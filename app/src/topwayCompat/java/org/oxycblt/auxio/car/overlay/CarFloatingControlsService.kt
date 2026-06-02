@@ -55,6 +55,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     private var windowManager: WindowManager? = null
     private var isOverlayAttached = false
     private var isAuxioForeground = false
+    private var isForegroundPromoted = false
 
     override fun onCreate() {
         super.onCreate()
@@ -75,19 +76,26 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             return START_NOT_STICKY
         }
 
-        when (intent.action) {
-            ACTION_START -> {
-                if (!Settings.canDrawOverlays(this)) {
-                    L.w("Overlay permission not granted, stopping")
-                    stopSelfCleanly()
-                    return START_NOT_STICKY
-                }
-                startOverlayRuntime()
-            }
-            ACTION_STOP -> {
-                stopOverlayRuntime()
+        if (intent.action == ACTION_STOP) {
+            stopOverlayRuntime()
+            stopSelfCleanly()
+            return START_NOT_STICKY
+        }
+
+        if (!isForegroundPromoted) {
+            if (!prefs.enabled || !Settings.canDrawOverlays(this)) {
                 stopSelfCleanly()
+                return START_NOT_STICKY
             }
+            if (!promoteForeground()) {
+                stopSelfCleanly()
+                return START_NOT_STICKY
+            }
+            isForegroundPromoted = true
+        }
+
+        when (intent.action) {
+            ACTION_START -> showOverlayIfAllowed()
             ACTION_SHOW -> showOverlayIfAllowed()
             ACTION_HIDE -> hideOverlay()
             ACTION_TOGGLE -> {
@@ -129,10 +137,13 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     // --- Overlay lifecycle ---
 
     private fun startOverlayRuntime() {
-        if (!promoteForeground()) {
-            // Foreground promotion failed — stop cleanly.
-            stopSelfCleanly()
-            return
+        if (!isForegroundPromoted) {
+            if (!promoteForeground()) {
+                // Foreground promotion failed — stop cleanly.
+                stopSelfCleanly()
+                return
+            }
+            isForegroundPromoted = true
         }
         if (!isOverlayAttached) {
             showOverlayIfAllowed()
@@ -392,7 +403,13 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             if (!Settings.canDrawOverlays(context)) return
             val intent = Intent(context, CarFloatingControlsService::class.java)
             intent.action = ACTION_START
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(context, intent)
+            } catch (e: IllegalStateException) {
+                L.w(e, "Cannot start overlay service: IllegalStateException")
+            } catch (e: SecurityException) {
+                L.w(e, "Cannot start overlay service: SecurityException")
+            }
         }
 
         fun stop(context: Context) {
@@ -412,14 +429,12 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             val intent = Intent(context, CarFloatingControlsService::class.java)
             intent.action = ACTION_AUXIO_FOREGROUND_CHANGED
             intent.putExtra(EXTRA_AUXIO_FOREGROUND, isForeground)
-            // Use startService (not startForegroundService) since the service should already be
-            // in foreground. If it isn't running, this is a no-op on API 26+ when the app is in
-            // background. That's acceptable — we only want to signal a running service.
             try {
-                context.startService(intent)
+                ContextCompat.startForegroundService(context, intent)
             } catch (e: IllegalStateException) {
-                // App is in background and service is not running — expected on API 26+.
-                L.d("Cannot signal foreground change: service not running")
+                L.d("Cannot signal foreground change: service not running/background")
+            } catch (e: SecurityException) {
+                L.d("Cannot signal foreground change: security policy")
             }
         }
 
@@ -435,9 +450,11 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             val intent = Intent(context, CarFloatingControlsService::class.java)
             intent.action = ACTION_RESET_POSITION
             try {
-                context.startService(intent)
+                ContextCompat.startForegroundService(context, intent)
             } catch (e: IllegalStateException) {
-                L.d("Cannot reset position: service not running")
+                L.d("Cannot reset position: service not running/background")
+            } catch (e: SecurityException) {
+                L.d("Cannot reset position: security policy")
             }
         }
     }

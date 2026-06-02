@@ -103,9 +103,29 @@ class CarOverlayPermissionActivity : AppCompatActivity() {
     }
 
     private fun openOverlaySettings() {
-        val intent =
-            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-        startActivity(intent)
+        val intents = listOf(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+            Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS),
+            Intent(Settings.ACTION_APPLICATION_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS)
+        )
+
+        for (intent in intents) {
+            if (intent.resolveActivity(packageManager) != null) {
+                try {
+                    startActivity(intent)
+                    return
+                } catch (e: Exception) {
+                    android.util.Log.w("OverlayPerm", "Failed to start settings intent: ${intent.action}", e)
+                }
+            } else {
+                android.util.Log.d("OverlayPerm", "Settings intent not resolvable: ${intent.action}")
+            }
+        }
+
+        statusText.text = getString(R.string.car_overlay_permission_manual_instructions)
     }
 
     companion object {
