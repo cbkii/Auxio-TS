@@ -28,6 +28,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import org.oxycblt.auxio.R
+import timber.log.Timber as L
 
 /**
  * Simple activity to guide users through the overlay permission setup. Checks permission on resume
@@ -118,10 +119,10 @@ class CarOverlayPermissionActivity : AppCompatActivity() {
                     startActivity(intent)
                     return
                 } catch (e: Exception) {
-                    android.util.Log.w("OverlayPerm", "Failed to start settings intent: ${intent.action}", e)
+                    L.w(e, "Failed to start settings intent: ${intent.action}")
                 }
             } else {
-                android.util.Log.d("OverlayPerm", "Settings intent not resolvable: ${intent.action}")
+                L.d("Settings intent not resolvable: ${intent.action}")
             }
         }
 
