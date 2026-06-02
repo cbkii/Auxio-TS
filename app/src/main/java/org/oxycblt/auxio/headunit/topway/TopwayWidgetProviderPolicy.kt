@@ -41,6 +41,9 @@ object TopwayWidgetProviderPolicy {
         // DoFun/Topway launchers are not guaranteed to be normal Android AppWidget hosts. In the
         // dedicated compatibility APKs, serve explicit `cmd=update` requests even when
         // AppWidgetManager cannot report a widget instance for either provider component.
+        if (topwayCompatFlavor) {
+            return true
+        }
         return shouldHandleTopwayUpdate(
             topwayCompatFlavor = topwayCompatFlavor,
             hasAnyWidgetInstances = hasAnyWidgetInstances(context),
@@ -71,7 +74,7 @@ object TopwayWidgetProviderPolicy {
 
     fun providerComponents(context: Context): List<ComponentName> =
         providerClassNames(BuildConfig.TOPWAY_COMPAT_FLAVOR).map { className ->
-            ComponentName(context.packageName, className)
+            ComponentName(context, className)
         }
 
     internal fun shouldHandleTopwayUpdate(

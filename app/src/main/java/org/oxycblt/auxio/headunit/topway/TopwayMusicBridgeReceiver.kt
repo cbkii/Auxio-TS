@@ -41,7 +41,16 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
-        val serviceIntent = Intent(context, AuxioService::class.java).setAction(action)
+        val serviceClass = if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            try {
+                Class.forName("com.tw.music.MusicService")
+            } catch (e: ClassNotFoundException) {
+                AuxioService::class.java
+            }
+        } else {
+            AuxioService::class.java
+        }
+        val serviceIntent = Intent(context, serviceClass).setAction(action)
         val extras =
             TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
                 safelyExtractIncomingExtras(intent, javaClass.classLoader)

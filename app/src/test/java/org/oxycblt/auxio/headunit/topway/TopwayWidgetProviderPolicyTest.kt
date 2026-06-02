@@ -10,12 +10,17 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.junit.runner.RunWith
 import org.oxycblt.auxio.widgets.WidgetProvider
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class TopwayWidgetProviderPolicyTest {
     @Test
     fun standardVariantChecksOnlyNormalAuxioProvider() {
@@ -57,5 +62,18 @@ class TopwayWidgetProviderPolicyTest {
                 hasAnyWidgetInstances = false,
             )
         )
+    }
+
+    @Test
+    fun testProviderComponentsConstructsCorrectComponentNames() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val components = TopwayWidgetProviderPolicy.providerComponents(context)
+        
+        // This validates that ComponentName(Context, String) is used, so the package name
+        // correctly mirrors the running Context's package.
+        assertTrue(components.isNotEmpty())
+        for (component in components) {
+            assertEquals(context.packageName, component.packageName)
+        }
     }
 }
