@@ -3,6 +3,11 @@ name: Upstream Auxio Monitor
 on:
   workflow_dispatch:
     inputs:
+      upstream_branch:
+        description: "Optional upstream branch override for diagnostics"
+        required: false
+        type: string
+        default: ""
       update_baseline:
         description: "Update stored upstream baseline after creating or acknowledging a changed-upstream report"
         required: false
@@ -52,6 +57,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         GITHUB_TOKEN: ${{ github.token }}
         UPSTREAM_REPO_URL: https://github.com/OxygenCobalt/Auxio.git
+        UPSTREAM_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.upstream_branch || '' }}
         BASELINE_FILE: .github/upstream-auxio-baseline.json
         REPORT_DIR: build/upstream-auxio-monitor
         UPDATE_BASELINE: ${{ github.event_name != 'workflow_dispatch' || inputs.update_baseline }}
@@ -60,7 +66,7 @@ jobs:
 
     - name: Upload upstream change reports
       if: steps.monitor.outputs.reports_generated == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@49552fcb82fc92c668b492a7d36fc7860a20c81d
       with:
         name: upstream-auxio-monitor-report
         path: build/upstream-auxio-monitor/**
