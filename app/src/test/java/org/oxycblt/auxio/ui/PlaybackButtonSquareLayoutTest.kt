@@ -25,16 +25,24 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.LayoutRes
 import androidx.test.core.app.ApplicationProvider
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
+import dagger.hilt.android.testing.HiltTestApplication
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.auxio.R
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
+@Config(application = HiltTestApplication::class)
 class PlaybackButtonSquareLayoutTest {
+    @get:Rule val hiltRule = HiltAndroidRule(this)
+
     @Test
     @Config(qualifiers = "w1280dp-h720dp-land")
     fun `playback bar controls are square in landscape`() {

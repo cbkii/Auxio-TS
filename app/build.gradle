@@ -270,6 +270,8 @@ dependencies {
     testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
     testImplementation "org.robolectric:robolectric:4.16"
     testImplementation "androidx.test:core:1.6.1"
+    testImplementation "com.google.dagger:hilt-android-testing:$hilt_version"
+    kspTest "com.google.dagger:hilt-android-compiler:$hilt_version"
     testImplementation "io.github.takahirom.roborazzi:roborazzi:1.63.0"
     testImplementation "io.github.takahirom.roborazzi:roborazzi-junit-rule:1.63.0"
 }
