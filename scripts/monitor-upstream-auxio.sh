@@ -352,7 +352,12 @@ if [[ -z "${GH_TOKEN:-}" ]]; then
 fi
 
 duplicate_json="$(gh issue list --repo "${GITHUB_REPOSITORY}" --state open --limit 100 --search "\"${new_sha}\" in:title,body repo:${GITHUB_REPOSITORY}" --json number,title,url)"
-duplicate_url="$(python3 -c 'import json, sys; items = json.loads(sys.argv[1]); print(items[0].get("url", "") if items else "")' "${duplicate_json}")"
+duplicate_url="$(printf '%s' "${duplicate_json}" | python3 -c 'import json, sys
+try:
+    items = json.load(sys.stdin)
+except Exception:
+    items = []
+print(items[0].get("url", "") if items else "")')"
 
 reported="false"
 issue_url=""
