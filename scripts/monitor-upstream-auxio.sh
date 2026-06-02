@@ -34,6 +34,21 @@ set_output() {
   fi
 }
 
+github_error() {
+  printf '::error::%s\n' "$*" >&2
+}
+
+fail_with_summary() {
+  local message="$1"
+  github_error "${message}"
+  append_summary "## Upstream Auxio monitor"
+  append_summary ""
+  append_summary "Monitor failed before creating or updating any upstream report."
+  append_summary ""
+  append_summary "${message}"
+  exit 1
+}
+
 json_get() {
   local field="$1"
   local file="$2"
@@ -84,6 +99,35 @@ with open(tmp, "w", encoding="utf-8") as handle:
 os.replace(tmp, path)
 PY
   validate_baseline_json
+}
+
+is_full_commit_sha() {
+  [[ "$1" =~ ^[0-9a-fA-F]{40}$ ]]
+}
+
+ensure_baseline_sha_is_reachable() {
+  local sha="$1"
+
+  if [[ -z "${sha}" ]]; then
+    return 0
+  fi
+
+  if ! is_full_commit_sha "${sha}"; then
+    fail_with_summary "Baseline last_seen_sha '${sha}' is not a full 40-character git SHA. Reseed ${BASELINE_FILE} with a valid upstream ${branch} commit SHA, then rerun the monitor."
+  fi
+
+  if git cat-file -e "${sha}^{commit}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  log "Baseline SHA ${sha} was not present after fetching ${REMOTE_NAME}/${branch}; attempting a direct best-effort fetch."
+  git fetch --no-tags "${REMOTE_NAME}" "${sha}" >/dev/null 2>&1 || true
+
+  if git cat-file -e "${sha}^{commit}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  fail_with_summary "Baseline SHA ${sha} was not found in fetched upstream history for ${UPSTREAM_REPO_URL} (${branch}). Reseed ${BASELINE_FILE} with a reachable upstream commit SHA; see docs/UPSTREAM_AUXIO_MONITORING.md."
 }
 
 resolve_default_branch() {
@@ -139,6 +183,7 @@ remove_remote
 git remote add "${REMOTE_NAME}" "${UPSTREAM_REPO_URL}"
 git fetch --no-tags --prune "${REMOTE_NAME}" "+refs/heads/${branch}:refs/remotes/${REMOTE_NAME}/${branch}"
 new_sha="$(git rev-parse "refs/remotes/${REMOTE_NAME}/${branch}")"
+ensure_baseline_sha_is_reachable "${old_sha}"
 old_short="${old_sha:0:12}"
 new_short="${new_sha:0:12}"
 
