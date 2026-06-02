@@ -92,7 +92,7 @@ class PlaybackButtonSquareLayoutTest {
 
     private fun inflateAndLayout(@LayoutRes layoutId: Int, widthPx: Int, heightPx: Int): View {
         val base = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val themed = ContextThemeWrapper(base, R.style.Theme_Auxio)
+        val themed = ContextThemeWrapper(base, R.style.Theme_Auxio_App)
         val parent = FrameLayout(themed)
         val view = LayoutInflater.from(themed).inflate(layoutId, parent, false)
         parent.addView(
