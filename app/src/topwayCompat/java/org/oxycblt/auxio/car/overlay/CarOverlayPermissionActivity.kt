@@ -104,14 +104,21 @@ class CarOverlayPermissionActivity : AppCompatActivity() {
     }
 
     private fun openOverlaySettings() {
-        val intents = listOf(
-            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
-            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
-            Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS),
-            Intent(Settings.ACTION_APPLICATION_SETTINGS),
-            Intent(Settings.ACTION_SETTINGS)
-        )
+        val intents =
+            listOf(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName"),
+                ),
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName"),
+                ),
+                Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS),
+                Intent(Settings.ACTION_APPLICATION_SETTINGS),
+                Intent(Settings.ACTION_SETTINGS),
+            )
 
         for (intent in intents) {
             if (intent.resolveActivity(packageManager) != null) {

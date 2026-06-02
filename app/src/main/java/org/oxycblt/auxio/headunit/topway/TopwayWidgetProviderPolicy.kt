@@ -84,9 +84,10 @@ object TopwayWidgetProviderPolicy {
 
     internal fun providerClassNames(topwayCompatFlavor: Boolean): List<String> =
         buildList {
-            add(WidgetProvider::class.java.name)
-            if (topwayCompatFlavor) {
-                add(STOCK_WIDGET_PROVIDER_CLASS)
+                add(WidgetProvider::class.java.name)
+                if (topwayCompatFlavor) {
+                    add(STOCK_WIDGET_PROVIDER_CLASS)
+                }
             }
-        }.distinct()
+            .distinct()
 }
