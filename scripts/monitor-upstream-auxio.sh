@@ -69,7 +69,7 @@ path, url, branch, sha, timestamp = sys.argv[1:]
 try:
     with open(path, "r", encoding="utf-8") as handle:
         data = json.load(handle)
-except FileNotFoundError:
+except (FileNotFoundError, ValueError):
     data = {}
 data["upstream_repository"] = "OxygenCobalt/Auxio"
 data["upstream_url"] = url
