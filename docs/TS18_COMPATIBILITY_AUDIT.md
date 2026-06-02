@@ -16,7 +16,7 @@ This audit records the repo-wide TS18/Topway/DoFun compatibility scan performed 
 | Topway incoming commands | Correct bridge code | Allowlisted and sanitized via isolated `headunit/topway` bridge. |
 | Topway outgoing metadata/progress | Correct bridge code | Published from real widget/playback state through `TopwayMusicBroadcastBridge`; payload keys preserve Topway spellings such as `musicaArtist`. |
 | Topway widget update routing | Correct bridge code | Topway-compatible variants serve `cmd=update` even when AppWidgetManager cannot report a normal widget instance, because DoFun may not behave as a normal AppWidget host. |
-| Android 10 overlay runtime | Correct product code; requires TS18 validation | API 34 `SPECIAL_USE` foreground-service type is selected only in code on API 34+, manifest avoids hard-coded `specialUse`, and add/update/remove failures stop cleanly. |
+| Android 10 overlay runtime | Correct product code; requires TS18 validation | API 34 `SPECIAL_USE` foreground-service type is declared in the manifest for Android 14+, but runtime service-type selection remains API-gated to avoid Android 10 crashes, and add/update/remove failures stop cleanly. |
 | Storage `/storage/usbdisk0` | Requires TS18 runtime validation | Musikr uses Android MediaStore/StorageVolume abstraction; real TS18 validation must confirm whether the USB volume is indexed by MediaStore or needs user-selected access. |
 | Private Cardoor/TWUtil/vendor services | Correct docs/reference evidence only | Not implemented in production; remains evidence-gated future work under the tier process. |
 
