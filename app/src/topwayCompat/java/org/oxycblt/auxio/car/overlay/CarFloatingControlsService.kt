@@ -59,6 +59,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
 
     override fun onCreate() {
         super.onCreate()
+        isServiceCreated = true
         prefs = CarOverlayPrefs.from(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         L.d("CarFloatingControlsService created")
@@ -108,6 +109,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                     prefs.positionX = cx
                     prefs.positionY = cy
                     updateOverlayPosition(cx, cy)
+                } else {
+                    L.d("Ignoring reset-position command with no live overlay")
+                    stopSelfCleanly()
                 }
             }
             ACTION_AUXIO_FOREGROUND_CHANGED -> {
@@ -130,6 +134,8 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
 
     override fun onDestroy() {
         removeOverlay()
+        isServiceCreated = false
+        isOverlayRuntimeAttached = false
         L.d("CarFloatingControlsService destroyed")
         super.onDestroy()
     }
@@ -184,6 +190,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
         overlayView = view
         isOverlayAttached = true
+        isOverlayRuntimeAttached = true
         L.d("Overlay attached at ($cx, $cy)")
     }
 
@@ -204,6 +211,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
         overlayView = null
         isOverlayAttached = false
+        isOverlayRuntimeAttached = false
     }
 
     private fun updateOverlayPosition(x: Int, y: Int) {
@@ -376,6 +384,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         private const val OVERLAY_ESTIMATED_WIDTH_PX = 350
         private const val OVERLAY_ESTIMATED_HEIGHT_PX = 80
 
+        @Volatile private var isServiceCreated = false
+        @Volatile private var isOverlayRuntimeAttached = false
+
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".car.overlay.START"
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".car.overlay.STOP"
         const val ACTION_SHOW = BuildConfig.APPLICATION_ID + ".car.overlay.SHOW"
@@ -417,15 +428,15 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
 
         /**
-         * Signals foreground/background change to a running service. Does NOT cold-start the
-         * service. If the service is not running, startService with a non-start action on a
-         * non-running service is safe (it will trigger onCreate + onStartCommand, which will detect
-         * the service is not in foreground mode and stop itself).
+         * Signals foreground/background changes. Foreground transitions only need to hide an existing
+         * overlay, so they never cold-start the service. Background transitions may restore the
+         * overlay through the foreground-service path; [onStartCommand] promotes or stops cleanly.
          */
         fun setAuxioForeground(context: Context, isForeground: Boolean) {
             val prefs = CarOverlayPrefs.from(context)
             if (!prefs.enabled) return
             if (!Settings.canDrawOverlays(context)) return
+            if (isForeground && !isServiceCreated) return
             val intent = Intent(context, CarFloatingControlsService::class.java)
             intent.action = ACTION_AUXIO_FOREGROUND_CHANGED
             intent.putExtra(EXTRA_AUXIO_FOREGROUND, isForeground)
@@ -439,14 +450,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
 
         /**
-         * Sends a position-reset command to an already-running service. Does NOT cold-start the
-         * service. Checks enabled + permission before sending to avoid waking a stopped service.
-         * Position prefs are already updated by the caller.
+         * Sends a position-reset command only to a known live overlay. Position prefs are already
+         * updated by the caller; if no overlay is attached, the next overlay show will use prefs.
          */
         fun resetPositionIfRunning(context: Context) {
             val prefs = CarOverlayPrefs.from(context)
             if (!prefs.enabled) return
             if (!Settings.canDrawOverlays(context)) return
+            if (!isServiceCreated || !isOverlayRuntimeAttached) return
             val intent = Intent(context, CarFloatingControlsService::class.java)
             intent.action = ACTION_RESET_POSITION
             try {
