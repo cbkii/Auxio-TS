@@ -428,9 +428,10 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
 
         /**
-         * Signals foreground/background changes. Foreground transitions only need to hide an existing
-         * overlay, so they never cold-start the service. Background transitions may restore the
-         * overlay through the foreground-service path; [onStartCommand] promotes or stops cleanly.
+         * Signals foreground/background changes. Foreground transitions only need to hide an
+         * existing overlay, so they never cold-start the service. Background transitions may
+         * restore the overlay through the foreground-service path; [onStartCommand] promotes or
+         * stops cleanly.
          */
         fun setAuxioForeground(context: Context, isForeground: Boolean) {
             val prefs = CarOverlayPrefs.from(context)
