@@ -8,6 +8,7 @@ Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed 
 
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — local setup, CI workflow coverage, Roborazzi UI workflow, and deleted-workflow audit notes.
 - [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — manual signed release flow and expected APK assets.
+- [`UPSTREAM_AUXIO_MONITORING.md`](UPSTREAM_AUXIO_MONITORING.md) — monthly upstream Auxio change monitor, no-clutter baseline rules, and generated issue workflow.
 - [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — DoFun/Topway compatibility contract and private-hook boundaries.
 - [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — compact APK-derived reference evidence for DoFun Variety and stock `twmusic`.
 - [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
@@ -44,6 +45,7 @@ Observed Cardoor/private services and vendor hooks are evidence only, not produc
 - `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety/DoFun guardrails.
 - `.github/workflows/manual-release.yml` builds, signs, verifies, and uploads standard plus Topway/DoFun release APKs.
 - `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshots/reports for UI review.
+- `.github/workflows/upstream-auxio-monitor.yml` checks `OxygenCobalt/Auxio` monthly and opens an issue only when upstream has new commits to review.
 
 Local preflight:
 
