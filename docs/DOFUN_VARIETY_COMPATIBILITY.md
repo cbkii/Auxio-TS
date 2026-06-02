@@ -1,8 +1,8 @@
 # DoFun Variety / Topway music compatibility
 
-Auxio-TS targets TS18/Topway head units using DoFun Variety Theme (`com.dofun.variety`). The practical goal is for Auxio-TS to replace the stock `twmusic` / `com.tw.music` app contract so the DoFun launcher/theme music widget can recognise the app, open it, display playback state, and route controls.
+Auxio-TS targets TS18/Topway head units using DoFun Variety Theme (`com.dofun.variety`). The practical goal is for Auxio-TS to replace or satisfy the stock `twmusic` / `com.tw.music` app contract so the DoFun launcher/theme music widget can recognise the app, open it, display playback state, and route controls.
 
-This document is the concise compatibility guide. Raw reference snippets live in `docs/reference/ts18-apk/`.
+This document is the concise compatibility guide. Raw APK reference snippets live in `docs/reference/ts18-apk/`. The exact-device runtime profile lives in `docs/evidence/ts18-device-profile/`.
 
 ## Primary compatibility contract
 
@@ -13,7 +13,7 @@ com.tw.media / com.tw.music.MusicActivity
 com.tw.music / com.tw.music.MusicActivity
 ```
 
-The clean Auxio-TS compatibility target is therefore a dedicated Topway/DoFun variant that exposes:
+The clean exact replacement target is therefore a dedicated Topway/DoFun variant that exposes:
 
 ```text
 application/package ID: com.tw.music
@@ -26,13 +26,49 @@ A normal Auxio package identity such as `org.oxycblt.auxio` may be a valid Andro
 ## Variant expectations
 
 | Build | Package/application ID | Launcher component | Purpose |
-| --- | --- | --- | --- |
+|---|---|---|---|
 | Standard Auxio-TS | `org.oxycblt.auxio` | `org.oxycblt.auxio.MainActivity` | Development/upstream baseline |
 | Standard debug | `org.oxycblt.auxio.debug` | `org.oxycblt.auxio.MainActivity` | Development/debug |
-| Topway/DoFun release | `com.tw.music` | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | Exact DoFun fixed-identity compatibility APK |
-| Topway/DoFun debug | normally `com.tw.music.debug` if debug suffix is kept | same alias | Development only; not a final DoFun identity proof |
+| Topway/DoFun exact release | `com.tw.music` | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | Exact DoFun fixed-identity compatibility APK |
+| Topway/DoFun exact debug | normally `com.tw.music.debug` if debug suffix is kept | same alias | Development only; not a final DoFun identity proof |
+| Proposed Topway/DoFun alternate release | `com.tw.media` | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | DoFun alternate fixed-entry candidate for stock-conflict-aware installs |
 
 Use a real Android product flavour/source set. Do not mutate package names only in CI.
+
+## Exact-device package conflict
+
+The real target TS18 diagnostics show stock `com.tw.music` installed as a system priv-app:
+
+```text
+/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
+```
+
+[Evidence confidence: Observed from user-provided device diagnostics] [Porting decision: Installation/runbook constraint]
+
+Implications:
+
+- `topwayTwMusicRelease` remains the correct exact DoFun replacement identity.
+- It is not guaranteed installable through the normal package installer on stock firmware where `com.tw.music` already exists.
+- Installation may require ADB shell, Shizuku, root, firmware control, package disable/uninstall-for-user, or compatible signing.
+- Do not claim universal no-root install compatibility for `topwayTwMusicRelease`.
+
+## `com.tw.media` alternate-entry posture
+
+DoFun's alternate fixed entry is directly reusable as a variant target:
+
+```text
+com.tw.media/com.tw.music.MusicActivity
+```
+
+[Evidence confidence: Observed APK/reference evidence] [Porting decision: Directly reusable alternate-entry requirement]
+
+However, `com.tw.media` must be documented honestly:
+
+- It does not remove or neutralise stock `com.tw.music`.
+- It may conflict if firmware already provides stock `com.tw.media`.
+- It may not be selected if DoFun prioritises `com.tw.music`.
+- It is primarily useful for users who can manage stock package state through ADB shell, Shizuku, root, or firmware control.
+- It is not a universal no-root bypass.
 
 ## Required Android media surfaces
 
@@ -109,28 +145,33 @@ com.tw.service.xt.aidl.ITWCommandAidl
 com.tw.service.xt.aidl.ITWCommandCallbackAidl
 ```
 
-These must not be copied into Auxio-TS product code. Use Android-standard APIs and the isolated Topway bridge instead.
+These must not be copied into Auxio-TS product code. Use Android-standard APIs and the isolated Topway bridge instead unless a later approved Tier 4 design PR proves a safe protocol and rollback path.
 
+## Exact-device private/system evidence
+
+The exact TS18 diagnostic profile indicates the stock music app is part of a broader Topway system environment:
+
+- stock `com.tw.music` is a system priv-app;
+- Topway packages such as `com.tw.service`, `com.tw.service.xt`, `com.tw.radio`, `com.tw.bt`, and `com.tw.eq` are system priv-apps;
+- `com.tw.service` was observed mediating media audio focus under UID 1000;
+- ZLink was observed as the restored media-button receiver in the captured state;
+- `/storage/usbdisk0` is the observed USB-media mount path.
+
+[Evidence confidence: Observed from user-provided diagnostics] [Porting decision: Runtime parity risk and validation requirement; not direct approval to port private APIs]
 
 ## Runtime fallback posture
 
-Auxio-TS implements the highest-confidence DoFun/Topway fallbacks without copying private
-vendor APIs:
+Auxio-TS implements or should implement the highest-confidence DoFun/Topway fallbacks without copying private vendor APIs:
 
-- the release APK installs as `com.tw.music`;
-- `com.tw.music.MusicActivity` aliases to Auxio's real activity;
-- `com.tw.music.MusicService` is provided in the Topway flavour as a stock-name wrapper over
-  Auxio's real media/browser/playback service;
-- `com.tw.music.view.MusicWidgetProvider` is provided in the Topway flavour as a stock-name
-  wrapper that forwards safe observed Topway widget/control broadcasts into Auxio's bridge;
-- Topway metadata/progress broadcasts are always enabled in the real `com.tw.music` release
-  variant, regardless of the head-unit UI layout preference;
-- cold-start Topway play/pause commands restore saved playback state instead of being dropped
-  when no current song is yet loaded in memory.
+- the exact release APK installs as `com.tw.music`;
+- the alternate candidate APK installs as `com.tw.media` once implemented;
+- both Topway-compatible variants should expose `com.tw.music.MusicActivity` for DoFun matching;
+- `com.tw.music.MusicService` may be provided in the Topway flavour as a stock-name wrapper over Auxio's real media/browser/playback service;
+- `com.tw.music.view.MusicWidgetProvider` may be provided in the Topway flavour as a stock-name wrapper that forwards safe observed Topway widget/control broadcasts into Auxio's bridge;
+- Topway metadata/progress broadcasts should be enabled in real Topway-compatible variants, regardless of head-unit UI layout preference;
+- cold-start Topway play/pause commands should restore saved playback state instead of being dropped when no current song is yet loaded in memory.
 
-Auxio-TS still deliberately avoids fake `cn.cardoor.libs.media.RemoteMediaService`,
-`android.tw.john.TWUtil`, and `com.tw.service.xt.aidl.*` implementations because the available
-evidence identifies names but not a safe public protocol.
+Auxio-TS still deliberately avoids fake `cn.cardoor.libs.media.RemoteMediaService`, `android.tw.john.TWUtil`, and `com.tw.service.xt.aidl.*` implementations unless a later human-approved design PR proves a safe protocol.
 
 ## Validation commands
 
@@ -138,7 +179,8 @@ Package/component checks:
 
 ```sh
 adb shell 'cmd package list packages | grep -E "com\.tw\.music|com\.tw\.media|org\.oxycblt\.auxio|com\.dofun\.variety"'
-adb shell cmd package resolve-activity --brief com.tw.music
+adb shell cmd package resolve-activity --brief -n com.tw.music/com.tw.music.MusicActivity
+adb shell cmd package resolve-activity --brief -n com.tw.media/com.tw.music.MusicActivity
 adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.APP_MUSIC
 adb shell cmd package query-intent-services -a android.media.browse.MediaBrowserService
 ```
@@ -146,8 +188,8 @@ adb shell cmd package query-intent-services -a android.media.browse.MediaBrowser
 Media/session and widget traffic:
 
 ```sh
-adb shell dumpsys media_session | grep -i -A60 'com.tw.music\|auxio'
-adb shell logcat -v time | grep -iE 'Auxio|Topway|tw.music|music_progress|MediaSource|NotifyService|cardoor|dofun|variety|MediaSession|MediaBrowser'
+adb shell dumpsys media_session | grep -i -A60 'com.tw.music\|com.tw.media\|auxio'
+adb shell logcat -v time | grep -iE 'Auxio|Topway|tw.music|tw.media|music_progress|MediaSource|NotifyService|cardoor|dofun|variety|MediaSession|MediaBrowser'
 ```
 
 Manual widget-command simulation:
@@ -161,7 +203,7 @@ adb shell am broadcast -a com.tw.music.action.prev
 Manual outgoing-state simulation:
 
 ```sh
-adb shell am broadcast -a com.tw.music.info   --es musicTitle "Auxio Test"   --es musicaArtist "Test Artist"   --es musicAlbum "Test Album"   --es musicPath "/sdcard/Music/test.mp3"
+adb shell am broadcast -a com.tw.music.info   --es musicTitle "Auxio Test"   --es musicaArtist "Test Artist"   --es musicAlbum "Test Album"   --es musicPath "/storage/usbdisk0/Music/test.mp3"
 
 adb shell am broadcast -a com.tw.launcher.music_progress_duration   --el msg_music_progress 30000   --el msg_music_duration 180000
 ```
@@ -171,17 +213,18 @@ adb shell am broadcast -a com.tw.launcher.music_progress_duration   --el msg_mus
 CI should protect:
 
 - standard variant identity remains intact;
-- Topway release variant installs as exact `com.tw.music`;
-- `com.tw.music.MusicActivity` alias exists;
+- Topway exact release variant installs as exact `com.tw.music`;
+- Topway alternate release variant installs as exact `com.tw.media` once implemented;
+- `com.tw.music.MusicActivity` alias exists in Topway-compatible variants;
 - `MediaBrowserService` remains declared/exported as intended;
 - provider authorities follow the variant application ID;
 - Topway broadcast/action strings remain isolated;
-- private/system/vendor hooks remain forbidden.
+- private/system/vendor hooks remain forbidden outside approved evidence/docs/tests/wrapper boundaries.
 
 Use/update:
 
 ```sh
 bash scripts/check-headunit-compat-safety.sh
+bash scripts/check-dofun-topway-compat.sh
+bash scripts/check-ts18-apk-reference-contracts.sh
 ```
-
-Add or keep a more specific DoFun/Topway manifest/APK check when the flavour is implemented.
