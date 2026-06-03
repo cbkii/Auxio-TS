@@ -62,7 +62,8 @@ class PlaybackButtonSquareLayoutTest {
     }
 
     private fun assertPlaybackButtonsDeclareSquareBounds(@LayoutRes layoutId: Int) {
-        val resources = ApplicationProvider.getApplicationContext<android.content.Context>().resources
+        val resources =
+            ApplicationProvider.getApplicationContext<android.content.Context>().resources
         val seenButtonIds = mutableSetOf<Int>()
         val parser = resources.getXml(layoutId)
         try {
@@ -73,12 +74,20 @@ class PlaybackButtonSquareLayoutTest {
                 if (buttonId !in PLAYBACK_BUTTON_IDS) continue
 
                 seenButtonIds += buttonId
-                val width = parser.getAttributeResourceValue(ANDROID_NS, "layout_width", NO_RESOURCE)
-                val height = parser.getAttributeResourceValue(ANDROID_NS, "layout_height", NO_RESOURCE)
+                val width =
+                    parser.getAttributeResourceValue(ANDROID_NS, "layout_width", NO_RESOURCE)
+                val height =
+                    parser.getAttributeResourceValue(ANDROID_NS, "layout_height", NO_RESOURCE)
                 val name = resources.getResourceEntryName(buttonId)
 
-                assertTrue("Playback button $name must declare a resource width", width != NO_RESOURCE)
-                assertTrue("Playback button $name must declare a resource height", height != NO_RESOURCE)
+                assertTrue(
+                    "Playback button $name must declare a resource width",
+                    width != NO_RESOURCE,
+                )
+                assertTrue(
+                    "Playback button $name must declare a resource height",
+                    height != NO_RESOURCE,
+                )
                 assertEquals("Playback button $name must declare square bounds", height, width)
             }
         } finally {
