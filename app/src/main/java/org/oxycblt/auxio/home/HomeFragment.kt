@@ -215,7 +215,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         if (!uiSettings.showHeadUnitDashboardQuickAccess) {
             return
         }
-        val hasLibrary = homeModel.songList.value.isNotEmpty()
+        val hasLibrary = homeModel.hasAnySongs
         binding.homeQuickPicks.setPadding(
             binding.homeQuickPicks.paddingLeft,
             binding.homeQuickPicks.paddingTop,
@@ -274,14 +274,12 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         when (destination) {
             HeadUnitEntryPoints.EntryDestination.NOW_PLAYING -> playbackModel.openPlayback()
             HeadUnitEntryPoints.EntryDestination.QUEUE -> playbackModel.openQueue()
-            HeadUnitEntryPoints.EntryDestination.RECENTLY_ADDED -> openRecentlyAdded()
+            HeadUnitEntryPoints.EntryDestination.RECENTLY_ADDED -> playRecentlyAdded()
             HeadUnitEntryPoints.EntryDestination.GENRES -> openTab(MusicType.GENRES)
             HeadUnitEntryPoints.EntryDestination.ARTISTS -> openTab(MusicType.ARTISTS)
             HeadUnitEntryPoints.EntryDestination.ALBUMS -> openTab(MusicType.ALBUMS)
             HeadUnitEntryPoints.EntryDestination.PLAYLISTS -> openTab(MusicType.PLAYLISTS)
-            HeadUnitEntryPoints.EntryDestination.FAVOURITES ->
-                favouritesPlaylist?.let { detailModel.showPlaylist(it) }
-                    ?: openTab(MusicType.PLAYLISTS)
+            HeadUnitEntryPoints.EntryDestination.FAVOURITES -> playFavourites()
             HeadUnitEntryPoints.EntryDestination.HEAD_UNIT_SETTINGS -> homeModel.showSettings()
         }
     }
@@ -313,15 +311,13 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         if (metadataState.recentlyAdded) {
             binding.homeMetadataChips.addView(
                 buildMetaChip(binding, getString(R.string.lbl_recently_added)) {
-                    openRecentlyAdded()
+                    playRecentlyAdded()
                 }
             )
         }
         if (metadataState.favourites) {
             binding.homeMetadataChips.addView(
-                buildMetaChip(binding, getString(R.string.lbl_favourites)) {
-                    favouritesPlaylist?.let { detailModel.showPlaylist(it) }
-                }
+                buildMetaChip(binding, getString(R.string.lbl_favourites)) { playFavourites() }
             )
         }
         setupHeadUnitQuickAccess(binding)
@@ -337,20 +333,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             isChecked = (decade == activeDecade)
             text = getString(R.string.lbl_decade_fmt, decade)
             contentDescription = text
-            setOnClickListener {
-                // Read the current filter value once to avoid any ordering sensitivity between
-                // the read and the update (both are on the main thread, but reading once is
-                // cleaner).
-                val currentFilter = homeModel.decadeFilter.value
-                // Toggle: tapping the active decade clears the filter; tapping a new one sets it.
-                val newDecade = if (currentFilter == decade) null else decade
-                // Always apply ByDate sort so that Songs tab order is consistent whether a decade
-                // filter is active or just cleared; clearing the filter keeps date ordering so the
-                // user can still browse chronologically.
-                homeModel.applySongSort(Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING))
-                homeModel.applyDecadeFilter(newDecade)
-                openTab(MusicType.SONGS)
-            }
+            setOnClickListener { playDecade(decade) }
         }
 
     // TODO: Optimise chip rebuild to only update isChecked when decades list is unchanged.
@@ -387,14 +370,12 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             HeadUnitRoute.NOW_PLAYING -> playbackModel.openPlayback()
             HeadUnitRoute.SHUFFLE_ALL -> playbackModel.shuffleAll()
             HeadUnitRoute.QUEUE -> playbackModel.openQueue()
-            HeadUnitRoute.RECENTLY_ADDED -> openRecentlyAdded()
+            HeadUnitRoute.RECENTLY_ADDED -> playRecentlyAdded()
             HeadUnitRoute.GENRES -> openTab(MusicType.GENRES)
             HeadUnitRoute.ARTISTS -> openTab(MusicType.ARTISTS)
             HeadUnitRoute.ALBUMS -> openTab(MusicType.ALBUMS)
             HeadUnitRoute.PLAYLISTS -> openTab(MusicType.PLAYLISTS)
-            HeadUnitRoute.FAVOURITES ->
-                favouritesPlaylist?.let { detailModel.showPlaylist(it) }
-                    ?: openTab(MusicType.PLAYLISTS)
+            HeadUnitRoute.FAVOURITES -> playFavourites()
             HeadUnitRoute.HEAD_UNIT_SETTINGS ->
                 if (musicModel.indexingState.value !is IndexingState.Indexing)
                     homeModel.showSettings()
@@ -408,9 +389,36 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         }
     }
 
-    private fun openRecentlyAdded() {
+    private fun playDecade(decade: Int) {
+        val songs = homeModel.songsForDecade(decade)
+        if (songs.isEmpty()) {
+            L.d("Ignoring stale decade chip for $decade with no matching songs")
+            return
+        }
+        playbackModel.play(songs)
+        homeModel.applySongSort(Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING))
+        homeModel.applyDecadeFilter(decade)
+        openTab(MusicType.SONGS)
+    }
+
+    private fun playRecentlyAdded() {
+        val songs = homeModel.recentlyAddedSongs()
+        if (songs.isEmpty()) {
+            L.d("Ignoring Recently Added generated playlist with no songs")
+            return
+        }
+        playbackModel.play(songs)
         homeModel.applySongSort(Sort(Sort.Mode.ByDateAdded, Sort.Direction.DESCENDING))
         openTab(MusicType.SONGS)
+    }
+
+    private fun playFavourites() {
+        val playlist = favouritesPlaylist
+        if (playlist?.songs?.isNotEmpty() != true) {
+            L.d("Ignoring Favourites generated playlist with no songs")
+            return
+        }
+        playbackModel.play(playlist)
     }
 
     private fun openDecades() {
