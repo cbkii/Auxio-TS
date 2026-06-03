@@ -28,11 +28,19 @@ object GeneratedPlaylistPolicy {
         CLEAR_FILTER,
     }
 
-    /** Shared date-descending sort for generated decade queues and matching Songs-tab context. */
+    /**
+     * Shared date-descending sort for generated decade queues and matching Songs-tab context.
+     *
+     * Generated decade queues and the visible Songs tab both rely on [Sort.songs] so they share
+     * the same stable multi-pass ordering and tie-breaking pipeline.
+     */
     val decadePlaybackSort = Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING)
 
     /**
      * Shared newest-first sort for generated Recently Added queues and matching Songs-tab context.
+     *
+     * As with [decadePlaybackSort], callers rely on [Sort.songs] so generated queues and the
+     * visible Songs tab stay aligned for equal date-added values.
      */
     val recentlyAddedSort = Sort(Sort.Mode.ByDateAdded, Sort.Direction.DESCENDING)
 
@@ -53,8 +61,10 @@ object GeneratedPlaylistPolicy {
     }
 
     /**
-     * Return all songs whose album release-year metadata falls inside [decade], sorted newest-first
-     * with the same date ordering used by the generated decade playback queue.
+     * Return all songs whose album release-year metadata falls inside [decade], sorted newest-first.
+     *
+     * This must match the visible Songs tab ordering for [decadePlaybackSort], so it delegates to
+     * [Sort.songs] rather than introducing local secondary keys.
      */
     fun songsForDecade(songs: Collection<Song>, decade: Int): List<Song> =
         decadePlaybackSort.songs(songs.filter { song -> isInDecade(song, decade) })
@@ -66,6 +76,11 @@ object GeneratedPlaylistPolicy {
     fun filterSongsForDecadePreservingOrder(songs: List<Song>, decade: Int?): List<Song> =
         if (decade == null) songs else songs.filter { song -> isInDecade(song, decade) }
 
-    /** Return all songs sorted newest-first by the same date-added semantics as the Songs tab. */
+    /**
+     * Return all songs sorted newest-first by the same date-added semantics as the Songs tab.
+     *
+     * This delegates to [Sort.songs] so generated Recently Added playback queues share the UI
+     * ordering and tie-breaking behaviour.
+     */
     fun recentlyAddedSongs(songs: Collection<Song>): List<Song> = recentlyAddedSort.songs(songs)
 }
