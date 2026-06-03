@@ -104,10 +104,7 @@ class GeneratedPlaylistPolicyTest {
         val second = testSong("second", year = 2005, addedMs = 20)
 
         val result =
-            GeneratedPlaylistPolicy.filterSongsForDecadePreservingOrder(
-                listOf(first, second),
-                null,
-            )
+            GeneratedPlaylistPolicy.filterSongsForDecadePreservingOrder(listOf(first, second), null)
 
         assertEquals(listOf(first, second), result)
     }
@@ -147,26 +144,42 @@ class GeneratedPlaylistPolicyTest {
     private fun testSong(label: String, year: Int?, addedMs: Long): Song =
         TestSong(label, TestAlbum("album-$label", year), addedMs)
 
-    private class TestSong(
-        label: String,
-        override val album: Album,
-        override val addedMs: Long,
-    ) : Song {
+    private class TestSong(label: String, override val album: Album, override val addedMs: Long) :
+        Song {
         override val name = TestName(label)
         override val track: Int? = null
         override val disc: Disc? = null
         override val date: Date? = null
-        override val uid: Music.UID get() = error("uid not needed")
-        override val uri: Uri get() = error("uri not needed")
-        override val path: Path get() = error("path not needed")
-        override val format: Format get() = error("format not needed")
-        override val size: Long get() = error("size not needed")
-        override val durationMs: Long get() = error("duration not needed")
-        override val bitrateKbps: Int get() = error("bitrate not needed")
-        override val sampleRateHz: Int get() = error("sample rate not needed")
+        override val uid: Music.UID
+            get() = error("uid not needed")
+
+        override val uri: Uri
+            get() = error("uri not needed")
+
+        override val path: Path
+            get() = error("path not needed")
+
+        override val format: Format
+            get() = error("format not needed")
+
+        override val size: Long
+            get() = error("size not needed")
+
+        override val durationMs: Long
+            get() = error("duration not needed")
+
+        override val bitrateKbps: Int
+            get() = error("bitrate not needed")
+
+        override val sampleRateHz: Int
+            get() = error("sample rate not needed")
+
         override val replayGainAdjustment: ReplayGainAdjustment
             get() = error("replaygain not needed")
-        override val modifiedMs: Long get() = error("modified not needed")
+
+        override val modifiedMs: Long
+            get() = error("modified not needed")
+
         override val cover: Cover? = null
         override val artists: List<Artist> = emptyList()
         override val genres: List<Genre> = emptyList()
@@ -174,22 +187,36 @@ class GeneratedPlaylistPolicyTest {
 
     private class TestAlbum(label: String, year: Int?) : Album {
         override val name = TestName(label)
-        override val dates: Date.Range? =
-            year?.let { Date.Range(Date.from(it)!!, Date.from(it)!!) }
-        override val songs: Collection<Song> get() = emptyList()
-        override val uid: Music.UID get() = error("uid not needed")
-        override val releaseType: ReleaseType get() = error("release type not needed")
-        override val covers: CoverCollection get() = error("covers not needed")
-        override val durationMs: Long get() = error("duration not needed")
-        override val addedMs: Long get() = error("added not needed")
+        override val dates: Date.Range? = year?.let { Date.Range(Date.from(it)!!, Date.from(it)!!) }
+        override val songs: Collection<Song>
+            get() = emptyList()
+
+        override val uid: Music.UID
+            get() = error("uid not needed")
+
+        override val releaseType: ReleaseType
+            get() = error("release type not needed")
+
+        override val covers: CoverCollection
+            get() = error("covers not needed")
+
+        override val durationMs: Long
+            get() = error("duration not needed")
+
+        override val addedMs: Long
+            get() = error("added not needed")
+
         override val artists: List<Artist> = emptyList()
     }
 
     private class TestName(override val raw: String) : Name.Known() {
         override val sort: String? = null
         override val tokens: List<Token> = emptyList()
+
         override fun equals(other: Any?) = other is TestName && raw == other.raw
+
         override fun hashCode() = raw.hashCode()
+
         override fun toString() = raw
     }
 }

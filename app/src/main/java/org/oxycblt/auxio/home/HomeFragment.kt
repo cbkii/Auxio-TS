@@ -199,7 +199,9 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         }
         collectImmediately(playbackModel.pagerQueue) { setupHeadUnitQuickAccess(requireBinding()) }
         collectImmediately(homeModel.songList, homeModel.genreList, homeModel.playlistList) {
-            songs, genres, playlists ->
+            songs,
+            genres,
+            playlists ->
             updateMetadataShortcuts(songs, genres, playlists)
             handlePendingEntryDestination()
         }
@@ -299,7 +301,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 HeadUnitEntryPoints.EntryDestination.GENRES -> openTabHandled(MusicType.GENRES)
                 HeadUnitEntryPoints.EntryDestination.ARTISTS -> openTabHandled(MusicType.ARTISTS)
                 HeadUnitEntryPoints.EntryDestination.ALBUMS -> openTabHandled(MusicType.ALBUMS)
-                HeadUnitEntryPoints.EntryDestination.PLAYLISTS -> openTabHandled(MusicType.PLAYLISTS)
+                HeadUnitEntryPoints.EntryDestination.PLAYLISTS ->
+                    openTabHandled(MusicType.PLAYLISTS)
                 HeadUnitEntryPoints.EntryDestination.FAVOURITES -> playFavourites()
                 HeadUnitEntryPoints.EntryDestination.HEAD_UNIT_SETTINGS -> {
                     homeModel.showSettings()
