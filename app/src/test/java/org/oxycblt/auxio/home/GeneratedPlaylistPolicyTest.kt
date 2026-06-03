@@ -20,8 +20,10 @@ package org.oxycblt.auxio.home
 
 import android.net.Uri
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
@@ -39,6 +41,35 @@ import org.oxycblt.musikr.tag.ReplayGainAdjustment
 import org.oxycblt.musikr.tag.Token
 
 class GeneratedPlaylistPolicyTest {
+    @Test
+    fun decadeChipAction_activeDecadeClearsFilter_inactiveDecadePlays() {
+        assertEquals(
+            GeneratedPlaylistPolicy.DecadeChipAction.CLEAR_FILTER,
+            GeneratedPlaylistPolicy.decadeChipAction(activeDecade = 1990, tappedDecade = 1990),
+        )
+        assertEquals(
+            GeneratedPlaylistPolicy.DecadeChipAction.PLAY_DECADE,
+            GeneratedPlaylistPolicy.decadeChipAction(activeDecade = 1980, tappedDecade = 1990),
+        )
+        assertEquals(
+            GeneratedPlaylistPolicy.DecadeChipAction.PLAY_DECADE,
+            GeneratedPlaylistPolicy.decadeChipAction(activeDecade = null, tappedDecade = 1990),
+        )
+    }
+
+    @Test
+    fun sharedSorts_matchGeneratedPlaylistOrderingAndUiContext() {
+        assertEquals(
+            Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING),
+            GeneratedPlaylistPolicy.decadePlaybackSort,
+        )
+        assertEquals(
+            Sort(Sort.Mode.ByDateAdded, Sort.Direction.DESCENDING),
+            GeneratedPlaylistPolicy.recentlyAddedSort,
+        )
+        assertNull(GeneratedPlaylistPolicy.recentlyAddedDecadeFilter)
+    }
+
     @Test
     fun songsForDecade_includesOnlyMatchingYears_newestFirst() {
         val song1989 = testSong("1989", year = 1989, addedMs = 1)
@@ -65,6 +96,20 @@ class GeneratedPlaylistPolicyTest {
         val result = GeneratedPlaylistPolicy.songsForDecade(listOf(unknown, old, next), 1990)
 
         assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun filterSongsForDecadePreservingOrder_nullDecadeReturnsFullVisibleList() {
+        val first = testSong("first", year = 1995, addedMs = 10)
+        val second = testSong("second", year = 2005, addedMs = 20)
+
+        val result =
+            GeneratedPlaylistPolicy.filterSongsForDecadePreservingOrder(
+                listOf(first, second),
+                null,
+            )
+
+        assertEquals(listOf(first, second), result)
     }
 
     @Test

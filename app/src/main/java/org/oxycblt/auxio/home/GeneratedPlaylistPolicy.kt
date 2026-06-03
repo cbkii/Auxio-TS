@@ -23,8 +23,28 @@ import org.oxycblt.musikr.Song
 
 /** Pure generated-playlist helpers for home/head-unit quick-access pills. */
 object GeneratedPlaylistPolicy {
-    private val decadeSort = Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING)
-    private val recentSort = Sort(Sort.Mode.ByDateAdded, Sort.Direction.DESCENDING)
+    enum class DecadeChipAction {
+        PLAY_DECADE,
+        CLEAR_FILTER,
+    }
+
+    /** Shared date-descending sort for generated decade queues and matching Songs-tab context. */
+    val decadePlaybackSort = Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING)
+
+    /**
+     * Shared newest-first sort for generated Recently Added queues and matching Songs-tab context.
+     */
+    val recentlyAddedSort = Sort(Sort.Mode.ByDateAdded, Sort.Direction.DESCENDING)
+
+    /** The visual decade filter state to use when opening the full Recently Added queue. */
+    val recentlyAddedDecadeFilter: Int? = null
+
+    fun decadeChipAction(activeDecade: Int?, tappedDecade: Int): DecadeChipAction =
+        if (activeDecade == tappedDecade) {
+            DecadeChipAction.CLEAR_FILTER
+        } else {
+            DecadeChipAction.PLAY_DECADE
+        }
 
     /** Return true when [song]'s album release-year metadata falls inside [decade]. */
     fun isInDecade(song: Song, decade: Int): Boolean {
@@ -37,7 +57,7 @@ object GeneratedPlaylistPolicy {
      * with the same date ordering used by the generated decade playback queue.
      */
     fun songsForDecade(songs: Collection<Song>, decade: Int): List<Song> =
-        decadeSort.songs(songs.filter { song -> isInDecade(song, decade) })
+        decadePlaybackSort.songs(songs.filter { song -> isInDecade(song, decade) })
 
     /**
      * Filter songs by [decade] while preserving the caller's existing order. This is for visible
@@ -47,5 +67,5 @@ object GeneratedPlaylistPolicy {
         if (decade == null) songs else songs.filter { song -> isInDecade(song, decade) }
 
     /** Return all songs sorted newest-first by the same date-added semantics as the Songs tab. */
-    fun recentlyAddedSongs(songs: Collection<Song>): List<Song> = recentSort.songs(songs)
+    fun recentlyAddedSongs(songs: Collection<Song>): List<Song> = recentlyAddedSort.songs(songs)
 }
