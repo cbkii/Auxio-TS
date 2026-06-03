@@ -31,6 +31,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
@@ -40,6 +41,8 @@ import com.google.android.material.tabs.TabLayoutMediator
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeBinding
 import org.oxycblt.auxio.detail.DetailViewModel
@@ -195,7 +198,14 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         collectImmediately(musicModel.indexingState) {
             updateIndexerState(it)
             setupHeadUnitQuickAccess(requireBinding())
-            handlePendingEntryDestination()
+            if (it is IndexingState.Completed) {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    delay(PENDING_ENTRY_SETTLE_DELAY_MS)
+                    handlePendingEntryDestination(allowPending = false)
+                }
+            } else {
+                handlePendingEntryDestination(allowPending = true)
+            }
         }
         collectImmediately(playbackModel.pagerQueue) { setupHeadUnitQuickAccess(requireBinding()) }
         collectImmediately(homeModel.songList, homeModel.genreList, homeModel.playlistList) {
@@ -203,7 +213,9 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             genres,
             playlists ->
             updateMetadataShortcuts(songs, genres, playlists)
-            handlePendingEntryDestination()
+            handlePendingEntryDestination(
+                allowPending = musicModel.indexingState.value is IndexingState.Indexing
+            )
         }
         collect(musicModel.playlistDecision.flow, ::handlePlaylistDecision)
         collectImmediately(musicModel.playlistMessage.flow, ::handlePlaylistMessage)
@@ -265,9 +277,9 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         handleEntryDestination(destination, allowPending = true)
     }
 
-    private fun handlePendingEntryDestination() {
+    private fun handlePendingEntryDestination(allowPending: Boolean) {
         val destination = pendingEntryDestination ?: return
-        handleEntryDestination(destination, allowPending = true)
+        handleEntryDestination(destination, allowPending = allowPending)
     }
 
     private fun handleEntryDestination(
@@ -309,7 +321,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                     true
                 }
             }
-        if (handled && pendingEntryDestination == destination) {
+        if ((handled || !allowPending) && pendingEntryDestination == destination) {
             pendingEntryDestination = null
         }
         return handled
@@ -429,6 +441,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private fun handleDecadeChip(decade: Int) {
         when (GeneratedPlaylistPolicy.decadeChipAction(homeModel.decadeFilter.value, decade)) {
             GeneratedPlaylistPolicy.DecadeChipAction.CLEAR_FILTER -> {
+                homeModel.applySongSort(GeneratedPlaylistPolicy.decadePlaybackSort)
                 homeModel.applyDecadeFilter(null)
                 openTab(MusicType.SONGS)
             }
@@ -731,7 +744,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             is Show.AlbumArtistDecision -> {
                 L.d("Navigating to artist choices for ${show.album}")
                 findNavController()
-                    .navigateSafe(HomeFragmentDirections.showArtistChoices(show.album.uid))
+                    .navigateSafe(HomeFragmentDirections.showArtistChoices(decision.song.uid))
             }
             is Show.GenreDetails -> {
                 L.d("Navigating to ${show.genre}")
@@ -772,6 +785,10 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         } else {
             binding.homeToolbar.setVisible(R.id.home_normal_toolbar)
         }
+    }
+
+    private companion object {
+        const val PENDING_ENTRY_SETTLE_DELAY_MS = 300L
     }
 
     /**
