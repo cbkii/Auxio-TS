@@ -83,6 +83,16 @@ constructor(
     val hasAnySongs: Boolean
         get() = _allSongs.isNotEmpty()
 
+    /**
+     * Generate a decade playlist from the full unfiltered library. This intentionally ignores
+     * [songList] so a currently active tab filter cannot shrink the playback queue.
+     */
+    fun songsForDecade(decade: Int): List<Song> =
+        GeneratedPlaylistPolicy.songsForDecade(_allSongs, decade)
+
+    /** Generate a newest-first playlist from the full unfiltered library. */
+    fun recentlyAddedSongs(): List<Song> = GeneratedPlaylistPolicy.recentlyAddedSongs(_allSongs)
+
     private val _decadeFilter = MutableStateFlow<Int?>(null)
     /**
      * The currently active decade filter, expressed as the first year of the decade (e.g. `1990`
@@ -259,12 +269,7 @@ constructor(
     }
 
     private fun List<Song>.filteredByDecade(decade: Int?) =
-        if (decade == null) this
-        else
-            filter { song ->
-                val year = song.album.dates?.min?.year
-                year != null && year >= decade && year < decade + 10
-            }
+        GeneratedPlaylistPolicy.filterSongsForDecadePreservingOrder(this, decade)
 
     /**
      * Apply a new [Sort] to [albumList].
