@@ -100,8 +100,8 @@ class MusicWidgetProvider : AppWidgetProvider() {
     }
 
     private fun safelyExtractIncomingExtras(intent: Intent?): Map<String, Any?> {
-        val extras = intent?.extras ?: return emptyMap()
         return try {
+            val extras = intent?.extras ?: return emptyMap()
             extras.classLoader = javaClass.classLoader
             extras.keySet().associateWith { key -> extras.get(key) }
         } catch (e: BadParcelableException) {

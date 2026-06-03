@@ -119,7 +119,7 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
      * needed.
      */
     private fun setupCarOverlayEnabled(preference: Preference) {
-        if (!BuildConfig.TOPWAY_TWMUSIC_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
         try {
             val settingsClass = Class.forName("org.oxycblt.auxio.car.overlay.CarOverlaySettings")
             val instance = settingsClass.getDeclaredField("INSTANCE").get(null)
@@ -152,7 +152,7 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
     }
 
     private fun setupCarOverlayReset(preference: Preference) {
-        if (!BuildConfig.TOPWAY_TWMUSIC_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
         try {
             val settingsClass = Class.forName("org.oxycblt.auxio.car.overlay.CarOverlaySettings")
             val instance = settingsClass.getDeclaredField("INSTANCE").get(null)

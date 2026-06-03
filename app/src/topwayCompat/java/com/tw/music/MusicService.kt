@@ -18,6 +18,13 @@
 
 package com.tw.music
 
-import dagger.hilt.android.AndroidEntryPoint
-
-@AndroidEntryPoint class MusicService : org.oxycblt.auxio.AuxioService()
+/**
+ * Thin wrapper for the DoFun/Topway launcher entry that expects `com.tw.music.MusicService`.
+ *
+ * No [dagger.hilt.android.AndroidEntryPoint] annotation is needed here because the parent
+ * [org.oxycblt.auxio.AuxioService] is already an `@AndroidEntryPoint` and performs all Hilt
+ * injection in its own `onCreate`. Adding the annotation to this subclass would cause KSP to
+ * generate a Java injector that cannot resolve this Kotlin class during the Java compilation phase,
+ * breaking the `topwayTwMusicDebug` / `topwayTwMediaDebug` builds.
+ */
+class MusicService : org.oxycblt.auxio.AuxioService()

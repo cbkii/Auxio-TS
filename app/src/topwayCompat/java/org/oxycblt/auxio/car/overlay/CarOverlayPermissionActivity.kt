@@ -28,6 +28,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import org.oxycblt.auxio.R
+import timber.log.Timber as L
 
 /**
  * Simple activity to guide users through the overlay permission setup. Checks permission on resume
@@ -103,9 +104,36 @@ class CarOverlayPermissionActivity : AppCompatActivity() {
     }
 
     private fun openOverlaySettings() {
-        val intent =
-            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-        startActivity(intent)
+        val intents =
+            listOf(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName"),
+                ),
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName"),
+                ),
+                Intent(Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS),
+                Intent(Settings.ACTION_APPLICATION_SETTINGS),
+                Intent(Settings.ACTION_SETTINGS),
+            )
+
+        for (intent in intents) {
+            if (intent.resolveActivity(packageManager) != null) {
+                try {
+                    startActivity(intent)
+                    return
+                } catch (e: Exception) {
+                    L.w(e, "Failed to start settings intent: ${intent.action}")
+                }
+            } else {
+                L.d("Settings intent not resolvable: ${intent.action}")
+            }
+        }
+
+        statusText.text = getString(R.string.car_overlay_permission_manual_instructions)
     }
 
     companion object {
