@@ -25,27 +25,19 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.annotation.LayoutRes
 import androidx.test.core.app.ApplicationProvider
-import dagger.hilt.android.testing.HiltAndroidRule
-import dagger.hilt.android.testing.HiltAndroidTest
-import dagger.hilt.android.testing.HiltTestApplication
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.auxio.R
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-@HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
-@Config(application = HiltTestApplication::class)
 class PlaybackButtonSquareLayoutTest {
-    @get:Rule val hiltRule = HiltAndroidRule(this)
-
     @Test
     @Config(qualifiers = "w1280dp-h720dp-land")
-    fun `playback bar controls are square in landscape`() {
+    fun playbackBarControlsAreSquareInLandscape() {
         assertPlaybackButtonsSquare(
             R.layout.fragment_playback_bar,
             LANDSCAPE_WIDTH,
@@ -55,19 +47,19 @@ class PlaybackButtonSquareLayoutTest {
 
     @Test
     @Config(qualifiers = "w320dp-h320dp-port")
-    fun `default playback panel controls are square`() {
+    fun defaultPlaybackPanelControlsAreSquare() {
         assertPlaybackButtonsSquare(R.layout.fragment_playback_panel, COMPACT_WIDTH, COMPACT_HEIGHT)
     }
 
     @Test
     @Config(qualifiers = "w640dp-h360dp-land")
-    fun `h360 playback panel controls are square`() {
+    fun h360PlaybackPanelControlsAreSquare() {
         assertPlaybackButtonsSquare(R.layout.fragment_playback_panel, H360_WIDTH, H360_HEIGHT)
     }
 
     @Test
     @Config(qualifiers = "w1280dp-h720dp-land")
-    fun `h520 playback panel controls are square in landscape`() {
+    fun h520PlaybackPanelControlsAreSquareInLandscape() {
         assertPlaybackButtonsSquare(
             R.layout.fragment_playback_panel,
             LANDSCAPE_WIDTH,
@@ -77,7 +69,7 @@ class PlaybackButtonSquareLayoutTest {
 
     @Test
     @Config(qualifiers = "w720dp-h1280dp-port")
-    fun `h520 playback panel controls are square in portrait`() {
+    fun h520PlaybackPanelControlsAreSquareInPortrait() {
         assertPlaybackButtonsSquare(
             R.layout.fragment_playback_panel,
             PORTRAIT_WIDTH,
@@ -100,7 +92,7 @@ class PlaybackButtonSquareLayoutTest {
 
     private fun inflateAndLayout(@LayoutRes layoutId: Int, widthPx: Int, heightPx: Int): View {
         val base = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val themed = ContextThemeWrapper(base, R.style.Theme_Auxio_App)
+        val themed = ContextThemeWrapper(base, R.style.Theme_Auxio)
         val parent = FrameLayout(themed)
         val view = LayoutInflater.from(themed).inflate(layoutId, parent, false)
         parent.addView(
