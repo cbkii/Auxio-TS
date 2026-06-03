@@ -67,6 +67,7 @@
         -->
         <activity
             android:name="org.oxycblt.auxio.MainActivity"
+            android:exported="true"
             tools:node="merge">
             <intent-filter tools:node="remove">
                 <action android:name="android.intent.action.MAIN" />
