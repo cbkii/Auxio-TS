@@ -744,7 +744,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             is Show.AlbumArtistDecision -> {
                 L.d("Navigating to artist choices for ${show.album}")
                 findNavController()
-                    .navigateSafe(HomeFragmentDirections.showArtistChoices(decision.song.uid))
+                    .navigateSafe(HomeFragmentDirections.showArtistChoices(show.album.uid))
             }
             is Show.GenreDetails -> {
                 L.d("Navigating to ${show.genre}")
