@@ -24,7 +24,7 @@ package com.tw.music
  * No [dagger.hilt.android.AndroidEntryPoint] annotation is needed here because the parent
  * [org.oxycblt.auxio.AuxioService] is already an `@AndroidEntryPoint` and performs all Hilt
  * injection in its own `onCreate`. Adding the annotation to this subclass would cause KSP to
- * generate a Java injector that cannot resolve this Kotlin class during the Java compilation
- * phase, breaking the `topwayTwMusicDebug` / `topwayTwMediaDebug` builds.
+ * generate a Java injector that cannot resolve this Kotlin class during the Java compilation phase,
+ * breaking the `topwayTwMusicDebug` / `topwayTwMediaDebug` builds.
  */
 class MusicService : org.oxycblt.auxio.AuxioService()
