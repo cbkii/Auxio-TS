@@ -31,8 +31,8 @@ object GeneratedPlaylistPolicy {
     /**
      * Shared date-descending sort for generated decade queues and matching Songs-tab context.
      *
-     * Generated decade queues and the visible Songs tab both rely on [Sort.songs] so they share
-     * the same stable multi-pass ordering and tie-breaking pipeline.
+     * Generated decade queues and the visible Songs tab both rely on [Sort.songs] so they share the
+     * same stable multi-pass ordering and tie-breaking pipeline.
      */
     val decadePlaybackSort = Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING)
 
@@ -61,7 +61,8 @@ object GeneratedPlaylistPolicy {
     }
 
     /**
-     * Return all songs whose album release-year metadata falls inside [decade], sorted newest-first.
+     * Return all songs whose album release-year metadata falls inside [decade], sorted
+     * newest-first.
      *
      * This must match the visible Songs tab ordering for [decadePlaybackSort], so it delegates to
      * [Sort.songs] rather than introducing local secondary keys.
