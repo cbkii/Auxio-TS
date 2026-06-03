@@ -121,6 +121,10 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 } else if (!isAuxioForeground && prefs.enabled) {
                     showOverlayIfAllowed()
                 }
+                if (!isOverlayAttached) {
+                    L.d("Foreground-change signal left no live overlay; stopping idle service")
+                    stopSelfCleanly()
+                }
             }
             else -> {
                 L.w("Unknown action: ${intent.action}, stopping idle service")
@@ -429,9 +433,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
 
         /**
          * Signals foreground/background changes. Foreground transitions only need to hide an
-         * existing overlay, so they never cold-start the service. Background transitions may
-         * restore the overlay through the foreground-service path; [onStartCommand] promotes or
-         * stops cleanly.
+         * existing overlay, so they never cold-start the service. Background transitions use the
+         * foreground-service path and [onStartCommand] promotes the service or stops it promptly if
+         * the signal leaves no live overlay.
          */
         fun setAuxioForeground(context: Context, isForeground: Boolean) {
             val prefs = CarOverlayPrefs.from(context)
@@ -453,6 +457,8 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         /**
          * Sends a position-reset command only to a known live overlay. Position prefs are already
          * updated by the caller; if no overlay is attached, the next overlay show will use prefs.
+         * If a reset signal is delivered after the overlay detaches, [onStartCommand] stops the
+         * foreground service promptly.
          */
         fun resetPositionIfRunning(context: Context) {
             val prefs = CarOverlayPrefs.from(context)
