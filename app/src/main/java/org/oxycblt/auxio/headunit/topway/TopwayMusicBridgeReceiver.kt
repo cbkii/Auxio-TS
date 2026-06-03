@@ -46,6 +46,7 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
                 try {
                     Class.forName("com.tw.music.MusicService")
                 } catch (e: ClassNotFoundException) {
+                    L.d(e, "Topway wrapper service not found, falling back to AuxioService")
                     AuxioService::class.java
                 }
             } else {
