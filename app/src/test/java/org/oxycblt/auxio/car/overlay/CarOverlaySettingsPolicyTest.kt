@@ -23,116 +23,116 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/**
- * Tests the overlay settings enable/disable decision logic. Verifies that:
- * - Enabling without permission enters the pending-permission flow
- * - Enabling with permission completes immediately
- * - Disabling clears pending-enable state
- * - Reset position does not request service start when disabled, permissionless, or idle
- */
 class CarOverlaySettingsPolicyTest {
 
-    private enum class EnableDecision {
-        COMPLETED,
-        PENDING_PERMISSION,
-    }
-
-    private data class EnableResult(val decision: EnableDecision, val pendingEnable: Boolean)
-
-    /**
-     * Models the setEnabled decision logic from CarOverlaySettings without Android framework calls.
-     * Enabling without permission must mark a pending-enable request and report that the operation
-     * did not complete immediately; disabling must always clear pending-enable state.
-     */
-    private fun setEnabledDecision(enable: Boolean, hasPermission: Boolean): EnableResult {
-        if (enable && !hasPermission) {
-            return EnableResult(EnableDecision.PENDING_PERMISSION, pendingEnable = true)
-        }
-        return EnableResult(EnableDecision.COMPLETED, pendingEnable = false)
-    }
-
-    /**
-     * Models the resetPosition logic — should only signal a service that is enabled, permitted, and
-     * already running so reset never cold-starts the overlay service.
-     */
-    private fun shouldSignalResetToService(
-        enabled: Boolean,
-        hasPermission: Boolean,
-        serviceRunning: Boolean,
-        overlayAttached: Boolean,
-    ): Boolean {
-        return enabled && hasPermission && serviceRunning && overlayAttached
-    }
-
     @Test
-    fun `enable with permission completes immediately`() {
+    fun `enable with permission completes immediately and starts service`() {
         assertEquals(
-            EnableResult(EnableDecision.COMPLETED, pendingEnable = false),
-            setEnabledDecision(enable = true, hasPermission = true),
+            CarOverlaySettingsPolicy.EnableResult(
+                decision = CarOverlaySettingsPolicy.EnableDecision.COMPLETED,
+                enabled = true,
+                pendingEnable = false,
+                launchPermissionFlow = false,
+                startService = true,
+                stopService = false,
+            ),
+            CarOverlaySettingsPolicy.setEnabledDecision(
+                requestedEnabled = true,
+                hasOverlayPermission = true,
+            ),
         )
     }
 
     @Test
-    fun `enable without permission enters pending-enable flow`() {
+    fun `enable without permission keeps switch unchecked and records pending enable`() {
         assertEquals(
-            EnableResult(EnableDecision.PENDING_PERMISSION, pendingEnable = true),
-            setEnabledDecision(enable = true, hasPermission = false),
+            CarOverlaySettingsPolicy.EnableResult(
+                decision = CarOverlaySettingsPolicy.EnableDecision.PENDING_PERMISSION,
+                enabled = false,
+                pendingEnable = true,
+                launchPermissionFlow = true,
+                startService = false,
+                stopService = false,
+            ),
+            CarOverlaySettingsPolicy.setEnabledDecision(
+                requestedEnabled = true,
+                hasOverlayPermission = false,
+            ),
         )
     }
 
     @Test
-    fun `disable always completes and clears pending-enable`() {
+    fun `disable always clears enabled and pending enable and stops service`() {
+        val expected =
+            CarOverlaySettingsPolicy.EnableResult(
+                decision = CarOverlaySettingsPolicy.EnableDecision.COMPLETED,
+                enabled = false,
+                pendingEnable = false,
+                launchPermissionFlow = false,
+                startService = false,
+                stopService = true,
+            )
         assertEquals(
-            EnableResult(EnableDecision.COMPLETED, pendingEnable = false),
-            setEnabledDecision(enable = false, hasPermission = true),
+            expected,
+            CarOverlaySettingsPolicy.setEnabledDecision(
+                requestedEnabled = false,
+                hasOverlayPermission = true,
+            ),
         )
         assertEquals(
-            EnableResult(EnableDecision.COMPLETED, pendingEnable = false),
-            setEnabledDecision(enable = false, hasPermission = false),
+            expected,
+            CarOverlaySettingsPolicy.setEnabledDecision(
+                requestedEnabled = false,
+                hasOverlayPermission = false,
+            ),
         )
     }
 
     @Test
     fun `reset position signals service only when overlay is live`() {
         assertTrue(
-            shouldSignalResetToService(
+            CarOverlaySettingsPolicy.shouldSignalResetToService(
                 enabled = true,
-                hasPermission = true,
-                serviceRunning = true,
-                overlayAttached = true,
+                hasOverlayPermission = true,
+                overlayLive = true,
             )
         )
         assertFalse(
-            shouldSignalResetToService(
+            CarOverlaySettingsPolicy.shouldSignalResetToService(
                 enabled = false,
-                hasPermission = true,
-                serviceRunning = true,
-                overlayAttached = true,
+                hasOverlayPermission = true,
+                overlayLive = true,
             )
         )
         assertFalse(
-            shouldSignalResetToService(
+            CarOverlaySettingsPolicy.shouldSignalResetToService(
                 enabled = true,
-                hasPermission = false,
-                serviceRunning = true,
-                overlayAttached = true,
+                hasOverlayPermission = false,
+                overlayLive = true,
             )
         )
         assertFalse(
-            shouldSignalResetToService(
+            CarOverlaySettingsPolicy.shouldSignalResetToService(
                 enabled = true,
-                hasPermission = true,
-                serviceRunning = false,
-                overlayAttached = true,
+                hasOverlayPermission = true,
+                overlayLive = false,
             )
         )
+    }
+
+    @Test
+    fun `overlay live requires created service and attached overlay`() {
+        assertTrue(
+            CarOverlaySettingsPolicy.overlayLive(serviceCreated = true, overlayAttached = true)
+        )
         assertFalse(
-            shouldSignalResetToService(
-                enabled = true,
-                hasPermission = true,
-                serviceRunning = true,
-                overlayAttached = false,
-            )
+            CarOverlaySettingsPolicy.overlayLive(serviceCreated = false, overlayAttached = true)
+        )
+        assertFalse(
+            CarOverlaySettingsPolicy.overlayLive(serviceCreated = true, overlayAttached = false)
+        )
+        assertFalse(
+            CarOverlaySettingsPolicy.overlayLive(serviceCreated = false, overlayAttached = false)
         )
     }
 }

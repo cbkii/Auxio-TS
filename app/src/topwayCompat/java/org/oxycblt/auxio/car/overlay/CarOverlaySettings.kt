@@ -41,24 +41,25 @@ object CarOverlaySettings {
      */
     fun setEnabled(context: Context, enabled: Boolean): Boolean {
         val prefs = CarOverlayPrefs.from(context)
+        val result =
+            CarOverlaySettingsPolicy.setEnabledDecision(
+                requestedEnabled = enabled,
+                hasOverlayPermission = Settings.canDrawOverlays(context),
+            )
 
-        if (enabled) {
-            if (!Settings.canDrawOverlays(context)) {
-                // Mark pending-enable so PermissionActivity knows to enable after grant.
-                prefs.pendingEnable = true
-                context.startActivity(CarOverlayPermissionActivity.intent(context))
-                // Return false: switch should NOT remain enabled until permission is granted.
-                return false
-            }
-            prefs.enabled = true
-            prefs.pendingEnable = false
+        prefs.enabled = result.enabled
+        prefs.pendingEnable = result.pendingEnable
+
+        if (result.launchPermissionFlow) {
+            context.startActivity(CarOverlayPermissionActivity.intent(context))
+        }
+        if (result.startService) {
             CarFloatingControlsService.start(context)
-        } else {
-            prefs.enabled = false
-            prefs.pendingEnable = false
+        }
+        if (result.stopService) {
             CarFloatingControlsService.stop(context)
         }
-        return true
+        return result.completedImmediately
     }
 
     /**
