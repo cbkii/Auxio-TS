@@ -462,9 +462,20 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
          */
         fun resetPositionIfRunning(context: Context) {
             val prefs = CarOverlayPrefs.from(context)
-            if (!prefs.enabled) return
-            if (!Settings.canDrawOverlays(context)) return
-            if (!isServiceCreated || !isOverlayRuntimeAttached) return
+            val overlayLive =
+                CarOverlaySettingsPolicy.overlayLive(
+                    serviceCreated = isServiceCreated,
+                    overlayAttached = isOverlayRuntimeAttached,
+                )
+            if (
+                !CarOverlaySettingsPolicy.shouldSignalResetToService(
+                    enabled = prefs.enabled,
+                    hasOverlayPermission = Settings.canDrawOverlays(context),
+                    overlayLive = overlayLive,
+                )
+            ) {
+                return
+            }
             val intent = Intent(context, CarFloatingControlsService::class.java)
             intent.action = ACTION_RESET_POSITION
             try {

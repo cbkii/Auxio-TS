@@ -41,7 +41,8 @@ require_file_not_contains() {
 
 find_merged_manifest() {
   local variant="$1"
-  find app/build/intermediates/merged_manifests -path "*${variant}*AndroidManifest.xml" -print 2>/dev/null | sort | head -n 1
+  find app/build/intermediates/merged_manifest app/build/intermediates/merged_manifests \
+    -path "*${variant}*AndroidManifest.xml" -print 2>/dev/null | sort | head -n 1
 }
 
 find_apk() {
@@ -346,16 +347,32 @@ def require_topway_alias(application, label, debug=False):
     for intent_filter in alias.findall("intent-filter"):
         filter_actions.update(attr(action_el, "name") for action_el in intent_filter.findall("action"))
         filter_categories.update(attr(cat_el, "name") for cat_el in intent_filter.findall("category"))
-    for action_name in ["android.intent.action.MAIN", "android.intent.action.MUSIC_PLAYER"]:
+    for action_name in ["android.intent.action.MAIN", "android.intent.action.MUSIC_PLAYER", "android.intent.action.VIEW"]:
         if action_name in filter_actions:
             ok(f"{label} alias has action {action_name}")
         else:
             fail(f"{label} alias lacks action {action_name}")
-    for category_name in ["android.intent.category.LAUNCHER", "android.intent.category.DEFAULT", "android.intent.category.APP_MUSIC"]:
+    for category_name in ["android.intent.category.LAUNCHER", "android.intent.category.DEFAULT", "android.intent.category.APP_MUSIC", "android.intent.category.BROWSABLE"]:
         if category_name in filter_categories:
             ok(f"{label} alias has category {category_name}")
         else:
             fail(f"{label} alias lacks category {category_name}")
+
+def require_topway_main_activity_minimized(application, label):
+    activities = [activity for activity in application.findall("activity") if attr(activity, "name") == "org.oxycblt.auxio.MainActivity"]
+    if not activities:
+        fail(f"{label} lacks org.oxycblt.auxio.MainActivity target")
+        return
+    activity = activities[0]
+    if attr(activity, "exported") == "false":
+        ok(f"{label} MainActivity target is not exported")
+    else:
+        fail(f"{label} MainActivity target exported is {attr(activity, 'exported')!r}")
+    intent_filters = activity.findall("intent-filter")
+    if not intent_filters:
+        ok(f"{label} MainActivity target has no external intent filters")
+    else:
+        fail(f"{label} MainActivity target still has {len(intent_filters)} intent filter(s)")
 
 standard, topway_debug, topway_release, topway_media_debug, topway_media_release = [parse(path) for path in sys.argv[1:6]]
 standard_app = standard.find("application")
@@ -377,6 +394,7 @@ else:
 require_package(topway_debug, "com.tw.music.debug", "topwayTwMusicDebug")
 require_single_launcher(topway_debug_app, "com.tw.music.MusicActivity", "topwayTwMusicDebug")
 require_topway_alias(topway_debug_app, "topwayTwMusicDebug", debug=True)
+require_topway_main_activity_minimized(topway_debug_app, "topwayTwMusicDebug")
 require_provider(topway_debug_app, "com.tw.music.debug.image.CoverProvider", "topwayTwMusicDebug")
 require_media_browser(topway_debug_app, "topwayTwMusicDebug")
 require_topway_receiver(topway_debug_app, "topwayTwMusicDebug")
@@ -384,6 +402,7 @@ require_topway_receiver(topway_debug_app, "topwayTwMusicDebug")
 require_package(topway_release, "com.tw.music", "topwayTwMusicRelease")
 require_single_launcher(topway_release_app, "com.tw.music.MusicActivity", "topwayTwMusicRelease")
 require_topway_alias(topway_release_app, "topwayTwMusicRelease")
+require_topway_main_activity_minimized(topway_release_app, "topwayTwMusicRelease")
 require_provider(topway_release_app, "com.tw.music.image.CoverProvider", "topwayTwMusicRelease")
 require_media_browser(topway_release_app, "topwayTwMusicRelease")
 require_topway_receiver(topway_release_app, "topwayTwMusicRelease")
@@ -391,6 +410,7 @@ require_topway_receiver(topway_release_app, "topwayTwMusicRelease")
 require_package(topway_media_debug, "com.tw.media.debug", "topwayTwMediaDebug")
 require_single_launcher(topway_media_debug_app, "com.tw.music.MusicActivity", "topwayTwMediaDebug")
 require_topway_alias(topway_media_debug_app, "topwayTwMediaDebug", debug=True)
+require_topway_main_activity_minimized(topway_media_debug_app, "topwayTwMediaDebug")
 require_provider(topway_media_debug_app, "com.tw.media.debug.image.CoverProvider", "topwayTwMediaDebug")
 require_media_browser(topway_media_debug_app, "topwayTwMediaDebug")
 require_topway_receiver(topway_media_debug_app, "topwayTwMediaDebug")
@@ -398,6 +418,7 @@ require_topway_receiver(topway_media_debug_app, "topwayTwMediaDebug")
 require_package(topway_media_release, "com.tw.media", "topwayTwMediaRelease")
 require_single_launcher(topway_media_release_app, "com.tw.music.MusicActivity", "topwayTwMediaRelease")
 require_topway_alias(topway_media_release_app, "topwayTwMediaRelease")
+require_topway_main_activity_minimized(topway_media_release_app, "topwayTwMediaRelease")
 require_provider(topway_media_release_app, "com.tw.media.image.CoverProvider", "topwayTwMediaRelease")
 require_media_browser(topway_media_release_app, "topwayTwMediaRelease")
 require_topway_receiver(topway_media_release_app, "topwayTwMediaRelease")
