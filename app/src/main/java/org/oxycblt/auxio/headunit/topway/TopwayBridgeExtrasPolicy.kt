@@ -51,16 +51,37 @@ object TopwayBridgeExtrasPolicy {
      * Reading a malformed Bundle can throw before any routing decision is made, so isolate Bundle
      * deserialization here and let callers continue with an empty extras map.
      */
-    fun safelyExtractIncomingExtras(intent: Intent?, classLoader: ClassLoader?): Map<String, Any?> {
+    fun safelyExtractIncomingExtras(
+        intent: Intent?,
+        classLoader: ClassLoader?,
+        source: String = "Topway bridge",
+    ): Map<String, Any?> {
+        val action = intent?.action
         return try {
             val extras = intent?.extras ?: return emptyMap()
             extras.classLoader = classLoader
-            extras.keySet().associateWith { key -> extras.get(key) }
+            buildMap(2) {
+                if (extras.containsKey(TopwayMusicContract.EXTRA_CMD)) {
+                    put(TopwayMusicContract.EXTRA_CMD, extras.get(TopwayMusicContract.EXTRA_CMD))
+                }
+                if (extras.containsKey(TopwayMusicContract.EXTRA_WIDGET_PROGRESS)) {
+                    put(
+                        TopwayMusicContract.EXTRA_WIDGET_PROGRESS,
+                        extras.get(TopwayMusicContract.EXTRA_WIDGET_PROGRESS),
+                    )
+                }
+            }
         } catch (e: BadParcelableException) {
-            L.w(e, "Ignoring malformed extras from untrusted Topway intent")
+            L.w(
+                e,
+                "Ignoring malformed extras from untrusted Topway intent: source=$source action=$action",
+            )
             emptyMap()
         } catch (e: RuntimeException) {
-            L.w(e, "Ignoring unreadable extras from untrusted Topway intent")
+            L.w(
+                e,
+                "Ignoring unreadable extras from untrusted Topway intent: source=$source action=$action",
+            )
             emptyMap()
         }
     }

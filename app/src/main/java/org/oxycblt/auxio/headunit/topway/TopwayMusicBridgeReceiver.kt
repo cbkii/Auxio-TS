@@ -57,6 +57,7 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
                 TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
                     intent,
                     javaClass.classLoader,
+                    source = "TopwayMusicBridgeReceiver",
                 )
             )
         extras.cmd?.let { serviceIntent.putExtra(TopwayMusicContract.EXTRA_CMD, it) }

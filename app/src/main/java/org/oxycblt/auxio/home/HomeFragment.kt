@@ -347,16 +347,35 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
 
         val signature =
             MetadataChipSignature(
-                decades = if (metadataState.decades) decades else emptyList(),
+                decades = if (metadataState.decades) decades.toList() else emptyList(),
                 activeDecade = homeModel.decadeFilter.value,
                 recentlyAdded = metadataState.recentlyAdded,
                 favourites = metadataState.favourites,
             )
-        if (metadataChipSignature != signature) {
-            rebuildMetadataChips(binding, signature)
-            metadataChipSignature = signature
+        val oldSignature = metadataChipSignature
+        when {
+            oldSignature != null &&
+                oldSignature.decades == signature.decades &&
+                oldSignature.recentlyAdded == signature.recentlyAdded &&
+                oldSignature.favourites == signature.favourites -> {
+                if (oldSignature.activeDecade != signature.activeDecade) {
+                    updateDecadeChipSelection(binding, signature)
+                }
+            }
+            oldSignature != signature -> rebuildMetadataChips(binding, signature)
         }
+        metadataChipSignature = signature
         setupHeadUnitQuickAccess(binding)
+    }
+
+    private fun updateDecadeChipSelection(
+        binding: FragmentHomeBinding,
+        signature: MetadataChipSignature,
+    ) {
+        for (index in signature.decades.indices) {
+            val chip = binding.homeMetadataChips.getChildAt(index) as? Chip ?: continue
+            chip.isChecked = signature.decades[index] == signature.activeDecade
+        }
     }
 
     private fun rebuildMetadataChips(

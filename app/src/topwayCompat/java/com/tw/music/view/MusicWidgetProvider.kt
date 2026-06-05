@@ -73,6 +73,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
                 TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
                     intent,
                     javaClass.classLoader,
+                    source = "MusicWidgetProvider",
                 )
             )
 

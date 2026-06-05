@@ -18,12 +18,37 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.content.Intent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import org.oxycblt.auxio.AuxioService
 
 class TopwayBridgeExtrasPolicyTest {
+    @Test
+    fun `safe extractor reads only allowlisted Topway extras`() {
+        val intent =
+            Intent(TopwayMusicContract.ACTION_CMD).apply {
+                putExtra(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.CMD_NEXT)
+                putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, 1234)
+                putExtra("ignored", "payload")
+            }
+
+        val extras =
+            TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
+                intent,
+                javaClass.classLoader,
+                source = "test",
+            )
+
+        assertEquals(
+            setOf(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.EXTRA_WIDGET_PROGRESS),
+            extras.keys,
+        )
+        assertEquals(TopwayMusicContract.CMD_NEXT, extras[TopwayMusicContract.EXTRA_CMD])
+        assertEquals(1234, extras[TopwayMusicContract.EXTRA_WIDGET_PROGRESS])
+    }
+
     @Test
     fun `sanitizer forwards only allowlisted Topway extras`() {
         val extras =
