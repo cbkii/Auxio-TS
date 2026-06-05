@@ -2,97 +2,188 @@
 
 Practical on-device checklist for validating Auxio-TS on a TS18/Topway head unit running DoFun Variety (`com.dofun.variety`). Static scripts, Gradle builds, emulator tests, and Roborazzi screenshots are useful pre-flight evidence, but do **not** prove full DoFun launcher/widget parity without real TS18 hardware validation.
 
+The exact target-device profile is summarised in [`evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md`](evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md).
+
 ## Test build under validation
 
-| Field | Value |
-|-------|-------|
-| Auxio-TS commit SHA |  |
-| APK file | `app/build/outputs/apk/topwayTwMusic/release/app-topwayTwMusic-release.apk` |
-| Expected package | `com.tw.music` |
-| Expected launcher component | `com.tw.music/.MusicActivity` |
-| Head unit model/firmware |  |
-| DoFun/Variety package/version |  |
-| Tester/date |  |
+| Field                                 | Value                                                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Auxio-TS commit SHA                   |                                                                                                       |
+| APK file                              | `app/build/outputs/apk/topwayTwMusic/release/app-topwayTwMusic-release.apk` or alternate variant path |
+| Expected package                      | `com.tw.music` for exact replacement; `com.tw.media` for alternate DoFun entry once implemented       |
+| Expected exact launcher component     | `com.tw.music/.MusicActivity`                                                                         |
+| Expected alternate launcher component | `com.tw.media/com.tw.music.MusicActivity`                                                             |
+| Head unit model/firmware              | `s9863a1h10_Natv`, Android 10 / SDK 29, if testing the captured target device                         |
+| DoFun/Variety package/version         |                                                                                                       |
+| Tester/date                           |                                                                                                       |
 
 Use `topwayTwMusicRelease` or another signed exact-package build for final DoFun identity validation. `topwayTwMusicDebug` installs as `com.tw.music.debug`, which is useful for development but is not DoFun's fixed stock package target.
 
+## Validation lanes
+
+### Lane A — normal app shell / TermOne / Termux only
+
+Use this lane when there is no ADB shell, no root, and no Shizuku package-manager authority.
+
+Allowed:
+
+- `getprop` inspection;
+- limited `pm list packages` and `pm path` checks;
+- storage/mount inspection;
+- display/window/audio snapshots where not permission-denied;
+- app launch/install through normal package installer.
+
+Not allowed/expected to work:
+
+- disabling/removing stock system packages;
+- reliable `dumpsys package` for arbitrary packages;
+- `am broadcast` test injection as shell;
+- privileged appops/package state changes.
+
+The captured TS18 diagnostics were from this lane. The shell identity was `u0_a177` under `u:r:untrusted_app`.
+
+### Lane B — ADB shell
+
+Use this lane only when `adb shell id` returns `uid=2000(shell)` or better.
+
+Commands in the sections below generally assume this lane.
+
+### Lane C — Shizuku
+
+Use this lane when Shizuku is running and package-manager operations are deliberately routed through its shell/system-mediated authority. Validate exactly which operations were performed and keep recovery steps.
+
+### Lane D — root/system image
+
+Use this lane only for deliberate system package replacement, Magisk/system overlay, or firmware-image changes. Keep stock APK backups and rollback instructions.
+
 ## Pre-install checks
 
-```sh
-# Check for existing stock music package
-adb shell cmd package list packages | grep -E "com\.tw\.music|com\.tw\.media"
+### Any lane
 
-# Check DoFun is present
-adb shell cmd package list packages | grep com.dofun.variety
+```sh
+pm list packages | grep -E "com\.tw\.music|com\.tw\.media|org\.oxycblt\.auxio|com\.dofun\.variety" || true
+pm path com.tw.music 2>/dev/null || true
+pm path com.tw.media 2>/dev/null || true
+pm path com.dofun.variety 2>/dev/null || true
+getprop ro.build.version.release
+getprop ro.build.version.sdk
+getprop ro.product.model
+getprop ro.product.device
+getprop service.adb.tcp.port
+getprop persist.adb.tcp.port
 ```
 
-If stock `com.tw.music` is present, it may win the music slot or cause a signature conflict. Do not disable or remove stock packages without explicit operator approval. With approval, a temporary disable command is:
+If stock `com.tw.music` is present at `/system/priv-app/...`, a user-signed `topwayTwMusicRelease` may fail to install until stock package state is managed through ADB shell, Shizuku, root, firmware control, or matching signing.
+
+### ADB/Shizuku/root package-state checks
+
+```sh
+adb shell cmd package list packages | grep -E "com\.tw\.music|com\.tw\.media|org\.oxycblt\.auxio|com\.dofun\.variety"
+adb shell pm path com.tw.music
+adb shell dumpsys package com.tw.music | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|priv|system|enabled|User 0|installed'
+```
+
+Prefer reversible disable before uninstall-for-user:
 
 ```sh
 adb shell pm disable-user --user 0 com.tw.music
 ```
 
+Only if needed and approved:
+
+```sh
+adb shell pm uninstall --user 0 com.tw.music
+```
+
+Recovery:
+
+```sh
+adb shell cmd package install-existing --user 0 com.tw.music
+adb shell pm enable com.tw.music
+```
+
 ## Install
+
+Exact `com.tw.music` replacement:
 
 ```sh
 adb install -r app/build/outputs/apk/topwayTwMusic/release/app-topwayTwMusic-release.apk
 ```
 
+Alternate `com.tw.media` DoFun entry once implemented:
+
+```sh
+adb install -r app/build/outputs/apk/topwayTwMedia/release/app-topwayTwMedia-release.apk
+```
+
+Normal package-installer testing from the head unit is acceptable only as an installability check. It does not replace ADB/root/Shizuku validation when stock package conflicts exist.
+
 ## Package resolution checks
 
 ```sh
-# Confirm com.tw.music resolves to Auxio-TS
-adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p com.tw.music
-# Expected: com.tw.music/com.tw.music.MusicActivity
+# Confirm exact com.tw.music component resolves when that variant is installed
+adb shell cmd package resolve-activity --brief -n com.tw.music/com.tw.music.MusicActivity
+
+# Confirm alternate com.tw.media component resolves when that variant is installed
+adb shell cmd package resolve-activity --brief -n com.tw.media/com.tw.music.MusicActivity
 
 # APP_MUSIC category
 adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.APP_MUSIC -p com.tw.music
-# Expected: com.tw.music/com.tw.music.MusicActivity
+adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.APP_MUSIC -p com.tw.media
 
 # Manifest/service/provider detail
 adb shell dumpsys package com.tw.music | grep -iE 'MusicActivity|MAIN|MUSIC_PLAYER|APP_MUSIC|LAUNCHER|MediaBrowserService|CoverProvider|com.tw.music.action|widget_music_progress'
-# Expected: MediaBrowserService, com.tw.music.image.CoverProvider, and Topway receiver actions are present
+adb shell dumpsys package com.tw.media | grep -iE 'MusicActivity|MAIN|MUSIC_PLAYER|APP_MUSIC|LAUNCHER|MediaBrowserService|CoverProvider|com.tw.music.action|widget_music_progress'
 ```
 
 ## Media browser check
 
 ```sh
 adb shell cmd package query-intent-services -a android.media.browse.MediaBrowserService
-# Expected: com.tw.music listed
+# Expected: installed Auxio-TS Topway-compatible package is listed.
 ```
 
 ## Media session check
 
 ```sh
-adb shell dumpsys media_session | grep -i -A60 'com.tw.music\|auxio'
-# Expected: active session with metadata when playing
+adb shell dumpsys media_session | grep -i -A80 'com.tw.music\|com.tw.media\|auxio'
+# Expected: active session with metadata when playing.
 
-adb shell dumpsys audio | grep -iE 'com.tw.music|auxio|focus|USAGE_MEDIA|STREAM_MUSIC'
-# Expected: normal media audio focus while playing
+adb shell dumpsys audio | grep -iE 'com.tw.music|com.tw.media|auxio|focus|USAGE_MEDIA|STREAM_MUSIC|com.tw.service'
+# Expected: normal media audio focus while playing; note whether com.tw.service mediates focus.
 ```
+
+Also record any restored media-button receiver:
+
+```sh
+adb shell dumpsys media_session | grep -i 'Restored MediaButtonReceiver'
+```
+
+The captured target-device diagnostics showed ZLink as the restored media-button receiver in that state. That is a runtime observation, not a permanent failure condition.
 
 ## DoFun widget recognition
 
-| Step | Expected |
-|------|----------|
-| Open DoFun launcher music panel/widget | Auxio-TS icon appears in music hotseat |
-| Tap music hotseat icon | Auxio-TS opens (com.tw.music.MusicActivity) |
-| Play a track in Auxio-TS | Widget shows track title/artist |
+| Step                                   | Expected                                                         |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| Open DoFun launcher music panel/widget | Auxio-TS icon appears in music hotseat or selectable music slot  |
+| Tap exact music hotseat icon           | Auxio-TS opens through `com.tw.music/com.tw.music.MusicActivity` |
+| Tap alternate entry if testing it      | Auxio-TS opens through `com.tw.media/com.tw.music.MusicActivity` |
+| Play a track in Auxio-TS               | Widget shows track title/artist                                  |
 
 ## Widget playback controls
 
-| Action | Expected |
-|--------|----------|
-| Tap play/pause on widget | Playback toggles |
-| Tap next on widget | Next track plays |
-| Tap prev on widget | Previous track plays |
+| Action                       | Expected                  |
+| ---------------------------- | ------------------------- |
+| Tap play/pause on widget     | Playback toggles          |
+| Tap next on widget           | Next track plays          |
+| Tap prev on widget           | Previous track plays      |
 | Seek via widget progress bar | Playback position changes |
 
 ## Broadcast verification
 
 ```sh
 # Watch Topway broadcasts
-adb shell logcat -v time | grep -iE 'tw.music|music_progress|dofun|variety'
+adb shell logcat -v time | grep -iE 'tw.music|tw.media|music_progress|dofun|variety|Auxio|Topway'
 
 # Manual control tests
 adb shell am broadcast -a com.tw.music.action.pp
@@ -108,51 +199,102 @@ adb shell am broadcast -a com.tw.music.action.cmd --es cmd prev
 adb shell am broadcast -a com.android.launcher.widget_music_progress --ei music_progress 30000
 ```
 
+## Storage/media-library validation
+
+The exact target diagnostics showed USB storage at:
+
+```text
+/storage/usbdisk0
+```
+
+Validate at least:
+
+```sh
+adb shell ls -lah /storage/usbdisk0
+adb shell ls -lah /storage/usbdisk0/Music 2>/dev/null || true
+adb shell ls -lah /sdcard/Music 2>/dev/null || true
+```
+
+Manual checks:
+
+- grant Android 10 storage permission when prompted;
+- confirm Auxio-TS can scan `/sdcard/Music`;
+- confirm Auxio-TS can scan or otherwise access `/storage/usbdisk0` where permitted;
+- confirm playback works from the same storage locations stock `twMusic` can access;
+- retest after ACC/reboot and after USB disk re-mount.
+
+## Overlay validation for PR #53 and later
+
+The exact device has:
+
+- Android 10 / SDK 29;
+- 1280x720 display;
+- top status bar around 55px;
+- right navigation bar around 55px.
+
+Validate:
+
+- overlay permission request opens usable system settings;
+- overlay service starts without Android 14-only foreground-service type crashes;
+- overlay never saves an off-screen position;
+- overlay does not sit under the top status bar or right navigation bar by default;
+- overlay can be dragged and persists position safely;
+- overlay recovers after process death/ACC/reboot only when enabled and permitted.
+
 ## Process restart check
 
 ```sh
 adb shell am force-stop com.tw.music
-# Reopen from DoFun widget — app should restart and resume
+# Reopen from DoFun widget — app should restart and resume.
+
+adb shell am force-stop com.tw.media
+# If alternate variant is installed, retest the alternate DoFun entry.
 ```
 
 ## Launcher restart check
 
 ```sh
 adb shell am force-stop com.dofun.variety
-# Wait for launcher to restart — music widget should still show Auxio-TS state
+# Wait for launcher to restart — music widget should still show Auxio-TS state.
 ```
 
 ## Reboot check
 
 Reboot the head unit. After boot:
-- DoFun music widget should still recognise Auxio-TS
-- Tapping the music hotseat should open Auxio-TS
-- Previous playback state should be recoverable
+
+- DoFun music widget should still recognise the installed Auxio-TS Topway-compatible variant;
+- tapping the music hotseat should open Auxio-TS;
+- previous playback state should be recoverable;
+- overlay state should match the user setting and permission state;
+- USB media paths should be re-scannable after mount completes.
 
 ## Evidence to retain outside git
 
-Keep runtime evidence outside the repository unless a maintainer explicitly asks for a small, redacted fixture. Useful artifacts are:
+Keep runtime evidence outside the repository unless a maintainer explicitly asks for a small, redacted fixture. Useful artefacts are:
 
-- `adb shell dumpsys package com.tw.music`
-- `adb shell dumpsys media_session`
-- filtered logcat covering DoFun widget recognition, controls, and playback state
-- screenshots/photos of DoFun widget recognition, metadata, progress, and controls
-- exact APK filename, commit SHA, head-unit firmware, and DoFun version
+- `adb shell dumpsys package com.tw.music` / `com.tw.media`;
+- `adb shell dumpsys media_session`;
+- `adb shell dumpsys audio`;
+- filtered logcat covering DoFun widget recognition, controls, playback state, overlay behaviour, and storage scan;
+- screenshots/photos of DoFun widget recognition, metadata, progress, and controls;
+- exact APK filename, commit SHA, head-unit firmware, and DoFun version.
 
 ## Pass/fail summary
 
-| Check | Pass | Fail | Notes |
-|-------|------|------|-------|
-| Package resolves as com.tw.music | ☐ | ☐ | |
-| APP_MUSIC intent resolves | ☐ | ☐ | |
-| MediaBrowserService listed | ☐ | ☐ | |
-| MediaSession active during playback | ☐ | ☐ | |
-| DoFun widget shows Auxio-TS | ☐ | ☐ | |
-| Widget controls work | ☐ | ☐ | |
-| Broadcast commands work | ☐ | ☐ | |
-| Process restart recovers | ☐ | ☐ | |
-| Launcher restart stable | ☐ | ☐ | |
-| Reboot stable | ☐ | ☐ | |
+| Check                               | Pass | Fail | Notes |
+| ----------------------------------- | ---- | ---- | ----- |
+| Package resolves as intended        | ☐    | ☐    |       |
+| APP_MUSIC intent resolves           | ☐    | ☐    |       |
+| MediaBrowserService listed          | ☐    | ☐    |       |
+| MediaSession active during playback | ☐    | ☐    |       |
+| DoFun widget shows Auxio-TS         | ☐    | ☐    |       |
+| Widget controls work                | ☐    | ☐    |       |
+| Broadcast commands work             | ☐    | ☐    |       |
+| Storage scan/playback works         | ☐    | ☐    |       |
+| Overlay safe on Android 10          | ☐    | ☐    |       |
+| Process restart recovers            | ☐    | ☐    |       |
+| Launcher restart stable             | ☐    | ☐    |       |
+| Reboot stable                       | ☐    | ☐    |       |
 
 ## Exact-device post-PR#53 validation addendum
 
@@ -180,7 +322,6 @@ adb shell pm enable com.tw.music
 adb shell cmd package install-existing --user 0 com.tw.music
 ```
 
-
 ### Expected package/service resolution
 
 ```sh
@@ -189,7 +330,6 @@ adb shell cmd package resolve-service --brief -a android.media.browse.MediaBrows
 ```
 
 Expected for release variants: `com.tw.music/com.tw.music.MusicService` for `topwayTwMusicRelease` and `com.tw.media/com.tw.music.MusicService` for `topwayTwMediaRelease`. If `org.oxycblt.auxio.AuxioService` also resolves as an exported browse service in either Topway-compatible release, treat it as a duplicate-service failure and roll back to the previous APK or re-enable the stock package with the recovery commands in `docs/TS18_INSTALLATION_CONSTRAINTS.md`.
-
 
 ### Android 10 storage and USB/UDisk checks
 

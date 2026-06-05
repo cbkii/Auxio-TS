@@ -11,6 +11,7 @@ Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed 
 - [`UPSTREAM_AUXIO_MONITORING.md`](UPSTREAM_AUXIO_MONITORING.md) — monthly upstream Auxio change monitor, no-clutter baseline rules, and generated issue workflow.
 - [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — DoFun/Topway compatibility contract and private-hook boundaries.
 - [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — compact APK-derived reference evidence for DoFun Variety and stock `twmusic`.
+- [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — package-conflict and install-lane constraints for real TS18 firmware.
 - [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
 - [`TS18_COMPATIBILITY_AUDIT.md`](TS18_COMPATIBILITY_AUDIT.md) — repo-wide TS18/Topway/DoFun compatibility surface classification.
 - [`topway/README.md`](topway/README.md) — local Topway decompile/source-led compatibility notes.
@@ -25,7 +26,7 @@ Primary compatibility target:
 
 - DoFun Variety Theme: `com.dofun.variety`
 
-[Evidence confidence: Observed in DoFun APK metadata/config] [Porting decision: Primary launcher/theme target]
+[Evidence confidence: Observed in DoFun APK metadata/config and exact-device package listing] [Porting decision: Primary launcher/theme target]
 
 Primary replacement contract:
 
@@ -34,11 +35,29 @@ Primary replacement contract:
 - launcher/activity component: `com.tw.music.MusicActivity`
 - release variants: `topwayTwMusicRelease` (`com.tw.music`) and `topwayTwMediaRelease` (`com.tw.media`)
 
-[Evidence confidence: Observed in DoFun APK config and stock twmusic APK references] [Porting decision: Directly reusable replacement contract]
+[Evidence confidence: Observed in DoFun APK config, stock twmusic APK references, and exact-device package paths] [Porting decision: Directly reusable replacement contract with install-lane constraints]
+
+Alternate DoFun fixed entry to support after implementation:
+
+- package/application ID: `com.tw.media`
+- launcher/activity component: `com.tw.music.MusicActivity`
+- intended release variant: `topwayTwMediaRelease`
+
+[Evidence confidence: Observed DoFun APK config; not yet an implemented release variant unless added by a later PR] [Porting decision: Reusable alternate-entry requirement, not a universal no-root bypass]
 
 Observed Cardoor/private services and vendor hooks are evidence only, not production implementation. They are not for production by default and require the formal gap-and-promotion process before any native/private investigation can become product code.
 
 [Evidence confidence: Observed APK/string evidence] [Porting decision: Evidence only; do not implement without proven protocol]
+
+## Exact-device installation warning
+
+The exact target TS18 diagnostics show stock `com.tw.music` installed as a system priv-app at:
+
+```text
+/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
+```
+
+A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed to install over that stock package. See [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) before editing release/install docs or claiming install compatibility.
 
 ## CI entry points
 

@@ -19,8 +19,15 @@
 package org.oxycblt.auxio
 
 import android.app.Application
+import android.os.Build
 import androidx.core.content.pm.ShortcutManagerCompat
 import dagger.hilt.android.HiltAndroidApp
+import java.io.File
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.home.HomeSettings
@@ -43,6 +50,7 @@ class Auxio : Application() {
     @Inject lateinit var homeSettings: HomeSettings
 
     override fun onCreate() {
+        installCrashHandler()
         super.onCreate()
         @Suppress("KotlinConstantConditions")
         if (
@@ -79,6 +87,106 @@ class Auxio : Application() {
             } catch (e: ReflectiveOperationException) {
                 Timber.w(e, "Car overlay visibility hooks not available")
             }
+        }
+    }
+
+    private fun installCrashHandler() {
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        if (previousHandler is CrashFileHandler) {
+            return
+        }
+        Thread.setDefaultUncaughtExceptionHandler(CrashFileHandler(this, previousHandler))
+    }
+
+    private class CrashFileHandler(
+        private val application: Application,
+        private val previousHandler: Thread.UncaughtExceptionHandler?,
+    ) : Thread.UncaughtExceptionHandler {
+        override fun uncaughtException(thread: Thread, throwable: Throwable) {
+            try {
+                writeCrashReport(thread, throwable)
+            } catch (_: Throwable) {
+                // Preserve the original crash path even if diagnostic export fails.
+            } finally {
+                previousHandler?.uncaughtException(thread, throwable)
+                    ?: kotlin.system.exitProcess(10)
+            }
+        }
+
+        private fun writeCrashReport(thread: Thread, throwable: Throwable) {
+            val crashTime = Date()
+            val timestamp = fileTimestamp(crashTime)
+            val diagnosticsDir = File(application.getExternalFilesDir(null), "crash-reports")
+            if (!diagnosticsDir.exists() && !diagnosticsDir.mkdirs()) {
+                return
+            }
+
+            val reportFile = File(diagnosticsDir, "crash-$timestamp.txt")
+            reportFile.writeText(buildReport(thread, throwable, crashTime))
+            pruneOldReports(diagnosticsDir)
+        }
+
+        private fun buildReport(thread: Thread, throwable: Throwable, crashTime: Date): String {
+            val stackTrace =
+                StringWriter().also { writer ->
+                    PrintWriter(writer).use { printWriter ->
+                        throwable.printStackTrace(printWriter)
+                    }
+                }
+
+            return buildString {
+                appendLine("Auxio crash report")
+                appendLine("Generated: ${displayTimestamp(crashTime)}")
+                appendLine()
+                appendLine("App")
+                appendLine("  applicationId: ${BuildConfig.APPLICATION_ID}")
+                appendLine("  versionName: ${BuildConfig.VERSION_NAME}")
+                appendLine("  versionCode: ${BuildConfig.VERSION_CODE}")
+                appendLine("  debug: ${BuildConfig.DEBUG}")
+                appendLine("  topwayTwMusicFlavor: ${BuildConfig.TOPWAY_TWMUSIC_FLAVOR}")
+                appendLine("  topwayTwMediaFlavor: ${BuildConfig.TOPWAY_TWMEDIA_FLAVOR}")
+                appendLine("  topwayCompatFlavor: ${BuildConfig.TOPWAY_COMPAT_FLAVOR}")
+                appendLine()
+                appendLine("Device")
+                appendLine("  manufacturer: ${Build.MANUFACTURER}")
+                appendLine("  brand: ${Build.BRAND}")
+                appendLine("  model: ${Build.MODEL}")
+                appendLine("  device: ${Build.DEVICE}")
+                appendLine("  product: ${Build.PRODUCT}")
+                appendLine("  hardware: ${Build.HARDWARE}")
+                appendLine("  androidRelease: ${Build.VERSION.RELEASE}")
+                appendLine("  sdkInt: ${Build.VERSION.SDK_INT}")
+                appendLine("  buildId: ${Build.ID}")
+                appendLine("  fingerprint: ${Build.FINGERPRINT}")
+                appendLine()
+                appendLine("Thread")
+                appendLine("  name: ${thread.name}")
+                appendLine("  id: ${thread.id}")
+                appendLine("  state: ${thread.state}")
+                appendLine()
+                appendLine("Exception")
+                appendLine(stackTrace.toString())
+            }
+        }
+
+        private fun pruneOldReports(diagnosticsDir: File) {
+            diagnosticsDir
+                .listFiles { file ->
+                    file.isFile && file.name.startsWith("crash-") && file.name.endsWith(".txt")
+                }
+                ?.sortedByDescending { it.lastModified() }
+                ?.drop(MAX_CRASH_REPORTS)
+                ?.forEach { it.delete() }
+        }
+
+        private companion object {
+            const val MAX_CRASH_REPORTS = 10
+
+            fun fileTimestamp(date: Date): String =
+                SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(date)
+
+            fun displayTimestamp(date: Date): String =
+                SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US).format(date)
         }
     }
 }

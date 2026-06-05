@@ -1,6 +1,7 @@
 # Copilot instructions for Auxio-TS
 
 ## Core stance
+
 - Start documentation navigation from `docs/README.md`.
 - Prefer consolidation/removal of stale docs over keeping historical wrappers.
 - **Auxio-TS is a TS18/TW/TWTHEME variant app.** TS18/TW/TWTHEME parity is the product target.
@@ -11,13 +12,12 @@
 - Treat `docs/evidence/t-music-snapshot/` as evidence, not code to port.
 - **Native/private contracts are NOT permanently out of scope.** They require the formal gap-and-promotion process (Tier 2 → Tier 3 → Tier 4). Do NOT say "private/native is out of scope" — say "not for production by default; requires formal gap-and-promotion process."
 
-
-
 ## DoFun Variety / stock twmusic compatibility authority
 
 The primary TS18 music compatibility target is now explicitly grounded in the user-provided DoFun Variety and stock Topway music APKs.
 
 Primary references:
+
 - `docs/DOFUN_VARIETY_COMPATIBILITY.md`
 - `docs/TS18_APK_REFERENCE.md`
 - `docs/reference/ts18-apk/reference-contracts.json`
@@ -25,6 +25,7 @@ Primary references:
 - `docs/reference/ts18-apk/twmusic/classes.string-hits.txt`
 
 Priority order for music-widget/package-identity work:
+
 1. DoFun Variety Theme (`com.dofun.variety`) recognition and widget/control behaviour.
 2. Stock `twmusic` / `com.tw.music` replacement contract.
 3. Android-standard MediaSession/MediaBrowser/notification correctness.
@@ -32,12 +33,14 @@ Priority order for music-widget/package-identity work:
 5. Private/native investigation only through explicit evidence-gated approval.
 
 Observed directly reusable requirements:
+
 - DoFun music hotseat matching expects `com.tw.media` / `com.tw.music.MusicActivity` or `com.tw.music` / `com.tw.music.MusicActivity`.
 - Dedicated Topway/DoFun release variants may intentionally install as exact package `com.tw.music` or alternate fixed-entry package `com.tw.media` and expose `com.tw.music.MusicActivity`.
 - The standard Auxio/Auxio-TS variant must keep its normal `org.oxycblt.auxio` identity.
 - Topway bridge strings are allowed only inside the isolated bridge package/tests/docs.
 
 Observed but not approved for product implementation:
+
 - `cn.cardoor.libs.media.RemoteMediaService`
 - `cn.cardoor.basic.media.NotifyService`
 - `cn.cardoor.libs.media.impl.MediaSourceService`
@@ -53,13 +56,13 @@ Do not fake private Cardoor services or copy stock `twmusic` vendor/private impl
 
 See canonical definition: [`docs/TS18_INTEGRATION_ARCHITECTURE.md` — TS18 Native Parity Strategy](docs/TS18_INTEGRATION_ARCHITECTURE.md#ts18-native-parity-strategy)
 
-| Tier | Name | Scope |
-|------|------|-------|
-| 0 | Evidence only | t-music snapshot, TWTHEME resources, diagnostics, public repos, firmware notes |
-| 1 | Android-standard implementation | MediaSession, MediaBrowser, notification, audio focus, media buttons, AppWidget, shortcuts |
-| 2 | TS18-aware validation | On-device evidence proving which TS18/TWTHEME surfaces see or ignore Tier 1 behaviour |
-| 3 | Isolated native experiments | External scripts or non-production branches testing specific TW/TWTHEME contracts |
-| 4 | Production native integration | Only via explicit human-approved design PR meeting all 8 production eligibility criteria |
+| Tier | Name                            | Scope                                                                                      |
+| ---- | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| 0    | Evidence only                   | t-music snapshot, TWTHEME resources, diagnostics, public repos, firmware notes             |
+| 1    | Android-standard implementation | MediaSession, MediaBrowser, notification, audio focus, media buttons, AppWidget, shortcuts |
+| 2    | TS18-aware validation           | On-device evidence proving which TS18/TWTHEME surfaces see or ignore Tier 1 behaviour      |
+| 3    | Isolated native experiments     | External scripts or non-production branches testing specific TW/TWTHEME contracts          |
+| 4    | Production native integration   | Only via explicit human-approved design PR meeting all 8 production eligibility criteria   |
 
 ## TS18/TW/TWTHEME source-led policy
 
@@ -68,6 +71,7 @@ TS18/TW/TWTHEME work must begin with the curated TS18/Topway/DoFun/TW source cor
 Android/Media3 standards are the Tier 1 implementation baseline. They are the preferred first implementation path but are not the final authority for TS18/TWTHEME-specific questions. Native parity gap investigation is allowed through the formal gap-and-promotion process. Production safety rules remain intact.
 
 Probe/diagnostics-driven work is secondary. It is allowed only when:
+
 - the user provides fresh diagnostics;
 - the repo already contains relevant captured evidence;
 - no reliable public TS18/TW/TWTHEME or equivalent head-unit source exists;
@@ -119,8 +123,8 @@ Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 7. Avoid TWUtil/TWClient reflection in product code.
 8. Avoid vendor binders and package impersonation.
 
-
 ## Topway decompile-driven compatibility rule
+
 - The official Topway `com.tw.music` apktool/JADX decompile is a primary local compatibility source.
 - Generic Android MediaSession/AppWidget/shortcut compatibility is necessary but not sufficient.
 - Agents must consult `docs/topway/` before proposing Topway/TS18 music compatibility work.
@@ -130,13 +134,16 @@ Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 - Runtime APK must stay clean and must not include evidence/probe/capture tooling.
 
 ## Evidence labeling (required)
+
 For each TS18/TW/TWTHEME claim, include:
-1) confidence: **Observed / Inferred / Hypothesis / Requires TS18 validation / Unsupported**
-2) porting decision label: **Directly reusable requirement / Reusable validation idea / Useful as evidence only / Obsolete due to Auxio architecture / Requires TS18 runtime validation / Unsafe to port / Should be explicitly avoided**
+
+1. confidence: **Observed / Inferred / Hypothesis / Requires TS18 validation / Unsupported**
+2. porting decision label: **Directly reusable requirement / Reusable validation idea / Useful as evidence only / Obsolete due to Auxio architecture / Requires TS18 runtime validation / Unsafe to port / Should be explicitly avoided**
 
 Always distinguish between: product requirement / Android-standard implementation / TS18 runtime validation / native-private investigation / production eligibility.
 
 ## Never do
+
 - Do not change the standard Auxio/Auxio-TS package to `com.tw.music` or `com.tw.media`; only dedicated, clearly named Topway/DoFun compatibility variants may install as those package IDs.
 - Do not assume privileged/system UID.
 - Do not copy decompiled smali into Auxio code.
@@ -155,6 +162,7 @@ Always distinguish between: product requirement / Android-standard implementatio
 - Never claim tasks/build/test/lint success unless commands actually passed in this environment.
 
 ## Baseline checks
+
 - `./gradlew tasks`
 - `./gradlew assembleDebug`
 - `./gradlew test`
@@ -162,6 +170,7 @@ Always distinguish between: product requirement / Android-standard implementatio
 - `find scripts -type f -name '*.sh' -print -exec sh -n {} \;`
 
 ## Release/signing safety
+
 - Treat release/signing workflow edits as security-sensitive.
 - Never print or commit secret material.
 - Keep decoded keystores in runner temp paths only.
@@ -176,8 +185,8 @@ Always distinguish between: product requirement / Android-standard implementatio
 
 - Tier pipeline reminder: Tier 2 evidence + summariser + matrix proposal can generate Tier 3 candidate drafts, but Tier 4 production native/private integration requires a separate approved design PR.
 
-
 ## Large-Scope Implementation Delivery Protocol
+
 1. Large tasks are delivery contracts, not suggestion lists.
 2. Do not satisfy large tasks by touching many headings shallowly.
 3. "Implemented" means runtime code is wired into real behavior or an executable workflow, not only a model/registry/doc/template/test.
@@ -190,6 +199,7 @@ Always distinguish between: product requirement / Android-standard implementatio
 10. Compatibility model/status/registry additions are not counted as implemented until wired to meaningful runtime call-sites.
 
 ## Implementation-status definitions
+
 - Implemented: runtime code or executable workflow is wired and usable.
 - Implemented — requires TS18 validation: implementation exists; runtime parity still needs TS18 hardware proof.
 - Partially implemented: pieces exist but user-visible behavior or call-site wiring is incomplete.
@@ -198,6 +208,7 @@ Always distinguish between: product requirement / Android-standard implementatio
 - Deferred: intentionally out of current scope, with reason.
 
 ## Ready for Draft PR / Ready for Merge Rules
+
 - Ready for Draft PR: main implementation goal is complete enough for review.
 - If any core requested workstream is partial and locally fixable, use: Needs another Codex pass.
 - If branch is an early snapshot, use: Ready for Draft PR snapshot.
@@ -205,6 +216,7 @@ Always distinguish between: product requirement / Android-standard implementatio
 - Missing SDK/submodules are environment-limited validation, not merge proof and not automatic merge blocker.
 
 ## Auxio-TS app/runtime priority rules
+
 - Auxio-TS is a TS18/TW/TWTHEME variant app; app/runtime behavior is the priority.
 - Source-backed compatibility work should improve real runtime surfaces, not only validation tooling.
 - Evidence/validation tooling is primary only when requested or when implementation cannot proceed safely.
@@ -212,6 +224,7 @@ Always distinguish between: product requirement / Android-standard implementatio
 - Docs/tests/fixtures must not substitute for app code implementation.
 
 ## Compatibility-layer wiring rules
+
 - A headunit/compat feature is not implemented until consumed by at least one meaningful runtime call-site.
 - Registry entries alone do not count as implementation.
 - Status models alone do not count as implementation.
@@ -245,7 +258,9 @@ For TS18/head-unit UI work, screenshots must include or approximate:
 If the agent environment cannot run an emulator, it must still update the workflow/scripts so GitHub Actions can produce the screenshot artifacts.
 
 ## Final response discipline
+
 Always report explicitly:
+
 - which areas were wired into runtime code,
 - which areas are scaffold-only,
 - which areas remain partial,
@@ -253,12 +268,9 @@ Always report explicitly:
 - whether output is a review snapshot or complete,
 - why any next scope is truly separate from current acceptance criteria.
 
-
 2026-05-23 runtime release-readiness update: Metadata/session/widget/notification consistency and head-unit route/action safety were hardened in app runtime code; validation tooling remains external to APK; no TS18 hardware parity success claimed; no Tier 4 private/native integration performed.
 
-
 2026-05-24 implementation note: isolated Topway bridge runtime wiring now exists; keep Topway strings constrained to approved bridge/test/docs scope and continue blocking private/native binder production paths.
-
 
 ## Seeded TS18 exact-device context
 

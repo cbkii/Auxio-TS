@@ -1,9 +1,11 @@
 # Musikr Quick Reference Guide
 
 ## What is Musikr?
+
 A custom Android music indexing library that bypasses MediaStore, using SAF + TagLib for enhanced metadata extraction and music organization.
 
 ## Key Features
+
 - **No MediaStore**: Direct file access via Storage Access Framework
 - **Advanced Metadata**: Full TagLib integration for rich tag support
 - **Multi-threaded**: Parallel processing with Kotlin coroutines
@@ -51,11 +53,13 @@ result.cleanup()
 ## Core Concepts
 
 ### Pipeline Architecture
+
 1. **Explore**: Find music files
 2. **Extract**: Get metadata via TagLib
 3. **Evaluate**: Build music graph
 
 ### Data Model
+
 - **Song**: Individual tracks with full metadata
 - **Album**: Collections of songs (includes EPs, singles)
 - **Artist**: Can have both album and track credits
@@ -63,11 +67,13 @@ result.cleanup()
 - **Playlist**: User-created or imported (M3U)
 
 ### UID System
+
 - Unique identifiers for all music items
 - Supports MusicBrainz IDs
 - Hash-based fallback for untagged files
 
 ## File Structure
+
 ```
 musikr/
 ├── src/main/
@@ -81,12 +87,13 @@ musikr/
 ## Common Tasks
 
 ### Custom Cache Implementation
+
 ```kotlin
 class MyCache : MutableCache {
     override suspend fun read(file: DocumentFile): CacheResult {
         // Your implementation
     }
-    
+
     override suspend fun write(extracted: List<ExtractedSong>) {
         // Your implementation
     }
@@ -94,12 +101,13 @@ class MyCache : MutableCache {
 ```
 
 ### Custom Cover Storage
+
 ```kotlin
 class MyCovers : MutableCovers<MyCover> {
     override suspend fun obtain(id: String): CoverResult<MyCover> {
         // Your implementation
     }
-    
+
     override suspend fun write(cover: Cover): String {
         // Your implementation
     }
@@ -107,6 +115,7 @@ class MyCovers : MutableCovers<MyCover> {
 ```
 
 ### Progress Monitoring
+
 ```kotlin
 musikr.run { progress ->
     when (progress) {
@@ -143,6 +152,7 @@ musikr.run { progress ->
 - Pre-warm cover cache for common albums
 
 ## See Also
+
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System design
 - [MODULES.md](MODULES.md) - Module details
 - [DATA_FLOW.md](DATA_FLOW.md) - Data flow diagrams

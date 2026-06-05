@@ -4,10 +4,10 @@ This file summarises the useful facts extracted from the attached DoFun Variety 
 
 ## Source APKs
 
-| APK | SHA-256 | Role |
-| --- | --- | --- |
-| `com.dofun.variety_V9.7.2.367.260312.apk` | `75e7ea9b46d68754253aa385e6ac750aae957a5b72196fec5449ccf2782c60b1` | DoFun launcher/theme widget target |
-| `com.tw.music_TW_THEME.20240715.apk` | `4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518` | Stock music app replacement contract |
+| APK                                       | SHA-256                                                            | Role                                 |
+| ----------------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| `com.dofun.variety_V9.7.2.367.260312.apk` | `75e7ea9b46d68754253aa385e6ac750aae957a5b72196fec5449ccf2782c60b1` | DoFun launcher/theme widget target   |
+| `com.tw.music_TW_THEME.20240715.apk`      | `4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518` | Stock music app replacement contract |
 
 ## Development meaning
 

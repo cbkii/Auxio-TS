@@ -19,16 +19,16 @@ For Codex or a fresh Linux environment, `bash scripts/setup-codex-android-env.sh
 
 ## Key Gradle tasks
 
-| Task | Description |
-|------|-------------|
-| `:app:assembleStandardDebug` | Standard Auxio-TS debug APK |
-| `:app:assembleTopwayTwMusicDebug` | DoFun-compatible debug APK (`com.tw.music.debug`) |
+| Task                                | Description                                                 |
+| ----------------------------------- | ----------------------------------------------------------- |
+| `:app:assembleStandardDebug`        | Standard Auxio-TS debug APK                                 |
+| `:app:assembleTopwayTwMusicDebug`   | DoFun-compatible debug APK (`com.tw.music.debug`)           |
 | `:app:assembleTopwayTwMusicRelease` | Exact DoFun/Topway replacement release APK (`com.tw.music`) |
-| `:app:assembleTopwayTwMediaDebug` | DoFun alternate-entry debug APK (`com.tw.media.debug`) |
-| `:app:assembleTopwayTwMediaRelease` | DoFun alternate-entry release APK (`com.tw.media`) |
-| `:app:testStandardDebugUnitTest` | Unit tests |
-| `:app:lintStandardDebug` | Android lint |
-| `spotlessCheck` | Code formatting check |
+| `:app:assembleTopwayTwMediaDebug`   | DoFun alternate-entry debug APK (`com.tw.media.debug`)      |
+| `:app:assembleTopwayTwMediaRelease` | DoFun alternate-entry release APK (`com.tw.media`)          |
+| `:app:testStandardDebugUnitTest`    | Unit tests                                                  |
+| `:app:lintStandardDebug`            | Android lint                                                |
+| `spotlessCheck`                     | Code formatting check                                       |
 
 ## Repository layout
 
@@ -46,7 +46,6 @@ gradle/                       Gradle wrapper
 scripts/                      CI/validation scripts
 docs/                         Minimal focused documentation
 ```
-
 
 ## Startup library loading and scans
 
@@ -81,11 +80,11 @@ The Topway bridge code lives in `app/src/main/java/org/oxycblt/auxio/headunit/to
 Roborazzi is wired into the Gradle build (`build.gradle` plugin + `app/build.gradle` dependencies).
 Test file: `app/src/test/java/org/oxycblt/auxio/ui/RoborazziSmokeScreenshotTest.kt`.
 
-| Gradle task | Description |
-|-------------|-------------|
-| `:app:recordRoborazziStandardDebug / :app:recordRoborazziTopwayTwMusicDebug` | Capture new PNG baselines |
-| `:app:verifyRoborazziStandardDebug / :app:verifyRoborazziTopwayTwMusicDebug` | Verify against committed baselines |
-| `:app:compareRoborazziStandardDebug / :app:compareRoborazziTopwayTwMusicDebug` | Produce diff report without failing |
+| Gradle task                                                                                    | Description                          |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `:app:recordRoborazziStandardDebug / :app:recordRoborazziTopwayTwMusicDebug`                   | Capture new PNG baselines            |
+| `:app:verifyRoborazziStandardDebug / :app:verifyRoborazziTopwayTwMusicDebug`                   | Verify against committed baselines   |
+| `:app:compareRoborazziStandardDebug / :app:compareRoborazziTopwayTwMusicDebug`                 | Produce diff report without failing  |
 | `:app:verifyAndRecordRoborazziStandardDebug / :app:verifyAndRecordRoborazziTopwayTwMusicDebug` | Verify then record changed baselines |
 
 Roborazzi uses Robolectric — no emulator or device required. Regular `test*UnitTest` tasks intentionally exclude `RoborazziSmokeScreenshotTest` so the PR unit-test job is not coupled to Roborazzi runtime artifact downloads; use the Roborazzi tasks/workflow for visual coverage.
@@ -96,13 +95,12 @@ Baseline PNGs live adjacent to the test source (committed to the repo). They are
 
 ## CI and workflow coverage
 
-| Workflow | Trigger | Responsibility |
-|----------|---------|----------------|
-| `android.yml` | push/PR to dev, app/build paths | Standard + `topwayTwMusic` + `topwayTwMedia` debug/release builds; DoFun compat checks; APK artifacts |
-| `lint.yml` | push/PR to dev, app/build/scripts/docs/workflow paths | Workflow YAML syntax; shell script syntax; formatting (spotless); unit tests; Android lint; head-unit safety + DoFun compat scripts |
-| `manual-release.yml` | manual dispatch | Signed standard, `topwayTwMusic`, and `topwayTwMedia` release APKs; package identity verification |
-| `ui-screenshots.yml` | manual dispatch | Roborazzi UI regression screenshots; PNG + HTML report artifacts |
-
+| Workflow             | Trigger                                               | Responsibility                                                                                                                      |
+| -------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `android.yml`        | push/PR to dev, app/build paths                       | Standard + `topwayTwMusic` + `topwayTwMedia` debug/release builds; DoFun compat checks; APK artifacts                               |
+| `lint.yml`           | push/PR to dev, app/build/scripts/docs/workflow paths | Workflow YAML syntax; shell script syntax; formatting (spotless); unit tests; Android lint; head-unit safety + DoFun compat scripts |
+| `manual-release.yml` | manual dispatch                                       | Signed standard, `topwayTwMusic`, and `topwayTwMedia` release APKs; package identity verification                                   |
+| `ui-screenshots.yml` | manual dispatch                                       | Roborazzi UI regression screenshots; PNG + HTML report artifacts                                                                    |
 
 ### Branch protection / required checks
 
@@ -119,10 +117,9 @@ Remove stale required checks for deleted workflows such as `Manual Roborazzi`, `
 
 ### Why deleted workflows are not retained
 
-| Removed workflow | Reason |
-|------------------|--------|
-| `ts18-guardrails.yml` | Validated deleted research tooling (evidence scripts, scenario maps, fixture packs). The only still-relevant check (`check-headunit-compat-safety.sh`) is covered by the `headunit-safety` job in `lint.yml`. |
-| `ts18-validation-tools.yml` | Validated deleted TS18 Python scripts and scenario map JSON. All referenced files are removed. Relevant headunit-safety check covered in `lint.yml`. |
-| `manual-roborazzi.yml` | **Replaced** by `ui-screenshots.yml`. Functionality preserved and focused on current app UI needs. |
-| `manual-ui-screenshots.yml` | Depended on deleted `scripts/capture-ui-screenshots.sh` and a brittle Android emulator setup. Superseded by the emulator-free Roborazzi approach in `ui-screenshots.yml`. |
-
+| Removed workflow            | Reason                                                                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ts18-guardrails.yml`       | Validated deleted research tooling (evidence scripts, scenario maps, fixture packs). The only still-relevant check (`check-headunit-compat-safety.sh`) is covered by the `headunit-safety` job in `lint.yml`. |
+| `ts18-validation-tools.yml` | Validated deleted TS18 Python scripts and scenario map JSON. All referenced files are removed. Relevant headunit-safety check covered in `lint.yml`.                                                          |
+| `manual-roborazzi.yml`      | **Replaced** by `ui-screenshots.yml`. Functionality preserved and focused on current app UI needs.                                                                                                            |
+| `manual-ui-screenshots.yml` | Depended on deleted `scripts/capture-ui-screenshots.sh` and a brittle Android emulator setup. Superseded by the emulator-free Roborazzi approach in `ui-screenshots.yml`.                                     |
