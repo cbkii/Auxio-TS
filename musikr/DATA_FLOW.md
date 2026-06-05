@@ -211,6 +211,7 @@ START: Extracted Items
 ## Key Data Transformations
 
 ### File → Explored
+
 ```
 DocumentFile {              Explored {
   uri: Uri         ──►       file: DocumentFile
@@ -219,6 +220,7 @@ DocumentFile {              Explored {
 ```
 
 ### Explored → Extracted
+
 ```
 NewSong {                   ExtractedSong {
   file: DocumentFile  ──►     file: DocumentFile
@@ -230,6 +232,7 @@ NewSong {                   ExtractedSong {
 ```
 
 ### Extracted → Library Items
+
 ```
 ExtractedSong {             Song {
   tags: Map           ──►     uid: UID

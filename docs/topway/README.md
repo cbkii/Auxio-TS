@@ -15,7 +15,6 @@ The decompile shows **concrete Topway compatibility contracts**. Generic Android
 
 The safe implementation target is an isolated Auxio-TS Topway bridge that mirrors the observable contract without copying smali, requiring `android.uid.system`, or binding to `com.tw.service.xt` as a production dependency. Dedicated Topway/DoFun release variants may intentionally use stock-compatible public package identities (`com.tw.music` or `com.tw.media`) only through the documented thin wrapper boundary.
 
-
 ## Related DoFun/TS18 APK reference
 
 For the current DoFun Variety launcher/theme target and the stock `twmusic` replacement identity, also read:

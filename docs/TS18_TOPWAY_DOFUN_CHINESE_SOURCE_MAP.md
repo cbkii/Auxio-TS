@@ -28,19 +28,19 @@ Auxio-TS should remain an Auxio-owned music app with carefully isolated Topway/D
 
 Do not contradict these facts in docs, CI checks, release notes, prompts, or code comments:
 
-| Area | Fact |
-|---|---|
-| Device family | TS18 / Topway `s9863a1h10_Natv` / `s9863a1h10` |
-| Runtime | Android 10 / SDK 29 |
-| Display | 1280 x 720 landscape |
-| Insets | top status bar about 55 px; right navigation bar about 55 px |
-| Theme / launcher | DoFun Variety / 百变主题, package `com.dofun.variety` |
-| Stock music package | `com.tw.music` |
-| Stock music app state | system priv-app; normal user-signed APK cannot be assumed to replace it |
-| App-only shell context | TermOne / Termux-style normal app UID, not ADB shell/root |
-| ADB limitation | no observed local/TCP ADB listener; USB/OTG ADB physically unavailable in the user setup |
-| USB music storage | `/storage/usbdisk0` exists and must be validated |
-| DoFun fixed entries | `com.tw.music/com.tw.music.MusicActivity`; `com.tw.media/com.tw.music.MusicActivity` |
+| Area                   | Fact                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| Device family          | TS18 / Topway `s9863a1h10_Natv` / `s9863a1h10`                                           |
+| Runtime                | Android 10 / SDK 29                                                                      |
+| Display                | 1280 x 720 landscape                                                                     |
+| Insets                 | top status bar about 55 px; right navigation bar about 55 px                             |
+| Theme / launcher       | DoFun Variety / 百变主题, package `com.dofun.variety`                                    |
+| Stock music package    | `com.tw.music`                                                                           |
+| Stock music app state  | system priv-app; normal user-signed APK cannot be assumed to replace it                  |
+| App-only shell context | TermOne / Termux-style normal app UID, not ADB shell/root                                |
+| ADB limitation         | no observed local/TCP ADB listener; USB/OTG ADB physically unavailable in the user setup |
+| USB music storage      | `/storage/usbdisk0` exists and must be validated                                         |
+| DoFun fixed entries    | `com.tw.music/com.tw.music.MusicActivity`; `com.tw.media/com.tw.music.MusicActivity`     |
 
 ---
 
@@ -170,22 +170,22 @@ ACTION_OPEN_DOCUMENT_TREE U盘 Android
 
 These sources should override forum posts, APK mirrors, and speculative reverse-engineering notes.
 
-| Area | Source URL | Why it matters for Auxio-TS |
-|---|---|---|
-| Android media apps for cars | https://developer.android.com/training/cars/media | Establishes `MediaBrowserService` + `MediaSession` as the primary car media contract. Auxio-TS should integrate through this first, not through private Topway binders. |
-| Android for Cars media design | https://developers.google.com/cars/design/create-apps/app-types/media | Useful for UX expectations on in-car media browsing/playback. |
-| Testing Android apps for cars | https://developer.android.com/training/cars/testing | Useful for MediaBrowserService startup scenarios and car-specific validation thinking. |
-| Legacy MediaBrowserService guide | https://developer.android.com/media/legacy/audio/mediabrowserservice | Shows service declaration, `onGetRoot`, `onLoadChildren`, session initialisation, and browser client behaviour. Useful if Auxio-TS is still on compat/legacy APIs. |
-| Shared media / MediaStore | https://developer.android.com/training/data-storage/shared/media | Primary storage contract for local audio and external storage volumes. Check `MediaStore.getExternalVolumeNames()` and audio collections. |
-| Storage Access Framework | https://developer.android.com/training/data-storage/shared/documents-files | User-controlled fallback for USB/UDisk folders if MediaStore misses `/storage/usbdisk0`. |
-| All-files access | https://developer.android.com/training/data-storage/manage-all-files | Broad access exists but should not be default; use only as deliberate privileged/head-unit lane if ever justified. |
-| Android 10 storage/privacy | https://developer.android.com/about/versions/10/privacy/changes | Confirms Android 10 scoped-storage constraints. Useful for `requestLegacyExternalStorage` discussion. |
-| Android 11 storage changes | https://developer.android.com/about/versions/11/privacy/storage | Useful because modern target SDKs may face Android 11+ storage assumptions even on Android 10-era code paths. |
-| `TYPE_APPLICATION_OVERLAY` | https://developer.android.com/reference/android/view/WindowManager.LayoutParams#TYPE_APPLICATION_OVERLAY | Correct non-system overlay window type for floating car controls on API 26+. |
-| Foreground service types | https://developer.android.com/develop/background-work/services/fgs/service-types | `specialUse` and service-type requirements are Android 14+ concerns; code must be API-gated for TS18 Android 10. |
-| Android AIDL | https://developer.android.com/develop/background-work/services/aidl | Use only for understanding IPC shape; do not invent vendor AIDL contracts. |
-| Source Android dynamic AIDL | https://source.android.com/docs/core/architecture/aidl/dynamic-aidl | Useful for platform/native service context. Not directly applicable to normal APK product code on TS18. |
-| Shizuku setup | https://shizuku.rikka.app/guide/setup/ | Privileged package-management lane only. Android 10 unrooted startup needs computer ADB; wireless debugging is Android 11+. |
+| Area                             | Source URL                                                                                               | Why it matters for Auxio-TS                                                                                                                                             |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Android media apps for cars      | https://developer.android.com/training/cars/media                                                        | Establishes `MediaBrowserService` + `MediaSession` as the primary car media contract. Auxio-TS should integrate through this first, not through private Topway binders. |
+| Android for Cars media design    | https://developers.google.com/cars/design/create-apps/app-types/media                                    | Useful for UX expectations on in-car media browsing/playback.                                                                                                           |
+| Testing Android apps for cars    | https://developer.android.com/training/cars/testing                                                      | Useful for MediaBrowserService startup scenarios and car-specific validation thinking.                                                                                  |
+| Legacy MediaBrowserService guide | https://developer.android.com/media/legacy/audio/mediabrowserservice                                     | Shows service declaration, `onGetRoot`, `onLoadChildren`, session initialisation, and browser client behaviour. Useful if Auxio-TS is still on compat/legacy APIs.      |
+| Shared media / MediaStore        | https://developer.android.com/training/data-storage/shared/media                                         | Primary storage contract for local audio and external storage volumes. Check `MediaStore.getExternalVolumeNames()` and audio collections.                               |
+| Storage Access Framework         | https://developer.android.com/training/data-storage/shared/documents-files                               | User-controlled fallback for USB/UDisk folders if MediaStore misses `/storage/usbdisk0`.                                                                                |
+| All-files access                 | https://developer.android.com/training/data-storage/manage-all-files                                     | Broad access exists but should not be default; use only as deliberate privileged/head-unit lane if ever justified.                                                      |
+| Android 10 storage/privacy       | https://developer.android.com/about/versions/10/privacy/changes                                          | Confirms Android 10 scoped-storage constraints. Useful for `requestLegacyExternalStorage` discussion.                                                                   |
+| Android 11 storage changes       | https://developer.android.com/about/versions/11/privacy/storage                                          | Useful because modern target SDKs may face Android 11+ storage assumptions even on Android 10-era code paths.                                                           |
+| `TYPE_APPLICATION_OVERLAY`       | https://developer.android.com/reference/android/view/WindowManager.LayoutParams#TYPE_APPLICATION_OVERLAY | Correct non-system overlay window type for floating car controls on API 26+.                                                                                            |
+| Foreground service types         | https://developer.android.com/develop/background-work/services/fgs/service-types                         | `specialUse` and service-type requirements are Android 14+ concerns; code must be API-gated for TS18 Android 10.                                                        |
+| Android AIDL                     | https://developer.android.com/develop/background-work/services/aidl                                      | Use only for understanding IPC shape; do not invent vendor AIDL contracts.                                                                                              |
+| Source Android dynamic AIDL      | https://source.android.com/docs/core/architecture/aidl/dynamic-aidl                                      | Useful for platform/native service context. Not directly applicable to normal APK product code on TS18.                                                                 |
+| Shizuku setup                    | https://shizuku.rikka.app/guide/setup/                                                                   | Privileged package-management lane only. Android 10 unrooted startup needs computer ADB; wireless debugging is Android 11+.                                             |
 
 Chinese-localised official docs can often be reached by adding `?hl=zh-cn` or `?hl=zh-tw` to Android Developers / Source Android URLs. Prefer the English canonical page when exact technical wording matters, then include the Chinese URL for agent searchability.
 
@@ -429,14 +429,14 @@ These are useful for source-mining UX, local library scanning, lyrics, widgets, 
 
 Even though this document prioritises Chinese sources, the following repos are stronger engineering references for Android media architecture and local/removable storage:
 
-| Repo | URL | Use for |
-|---|---|---|
-| VLC Android | https://github.com/videolan/vlc-android | Mature local/removable media handling, playback service, notifications, formats. Licence-sensitive. |
-| AntennaPod | https://github.com/AntennaPod/AntennaPod | Mature MediaSession, notifications, lifecycle, queue/recovery, Android Auto style behaviour. |
-| UAMP | https://github.com/android/uamp | Google sample; archived but still useful for historical Android media app patterns. |
-| Retro Music Player | https://github.com/RetroMusicPlayer/RetroMusicPlayer | Local music app, widgets, Android Auto, notification controls; licence-sensitive. |
-| Shuttle | https://github.com/timusus/Shuttle | Older local music app; useful only as historical pattern reference. |
-| Fossify Music Player | https://github.com/FossifyOrg/Music-Player | Simple local music player and issue trail around Android Auto support. |
+| Repo                 | URL                                                  | Use for                                                                                             |
+| -------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| VLC Android          | https://github.com/videolan/vlc-android              | Mature local/removable media handling, playback service, notifications, formats. Licence-sensitive. |
+| AntennaPod           | https://github.com/AntennaPod/AntennaPod             | Mature MediaSession, notifications, lifecycle, queue/recovery, Android Auto style behaviour.        |
+| UAMP                 | https://github.com/android/uamp                      | Google sample; archived but still useful for historical Android media app patterns.                 |
+| Retro Music Player   | https://github.com/RetroMusicPlayer/RetroMusicPlayer | Local music app, widgets, Android Auto, notification controls; licence-sensitive.                   |
+| Shuttle              | https://github.com/timusus/Shuttle                   | Older local music app; useful only as historical pattern reference.                                 |
+| Fossify Music Player | https://github.com/FossifyOrg/Music-Player           | Simple local music player and issue trail around Android Auto support.                              |
 
 ---
 
@@ -611,14 +611,14 @@ Do not use API 34-only `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` unconditionally on 
 
 ### 12.7 Package-management lanes
 
-| Lane | What it can do | TS18 caveat |
-|---|---|---|
-| Normal install | Install non-conflicting package IDs | Cannot replace stock system `com.tw.music` if signature/package conflict remains |
-| `topwayTwMedia` | Try alternate `com.tw.media` DoFun entry | May conflict if firmware already has `com.tw.media`; not universal no-root bypass |
-| ADB shell | `pm disable-user`, `pm uninstall --user 0`, `cmd package install-existing` | Requires real ADB shell access, not TermOne app UID |
-| Shizuku | Privileged shell-like calls for authorised apps | Android 10 unrooted startup needs computer ADB; poor fit if USB/OTG ADB unavailable |
-| Root/Sui | Privileged package control | Requires rooted firmware |
-| Firmware/system image | Replace system app in image | High risk, device-specific, outside normal Auxio-TS APK release |
+| Lane                  | What it can do                                                             | TS18 caveat                                                                         |
+| --------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Normal install        | Install non-conflicting package IDs                                        | Cannot replace stock system `com.tw.music` if signature/package conflict remains    |
+| `topwayTwMedia`       | Try alternate `com.tw.media` DoFun entry                                   | May conflict if firmware already has `com.tw.media`; not universal no-root bypass   |
+| ADB shell             | `pm disable-user`, `pm uninstall --user 0`, `cmd package install-existing` | Requires real ADB shell access, not TermOne app UID                                 |
+| Shizuku               | Privileged shell-like calls for authorised apps                            | Android 10 unrooted startup needs computer ADB; poor fit if USB/OTG ADB unavailable |
+| Root/Sui              | Privileged package control                                                 | Requires rooted firmware                                                            |
+| Firmware/system image | Replace system app in image                                                | High risk, device-specific, outside normal Auxio-TS APK release                     |
 
 Recovery commands to document where ADB/root lane exists:
 
@@ -712,15 +712,15 @@ adb shell dumpsys activity services | grep -E 'CarOverlay|Foreground' -C 3
 
 When an agent finds a new source, classify it before acting:
 
-| Classification | Meaning | Action |
-|---|---|---|
-| Official Android contract | Android Developers, AOSP, Source Android | Can drive implementation decisions. |
-| Mature OSS app | VLC, AntennaPod, Auxio, Retro, etc. | Use for patterns after licence check. |
-| Chinese OSS app/repo | Chinese developer repo or source-linked tutorial | Use for search terms, UX patterns, implementation patterns after licence check. |
-| APK mirror | 7723, Ali213, random download site | Package/version/name evidence only; do not download into repo. |
-| Forum field report | XDA, 4PDA, CSDN comments, Telegram | Useful for device behaviour hypotheses; must validate locally. |
-| Decompiled/private code | stock APK classes, smali, vendor AIDL | Evidence-gated only; never copy into production without formal approval. |
-| Exact private/native contract | Complete AIDL/API with device proof | Requires design review, isolation, graceful fallback, and tests. |
+| Classification                | Meaning                                          | Action                                                                          |
+| ----------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Official Android contract     | Android Developers, AOSP, Source Android         | Can drive implementation decisions.                                             |
+| Mature OSS app                | VLC, AntennaPod, Auxio, Retro, etc.              | Use for patterns after licence check.                                           |
+| Chinese OSS app/repo          | Chinese developer repo or source-linked tutorial | Use for search terms, UX patterns, implementation patterns after licence check. |
+| APK mirror                    | 7723, Ali213, random download site               | Package/version/name evidence only; do not download into repo.                  |
+| Forum field report            | XDA, 4PDA, CSDN comments, Telegram               | Useful for device behaviour hypotheses; must validate locally.                  |
+| Decompiled/private code       | stock APK classes, smali, vendor AIDL            | Evidence-gated only; never copy into production without formal approval.        |
+| Exact private/native contract | Complete AIDL/API with device proof              | Requires design review, isolation, graceful fallback, and tests.                |
 
 ---
 
@@ -759,4 +759,3 @@ Refresh the Chinese and head-unit source map before editing. Search GitHub, Gite
 
 Classify every new source as official, mature OSS, Chinese OSS, APK mirror, forum field report, or private/native evidence. Do not implement fake Cardoor services, TWUtil reflection, copied smali, platform signing, android.uid.system, sharedUserId, or vendor AIDL unless a complete device-specific contract is recovered and explicitly approved. Prefer Android-standard MediaBrowserService/MediaSession, MediaStore/SAF, and thin Topway/DoFun wrappers.
 ```
-

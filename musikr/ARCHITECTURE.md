@@ -46,6 +46,7 @@ Musikr is a highly opinionated, multi-threaded music loading library for Android
 ## Pipeline Steps
 
 ### 1. ExploreStep
+
 - **Purpose**: Discover music files on the device
 - **Process**:
   - Uses FS module to explore file system via SAF
@@ -55,6 +56,7 @@ Musikr is a highly opinionated, multi-threaded music loading library for Android
 - **Output**: Stream of `Explored` items (songs/playlists to process)
 
 ### 2. ExtractStep
+
 - **Purpose**: Extract metadata from discovered files
 - **Process**:
   - Uses JNI bridge to TagLib for metadata extraction
@@ -64,6 +66,7 @@ Musikr is a highly opinionated, multi-threaded music loading library for Android
 - **Output**: Stream of `Extracted` items with full metadata
 
 ### 3. EvaluateStep
+
 - **Purpose**: Build the music graph from extracted metadata
 - **Process**:
   - Creates relationships between songs, albums, artists, genres
@@ -75,6 +78,7 @@ Musikr is a highly opinionated, multi-threaded music loading library for Android
 ## Key Components
 
 ### Config & Storage
+
 - **Config**: Main configuration container
   - `fs`: File system access configuration
   - `storage`: Persistent storage components
@@ -86,6 +90,7 @@ Musikr is a highly opinionated, multi-threaded music loading library for Android
   - `storedPlaylists`: User playlist management
 
 ### Data Models
+
 - **Music**: Base interface for all music items
   - Uses UID system for unique identification
   - Supports MusicBrainz IDs
@@ -96,29 +101,34 @@ Musikr is a highly opinionated, multi-threaded music loading library for Android
 - **Playlist**: User-created or imported playlists
 
 ### File System (FS)
+
 - Abstraction over Android's Storage Access Framework
 - Supports multiple storage locations
 - Handles permissions and URI management
 
 ### Native Layer (C++)
+
 - TagLib integration for metadata extraction
 - JNI wrappers for Java/Kotlin interop
 - Support for various audio formats
 - Custom patches for enhanced functionality
 
 ## Threading Model
+
 - **Coroutine-based**: All operations use Kotlin coroutines
 - **Multi-threaded extraction**: Parallel metadata extraction
 - **Buffered channels**: For efficient pipeline communication
 - **Dispatcher control**: Explicit IO dispatcher usage
 
 ## Error Handling
+
 - **Pipeline exceptions**: Custom exception types
 - **Graceful degradation**: Continue on individual file errors
 - **Logging**: Comprehensive error logging
 - **Cache invalidation**: Automatic stale cache detection
 
 ## Performance Optimizations
+
 - **Caching**: Aggressive metadata caching
 - **Parallel processing**: Multi-threaded file processing
 - **Lazy evaluation**: On-demand cover loading

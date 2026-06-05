@@ -25,13 +25,13 @@ A normal Auxio package identity such as `org.oxycblt.auxio` may be a valid Andro
 
 ## Variant expectations
 
-| Build | Package/application ID | Launcher component | Purpose |
-|---|---|---|---|
-| Standard Auxio-TS | `org.oxycblt.auxio` | `org.oxycblt.auxio.MainActivity` | Development/upstream baseline |
-| Standard debug | `org.oxycblt.auxio.debug` | `org.oxycblt.auxio.MainActivity` | Development/debug |
-| Topway/DoFun exact release | `com.tw.music` | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | Exact DoFun fixed-identity compatibility APK |
-| Topway/DoFun exact debug | normally `com.tw.music.debug` if debug suffix is kept | same alias | Development only; not a final DoFun identity proof |
-| Proposed Topway/DoFun alternate release | `com.tw.media` | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | DoFun alternate fixed-entry candidate for stock-conflict-aware installs |
+| Build                                   | Package/application ID                                | Launcher component                                                     | Purpose                                                                 |
+| --------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Standard Auxio-TS                       | `org.oxycblt.auxio`                                   | `org.oxycblt.auxio.MainActivity`                                       | Development/upstream baseline                                           |
+| Standard debug                          | `org.oxycblt.auxio.debug`                             | `org.oxycblt.auxio.MainActivity`                                       | Development/debug                                                       |
+| Topway/DoFun exact release              | `com.tw.music`                                        | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | Exact DoFun fixed-identity compatibility APK                            |
+| Topway/DoFun exact debug                | normally `com.tw.music.debug` if debug suffix is kept | same alias                                                             | Development only; not a final DoFun identity proof                      |
+| Proposed Topway/DoFun alternate release | `com.tw.media`                                        | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | DoFun alternate fixed-entry candidate for stock-conflict-aware installs |
 
 Use a real Android product flavour/source set. Do not mutate package names only in CI.
 
@@ -237,10 +237,10 @@ Add or keep a more specific DoFun/Topway manifest/APK check when the flavour is 
 
 Auxio-TS now provides two Topway-compatible release identities:
 
-| Variant | Package | DoFun component | Install constraint |
-| --- | --- | --- | --- |
+| Variant                | Package        | DoFun component                           | Install constraint                                                                                    |
+| ---------------------- | -------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `topwayTwMusicRelease` | `com.tw.music` | `com.tw.music/com.tw.music.MusicActivity` | Exact stock replacement; conflicts with stock system priv-app unless package state/signing is managed |
-| `topwayTwMediaRelease` | `com.tw.media` | `com.tw.media/com.tw.music.MusicActivity` | Alternate DoFun fixed entry; not a universal no-root bypass and may conflict on some firmware |
+| `topwayTwMediaRelease` | `com.tw.media` | `com.tw.media/com.tw.music.MusicActivity` | Alternate DoFun fixed entry; not a universal no-root bypass and may conflict on some firmware         |
 
 Both variants reuse the same thin wrapper source set (`com.tw.music.MusicActivity`, `com.tw.music.MusicService`, and `com.tw.music.view.MusicWidgetProvider`) and delegate into Auxio-owned code. The wrapper exposes stock-compatible package/class/component names only; it does not add private Cardoor services, TWUtil reflection, vendor binders, system UID, `sharedUserId`, copied smali, or platform-signature requirements.
 

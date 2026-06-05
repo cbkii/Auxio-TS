@@ -2,10 +2,10 @@
 
 This directory contains a compact, repo-safe reference set extracted from the user-provided APKs:
 
-| APK | Purpose | SHA-256 |
-| --- | --- | --- |
-| `com.dofun.variety_V9.7.2.367.260312.apk` | DoFun Variety Theme launcher/widget target | `75e7ea9b46d68754253aa385e6ac750aae957a5b72196fec5449ccf2782c60b1` |
-| `com.tw.music_TW_THEME.20240715.apk` | Stock Topway `twmusic` compatibility reference | `4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518` |
+| APK                                       | Purpose                                        | SHA-256                                                            |
+| ----------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ |
+| `com.dofun.variety_V9.7.2.367.260312.apk` | DoFun Variety Theme launcher/widget target     | `75e7ea9b46d68754253aa385e6ac750aae957a5b72196fec5449ccf2782c60b1` |
+| `com.tw.music_TW_THEME.20240715.apk`      | Stock Topway `twmusic` compatibility reference | `4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518` |
 
 The original APK binaries are **not** committed here. These files are small extracted/reference artefacts only.
 

@@ -31,22 +31,22 @@ A user-signed APK cannot normally update an existing system APK with the same pa
 
 ## Install lanes
 
-| Lane | Authority | Can install exact `com.tw.music` replacement? | Notes |
-|---|---|---:|---|
-| Normal package installer only | User/app context | Usually no if stock `com.tw.music` exists | Expected package/signature conflict. |
-| TermOne/Termux app shell only | App UID such as `u0_a177` | No | Can inspect limited state only; cannot disable/remove system packages. |
-| ADB shell | `uid=2000(shell)` | Usually yes after disable/uninstall-for-user | Reversible user-level package management is possible. |
-| Shizuku | Shell/system-mediated app operations | Possibly | Depends on Shizuku being started and the package manager action supported. |
-| Root/Magisk/system image | root/system | Yes | Can remove, overlay, or replace system APKs; highest risk and highest authority. |
-| Matching OEM/platform signing key | package update authority | Yes | Not expected for normal Auxio-TS releases. |
+| Lane                              | Authority                            | Can install exact `com.tw.music` replacement? | Notes                                                                            |
+| --------------------------------- | ------------------------------------ | --------------------------------------------: | -------------------------------------------------------------------------------- |
+| Normal package installer only     | User/app context                     |     Usually no if stock `com.tw.music` exists | Expected package/signature conflict.                                             |
+| TermOne/Termux app shell only     | App UID such as `u0_a177`            |                                            No | Can inspect limited state only; cannot disable/remove system packages.           |
+| ADB shell                         | `uid=2000(shell)`                    |  Usually yes after disable/uninstall-for-user | Reversible user-level package management is possible.                            |
+| Shizuku                           | Shell/system-mediated app operations |                                      Possibly | Depends on Shizuku being started and the package manager action supported.       |
+| Root/Magisk/system image          | root/system                          |                                           Yes | Can remove, overlay, or replace system APKs; highest risk and highest authority. |
+| Matching OEM/platform signing key | package update authority             |                                           Yes | Not expected for normal Auxio-TS releases.                                       |
 
 ## Variants and intended use
 
-| Variant | Package ID | DoFun component target | Intended use | Caveat |
-|---|---|---|---|---|
-| `standard` | `org.oxycblt.auxio` | Normal Auxio activity | General development/testing | Does not satisfy fixed DoFun stock music identity. |
-| `topwayTwMusic` | `com.tw.music` | `com.tw.music/com.tw.music.MusicActivity` | Exact stock `twmusic` replacement target | Conflicts with stock `com.tw.music` unless package state is managed. |
-| proposed `topwayTwMedia` | `com.tw.media` | `com.tw.media/com.tw.music.MusicActivity` | DoFun alternate-entry candidate for stock-conflict-aware installs | For root/Shizuku/ADB/system-managed setups; not a guaranteed no-root bypass. |
+| Variant                  | Package ID          | DoFun component target                    | Intended use                                                      | Caveat                                                                       |
+| ------------------------ | ------------------- | ----------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `standard`               | `org.oxycblt.auxio` | Normal Auxio activity                     | General development/testing                                       | Does not satisfy fixed DoFun stock music identity.                           |
+| `topwayTwMusic`          | `com.tw.music`      | `com.tw.music/com.tw.music.MusicActivity` | Exact stock `twmusic` replacement target                          | Conflicts with stock `com.tw.music` unless package state is managed.         |
+| proposed `topwayTwMedia` | `com.tw.media`      | `com.tw.media/com.tw.music.MusicActivity` | DoFun alternate-entry candidate for stock-conflict-aware installs | For root/Shizuku/ADB/system-managed setups; not a guaranteed no-root bypass. |
 
 ## Recommended operator flow
 
@@ -106,26 +106,27 @@ Adding a `topwayTwMedia` variant is useful because it lets Auxio-TS satisfy that
 ## Documentation rule
 
 Do not state that any Topway variant is universally installable on locked stock TS18 firmware. Always state the required package-state authority and exact package identity being tested.
+
 # TS18 Installation Constraints
 
 This page describes install lanes for the redacted TS18 `s9863a1h10` Android 10 device profile. It does not include raw diagnostics.
 
 ## APK lanes
 
-| APK / variant | Package | Purpose | Stock-conflict note |
-| --- | --- | --- | --- |
-| `standardRelease` | `org.oxycblt.auxio` | Normal Auxio-TS identity | Does not replace stock `com.tw.music` |
-| `topwayTwMusicRelease` | `com.tw.music` | Exact stock `twmusic` replacement identity | Conflicts with stock system priv-app unless package state/signing is managed |
-| `topwayTwMediaRelease` | `com.tw.media` | DoFun alternate fixed entry for `com.tw.media/com.tw.music.MusicActivity` | Not a universal no-root bypass; `com.tw.media` may itself conflict on some firmware |
+| APK / variant          | Package             | Purpose                                                                   | Stock-conflict note                                                                 |
+| ---------------------- | ------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `standardRelease`      | `org.oxycblt.auxio` | Normal Auxio-TS identity                                                  | Does not replace stock `com.tw.music`                                               |
+| `topwayTwMusicRelease` | `com.tw.music`      | Exact stock `twmusic` replacement identity                                | Conflicts with stock system priv-app unless package state/signing is managed        |
+| `topwayTwMediaRelease` | `com.tw.media`      | DoFun alternate fixed entry for `com.tw.media/com.tw.music.MusicActivity` | Not a universal no-root bypass; `com.tw.media` may itself conflict on some firmware |
 
 ## Install-lane distinction
 
-| Lane | What it can do | Constraints |
-| --- | --- | --- |
-| Normal app context / TermOne only | Run app-local diagnostics, inspect app-visible storage, verify overlay permission UI, validate `/sdcard/Music` and `/storage/usbdisk0` media visibility | Cannot disable/remove system priv-app packages; cannot assume install over stock `com.tw.music` |
-| ADB shell | Install APKs, inspect package state, disable/enable packages for a user, collect `dumpsys` evidence | Requires physical USB/OTG ADB or another shell path; unavailable in the reported user setup |
-| Shizuku | User-mediated package-management and shell-like operations from an app context | Requires Shizuku to be installed, authorized, and working on the head unit |
-| Root/system image/firmware control | Manage system priv-app package state, firmware contents, or matching signing path | Device/firmware-specific and outside normal APK expectations |
+| Lane                               | What it can do                                                                                                                                          | Constraints                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Normal app context / TermOne only  | Run app-local diagnostics, inspect app-visible storage, verify overlay permission UI, validate `/sdcard/Music` and `/storage/usbdisk0` media visibility | Cannot disable/remove system priv-app packages; cannot assume install over stock `com.tw.music` |
+| ADB shell                          | Install APKs, inspect package state, disable/enable packages for a user, collect `dumpsys` evidence                                                     | Requires physical USB/OTG ADB or another shell path; unavailable in the reported user setup     |
+| Shizuku                            | User-mediated package-management and shell-like operations from an app context                                                                          | Requires Shizuku to be installed, authorized, and working on the head unit                      |
+| Root/system image/firmware control | Manage system priv-app package state, firmware contents, or matching signing path                                                                       | Device/firmware-specific and outside normal APK expectations                                    |
 
 A user-signed `topwayTwMusicRelease` cannot be assumed installable over `/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk`. Package state/signing must be managed by ADB shell, Shizuku, root, firmware/system-image control, matching OEM signature, or prior stock-package removal/disable.
 

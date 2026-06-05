@@ -44,26 +44,26 @@ Auxio-TS keeps Auxio as the runtime music player base and adds TS18/Topway/DoFun
 
 ### Key facts
 
-| Area | Value |
-| --- | --- |
-| Upstream base | [OxygenCobalt/Auxio](https://github.com/OxygenCobalt/Auxio) |
-| Primary compatibility target | DoFun Variety Theme / `com.dofun.variety` |
-| Stock app replacement contract | `twmusic` / `com.tw.music` |
-| Topway music release package | `com.tw.music` |
-| Topway media alternate package | `com.tw.media` |
-| Topway launcher/activity component | `com.tw.music.MusicActivity` |
-| Topway release variants | `topwayTwMusicRelease`, `topwayTwMediaRelease` |
-| Standard development variant | `org.oxycblt.auxio` |
+| Area                               | Value                                                       |
+| ---------------------------------- | ----------------------------------------------------------- |
+| Upstream base                      | [OxygenCobalt/Auxio](https://github.com/OxygenCobalt/Auxio) |
+| Primary compatibility target       | DoFun Variety Theme / `com.dofun.variety`                   |
+| Stock app replacement contract     | `twmusic` / `com.tw.music`                                  |
+| Topway music release package       | `com.tw.music`                                              |
+| Topway media alternate package     | `com.tw.media`                                              |
+| Topway launcher/activity component | `com.tw.music.MusicActivity`                                |
+| Topway release variants            | `topwayTwMusicRelease`, `topwayTwMediaRelease`              |
+| Standard development variant       | `org.oxycblt.auxio`                                         |
 
 ### Variant model
 
 Auxio-TS has three release identities:
 
-| Variant | Package identity | Purpose |
-| --- | --- | --- |
-| `standard` | `org.oxycblt.auxio` | Normal Auxio-derived development/upstream baseline |
-| `topwayTwMusic` | `com.tw.music` | Exact TS18/Topway/DoFun stock `twmusic` replacement identity; stock system priv-app conflicts must be managed |
-| `topwayTwMedia` | `com.tw.media` | DoFun alternate fixed entry exposing `com.tw.media/com.tw.music.MusicActivity`; not a universal no-root bypass |
+| Variant         | Package identity    | Purpose                                                                                                        |
+| --------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `standard`      | `org.oxycblt.auxio` | Normal Auxio-derived development/upstream baseline                                                             |
+| `topwayTwMusic` | `com.tw.music`      | Exact TS18/Topway/DoFun stock `twmusic` replacement identity; stock system priv-app conflicts must be managed  |
+| `topwayTwMedia` | `com.tw.media`      | DoFun alternate fixed entry exposing `com.tw.media/com.tw.music.MusicActivity`; not a universal no-root bypass |
 
 Only dedicated Topway/DoFun compatibility variants use stock-style identities. The standard variant remains `org.oxycblt.auxio`; `topwayTwMusicRelease` is `com.tw.music`, and `topwayTwMediaRelease` is `com.tw.media`.
 
@@ -168,16 +168,16 @@ See [`docs/TS18_RUNTIME_VALIDATION.md`](docs/TS18_RUNTIME_VALIDATION.md) for the
 
 ## Documentation
 
-| Doc | Purpose |
-| --- | --- |
-| [`docs/README.md`](docs/README.md) | Documentation index |
-| [`docs/DOFUN_VARIETY_COMPATIBILITY.md`](docs/DOFUN_VARIETY_COMPATIBILITY.md) | DoFun/Topway compatibility contract |
-| [`docs/TS18_APK_REFERENCE.md`](docs/TS18_APK_REFERENCE.md) | Compact APK-derived reference evidence |
+| Doc                                                                              | Purpose                                                 |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [`docs/README.md`](docs/README.md)                                               | Documentation index                                     |
+| [`docs/DOFUN_VARIETY_COMPATIBILITY.md`](docs/DOFUN_VARIETY_COMPATIBILITY.md)     | DoFun/Topway compatibility contract                     |
+| [`docs/TS18_APK_REFERENCE.md`](docs/TS18_APK_REFERENCE.md)                       | Compact APK-derived reference evidence                  |
 | [`docs/TS18_INSTALLATION_CONSTRAINTS.md`](docs/TS18_INSTALLATION_CONSTRAINTS.md) | Real TS18 package-conflict and install-lane constraints |
-| [`docs/TS18_RUNTIME_VALIDATION.md`](docs/TS18_RUNTIME_VALIDATION.md) | Head-unit validation checklist |
-| [`docs/CODEX_TS18_DEVICE_CONTEXT.md`](docs/CODEX_TS18_DEVICE_CONTEXT.md) | Exact TS18 diagnostic context for agents |
-| [`docs/RELEASE_WORKFLOW.md`](docs/RELEASE_WORKFLOW.md) | Release process and expected APK assets |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Local setup, CI, Roborazzi, and repo layout |
+| [`docs/TS18_RUNTIME_VALIDATION.md`](docs/TS18_RUNTIME_VALIDATION.md)             | Head-unit validation checklist                          |
+| [`docs/CODEX_TS18_DEVICE_CONTEXT.md`](docs/CODEX_TS18_DEVICE_CONTEXT.md)         | Exact TS18 diagnostic context for agents                |
+| [`docs/RELEASE_WORKFLOW.md`](docs/RELEASE_WORKFLOW.md)                           | Release process and expected APK assets                 |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)                                     | Local setup, CI, Roborazzi, and repo layout             |
 
 ## Contributing
 
@@ -187,12 +187,12 @@ For general Auxio issues, features, or behaviour that also affects the normal up
 
 Use this repo for Auxio-TS-specific work, especially:
 
-* TS18/Topway head-unit behaviour
-* DoFun Variety Theme widget/panel integration
-* `com.tw.music` compatibility APK behaviour
-* `com.tw.media` alternate DoFun fixed-entry behaviour once implemented
-* Topway broadcast/control bridge behaviour
-* release and validation workflows for the TS18 variant
+- TS18/Topway head-unit behaviour
+- DoFun Variety Theme widget/panel integration
+- `com.tw.music` compatibility APK behaviour
+- `com.tw.media` alternate DoFun fixed-entry behaviour once implemented
+- Topway broadcast/control bridge behaviour
+- release and validation workflows for the TS18 variant
 
 Keep changes aligned with upstream Auxio where practical. Avoid unnecessary divergence from upstream unless required for the TS18/Topway/DoFun compatibility target.
 

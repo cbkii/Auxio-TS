@@ -1,6 +1,7 @@
 # AGENTS.md — Auxio-TS coding authority
 
 ## Project stance
+
 - Start documentation navigation from `docs/README.md`.
 - For Codex/environment setup and validation flow, use `docs/DEVELOPMENT.md`.
 - Prefer consolidation/removal of stale docs over keeping historical wrappers.
@@ -10,13 +11,12 @@
 - Use `docs/evidence/t-music-snapshot/` as evidence only, not implementation source.
 - **Native/private contracts are NOT permanently out of scope.** They require the formal gap-and-promotion process (Tier 2 validated gap → Tier 3 investigation → Tier 4 design PR). Do NOT say "private/native is out of scope" — say "not for production by default; requires formal gap-and-promotion process."
 
-
-
 ## DoFun Variety / stock twmusic compatibility authority
 
 The primary TS18 music compatibility target is now explicitly grounded in the user-provided DoFun Variety and stock Topway music APKs.
 
 Primary references:
+
 - `docs/DOFUN_VARIETY_COMPATIBILITY.md`
 - `docs/TS18_APK_REFERENCE.md`
 - `docs/reference/ts18-apk/reference-contracts.json`
@@ -24,6 +24,7 @@ Primary references:
 - `docs/reference/ts18-apk/twmusic/classes.string-hits.txt`
 
 Priority order for music-widget/package-identity work:
+
 1. DoFun Variety Theme (`com.dofun.variety`) recognition and widget/control behaviour.
 2. Stock `twmusic` / `com.tw.music` replacement contract.
 3. Android-standard MediaSession/MediaBrowser/notification correctness.
@@ -31,12 +32,14 @@ Priority order for music-widget/package-identity work:
 5. Private/native investigation only through explicit evidence-gated approval.
 
 Observed directly reusable requirements:
+
 - DoFun music hotseat matching expects `com.tw.media` / `com.tw.music.MusicActivity` or `com.tw.music` / `com.tw.music.MusicActivity`.
 - A dedicated Topway/DoFun release variant may intentionally install as exact package `com.tw.music` and expose `com.tw.music.MusicActivity`.
 - The standard Auxio/Auxio-TS variant must keep its normal `org.oxycblt.auxio` identity.
 - Topway bridge strings are allowed only inside the isolated bridge package/tests/docs.
 
 Observed but not approved for product implementation:
+
 - `cn.cardoor.libs.media.RemoteMediaService`
 - `cn.cardoor.basic.media.NotifyService`
 - `cn.cardoor.libs.media.impl.MediaSourceService`
@@ -52,13 +55,13 @@ Do not fake private Cardoor services or copy stock `twmusic` vendor/private impl
 
 See canonical definition: [`docs/TS18_INTEGRATION_ARCHITECTURE.md` — TS18 Native Parity Strategy](docs/TS18_INTEGRATION_ARCHITECTURE.md#ts18-native-parity-strategy)
 
-| Tier | Name | Scope |
-|------|------|-------|
-| 0 | Evidence only | t-music snapshot, TWTHEME resources, diagnostics, public repos, firmware notes |
-| 1 | Android-standard implementation | MediaSession, MediaBrowser, notification, audio focus, media buttons, AppWidget, shortcuts |
-| 2 | TS18-aware validation | On-device evidence proving which TS18/TWTHEME surfaces see or ignore Tier 1 behaviour |
-| 3 | Isolated native experiments | External scripts or non-production branches testing specific TW/TWTHEME contracts |
-| 4 | Production native integration | Only via explicit human-approved design PR meeting all 8 production eligibility criteria |
+| Tier | Name                            | Scope                                                                                      |
+| ---- | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| 0    | Evidence only                   | t-music snapshot, TWTHEME resources, diagnostics, public repos, firmware notes             |
+| 1    | Android-standard implementation | MediaSession, MediaBrowser, notification, audio focus, media buttons, AppWidget, shortcuts |
+| 2    | TS18-aware validation           | On-device evidence proving which TS18/TWTHEME surfaces see or ignore Tier 1 behaviour      |
+| 3    | Isolated native experiments     | External scripts or non-production branches testing specific TW/TWTHEME contracts          |
+| 4    | Production native integration   | Only via explicit human-approved design PR meeting all 8 production eligibility criteria   |
 
 A production native integration (Tier 4) is only eligible after an explicit human-approved design PR proves: product need; evidence-backed contract; no package impersonation; no copied smali; no platform-signature/system-UID dependency; safe fallback; isolated implementation; validation and rollback path.
 
@@ -69,6 +72,7 @@ TS18/TW/TWTHEME work must begin with the curated TS18/Topway/DoFun/TW source cor
 Android/Media3 standards are the Tier 1 implementation baseline. They are the preferred first implementation path but are not the final authority for TS18/TWTHEME-specific questions. For TS18-specific behaviour, agents must first search and classify TS18/TW/TWTHEME ecosystem sources before proposing implementation or validation changes.
 
 Probe/diagnostics-driven work is secondary. It is allowed only when:
+
 - the user provides fresh diagnostics;
 - the repo already contains relevant captured evidence;
 - no reliable public TS18/TW/TWTHEME or equivalent head-unit source exists;
@@ -78,34 +82,31 @@ Do not add in-app TS18 probe frameworks, default-off vendor adapter skeletons, T
 
 ### Required source priority order for TS18/TW/TWTHEME work
 
-```text
-Priority 1: TS18/TW/TWTHEME ecosystem sources
+##### Priority 1: TS18/TW/TWTHEME ecosystem sources
   - Topway / TS10 / TS18 firmware references
   - DoFun / iLauncher / TWTHEME material
   - TWUtil / TWClient public references
   - ZLink/TLink/carchoose ecosystem clues
   - TWTHEME theme/window/PiP/launcher behaviour sources
 
-Priority 2: Battle-tested public head-unit projects
+##### Priority 2: Battle-tested public head-unit projects
   - Projects showing working Android head-unit integration patterns
-  - Media metadata exposure, hardware-key routing, launcher/widget behaviour,
-    and platform isolation precedents
+  - Media metadata exposure, hardware-key routing, launcher/widget behaviour, and platform isolation precedents
 
-Priority 3: Local repository evidence
+##### Priority 3: Local repository evidence
   - docs/evidence/t-music-snapshot/
   - diagnostics/redacted/ts18_device_profile.json
   - Existing Auxio-TS TS18 docs
 
-Priority 4: User-provided diagnostics
+##### Priority 4: User-provided diagnostics
   - Fresh TS18 logs, dumpsys, bugreport extracts, package lists,
     theme APK listings, launcher behaviour captures
 
-Priority 5: New probes/diagnostics
+##### Priority 5: New probes/diagnostics
   - Allowed only when no reliable source, public equivalent, or
     user-provided evidence exists
   - Prefer external scripts/manual runbook steps
   - Do not add speculative probe frameworks to product app code
-```
 
 Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 
@@ -120,8 +121,8 @@ Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 7. Avoid TWUtil/TWClient reflection in product code.
 8. Avoid vendor binders and package impersonation.
 
-
 ## Topway decompile-driven compatibility rule
+
 - The official Topway `com.tw.music` apktool/JADX decompile is a primary local compatibility source.
 - Generic Android MediaSession/AppWidget/shortcut compatibility is necessary but not sufficient.
 - Agents must consult `docs/topway/` before proposing Topway/TS18 music compatibility work.
@@ -131,6 +132,7 @@ Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 - Runtime APK must stay clean and must not include evidence/probe/capture tooling.
 
 ## TS18 claim labeling (required)
+
 For TS18/TW/TWTHEME claims, include both labels:
 
 - **Evidence confidence**: Observed / Inferred / Hypothesis / Requires TS18 validation / Unsupported
@@ -139,6 +141,7 @@ For TS18/TW/TWTHEME claims, include both labels:
 Always distinguish between: product requirement / Android-standard implementation / TS18 runtime validation / native-private investigation / production eligibility.
 
 ## Hard constraints
+
 - Do not change the standard Auxio/Auxio-TS package identity to `com.tw.music` or `com.tw.media`; only dedicated, clearly named Topway/DoFun compatibility variants may install as those package IDs.
 - Do not require privileged/system UID or platform signing.
 - Do not copy decompiled smali into app code.
@@ -156,8 +159,11 @@ Always distinguish between: product requirement / Android-standard implementatio
 - Distinguish Codex environment limitations from GitHub Actions/Copilot runner failures.
 - Do not treat Codex environment build limitations as final CI proof; GitHub Actions/Copilot CI is the final workflow proof point.
 - Never claim tasks/build/test/lint success unless commands actually passed in this environment.
+
 ## Validation baseline
+
 Run or document blockers for:
+
 - `./gradlew tasks`
 - `./gradlew assembleDebug`
 - `./gradlew test`
@@ -175,6 +181,7 @@ bash ./scripts/prepare-ci-environment.sh
 ```
 
 This script (idempotent, safe to re-run) does everything in one step:
+
 1. Detects ZIP/snapshot environments and exits with `SNAPSHOT_LIMITATION`
 2. **Fast-path**: if required submodule files are already present (e.g. workflow used
    `submodules: recursive`), skips expensive `git submodule sync/update`.
@@ -189,12 +196,12 @@ duplicating the submodule sync/update/patch logic. Local and Codex builds run th
 
 **Outcome classification used by the script:**
 
-| Label | Meaning |
-|-------|---------|
-| `SNAPSHOT_LIMITATION` | No `.git` — ZIP/snapshot; Gradle cannot run |
-| `SUBMODULE_BLOCKER` | `.git` present but required submodule files are missing |
+| Label                  | Meaning                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `SNAPSHOT_LIMITATION`  | No `.git` — ZIP/snapshot; Gradle cannot run                                       |
+| `SUBMODULE_BLOCKER`    | `.git` present but required submodule files are missing                           |
 | `UPSTREAM_MEDIA_QUIRK` | media submodule present but `common_ktx/proguard-rules.txt` absent; fixed by stub |
-| `REAL_BUILD_FAILURE` | Prep passed; Gradle itself failed — real app/build issue |
+| `REAL_BUILD_FAILURE`   | Prep passed; Gradle itself failed — real app/build issue                          |
 
 ### Submodule requirements and repair
 
@@ -203,23 +210,26 @@ This repo requires **recursive git submodules** to build. Gradle cannot configur
 
 Required submodules:
 
-| Path | Purpose | Remote | Reachable in sandbox? |
-|------|---------|--------|-----------------------|
-| `media/` | Patched Media3/ExoPlayer | `github.com/OxygenCobalt/media` | Yes |
-| `media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg/` | FFmpeg decoder | `git.ffmpeg.org` | **No** (blocked) |
-| `musikr/src/main/cpp/taglib/` | Taglib parser | `github.com/taglib/taglib` | Yes |
+| Path                                                  | Purpose                  | Remote                          | Reachable in sandbox? |
+| ----------------------------------------------------- | ------------------------ | ------------------------------- | --------------------- |
+| `media/`                                              | Patched Media3/ExoPlayer | `github.com/OxygenCobalt/media` | Yes                   |
+| `media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg/` | FFmpeg decoder           | `git.ffmpeg.org`                | **No** (blocked)      |
+| `musikr/src/main/cpp/taglib/`                         | Taglib parser            | `github.com/taglib/taglib`      | Yes                   |
 
 **Fresh clone:**
+
 ```
 git clone --recurse-submodules https://github.com/cbkii/Auxio-TS.git
 ```
 
 **Existing clone — one-command prep:**
+
 ```
 bash ./scripts/prepare-ci-environment.sh
 ```
 
 **Then run Gradle:**
+
 ```
 ./gradlew --no-daemon --stacktrace help
 ```
@@ -232,10 +242,12 @@ bash ./scripts/prepare-ci-environment.sh
 4. If it exits 0 but Gradle fails: classify as `REAL_BUILD_FAILURE` — inspect the first error above the stack trace.
 
 ### ZIP/snapshot environments (Codex, agent, archive-based)
+
 ZIP snapshots without `.git` cannot run Gradle. Classify as `SNAPSHOT_LIMITATION`.
 Do not try to work around this by copying submodule files manually.
 
 ### Known submodule quirks
+
 - `media/libraries/common_ktx/proguard-rules.txt` is **absent** from the `OxygenCobalt/media`
   submodule (commit `0b01e32`). The `common_library_config.gradle` requires it via
   `consumerProguardFiles 'proguard-rules.txt'`. `prepare-ci-environment.sh` creates an empty
@@ -246,11 +258,12 @@ Do not try to work around this by copying submodule files manually.
   missing path. GitHub Actions CI handles ffmpeg initialization correctly with `fetch-depth: 0`.
   **`fetch-depth: 0` is required** in `android.yml` and `lint.yml` because ffmpeg uses an
   unadvertised object reference; shallow clones (`fetch-depth: 1`) break recursive submodule
-  init with "unadvertised object" errors.  Do not change `fetch-depth` to 1 for those workflows.
+  init with "unadvertised object" errors. Do not change `fetch-depth` to 1 for those workflows.
 - Local Gradle builds also fail in this sandbox because JetBrains JDK 21 toolchain downloads
   from `api.foojay.io` are unreachable (AGP plugin resolution fails).
 
 ### Quality workflow scoping
+
 - `lint.yml` runs four **independent jobs**: `Formatting`, `Unit tests`, `Android lint`, and
   `Head-unit safety`. A formatting failure must not hide unit-test or lint status.
 - `testDebugUnitTest` is scoped to `:app` and `:musikr` only. The media library test files
@@ -259,21 +272,20 @@ Do not try to work around this by copying submodule files manually.
 - `lintDebug` is scoped to `:app` only. `app/build.gradle` sets `checkDependencies = false`
   so the app lint report does not aggregate media library lint errors.
 - `app/lint.xml` suppresses all lint issues for the vendored Google Material backport package
-  (`**/com/google/android/material/**`).  New issues in Auxio-owned source still fail CI.
+  (`**/com/google/android/material/**`). New issues in Auxio-owned source still fail CI.
 - `:musikr lintDebug` can be added once musikr lint issues are resolved or baselined.
 
 - `scripts/check-ts18-apk-reference-contracts.sh` is the compact APK-reference baseline check. Run it with the DoFun and head-unit safety checks whenever workflows, package identity, Topway broadcasts, or APK-reference docs change.
-- `scripts/check-headunit-compat-safety.sh` is the canonical product-code TS18/Topway safety
-  guardrail used by both Android Quality and TS18 Guardrails.
+- `scripts/check-headunit-compat-safety.sh` is the canonical product-code TS18/Topway safety guardrail used by both Android Quality and TS18 Guardrails.
 
 ### CI audit methodology for agents
+
 - Fetch **full** job logs, not tails. The root error is always above the Gradle stack trace dump.
 - Separate root causes from cascade errors before fixing anything.
 - Run `bash ./scripts/check-submodules.sh` first to rule out submodule issues before diagnosing Gradle.
 - Run `./gradlew --no-daemon --stacktrace :app:assembleDebug` (not bare `assembleDebug`) if
   you want to limit the build to Auxio-TS code and skip media library sub-tasks.
-- Do not claim `test`, `lint`, or `assembleDebug` passed unless the command actually ran
-  and exited 0.
+- Do not claim `test`, `lint`, or `assembleDebug` passed unless the command actually ran and exited 0.
 
 ## UI screenshot workflow
 
@@ -301,6 +313,7 @@ For TS18/head-unit UI work, screenshots must include or approximate:
 Roborazzi runs through Robolectric and does not require an emulator. If additional emulator screenshots are needed later, keep that tooling development-only and document the workflow/script path explicitly.
 
 ## Release/signing safety
+
 - Treat release/signing workflow edits as security-sensitive.
 - Never print secrets or commit keystores/signing artifacts.
 - Keep decoded keystores only in runner temp paths.
@@ -310,8 +323,8 @@ Roborazzi runs through Robolectric and does not require an emulator. If addition
 
 - Tier 0->4 flow reminder: evidence and candidate generation are allowed; production private/native integration still requires a future approved design PR.
 
-
 ## Large-Scope Implementation Delivery Protocol
+
 1. Large tasks are delivery contracts, not suggestion lists.
 2. Do not satisfy large tasks by touching many headings shallowly.
 3. "Implemented" means runtime code is wired into real behavior or an executable workflow, not only a model/registry/doc/template/test.
@@ -324,6 +337,7 @@ Roborazzi runs through Robolectric and does not require an emulator. If addition
 10. Compatibility model/status/registry additions are not counted as implemented until wired to meaningful runtime call-sites.
 
 ## Implementation-status definitions
+
 - Implemented: runtime code or executable workflow is wired and usable.
 - Implemented — requires TS18 validation: implementation exists; runtime parity still needs TS18 hardware proof.
 - Partially implemented: pieces exist but user-visible behavior or call-site wiring is incomplete.
@@ -332,6 +346,7 @@ Roborazzi runs through Robolectric and does not require an emulator. If addition
 - Deferred: intentionally out of current scope, with reason.
 
 ## Ready for Draft PR / Ready for Merge Rules
+
 - Ready for Draft PR: main implementation goal is complete enough for review.
 - If any core requested workstream is partial and locally fixable, use: Needs another Codex pass.
 - If branch is an early snapshot, use: Ready for Draft PR snapshot.
@@ -339,6 +354,7 @@ Roborazzi runs through Robolectric and does not require an emulator. If addition
 - Missing SDK/submodules are environment-limited validation, not merge proof and not automatic merge blocker.
 
 ## Auxio-TS app/runtime priority rules
+
 - Auxio-TS is a TS18/TW/TWTHEME variant app; app/runtime behavior is the priority.
 - Source-backed compatibility work should improve real runtime surfaces, not only validation tooling.
 - Evidence/validation tooling is primary only when requested or when implementation cannot proceed safely.
@@ -346,6 +362,7 @@ Roborazzi runs through Robolectric and does not require an emulator. If addition
 - Docs/tests/fixtures must not substitute for app code implementation.
 
 ## Compatibility-layer wiring rules
+
 - A headunit/compat feature is not implemented until consumed by at least one meaningful runtime call-site.
 - Registry entries alone do not count as implementation.
 - Status models alone do not count as implementation.
@@ -354,14 +371,15 @@ Roborazzi runs through Robolectric and does not require an emulator. If addition
 - Settings/status are not implemented until surfaced via existing UI/settings patterns.
 
 ## Final response discipline
+
 Always report explicitly:
+
 - which areas were wired into runtime code,
 - which areas are scaffold-only,
 - which areas remain partial,
 - which partials are locally fixable and why not fixed,
 - whether output is a review snapshot or complete,
 - why any next scope is truly separate from current acceptance criteria.
-
 
 2026-05-24 implementation note: isolated Topway bridge runtime wiring now exists; keep Topway strings limited to approved bridge/test/docs paths and preserve no-binder/no-impersonation safety boundaries.
 
