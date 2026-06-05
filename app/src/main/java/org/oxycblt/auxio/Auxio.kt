@@ -114,19 +114,19 @@ class Auxio : Application() {
         }
 
         private fun writeCrashReport(thread: Thread, throwable: Throwable) {
-            val timestamp = FILE_TIMESTAMP_FORMAT.format(Date())
-            val externalFilesDir = application.getExternalFilesDir(null) ?: return
-            val diagnosticsDir = File(externalFilesDir, "crash-reports")
+            val crashTime = Date()
+            val timestamp = fileTimestamp(crashTime)
+            val diagnosticsDir = File(application.getExternalFilesDir(null), "crash-reports")
             if (!diagnosticsDir.exists() && !diagnosticsDir.mkdirs()) {
                 return
             }
 
             val reportFile = File(diagnosticsDir, "crash-$timestamp.txt")
-            reportFile.writeText(buildReport(thread, throwable))
+            reportFile.writeText(buildReport(thread, throwable, crashTime))
             pruneOldReports(diagnosticsDir)
         }
 
-        private fun buildReport(thread: Thread, throwable: Throwable): String {
+        private fun buildReport(thread: Thread, throwable: Throwable, crashTime: Date): String {
             val stackTrace =
                 StringWriter().also { writer ->
                     PrintWriter(writer).use { printWriter ->
@@ -136,7 +136,7 @@ class Auxio : Application() {
 
             return buildString {
                 appendLine("Auxio crash report")
-                appendLine("Generated: ${DISPLAY_TIMESTAMP_FORMAT.format(Date())}")
+                appendLine("Generated: ${displayTimestamp(crashTime)}")
                 appendLine()
                 appendLine("App")
                 appendLine("  applicationId: ${BuildConfig.APPLICATION_ID}")
@@ -182,8 +182,11 @@ class Auxio : Application() {
         private companion object {
             const val MAX_CRASH_REPORTS = 10
 
-            val FILE_TIMESTAMP_FORMAT = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US)
-            val DISPLAY_TIMESTAMP_FORMAT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US)
+            fun fileTimestamp(date: Date): String =
+                SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(date)
+
+            fun displayTimestamp(date: Date): String =
+                SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US).format(date)
         }
     }
 }
