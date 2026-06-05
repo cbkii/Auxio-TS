@@ -40,11 +40,18 @@ interface TopwayStartCallbacks {
 object TopwayStartIntentHandler {
     fun handle(intent: Intent?, callbacks: TopwayStartCallbacks): Boolean {
         if (intent == null || !TopwayMusicContract.isIncomingAction(intent.action)) return false
+        val extras =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
+                    intent,
+                    TopwayStartIntentHandler::class.java.classLoader,
+                )
+            )
         val decision =
             TopwayStartRoutingPolicy.decide(
                 action = intent.action,
-                cmd = intent.getStringExtra(TopwayMusicContract.EXTRA_CMD),
-                rawSeek = intent.extras?.get(TopwayMusicContract.EXTRA_WIDGET_PROGRESS),
+                cmd = extras.cmd,
+                rawSeek = extras.widgetProgress,
                 durationMs = callbacks.currentDurationMs,
                 hasCurrentSong = callbacks.hasCurrentSong,
             )

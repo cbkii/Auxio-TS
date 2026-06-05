@@ -55,6 +55,27 @@ class TopwayBridgeExtrasPolicyTest {
     }
 
     @Test
+    fun `sanitizer bounds widget progress before service routing`() {
+        val validLong =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                mapOf(TopwayMusicContract.EXTRA_WIDGET_PROGRESS to 1234L)
+            )
+        assertEquals(1234, validLong.widgetProgress)
+
+        val overflowLong =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                mapOf(TopwayMusicContract.EXTRA_WIDGET_PROGRESS to Long.MAX_VALUE)
+            )
+        assertNull(overflowLong.widgetProgress)
+
+        val longString =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                mapOf(TopwayMusicContract.EXTRA_WIDGET_PROGRESS to "12345678901")
+            )
+        assertNull(longString.widgetProgress)
+    }
+
+    @Test
     fun `sanitizer ignores injected start id override attempts`() {
         val extras =
             TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(

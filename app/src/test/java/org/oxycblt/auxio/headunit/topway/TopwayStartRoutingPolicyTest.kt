@@ -147,6 +147,25 @@ class TopwayStartRoutingPolicyTest {
         )
     }
 
+    @Test
+    fun `sanitized oversized launcher seek is ignored before routing`() {
+        val extras =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                mapOf(TopwayMusicContract.EXTRA_WIDGET_PROGRESS to "12345678901")
+            )
+
+        val decision =
+            decide(
+                TopwayMusicContract.ACTION_LAUNCHER_WIDGET_SEEK,
+                rawSeek = extras.widgetProgress,
+                durationMs = 10_000L,
+                hasSong = true,
+            )
+
+        assertEquals(TopwayServiceAction.IGNORE, decision.action)
+        assertNull(decision.seekTargetMs)
+    }
+
     private fun decide(
         action: String?,
         cmd: String? = null,

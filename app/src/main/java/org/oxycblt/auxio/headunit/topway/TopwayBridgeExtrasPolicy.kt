@@ -18,6 +18,10 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.content.Intent
+import android.os.BadParcelableException
+import timber.log.Timber as L
+
 data class TopwayBridgeExtras(val cmd: String?, val widgetProgress: Int?)
 
 /** Allowlist-only bridge payload sanitizer for exported Topway receiver intents. */
@@ -38,6 +42,27 @@ object TopwayBridgeExtrasPolicy {
         val widgetProgress =
             parseWidgetProgress(incoming[TopwayMusicContract.EXTRA_WIDGET_PROGRESS])
         return TopwayBridgeExtras(cmd = cmd, widgetProgress = widgetProgress)
+    }
+
+    /**
+     * Safely extracts the tiny Topway extras allowlist from an untrusted [Intent].
+     *
+     * Exported receivers and services can be addressed by launcher/widget processes or other apps.
+     * Reading a malformed Bundle can throw before any routing decision is made, so isolate Bundle
+     * deserialization here and let callers continue with an empty extras map.
+     */
+    fun safelyExtractIncomingExtras(intent: Intent?, classLoader: ClassLoader?): Map<String, Any?> {
+        return try {
+            val extras = intent?.extras ?: return emptyMap()
+            extras.classLoader = classLoader
+            extras.keySet().associateWith { key -> extras.get(key) }
+        } catch (e: BadParcelableException) {
+            L.w(e, "Ignoring malformed extras from untrusted Topway intent")
+            emptyMap()
+        } catch (e: RuntimeException) {
+            L.w(e, "Ignoring unreadable extras from untrusted Topway intent")
+            emptyMap()
+        }
     }
 
     private fun parseWidgetProgress(raw: Any?): Int? =

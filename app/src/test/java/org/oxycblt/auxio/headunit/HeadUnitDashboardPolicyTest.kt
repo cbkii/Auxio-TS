@@ -82,6 +82,7 @@ class HeadUnitDashboardPolicyTest {
         assertEquals(QuickPickAction.NOW_PLAYING, entries.first().action)
         assertEquals(QuickPickAction.QUEUE, entries[1].action)
         assertEquals(QuickPickAction.SHUFFLE_ALL, entries[2].action)
+        assertEquals(QuickPickAction.HEAD_UNIT_SETTINGS, entries.last().action)
     }
 
     @Test
@@ -98,6 +99,7 @@ class HeadUnitDashboardPolicyTest {
         assertFalse(entries.getValue(QuickPickAction.SHUFFLE_ALL).enabled)
         assertFalse(entries.getValue(QuickPickAction.RECENTLY_ADDED).enabled)
         assertTrue(entries.getValue(QuickPickAction.NOW_PLAYING).enabled)
+        assertTrue(entries.getValue(QuickPickAction.HEAD_UNIT_SETTINGS).enabled)
     }
 
     @Test
@@ -113,6 +115,7 @@ class HeadUnitDashboardPolicyTest {
                 .associateBy { it.action }
         assertFalse(entries.getValue(QuickPickAction.SHUFFLE_ALL).enabled)
         assertFalse(entries.getValue(QuickPickAction.RECENTLY_ADDED).enabled)
+        assertFalse(entries.getValue(QuickPickAction.HEAD_UNIT_SETTINGS).enabled)
     }
 
     @Test
@@ -142,7 +145,7 @@ class HeadUnitDashboardPolicyTest {
                 )
                 .map { it.action }
         assertFalse(noFavs.contains(QuickPickAction.FAVOURITES))
-        assertEquals(QuickPickAction.RECENTLY_ADDED, noFavs.last())
+        assertEquals(QuickPickAction.HEAD_UNIT_SETTINGS, noFavs.last())
 
         val withFavsList =
             HeadUnitDashboardPolicy.entries(
@@ -155,6 +158,31 @@ class HeadUnitDashboardPolicyTest {
         val withFavs = withFavsList.associateBy { it.action }
         assertTrue(withFavs.containsKey(QuickPickAction.FAVOURITES))
         assertTrue(withFavs.getValue(QuickPickAction.FAVOURITES).enabled)
-        assertEquals(QuickPickAction.FAVOURITES, withFavsList.last().action)
+        assertEquals(QuickPickAction.HEAD_UNIT_SETTINGS, withFavsList.last().action)
+    }
+
+    @Test
+    fun `settings entry is visible and disabled only while indexing`() {
+        val readyEntries =
+            HeadUnitDashboardPolicy.entries(
+                    HeadUnitDashboardState(
+                        hasLibraryContent = false,
+                        hasFavourites = false,
+                        isIndexing = false,
+                    )
+                )
+                .associateBy { it.action }
+        assertTrue(readyEntries.getValue(QuickPickAction.HEAD_UNIT_SETTINGS).enabled)
+
+        val indexingEntries =
+            HeadUnitDashboardPolicy.entries(
+                    HeadUnitDashboardState(
+                        hasLibraryContent = true,
+                        hasFavourites = true,
+                        isIndexing = true,
+                    )
+                )
+                .associateBy { it.action }
+        assertFalse(indexingEntries.getValue(QuickPickAction.HEAD_UNIT_SETTINGS).enabled)
     }
 }

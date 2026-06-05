@@ -22,7 +22,6 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
-import android.os.BadParcelableException
 import androidx.core.content.ContextCompat
 import com.tw.music.MusicService
 import org.oxycblt.auxio.AuxioService
@@ -70,7 +69,12 @@ class MusicWidgetProvider : AppWidgetProvider() {
                 ?: TopwayMusicContract.ACTION_CMD
 
         val extras =
-            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(safelyExtractIncomingExtras(intent))
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
+                    intent,
+                    javaClass.classLoader,
+                )
+            )
 
         val serviceIntent =
             Intent(context, MusicService::class.java)
@@ -96,20 +100,6 @@ class MusicWidgetProvider : AppWidgetProvider() {
             L.w(e, "Unable to forward Topway widget/provider intent due to service state")
         } catch (e: SecurityException) {
             L.w(e, "Unable to forward Topway widget/provider intent due to security policy")
-        }
-    }
-
-    private fun safelyExtractIncomingExtras(intent: Intent?): Map<String, Any?> {
-        return try {
-            val extras = intent?.extras ?: return emptyMap()
-            extras.classLoader = javaClass.classLoader
-            extras.keySet().associateWith { key -> extras.get(key) }
-        } catch (e: BadParcelableException) {
-            L.w(e, "Ignoring malformed extras from untrusted Topway widget/provider intent")
-            emptyMap()
-        } catch (e: RuntimeException) {
-            L.w(e, "Ignoring unreadable extras from untrusted Topway widget/provider intent")
-            emptyMap()
         }
     }
 }

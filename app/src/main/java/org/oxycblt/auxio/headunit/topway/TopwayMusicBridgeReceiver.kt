@@ -21,7 +21,6 @@ package org.oxycblt.auxio.headunit.topway
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.BadParcelableException
 import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
@@ -55,7 +54,10 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         val serviceIntent = Intent(context, serviceClass).setAction(action)
         val extras =
             TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
-                safelyExtractIncomingExtras(intent, javaClass.classLoader)
+                TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
+                    intent,
+                    javaClass.classLoader,
+                )
             )
         extras.cmd?.let { serviceIntent.putExtra(TopwayMusicContract.EXTRA_CMD, it) }
         extras.widgetProgress?.let {
@@ -68,25 +70,6 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w(e, "Unable to start Auxio for Topway action due to service state")
         } catch (e: SecurityException) {
             L.w(e, "Unable to start Auxio for Topway action due to security policy")
-        }
-    }
-
-    companion object {
-        internal fun safelyExtractIncomingExtras(
-            intent: Intent?,
-            classLoader: ClassLoader?,
-        ): Map<String, Any?> {
-            return try {
-                val extras = intent?.extras ?: return emptyMap()
-                extras.classLoader = classLoader
-                extras.keySet().associateWith { key -> extras.get(key) }
-            } catch (e: BadParcelableException) {
-                L.w(e, "Ignoring malformed extras from untrusted Topway bridge intent")
-                emptyMap()
-            } catch (e: RuntimeException) {
-                L.w(e, "Ignoring unreadable extras from untrusted Topway bridge intent")
-                emptyMap()
-            }
         }
     }
 }

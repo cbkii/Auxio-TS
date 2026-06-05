@@ -106,6 +106,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private var pendingImportTarget: Playlist? = null
     /** The current Favourites playlist (a playlist named [FAVOURITES_PLAYLIST_NAME]), or null. */
     private var favouritesPlaylist: Playlist? = null
+    private var metadataChipSignature: MetadataChipSignature? = null
     private var pendingEntryDestination: HeadUnitEntryPoints.EntryDestination? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -344,26 +345,42 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 hasFavourites = favouritesPlaylist?.songs?.isNotEmpty() == true,
             )
 
-        binding.homeMetadataChips.removeAllViews()
-        if (metadataState.decades) {
-            val activeDecade = homeModel.decadeFilter.value
-            decades.forEach { decade ->
-                binding.homeMetadataChips.addView(buildDecadeChip(binding, decade, activeDecade))
-            }
+        val signature =
+            MetadataChipSignature(
+                decades = if (metadataState.decades) decades else emptyList(),
+                activeDecade = homeModel.decadeFilter.value,
+                recentlyAdded = metadataState.recentlyAdded,
+                favourites = metadataState.favourites,
+            )
+        if (metadataChipSignature != signature) {
+            rebuildMetadataChips(binding, signature)
+            metadataChipSignature = signature
         }
-        if (metadataState.recentlyAdded) {
+        setupHeadUnitQuickAccess(binding)
+    }
+
+    private fun rebuildMetadataChips(
+        binding: FragmentHomeBinding,
+        signature: MetadataChipSignature,
+    ) {
+        binding.homeMetadataChips.removeAllViews()
+        signature.decades.forEach { decade ->
+            binding.homeMetadataChips.addView(
+                buildDecadeChip(binding, decade, signature.activeDecade)
+            )
+        }
+        if (signature.recentlyAdded) {
             binding.homeMetadataChips.addView(
                 buildMetaChip(binding, getString(R.string.lbl_recently_added)) {
                     playRecentlyAdded()
                 }
             )
         }
-        if (metadataState.favourites) {
+        if (signature.favourites) {
             binding.homeMetadataChips.addView(
                 buildMetaChip(binding, getString(R.string.lbl_favourites)) { playFavourites() }
             )
         }
-        setupHeadUnitQuickAccess(binding)
     }
 
     private fun buildDecadeChip(
@@ -378,8 +395,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             contentDescription = text
             setOnClickListener { handleDecadeChip(decade) }
         }
-
-    // TODO: Optimise chip rebuild to only update isChecked when decades list is unchanged.
 
     private fun buildMetaChip(
         binding: FragmentHomeBinding,
@@ -499,6 +514,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         super.onDestroyBinding(binding)
         storagePermissionLauncher = null
         favouritesPlaylist = null
+        metadataChipSignature = null
         binding.homeNormalToolbar.setOnMenuItemClickListener(null)
     }
 
@@ -786,6 +802,13 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             binding.homeToolbar.setVisible(R.id.home_normal_toolbar)
         }
     }
+
+    private data class MetadataChipSignature(
+        val decades: List<Int>,
+        val activeDecade: Int?,
+        val recentlyAdded: Boolean,
+        val favourites: Boolean,
+    )
 
     private companion object {
         const val PENDING_ENTRY_SETTLE_DELAY_MS = 300L
