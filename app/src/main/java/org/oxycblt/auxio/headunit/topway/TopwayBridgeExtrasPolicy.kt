@@ -60,17 +60,10 @@ object TopwayBridgeExtrasPolicy {
         return try {
             val extras = intent?.extras ?: return emptyMap()
             extras.classLoader = classLoader
-            buildMap(2) {
-                if (extras.containsKey(TopwayMusicContract.EXTRA_CMD)) {
-                    put(TopwayMusicContract.EXTRA_CMD, extras.get(TopwayMusicContract.EXTRA_CMD))
-                }
-                if (extras.containsKey(TopwayMusicContract.EXTRA_WIDGET_PROGRESS)) {
-                    put(
-                        TopwayMusicContract.EXTRA_WIDGET_PROGRESS,
-                        extras.get(TopwayMusicContract.EXTRA_WIDGET_PROGRESS),
-                    )
-                }
-            }
+            extractAllowlistedIncomingExtras(
+                containsKey = extras::containsKey,
+                getValue = { key -> extras.get(key) },
+            )
         } catch (e: BadParcelableException) {
             L.w(
                 e,
@@ -85,6 +78,22 @@ object TopwayBridgeExtrasPolicy {
             emptyMap()
         }
     }
+
+    internal fun extractAllowlistedIncomingExtras(
+        containsKey: (String) -> Boolean,
+        getValue: (String) -> Any?,
+    ): Map<String, Any?> =
+        buildMap(2) {
+            if (containsKey(TopwayMusicContract.EXTRA_CMD)) {
+                put(TopwayMusicContract.EXTRA_CMD, getValue(TopwayMusicContract.EXTRA_CMD))
+            }
+            if (containsKey(TopwayMusicContract.EXTRA_WIDGET_PROGRESS)) {
+                put(
+                    TopwayMusicContract.EXTRA_WIDGET_PROGRESS,
+                    getValue(TopwayMusicContract.EXTRA_WIDGET_PROGRESS),
+                )
+            }
+        }
 
     private fun parseWidgetProgress(raw: Any?): Int? =
         when (raw) {

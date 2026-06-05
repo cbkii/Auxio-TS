@@ -18,7 +18,6 @@
 
 package org.oxycblt.auxio.headunit.topway
 
-import android.content.Intent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -26,25 +25,29 @@ import org.oxycblt.auxio.AuxioService
 
 class TopwayBridgeExtrasPolicyTest {
     @Test
-    fun `safe extractor reads only allowlisted Topway extras`() {
-        val intent =
-            Intent(TopwayMusicContract.ACTION_CMD).apply {
-                putExtra(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.CMD_NEXT)
-                putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, 1234)
-                putExtra("ignored", "payload")
-            }
+    fun `allowlist extractor reads only Topway extras`() {
+        val source =
+            mapOf(
+                TopwayMusicContract.EXTRA_CMD to TopwayMusicContract.CMD_NEXT,
+                TopwayMusicContract.EXTRA_WIDGET_PROGRESS to 1234,
+                "ignored" to "payload",
+            )
+        val touched = mutableListOf<String>()
 
         val extras =
-            TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
-                intent,
-                javaClass.classLoader,
-                source = "test",
+            TopwayBridgeExtrasPolicy.extractAllowlistedIncomingExtras(
+                containsKey = source::containsKey,
+                getValue = { key ->
+                    touched += key
+                    source[key]
+                },
             )
 
-        assertEquals(
-            setOf(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.EXTRA_WIDGET_PROGRESS),
-            extras.keys,
-        )
+        val allowedKeys =
+            setOf(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.EXTRA_WIDGET_PROGRESS)
+        assertEquals(allowedKeys, extras.keys)
+        assertEquals(allowedKeys, touched.toSet())
+        assertEquals(2, touched.size)
         assertEquals(TopwayMusicContract.CMD_NEXT, extras[TopwayMusicContract.EXTRA_CMD])
         assertEquals(1234, extras[TopwayMusicContract.EXTRA_WIDGET_PROGRESS])
     }
