@@ -128,7 +128,9 @@ class Auxio : Application() {
         private fun buildReport(thread: Thread, throwable: Throwable): String {
             val stackTrace =
                 StringWriter().also { writer ->
-                    PrintWriter(writer).use { printWriter -> throwable.printStackTrace(printWriter) }
+                    PrintWriter(writer).use { printWriter ->
+                        throwable.printStackTrace(printWriter)
+                    }
                 }
 
             return buildString {
