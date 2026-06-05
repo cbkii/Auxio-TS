@@ -40,17 +40,37 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
-        val serviceIntent = Intent(context, AuxioService::class.java).setAction(action)
+        val serviceClass =
+            if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                try {
+                    Class.forName("com.tw.music.MusicService")
+                } catch (e: ClassNotFoundException) {
+                    L.d(e, "Topway wrapper service not found, falling back to AuxioService")
+                    AuxioService::class.java
+                }
+            } else {
+                AuxioService::class.java
+            }
+        val serviceIntent = Intent(context, serviceClass).setAction(action)
         val extras =
             TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
-                intent.extras?.keySet()?.associateWith { key -> intent.extras?.get(key) }
-                    ?: emptyMap()
+                TopwayBridgeExtrasPolicy.safelyExtractIncomingExtras(
+                    intent,
+                    javaClass.classLoader,
+                    source = "TopwayMusicBridgeReceiver",
+                )
             )
         extras.cmd?.let { serviceIntent.putExtra(TopwayMusicContract.EXTRA_CMD, it) }
         extras.widgetProgress?.let {
             serviceIntent.putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, it)
         }
         serviceIntent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TOPWAY)
-        ContextCompat.startForegroundService(context, serviceIntent)
+        try {
+            ContextCompat.startForegroundService(context, serviceIntent)
+        } catch (e: IllegalStateException) {
+            L.w(e, "Unable to start Auxio for Topway action due to service state")
+        } catch (e: SecurityException) {
+            L.w(e, "Unable to start Auxio for Topway action due to security policy")
+        }
     }
 }

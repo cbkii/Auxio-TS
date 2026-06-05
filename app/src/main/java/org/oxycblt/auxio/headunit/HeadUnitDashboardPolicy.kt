@@ -79,6 +79,14 @@ object HeadUnitDashboardPolicy {
                 )
             )
         }
+        add(
+            entry(
+                QuickPickAction.HEAD_UNIT_SETTINGS,
+                R.string.set_head_unit,
+                R.drawable.ic_config_24,
+                !state.isIndexing,
+            )
+        )
     }
 
     private fun entry(

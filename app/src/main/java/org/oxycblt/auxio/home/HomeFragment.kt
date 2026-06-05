@@ -31,6 +31,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
@@ -40,6 +41,8 @@ import com.google.android.material.tabs.TabLayoutMediator
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeBinding
 import org.oxycblt.auxio.detail.DetailViewModel
@@ -62,7 +65,6 @@ import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.list.SelectionFragment
 import org.oxycblt.auxio.list.menu.Menu
-import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
@@ -104,6 +106,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private var pendingImportTarget: Playlist? = null
     /** The current Favourites playlist (a playlist named [FAVOURITES_PLAYLIST_NAME]), or null. */
     private var favouritesPlaylist: Playlist? = null
+    private var metadataChipSignature: MetadataChipSignature? = null
+    private var pendingEntryDestination: HeadUnitEntryPoints.EntryDestination? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -195,14 +199,25 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         collectImmediately(musicModel.indexingState) {
             updateIndexerState(it)
             setupHeadUnitQuickAccess(requireBinding())
+            if (it is IndexingState.Completed) {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    delay(PENDING_ENTRY_SETTLE_DELAY_MS)
+                    handlePendingEntryDestination(allowPending = false)
+                }
+            } else {
+                handlePendingEntryDestination(allowPending = true)
+            }
         }
         collectImmediately(playbackModel.pagerQueue) { setupHeadUnitQuickAccess(requireBinding()) }
-        collectImmediately(
-            homeModel.songList,
-            homeModel.genreList,
-            homeModel.playlistList,
-            ::updateMetadataShortcuts,
-        )
+        collectImmediately(homeModel.songList, homeModel.genreList, homeModel.playlistList) {
+            songs,
+            genres,
+            playlists ->
+            updateMetadataShortcuts(songs, genres, playlists)
+            handlePendingEntryDestination(
+                allowPending = musicModel.indexingState.value is IndexingState.Indexing
+            )
+        }
         collect(musicModel.playlistDecision.flow, ::handlePlaylistDecision)
         collectImmediately(musicModel.playlistMessage.flow, ::handlePlaylistMessage)
         collect(playbackModel.playbackDecision.flow) { decision ->
@@ -215,7 +230,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         if (!uiSettings.showHeadUnitDashboardQuickAccess) {
             return
         }
-        val hasLibrary = homeModel.songList.value.isNotEmpty()
+        val hasLibrary = homeModel.hasAnySongs
         binding.homeQuickPicks.setPadding(
             binding.homeQuickPicks.paddingLeft,
             binding.homeQuickPicks.paddingTop,
@@ -256,34 +271,61 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val activityIntent = activity?.intent ?: return
         val destinationName =
             activityIntent.getStringExtra(HeadUnitEntryPoints.EXTRA_ENTRY_DESTINATION) ?: return
-        activityIntent.removeExtra(HeadUnitEntryPoints.EXTRA_ENTRY_DESTINATION)
-
         val destination =
             HeadUnitEntryPoints.EntryDestination.entries.firstOrNull { it.name == destinationName }
                 ?: HeadUnitEntryPoints.safeDestinationForAction(null)
+        activityIntent.removeExtra(HeadUnitEntryPoints.EXTRA_ENTRY_DESTINATION)
+        handleEntryDestination(destination, allowPending = true)
+    }
 
+    private fun handlePendingEntryDestination(allowPending: Boolean) {
+        val destination = pendingEntryDestination ?: return
+        handleEntryDestination(destination, allowPending = allowPending)
+    }
+
+    private fun handleEntryDestination(
+        destination: HeadUnitEntryPoints.EntryDestination,
+        allowPending: Boolean,
+    ): Boolean {
         if (
             musicModel.indexingState.value is IndexingState.Indexing &&
                 destination != HeadUnitEntryPoints.EntryDestination.NOW_PLAYING &&
                 destination != HeadUnitEntryPoints.EntryDestination.QUEUE
         ) {
+            if (allowPending) {
+                pendingEntryDestination = destination
+            }
             homeModel.synchronizeTabPosition(0)
-            return
+            return false
         }
 
-        when (destination) {
-            HeadUnitEntryPoints.EntryDestination.NOW_PLAYING -> playbackModel.openPlayback()
-            HeadUnitEntryPoints.EntryDestination.QUEUE -> playbackModel.openQueue()
-            HeadUnitEntryPoints.EntryDestination.RECENTLY_ADDED -> openRecentlyAdded()
-            HeadUnitEntryPoints.EntryDestination.GENRES -> openTab(MusicType.GENRES)
-            HeadUnitEntryPoints.EntryDestination.ARTISTS -> openTab(MusicType.ARTISTS)
-            HeadUnitEntryPoints.EntryDestination.ALBUMS -> openTab(MusicType.ALBUMS)
-            HeadUnitEntryPoints.EntryDestination.PLAYLISTS -> openTab(MusicType.PLAYLISTS)
-            HeadUnitEntryPoints.EntryDestination.FAVOURITES ->
-                favouritesPlaylist?.let { detailModel.showPlaylist(it) }
-                    ?: openTab(MusicType.PLAYLISTS)
-            HeadUnitEntryPoints.EntryDestination.HEAD_UNIT_SETTINGS -> homeModel.showSettings()
+        val handled =
+            when (destination) {
+                HeadUnitEntryPoints.EntryDestination.NOW_PLAYING -> {
+                    playbackModel.openPlayback()
+                    true
+                }
+                HeadUnitEntryPoints.EntryDestination.QUEUE -> {
+                    playbackModel.openQueue()
+                    true
+                }
+                HeadUnitEntryPoints.EntryDestination.RECENTLY_ADDED ->
+                    playRecentlyAdded(deferIfEmpty = allowPending)
+                HeadUnitEntryPoints.EntryDestination.GENRES -> openTabHandled(MusicType.GENRES)
+                HeadUnitEntryPoints.EntryDestination.ARTISTS -> openTabHandled(MusicType.ARTISTS)
+                HeadUnitEntryPoints.EntryDestination.ALBUMS -> openTabHandled(MusicType.ALBUMS)
+                HeadUnitEntryPoints.EntryDestination.PLAYLISTS ->
+                    openTabHandled(MusicType.PLAYLISTS)
+                HeadUnitEntryPoints.EntryDestination.FAVOURITES -> playFavourites()
+                HeadUnitEntryPoints.EntryDestination.HEAD_UNIT_SETTINGS -> {
+                    homeModel.showSettings()
+                    true
+                }
+            }
+        if ((handled || !allowPending) && pendingEntryDestination == destination) {
+            pendingEntryDestination = null
         }
+        return handled
     }
 
     private fun updateMetadataShortcuts(
@@ -303,28 +345,61 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 hasFavourites = favouritesPlaylist?.songs?.isNotEmpty() == true,
             )
 
-        binding.homeMetadataChips.removeAllViews()
-        if (metadataState.decades) {
-            val activeDecade = homeModel.decadeFilter.value
-            decades.forEach { decade ->
-                binding.homeMetadataChips.addView(buildDecadeChip(binding, decade, activeDecade))
+        val signature =
+            MetadataChipSignature(
+                decades = if (metadataState.decades) decades.toList() else emptyList(),
+                activeDecade = homeModel.decadeFilter.value,
+                recentlyAdded = metadataState.recentlyAdded,
+                favourites = metadataState.favourites,
+            )
+        val oldSignature = metadataChipSignature
+        when {
+            oldSignature != null &&
+                oldSignature.decades == signature.decades &&
+                oldSignature.recentlyAdded == signature.recentlyAdded &&
+                oldSignature.favourites == signature.favourites -> {
+                if (oldSignature.activeDecade != signature.activeDecade) {
+                    updateDecadeChipSelection(binding, signature)
+                }
             }
+            oldSignature != signature -> rebuildMetadataChips(binding, signature)
         }
-        if (metadataState.recentlyAdded) {
+        metadataChipSignature = signature
+        setupHeadUnitQuickAccess(binding)
+    }
+
+    private fun updateDecadeChipSelection(
+        binding: FragmentHomeBinding,
+        signature: MetadataChipSignature,
+    ) {
+        for (index in signature.decades.indices) {
+            val chip = binding.homeMetadataChips.getChildAt(index) as? Chip ?: continue
+            chip.isChecked = signature.decades[index] == signature.activeDecade
+        }
+    }
+
+    private fun rebuildMetadataChips(
+        binding: FragmentHomeBinding,
+        signature: MetadataChipSignature,
+    ) {
+        binding.homeMetadataChips.removeAllViews()
+        signature.decades.forEach { decade ->
+            binding.homeMetadataChips.addView(
+                buildDecadeChip(binding, decade, signature.activeDecade)
+            )
+        }
+        if (signature.recentlyAdded) {
             binding.homeMetadataChips.addView(
                 buildMetaChip(binding, getString(R.string.lbl_recently_added)) {
-                    openRecentlyAdded()
+                    playRecentlyAdded()
                 }
             )
         }
-        if (metadataState.favourites) {
+        if (signature.favourites) {
             binding.homeMetadataChips.addView(
-                buildMetaChip(binding, getString(R.string.lbl_favourites)) {
-                    favouritesPlaylist?.let { detailModel.showPlaylist(it) }
-                }
+                buildMetaChip(binding, getString(R.string.lbl_favourites)) { playFavourites() }
             )
         }
-        setupHeadUnitQuickAccess(binding)
     }
 
     private fun buildDecadeChip(
@@ -337,23 +412,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             isChecked = (decade == activeDecade)
             text = getString(R.string.lbl_decade_fmt, decade)
             contentDescription = text
-            setOnClickListener {
-                // Read the current filter value once to avoid any ordering sensitivity between
-                // the read and the update (both are on the main thread, but reading once is
-                // cleaner).
-                val currentFilter = homeModel.decadeFilter.value
-                // Toggle: tapping the active decade clears the filter; tapping a new one sets it.
-                val newDecade = if (currentFilter == decade) null else decade
-                // Always apply ByDate sort so that Songs tab order is consistent whether a decade
-                // filter is active or just cleared; clearing the filter keeps date ordering so the
-                // user can still browse chronologically.
-                homeModel.applySongSort(Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING))
-                homeModel.applyDecadeFilter(newDecade)
-                openTab(MusicType.SONGS)
-            }
+            setOnClickListener { handleDecadeChip(decade) }
         }
-
-    // TODO: Optimise chip rebuild to only update isChecked when decades list is unchanged.
 
     private fun buildMetaChip(
         binding: FragmentHomeBinding,
@@ -387,14 +447,12 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             HeadUnitRoute.NOW_PLAYING -> playbackModel.openPlayback()
             HeadUnitRoute.SHUFFLE_ALL -> playbackModel.shuffleAll()
             HeadUnitRoute.QUEUE -> playbackModel.openQueue()
-            HeadUnitRoute.RECENTLY_ADDED -> openRecentlyAdded()
+            HeadUnitRoute.RECENTLY_ADDED -> playRecentlyAdded()
             HeadUnitRoute.GENRES -> openTab(MusicType.GENRES)
             HeadUnitRoute.ARTISTS -> openTab(MusicType.ARTISTS)
             HeadUnitRoute.ALBUMS -> openTab(MusicType.ALBUMS)
             HeadUnitRoute.PLAYLISTS -> openTab(MusicType.PLAYLISTS)
-            HeadUnitRoute.FAVOURITES ->
-                favouritesPlaylist?.let { detailModel.showPlaylist(it) }
-                    ?: openTab(MusicType.PLAYLISTS)
+            HeadUnitRoute.FAVOURITES -> playFavourites()
             HeadUnitRoute.HEAD_UNIT_SETTINGS ->
                 if (musicModel.indexingState.value !is IndexingState.Indexing)
                     homeModel.showSettings()
@@ -402,22 +460,72 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     }
 
     private fun openTab(type: MusicType) {
+        openTabHandled(type)
+    }
+
+    private fun openTabHandled(type: MusicType): Boolean {
         val index = homeModel.currentTabTypes.indexOf(type)
         if (index >= 0) {
             requireBinding().homePager.currentItem = index
+            return true
+        }
+        return false
+    }
+
+    private fun handleDecadeChip(decade: Int) {
+        when (GeneratedPlaylistPolicy.decadeChipAction(homeModel.decadeFilter.value, decade)) {
+            GeneratedPlaylistPolicy.DecadeChipAction.CLEAR_FILTER -> {
+                homeModel.applySongSort(GeneratedPlaylistPolicy.decadePlaybackSort)
+                homeModel.applyDecadeFilter(null)
+                openTab(MusicType.SONGS)
+            }
+            GeneratedPlaylistPolicy.DecadeChipAction.PLAY_DECADE -> playDecade(decade)
         }
     }
 
-    private fun openRecentlyAdded() {
-        homeModel.applySongSort(Sort(Sort.Mode.ByDateAdded, Sort.Direction.DESCENDING))
+    private fun playDecade(decade: Int) {
+        val songs = homeModel.songsForDecade(decade)
+        if (songs.isEmpty()) {
+            L.d("Ignoring stale decade chip for $decade with no matching songs")
+            return
+        }
+        playbackModel.play(songs)
+        homeModel.applySongSort(GeneratedPlaylistPolicy.decadePlaybackSort)
+        homeModel.applyDecadeFilter(decade)
         openTab(MusicType.SONGS)
+    }
+
+    private fun playRecentlyAdded(deferIfEmpty: Boolean = false): Boolean {
+        val songs = homeModel.recentlyAddedSongs()
+        if (songs.isEmpty()) {
+            L.d("Ignoring Recently Added generated playlist with no songs")
+            if (deferIfEmpty) {
+                pendingEntryDestination = HeadUnitEntryPoints.EntryDestination.RECENTLY_ADDED
+            }
+            return false
+        }
+        playbackModel.play(songs)
+        homeModel.applySongSort(GeneratedPlaylistPolicy.recentlyAddedSort)
+        homeModel.applyDecadeFilter(GeneratedPlaylistPolicy.recentlyAddedDecadeFilter)
+        openTab(MusicType.SONGS)
+        return true
+    }
+
+    private fun playFavourites(): Boolean {
+        val playlist = favouritesPlaylist
+        if (playlist?.songs?.isNotEmpty() != true) {
+            L.d("Opening Playlists because Favourites is missing or empty")
+            return openTabHandled(MusicType.PLAYLISTS)
+        }
+        playbackModel.play(playlist)
+        return true
     }
 
     private fun openDecades() {
         // Clear any active decade filter so all songs are visible, sorted by date so the user
         // can see and tap individual decade chips in the metadata chip section above.
         homeModel.applyDecadeFilter(null)
-        homeModel.applySongSort(Sort(Sort.Mode.ByDate, Sort.Direction.DESCENDING))
+        homeModel.applySongSort(GeneratedPlaylistPolicy.decadePlaybackSort)
         openTab(MusicType.SONGS)
     }
 
@@ -425,6 +533,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         super.onDestroyBinding(binding)
         storagePermissionLauncher = null
         favouritesPlaylist = null
+        metadataChipSignature = null
         binding.homeNormalToolbar.setOnMenuItemClickListener(null)
     }
 
@@ -711,6 +820,17 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         } else {
             binding.homeToolbar.setVisible(R.id.home_normal_toolbar)
         }
+    }
+
+    private data class MetadataChipSignature(
+        val decades: List<Int>,
+        val activeDecade: Int?,
+        val recentlyAdded: Boolean,
+        val favourites: Boolean,
+    )
+
+    private companion object {
+        const val PENDING_ENTRY_SETTLE_DELAY_MS = 300L
     }
 
     /**

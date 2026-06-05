@@ -25,6 +25,34 @@ import org.oxycblt.auxio.AuxioService
 
 class TopwayBridgeExtrasPolicyTest {
     @Test
+    fun `allowlist extractor reads only Topway extras`() {
+        val source =
+            mapOf(
+                TopwayMusicContract.EXTRA_CMD to TopwayMusicContract.CMD_NEXT,
+                TopwayMusicContract.EXTRA_WIDGET_PROGRESS to 1234,
+                "ignored" to "payload",
+            )
+        val touched = mutableListOf<String>()
+
+        val extras =
+            TopwayBridgeExtrasPolicy.extractAllowlistedIncomingExtras(
+                containsKey = source::containsKey,
+                getValue = { key ->
+                    touched += key
+                    source[key]
+                },
+            )
+
+        val allowedKeys =
+            setOf(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.EXTRA_WIDGET_PROGRESS)
+        assertEquals(allowedKeys, extras.keys)
+        assertEquals(allowedKeys, touched.toSet())
+        assertEquals(2, touched.size)
+        assertEquals(TopwayMusicContract.CMD_NEXT, extras[TopwayMusicContract.EXTRA_CMD])
+        assertEquals(1234, extras[TopwayMusicContract.EXTRA_WIDGET_PROGRESS])
+    }
+
+    @Test
     fun `sanitizer forwards only allowlisted Topway extras`() {
         val extras =
             TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
@@ -52,6 +80,27 @@ class TopwayBridgeExtrasPolicyTest {
                 mapOf(TopwayMusicContract.EXTRA_CMD to "this-command-is-definitely-too-long")
             )
         assertNull(tooLong.cmd)
+    }
+
+    @Test
+    fun `sanitizer bounds widget progress before service routing`() {
+        val validLong =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                mapOf(TopwayMusicContract.EXTRA_WIDGET_PROGRESS to 1234L)
+            )
+        assertEquals(1234, validLong.widgetProgress)
+
+        val overflowLong =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                mapOf(TopwayMusicContract.EXTRA_WIDGET_PROGRESS to Long.MAX_VALUE)
+            )
+        assertNull(overflowLong.widgetProgress)
+
+        val longString =
+            TopwayBridgeExtrasPolicy.sanitizeIncomingExtras(
+                mapOf(TopwayMusicContract.EXTRA_WIDGET_PROGRESS to "12345678901")
+            )
+        assertNull(longString.widgetProgress)
     }
 
     @Test

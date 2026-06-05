@@ -4,12 +4,32 @@
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Android 14+ requires this permission when using FOREGROUND_SERVICE_TYPE_SPECIAL_USE.
+         Android 10 safely ignores this declaration. Runtime code API-gates the service type. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application>
         <!--
+        Topway-compatible APKs keep Auxio's normal service for explicit in-app starts only. External
+        MediaBrowser clients should see the stock-name wrapper below as the canonical browse service
+        to avoid split TS18 sessions across two exported service component names.
+        -->
+        <service
+            android:name="org.oxycblt.auxio.AuxioService"
+            android:exported="false"
+            tools:node="merge"
+            tools:replace="android:exported">
+            <intent-filter tools:node="remove">
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+            <intent-filter tools:node="remove">
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+            </intent-filter>
+        </service>
+
+        <!--
         Stock-component fallbacks for Topway/DoFun integrations that address stock twmusic
-        components explicitly. These are Topway-flavour only and delegate to Auxio's real service
+        components explicitly. These are Topway-compatible flavour only and delegate to Auxio's real service
         and widget/control bridge; they do not implement private Cardoor/vendor APIs.
         -->
         <service
@@ -42,18 +62,32 @@
         <!--
         DoFun/Variety's extracted apps_match_config.json fixes the local music hotseat to
         com.tw.music/.MusicActivity (or com.tw.media with the same class).  Expose that stock
-        Topway-compatible identity only in the topwayTwMusic flavour while targeting Auxio's real
+        Topway-compatible identity only in the Topway-compatible flavours while targeting Auxio's real
         activity implementation.
         -->
         <activity
             android:name="org.oxycblt.auxio.MainActivity"
-            tools:node="merge">
+            android:exported="false"
+            tools:ignore="AppLinkUrlError"
+            tools:node="merge"
+            tools:replace="android:exported">
             <intent-filter tools:node="remove">
                 <action android:name="android.intent.action.MAIN" />
                 <action android:name="android.intent.action.MUSIC_PLAYER" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.APP_MUSIC" />
+            </intent-filter>
+            <intent-filter tools:node="remove">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+                <data android:mimeType="application/x-ogg" />
+                <data android:mimeType="application/itunes" />
             </intent-filter>
         </activity>
 
@@ -72,9 +106,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.APP_MUSIC" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+                <data android:mimeType="application/x-ogg" />
+                <data android:mimeType="application/itunes" />
+            </intent-filter>
         </activity-alias>
 
-        <!-- Car Floating Controls overlay service -->
+        <!-- Car Floating Controls overlay service.
+             foregroundServiceType="specialUse" is required by Android 14+ for the overlay use case.
+             Android 10 ignores this attribute. Runtime code API-gates the actual service type
+             constant so Android 10 receives 0 (legacy behaviour) and never sees API 34 constants. -->
         <service
             android:name="org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
             android:exported="false"
@@ -82,7 +130,7 @@
             tools:ignore="ForegroundServicePermission">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Persistent floating media controls overlay for head-unit use" />
+                android:value="Car floating playback controls overlay for head-unit displays" />
         </service>
 
         <!-- Car Floating Controls overlay permission activity -->
@@ -91,7 +139,8 @@
             android:exported="false"
             android:theme="@style/Theme.Auxio.App" />
 
-        <!-- Boot receiver to restore overlay after reboot/ACC wake -->
+        <!-- Boot receiver to restore overlay after ACTION_BOOT_COMPLETED only. ACC wake requires
+             separate TS18 runtime evidence before additional quickboot/vendor actions are declared. -->
         <receiver
             android:name="org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver"
             android:exported="true">

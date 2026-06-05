@@ -49,30 +49,29 @@ Auxio-TS keeps Auxio as the runtime music player base and adds TS18/Topway/DoFun
 | Upstream base | [OxygenCobalt/Auxio](https://github.com/OxygenCobalt/Auxio) |
 | Primary compatibility target | DoFun Variety Theme / `com.dofun.variety` |
 | Stock app replacement contract | `twmusic` / `com.tw.music` |
-| Topway exact release package | `com.tw.music` |
-| Topway exact launcher/activity component | `com.tw.music.MusicActivity` |
-| Topway exact release variant | `topwayTwMusicRelease` |
-| Proposed alternate DoFun package | `com.tw.media` |
-| Proposed alternate component | `com.tw.media/com.tw.music.MusicActivity` |
+| Topway music release package | `com.tw.music` |
+| Topway media alternate package | `com.tw.media` |
+| Topway launcher/activity component | `com.tw.music.MusicActivity` |
+| Topway release variants | `topwayTwMusicRelease`, `topwayTwMediaRelease` |
 | Standard development variant | `org.oxycblt.auxio` |
 
 ### Variant model
 
-Auxio-TS has separate identities:
+Auxio-TS has three release identities:
 
 | Variant | Package identity | Purpose |
 | --- | --- | --- |
 | `standard` | `org.oxycblt.auxio` | Normal Auxio-derived development/upstream baseline |
-| `topwayTwMusic` | `com.tw.music` | TS18/Topway/DoFun-compatible APK intended to stand in for stock `twmusic` |
-| proposed `topwayTwMedia` | `com.tw.media` | DoFun alternate fixed-entry candidate using `com.tw.music.MusicActivity` |
+| `topwayTwMusic` | `com.tw.music` | Exact TS18/Topway/DoFun stock `twmusic` replacement identity; stock system priv-app conflicts must be managed |
+| `topwayTwMedia` | `com.tw.media` | DoFun alternate fixed entry exposing `com.tw.media/com.tw.music.MusicActivity`; not a universal no-root bypass |
 
-Only dedicated Topway/DoFun compatibility variants use stock-style package identities.
+Only dedicated Topway/DoFun compatibility variants use stock-style identities. The standard variant remains `org.oxycblt.auxio`; `topwayTwMusicRelease` is `com.tw.music`, and `topwayTwMediaRelease` is `com.tw.media`.
 
 ## Compatibility and installation scope
 
 Auxio-TS targets compatibility surfaces needed by DoFun Variety and TS18/Topway launchers, such as:
 
-- `com.tw.music` package identity for the exact compatibility APK
+- `com.tw.music` and `com.tw.media` package identities for dedicated compatibility APKs
 - `com.tw.music.MusicActivity` launcher/activity alias
 - Android `MediaSession` / `MediaBrowserService`
 - Topway-style metadata/progress broadcasts
@@ -122,6 +121,7 @@ Build the TS18/Topway/DoFun exact compatibility APK:
 
 ```sh
 ./gradlew :app:assembleTopwayTwMusicRelease
+./gradlew :app:assembleTopwayTwMediaRelease
 ```
 
 Build the TS18/Topway/DoFun alternate `com.tw.media` APK once implemented:

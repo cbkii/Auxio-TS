@@ -99,6 +99,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
         tv.text = LABEL_DRAG
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, BUTTON_TEXT_SP)
         tv.gravity = Gravity.CENTER
+        tv.includeFontPadding = false
         tv.setTextColor(Color.WHITE)
         tv.layoutParams = LayoutParams(buttonSizePx, buttonSizePx)
         tv.contentDescription = DESC_DRAG
@@ -169,6 +170,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
         tv.text = label
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, BUTTON_TEXT_SP)
         tv.gravity = Gravity.CENTER
+        tv.includeFontPadding = false
         tv.setTextColor(Color.WHITE)
         tv.layoutParams = LayoutParams(buttonSizePx, buttonSizePx)
         tv.contentDescription = description

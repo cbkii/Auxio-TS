@@ -186,10 +186,8 @@
     <!-- Format string for an individual decade chip label, e.g. "1990s" -->
     <string name="lbl_decade_fmt">%1$ds</string>
     <string name="lbl_folders">Folders</string>
-    <string name="lbl_folders_unavailable">Folders (not available here)</string>
     <string name="lbl_favourites">Favourites</string>
-    <string name="lbl_favourites_unavailable">Favourites (not available here)</string>
-<string name="lbl_report">Report</string>
+    <string name="lbl_report">Report</string>
 
     <string name="lbl_author">Author</string>
     <string name="lbl_author_name">Alexander Capehart</string>

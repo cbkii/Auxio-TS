@@ -1,0 +1,90 @@
+name: Upstream Auxio Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_branch:
+        description: "Optional upstream branch override for diagnostics"
+        required: false
+        type: string
+        default: ""
+      update_baseline:
+        description: "Update stored upstream baseline after creating or acknowledging a changed-upstream report"
+        required: false
+        type: boolean
+        default: true
+      dry_run:
+        description: "Generate logs/reports but do not create issues or update baseline"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Monthly, away from top-of-hour congestion. UTC.
+    - cron: "37 17 3 * *"
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: upstream-auxio-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Check OxygenCobalt/Auxio for reviewable changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout Auxio-TS dev
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      with:
+        ref: dev
+        fetch-depth: 0
+        persist-credentials: true
+
+    - name: Configure git identity
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+    - name: Monitor upstream Auxio
+      id: monitor
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ github.token }}
+        UPSTREAM_REPO_URL: https://github.com/OxygenCobalt/Auxio.git
+        UPSTREAM_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.upstream_branch || '' }}
+        BASELINE_FILE: .github/upstream-auxio-baseline.json
+        REPORT_DIR: build/upstream-auxio-monitor
+        UPDATE_BASELINE: ${{ github.event_name != 'workflow_dispatch' || inputs.update_baseline }}
+        DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      run: bash scripts/monitor-upstream-auxio.sh
+
+    - name: Upload upstream change reports
+      if: steps.monitor.outputs.reports_generated == 'true'
+      uses: actions/upload-artifact@49552fcb82fc92c668b492a7d36fc7860a20c81d
+      with:
+        name: upstream-auxio-monitor-report
+        path: build/upstream-auxio-monitor/**
+        if-no-files-found: error
+        retention-days: 30
+
+    - name: Commit updated upstream baseline
+      if: steps.monitor.outputs.baseline_updated == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        git add .github/upstream-auxio-baseline.json
+        if git diff --cached --quiet; then
+          echo "Baseline output indicated an update, but no baseline file changes are staged."
+          exit 0
+        fi
+        git commit -m "Update upstream Auxio monitor baseline"
+        if ! git push origin HEAD:dev; then
+          echo "::error::Baseline commit was created after the upstream SHA was reported, but push to dev failed. Re-run or push the baseline commit manually to avoid duplicate monitor reports."
+          exit 1
+        fi

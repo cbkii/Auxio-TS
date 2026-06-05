@@ -8,12 +8,12 @@ Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed 
 
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — local setup, CI workflow coverage, Roborazzi UI workflow, and deleted-workflow audit notes.
 - [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — manual signed release flow and expected APK assets.
+- [`UPSTREAM_AUXIO_MONITORING.md`](UPSTREAM_AUXIO_MONITORING.md) — monthly upstream Auxio change monitor, no-clutter baseline rules, and generated issue workflow.
 - [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — DoFun/Topway compatibility contract and private-hook boundaries.
 - [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — compact APK-derived reference evidence for DoFun Variety and stock `twmusic`.
 - [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — package-conflict and install-lane constraints for real TS18 firmware.
 - [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
-- [`CODEX_TS18_DEVICE_CONTEXT.md`](CODEX_TS18_DEVICE_CONTEXT.md) — exact TS18 diagnostic context for agents that cannot see the uploaded raw archive.
-- [`evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md`](evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md) — redacted exact-device profile from user diagnostics.
+- [`TS18_COMPATIBILITY_AUDIT.md`](TS18_COMPATIBILITY_AUDIT.md) — repo-wide TS18/Topway/DoFun compatibility surface classification.
 - [`topway/README.md`](topway/README.md) — local Topway decompile/source-led compatibility notes.
 
 ## DoFun Variety / TS18 APK reference baseline
@@ -33,7 +33,7 @@ Primary replacement contract:
 - stock `twmusic` / `com.tw.music`
 - release package/application ID: `com.tw.music`
 - launcher/activity component: `com.tw.music.MusicActivity`
-- release variant: `topwayTwMusicRelease`
+- release variants: `topwayTwMusicRelease` (`com.tw.music`) and `topwayTwMediaRelease` (`com.tw.media`)
 
 [Evidence confidence: Observed in DoFun APK config, stock twmusic APK references, and exact-device package paths] [Porting decision: Directly reusable replacement contract with install-lane constraints]
 
@@ -63,8 +63,9 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
 
 - `.github/workflows/android.yml` builds standard and Topway/DoFun APKs and runs DoFun compatibility checks on relevant PR/push changes.
 - `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety/DoFun guardrails.
-- `.github/workflows/manual-release.yml` builds, signs, verifies, and uploads standard plus Topway/DoFun release APKs.
+- `.github/workflows/manual-release.yml` builds, signs, verifies, and uploads standard, `topwayTwMusic`, and `topwayTwMedia` release APKs.
 - `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshots/reports for UI review.
+- `.github/workflows/upstream-auxio-monitor.yml` checks `OxygenCobalt/Auxio` monthly and opens an issue only when upstream has new commits to review.
 
 Local preflight:
 
@@ -76,3 +77,9 @@ bash scripts/check-headunit-compat-safety.sh
 find scripts -type f -name '*.sh' -print -exec bash -n {} \;
 ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
 ```
+
+## Exact-device context
+
+- [`CODEX_TS18_DEVICE_CONTEXT.md`](CODEX_TS18_DEVICE_CONTEXT.md) — redacted `s9863a1h10` Android 10 TS18 profile for agent work.
+- [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — install lanes, stock package conflicts, and recovery notes.
+- [`evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md`](evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md) — concise redacted device evidence.
