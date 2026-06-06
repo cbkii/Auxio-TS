@@ -34,8 +34,8 @@ import org.robolectric.annotation.Config
  * The v4.0.19/v4.0.20 release crash was caused by MaterialButton inflation failures when
  * Material3Expressive icon button styles were combined with materialSizeOverlay inside a
  * MaterialButtonGroup. These tests inflate all layouts containing MaterialButtonGroup,
- * WidthFixMaterialButton, RippleFixMaterialButton, or custom Auxio button styles to ensure
- * no UnsupportedOperationException occurs during attribute resolution.
+ * WidthFixMaterialButton, RippleFixMaterialButton, or custom Auxio button styles to ensure no
+ * UnsupportedOperationException occurs during attribute resolution.
  *
  * Coverage includes: playback bar/panel (all qualifiers), dialogs with button groups, toolbar,
  * detail layouts, home list, and main activity layouts.
