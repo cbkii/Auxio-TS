@@ -89,13 +89,13 @@
                 android:layout_height="@dimen/size_playback_button_small"
                 android:contentDescription="@string/desc_change_repeat"
                 app:icon="@drawable/ic_repeat_off_24"
+                app:iconSize="@dimen/size_playback_icon_small"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/playback_skip_prev"
                 app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintHorizontal_chainStyle="packed"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:materialSizeOverlay="@style/SizeOverlay.Auxio.Button.Playback.Control.Small" />
+                app:layout_constraintTop_toTopOf="parent" />
 
             <org.oxycblt.auxio.ui.RippleFixMaterialButton
                 android:id="@+id/playback_skip_prev"
@@ -104,12 +104,12 @@
                 android:layout_height="@dimen/size_playback_button_small"
                 android:contentDescription="@string/desc_skip_prev"
                 app:icon="@drawable/ic_skip_prev_24"
+                app:iconSize="@dimen/size_playback_icon_small"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/playback_play_pause"
                 app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toEndOf="@+id/playback_repeat"
-                app:layout_constraintTop_toTopOf="parent"
-                app:materialSizeOverlay="@style/SizeOverlay.Auxio.Button.Playback.Control.Small" />
+                app:layout_constraintTop_toTopOf="parent" />
 
             <org.oxycblt.auxio.ui.RippleFixMaterialButton
                 android:id="@+id/playback_play_pause"
@@ -118,13 +118,13 @@
                 android:layout_height="@dimen/size_playback_button_small"
                 android:contentDescription="@string/desc_play_pause"
                 app:icon="@drawable/sel_playing_state_24"
+                app:iconSize="@dimen/size_playback_icon_small"
                 android:layout_marginHorizontal="@dimen/spacing_tiny"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/playback_skip_next"
                 app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toEndOf="@+id/playback_skip_prev"
                 app:layout_constraintTop_toTopOf="parent"
-                app:materialSizeOverlay="@style/SizeOverlay.Auxio.Button.Playback.Control.Small"
                 tools:icon="@drawable/ic_play_24" />
 
             <org.oxycblt.auxio.ui.RippleFixMaterialButton
@@ -134,12 +134,12 @@
                 android:layout_height="@dimen/size_playback_button_small"
                 android:contentDescription="@string/desc_skip_next"
                 app:icon="@drawable/ic_skip_next_24"
+                app:iconSize="@dimen/size_playback_icon_small"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/playback_shuffle"
                 app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toEndOf="@+id/playback_play_pause"
-                app:layout_constraintTop_toTopOf="parent"
-                app:materialSizeOverlay="@style/SizeOverlay.Auxio.Button.Playback.Control.Small" />
+                app:layout_constraintTop_toTopOf="parent" />
 
             <org.oxycblt.auxio.ui.RippleFixMaterialButton
                 android:id="@+id/playback_shuffle"
@@ -148,13 +148,13 @@
                 android:layout_height="@dimen/size_playback_button_small"
                 android:contentDescription="@string/desc_shuffle"
                 app:icon="@drawable/sel_shuffle_state_24"
+                app:iconSize="@dimen/size_playback_icon_small"
                 app:iconTint="@color/sel_activatable_icon"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintHorizontal_bias="0.5"
                 app:layout_constraintStart_toEndOf="@+id/playback_skip_next"
-                app:layout_constraintTop_toTopOf="parent"
-                app:materialSizeOverlay="@style/SizeOverlay.Auxio.Button.Playback.Control.Small" />
+                app:layout_constraintTop_toTopOf="parent" />
 
         </com.google.android.material.button.MaterialButtonGroup>
 

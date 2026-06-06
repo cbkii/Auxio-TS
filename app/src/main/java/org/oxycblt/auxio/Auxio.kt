@@ -116,7 +116,8 @@ class Auxio : Application() {
         private fun writeCrashReport(thread: Thread, throwable: Throwable) {
             val crashTime = Date()
             val timestamp = fileTimestamp(crashTime)
-            val diagnosticsDir = File(application.getExternalFilesDir(null), "crash-reports")
+            val externalFilesDir = application.getExternalFilesDir(null) ?: return
+            val diagnosticsDir = File(externalFilesDir, "crash-reports")
             if (!diagnosticsDir.exists() && !diagnosticsDir.mkdirs()) {
                 return
             }

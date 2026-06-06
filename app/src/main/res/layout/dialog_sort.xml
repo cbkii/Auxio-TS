@@ -89,7 +89,6 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="@dimen/spacing_small"
             android:text="@string/lbl_cancel"
-            app:materialSizeOverlay="@style/SizeOverlay.Material3Expressive.Button.Small"
             app:layout_constraintBottom_toBottomOf="@+id/sort_save"
             app:layout_constraintEnd_toStartOf="@+id/sort_save"
             app:layout_constraintTop_toTopOf="@+id/sort_save" />
