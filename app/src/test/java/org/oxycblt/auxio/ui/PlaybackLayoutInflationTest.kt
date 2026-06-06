@@ -29,12 +29,16 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Regression test for the release crash caused by MaterialButton inflation failures when
- * Material3Expressive icon button styles are combined with materialSizeOverlay inside a
- * MaterialButtonGroup. This test inflates the actual playback layouts under Theme.Auxio.App to
- * ensure no UnsupportedOperationException occurs during attribute resolution.
+ * Regression tests for layout inflation under [R.style.Theme_Auxio_App].
  *
- * See: fragment_playback_bar line #77 crash with WidthFixMaterialButton / MaterialButton.
+ * The v4.0.19/v4.0.20 release crash was caused by MaterialButton inflation failures when
+ * Material3Expressive icon button styles were combined with materialSizeOverlay inside a
+ * MaterialButtonGroup. These tests inflate all layouts containing MaterialButtonGroup,
+ * WidthFixMaterialButton, RippleFixMaterialButton, or custom Auxio button styles to ensure
+ * no UnsupportedOperationException occurs during attribute resolution.
+ *
+ * Coverage includes: playback bar/panel (all qualifiers), dialogs with button groups, toolbar,
+ * detail layouts, home list, and main activity layouts.
  */
 @RunWith(RobolectricTestRunner::class)
 class PlaybackLayoutInflationTest {
@@ -45,15 +49,17 @@ class PlaybackLayoutInflationTest {
         return LayoutInflater.from(context)
     }
 
+    // --- Playback bar ---
+
     @Test
     @Config(qualifiers = "w1280dp-h720dp-land")
     fun inflatePlaybackBar_doesNotCrash() {
         val inflater = themedInflater()
         val parent = FrameLayout(inflater.context)
-        // This is the exact crash path: inflating fragment_playback_bar with MaterialButtonGroup
-        // containing WidthFixMaterialButton/RippleFixMaterialButton with size overlays.
         inflater.inflate(R.layout.fragment_playback_bar, parent, false)
     }
+
+    // --- Playback panel (all resource qualifiers) ---
 
     @Test
     @Config(qualifiers = "w320dp-h320dp-port")
@@ -87,11 +93,109 @@ class PlaybackLayoutInflationTest {
         inflater.inflate(R.layout.fragment_playback_panel, parent, false)
     }
 
+    // --- Dialogs with MaterialButtonGroup ---
+
     @Test
     @Config(qualifiers = "w412dp-h915dp-port")
     fun inflateDialogSort_doesNotCrash() {
         val inflater = themedInflater()
         val parent = FrameLayout(inflater.context)
         inflater.inflate(R.layout.dialog_sort, parent, false)
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-port")
+    fun inflateDialogMusicLocations_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.dialog_music_locations, parent, false)
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-port")
+    fun inflateDialogPlaylistExport_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.dialog_playlist_export, parent, false)
+    }
+
+    // --- Toolbar (contains MaterialButtonGroup) ---
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-port")
+    fun inflateViewToolbar_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.view_toolbar, parent, false)
+    }
+
+    // --- Detail layouts (all qualifiers, contain MaterialButtonGroup) ---
+
+    @Test
+    @Config(qualifiers = "w320dp-h320dp-port")
+    fun inflateFragmentDetail_default_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_detail, parent, false)
+    }
+
+    @Test
+    @Config(qualifiers = "w640dp-h360dp-land")
+    fun inflateFragmentDetail_h360dp_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_detail, parent, false)
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h480dp-port")
+    fun inflateFragmentDetail_h480dp_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_detail, parent, false)
+    }
+
+    @Test
+    @Config(qualifiers = "w600dp-h900dp-port")
+    fun inflateFragmentDetail_w600dp_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_detail, parent, false)
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h900dp-port")
+    fun inflateFragmentDetail_sw600dp_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_detail, parent, false)
+    }
+
+    // --- Home list (contains RippleFixMaterialButton) ---
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-port")
+    fun inflateFragmentHomeList_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_home_list, parent, false)
+    }
+
+    // --- Main activity layouts ---
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-port")
+    fun inflateFragmentMain_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_main, parent, false)
+    }
+
+    @Test
+    @Config(qualifiers = "w720dp-h900dp-land")
+    fun inflateFragmentMain_w720dp_doesNotCrash() {
+        val inflater = themedInflater()
+        val parent = FrameLayout(inflater.context)
+        inflater.inflate(R.layout.fragment_main, parent, false)
     }
 }

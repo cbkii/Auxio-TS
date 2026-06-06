@@ -52,7 +52,7 @@
 
         <com.google.android.material.button.MaterialButtonGroup
             android:id="@+id/sort_direction_group"
-            style="@style/Widget.Material3Expressive.MaterialButtonGroup.Connected"
+            style="@style/Widget.Auxio.MaterialButtonGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="@dimen/spacing_medium"
