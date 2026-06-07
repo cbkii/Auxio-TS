@@ -133,10 +133,8 @@ class Auxio : Application() {
         }
 
         private fun crashReportDirectory(): File? {
-            val externalDir = File(
-                application.getExternalFilesDir(null) ?: application.filesDir,
-                "crash-reports",
-            )
+            val externalDir =
+                File(application.getExternalFilesDir(null) ?: application.filesDir, "crash-reports")
             if (CrashReportStorage.ensureDirectory(externalDir)) {
                 return externalDir
             }
