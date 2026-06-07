@@ -19,7 +19,7 @@
             @style/Widget.Material3.Button.IconButton.Filled
         </item>
         <item name="materialIconButtonFilledTonalStyle">
-            @style/Widget.Material3.Button.IconButton.FilledTonal
+            @style/Widget.Material3.Button.IconButton.Filled.Tonal
         </item>
         <item name="materialSplitButtonStyle">@style/Widget.Auxio.SplitButton</item>
         <item name="materialSplitButtonLeadingFilledStyle">

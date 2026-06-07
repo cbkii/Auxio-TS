@@ -9,13 +9,49 @@
 ## Setup
 
 ```sh
-bash scripts/prepare-ci-environment.sh   # init submodules, validate, create stubs
-./gradlew :app:assembleStandardDebug     # verify build
+bash scripts/bootstrap-dependencies.sh --profile full-build   # init submodules, validate pins, create stubs
+./gradlew :app:assembleStandardDebug                          # verify build
 ```
 
-`prepare-ci-environment.sh` handles submodule init/update and the `common_ktx` proguard stub. Run it once after clone or submodule changes. A ZIP/snapshot checkout is insufficient because Gradle needs the `media` submodule, nested ffmpeg sources, and `musikr` taglib sources.
+`prepare-ci-environment.sh` remains a backwards-compatible wrapper and defaults to `bootstrap-dependencies.sh --profile full-build`. Run the bootstrap command after clone or submodule changes. A ZIP/snapshot checkout is sufficient only for degraded static source review; Gradle needs the `media` submodule, nested ffmpeg sources, and `musikr` taglib sources.
 
-For Codex or a fresh Linux environment, `bash scripts/setup-codex-android-env.sh` can bootstrap/verify Android command-line tools, SDK platform/build tools, CMake, NDK, submodules, and a Gradle smoke test.
+For Codex, Jules-style agents, or a fresh Linux environment, `bash scripts/setup-codex-android-env.sh` can bootstrap/verify Android command-line tools, SDK platform/build tools, CMake, NDK, submodules, and a Gradle smoke test. If native dependencies cannot be fetched, use `static-review` and report `DEGRADED_STATIC_ONLY` instead of claiming Gradle validation.
+
+## Dependency bootstrap profiles
+
+Dependency policy is centralised under `ci/dependencies/` and enforced by `scripts/bootstrap-dependencies.sh`. The script configures only approved mirrors, fetches the same pinned gitlink commits, verifies root and nested submodule SHAs, and creates the known `media/libraries/common_ktx/proguard-rules.txt` stub only when the media submodule needs it.
+
+Shared, read-only parsing/validation logic (supported-profile list, manifest TSV parsing, `profile_requires_path`, parent-worktree resolution, gitlink/actual SHA lookup, sentinel checks, classification labels, logging helpers) lives in `scripts/dependency-lib.sh`, which both `bootstrap-dependencies.sh` and `check-submodules.sh` source so the logic cannot drift. `check-submodules.sh` is read-only validation; its only mutating action is `--repair`, which delegates to `bootstrap-dependencies.sh` with the same (validated) profile. `prepare-ci-environment.sh` is a thin wrapper that also delegates to the bootstrap.
+
+All four entrypoints validate the profile (CLI value, bare profile name, and the `DEPENDENCY_BOOTSTRAP_PROFILE` / `CHECK_SUBMODULES_PROFILE` environment defaults) against the supported set. A missing `--profile` value exits `2` with usage; an unsupported profile exits `2` instead of silently validating zero entries.
+
+| Profile | Intended use | Failure policy |
+| ------- | ------------ | -------------- |
+| `static-review` | Source/script/XML review in agents or restricted local checkouts | May print `DEGRADED_STATIC_ONLY`; do not run or claim Gradle/build/test success unless dependencies are fully ready |
+| `jvm-tests` | Repo JVM/unit-test Gradle tasks | Strict today because Gradle configuration still requires the native/media submodule graph |
+| `full-build` | Debug/full CI builds and local release-equivalent validation | Strict: missing pins, SDK/tooling, or release-blocking submodules fail |
+| `release` | Manual signed release workflow | Strictest: no degraded mode; media, ffmpeg, and taglib must be present at exact pinned SHAs |
+
+Common commands:
+
+```sh
+bash scripts/bootstrap-dependencies.sh --profile static-review
+bash scripts/bootstrap-dependencies.sh --profile jvm-tests
+bash scripts/bootstrap-dependencies.sh --profile full-build
+bash scripts/bootstrap-dependencies.sh --profile release
+```
+
+Approved mirrors are documented in `ci/dependencies/git-url-overrides.tsv`; they are fallback fetch locations only and must never be used to replace a submodule with arbitrary latest HEAD. Repair an existing clone with `bash scripts/bootstrap-dependencies.sh --profile full-build`; use `--profile release` before signing or tagging.
+
+### Gradle version catalogue status
+
+`gradle/libs.versions.toml` is currently a curated dependency **inventory / partial migration**, not the value Gradle consumes at build time. The authoritative versions still live in the root `build.gradle` `buildscript.ext` block and the inline `plugins { ... version "..." }` strings. `scripts/check-version-catalog-sync.sh` (run in CI by the lint workflow's "Workflow/script syntax" job) fails the build if any version duplicated in `build.gradle` drifts from the catalogue, so the inventory stays trustworthy. When you change a duplicated version, update **both** files.
+
+Fully wiring the catalogue (adding a `[libraries]` section and migrating build scripts to type-safe `libs.*` accessors so the catalogue becomes the sole source of truth) is intentionally **out of scope** for dependency-resilience PRs to avoid broad, risky build changes; it is tracked as future work. Likewise, to introduce or refresh Gradle dependency locks / verification metadata, use a fully bootstrapped SDK environment and document the exact `--write-locks` / `--write-verification-metadata` command in that PR. Avoid broad dependency upgrades in bootstrap/resilience PRs.
+
+### Dependency update automation
+
+`.github/dependabot.yml` opens weekly grouped minor/patch PRs for Gradle dependencies and GitHub Actions, and monthly git-submodule PRs. Every update PR runs the same `android.yml` / `lint.yml` CI (canonical bootstrap → build → native → tests), so no automated update bypasses full-build-equivalent validation. Android Gradle Plugin **major** upgrades are deliberately ignored by Dependabot because they require coordinated Kotlin/KSP/Gradle-wrapper migration and must be done in a human-reviewed PR; minor/patch AGP updates are still allowed.
 
 ## Key Gradle tasks
 

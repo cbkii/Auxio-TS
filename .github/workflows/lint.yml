@@ -73,6 +73,13 @@ jobs:
     - name: Validate shell script syntax
       shell: bash
       run: find scripts -type f -name '*.sh' -print -exec bash -n {} \;
+    - name: Validate dependabot config YAML
+      shell: bash
+      run: |
+        ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/dependabot.yml
+    - name: Check version catalogue is in sync with build.gradle
+      shell: bash
+      run: bash ./scripts/check-version-catalog-sync.sh
 
   format:
     name: Formatting
@@ -89,11 +96,8 @@ jobs:
         # cause "unadvertised object" fetch errors during recursive submodule
         # init.  Full history ensures the referenced commit is always reachable.
         fetch-depth: 0
-        submodules: recursive
+        submodules: false
         persist-credentials: false
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/prepare-ci-environment.sh
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
@@ -120,6 +124,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build
         fi
+    - name: Prepare CI environment
+      shell: bash
+      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
     - name: Check formatting
       run: ./gradlew --no-daemon --stacktrace spotlessCheck
     - name: Upload formatting reports
@@ -210,11 +217,8 @@ jobs:
         # cause "unadvertised object" fetch errors during recursive submodule
         # init.  Full history ensures the referenced commit is always reachable.
         fetch-depth: 0
-        submodules: recursive
+        submodules: false
         persist-credentials: false
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/prepare-ci-environment.sh
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
@@ -240,6 +244,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build
         fi
+    - name: Prepare CI environment
+      shell: bash
+      # jvm-tests is strict in this repo (Gradle configuration still needs the
+      # media/taglib/ffmpeg submodule graph), so it bootstraps the same pinned
+      # dependencies as full-build while documenting the intent of this job.
+      run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
     - name: Run unit tests
       # testDebugUnitTest is scoped to :app and :musikr only.
       # The media library test files have missing test-utility dependencies
@@ -273,11 +283,8 @@ jobs:
         # cause "unadvertised object" fetch errors during recursive submodule
         # init.  Full history ensures the referenced commit is always reachable.
         fetch-depth: 0
-        submodules: recursive
+        submodules: false
         persist-credentials: false
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/prepare-ci-environment.sh
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
@@ -303,6 +310,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build
         fi
+    - name: Prepare CI environment
+      shell: bash
+      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
     - name: Run Android lint
       # lintDebug is scoped to :app only.
       # app/build.gradle sets checkDependencies=false so media library lint

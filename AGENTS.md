@@ -172,95 +172,103 @@ Run or document blockers for:
 
 ## CI reliability — known issues and rules
 
-### Pre-Gradle preparation: one command for all environments
+### Dependency bootstrap: one canonical command for all environments
 
-Run this before any Gradle command in any environment (local, CI, Codex, agent):
+Run the canonical bootstrap before any Gradle command in any environment (local, CI, Codex, Jules-style agent):
 
 ```bash
-bash ./scripts/prepare-ci-environment.sh
+bash ./scripts/bootstrap-dependencies.sh --profile full-build
 ```
 
-This script (idempotent, safe to re-run) does everything in one step:
+`scripts/prepare-ci-environment.sh` is a backwards-compatible wrapper that calls `bootstrap-dependencies.sh --profile full-build` unless `DEPENDENCY_BOOTSTRAP_PROFILE` or an explicit profile argument is provided. `scripts/check-submodules.sh` is read-only validation/delegation; do not duplicate dependency policy there.
 
-1. Detects ZIP/snapshot environments and exits with `SNAPSHOT_LIMITATION`
-2. **Fast-path**: if required submodule files are already present (e.g. workflow used
-   `submodules: recursive`), skips expensive `git submodule sync/update`.
-3. Otherwise runs `git submodule sync --recursive` then
-   `git submodule update --init --recursive --jobs 4` (soft-fail for git.ffmpeg.org)
-4. Creates `media/libraries/common_ktx/proguard-rules.txt` stub (`UPSTREAM_MEDIA_QUIRK`)
-5. Calls `bash ./scripts/check-submodules.sh` — validates all required paths
-6. Verifies all required files exist; exits 0 only when Gradle is ready
+Shared, read-only logic (supported-profile list, manifest parsing, `profile_requires_path`, parent-worktree resolution, gitlink/actual SHA lookup, sentinel checks, classification labels, logging) lives in `scripts/dependency-lib.sh`; both the bootstrap and the checker source it so the logic cannot drift. All entrypoints validate the profile (CLI, bare name, and env defaults): a missing `--profile` value exits `2` with usage, and an unsupported profile exits `2` rather than silently validating zero manifest entries.
 
-GitHub Actions (`android.yml`, `lint.yml`, `manual-release.yml`) call this script instead of
-duplicating the submodule sync/update/patch logic. Local and Codex builds run the same steps.
+Supported profiles:
 
-**Outcome classification used by the script:**
+| Profile | Use | Failure policy |
+| ------- | --- | -------------- |
+| `static-review` | Agent/static script, YAML, XML, and source review when full native dependencies may be unreachable | May print `DEGRADED_STATIC_ONLY`; never claim Gradle/build/test validation from this mode |
+| `jvm-tests` | JVM/unit-test validation | Strict in this repo because Gradle configuration still needs the media/taglib/ffmpeg submodule graph |
+| `full-build` | CI debug/full build bootstrap | Strict: missing pins, SDK/tooling, or required submodules fail |
+| `release` | Signed release bootstrap | Fail closed; no degraded mode allowed |
 
-| Label                  | Meaning                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `SNAPSHOT_LIMITATION`  | No `.git` — ZIP/snapshot; Gradle cannot run                                       |
-| `SUBMODULE_BLOCKER`    | `.git` present but required submodule files are missing                           |
-| `UPSTREAM_MEDIA_QUIRK` | media submodule present but `common_ktx/proguard-rules.txt` absent; fixed by stub |
-| `REAL_BUILD_FAILURE`   | Prep passed; Gradle itself failed — real app/build issue                          |
+The repo-owned dependency manifests live under `ci/dependencies/`:
+
+- `submodules.tsv` — path, type, parent, primary remote, approved fallback mirror(s), required profiles, sentinel file, release-blocking status.
+- `git-url-overrides.tsv` — approved fallback mirrors and reasons. Mirrors may only fetch the exact pinned gitlink commit; never use arbitrary dependency HEADs.
+- `android-sdk.env` — expected Java/Android SDK/NDK/CMake/Ninja versions.
+- `validation-profiles.tsv` — profile purpose and fail-open/fail-closed policy.
+
+**Outcome classification used by bootstrap:**
+
+| Label | Meaning |
+| ----- | ------- |
+| `READY` | Bootstrap completed for the selected profile |
+| `SNAPSHOT_LIMITATION` | No `.git`; static review may degrade, Gradle profiles fail |
+| `SUBMODULE_BLOCKER` | Required submodule/sentinel missing or fetch failed |
+| `DEPENDENCY_MIRROR_USED` | Approved mirror supplied the exact pinned commit |
+| `DEPENDENCY_PIN_MISMATCH` | Checked-out submodule HEAD differs from parent gitlink; always fail |
+| `SDK_BLOCKER` | Android SDK/native tooling missing for strict profiles |
+| `DEGRADED_STATIC_ONLY` | Static review may continue, but no build/test/lint success may be claimed |
+| `REAL_BUILD_FAILURE` | Bootstrap passed; Gradle/app build itself failed |
 
 ### Submodule requirements and repair
 
-This repo requires **recursive git submodules** to build. Gradle cannot configure at all if
-`media/core_settings.gradle` is missing (applied unconditionally at `settings.gradle` line 19).
+This repo requires recursive git submodules for Gradle. Gradle cannot configure at all if `media/core_settings.gradle` is missing (applied unconditionally by `settings.gradle`).
 
-Required submodules:
+Required release/full-build submodules:
 
-| Path                                                  | Purpose                  | Remote                          | Reachable in sandbox? |
-| ----------------------------------------------------- | ------------------------ | ------------------------------- | --------------------- |
-| `media/`                                              | Patched Media3/ExoPlayer | `github.com/OxygenCobalt/media` | Yes                   |
-| `media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg/` | FFmpeg decoder           | `git.ffmpeg.org`                | **No** (blocked)      |
-| `musikr/src/main/cpp/taglib/`                         | Taglib parser            | `github.com/taglib/taglib`      | Yes                   |
+| Path | Purpose | Primary remote | Approved fallback policy |
+| ---- | ------- | -------------- | ------------------------ |
+| `media/` | Patched Media3/ExoPlayer | `github.com/OxygenCobalt/media` | No fallback currently approved |
+| `media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg/` | FFmpeg decoder | `git.ffmpeg.org` | `github.com/FFmpeg/FFmpeg` only for the pinned commit |
+| `musikr/src/main/cpp/taglib/` | Taglib parser | `github.com/taglib/taglib` | `github.com/KDE/taglib` only for the pinned commit |
 
 **Fresh clone:**
 
-```
-git clone --recurse-submodules https://github.com/cbkii/Auxio-TS.git
-```
-
-**Existing clone — one-command prep:**
-
-```
-bash ./scripts/prepare-ci-environment.sh
+```bash
+git clone https://github.com/cbkii/Auxio-TS.git
+cd Auxio-TS
+bash ./scripts/bootstrap-dependencies.sh --profile full-build
 ```
 
-**Then run Gradle:**
+GitHub Actions must use `actions/checkout` with `fetch-depth: 0` and `submodules: false`, then let the repo bootstrap script initialise submodules and apply fallback policy. Do not reintroduce recursive checkout in Gradle/build/release workflows, because it can fail before repo-owned mirror and classification logic runs.
 
+**Existing clone repair:**
+
+```bash
+bash ./scripts/bootstrap-dependencies.sh --profile full-build
 ```
-./gradlew --no-daemon --stacktrace help
+
+**Release validation:**
+
+```bash
+bash ./scripts/bootstrap-dependencies.sh --profile release
 ```
 
-### Classifying submodule failures vs app build failures
+### Classifying dependency failures vs app build failures
 
-1. Run `bash ./scripts/prepare-ci-environment.sh` before any Gradle command.
-2. If it exits non-zero with `SNAPSHOT_LIMITATION`: ZIP/snapshot environment — Gradle validation impossible.
-3. If it exits non-zero with `SUBMODULE_BLOCKER`: environment/setup issue — not an app code issue.
-4. If it exits 0 but Gradle fails: classify as `REAL_BUILD_FAILURE` — inspect the first error above the stack trace.
+1. Run `bash ./scripts/bootstrap-dependencies.sh --profile <profile>` before Gradle.
+2. If it prints `SNAPSHOT_LIMITATION`, a ZIP/snapshot checkout cannot run Gradle; only `static-review` may continue in degraded mode.
+3. If it prints `SUBMODULE_BLOCKER`, `SDK_BLOCKER`, or `DEPENDENCY_PIN_MISMATCH`, classify as environment/dependency setup unless the repo script itself is broken.
+4. If bootstrap prints `READY` and Gradle fails, classify as `REAL_BUILD_FAILURE` and inspect the first root error above any stack trace.
 
 ### ZIP/snapshot environments (Codex, agent, archive-based)
 
-ZIP snapshots without `.git` cannot run Gradle. Classify as `SNAPSHOT_LIMITATION`.
-Do not try to work around this by copying submodule files manually.
+ZIP snapshots without `.git` cannot verify or fetch gitlink-pinned dependencies. Classify as `SNAPSHOT_LIMITATION`. For `static-review`, report `DEGRADED_STATIC_ONLY`; for `jvm-tests`, `full-build`, and `release`, fail closed. Do not try to work around this by copying submodule files manually.
 
-### Known submodule quirks
+### Known dependency quirks
 
-- `media/libraries/common_ktx/proguard-rules.txt` is **absent** from the `OxygenCobalt/media`
-  submodule (commit `0b01e32`). The `common_library_config.gradle` requires it via
-  `consumerProguardFiles 'proguard-rules.txt'`. `prepare-ci-environment.sh` creates an empty
-  stub file before Gradle runs (`UPSTREAM_MEDIA_QUIRK`). If a future submodule bump adds the
-  file, this step becomes a no-op.
-- The nested `ffmpeg` submodule resolves from `git.ffmpeg.org`, which is unreachable in this
-  sandbox. `check-submodules.sh` reports this as `SUBMODULE_BLOCKER` with ffmpeg noted as the
-  missing path. GitHub Actions CI handles ffmpeg initialization correctly with `fetch-depth: 0`.
-  **`fetch-depth: 0` is required** in `android.yml` and `lint.yml` because ffmpeg uses an
-  unadvertised object reference; shallow clones (`fetch-depth: 1`) break recursive submodule
-  init with "unadvertised object" errors. Do not change `fetch-depth` to 1 for those workflows.
-- Local Gradle builds also fail in this sandbox because JetBrains JDK 21 toolchain downloads
-  from `api.foojay.io` are unreachable (AGP plugin resolution fails).
+- `media/libraries/common_ktx/proguard-rules.txt` is absent from the pinned `OxygenCobalt/media` submodule. The bootstrap creates an empty stub only when the `media/libraries/common_ktx` directory exists (`UPSTREAM_MEDIA_QUIRK`).
+- The nested `ffmpeg` submodule may be unreachable from `git.ffmpeg.org` in restricted environments. Bootstrap may retry the approved GitHub FFmpeg mirror, but it still verifies the exact nested gitlink SHA and fails on mismatch.
+- Local Gradle builds can also fail if Android SDK/NDK/CMake/Ninja/JDK tooling is missing. Strict profiles report this as `SDK_BLOCKER`; once bootstrap is `READY`, Gradle failures are real build failures.
+
+### Gradle dependency hardening
+
+Do not perform broad dependency upgrades as part of bootstrap changes. Version centralisation, dependency locking, and verification metadata should be updated deliberately, with the update command documented in the PR. CI must fail on dependency verification mismatches once verification metadata is enabled.
+
+`gradle/libs.versions.toml` is a curated inventory/partial migration, **not** the value Gradle consumes (authoritative versions remain in `build.gradle` `ext` + inline `plugins` strings). `scripts/check-version-catalog-sync.sh` runs in the lint workflow and fails CI if a version duplicated in both places drifts — update both when changing a duplicated version. Fully migrating to `libs.*` accessors is tracked future work, intentionally out of scope here.
 
 ### Quality workflow scoping
 

@@ -82,7 +82,7 @@
             @style/Widget.Material3.Button.IconButton.Filled
         </item>
         <item name="materialIconButtonFilledTonalStyle">
-            @style/Widget.Material3.Button.IconButton.FilledTonal
+            @style/Widget.Material3.Button.IconButton.Filled.Tonal
         </item>
         <item name="materialSplitButtonStyle">@style/Widget.Auxio.SplitButton</item>
         <item name="materialSplitButtonLeadingFilledStyle">
@@ -424,7 +424,7 @@
         <item name="android:paddingBottom">@dimen/spacing_small</item>
     </style>
 
-    <style name="Widget.Auxio.Button.Icon.Small.Secondary" parent="Widget.Material3.Button.IconButton.FilledTonal">
+    <style name="Widget.Auxio.Button.Icon.Small.Secondary" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
         <item name="iconSize">@dimen/size_icon_small</item>
         <item name="android:minWidth">@dimen/size_touchable_small</item>
         <item name="android:minHeight">@dimen/size_touchable_small</item>
@@ -507,7 +507,7 @@
         <item name="android:paddingBottom">0dp</item>
     </style>
 
-    <style name="Widget.Auxio.Button.Playback.Skip" parent="Widget.Material3.Button.IconButton.FilledTonal">
+    <style name="Widget.Auxio.Button.Playback.Skip" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
         <item name="iconGravity">textStart</item>
         <item name="iconPadding">0dp</item>
         <item name="android:insetLeft">0dp</item>

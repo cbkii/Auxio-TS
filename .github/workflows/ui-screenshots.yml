@@ -80,7 +80,7 @@ jobs:
         with:
           ref: ${{ inputs.target_ref }}
           fetch-depth: 0
-          submodules: recursive
+          submodules: false
           persist-credentials: false
 
       - name: Set up JDK 21
@@ -91,9 +91,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Prepare CI environment
-        run: bash ./scripts/prepare-ci-environment.sh
 
       - name: Write local.properties
         run: |
@@ -111,6 +108,9 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y ninja-build
           fi
+
+      - name: Prepare CI environment
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
       - name: Map Roborazzi task
         id: map_task
