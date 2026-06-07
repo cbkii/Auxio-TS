@@ -1,4 +1,4 @@
 # path	type	parent	primary_remote	fallback_remotes	required_profiles	sentinel	release_blocking
-media	git-submodule	.	https://github.com/OxygenCobalt/media.git	-	jvm-tests,full-build,release	core_settings.gradle	true
+media	git-submodule	.	https://github.com/cbkii/media.git	-	jvm-tests,full-build,release	core_settings.gradle	true
 musikr/src/main/cpp/taglib	git-submodule	.	https://github.com/taglib/taglib.git	https://github.com/KDE/taglib.git	jvm-tests,full-build,release	CMakeLists.txt	true
-media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg	git-submodule	media	https://git.ffmpeg.org/ffmpeg.git	https://github.com/FFmpeg/FFmpeg.git	jvm-tests,full-build,release	configure	true
+media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg	git-submodule	media	https://github.com/FFmpeg/FFmpeg.git	https://git.ffmpeg.org/ffmpeg.git	jvm-tests,full-build,release	configure	true

@@ -1,3 +1,3 @@
 # primary_url	approved_fallback_url	reason
-https://git.ffmpeg.org/ffmpeg.git	https://github.com/FFmpeg/FFmpeg.git	Approved public mirror used only to fetch the exact pinned FFmpeg gitlink commit when git.ffmpeg.org is unavailable.
+https://github.com/FFmpeg/FFmpeg.git	https://git.ffmpeg.org/ffmpeg.git	GitHub mirror is the clone-time primary for shallow recursive agent environments; the FFmpeg main repository remains an approved fallback while exact pinned gitlink SHAs are still verified.
 https://github.com/taglib/taglib.git	https://github.com/KDE/taglib.git	Approved upstream project mirror used only to fetch the exact pinned taglib gitlink commit when the primary GitHub org URL is unavailable.
