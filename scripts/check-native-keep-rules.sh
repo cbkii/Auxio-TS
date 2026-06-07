@@ -35,27 +35,82 @@ list_jni_files() {
   fi
 }
 
-# Derive the fully-qualified names of the enclosing object/class declarations in a file.
+# Derive the fully-qualified names of the type(s) that actually *enclose* an `external fun` in a
+# file. A brace-depth stack tracks the current type nesting, so this correctly handles nested and
+# `companion object` declarations and any declaration keyword (`class`, `enum class`, `data class`,
+# `sealed`/`value`/`annotation`/`inner class`, `object`, `interface`). Nested names are joined with
+# `$` to match the runtime/ProGuard binary name (e.g. `Outer$Inner`). Only types that contain a
+# JNI method are emitted, so unrelated types in the same file are not forced to carry keep rules.
 fqcns_for_file() {
   local file="$1"
   local pkg
   pkg="$(sed -n 's/^[[:space:]]*package[[:space:]]\+\([A-Za-z0-9_.]\+\).*/\1/p' "${file}" | head -n1)"
   [ -n "${pkg}" ] || return 0
-  sed -n -E 's/^[[:space:]]*(internal |private |public |abstract |sealed |open |data )*(object|class)[[:space:]]+([A-Za-z0-9_]+).*/\3/p' "${file}" |
-    while IFS= read -r name; do
-      [ -n "${name}" ] && echo "${pkg}.${name}"
-    done
+  awk -v pkg="${pkg}" '
+    BEGIN { sp = 0; depth = 0 }
+    function emit(   i, s) {
+      s = pkg
+      for (i = 0; i < sp; i++) {
+        s = s (i == 0 ? "." : "$") stack[i]
+      }
+      if (!(s in seen)) {
+        seen[s] = 1
+        print s
+      }
+    }
+    {
+      line = $0
+      sub(/\/\/.*/, "", line)   # drop trailing line comments (approximate)
+      preDepth = depth
+
+      # Detect a type declaration and record its simple name. companion objects may be unnamed
+      # (compiled to "Companion"); every other form carries an explicit name after the keyword.
+      name = ""
+      if (match(line, /(^|[^A-Za-z0-9_.])companion[ \t]+object([ \t]+[A-Za-z_][A-Za-z0-9_]*)?/)) {
+        seg = substr(line, RSTART, RLENGTH)
+        if (match(seg, /object[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+          name = substr(seg, RSTART, RLENGTH); sub(/object[ \t]+/, "", name)
+        } else {
+          name = "Companion"
+        }
+      } else if (match(line, /(^|[^A-Za-z0-9_.])(class|interface|object)[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+        seg = substr(line, RSTART, RLENGTH)
+        name = seg; sub(/.*[ \t]+/, "", name)
+      }
+      if (name != "") {
+        stack[sp] = name
+        declDepth[sp] = preDepth
+        sp++
+      }
+
+      if (line ~ /(^|[^A-Za-z0-9_.])external[ \t]+fun([^A-Za-z0-9_]|$)/ && sp > 0) {
+        emit()
+      }
+
+      # Update running brace depth, then pop any type whose body has closed.
+      n = gsub(/\{/, "{", line)
+      m = gsub(/\}/, "}", line)
+      depth += n - m
+      while (sp > 0 && depth <= declDepth[sp - 1]) {
+        sp--
+      }
+    }
+  ' "${file}"
 }
 
 # Does any keep rule file contain `-keep ... class <fqcn>`?
 keep_rule_exists() {
   local fqcn="$1"
   shift
+  # Escape ERE metacharacters in the FQCN: '.' (any char) and '$' (end-of-line anchor, used as
+  # the nested-class separator in binary names such as MetadataResult$Success).
+  local esc="${fqcn//./\\.}"
+  esc="${esc//\$/\\$}"
   local f
   for f in "$@"; do
     [ -f "${f}" ] || continue
-    # Match the fqcn as a whole token (escape dots) on a -keep line.
-    if grep -E "^[[:space:]]*-keep[a-z]*[[:space:]]+(class[[:space:]]+)?${fqcn//./\\.}([[:space:]]|\{|$)" "${f}" >/dev/null 2>&1; then
+    # Match the fqcn as a whole token on a -keep line.
+    if grep -E "^[[:space:]]*-keep[a-z]*[[:space:]]+(class[[:space:]]+)?${esc}([[:space:]]|\{|$)" "${f}" >/dev/null 2>&1; then
       return 0
     fi
   done
@@ -93,18 +148,25 @@ echo "--- Native (JNI) keep-rule guardrail ---"
 check_module "musikr" "${musikr_src}" "${musikr_proguard}" "${musikr_consumer}"
 check_module "app" "${app_src}" "${app_proguard}"
 
-# Sync check: every -keep line in the musikr consumer rules must also appear in the musikr
-# proguard rules so the two duplicated files cannot silently drift.
+# Sync check: the musikr consumer rules and proguard rules carry the same set of -keep rules, so
+# the two duplicated files cannot silently drift in either direction. A rule added to one file but
+# not the other (regardless of which) is a failure.
 if [ -f "${musikr_consumer}" ] && [ -f "${musikr_proguard}" ]; then
   sync_failed=0
-  while IFS= read -r rule; do
-    [ -n "${rule}" ] || continue
-    if ! grep -Fxq -- "${rule}" "${musikr_proguard}"; then
-      echo "ERROR: keep rule present in ${musikr_consumer} but missing from ${musikr_proguard}: ${rule}" >&2
-      fail=1
-      sync_failed=1
-    fi
-  done < <(grep -E '^[[:space:]]*-keep' "${musikr_consumer}" | sed 's/[[:space:]]*$//')
+  # left=source file, right=file that must also contain each of left's -keep rules.
+  check_keep_subset() {
+    local left="$1" right="$2" rule
+    while IFS= read -r rule; do
+      [ -n "${rule}" ] || continue
+      if ! grep -Fxq -- "${rule}" "${right}"; then
+        echo "ERROR: keep rule present in ${left} but missing from ${right}: ${rule}" >&2
+        fail=1
+        sync_failed=1
+      fi
+    done < <(grep -E '^[[:space:]]*-keep' "${left}" | sed 's/[[:space:]]*$//')
+  }
+  check_keep_subset "${musikr_consumer}" "${musikr_proguard}"
+  check_keep_subset "${musikr_proguard}" "${musikr_consumer}"
   if [ "${sync_failed}" -eq 0 ]; then
     echo "OK: musikr consumer/proguard keep rules are in sync"
   fi
