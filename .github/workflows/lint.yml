@@ -73,6 +73,13 @@ jobs:
     - name: Validate shell script syntax
       shell: bash
       run: find scripts -type f -name '*.sh' -print -exec bash -n {} \;
+    - name: Validate dependabot config YAML
+      shell: bash
+      run: |
+        ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/dependabot.yml
+    - name: Check version catalogue is in sync with build.gradle
+      shell: bash
+      run: bash ./scripts/check-version-catalog-sync.sh
 
   format:
     name: Formatting
@@ -239,7 +246,10 @@ jobs:
         fi
     - name: Prepare CI environment
       shell: bash
-      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+      # jvm-tests is strict in this repo (Gradle configuration still needs the
+      # media/taglib/ffmpeg submodule graph), so it bootstraps the same pinned
+      # dependencies as full-build while documenting the intent of this job.
+      run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
     - name: Run unit tests
       # testDebugUnitTest is scoped to :app and :musikr only.
       # The media library test files have missing test-utility dependencies

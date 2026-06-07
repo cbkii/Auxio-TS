@@ -1,3 +1,19 @@
+# Gradle version catalogue for Auxio-TS.
+#
+# STATUS: curated dependency *inventory* / partial migration — NOT yet the value
+# Gradle consumes at build time. The authoritative versions are still declared in
+# the root build.gradle `buildscript.ext` block and the inline `plugins { ... }`
+# version strings. This catalogue mirrors them so there is a single place to read
+# the dependency surface and so Dependabot can reason about coordinates.
+#
+# DRIFT GUARD: scripts/check-version-catalog-sync.sh (run by the lint workflow's
+# "Workflow/script syntax" job) fails CI if any version duplicated in build.gradle
+# disagrees with this file. When you change a duplicated version, update BOTH.
+#
+# NEXT STEPS (intentionally out of scope for the dependency-resilience PR to avoid
+# broad/ risky changes): add a [libraries] section and migrate build scripts to
+# type-safe `libs.*` accessors so this catalogue becomes the sole source of truth,
+# then remove the Groovy `ext`/inline versions and this drift guard.
 [versions]
 agp = "9.2.1"
 kotlin = "2.3.10"

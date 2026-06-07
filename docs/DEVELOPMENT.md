@@ -21,6 +21,10 @@ For Codex, Jules-style agents, or a fresh Linux environment, `bash scripts/setup
 
 Dependency policy is centralised under `ci/dependencies/` and enforced by `scripts/bootstrap-dependencies.sh`. The script configures only approved mirrors, fetches the same pinned gitlink commits, verifies root and nested submodule SHAs, and creates the known `media/libraries/common_ktx/proguard-rules.txt` stub only when the media submodule needs it.
 
+Shared, read-only parsing/validation logic (supported-profile list, manifest TSV parsing, `profile_requires_path`, parent-worktree resolution, gitlink/actual SHA lookup, sentinel checks, classification labels, logging helpers) lives in `scripts/dependency-lib.sh`, which both `bootstrap-dependencies.sh` and `check-submodules.sh` source so the logic cannot drift. `check-submodules.sh` is read-only validation; its only mutating action is `--repair`, which delegates to `bootstrap-dependencies.sh` with the same (validated) profile. `prepare-ci-environment.sh` is a thin wrapper that also delegates to the bootstrap.
+
+All four entrypoints validate the profile (CLI value, bare profile name, and the `DEPENDENCY_BOOTSTRAP_PROFILE` / `CHECK_SUBMODULES_PROFILE` environment defaults) against the supported set. A missing `--profile` value exits `2` with usage; an unsupported profile exits `2` instead of silently validating zero entries.
+
 | Profile | Intended use | Failure policy |
 | ------- | ------------ | -------------- |
 | `static-review` | Source/script/XML review in agents or restricted local checkouts | May print `DEGRADED_STATIC_ONLY`; do not run or claim Gradle/build/test success unless dependencies are fully ready |
@@ -39,7 +43,15 @@ bash scripts/bootstrap-dependencies.sh --profile release
 
 Approved mirrors are documented in `ci/dependencies/git-url-overrides.tsv`; they are fallback fetch locations only and must never be used to replace a submodule with arbitrary latest HEAD. Repair an existing clone with `bash scripts/bootstrap-dependencies.sh --profile full-build`; use `--profile release` before signing or tagging.
 
-Gradle/Maven version inventory starts in `gradle/libs.versions.toml`. Existing Groovy build scripts still keep compatibility `ext` values where required by the current plugin setup; when changing dependencies, update the catalog and avoid broad upgrades in bootstrap/resilience PRs. To introduce or refresh Gradle dependency locks/verification metadata, use a fully bootstrapped SDK environment and document the exact Gradle `--write-locks` / `--write-verification-metadata` command in the PR.
+### Gradle version catalogue status
+
+`gradle/libs.versions.toml` is currently a curated dependency **inventory / partial migration**, not the value Gradle consumes at build time. The authoritative versions still live in the root `build.gradle` `buildscript.ext` block and the inline `plugins { ... version "..." }` strings. `scripts/check-version-catalog-sync.sh` (run in CI by the lint workflow's "Workflow/script syntax" job) fails the build if any version duplicated in `build.gradle` drifts from the catalogue, so the inventory stays trustworthy. When you change a duplicated version, update **both** files.
+
+Fully wiring the catalogue (adding a `[libraries]` section and migrating build scripts to type-safe `libs.*` accessors so the catalogue becomes the sole source of truth) is intentionally **out of scope** for dependency-resilience PRs to avoid broad, risky build changes; it is tracked as future work. Likewise, to introduce or refresh Gradle dependency locks / verification metadata, use a fully bootstrapped SDK environment and document the exact `--write-locks` / `--write-verification-metadata` command in that PR. Avoid broad dependency upgrades in bootstrap/resilience PRs.
+
+### Dependency update automation
+
+`.github/dependabot.yml` opens weekly grouped minor/patch PRs for Gradle dependencies and GitHub Actions, and monthly git-submodule PRs. Every update PR runs the same `android.yml` / `lint.yml` CI (canonical bootstrap → build → native → tests), so no automated update bypasses full-build-equivalent validation. Android Gradle Plugin **major** upgrades are deliberately ignored by Dependabot because they require coordinated Kotlin/KSP/Gradle-wrapper migration and must be done in a human-reviewed PR; minor/patch AGP updates are still allowed.
 
 ## Key Gradle tasks
 

@@ -6,11 +6,19 @@ updates:
       interval: "weekly"
       day: "monday"
     groups:
+      # Low-risk minor/patch bumps are grouped into a single PR. Major bumps stay
+      # ungrouped so each one gets its own PR and full CI (build + native + tests).
       gradle-patch-minor:
         update-types:
           - "minor"
           - "patch"
     ignore:
+      # Do NOT auto-open Android Gradle Plugin (AGP) major upgrades. An AGP major
+      # bump (e.g. 9.x -> 10.x) routinely requires coordinated Kotlin/KSP/Gradle
+      # wrapper changes and manual migration steps, so it must be performed in a
+      # deliberate, human-reviewed PR rather than an automated Dependabot PR.
+      # Minor/patch AGP updates are still allowed. See docs/DEVELOPMENT.md
+      # ("Dependency update automation") for the rationale.
       - dependency-name: "com.android.tools.build:gradle"
         update-types:
           - "version-update:semver-major"

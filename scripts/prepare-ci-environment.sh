@@ -1,26 +1,59 @@
 #!/usr/bin/env bash
+# Backwards-compatible wrapper around the canonical dependency bootstrap.
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# shellcheck source=scripts/dependency-lib.sh
+source "${SCRIPT_DIR}/dependency-lib.sh"
+
+cd "${ROOT_DIR}"
+
+usage() {
+  cat <<USAGE
+Usage: bash scripts/prepare-ci-environment.sh [--profile <$(dep_supported_profiles_pipe)>|<profile>]
+
+Delegates to scripts/bootstrap-dependencies.sh. The profile defaults to
+full-build (override with --profile, a bare profile name, or the
+DEPENDENCY_BOOTSTRAP_PROFILE environment variable).
+USAGE
+}
+
+# Environment-provided default is validated below alongside any CLI value.
 PROFILE="${DEPENDENCY_BOOTSTRAP_PROFILE:-full-build}"
+
 if [[ $# -gt 0 ]]; then
   case "$1" in
     --profile)
-      PROFILE="${2:-}"
+      if [[ $# -lt 2 ]]; then
+        dep_err "Missing value for --profile; expected one of: $(dep_supported_profiles_pipe)"
+        usage
+        exit 2
+      fi
+      PROFILE="$2"
       shift 2
+      ;;
+    --profile=*)
+      PROFILE="${1#--profile=}"
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
       ;;
     static-review|jvm-tests|full-build|release)
       PROFILE="$1"
       shift
       ;;
     *)
-      echo "::error::Unknown prepare-ci-environment argument: $1"
-      echo "Usage: bash scripts/prepare-ci-environment.sh [--profile <profile>|<profile>]"
+      dep_err "Unknown prepare-ci-environment argument: $1"
+      usage
       exit 2
       ;;
   esac
 fi
 
-exec bash ./scripts/bootstrap-dependencies.sh --profile "$PROFILE"
+dep_validate_profile "${PROFILE}" "prepare-ci profile" || { usage; exit 2; }
+
+exec bash "${SCRIPT_DIR}/bootstrap-dependencies.sh" --profile "${PROFILE}"

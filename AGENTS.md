@@ -182,6 +182,8 @@ bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
 `scripts/prepare-ci-environment.sh` is a backwards-compatible wrapper that calls `bootstrap-dependencies.sh --profile full-build` unless `DEPENDENCY_BOOTSTRAP_PROFILE` or an explicit profile argument is provided. `scripts/check-submodules.sh` is read-only validation/delegation; do not duplicate dependency policy there.
 
+Shared, read-only logic (supported-profile list, manifest parsing, `profile_requires_path`, parent-worktree resolution, gitlink/actual SHA lookup, sentinel checks, classification labels, logging) lives in `scripts/dependency-lib.sh`; both the bootstrap and the checker source it so the logic cannot drift. All entrypoints validate the profile (CLI, bare name, and env defaults): a missing `--profile` value exits `2` with usage, and an unsupported profile exits `2` rather than silently validating zero manifest entries.
+
 Supported profiles:
 
 | Profile | Use | Failure policy |
@@ -265,6 +267,8 @@ ZIP snapshots without `.git` cannot verify or fetch gitlink-pinned dependencies.
 ### Gradle dependency hardening
 
 Do not perform broad dependency upgrades as part of bootstrap changes. Version centralisation, dependency locking, and verification metadata should be updated deliberately, with the update command documented in the PR. CI must fail on dependency verification mismatches once verification metadata is enabled.
+
+`gradle/libs.versions.toml` is a curated inventory/partial migration, **not** the value Gradle consumes (authoritative versions remain in `build.gradle` `ext` + inline `plugins` strings). `scripts/check-version-catalog-sync.sh` runs in the lint workflow and fails CI if a version duplicated in both places drifts — update both when changing a duplicated version. Fully migrating to `libs.*` accessors is tracked future work, intentionally out of scope here.
 
 ### Quality workflow scoping
 
