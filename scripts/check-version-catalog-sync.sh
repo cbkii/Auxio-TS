@@ -40,7 +40,7 @@ extract_quoted() { sed -E "s/.*['\"]([^'\"]*)['\"][^'\"]*$/\1/"; }
 # = ... }`) is never matched.
 catalog_version() {
   local key="$1" line
-  line="$(grep -E "^${key}[[:space:]]*=[[:space:]]*\"" "${CATALOG}" || true)"
+  line="$(grep -m 1 -E "^${key}[[:space:]]*=[[:space:]]*\"" "${CATALOG}" || true)"
   [[ -z "${line}" ]] && return 1
   printf '%s\n' "${line}" | sed -E 's/.*=[[:space:]]*"([^"]*)".*/\1/'
 }
@@ -49,18 +49,18 @@ catalog_version() {
 gradle_version() {
   local key="$1" line
   case "${key}" in
-    agp)              line="$(grep -E "agp_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    kotlin)           line="$(grep -E "kotlin_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    kotlinCoroutines) line="$(grep -E "kotlin_coroutines_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    navigation)       line="$(grep -E "navigation_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    hilt)             line="$(grep -E "hilt_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    room)             line="$(grep -E "room_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    androidxCore)     line="$(grep -E "core_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    desugarJdkLibs)   line="$(grep -E "desugaring_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
-    ksp)              line="$(grep -E 'com\.google\.devtools\.ksp" version' "${BUILD_GRADLE}")" ;;
-    spotless)         line="$(grep -E 'com\.diffplug\.spotless" version' "${BUILD_GRADLE}")" ;;
-    roborazzi)        line="$(grep -E 'io\.github\.takahirom\.roborazzi" version' "${BUILD_GRADLE}")" ;;
-    dokka)            line="$(grep -E 'dokka-gradle-plugin:' "${BUILD_GRADLE}")" ;;
+    agp)              line="$(grep -m 1 -E "agp_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    kotlin)           line="$(grep -m 1 -E "kotlin_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    kotlinCoroutines) line="$(grep -m 1 -E "kotlin_coroutines_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    navigation)       line="$(grep -m 1 -E "navigation_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    hilt)             line="$(grep -m 1 -E "hilt_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    room)             line="$(grep -m 1 -E "room_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    androidxCore)     line="$(grep -m 1 -E "core_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    desugarJdkLibs)   line="$(grep -m 1 -E "desugaring_version[[:space:]]*=" "${BUILD_GRADLE}")" ;;
+    ksp)              line="$(grep -m 1 -E 'com\.google\.devtools\.ksp" version' "${BUILD_GRADLE}")" ;;
+    spotless)         line="$(grep -m 1 -E 'com\.diffplug\.spotless" version' "${BUILD_GRADLE}")" ;;
+    roborazzi)        line="$(grep -m 1 -E 'io\.github\.takahirom\.roborazzi" version' "${BUILD_GRADLE}")" ;;
+    dokka)            line="$(grep -m 1 -E 'dokka-gradle-plugin:' "${BUILD_GRADLE}")" ;;
     *) return 2 ;;
   esac
   [[ -z "${line}" ]] && return 1

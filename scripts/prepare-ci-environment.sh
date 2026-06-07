@@ -42,14 +42,17 @@ if [[ $# -gt 0 ]]; then
       usage
       exit 0
       ;;
-    static-review|jvm-tests|full-build|release)
-      PROFILE="$1"
-      shift
-      ;;
-    *)
+    -*)
       dep_err "Unknown prepare-ci-environment argument: $1"
       usage
       exit 2
+      ;;
+    *)
+      # Any non-flag positional is treated as a candidate profile and validated
+      # centrally below via dep_validate_profile (single source of truth in
+      # dependency-lib.sh), so the supported-profile list is not duplicated here.
+      PROFILE="$1"
+      shift
       ;;
   esac
 fi

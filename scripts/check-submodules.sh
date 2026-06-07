@@ -92,7 +92,7 @@ missing=0
 dep_info "--- Submodule pin validation (${PROFILE}) ---"
 # Read the manifest on FD 3 so git commands inside the loop cannot consume it
 # from stdin.
-while IFS=$'\t' read -r path type parent primary fallbacks required_profiles sentinel release_blocking <&3; do
+while IFS=$'\t' read -r path _type parent _primary _fallbacks required_profiles sentinel _release_blocking <&3; do
   [[ -z "${path:-}" || "${path:0:1}" == "#" ]] && continue
   dep_profile_requires_path "${required_profiles}" "${PROFILE}" || continue
 
