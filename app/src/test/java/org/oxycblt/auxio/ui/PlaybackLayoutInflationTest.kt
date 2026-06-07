@@ -21,9 +21,11 @@ package org.oxycblt.auxio.ui
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.widget.FrameLayout
+import androidx.fragment.app.FragmentActivity
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.auxio.R
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
@@ -47,6 +49,21 @@ class PlaybackLayoutInflationTest {
         val context =
             ContextThemeWrapper(RuntimeEnvironment.getApplication(), R.style.Theme_Auxio_App)
         return LayoutInflater.from(context)
+    }
+
+    /**
+     * Inflater hosted by a real [FragmentActivity].
+     *
+     * Layouts containing a [androidx.fragment.app.FragmentContainerView] with an `android:name`
+     * (e.g. the NavHostFragment in `fragment_main`) require the inflating context to resolve to a
+     * [FragmentActivity]; a plain themed application context throws
+     * [UnsupportedOperationException] during construction. The fragment is not instantiated here
+     * because the inflated hierarchy is never attached to a window/FragmentManager.
+     */
+    private fun fragmentActivityInflater(): LayoutInflater {
+        val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+        activity.setTheme(R.style.Theme_Auxio_App)
+        return LayoutInflater.from(activity)
     }
 
     // --- Playback bar ---
@@ -186,7 +203,7 @@ class PlaybackLayoutInflationTest {
     @Test
     @Config(qualifiers = "w412dp-h915dp-port")
     fun inflateFragmentMain_doesNotCrash() {
-        val inflater = themedInflater()
+        val inflater = fragmentActivityInflater()
         val parent = FrameLayout(inflater.context)
         inflater.inflate(R.layout.fragment_main, parent, false)
     }
@@ -194,7 +211,7 @@ class PlaybackLayoutInflationTest {
     @Test
     @Config(qualifiers = "w720dp-h900dp-land")
     fun inflateFragmentMain_w720dp_doesNotCrash() {
-        val inflater = themedInflater()
+        val inflater = fragmentActivityInflater()
         val parent = FrameLayout(inflater.context)
         inflater.inflate(R.layout.fragment_main, parent, false)
     }
