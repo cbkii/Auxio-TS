@@ -37,6 +37,15 @@ import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
 import timber.log.Timber
 
+internal object CrashReportStorage {
+    fun ensureDirectory(directory: File): Boolean =
+        if (directory.exists()) {
+            directory.isDirectory && directory.canWrite()
+        } else {
+            directory.mkdirs() && directory.isDirectory && directory.canWrite()
+        }
+}
+
 /**
  * A simple, rational music player for android.
  *
@@ -116,14 +125,31 @@ class Auxio : Application() {
         private fun writeCrashReport(thread: Thread, throwable: Throwable) {
             val crashTime = Date()
             val timestamp = fileTimestamp(crashTime)
-            val diagnosticsDir = File(application.getExternalFilesDir(null), "crash-reports")
-            if (!diagnosticsDir.exists() && !diagnosticsDir.mkdirs()) {
-                return
-            }
+            val diagnosticsDir = crashReportDirectory() ?: return
 
             val reportFile = File(diagnosticsDir, "crash-$timestamp.txt")
             reportFile.writeText(buildReport(thread, throwable, crashTime))
             pruneOldReports(diagnosticsDir)
+        }
+
+        private fun crashReportDirectory(): File? {
+            val externalDir =
+                File(application.getExternalFilesDir(null) ?: application.filesDir, "crash-reports")
+            if (CrashReportStorage.ensureDirectory(externalDir)) {
+                return externalDir
+            }
+
+            val fallbackDir = File(application.filesDir, "crash-reports")
+            if (fallbackDir != externalDir && CrashReportStorage.ensureDirectory(fallbackDir)) {
+                Timber.w(
+                    "Using internal crash-report directory after external directory was unavailable: %s",
+                    externalDir.absolutePath,
+                )
+                return fallbackDir
+            }
+
+            Timber.w("Unable to create crash-report directory: %s", fallbackDir.absolutePath)
+            return null
         }
 
         private fun buildReport(thread: Thread, throwable: Throwable, crashTime: Date): String {

@@ -24,7 +24,7 @@
 
         <com.google.android.material.button.MaterialButtonGroup
             android:id="@+id/folder_mode_group"
-            style="@style/Widget.Material3Expressive.MaterialButtonGroup.Connected"
+            style="@style/Widget.Auxio.MaterialButtonGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/spacing_large"
@@ -227,7 +227,7 @@
 
         <com.google.android.material.button.MaterialButtonGroup
             android:id="@+id/locations_exclude_mode_group"
-            style="@style/Widget.Material3Expressive.MaterialButtonGroup.Connected"
+            style="@style/Widget.Auxio.MaterialButtonGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/spacing_large"

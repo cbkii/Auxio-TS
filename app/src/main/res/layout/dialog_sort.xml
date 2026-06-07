@@ -52,7 +52,7 @@
 
         <com.google.android.material.button.MaterialButtonGroup
             android:id="@+id/sort_direction_group"
-            style="@style/Widget.Material3Expressive.MaterialButtonGroup.Connected"
+            style="@style/Widget.Auxio.MaterialButtonGroup"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="@dimen/spacing_medium"
@@ -89,7 +89,6 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="@dimen/spacing_small"
             android:text="@string/lbl_cancel"
-            app:materialSizeOverlay="@style/SizeOverlay.Material3Expressive.Button.Small"
             app:layout_constraintBottom_toBottomOf="@+id/sort_save"
             app:layout_constraintEnd_toStartOf="@+id/sort_save"
             app:layout_constraintTop_toTopOf="@+id/sort_save" />
