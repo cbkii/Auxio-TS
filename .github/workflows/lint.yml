@@ -89,11 +89,8 @@ jobs:
         # cause "unadvertised object" fetch errors during recursive submodule
         # init.  Full history ensures the referenced commit is always reachable.
         fetch-depth: 0
-        submodules: recursive
+        submodules: false
         persist-credentials: false
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/prepare-ci-environment.sh
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
@@ -120,6 +117,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build
         fi
+    - name: Prepare CI environment
+      shell: bash
+      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
     - name: Check formatting
       run: ./gradlew --no-daemon --stacktrace spotlessCheck
     - name: Upload formatting reports
@@ -210,11 +210,8 @@ jobs:
         # cause "unadvertised object" fetch errors during recursive submodule
         # init.  Full history ensures the referenced commit is always reachable.
         fetch-depth: 0
-        submodules: recursive
+        submodules: false
         persist-credentials: false
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/prepare-ci-environment.sh
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
@@ -240,6 +237,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build
         fi
+    - name: Prepare CI environment
+      shell: bash
+      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
     - name: Run unit tests
       # testDebugUnitTest is scoped to :app and :musikr only.
       # The media library test files have missing test-utility dependencies
@@ -273,11 +273,8 @@ jobs:
         # cause "unadvertised object" fetch errors during recursive submodule
         # init.  Full history ensures the referenced commit is always reachable.
         fetch-depth: 0
-        submodules: recursive
+        submodules: false
         persist-credentials: false
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/prepare-ci-environment.sh
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
@@ -303,6 +300,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build
         fi
+    - name: Prepare CI environment
+      shell: bash
+      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
     - name: Run Android lint
       # lintDebug is scoped to :app only.
       # app/build.gradle sets checkDependencies=false so media library lint

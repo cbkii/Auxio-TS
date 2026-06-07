@@ -1,142 +1,91 @@
 #!/usr/bin/env bash
-# check-submodules.sh — verify that required git submodules are initialized
-#
-# Usage:
-#   bash ./scripts/check-submodules.sh          # read-only validation (default)
-#   CHECK_SUBMODULES_REPAIR=1 bash ./scripts/check-submodules.sh
-#       or
-#   bash ./scripts/check-submodules.sh --repair # run git submodule sync+update
-#
-# Required submodules for a full build:
-#   media/                             — patched OxygenCobalt/media (Media3 + ExoPlayer)
-#     core_settings.gradle             — applied by settings.gradle; MUST exist before Gradle
-#     libraries/decoder_ffmpeg/src/main/jni/ffmpeg/  — nested ffmpeg (from git.ffmpeg.org)
-#   musikr/src/main/cpp/taglib/        — taglib (from github.com/taglib/taglib)
-#
-# ZIP/snapshot environments (no .git directory) cannot run Gradle successfully
-# because settings.gradle unconditionally applies media/core_settings.gradle.
-# Classification: SUBMODULE_BLOCKER — environment-limited, not an app code issue.
-
+# Read-only dependency validator. Use bootstrap-dependencies.sh for repair/fetch.
 set -euo pipefail
 
-# ── Environment detection ────────────────────────────────────────────────────
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
 
-REPAIR=0
-if [[ "${CHECK_SUBMODULES_REPAIR:-0}" == "1" ]] || [[ "${1:-}" == "--repair" ]]; then
-  REPAIR=1
+PROFILE="${CHECK_SUBMODULES_PROFILE:-full-build}"
+if [[ $# -gt 0 ]]; then
+  case "$1" in
+    --profile)
+      PROFILE="${2:-}"
+      shift 2
+      ;;
+    --repair)
+      echo "::notice::check-submodules.sh no longer owns repair policy; delegating to canonical bootstrap."
+      exec bash ./scripts/bootstrap-dependencies.sh --profile "$PROFILE"
+      ;;
+    static-review|jvm-tests|full-build|release)
+      PROFILE="$1"
+      shift
+      ;;
+    *)
+      echo "::error::Unknown check-submodules argument: $1"
+      echo "Usage: bash scripts/check-submodules.sh [--profile <profile>|<profile>|--repair]"
+      exit 2
+      ;;
+  esac
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-cd "${REPO_ROOT}"
-
-# Detect ZIP/snapshot: no .git means submodule commands are impossible
-if [[ ! -e ".git" ]]; then
-  echo "::error::SUBMODULE_BLOCKER: This directory has no .git — it appears to be a ZIP/snapshot extract."
-  echo "::error::ZIP snapshots cannot run Gradle because settings.gradle requires media/core_settings.gradle from the submodule."
-  echo "::error::Clone the repository properly with submodules:"
-  echo "::error::  git clone --recurse-submodules <remote-url>"
+if [[ ! -e .git ]]; then
+  echo "::error::SNAPSHOT_LIMITATION: no .git directory detected."
+  [[ "$PROFILE" == "static-review" ]] && exit 0
   exit 1
 fi
 
-# ── Optional repair mode ─────────────────────────────────────────────────────
-
-if [[ "${REPAIR}" -eq 1 ]]; then
-  echo "--- Repair mode: syncing and updating submodules ---"
-  git submodule sync --recursive
-  git submodule update --init --recursive --jobs 4 || {
-    echo "::warning::git submodule update completed with some failures (ffmpeg may be unreachable)."
-    echo "::warning::If only ffmpeg is missing, the build may still succeed if CMake can skip it."
-  }
+manifest="ci/dependencies/submodules.tsv"
+if [[ ! -f "$manifest" ]]; then
+  echo "::error::REAL_BUILD_FAILURE: missing $manifest"
+  exit 1
 fi
 
-# ── Validation ───────────────────────────────────────────────────────────────
-
+pin_mismatch=0
 missing=0
-
-check_required_file() {
-  local path="$1"
-  local hint="${2:-}"
-  if [[ ! -f "${path}" ]]; then
-    echo "::error::MISSING required file: ${path}"
-    if [[ -n "${hint}" ]]; then
-      echo "::error::  → ${hint}"
-    fi
-    missing=1
-  else
-    echo "OK  file: ${path}"
-  fi
+profile_requires_path() { [[ ",$1," == *",${PROFILE},"* ]]; }
+parent_worktree() { [[ "$1" == "." ]] && printf '%s\n' "$ROOT_DIR" || printf '%s/%s\n' "$ROOT_DIR" "$1"; }
+expected_sha_for() {
+  local parent="$1" path="$2" rel="$2" parent_dir
+  parent_dir="$(parent_worktree "$parent")"
+  [[ "$parent" != "." ]] && rel="${path#${parent}/}"
+  git -C "$parent_dir" rev-parse "HEAD:${rel}" 2>/dev/null || true
 }
 
-check_required_dir_nonempty() {
-  local path="$1"
-  local sentinel="$2"
-  local hint="${3:-}"
-  if [[ ! -d "${path}" ]]; then
-    echo "::error::MISSING required directory: ${path}"
-    if [[ -n "${hint}" ]]; then
-      echo "::error::  → ${hint}"
-    fi
-    missing=1
-  elif [[ ! -f "${path}/${sentinel}" ]]; then
-    echo "::error::EMPTY submodule directory: ${path} (${sentinel} not found — submodule not initialized)"
-    if [[ -n "${hint}" ]]; then
-      echo "::error::  → ${hint}"
-    fi
-    missing=1
-  else
-    echo "OK  dir:  ${path} (${sentinel} present)"
+echo "--- Submodule pin validation (${PROFILE}) ---"
+while IFS=$'\t' read -r path type parent primary fallbacks required_profiles sentinel release_blocking; do
+  [[ -z "${path:-}" || "${path:0:1}" == "#" ]] && continue
+  profile_requires_path "$required_profiles" || continue
+  expected="$(expected_sha_for "$parent" "$path")"
+  if [[ -z "$expected" ]]; then
+    echo "::error::DEPENDENCY_PIN_MISMATCH: cannot read expected gitlink for $path"
+    pin_mismatch=1
+    continue
   fi
-}
+  if [[ ! -e "$path/$sentinel" ]]; then
+    echo "::error::SUBMODULE_BLOCKER: missing $path/$sentinel"
+    missing=1
+    continue
+  fi
+  actual="$(git -C "$path" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -z "$actual" || "$actual" != "$expected" ]]; then
+    echo "::error::DEPENDENCY_PIN_MISMATCH: $path is at ${actual:-<unverified>}, expected $expected"
+    pin_mismatch=1
+    continue
+  fi
+  echo "OK $path: $actual"
+done < "$manifest"
 
-echo "--- Submodule validation ---"
-
-# media/core_settings.gradle: applied by settings.gradle at configuration time.
-# If this file is missing, Gradle cannot configure the project at all.
-check_required_file \
-  "media/core_settings.gradle" \
-  "media submodule not initialized — Gradle CANNOT run without this file."
-
-# media ffmpeg nested submodule: required for CMake native build of decoder_ffmpeg.
-# Note: git.ffmpeg.org may be unreachable in air-gapped/sandboxed environments.
-# In GitHub Actions with fetch-depth: 0, this initialises successfully.
-check_required_dir_nonempty \
-  "media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg" \
-  "configure" \
-  "ffmpeg nested submodule not initialized — native decoder build will fail."
-
-# taglib: required for metadata parsing (CMake/musikr).
-check_required_file \
-  "musikr/src/main/cpp/taglib/CMakeLists.txt" \
-  "taglib submodule not initialized — musikr native build will fail."
-
-# ── Result ───────────────────────────────────────────────────────────────────
-
-if [[ "${missing}" -ne 0 ]]; then
-  ORIGIN_URL="$(git config --get remote.origin.url 2>/dev/null || echo "<remote-url>")"
-  echo ""
-  echo "::error::SUBMODULE_BLOCKER: One or more required submodules are not initialized."
-  echo "::error::This is an environment/setup issue — not an app code issue."
-  echo "::error::"
-  echo "::error::Repair commands:"
-  echo "::error::  # For a fresh clone:"
-  echo "::error::  git clone --recurse-submodules ${ORIGIN_URL}"
-  echo "::error::"
-  echo "::error::  # For an existing clone:"
-  echo "::error::  git submodule sync --recursive"
-  echo "::error::  git submodule update --init --recursive --jobs 4"
-  echo "::error::"
-  echo "::error::  # Or run this script in repair mode:"
-  echo "::error::  bash ./scripts/check-submodules.sh --repair"
-  echo "::error::"
-  echo "::error::Note: the ffmpeg nested submodule requires git.ffmpeg.org to be reachable."
-  echo "::error::      In air-gapped/sandbox environments it may fail — this is expected."
+if [[ "$pin_mismatch" -ne 0 ]]; then
+  exit 1
+fi
+if [[ "$missing" -ne 0 ]]; then
+  if [[ "$PROFILE" == "static-review" ]]; then
+    echo "::warning::DEGRADED_STATIC_ONLY: missing submodules; static review only."
+    exit 0
+  fi
+  echo "::error::SUBMODULE_BLOCKER: run bash ./scripts/bootstrap-dependencies.sh --profile $PROFILE"
   exit 1
 fi
 
-echo ""
-echo "Submodule validation passed."
-if command -v git >/dev/null 2>&1; then
-  echo "--- git submodule status --recursive ---"
-  git submodule status --recursive 2>/dev/null || true
-fi
+echo "READY: submodule pins validated for profile $PROFILE."
+git submodule status --recursive 2>/dev/null || true

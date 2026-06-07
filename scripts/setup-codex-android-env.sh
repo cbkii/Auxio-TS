@@ -95,15 +95,11 @@ sdkmanager \
 printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 log "Wrote local.properties"
 
-log "Syncing submodules"
-git submodule sync --recursive
-git submodule update --init --recursive --jobs 4
-
-log "Running repo CI preparation"
-bash scripts/prepare-ci-environment.sh
+log "Bootstrapping repo dependencies"
+bash scripts/bootstrap-dependencies.sh --profile full-build
 
 log "Checking submodules"
-bash scripts/check-submodules.sh
+bash scripts/check-submodules.sh --profile full-build
 
 log "Checking head-unit safety"
 bash scripts/check-headunit-compat-safety.sh

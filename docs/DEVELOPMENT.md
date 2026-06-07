@@ -9,13 +9,37 @@
 ## Setup
 
 ```sh
-bash scripts/prepare-ci-environment.sh   # init submodules, validate, create stubs
-./gradlew :app:assembleStandardDebug     # verify build
+bash scripts/bootstrap-dependencies.sh --profile full-build   # init submodules, validate pins, create stubs
+./gradlew :app:assembleStandardDebug                          # verify build
 ```
 
-`prepare-ci-environment.sh` handles submodule init/update and the `common_ktx` proguard stub. Run it once after clone or submodule changes. A ZIP/snapshot checkout is insufficient because Gradle needs the `media` submodule, nested ffmpeg sources, and `musikr` taglib sources.
+`prepare-ci-environment.sh` remains a backwards-compatible wrapper and defaults to `bootstrap-dependencies.sh --profile full-build`. Run the bootstrap command after clone or submodule changes. A ZIP/snapshot checkout is sufficient only for degraded static source review; Gradle needs the `media` submodule, nested ffmpeg sources, and `musikr` taglib sources.
 
-For Codex or a fresh Linux environment, `bash scripts/setup-codex-android-env.sh` can bootstrap/verify Android command-line tools, SDK platform/build tools, CMake, NDK, submodules, and a Gradle smoke test.
+For Codex, Jules-style agents, or a fresh Linux environment, `bash scripts/setup-codex-android-env.sh` can bootstrap/verify Android command-line tools, SDK platform/build tools, CMake, NDK, submodules, and a Gradle smoke test. If native dependencies cannot be fetched, use `static-review` and report `DEGRADED_STATIC_ONLY` instead of claiming Gradle validation.
+
+## Dependency bootstrap profiles
+
+Dependency policy is centralised under `ci/dependencies/` and enforced by `scripts/bootstrap-dependencies.sh`. The script configures only approved mirrors, fetches the same pinned gitlink commits, verifies root and nested submodule SHAs, and creates the known `media/libraries/common_ktx/proguard-rules.txt` stub only when the media submodule needs it.
+
+| Profile | Intended use | Failure policy |
+| ------- | ------------ | -------------- |
+| `static-review` | Source/script/XML review in agents or restricted local checkouts | May print `DEGRADED_STATIC_ONLY`; do not run or claim Gradle/build/test success unless dependencies are fully ready |
+| `jvm-tests` | Repo JVM/unit-test Gradle tasks | Strict today because Gradle configuration still requires the native/media submodule graph |
+| `full-build` | Debug/full CI builds and local release-equivalent validation | Strict: missing pins, SDK/tooling, or release-blocking submodules fail |
+| `release` | Manual signed release workflow | Strictest: no degraded mode; media, ffmpeg, and taglib must be present at exact pinned SHAs |
+
+Common commands:
+
+```sh
+bash scripts/bootstrap-dependencies.sh --profile static-review
+bash scripts/bootstrap-dependencies.sh --profile jvm-tests
+bash scripts/bootstrap-dependencies.sh --profile full-build
+bash scripts/bootstrap-dependencies.sh --profile release
+```
+
+Approved mirrors are documented in `ci/dependencies/git-url-overrides.tsv`; they are fallback fetch locations only and must never be used to replace a submodule with arbitrary latest HEAD. Repair an existing clone with `bash scripts/bootstrap-dependencies.sh --profile full-build`; use `--profile release` before signing or tagging.
+
+Gradle/Maven version inventory starts in `gradle/libs.versions.toml`. Existing Groovy build scripts still keep compatibility `ext` values where required by the current plugin setup; when changing dependencies, update the catalog and avoid broad upgrades in bootstrap/resilience PRs. To introduce or refresh Gradle dependency locks/verification metadata, use a fully bootstrapped SDK environment and document the exact Gradle `--write-locks` / `--write-verification-metadata` command in the PR.
 
 ## Key Gradle tasks
 

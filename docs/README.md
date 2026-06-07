@@ -65,12 +65,13 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
 - `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety/DoFun guardrails.
 - `.github/workflows/manual-release.yml` builds, signs, verifies, and uploads standard, `topwayTwMusic`, and `topwayTwMedia` release APKs.
 - `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshots/reports for UI review.
+- `.github/workflows/dependency-health.yml` runs weekly/manual dependency bootstrap, submodule status, Gradle dependency reports, and a standard debug build.
 - `.github/workflows/upstream-auxio-monitor.yml` checks `OxygenCobalt/Auxio` monthly and opens an issue only when upstream has new commits to review.
 
 Local preflight:
 
 ```sh
-bash scripts/prepare-ci-environment.sh
+bash scripts/bootstrap-dependencies.sh --profile full-build
 bash scripts/check-ts18-apk-reference-contracts.sh
 bash scripts/check-dofun-topway-compat.sh
 bash scripts/check-headunit-compat-safety.sh

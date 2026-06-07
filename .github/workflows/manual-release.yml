@@ -37,11 +37,7 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          submodules: recursive
-
-      - name: Prepare CI environment
-        shell: bash
-        run: bash ./scripts/prepare-ci-environment.sh
+          submodules: false
 
       - name: Verify branch release context
         shell: bash
@@ -115,6 +111,10 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y ninja-build
           fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile release
 
       - name: Compute release version and check collisions
         id: version

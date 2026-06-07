@@ -1,0 +1,5 @@
+# profile	purpose	requires_git	requires_submodules	requires_android_sdk	allows_degraded_static	fail_closed
+static-review	Shell/YAML/XML/source review without claiming Gradle validation.	true	best-effort	false	true	false
+jvm-tests	JVM test profile; currently Gradle configuration still requires media/taglib/ffmpeg gitlinks.	true	all	true	false	true
+full-build	Debug/release-equivalent CI build bootstrap.	true	all	true	false	true
+release	Signed release bootstrap; no degraded mode allowed.	true	all	true	false	true
