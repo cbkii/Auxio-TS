@@ -348,3 +348,4 @@ jobs:
         bash ./scripts/check-ts18-apk-reference-contracts.sh
         bash ./scripts/check-headunit-compat-safety.sh
         bash ./scripts/check-dofun-topway-compat.sh
+        bash ./scripts/check-native-keep-rules.sh

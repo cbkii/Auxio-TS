@@ -76,10 +76,17 @@ class Auxio : Application() {
         playbackSettings.migrate()
         uiSettings.migrate()
         homeSettings.migrate()
-        ShortcutManagerCompat.setDynamicShortcuts(
-            this,
-            HeadUnitEntryPoints.createDynamicShortcuts(this),
-        )
+        // Dynamic shortcuts are a non-essential convenience. Some OEM launchers (including
+        // head-unit launchers such as DoFun) ship a partial or buggy ShortcutManager that can
+        // throw from setDynamicShortcuts; never let that crash every app launch.
+        try {
+            ShortcutManagerCompat.setDynamicShortcuts(
+                this,
+                HeadUnitEntryPoints.createDynamicShortcuts(this),
+            )
+        } catch (e: Exception) {
+            Timber.w(e, "Unable to register dynamic shortcuts")
+        }
 
         // Register car floating controls visibility hooks for the Topway/TS18 variant.
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
