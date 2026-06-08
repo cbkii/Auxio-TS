@@ -21,7 +21,6 @@ package org.oxycblt.auxio.playback
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.fragment.app.activityViewModels
 import dagger.hilt.android.AndroidEntryPoint
