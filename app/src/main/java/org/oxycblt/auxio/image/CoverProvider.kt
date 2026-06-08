@@ -25,7 +25,6 @@ import android.content.UriMatcher
 import android.database.Cursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.image.covers.SettingCovers
@@ -40,10 +39,10 @@ class CoverProvider : ContentProvider() {
         }
         val id = uri.lastPathSegment ?: return null
         // openFile is a synchronous API that can be called from binder threads.
-        // We use runBlocking with Dispatchers.IO to ensure we don't block the calling
-        // thread (if it's the main thread) with I/O, although ideally this should never
-        // be called from the main thread.
-        return runBlocking(Dispatchers.IO) {
+        // We keep this API synchronous and use runBlocking to bridge to the suspend-based
+        // cover-loading code. Note: runBlocking still blocks the calling thread, so this
+        // should not be invoked from the main thread in normal operation.
+        return runBlocking {
             when (val result = SettingCovers.immutable(requireNotNull(context)).obtain(id)) {
                 is CoverResult.Hit -> result.cover.fd()
                 else -> null

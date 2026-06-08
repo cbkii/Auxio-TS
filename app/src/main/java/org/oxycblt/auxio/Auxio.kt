@@ -72,13 +72,13 @@ class Auxio : Application() {
         }
 
         // Migrate any settings that may have changed in an app update.
-        try {
-            imageSettings.migrate()
-            playbackSettings.migrate()
-            uiSettings.migrate()
-            homeSettings.migrate()
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to migrate settings")
+        // Isolate each migration so a single failure doesn't block the rest.
+        listOf(imageSettings, playbackSettings, uiSettings, homeSettings).forEach { settings ->
+            try {
+                settings.migrate()
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to migrate settings: ${settings.javaClass.simpleName}")
+            }
         }
         // Dynamic shortcuts are a non-essential convenience. Some OEM launchers (including
         // head-unit launchers such as DoFun) ship a partial or buggy ShortcutManager that can
