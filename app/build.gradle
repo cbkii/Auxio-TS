@@ -136,15 +136,19 @@ android {
     sourceSets {
         // Reuse the same thin Topway/DoFun wrapper source set for both fixed DoFun entries.
         // The active applicationId supplies either com.tw.music or com.tw.media while the
-        // exported class remains com.tw.music.MusicActivity.
+        // exported component remains com.tw.music.MusicActivity. Keep both Java and Kotlin
+        // source roots explicit so release/minified variants cannot merge the manifest without
+        // compiling the stock-name wrapper classes it declares.
         topwayTwMusic {
             manifest.srcFile "src/topwayCompat/AndroidManifest.xml"
-            java.srcDirs += ["src/topwayCompat/java"]
+            java.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
+            kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
             res.srcDirs += ["src/topwayCompat/res"]
         }
         topwayTwMedia {
             manifest.srcFile "src/topwayCompat/AndroidManifest.xml"
-            java.srcDirs += ["src/topwayCompat/java"]
+            java.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
+            kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
             res.srcDirs += ["src/topwayCompat/res"]
         }
     }

@@ -36,13 +36,21 @@ class CarOverlayBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
 
-        val prefs = CarOverlayPrefs.from(context)
-        if (!prefs.enabled) {
-            L.d("Car overlay disabled, skipping boot restore")
-            return
-        }
         if (!Settings.canDrawOverlays(context)) {
             L.w("Overlay permission not granted, skipping boot restore")
+            return
+        }
+
+        val prefs =
+            try {
+                CarOverlayPrefs.from(context)
+            } catch (e: RuntimeException) {
+                L.w(e, "Unable to read car overlay preferences during boot restore")
+                return
+            }
+
+        if (!prefs.enabled) {
+            L.d("Car overlay disabled, skipping boot restore")
             return
         }
 
