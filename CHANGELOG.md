@@ -807,8 +807,8 @@
 
 #### What's New
 
-- Added option to ignore `MediaStore` tags, allowing more correct metadata at the cost of longer loading times 
-- Added support for sort tags [#172, dependent on this feature] 
+- Added option to ignore `MediaStore` tags, allowing more correct metadata at the cost of longer loading times
+- Added support for sort tags [#172, dependent on this feature]
 - Added support for date tags, including more fine-grained dates [#159, dependent on this feature]
 - Added support for release types signifying EPs, Singles, Compilations, and more [#158, dependent on this feature]
 - Added basic awareness of multi-value vorbis tags [#197, dependent on this feature]

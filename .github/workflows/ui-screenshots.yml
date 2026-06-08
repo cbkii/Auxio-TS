@@ -84,13 +84,13 @@ jobs:
           persist-credentials: false
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
 
       - name: Write local.properties
         run: |
@@ -142,7 +142,7 @@ jobs:
       - name: Upload Roborazzi reports
         id: upload_reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-roborazzi-reports
           path: |
@@ -156,7 +156,7 @@ jobs:
       - name: Upload all Roborazzi PNG outputs
         id: upload_outputs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-roborazzi-outputs
           path: |
@@ -169,7 +169,7 @@ jobs:
       - name: Upload PNG - main launch landscape
         id: upload_png_main_launch_landscape
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-main-launch-landscape.png
           path: app/build/outputs/roborazzi/main-launch-landscape.png
@@ -179,7 +179,7 @@ jobs:
       - name: Upload PNG - main launch portrait
         id: upload_png_main_launch_portrait
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-main-launch-portrait.png
           path: app/build/outputs/roborazzi/main-launch-portrait.png
@@ -189,7 +189,7 @@ jobs:
       - name: Upload PNG - playback shuffle off landscape
         id: upload_png_playback_shuffle_off_landscape
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-playback-page-shuffle-off-landscape.png
           path: app/build/outputs/roborazzi/playback-page-shuffle-off-landscape.png
@@ -199,7 +199,7 @@ jobs:
       - name: Upload PNG - playback shuffle on landscape
         id: upload_png_playback_shuffle_on_landscape
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-playback-page-shuffle-on-landscape.png
           path: app/build/outputs/roborazzi/playback-page-shuffle-on-landscape.png
@@ -209,7 +209,7 @@ jobs:
       - name: Upload PNG - playback shuffle off portrait
         id: upload_png_playback_shuffle_off_portrait
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-playback-page-shuffle-off-portrait.png
           path: app/build/outputs/roborazzi/playback-page-shuffle-off-portrait.png
@@ -219,7 +219,7 @@ jobs:
       - name: Upload PNG - playback shuffle on portrait
         id: upload_png_playback_shuffle_on_portrait
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: auxio-ts-${{ inputs.variant }}-playback-page-shuffle-on-portrait.png
           path: app/build/outputs/roborazzi/playback-page-shuffle-on-portrait.png

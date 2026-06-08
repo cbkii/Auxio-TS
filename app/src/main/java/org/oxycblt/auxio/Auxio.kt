@@ -194,6 +194,7 @@ class Auxio : Application() {
                 appendLine()
                 appendLine("Thread")
                 appendLine("  name: ${thread.name}")
+                @Suppress("DEPRECATION")
                 appendLine("  id: ${thread.id}")
                 appendLine("  state: ${thread.state}")
                 appendLine()

@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.headunit
 
 import android.content.res.Resources
+import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
 import androidx.core.view.updateLayoutParams
@@ -90,10 +91,13 @@ object HeadUnitUiAdapter {
         artistView: TextView,
     ) {
         if (!largeControls) return
-        val scaledDensity = resources.displayMetrics.scaledDensity
-        songView.textSize =
-            resources.getDimension(R.dimen.text_size_head_unit_title) / scaledDensity
-        artistView.textSize =
-            resources.getDimension(R.dimen.text_size_head_unit_subtitle) / scaledDensity
+        songView.setTextSize(
+            TypedValue.COMPLEX_UNIT_PX,
+            resources.getDimension(R.dimen.text_size_head_unit_title),
+        )
+        artistView.setTextSize(
+            TypedValue.COMPLEX_UNIT_PX,
+            resources.getDimension(R.dimen.text_size_head_unit_subtitle),
+        )
     }
 }

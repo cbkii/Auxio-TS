@@ -121,8 +121,8 @@ class RoundedRectTransformation(
             DecodeUtils.computeSizeMultiplier(
                 srcWidth = input.width,
                 srcHeight = input.height,
-                dstWidth = size.width.pxOrElse { Int.MIN_VALUE },
-                dstHeight = size.height.pxOrElse { Int.MIN_VALUE },
+                dstWidth = size.width.pxOrElse { 0 },
+                dstHeight = size.height.pxOrElse { 0 },
                 scale = Scale.FIT,
             )
         val outputWidth = (multiplier * input.width).roundToInt()

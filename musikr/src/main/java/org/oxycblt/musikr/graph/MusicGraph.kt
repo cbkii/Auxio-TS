@@ -374,7 +374,7 @@ private class MusicGraphBuilderImpl : MusicGraph.Builder {
         val fullMusicBrainzIdCoverage = cluster.all { it.preArtist.musicBrainzId != null }
         if (fullMusicBrainzIdCoverage) {
             // All artists have MBIDs, nothing needs to be merged.
-            val mbidClusters = cluster.groupBy { unlikelyToBeNull(it.preArtist.musicBrainzId) }
+            val mbidClusters = cluster.groupBy { it.preArtist.musicBrainzId!! }
             for (mbidCluster in mbidClusters.values) {
                 simplifyArtistClusterImpl(mbidCluster)
             }
@@ -450,7 +450,7 @@ private class MusicGraphBuilderImpl : MusicGraph.Builder {
         val fullMusicBrainzIdCoverage = cluster.all { it.preAlbum.musicBrainzId != null }
         if (fullMusicBrainzIdCoverage) {
             // All albums have MBIDs, nothing needs to be merged.
-            val mbidClusters = cluster.groupBy { unlikelyToBeNull(it.preAlbum.musicBrainzId) }
+            val mbidClusters = cluster.groupBy { it.preAlbum.musicBrainzId!! }
             for (mbidCluster in mbidClusters.values) {
                 simplifyAlbumClusterImpl(mbidCluster)
             }

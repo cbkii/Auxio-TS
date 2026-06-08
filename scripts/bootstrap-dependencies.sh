@@ -129,7 +129,7 @@ update_one_submodule() {
 
   dep_info "--- Updating submodule ${path} ---"
   set_submodule_url "${parent}" "${path}" "${primary}"
-  if git -C "${parent_dir}" submodule update --init --recursive --jobs "${JOBS}" -- "${rel}"; then
+  if git -C "${parent_dir}" submodule update --init --jobs "${JOBS}" -- "${rel}"; then
     return 0
   fi
 
@@ -140,7 +140,7 @@ update_one_submodule() {
     dep_warn "DEPENDENCY_MIRROR_USED: retrying ${path} from approved mirror ${url}; the pinned gitlink SHA will still be verified."
     MIRROR_USED=1
     set_submodule_url "${parent}" "${path}" "${url}"
-    if git -C "${parent_dir}" submodule update --init --recursive --jobs "${JOBS}" -- "${rel}"; then
+    if git -C "${parent_dir}" submodule update --init --jobs "${JOBS}" -- "${rel}"; then
       return 0
     fi
   done
@@ -190,6 +190,7 @@ create_common_ktx_stub_if_required() {
   local stub="${REPO_ROOT}/media/libraries/common_ktx/proguard-rules.txt"
   if [[ -d "${REPO_ROOT}/media/libraries/common_ktx" && ! -f "${stub}" ]]; then
     : > "${stub}"
+    # This warning is suppressed if the file is eventually tracked in the media submodule.
     dep_warn "UPSTREAM_MEDIA_QUIRK: created media/libraries/common_ktx/proguard-rules.txt stub."
   fi
 }
@@ -213,9 +214,10 @@ check_sdk() {
 dep_info "--- Configuring approved git URL fallback policy ---"
 git submodule sync --recursive || true
 
-# Initialise/update in manifest order. Nested entries work after their parent is
-# fetched. The manifest is read on FD 3 so git commands inside the loop cannot
-# consume it from stdin.
+# Initialise/update in manifest order without --recursive. Every required
+# transitive submodule must be listed in ci/dependencies/submodules.tsv so
+# fallback URLs, exact-pin checks, and failure classification stay repo-owned
+# instead of being hidden inside a parent recursive update.
 while IFS=$'\t' read -r path type parent primary fallbacks required_profiles sentinel release_blocking <&3; do
   [[ -z "${path:-}" || "${path:0:1}" == "#" ]] && continue
   dep_profile_requires_path "${required_profiles}" "${PROFILE}" || continue

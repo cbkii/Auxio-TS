@@ -395,7 +395,7 @@ class PlaybackPanelFragment :
         if (uiSettings.driverSide != UISettings.DriverSide.LEFT) {
             return
         }
-        val root = binding.root as ConstraintLayout
+        val root = binding.root
         ConstraintSet().apply {
             clone(root)
             clear(R.id.playback_pager, ConstraintSet.START)

@@ -188,7 +188,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         if (uiSettings.driverSide != UISettings.DriverSide.LEFT) {
             return
         }
-        val root = binding.root as ConstraintLayout
+        val root = binding.root
         ConstraintSet().apply {
             clone(root)
             clear(R.id.playback_cover, ConstraintSet.START)
