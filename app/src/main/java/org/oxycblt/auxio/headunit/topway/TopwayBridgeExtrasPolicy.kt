@@ -62,7 +62,11 @@ object TopwayBridgeExtrasPolicy {
             extras.classLoader = classLoader
             extractAllowlistedIncomingExtras(
                 containsKey = extras::containsKey,
-                getValue = { key -> extras.get(key) },
+                getValue = { key ->
+                    @Suppress("DEPRECATION") // Bundle.get is the only untyped accessor; callers
+                    // perform their own type checks in sanitizeIncomingExtras.
+                    extras.get(key)
+                },
             )
         } catch (e: BadParcelableException) {
             L.w(

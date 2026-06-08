@@ -433,6 +433,7 @@ private class RotatingDrawable(drawable: Drawable) : Drawable(), Drawable.Callba
         wrappedDrawable.colorFilter = colorFilter
     }
 
+    @Suppress("DEPRECATION") // Required override of deprecated Drawable.getOpacity().
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     override fun setTint(tintColor: Int) {

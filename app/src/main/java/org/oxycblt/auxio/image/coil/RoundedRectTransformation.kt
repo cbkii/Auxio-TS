@@ -75,6 +75,9 @@ class RoundedRectTransformation(
             drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 
             val matrix = Matrix()
+            @Suppress("DEPRECATION") // computeSizeMultiplier scalar overload is deprecated in
+            // Coil 3.x; the replacement API operates on Size objects but this vendored
+            // transformation uses explicit pixel arithmetic intentionally.
             val multiplier =
                 DecodeUtils.computeSizeMultiplier(
                         srcWidth = input.width,
@@ -117,6 +120,7 @@ class RoundedRectTransformation(
             // This path only runs w/the widget code, which already normalizes widget sizes
             return input.width to input.height
         }
+        @Suppress("DEPRECATION") // Same as above: vendored Coil transformation arithmetic.
         val multiplier =
             DecodeUtils.computeSizeMultiplier(
                 srcWidth = input.width,

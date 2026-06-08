@@ -250,11 +250,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
      * On Android 10 fallback, uses display size minus known TS18 bar insets.
      */
     private fun clampPosition(x: Int, y: Int): Pair<Int, Int> {
-        val display = windowManager?.defaultDisplay
-        val size = Point()
-        display?.getSize(size)
-        val screenW = if (size.x > 0) size.x else DEFAULT_SCREEN_WIDTH
-        val screenH = if (size.y > 0) size.y else DEFAULT_SCREEN_HEIGHT
+        val (screenW, screenH) = getScreenDimensions()
 
         // Approximate usable area accounting for system bars.
         val minX = 0
@@ -263,6 +259,26 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         val maxY = (screenH - OVERLAY_ESTIMATED_HEIGHT_PX).coerceAtLeast(minY)
 
         return x.coerceIn(minX, maxX) to y.coerceIn(minY, maxY)
+    }
+
+    private fun getScreenDimensions(): Pair<Int, Int> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+            val metrics = wm?.currentWindowMetrics
+            if (metrics != null) {
+                val bounds = metrics.bounds
+                return bounds.width() to bounds.height()
+            }
+        }
+        // Android 10 fallback: use deprecated API for TS18 compatibility.
+        @Suppress("DEPRECATION")
+        val display = windowManager?.defaultDisplay
+        val size = Point()
+        @Suppress("DEPRECATION")
+        display?.getSize(size)
+        val w = if (size.x > 0) size.x else DEFAULT_SCREEN_WIDTH
+        val h = if (size.y > 0) size.y else DEFAULT_SCREEN_HEIGHT
+        return w to h
     }
 
     // --- Foreground notification ---

@@ -90,16 +90,15 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       with:
-        # fetch-depth: 0 (full history) is required here.
-        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
-        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
-        # cause "unadvertised object" fetch errors during recursive submodule
-        # init.  Full history ensures the referenced commit is always reachable.
+        # fetch-depth: 0 (full history) retained for submodule verification and
+        # merge-base operations.  The media submodule resolves from cbkii/media
+        # (GitHub mirror) as primary; ffmpeg resolves from GitHub mirror via
+        # cbkii/media's nested submodule graph.
         fetch-depth: 0
         submodules: false
         persist-credentials: false
     - name: Set up JDK 21
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         java-version: "21"
         distribution: "temurin"
@@ -114,7 +113,7 @@ jobs:
         fi
         printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
     - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@v5
       with:
         # PRs must not write to the shared Gradle cache; pushes to dev may write.
         cache-read-only: ${{ github.event_name == 'pull_request' }}
@@ -131,7 +130,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace spotlessCheck
     - name: Upload formatting reports
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: android-quality-format-reports
         path: |
@@ -211,16 +210,15 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       with:
-        # fetch-depth: 0 (full history) is required here.
-        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
-        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
-        # cause "unadvertised object" fetch errors during recursive submodule
-        # init.  Full history ensures the referenced commit is always reachable.
+        # fetch-depth: 0 (full history) retained for submodule verification and
+        # merge-base operations.  The media submodule resolves from cbkii/media
+        # (GitHub mirror) as primary; ffmpeg resolves from GitHub mirror via
+        # cbkii/media's nested submodule graph.
         fetch-depth: 0
         submodules: false
         persist-credentials: false
     - name: Set up JDK 21
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         java-version: "21"
         distribution: "temurin"
@@ -235,7 +233,7 @@ jobs:
         fi
         printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
     - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@v5
       with:
         cache-read-only: ${{ github.event_name == 'pull_request' }}
     - name: Ensure native build tools are present
@@ -258,7 +256,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
     - name: Upload unit test reports
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: android-quality-unit-test-reports
         path: |
@@ -277,16 +275,15 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       with:
-        # fetch-depth: 0 (full history) is required here.
-        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
-        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
-        # cause "unadvertised object" fetch errors during recursive submodule
-        # init.  Full history ensures the referenced commit is always reachable.
+        # fetch-depth: 0 (full history) retained for submodule verification and
+        # merge-base operations.  The media submodule resolves from cbkii/media
+        # (GitHub mirror) as primary; ffmpeg resolves from GitHub mirror via
+        # cbkii/media's nested submodule graph.
         fetch-depth: 0
         submodules: false
         persist-credentials: false
     - name: Set up JDK 21
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         java-version: "21"
         distribution: "temurin"
@@ -301,7 +298,7 @@ jobs:
         fi
         printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
     - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v4
+      uses: gradle/actions/setup-gradle@v5
       with:
         cache-read-only: ${{ github.event_name == 'pull_request' }}
     - name: Ensure native build tools are present
@@ -322,7 +319,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace :app:lintStandardDebug
     - name: Upload Android lint reports
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: android-quality-lint-reports
         path: |

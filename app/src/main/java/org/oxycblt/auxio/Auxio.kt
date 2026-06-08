@@ -194,6 +194,10 @@ class Auxio : Application() {
                 appendLine()
                 appendLine("Thread")
                 appendLine("  name: ${thread.name}")
+                // Thread.getId() is deprecated on JDK 21+ in favor of threadId(), but
+                // threadId() is not available on Android runtime below API 35.  Retain
+                // the deprecated accessor for crash reports on Android 10 (TS18).
+                @Suppress("DEPRECATION")
                 appendLine("  id: ${thread.id}")
                 appendLine("  state: ${thread.state}")
                 appendLine()
