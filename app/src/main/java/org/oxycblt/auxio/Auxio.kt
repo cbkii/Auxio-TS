@@ -72,10 +72,14 @@ class Auxio : Application() {
         }
 
         // Migrate any settings that may have changed in an app update.
-        imageSettings.migrate()
-        playbackSettings.migrate()
-        uiSettings.migrate()
-        homeSettings.migrate()
+        try {
+            imageSettings.migrate()
+            playbackSettings.migrate()
+            uiSettings.migrate()
+            homeSettings.migrate()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to migrate settings")
+        }
         // Dynamic shortcuts are a non-essential convenience. Some OEM launchers (including
         // head-unit launchers such as DoFun) ship a partial or buggy ShortcutManager that can
         // throw from setDynamicShortcuts; never let that crash every app launch.
@@ -130,13 +134,21 @@ class Auxio : Application() {
         }
 
         private fun writeCrashReport(thread: Thread, throwable: Throwable) {
-            val crashTime = Date()
-            val timestamp = fileTimestamp(crashTime)
-            val diagnosticsDir = crashReportDirectory() ?: return
+            try {
+                val crashTime = Date()
+                val timestamp = fileTimestamp(crashTime)
+                val diagnosticsDir = crashReportDirectory() ?: return
 
-            val reportFile = File(diagnosticsDir, "crash-$timestamp.txt")
-            reportFile.writeText(buildReport(thread, throwable, crashTime))
-            pruneOldReports(diagnosticsDir)
+                val reportFile = File(diagnosticsDir, "crash-$timestamp.txt")
+                reportFile.writeText(buildReport(thread, throwable, crashTime))
+                pruneOldReports(diagnosticsDir)
+            } catch (e: Throwable) {
+                // If we can't write the crash report, at least log it to logcat if possible
+                try {
+                    Log.e("CrashFileHandler", "Failed to write crash report", e)
+                } catch (_: Throwable) {
+                }
+            }
         }
 
         private fun crashReportDirectory(): File? {
