@@ -49,3 +49,10 @@
 -keep class org.oxycblt.auxio.car.overlay.CarFloatingControlsService { *; }
 -keep class org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver { *; }
 -keep class org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity { *; }
+
+# Main manifest-declared components to ensure they are kept through R8 shrinking.
+-keep class org.oxycblt.auxio.image.CoverProvider { *; }
+-keep class org.oxycblt.auxio.playback.service.MediaButtonReceiver { *; }
+-keep class org.oxycblt.auxio.headunit.topway.TopwayMusicBridgeReceiver { *; }
+-keep class org.oxycblt.auxio.widgets.WidgetProvider { *; }
+-keep class org.oxycblt.auxio.tasker.ActivityConfigStartAction { *; }

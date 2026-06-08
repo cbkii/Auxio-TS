@@ -38,6 +38,10 @@ class CoverProvider : ContentProvider() {
             return null
         }
         val id = uri.lastPathSegment ?: return null
+        // openFile is a synchronous API that can be called from binder threads.
+        // We keep this API synchronous and use runBlocking to bridge to the suspend-based
+        // cover-loading code. Note: runBlocking still blocks the calling thread, so this
+        // should not be invoked from the main thread in normal operation.
         return runBlocking {
             when (val result = SettingCovers.immutable(requireNotNull(context)).obtain(id)) {
                 is CoverResult.Hit -> result.cover.fd()
