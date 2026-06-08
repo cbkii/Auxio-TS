@@ -25,12 +25,12 @@ Shared, read-only parsing/validation logic (supported-profile list, manifest TSV
 
 All four entrypoints validate the profile (CLI value, bare profile name, and the `DEPENDENCY_BOOTSTRAP_PROFILE` / `CHECK_SUBMODULES_PROFILE` environment defaults) against the supported set. A missing `--profile` value exits `2` with usage; an unsupported profile exits `2` instead of silently validating zero entries.
 
-| Profile | Intended use | Failure policy |
-| ------- | ------------ | -------------- |
+| Profile         | Intended use                                                     | Failure policy                                                                                                      |
+| --------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `static-review` | Source/script/XML review in agents or restricted local checkouts | May print `DEGRADED_STATIC_ONLY`; do not run or claim Gradle/build/test success unless dependencies are fully ready |
-| `jvm-tests` | Repo JVM/unit-test Gradle tasks | Strict today because Gradle configuration still requires the native/media submodule graph |
-| `full-build` | Debug/full CI builds and local release-equivalent validation | Strict: missing pins, SDK/tooling, or release-blocking submodules fail |
-| `release` | Manual signed release workflow | Strictest: no degraded mode; media, ffmpeg, and taglib must be present at exact pinned SHAs |
+| `jvm-tests`     | Repo JVM/unit-test Gradle tasks                                  | Strict today because Gradle configuration still requires the native/media submodule graph                           |
+| `full-build`    | Debug/full CI builds and local release-equivalent validation     | Strict: missing pins, SDK/tooling, or release-blocking submodules fail                                              |
+| `release`       | Manual signed release workflow                                   | Strictest: no degraded mode; media, ffmpeg, and taglib must be present at exact pinned SHAs                         |
 
 Common commands:
 

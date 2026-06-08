@@ -83,30 +83,33 @@ Do not add in-app TS18 probe frameworks, default-off vendor adapter skeletons, T
 ### Required source priority order for TS18/TW/TWTHEME work
 
 ##### Priority 1: TS18/TW/TWTHEME ecosystem sources
-  - Topway / TS10 / TS18 firmware references
-  - DoFun / iLauncher / TWTHEME material
-  - TWUtil / TWClient public references
-  - ZLink/TLink/carchoose ecosystem clues
-  - TWTHEME theme/window/PiP/launcher behaviour sources
+
+- Topway / TS10 / TS18 firmware references
+- DoFun / iLauncher / TWTHEME material
+- TWUtil / TWClient public references
+- ZLink/TLink/carchoose ecosystem clues
+- TWTHEME theme/window/PiP/launcher behaviour sources
 
 ##### Priority 2: Battle-tested public head-unit projects
-  - Projects showing working Android head-unit integration patterns
-  - Media metadata exposure, hardware-key routing, launcher/widget behaviour, and platform isolation precedents
+
+- Projects showing working Android head-unit integration patterns
+- Media metadata exposure, hardware-key routing, launcher/widget behaviour, and platform isolation precedents
 
 ##### Priority 3: Local repository evidence
-  - docs/evidence/t-music-snapshot/
-  - diagnostics/redacted/ts18_device_profile.json
-  - Existing Auxio-TS TS18 docs
+
+- docs/evidence/t-music-snapshot/
+- diagnostics/redacted/ts18_device_profile.json
+- Existing Auxio-TS TS18 docs
 
 ##### Priority 4: User-provided diagnostics
-  - Fresh TS18 logs, dumpsys, bugreport extracts, package lists,
-    theme APK listings, launcher behaviour captures
+
+- Fresh TS18 logs, dumpsys, bugreport extracts, package lists, theme APK listings, launcher behaviour captures
 
 ##### Priority 5: New probes/diagnostics
-  - Allowed only when no reliable source, public equivalent, or
-    user-provided evidence exists
-  - Prefer external scripts/manual runbook steps
-  - Do not add speculative probe frameworks to product app code
+
+- Allowed only when no reliable source, public equivalent, or user-provided evidence exists
+- Prefer external scripts/manual runbook steps
+- Do not add speculative probe frameworks to product app code
 
 Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 
@@ -186,12 +189,12 @@ Shared, read-only logic (supported-profile list, manifest parsing, `profile_requ
 
 Supported profiles:
 
-| Profile | Use | Failure policy |
-| ------- | --- | -------------- |
-| `static-review` | Agent/static script, YAML, XML, and source review when full native dependencies may be unreachable | May print `DEGRADED_STATIC_ONLY`; never claim Gradle/build/test validation from this mode |
-| `jvm-tests` | JVM/unit-test validation | Strict in this repo because Gradle configuration still needs the media/taglib/ffmpeg submodule graph |
-| `full-build` | CI debug/full build bootstrap | Strict: missing pins, SDK/tooling, or required submodules fail |
-| `release` | Signed release bootstrap | Fail closed; no degraded mode allowed |
+| Profile         | Use                                                                                                | Failure policy                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `static-review` | Agent/static script, YAML, XML, and source review when full native dependencies may be unreachable | May print `DEGRADED_STATIC_ONLY`; never claim Gradle/build/test validation from this mode            |
+| `jvm-tests`     | JVM/unit-test validation                                                                           | Strict in this repo because Gradle configuration still needs the media/taglib/ffmpeg submodule graph |
+| `full-build`    | CI debug/full build bootstrap                                                                      | Strict: missing pins, SDK/tooling, or required submodules fail                                       |
+| `release`       | Signed release bootstrap                                                                           | Fail closed; no degraded mode allowed                                                                |
 
 The repo-owned dependency manifests live under `ci/dependencies/`:
 
@@ -202,16 +205,16 @@ The repo-owned dependency manifests live under `ci/dependencies/`:
 
 **Outcome classification used by bootstrap:**
 
-| Label | Meaning |
-| ----- | ------- |
-| `READY` | Bootstrap completed for the selected profile |
-| `SNAPSHOT_LIMITATION` | No `.git`; static review may degrade, Gradle profiles fail |
-| `SUBMODULE_BLOCKER` | Required submodule/sentinel missing or fetch failed |
-| `DEPENDENCY_MIRROR_USED` | Approved mirror supplied the exact pinned commit |
-| `DEPENDENCY_PIN_MISMATCH` | Checked-out submodule HEAD differs from parent gitlink; always fail |
-| `SDK_BLOCKER` | Android SDK/native tooling missing for strict profiles |
-| `DEGRADED_STATIC_ONLY` | Static review may continue, but no build/test/lint success may be claimed |
-| `REAL_BUILD_FAILURE` | Bootstrap passed; Gradle/app build itself failed |
+| Label                     | Meaning                                                                   |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `READY`                   | Bootstrap completed for the selected profile                              |
+| `SNAPSHOT_LIMITATION`     | No `.git`; static review may degrade, Gradle profiles fail                |
+| `SUBMODULE_BLOCKER`       | Required submodule/sentinel missing or fetch failed                       |
+| `DEPENDENCY_MIRROR_USED`  | Approved mirror supplied the exact pinned commit                          |
+| `DEPENDENCY_PIN_MISMATCH` | Checked-out submodule HEAD differs from parent gitlink; always fail       |
+| `SDK_BLOCKER`             | Android SDK/native tooling missing for strict profiles                    |
+| `DEGRADED_STATIC_ONLY`    | Static review may continue, but no build/test/lint success may be claimed |
+| `REAL_BUILD_FAILURE`      | Bootstrap passed; Gradle/app build itself failed                          |
 
 ### Jules environment readiness
 
@@ -227,11 +230,12 @@ This repo requires recursive git submodules for Gradle. Gradle cannot configure 
 
 Required release/full-build submodules:
 
-| Path | Purpose | Primary remote | Approved fallback policy |
-| ---- | ------- | -------------- | ------------------------ |
-| `media/` | Patched Media3/ExoPlayer | `github.com/OxygenCobalt/media` | No fallback currently approved |
-| `media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg/` | FFmpeg decoder | `git.ffmpeg.org` | `github.com/FFmpeg/FFmpeg` only for the pinned commit |
-| `musikr/src/main/cpp/taglib/` | Taglib parser | `github.com/taglib/taglib` | `github.com/KDE/taglib` only for the pinned commit |
+| Path                                                  | Purpose                       | Primary remote              | Approved fallback policy                           |
+| ----------------------------------------------------- | ----------------------------- | --------------------------- | -------------------------------------------------- |
+| `media/`                                              | Patched Media3/ExoPlayer      | `github.com/cbkii/media`    | No fallback currently approved                     |
+| `media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg/` | FFmpeg decoder                | `github.com/FFmpeg/FFmpeg`  | `git.ffmpeg.org` only for the pinned commit        |
+| `musikr/src/main/cpp/taglib/`                         | Taglib parser                 | `github.com/taglib/taglib`  | `github.com/KDE/taglib` only for the pinned commit |
+| `musikr/src/main/cpp/taglib/3rdparty/utfcpp/`         | UTF-CPP helper used by TagLib | `github.com/nemtrif/utfcpp` | No fallback currently approved                     |
 
 **Fresh clone:**
 
@@ -299,8 +303,7 @@ Do not perform broad dependency upgrades as part of bootstrap changes. Version c
 - Fetch **full** job logs, not tails. The root error is always above the Gradle stack trace dump.
 - Separate root causes from cascade errors before fixing anything.
 - Run `bash ./scripts/check-submodules.sh` first to rule out submodule issues before diagnosing Gradle.
-- Run `./gradlew --no-daemon --stacktrace :app:assembleDebug` (not bare `assembleDebug`) if
-  you want to limit the build to Auxio-TS code and skip media library sub-tasks.
+- Run `./gradlew --no-daemon --stacktrace :app:assembleDebug` (not bare `assembleDebug`) if you want to limit the build to Auxio-TS code and skip media library sub-tasks.
 - Do not claim `test`, `lint`, or `assembleDebug` passed unless the command actually ran and exited 0.
 
 ## UI screenshot workflow

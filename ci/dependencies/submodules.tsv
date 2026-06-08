@@ -1,4 +1,5 @@
 # path	type	parent	primary_remote	fallback_remotes	required_profiles	sentinel	release_blocking
 media	git-submodule	.	https://github.com/cbkii/media.git	-	jvm-tests,full-build,release	core_settings.gradle	true
-musikr/src/main/cpp/taglib	git-submodule	.	https://github.com/taglib/taglib.git	https://github.com/KDE/taglib.git	jvm-tests,full-build,release	CMakeLists.txt	true
 media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg	git-submodule	media	https://github.com/FFmpeg/FFmpeg.git	https://git.ffmpeg.org/ffmpeg.git	jvm-tests,full-build,release	configure	true
+musikr/src/main/cpp/taglib	git-submodule	.	https://github.com/taglib/taglib.git	https://github.com/KDE/taglib.git	jvm-tests,full-build,release	CMakeLists.txt	true
+musikr/src/main/cpp/taglib/3rdparty/utfcpp	git-submodule	musikr/src/main/cpp/taglib	https://github.com/nemtrif/utfcpp.git	-	jvm-tests,full-build,release	source/utf8.h	true
