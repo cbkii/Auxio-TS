@@ -141,13 +141,13 @@ android {
         // compiling the stock-name wrapper classes it declares.
         topwayTwMusic {
             manifest.srcFile "src/topwayCompat/AndroidManifest.xml"
-            java.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
+            java.srcDirs += ["src/topwayCompat/java"]
             kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
             res.srcDirs += ["src/topwayCompat/res"]
         }
         topwayTwMedia {
             manifest.srcFile "src/topwayCompat/AndroidManifest.xml"
-            java.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
+            java.srcDirs += ["src/topwayCompat/java"]
             kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
             res.srcDirs += ["src/topwayCompat/res"]
         }

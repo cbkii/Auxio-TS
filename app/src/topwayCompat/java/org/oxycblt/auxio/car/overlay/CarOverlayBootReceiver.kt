@@ -44,7 +44,10 @@ class CarOverlayBootReceiver : BroadcastReceiver() {
         val prefs =
             try {
                 CarOverlayPrefs.from(context)
-            } catch (e: RuntimeException) {
+            } catch (e: SecurityException) {
+                L.w(e, "Unable to read car overlay preferences during boot restore")
+                return
+            } catch (e: IllegalStateException) {
                 L.w(e, "Unable to read car overlay preferences during boot restore")
                 return
             }
