@@ -147,8 +147,7 @@ class Auxio : Application() {
                 // If we can't write the crash report, at least log it to logcat if possible
                 try {
                     Log.e("CrashFileHandler", "Failed to write crash report", e)
-                } catch (_: Throwable) {
-                }
+                } catch (_: Throwable) {}
             }
         }
 
