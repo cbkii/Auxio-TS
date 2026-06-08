@@ -40,3 +40,12 @@
 # keep these so the reflective registration path always finds them.
 -keep class org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks { *; }
 -keep class org.oxycblt.auxio.car.overlay.CarOverlaySettings { *; }
+# Manifest-declared Topway/DoFun wrapper components. Android instantiates these classes directly
+# from the manifest before Auxio can recover, so release shrinking must never remove them while the
+# topwayCompat manifest declares them. They are thin public Android-standard wrappers only, not
+# private Cardoor/vendor implementations.
+-keep class com.tw.music.MusicService { *; }
+-keep class com.tw.music.view.MusicWidgetProvider { *; }
+-keep class org.oxycblt.auxio.car.overlay.CarFloatingControlsService { *; }
+-keep class org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver { *; }
+-keep class org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity { *; }

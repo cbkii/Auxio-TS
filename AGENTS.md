@@ -213,6 +213,14 @@ The repo-owned dependency manifests live under `ci/dependencies/`:
 | `DEGRADED_STATIC_ONLY` | Static review may continue, but no build/test/lint success may be claimed |
 | `REAL_BUILD_FAILURE` | Bootstrap passed; Gradle/app build itself failed |
 
+### Jules environment readiness
+
+When running inside Jules, first inspect `.jules/setup-status.env` if present.
+
+- If `AUXIO_JULES_READINESS=FULL_BUILD_READY`, Gradle validation may be attempted and reported with exact command results.
+- If `AUXIO_JULES_READINESS=STATIC_REVIEW_ONLY`, continue static/source/script review where possible, but do not claim Gradle, APK, release, or runtime validation passed.
+- If the file is missing, run `bash scripts/setup-jules-env.sh` before deciding whether the environment is build-capable.
+
 ### Submodule requirements and repair
 
 This repo requires recursive git submodules for Gradle. Gradle cannot configure at all if `media/core_settings.gradle` is missing (applied unconditionally by `settings.gradle`).

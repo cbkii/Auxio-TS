@@ -430,6 +430,11 @@ PY
   fi
 fi
 
+printf '\nChecking manifest-declared Topway component class packaging guardrail...\n'
+if ! bash ./scripts/check-topway-manifest-components.sh; then
+  failures=$((failures + 1))
+fi
+
 printf '\nChecking built APK presence when present...\n'
 standard_debug_apk="$(find_apk standard debug || true)"
 standard_release_apk="$(find_apk standard release || true)"
