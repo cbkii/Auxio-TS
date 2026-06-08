@@ -20,7 +20,6 @@ package org.oxycblt.auxio
 
 import android.app.Application
 import android.os.Build
-import android.util.Log
 import androidx.core.content.pm.ShortcutManagerCompat
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
@@ -146,7 +145,7 @@ class Auxio : Application() {
             } catch (e: Throwable) {
                 // If we can't write the crash report, at least log it to logcat if possible
                 try {
-                    Log.e("CrashFileHandler", "Failed to write crash report", e)
+                    android.util.Log.e("CrashFileHandler", "Failed to write crash report", e)
                 } catch (_: Throwable) {}
             }
         }
