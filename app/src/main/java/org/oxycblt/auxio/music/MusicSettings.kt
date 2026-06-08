@@ -286,7 +286,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     private fun String.toOpenedLocations(): List<Location.Opened> =
         splitEscaped { it == ';' }
-            .mapNotNull { Location.Unopened.from(context, it.toUri()).open(context) }
+            .mapNotNull { Location.Unopened.from(context, it.toUri())?.open(context) }
 
     private fun String.toUnopenedLocations(): List<Location.Unopened> =
         splitEscaped { it == ';' }.mapNotNull { Location.Unopened.from(context, it.toUri()) }
