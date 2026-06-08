@@ -81,6 +81,9 @@ def source_exists(class_name):
     rel = Path(*class_name.split("."))
     return any((root / rel.with_suffix(ext)).is_file() for root in SOURCE_ROOTS for ext in (".kt", ".java"))
 
+def is_test_like_manifest(path):
+    return any("test" in part.lower() or "androidtest" in part.lower() for part in path.parts)
+
 def merged_manifest_paths():
     bases = [REPO / "app/build/intermediates/merged_manifest", REPO / "app/build/intermediates/merged_manifests"]
     paths = {}
@@ -88,8 +91,11 @@ def merged_manifest_paths():
         matches = []
         for base in bases:
             if base.is_dir():
-                matches.extend(base.glob(f"**/{variant}/**/AndroidManifest.xml"))
-                matches.extend(base.glob(f"**/{variant}*/**/AndroidManifest.xml"))
+                matches.extend(
+                    path
+                    for path in base.glob(f"**/{variant}/**/AndroidManifest.xml")
+                    if not is_test_like_manifest(path)
+                )
         if matches:
             paths[variant] = sorted(set(matches))[0]
     return paths
@@ -181,6 +187,22 @@ def apk_paths():
                 paths[variant] = candidates[0]
     return paths
 
+def dex_contains(zf, dex_names, needle):
+    # Stream each DEX entry separately so the guardrail does not concatenate all DEX files into memory.
+    overlap = max(len(needle) - 1, 0)
+    for dex_name in dex_names:
+        tail = b""
+        with zf.open(dex_name) as dex_file:
+            while True:
+                chunk = dex_file.read(1024 * 1024)
+                if not chunk:
+                    break
+                data = tail + chunk
+                if needle in data:
+                    return True
+                tail = data[-overlap:] if overlap else b""
+    return False
+
 def check_apks():
     import zipfile
     paths = apk_paths()
@@ -191,25 +213,24 @@ def check_apks():
         try:
             with zipfile.ZipFile(apk) as zf:
                 dex_names = [name for name in zf.namelist() if name.startswith("classes") and name.endswith(".dex")]
-                dex_bytes = b"".join(zf.read(name) for name in dex_names)
+                if not dex_names:
+                    fail(f"{variant} APK has no classes*.dex entries: {apk}")
+                    continue
+                ok(f"{variant} APK contains DEX entries: {', '.join(dex_names)}")
+                for class_name in sorted(REQUIRED_TOPWAY_LOADABLE_CLASSES):
+                    needle = descriptor(class_name).encode()
+                    if dex_contains(zf, dex_names, needle):
+                        ok(f"{variant} APK DEX contains loadable class {class_name}")
+                    else:
+                        fail(f"{variant} APK DEX is missing manifest loadable class {class_name}")
+                alias_descriptor = descriptor(REQUIRED_TOPWAY_ALIAS).encode()
+                if dex_contains(zf, dex_names, alias_descriptor):
+                    ok(f"{variant} APK also contains optional alias class {REQUIRED_TOPWAY_ALIAS}")
+                else:
+                    ok(f"{variant} APK uses {REQUIRED_TOPWAY_ALIAS} as an activity-alias; no class is required")
         except Exception as exc:
             fail(f"unable to read {variant} APK {apk}: {exc}")
             continue
-        if not dex_names:
-            fail(f"{variant} APK has no classes*.dex entries: {apk}")
-            continue
-        ok(f"{variant} APK contains DEX entries: {', '.join(dex_names)}")
-        for class_name in sorted(REQUIRED_TOPWAY_LOADABLE_CLASSES):
-            needle = descriptor(class_name).encode()
-            if needle in dex_bytes:
-                ok(f"{variant} APK DEX contains loadable class {class_name}")
-            else:
-                fail(f"{variant} APK DEX is missing manifest loadable class {class_name}")
-        alias_descriptor = descriptor(REQUIRED_TOPWAY_ALIAS).encode()
-        if alias_descriptor in dex_bytes:
-            ok(f"{variant} APK also contains optional alias class {REQUIRED_TOPWAY_ALIAS}")
-        else:
-            ok(f"{variant} APK uses {REQUIRED_TOPWAY_ALIAS} as an activity-alias; no class is required")
 
 check_source_manifest()
 check_merged_manifests()

@@ -51,13 +51,15 @@ write_status() {
   local submodules_ready="$3"
   local gradle_ready="$4"
   local notes="$5"
+  local escaped_notes
+  printf -v escaped_notes '%q' "$notes"
 
   cat > "$STATUS_FILE" <<EOF
 AUXIO_JULES_READINESS=${readiness}
 AUXIO_JULES_SDK_READY=${sdk_ready}
 AUXIO_JULES_SUBMODULES_READY=${submodules_ready}
 AUXIO_JULES_GRADLE_READY=${gradle_ready}
-AUXIO_JULES_NOTES=${notes}
+AUXIO_JULES_NOTES=${escaped_notes}
 EOF
 
   cat > "$SUMMARY_FILE" <<EOF
