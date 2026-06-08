@@ -21,7 +21,6 @@ package org.oxycblt.auxio.playback
 import android.content.res.Configuration
 import android.os.Bundle
 import android.view.LayoutInflater
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.fragment.app.activityViewModels
 import dagger.hilt.android.AndroidEntryPoint
@@ -188,7 +187,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         if (uiSettings.driverSide != UISettings.DriverSide.LEFT) {
             return
         }
-        val root = binding.root as ConstraintLayout
+        val root = binding.root
         ConstraintSet().apply {
             clone(root)
             clear(R.id.playback_cover, ConstraintSet.START)

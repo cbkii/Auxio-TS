@@ -249,12 +249,21 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
      * Clamps overlay coordinates to the visible usable area, accounting for TS18-style system bars.
      * On Android 10 fallback, uses display size minus known TS18 bar insets.
      */
+    @Suppress("DEPRECATION")
     private fun clampPosition(x: Int, y: Int): Pair<Int, Int> {
-        val display = windowManager?.defaultDisplay
-        val size = Point()
-        display?.getSize(size)
-        val screenW = if (size.x > 0) size.x else DEFAULT_SCREEN_WIDTH
-        val screenH = if (size.y > 0) size.y else DEFAULT_SCREEN_HEIGHT
+        val screenW: Int
+        val screenH: Int
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val metrics = windowManager?.currentWindowMetrics
+            screenW = metrics?.bounds?.width() ?: DEFAULT_SCREEN_WIDTH
+            screenH = metrics?.bounds?.height() ?: DEFAULT_SCREEN_HEIGHT
+        } else {
+            val display = windowManager?.defaultDisplay
+            val size = Point()
+            display?.getSize(size)
+            screenW = if (size.x > 0) size.x else DEFAULT_SCREEN_WIDTH
+            screenH = if (size.y > 0) size.y else DEFAULT_SCREEN_HEIGHT
+        }
 
         // Approximate usable area accounting for system bars.
         val minX = 0

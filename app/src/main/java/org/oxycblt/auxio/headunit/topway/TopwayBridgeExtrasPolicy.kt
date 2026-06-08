@@ -62,7 +62,13 @@ object TopwayBridgeExtrasPolicy {
             extras.classLoader = classLoader
             extractAllowlistedIncomingExtras(
                 containsKey = extras::containsKey,
-                getValue = { key -> extras.get(key) },
+                getValue = { key ->
+                    when (key) {
+                        TopwayMusicContract.EXTRA_CMD -> extras.getString(key)
+                        TopwayMusicContract.EXTRA_WIDGET_PROGRESS -> extras.get(key)
+                        else -> null
+                    }
+                },
             )
         } catch (e: BadParcelableException) {
             L.w(

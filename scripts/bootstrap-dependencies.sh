@@ -190,6 +190,7 @@ create_common_ktx_stub_if_required() {
   local stub="${REPO_ROOT}/media/libraries/common_ktx/proguard-rules.txt"
   if [[ -d "${REPO_ROOT}/media/libraries/common_ktx" && ! -f "${stub}" ]]; then
     : > "${stub}"
+    # This warning is suppressed if the file is eventually tracked in the media submodule.
     dep_warn "UPSTREAM_MEDIA_QUIRK: created media/libraries/common_ktx/proguard-rules.txt stub."
   fi
 }

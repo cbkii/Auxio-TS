@@ -30,7 +30,6 @@ import android.view.View
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
-import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.view.updatePadding
 import androidx.core.view.updatePaddingRelative
@@ -395,7 +394,7 @@ class PlaybackPanelFragment :
         if (uiSettings.driverSide != UISettings.DriverSide.LEFT) {
             return
         }
-        val root = binding.root as ConstraintLayout
+        val root = binding.root
         ConstraintSet().apply {
             clone(root)
             clear(R.id.playback_pager, ConstraintSet.START)

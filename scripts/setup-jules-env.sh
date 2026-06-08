@@ -161,12 +161,18 @@ if run_step "install Android command-line tools" install_cmdline_tools; then
 
     # AGP 9.2 requires Gradle 9.4.1, Build Tools 36.0.0, and defaults to
     # NDK 28.2.13676358. This repo's wrapper already supplies Gradle.
+    #
+    # Derive target_sdk and ndk_version from build.gradle where safe.
+    TARGET_SDK=$(grep 'target_sdk =' "${ROOT}/build.gradle" | sed 's/.*= //; s/["'\'']//g' || echo "36")
+    NDK_VERSION=$(grep 'ndk_version =' "${ROOT}/build.gradle" | sed 's/.*= //; s/["'\'']//g' || echo "28.2.13676358")
+    BUILD_TOOLS="36.0.0"
+
     if run_step "install Android SDK packages" sdkmanager \
       "platform-tools" \
-      "platforms;android-36" \
-      "build-tools;36.0.0" \
+      "platforms;android-${TARGET_SDK}" \
+      "build-tools;${BUILD_TOOLS}" \
       "cmake;3.22.1" \
-      "ndk;28.2.13676358"; then
+      "ndk;${NDK_VERSION}"; then
       sdk_ready=true
       printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
       log "Wrote local.properties"

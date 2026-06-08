@@ -315,11 +315,9 @@ class ThemedSpeedDialView : SpeedDialView {
 
     override fun onSaveInstanceState(): Parcelable {
         val superState =
-            BundleCompat.getParcelable(
-                super.onSaveInstanceState() as Bundle,
-                "superState",
-                Parcelable::class.java,
-            )
+            (super.onSaveInstanceState() as? Bundle)?.let {
+                BundleCompat.getParcelable(it, "superState", Parcelable::class.java)
+            }
         return State(superState, isOpen)
     }
 
