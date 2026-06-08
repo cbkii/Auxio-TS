@@ -131,7 +131,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace spotlessCheck
     - name: Upload formatting reports
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: android-quality-format-reports
         path: |
@@ -258,7 +258,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
     - name: Upload unit test reports
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: android-quality-unit-test-reports
         path: |
@@ -322,7 +322,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace :app:lintStandardDebug
     - name: Upload Android lint reports
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: android-quality-lint-reports
         path: |

@@ -349,7 +349,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload signed APK workflow artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: Auxio-TS-${{ steps.version.outputs.release_tag }}-signed-apks
           path: ${{ runner.temp }}/Auxio-TS-${{ steps.version.outputs.release_tag }}-*-release.apk
