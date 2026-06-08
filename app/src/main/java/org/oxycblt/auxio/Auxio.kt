@@ -20,6 +20,7 @@ package org.oxycblt.auxio
 
 import android.app.Application
 import android.os.Build
+import android.util.Log
 import androidx.core.content.pm.ShortcutManagerCompat
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
