@@ -20,46 +20,31 @@ package org.oxycblt.auxio.music
 
 import java.io.File
 
-/**
- * Policy for identifying and prioritizing TS18-specific candidate music source roots.
- */
+/** Policy for identifying and prioritizing TS18-specific candidate music source roots. */
 object TopwaySourcePolicy {
 
-    /**
-     * Primary observed USB storage path on Topway TS18.
-     */
+    /** Primary observed USB storage path on Topway TS18. */
     const val USB_DISK_0 = "/storage/usbdisk0"
 
-    /**
-     * Observed primary shared music directory on TS18.
-     */
+    /** Observed primary shared music directory on TS18. */
     const val EMULATED_MUSIC = "/storage/emulated/0/Music"
 
-    /**
-     * Legacy/alias path for emulated music.
-     */
+    /** Legacy/alias path for emulated music. */
     const val SDCARD_MUSIC = "/sdcard/Music"
 
     /**
-     * Safe generic shared-storage fallbacks. These are preferred over device-specific paths
-     * when SAF picker is unavailable.
+     * Safe generic shared-storage fallbacks. These are preferred over device-specific paths when
+     * SAF picker is unavailable.
      */
-    val SAFE_GENERIC_FALLBACKS = listOf(
-        EMULATED_MUSIC,
-        SDCARD_MUSIC
-    )
+    val SAFE_GENERIC_FALLBACKS = listOf(EMULATED_MUSIC, SDCARD_MUSIC)
 
     /**
-     * TS18-specific removable USB candidate. Should only be used on Topway/TS18 builds
-     * and after explicit validation.
+     * TS18-specific removable USB candidate. Should only be used on Topway/TS18 builds and after
+     * explicit validation.
      */
-    val TS18_USB_CANDIDATES = listOf(
-        USB_DISK_0
-    )
+    val TS18_USB_CANDIDATES = listOf(USB_DISK_0)
 
-    /**
-     * List of all candidate roots.
-     */
+    /** List of all candidate roots. */
     val CANDIDATE_ROOTS = SAFE_GENERIC_FALLBACKS + TS18_USB_CANDIDATES
 
     /** Directories that are known to be noisy or irrelevant on TS18 and should be skipped. */
@@ -75,17 +60,13 @@ object TopwaySourcePolicy {
             ".DFMusicLog",
         )
 
-    /**
-     * Checks if a given path is a valid and accessible candidate for music storage on TS18.
-     */
+    /** Checks if a given path is a valid and accessible candidate for music storage on TS18. */
     fun isAccessibleCandidate(path: String): Boolean {
         val file = File(path)
         return file.exists() && file.isDirectory && file.canRead()
     }
 
-    /**
-     * Returns the first accessible candidate root from the priority list.
-     */
+    /** Returns the first accessible candidate root from the priority list. */
     fun findFirstAccessibleCandidate(): String? {
         return CANDIDATE_ROOTS.firstOrNull { isAccessibleCandidate(it) }
     }

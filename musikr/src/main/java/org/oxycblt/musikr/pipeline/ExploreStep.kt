@@ -40,15 +40,18 @@ internal interface ExploreStep {
     suspend fun explore(scope: CoroutineScope, explored: Channel<Explored>): Deferred<Result<Unit>>
 
     companion object {
-        fun from(context: Context, config: Config, noisyDirs: Set<String> = emptySet()): ExploreStep =
-            ExploreStepImpl(config.fs, config.storage, noisyDirs)
+        fun from(
+            context: Context,
+            config: Config,
+            noisyDirs: Set<String> = emptySet(),
+        ): ExploreStep = ExploreStepImpl(config.fs, config.storage, noisyDirs)
     }
 }
 
 private class ExploreStepImpl(
     private val fs: FS,
     private val storage: Storage,
-    private val noisyDirs: Set<String>
+    private val noisyDirs: Set<String>,
 ) : ExploreStep {
     override suspend fun explore(
         scope: CoroutineScope,

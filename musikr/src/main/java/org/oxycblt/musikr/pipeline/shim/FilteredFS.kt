@@ -23,15 +23,12 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.util.tryAsync
 
-/**
- * A wrapper [FS] that filters files based on their path components.
- */
+/** A wrapper [FS] that filters files based on their path components. */
 internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
@@ -42,14 +39,15 @@ internal class FilteredFS(
         val delegateChannel = Channel<File>(Channel.UNLIMITED)
         val delegateTask = delegate.explore(delegateChannel)
 
-        val filterTask = scope.tryAsync(Dispatchers.Default) {
-            for (file in delegateChannel) {
-                val isNoisy = file.path.components.components.any { it in noisyDirs }
-                if (!isNoisy) {
-                    files.send(file)
+        val filterTask =
+            scope.tryAsync(Dispatchers.Default) {
+                for (file in delegateChannel) {
+                    val isNoisy = file.path.components.components.any { it in noisyDirs }
+                    if (!isNoisy) {
+                        files.send(file)
+                    }
                 }
             }
-        }
 
         return scope.tryAsync(Dispatchers.Default) {
             val result = delegateTask.await()

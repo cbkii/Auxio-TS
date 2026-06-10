@@ -24,9 +24,7 @@ import android.content.pm.PackageManager
 import org.oxycblt.auxio.music.TopwaySourcePolicy
 import timber.log.Timber as L
 
-/**
- * Diagnostic helper to probe storage picker capabilities on the device.
- */
+/** Diagnostic helper to probe storage picker capabilities on the device. */
 object StoragePickerCapabilityProbe {
 
     data class CapabilityReport(
@@ -41,26 +39,35 @@ object StoragePickerCapabilityProbe {
         val pm = context.packageManager
 
         val treeIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-        val treeResolves = pm.queryIntentActivities(treeIntent, PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()
+        val treeResolves =
+            pm.queryIntentActivities(treeIntent, PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()
 
-        val openIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "audio/*"
-        }
-        val openResolves = pm.queryIntentActivities(openIntent, PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()
+        val openIntent =
+            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+            }
+        val openResolves =
+            pm.queryIntentActivities(openIntent, PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()
 
-        val getContentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "audio/*"
-        }
-        val getContentResolves = pm.queryIntentActivities(getContentIntent, PackageManager.MATCH_DEFAULT_ONLY).isNotEmpty()
+        val getContentIntent =
+            Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+            }
+        val getContentResolves =
+            pm.queryIntentActivities(getContentIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                .isNotEmpty()
 
-        val activities = pm.queryIntentActivities(treeIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            .map { it.activityInfo.name }
+        val activities =
+            pm.queryIntentActivities(treeIntent, PackageManager.MATCH_DEFAULT_ONLY).map {
+                it.activityInfo.name
+            }
 
-        val ts18Candidates = TopwaySourcePolicy.CANDIDATE_ROOTS.associateWith {
-            TopwaySourcePolicy.isAccessibleCandidate(it)
-        }
+        val ts18Candidates =
+            TopwaySourcePolicy.CANDIDATE_ROOTS.associateWith {
+                TopwaySourcePolicy.isAccessibleCandidate(it)
+            }
 
         val report =
             CapabilityReport(

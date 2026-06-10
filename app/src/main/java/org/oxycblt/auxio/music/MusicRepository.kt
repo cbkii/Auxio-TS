@@ -28,7 +28,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.image.covers.SettingCovers
-import org.oxycblt.auxio.music.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.music.shim.WriteOnlyMutableCache
