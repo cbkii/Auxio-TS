@@ -341,11 +341,11 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         view?.measure(
             View.MeasureSpec.makeMeasureSpec(
                 bounds.width().coerceAtLeast(0),
-                View.MeasureSpec.AT_MOST
+                View.MeasureSpec.AT_MOST,
             ),
             View.MeasureSpec.makeMeasureSpec(
                 bounds.height().coerceAtLeast(0),
-                View.MeasureSpec.AT_MOST
+                View.MeasureSpec.AT_MOST,
             ),
         )
         return OverlaySize(
@@ -359,11 +359,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         val height: Int = OVERLAY_ESTIMATED_HEIGHT_PX,
     )
 
-    private data class InitialPosition(
-        val x: Int,
-        val y: Int,
-        val shouldPersist: Boolean,
-    )
+    private data class InitialPosition(val x: Int, val y: Int, val shouldPersist: Boolean)
 
     // --- Foreground notification ---
 
@@ -430,7 +426,8 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         val view = overlayView ?: return
         val params = view.layoutParams as? WindowManager.LayoutParams ?: return
         val bounds = fullDisplayBounds()
-        val (cx, cy) = clampPosition(params.x, params.y, bounds = bounds, size = overlaySize(view, bounds))
+        val (cx, cy) =
+            clampPosition(params.x, params.y, bounds = bounds, size = overlaySize(view, bounds))
         params.x = cx
         params.y = cy
         try {
