@@ -236,9 +236,10 @@ Validate:
 
 - overlay permission request opens usable system settings;
 - overlay service starts without Android 14-only foreground-service type crashes;
-- overlay never saves an off-screen position;
-- overlay does not sit under the top status bar or right navigation bar by default;
-- overlay can be dragged and persists position safely;
+- overlay never saves a permanently off-screen position;
+- after reset, overlay appears top-centre with its top edge at physical display `y = 0` and is not shifted down by the old 55px status-bar inset;
+- overlay is allowed to overlap/draw into the status-bar or right-nav areas where the firmware permits, while stock Android may still keep `TYPE_APPLICATION_OVERLAY` below critical system windows in z-order;
+- overlay can be dragged away and back to the physical top edge and persists position safely;
 - overlay recovers after process death/ACC/reboot only when enabled and permitted.
 
 ## Process restart check
