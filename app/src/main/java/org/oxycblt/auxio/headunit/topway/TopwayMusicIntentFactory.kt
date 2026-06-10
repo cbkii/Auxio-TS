@@ -19,7 +19,6 @@
 package org.oxycblt.auxio.headunit.topway
 
 import android.content.Intent
-import kotlin.math.max
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataSnapshot
 
 object TopwayMusicIntentFactory {
@@ -43,7 +42,9 @@ object TopwayMusicIntentFactory {
 
     internal fun progressExtras(progressMs: Long, durationMs: Long): Map<String, Int> =
         mapOf(
-            TopwayMusicContract.EXTRA_PROGRESS to progressMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
-            TopwayMusicContract.EXTRA_DURATION to durationMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            TopwayMusicContract.EXTRA_PROGRESS to
+                progressMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            TopwayMusicContract.EXTRA_DURATION to
+                durationMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
         )
 }
