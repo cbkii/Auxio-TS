@@ -54,14 +54,26 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getInt(KEY_POSITION_Y, DEFAULT_Y)
         set(value) = prefs.edit { putInt(KEY_POSITION_Y, value) }
 
+    val hasSavedPosition: Boolean
+        get() = prefs.contains(KEY_POSITION_X) && prefs.contains(KEY_POSITION_Y)
+
+    val hasOldDefaultPosition: Boolean
+        get() =
+            hasSavedPosition &&
+                prefs.getInt(KEY_POSITION_X, DEFAULT_X) == OLD_DEFAULT_X &&
+                prefs.getInt(KEY_POSITION_Y, DEFAULT_Y) == OLD_DEFAULT_Y
+
     var opacityPercent: Int
         get() = prefs.getInt(KEY_OPACITY, DEFAULT_OPACITY).coerceIn(MIN_OPACITY, MAX_OPACITY)
         set(value) = prefs.edit { putInt(KEY_OPACITY, value.coerceIn(MIN_OPACITY, MAX_OPACITY)) }
 
     fun resetPosition() {
+        // Clear instead of writing a fixed X so the running service can re-center against the
+        // current full physical display width. The property getters still expose the TS18 fallback
+        // default for static callers.
         prefs.edit {
-            putInt(KEY_POSITION_X, DEFAULT_X)
-            putInt(KEY_POSITION_Y, DEFAULT_Y)
+            remove(KEY_POSITION_X)
+            remove(KEY_POSITION_Y)
         }
     }
 
@@ -73,10 +85,13 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         private const val KEY_POSITION_Y = "car_overlay_y"
         private const val KEY_OPACITY = "car_overlay_opacity"
 
-        // Top-center anchor for TS18 (1280x720, 55px status bar, 55px right nav).
-        // Usable width = 1280 - 55 = 1225; center = (1225 - ~350 overlay) / 2 ≈ 437.
-        const val DEFAULT_X = 437
-        const val DEFAULT_Y = 55
+        // Top-center anchor for the full TS18 physical display (1280x720) using the current
+        // estimated overlay width. Runtime placement re-centers from live display metrics when
+        // available, but these constants keep first-read/default static behaviour top-edge safe.
+        const val DEFAULT_X = 465
+        const val DEFAULT_Y = 0
+        private const val OLD_DEFAULT_X = 437
+        private const val OLD_DEFAULT_Y = 55
         const val DEFAULT_OPACITY = 90
         const val MIN_OPACITY = 30
         const val MAX_OPACITY = 100

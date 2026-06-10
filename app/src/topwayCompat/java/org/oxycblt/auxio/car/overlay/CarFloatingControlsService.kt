@@ -24,10 +24,12 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Point
+import android.graphics.Rect
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.view.Gravity
+import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
@@ -105,7 +107,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             ACTION_RESET_POSITION -> {
                 // Only reposition a live overlay. Position prefs are already updated by caller.
                 if (isOverlayAttached) {
-                    val (cx, cy) = clampPosition(prefs.positionX, prefs.positionY)
+                    val (cx, cy) = resolveInitialPosition(overlaySize(overlayView))
                     prefs.positionX = cx
                     prefs.positionY = cy
                     updateOverlayPosition(cx, cy)
@@ -178,7 +180,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         view.applyOpacity(prefs.opacityPercent)
 
         val params = createLayoutParams()
-        val (cx, cy) = clampPosition(prefs.positionX, prefs.positionY)
+        val (cx, cy) = resolveInitialPosition(overlaySize(view))
         params.x = cx
         params.y = cy
         // Persist clamped position in case old prefs were out-of-bounds.
@@ -237,42 +239,103 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT,
             )
-            .apply { gravity = Gravity.TOP or Gravity.START }
+            .apply {
+                gravity = Gravity.TOP or Gravity.START
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    layoutInDisplayCutoutMode =
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
     }
 
     // --- Position clamping ---
 
     /**
-     * Clamps overlay coordinates to the visible usable area, accounting for TS18-style system bars.
-     * On Android 10 fallback, uses display size minus known TS18 bar insets.
+     * Resolves the persisted or default overlay position against full-screen display bounds. New
+     * installs, explicit reset-position requests, and the exact legacy below-status-bar default are
+     * placed at top-centre with y=0. Deliberately dragged custom positions are preserved and only
+     * clamped enough to avoid permanently losing the overlay off-screen.
      */
+    private fun resolveInitialPosition(size: OverlaySize = OverlaySize()): Pair<Int, Int> {
+        val bounds = fullDisplayBounds()
+        if (!prefs.hasSavedPosition || prefs.hasOldDefaultPosition) {
+            return defaultTopCenterPosition(bounds, size)
+        }
+        return clampPosition(prefs.positionX, prefs.positionY, bounds, size)
+    }
+
     @Suppress("DEPRECATION")
-    private fun clampPosition(x: Int, y: Int): Pair<Int, Int> {
-        val screenW: Int
-        val screenH: Int
+    private fun fullDisplayBounds(): Rect {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val metrics = windowManager?.currentWindowMetrics
-            screenW = metrics?.bounds?.width() ?: DEFAULT_SCREEN_WIDTH
-            screenH = metrics?.bounds?.height() ?: DEFAULT_SCREEN_HEIGHT
-        } else {
-            val display = windowManager?.defaultDisplay
-            val size = Point()
-            display?.getSize(size)
-            screenW = if (size.x > 0) size.x else DEFAULT_SCREEN_WIDTH
-            screenH = if (size.y > 0) size.y else DEFAULT_SCREEN_HEIGHT
+            val metrics =
+                windowManager?.maximumWindowMetrics ?: windowManager?.currentWindowMetrics
+            return metrics?.bounds ?: Rect(0, 0, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
         }
 
-        // Approximate usable area accounting for system bars.
+        val display = windowManager?.defaultDisplay
+        val size = Point()
+        display?.getRealSize(size)
+        val width = if (size.x > 0) size.x else DEFAULT_SCREEN_WIDTH
+        val height = if (size.y > 0) size.y else DEFAULT_SCREEN_HEIGHT
+        return Rect(0, 0, width, height)
+    }
+
+    private fun defaultTopCenterPosition(bounds: Rect, size: OverlaySize): Pair<Int, Int> {
+        val screenW = bounds.width().takeIf { it > 0 } ?: DEFAULT_SCREEN_WIDTH
+        val x = ((screenW - size.width) / 2).coerceAtLeast(0)
+        return clampPosition(x, DEFAULT_TOP_EDGE_Y, bounds, size)
+    }
+
+    /**
+     * Clamp against the full physical display, not the app usable area below system bars. Public
+     * overlay windows still remain below critical system windows in z-order on stock Android, but
+     * y=0 plus full-screen/no-limits layout flags requests the maximum public-API top-edge extent.
+     */
+    private fun clampPosition(
+        x: Int,
+        y: Int,
+        bounds: Rect = fullDisplayBounds(),
+        size: OverlaySize = OverlaySize(),
+    ): Pair<Int, Int> {
+        val screenW = bounds.width().takeIf { it > 0 } ?: DEFAULT_SCREEN_WIDTH
+        val screenH = bounds.height().takeIf { it > 0 } ?: DEFAULT_SCREEN_HEIGHT
         val minX = 0
-        val minY = STATUS_BAR_INSET_PX
-        val maxX = (screenW - NAV_BAR_INSET_PX - OVERLAY_ESTIMATED_WIDTH_PX).coerceAtLeast(minX)
-        val maxY = (screenH - OVERLAY_ESTIMATED_HEIGHT_PX).coerceAtLeast(minY)
+        val minY = DEFAULT_TOP_EDGE_Y
+        val maxX = (screenW - size.width).coerceAtLeast(minX)
+        val maxY = (screenH - size.height).coerceAtLeast(minY)
 
         return x.coerceIn(minX, maxX) to y.coerceIn(minY, maxY)
     }
+
+    private fun overlaySize(view: View?): OverlaySize {
+        val width = view?.width?.takeIf { it > 0 }
+        val height = view?.height?.takeIf { it > 0 }
+        if (width != null && height != null) {
+            return OverlaySize(width, height)
+        }
+
+        view?.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        return OverlaySize(
+            width = view?.measuredWidth?.takeIf { it > 0 } ?: OVERLAY_ESTIMATED_WIDTH_PX,
+            height = view?.measuredHeight?.takeIf { it > 0 } ?: OVERLAY_ESTIMATED_HEIGHT_PX,
+        )
+    }
+
+    private data class OverlaySize(
+        val width: Int = OVERLAY_ESTIMATED_WIDTH_PX,
+        val height: Int = OVERLAY_ESTIMATED_HEIGHT_PX,
+    )
 
     // --- Foreground notification ---
 
@@ -338,7 +401,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     override fun onDragFinished(x: Int, y: Int) {
         val view = overlayView ?: return
         val params = view.layoutParams as? WindowManager.LayoutParams ?: return
-        val (cx, cy) = clampPosition(params.x, params.y)
+        val (cx, cy) = clampPosition(params.x, params.y, size = overlaySize(view))
         params.x = cx
         params.y = cy
         try {
@@ -389,11 +452,10 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         private const val CHANNEL_ID = "auxio_car_overlay_channel"
         private const val NOTIFICATION_ID = 42
 
-        // TS18-specific defaults for position clamping.
+        // TS18 fallback display dimensions used only when Android cannot report real metrics.
         private const val DEFAULT_SCREEN_WIDTH = 1280
         private const val DEFAULT_SCREEN_HEIGHT = 720
-        private const val STATUS_BAR_INSET_PX = 55
-        private const val NAV_BAR_INSET_PX = 55
+        private const val DEFAULT_TOP_EDGE_Y = 0
         private const val OVERLAY_ESTIMATED_WIDTH_PX = 350
         private const val OVERLAY_ESTIMATED_HEIGHT_PX = 80
 
