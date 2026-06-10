@@ -18,16 +18,27 @@
 
 package com.tw.music.view
 
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import com.tw.music.MusicService
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.topway.TopwayBridgeExtrasPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayMusicContract
+import org.oxycblt.auxio.headunit.topway.TopwayWidgetProviderPolicy
+import org.oxycblt.auxio.music.resolve
+import org.oxycblt.auxio.music.resolveNames
+import org.oxycblt.auxio.playback.service.PendingIntentRequestCodePolicy
+import org.oxycblt.auxio.ui.UISettings
+import org.oxycblt.auxio.widgets.WidgetComponent
+import org.oxycblt.auxio.widgets.WidgetTimeline
 import timber.log.Timber as L
 
 class MusicWidgetProvider : AppWidgetProvider() {
@@ -59,7 +70,103 @@ class MusicWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
-        forwardTopwayIntent(context, null)
+        // Request a full state update from WidgetComponent.
+        context.sendBroadcast(
+            Intent(org.oxycblt.auxio.widgets.WidgetProvider.ACTION_WIDGET_UPDATE)
+                .setPackage(context.packageName)
+        )
+    }
+
+    /**
+     * Update the currently shown layout based on the given [WidgetComponent.PlaybackState]
+     *
+     * @param context [Context] required to update the widget layout.
+     * @param state [WidgetComponent.PlaybackState] to show, or null if no playback is going on.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun update(context: Context, uiSettings: UISettings, state: WidgetComponent.PlaybackState?) {
+        val awm =
+            try {
+                AppWidgetManager.getInstance(context)
+            } catch (e: Exception) {
+                L.w(e, "Unable to get AppWidgetManager instance")
+                null
+            } ?: return
+
+        val component = ComponentName(context, MusicWidgetProvider::class.java)
+
+        // Only proceed if we are in the Topway flavor or if there are active widget instances.
+        if (!TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate(context)) {
+            L.d("Skipping Topway widget update: no active instances and not in Topway flavor")
+            return
+        }
+
+        val views =
+            if (state == null) {
+                RemoteViews(context.packageName, R.layout.widget_default)
+            } else {
+                val rv = RemoteViews(context.packageName, R.layout.app_widget_topway)
+
+                rv.setTextViewText(R.id.title, state.song.name.resolve(context))
+                rv.setTextViewText(R.id.artist, state.song.artists.resolveNames(context))
+
+                if (state.cover != null) {
+                    rv.setImageViewBitmap(R.id.albumart, state.cover)
+                } else {
+                    rv.setImageViewResource(R.id.albumart, R.drawable.ic_remote_default_cover_24)
+                }
+
+                val timeline = WidgetTimeline.state(state.positionMs, state.song.durationMs)
+                rv.setTextViewText(R.id.tv_current_time, timeline.currentText)
+                rv.setTextViewText(R.id.tv_duration, timeline.durationText)
+                rv.setProgressBar(
+                    R.id.seek_bar_progress,
+                    timeline.maxSeconds,
+                    timeline.progressSeconds,
+                    false,
+                )
+
+                rv.setImageViewResource(
+                    R.id.control_play,
+                    if (state.isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24,
+                )
+
+                rv.setOnClickPendingIntent(
+                    R.id.control_prev,
+                    newServicePendingIntent(context, TopwayMusicContract.ACTION_PREV),
+                )
+                rv.setOnClickPendingIntent(
+                    R.id.control_play,
+                    newServicePendingIntent(context, TopwayMusicContract.ACTION_PLAY_PAUSE),
+                )
+                rv.setOnClickPendingIntent(
+                    R.id.control_next,
+                    newServicePendingIntent(context, TopwayMusicContract.ACTION_NEXT),
+                )
+
+                rv
+            }
+
+        try {
+            awm.updateAppWidget(component, views)
+            L.d("Successfully updated Topway RemoteViews layout")
+        } catch (e: Exception) {
+            L.w(e, "Unable to update Topway widget")
+        }
+    }
+
+    private fun newServicePendingIntent(context: Context, action: String): PendingIntent {
+        val intent =
+            Intent(context, MusicService::class.java)
+                .setAction(action)
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TOPWAY)
+
+        return PendingIntent.getService(
+            context,
+            PendingIntentRequestCodePolicy.forAction(action),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     }
 
     private fun forwardTopwayIntent(context: Context, intent: Intent?) {

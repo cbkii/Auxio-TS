@@ -33,10 +33,21 @@ class TopwayMusicBroadcastBridge(private val context: Context, private val uiSet
         get() = BuildConfig.TOPWAY_COMPAT_FLAVOR || uiSettings.headUnitLandscapeMode
 
     fun publishMetadata(snapshot: HeadUnitMetadataSnapshot?) {
-        if (!bridgeEnabled || snapshot == null) return
+        if (!bridgeEnabled) return
+        if (snapshot == null) {
+            clearMetadata()
+            return
+        }
         if (snapshot == lastMetadata) return
         context.sendBroadcast(TopwayMusicIntentFactory.metadataIntent(snapshot))
         lastMetadata = snapshot
+    }
+
+    private fun clearMetadata() {
+        if (lastMetadata != null) {
+            context.sendBroadcast(TopwayMusicIntentFactory.metadataIntent(null))
+            lastMetadata = null
+        }
     }
 
     fun publishProgress(
@@ -65,8 +76,8 @@ class TopwayMusicBroadcastBridge(private val context: Context, private val uiSet
     }
 
     fun clear() {
-        lastMetadata = null
         if (!bridgeEnabled) return
+        clearMetadata()
         if (lastProgress != TopwayProgressStatePolicy.CLEAR) {
             context.sendBroadcast(TopwayMusicIntentFactory.progressIntent(0L, 0L))
             lastProgress = TopwayProgressStatePolicy.CLEAR

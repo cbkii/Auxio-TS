@@ -47,9 +47,25 @@ class TopwayMusicIntentFactoryTest {
     }
 
     @Test
-    fun `progress intent clamps negative values and keeps milliseconds`() {
+    fun `progress intent clamps negative values and uses integers`() {
         val extras = TopwayMusicIntentFactory.progressExtras(-1L, 5_000L)
-        assertEquals(0L, extras[TopwayMusicContract.EXTRA_PROGRESS])
-        assertEquals(5_000L, extras[TopwayMusicContract.EXTRA_DURATION])
+        assertEquals(0, extras[TopwayMusicContract.EXTRA_PROGRESS])
+        assertEquals(5000, extras[TopwayMusicContract.EXTRA_DURATION])
+    }
+
+    @Test
+    fun `progress intent clamps oversized values to Int MAX_VALUE`() {
+        val extras = TopwayMusicIntentFactory.progressExtras(Long.MAX_VALUE, Long.MAX_VALUE)
+        assertEquals(Int.MAX_VALUE, extras[TopwayMusicContract.EXTRA_PROGRESS])
+        assertEquals(Int.MAX_VALUE, extras[TopwayMusicContract.EXTRA_DURATION])
+    }
+
+    @Test
+    fun `metadata extras handle null snapshot with empty placeholders`() {
+        val extras = TopwayMusicIntentFactory.metadataExtras(null)
+        assertEquals("", extras[TopwayMusicContract.EXTRA_MUSIC_TITLE])
+        assertEquals("", extras[TopwayMusicContract.EXTRA_MUSIC_ARTIST])
+        assertEquals("", extras[TopwayMusicContract.EXTRA_MUSIC_ALBUM])
+        assertEquals("", extras[TopwayMusicContract.EXTRA_MUSIC_PATH])
     }
 }

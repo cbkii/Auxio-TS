@@ -19,11 +19,10 @@
 package org.oxycblt.auxio.headunit.topway
 
 import android.content.Intent
-import kotlin.math.max
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataSnapshot
 
 object TopwayMusicIntentFactory {
-    fun metadataIntent(snapshot: HeadUnitMetadataSnapshot): Intent =
+    fun metadataIntent(snapshot: HeadUnitMetadataSnapshot?): Intent =
         Intent(TopwayMusicContract.ACTION_MUSIC_INFO).apply {
             metadataExtras(snapshot).forEach { (key, value) -> putExtra(key, value) }
         }
@@ -33,17 +32,19 @@ object TopwayMusicIntentFactory {
             progressExtras(progressMs, durationMs).forEach { (key, value) -> putExtra(key, value) }
         }
 
-    internal fun metadataExtras(snapshot: HeadUnitMetadataSnapshot): Map<String, String?> =
+    internal fun metadataExtras(snapshot: HeadUnitMetadataSnapshot?): Map<String, String?> =
         mapOf(
-            TopwayMusicContract.EXTRA_MUSIC_TITLE to snapshot.displayTitle,
-            TopwayMusicContract.EXTRA_MUSIC_ARTIST to snapshot.artist,
-            TopwayMusicContract.EXTRA_MUSIC_ALBUM to snapshot.albumTitle,
-            TopwayMusicContract.EXTRA_MUSIC_PATH to snapshot.mediaUri,
+            TopwayMusicContract.EXTRA_MUSIC_TITLE to (snapshot?.displayTitle ?: ""),
+            TopwayMusicContract.EXTRA_MUSIC_ARTIST to (snapshot?.artist ?: ""),
+            TopwayMusicContract.EXTRA_MUSIC_ALBUM to (snapshot?.albumTitle ?: ""),
+            TopwayMusicContract.EXTRA_MUSIC_PATH to (snapshot?.mediaUri ?: ""),
         )
 
-    internal fun progressExtras(progressMs: Long, durationMs: Long): Map<String, Long> =
+    internal fun progressExtras(progressMs: Long, durationMs: Long): Map<String, Int> =
         mapOf(
-            TopwayMusicContract.EXTRA_PROGRESS to max(0L, progressMs),
-            TopwayMusicContract.EXTRA_DURATION to max(0L, durationMs),
+            TopwayMusicContract.EXTRA_PROGRESS to
+                progressMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            TopwayMusicContract.EXTRA_DURATION to
+                durationMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
         )
 }
