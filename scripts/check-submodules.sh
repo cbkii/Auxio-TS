@@ -88,6 +88,7 @@ fi
 
 pin_mismatch=0
 missing=0
+dirty_submodule=0
 
 dep_info "--- Submodule pin validation (${PROFILE}) ---"
 # Read the manifest on FD 3 so git commands inside the loop cannot consume it
@@ -114,6 +115,7 @@ while IFS=$'\t' read -r path _type parent _primary _fallbacks required_profiles 
     continue
   fi
   dep_ok "${path}: ${actual}"
+  dep_validate_submodule_clean "${ROOT_DIR}" "${path}" || dirty_submodule=1
 done 3< "${MANIFEST}"
 
 if [[ "${pin_mismatch}" -ne 0 ]]; then
@@ -125,6 +127,15 @@ if [[ "${missing}" -ne 0 ]]; then
     exit 0
   fi
   dep_err "SUBMODULE_BLOCKER: run bash ./scripts/bootstrap-dependencies.sh --profile ${PROFILE}"
+  exit 1
+fi
+
+if [[ "${dirty_submodule}" -ne 0 ]]; then
+  if [[ "${PROFILE}" == "static-review" ]]; then
+    dep_warn "DEGRADED_STATIC_ONLY: dirty submodules; static review only."
+    exit 0
+  fi
+  dep_err "DEPENDENCY_DIRTY_SUBMODULE: clean or reset submodules before continuing."
   exit 1
 fi
 

@@ -38,7 +38,7 @@ jobs:
       with:
         ref: ${{ inputs.branch }}
         fetch-depth: 0
-        submodules: recursive
+        submodules: false
         token: ${{ github.token }}
 
     - name: Prepare CI environment
@@ -91,6 +91,11 @@ jobs:
     - name: Verify formatting after apply
       if: steps.spotless_check.outcome == 'failure'
       run: ./gradlew --no-daemon --stacktrace spotlessCheck
+
+    - name: Ensure submodules stayed clean
+      if: steps.spotless_check.outcome == 'failure'
+      shell: bash
+      run: bash ./scripts/check-submodules.sh --profile full-build
 
     - name: Commit and push formatting changes
       if: steps.spotless_check.outcome == 'failure'

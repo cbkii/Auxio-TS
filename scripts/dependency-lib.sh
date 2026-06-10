@@ -34,7 +34,7 @@ DEP_SUPPORTED_PROFILES=(static-review jvm-tests full-build release)
 #   READY                  dependencies satisfied for the requested profile
 #   SNAPSHOT_LIMITATION    no .git (ZIP/snapshot); git submodule ops impossible
 #   SUBMODULE_BLOCKER      required submodule/sentinel missing or unfetchable
-#   UPSTREAM_MEDIA_QUIRK   created the known media common_ktx proguard stub
+#   DEPENDENCY_DIRTY_SUBMODULE submodule contains modified, staged, or untracked files
 #   DEPENDENCY_MIRROR_USED an approved fallback mirror supplied the pinned commit
 #   DEPENDENCY_PIN_MISMATCH checked-out SHA != expected gitlink SHA
 #   SDK_BLOCKER            Android SDK / native tooling missing where required
@@ -131,3 +131,29 @@ dep_sentinel_present() {
   local repo_root="$1" path="$2" sentinel="$3"
   [[ -e "${repo_root}/${path}/${sentinel}" ]]
 }
+
+# Validate that a checked-out submodule worktree has no local modifications.
+dep_validate_submodule_clean() {
+  local repo_root="${1:?repo_root required}" path="${2:?path required}"
+  local dirty=0 untracked
+
+  if ! git -C "${repo_root}/${path}" diff --quiet --ignore-submodules=none; then
+    dep_err "DEPENDENCY_DIRTY_SUBMODULE: ${path} has modified tracked content."
+    dirty=1
+  fi
+
+  if ! git -C "${repo_root}/${path}" diff --cached --quiet --ignore-submodules=none; then
+    dep_err "DEPENDENCY_DIRTY_SUBMODULE: ${path} has staged changes."
+    dirty=1
+  fi
+
+  untracked="$(git -C "${repo_root}/${path}" ls-files -o --exclude-standard | sed -n '1,20p')"
+  if [[ -n "${untracked}" ]]; then
+    dep_err "DEPENDENCY_DIRTY_SUBMODULE: ${path} has untracked content:"
+    printf '%s\n' "${untracked}" >&2
+    dirty=1
+  fi
+
+  [[ "${dirty}" -eq 0 ]]
+}
+

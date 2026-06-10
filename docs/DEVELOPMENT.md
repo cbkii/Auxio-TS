@@ -19,7 +19,11 @@ For Codex, Jules-style agents, or a fresh Linux environment, `bash scripts/setup
 
 ## Dependency bootstrap profiles
 
-Dependency policy is centralised under `ci/dependencies/` and enforced by `scripts/bootstrap-dependencies.sh`. The script configures only approved mirrors, fetches the same pinned gitlink commits, verifies root and nested submodule SHAs, and creates the known `media/libraries/common_ktx/proguard-rules.txt` stub only when the media submodule needs it.
+Dependency policy is centralised under `ci/dependencies/` and enforced by
+`scripts/bootstrap-dependencies.sh`. The script configures only approved mirrors,
+fetches the same pinned gitlink commits, and verifies root and nested submodule
+SHAs. Required submodule build inputs must be tracked in the pinned submodule
+commits; bootstrap must not leave generated files inside submodule worktrees.
 
 Shared, read-only parsing/validation logic (supported-profile list, manifest TSV parsing, `profile_requires_path`, parent-worktree resolution, gitlink/actual SHA lookup, sentinel checks, classification labels, logging helpers) lives in `scripts/dependency-lib.sh`, which both `bootstrap-dependencies.sh` and `check-submodules.sh` source so the logic cannot drift. `check-submodules.sh` is read-only validation; its only mutating action is `--repair`, which delegates to `bootstrap-dependencies.sh` with the same (validated) profile. `prepare-ci-environment.sh` is a thin wrapper that also delegates to the bootstrap.
 

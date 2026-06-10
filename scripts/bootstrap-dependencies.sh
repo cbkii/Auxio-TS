@@ -26,6 +26,7 @@ DEGRADED=0
 PIN_MISMATCH=0
 SUBMODULE_BLOCKER=0
 SDK_BLOCKER=0
+DIRTY_SUBMODULE=0
 
 usage() {
   cat <<USAGE
@@ -186,15 +187,6 @@ validate_one_submodule() {
   dep_ok "${path}: ${actual}"
 }
 
-create_common_ktx_stub_if_required() {
-  local stub="${REPO_ROOT}/media/libraries/common_ktx/proguard-rules.txt"
-  if [[ -d "${REPO_ROOT}/media/libraries/common_ktx" && ! -f "${stub}" ]]; then
-    : > "${stub}"
-    # This warning is suppressed if the file is eventually tracked in the media submodule.
-    dep_warn "UPSTREAM_MEDIA_QUIRK: created media/libraries/common_ktx/proguard-rules.txt stub."
-  fi
-}
-
 check_sdk() {
   load_android_env
   local sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
@@ -230,13 +222,14 @@ while IFS=$'\t' read -r path type parent primary fallbacks required_profiles sen
   fi
 done 3< "${SUBMODULE_MANIFEST}"
 
-create_common_ktx_stub_if_required
 
 dep_info "--- Verifying pinned submodule SHAs ---"
 while IFS=$'\t' read -r path type parent primary fallbacks required_profiles sentinel release_blocking <&3; do
   [[ -z "${path:-}" || "${path:0:1}" == "#" ]] && continue
   dep_profile_requires_path "${required_profiles}" "${PROFILE}" || continue
-  if ! validate_one_submodule "${path}" "${type}" "${parent}" "${primary}" "${fallbacks}" "${required_profiles}" "${sentinel}" "${release_blocking}"; then
+  if validate_one_submodule "${path}" "${type}" "${parent}" "${primary}" "${fallbacks}" "${required_profiles}" "${sentinel}" "${release_blocking}"; then
+    dep_validate_submodule_clean "${REPO_ROOT}" "${path}" || DIRTY_SUBMODULE=1
+  else
     # Pin mismatches always fail closed (handled below). Structural failures
     # (missing sentinel / non-git worktree) block strict profiles but only
     # degrade static-review.
@@ -250,6 +243,15 @@ done 3< "${SUBMODULE_MANIFEST}"
 
 if [[ "${PIN_MISMATCH}" -ne 0 ]]; then
   dep_err "DEPENDENCY_PIN_MISMATCH: refusing to continue with unverified dependency pins."
+  exit 1
+fi
+
+if [[ "${DIRTY_SUBMODULE}" -ne 0 ]]; then
+  if is_static_review; then
+    dep_warn "DEGRADED_STATIC_ONLY: dirty submodules; static review only."
+    exit 0
+  fi
+  dep_err "DEPENDENCY_DIRTY_SUBMODULE: clean or reset submodules before continuing."
   exit 1
 fi
 
