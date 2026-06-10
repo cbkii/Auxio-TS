@@ -1,0 +1,41 @@
+# Contract matrix
+
+| Area | DoFun Variety evidence | Stock TW Music evidence | NavRadio+ comparator | Auxio-TS implication |
+|---|---|---|---|---|
+| Launcher package | `com.dofun.variety`; launcher activity `com.dofun.overseasvariety.Launcher` in manifest. | N/A | N/A | TS18 validation should keep DoFun as active launcher when testing. |
+| Music hotseat target | `apps_match_config.json` lines 15-31 and 141-153 map `hotseat_app_music` to `com.tw.media/com.tw.music.MusicActivity` and `com.tw.music/com.tw.music.MusicActivity`. | `MusicActivity` is the stock launcher activity. | NavRadio+ does not use this Topway identity. | Topway Auxio variant must expose `com.tw.music.MusicActivity` under package `com.tw.media`; optional `com.tw.music` variant remains useful but is not a no-root bypass if stock package is installed. |
+| Icon/app matching | `apps_config.json` lines 900-910 maps `com.tw.music` and `com.tw.media` + `com.tw.music.MusicActivity` to `app_music` / `link_icon_music`. | N/A | N/A | Keep class/package names exact; launcher icon matching depends on them. |
+| Activity | DoFun expects `com.tw.music.MusicActivity`. | Manifest declares `com.tw.music.MusicActivity` with MAIN/LAUNCHER and `singleTask`. | NavRadio+ has its own `RadioActivity`. | Auxio wrapper activity should be exported, stable, `singleTask`-compatible, and safe to cold-start. |
+| Service | DoFun static config does not name service. | Manifest declares `com.tw.music.MusicService`; stock widget uses explicit same-app service PendingIntents. | NavRadio+ `RadioService` is an exported real `MediaSessionService`. | Implement `com.tw.music.MusicService` wrapper/bridge. Do not rely only on generic Auxio service names. Do not over-export service blindly; prefer explicit bridge receiver/service entrypoints as needed. |
+| Widget provider | DoFun config does not name provider. | Manifest declares `com.tw.music.view.MusicWidgetProvider` with `android.appwidget.action.APPWIDGET_UPDATE` and `@xml/appwidget_info`. | NavRadio+ has exported widget providers with `android.permission.BIND_REMOTEVIEWS`. | Implement/keep `com.tw.music.view.MusicWidgetProvider`, exported for Android 12+ builds if it has an intent-filter, and use valid Android 10-compatible RemoteViews. |
+| Widget layout | Not statically visible in DoFun. | `music_widget.xml` uses `albumart`, `title`, `artist`, `control_prev`, `control_play`, `control_next`, `tv_current_time`, `tv_duration`, `seek_bar_progress`. | NavRadio+ widget is radio-specific but also uses simple RemoteViews controls. | Topway widget should expose simple Prev / Play-Pause / Next; avoid making repeat/shuffle the primary external control surface. |
+| Widget update | Unknown DoFun runtime path. | `onUpdate()` starts service, sends sticky `com.tw.music.action.cmd` with `cmd=update` and `appWidgetIds`; dynamic receiver refreshes RemoteViews. | NavRadio+ providers update from app-specific info broadcasts. | Handle `cmd=update` via both service and receiver paths. Update even when normal AppWidget IDs are zero where Topway wrappers require launcher-visible state. |
+| Incoming commands | DoFun runtime path not statically proven. | Service/dynamic receiver accept `cmd=prev|next|pp|update`; service also accepts actions `com.tw.music.action.prev|next|pp`. | NavRadio+ widget/overlay use simple `com.navimods.radio.set.prev_station` / `next_station` broadcasts. | Add robust bridge handling for both explicit actions and `com.tw.music.action.cmd` extras. Invalid/missing extras must be safe no-ops with logging. |
+| Metadata broadcast | DoFun receiver not statically exposed. | Broadcast `com.tw.music.info` extras `musicTitle`, `musicaArtist`, `musicAlbum`, `musicPath`. | NavRadio+ broadcasts app-specific `com.navimods.radio.info.*` for widgets. | Emit stock metadata broadcasts on playback state/track changes and after update requests. Preserve `musicaArtist` spelling. |
+| Progress broadcast | DoFun receiver not statically exposed. | Broadcast `com.tw.launcher.music_progress_duration` extras `msg_music_progress`, `msg_music_duration`, looped after 1000 ms. | NavRadio+ radio widgets are frequency/RDS oriented, not comparable. | Emit progress broadcasts during playback, seek, track changes, update, and safe placeholder state. |
+| Seek from launcher | Not statically visible in DoFun. | Activity registers runtime receiver for `com.android.launcher.widget_music_progress` and seeks to `music_progress`. | Not a direct comparator. | Add Topway receiver path for this action. Clamp invalid values; do not crash on null player/library. |
+| Media session | DoFun static APK does not show generic media-session dependency. | TW Music stock contract is widget/broadcast-centric. | NavRadio+ uses real Media3 `MediaSessionService`. | Consider a real Topway-only Media3 shim after stock contract, not a manifest-only fake. |
+| File picker | DoFun not directly relevant. | TW Music file-preview activity supports audio `VIEW` intents. | NavRadio+ has `GET_CONTENT` and changelog notes file-picker lifecycle/per-API fixes. | Auxio-TS should keep SAF/file-picker fallbacks robust on Android 10; do not tie launcher-widget work to file-picker work unless failures intersect. |
+| Overlay | DoFun and TW Music request overlay permissions; TW Music also requests privileged `SYSTEM_OVERLAY_WINDOW`. | TW Music has floating video drawables but stock music-widget fix does not depend on overlay. | NavRadio+ has `FloatWidgetService`, checks `Settings.canDrawOverlays`, and stops safely. | Overlay is fallback UX, not the primary DoFun music-widget fix. Normal `SYSTEM_ALERT_WINDOW` only; no reliance on privileged system overlay permission. |
+
+## Runtime validation delta — 2026-06-10
+
+| Area | Runtime observation | Implementation implication |
+|---|---|---|
+| DoFun fixed Music widget with stock and Auxio both installed | Manual observation and window dump show the widget opened stock `com.tw.music/.MusicActivity`. | `com.tw.media/com.tw.music.MusicActivity` is necessary but not sufficient for no-root replacement while stock is enabled. |
+| Android media session | `dumpsys media_session` showed active `com.tw.media` session selected as media-button session. | Generic MediaSessionCompat visibility is not the missing piece for the fixed DoFun Music widget. |
+| Auxio installed build | APK strings contain Topway action/extra/component terms. | Verify source/manifest/runtime handling rather than adding duplicate constants. |
+| Synthetic shell probes | v1 `am` commands failed with user `-2` cross-user permission denial. | Use `--user 0` in future scripts and do not treat v1 command failures as app behaviour. |
+| NavRadio on TS18 | No live `com.navimods.radio` media session captured; window evidence showed stock `com.tw.radio` after radio-widget phase. | Keep NavRadio as static comparator, but do not rely on it as runtime proof for Music widget integration. |
+| Overlay | `com.tw.media` overlay window present with `SYSTEM_ALERT_WINDOW`. | Overlay fallback is validated and should remain available. |
+
+
+## Final runtime delta — v2 run
+
+| Area | Runtime observation | Agent implication |
+|---|---|---|
+| Fixed widget availability | DoFun has only fixed Music and Radio widgets; no custom widget host. | Auxio cannot rely on normal user-added AppWidget UX for DoFun integration. The Topway fixed-widget contract matters. |
+| Music widget routing while stock exists | Manual observation: fixed Music widget opens stock `com.tw.music`; stock controls and metadata/progress work. | `com.tw.media/com.tw.music.MusicActivity` is necessary but does not win routing while stock `com.tw.music` is present/enabled in current state. |
+| Auxio session visibility | Passive `dumpsys media_session` shows active `com.tw.media` media session and receiver. | Do not make MediaSessionCompat visibility the primary fix; it already exists. |
+| Synthetic command probes | v2 used `--user 10177` due shell env leak, causing cross-user failures. | Do not infer Auxio service/broadcast failure from v2 synthetic probes. Use corrected script v3 or source tests. |
+| Stock disable test | v2 disable/uninstall attempts used wrong user. | User-0 disable/fallthrough remains unproven. Keep as validation item, not implementation premise. |
