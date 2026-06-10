@@ -275,8 +275,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     @Suppress("DEPRECATION")
     private fun fullDisplayBounds(): Rect {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val metrics =
-                windowManager?.maximumWindowMetrics ?: windowManager?.currentWindowMetrics
+            val metrics = windowManager?.maximumWindowMetrics ?: windowManager?.currentWindowMetrics
             return metrics?.bounds ?: Rect(0, 0, DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT)
         }
 
