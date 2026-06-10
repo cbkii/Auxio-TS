@@ -133,6 +133,12 @@ private constructor(
     }
 
     fun start(intent: Intent?) {
+        // Handle Topway intents regardless of startId for better robustness with external
+        // launcher/widget commands.
+        if (handleTopwayStartIntent(intent)) {
+            return
+        }
+
         // At minimum we want to ensure an active playback state.
         // TODO: Possibly also force to go foreground?
         val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
@@ -156,7 +162,7 @@ private constructor(
                     }
                 }
                 IntegerTable.START_ID_TOPWAY -> {
-                    handleTopwayStartIntent(intent)
+                    // Handled above, but kept for legacy coverage.
                     null
                 }
                 else -> {

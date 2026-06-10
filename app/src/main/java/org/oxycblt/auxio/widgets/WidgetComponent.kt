@@ -73,6 +73,18 @@ private constructor(
     }
 
     private val widgetProvider = WidgetProvider()
+    private val topwayWidgetProvider: Any? =
+        if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            try {
+                Class.forName("com.tw.music.view.MusicWidgetProvider").getDeclaredConstructor().newInstance()
+            } catch (e: Exception) {
+                L.w(e, "Topway widget provider not found in Topway flavor")
+                null
+            }
+        } else {
+            null
+        }
+
     private val topwayBridge = TopwayMusicBroadcastBridge(context, uiSettings)
 
     fun attach() {
@@ -153,6 +165,7 @@ private constructor(
                         PlaybackState(song, bitmap, isPlaying, repeatMode, isShuffled, elapsedMs)
                     L.d("Bitmap loaded, uploading state $state")
                     widgetProvider.update(context, uiSettings, state)
+                    updateTopwayWidget(state)
                 }
             },
         )
@@ -166,6 +179,23 @@ private constructor(
         uiSettings.unregisterListener(this)
         topwayBridge.clear()
         widgetProvider.reset(context, uiSettings)
+        updateTopwayWidget(null)
+    }
+
+    private fun updateTopwayWidget(state: PlaybackState?) {
+        if (topwayWidgetProvider == null) return
+        try {
+            val updateMethod =
+                topwayWidgetProvider.javaClass.getMethod(
+                    "update",
+                    Context::class.java,
+                    UISettings::class.java,
+                    PlaybackState::class.java,
+                )
+            updateMethod.invoke(topwayWidgetProvider, context, uiSettings, state)
+        } catch (e: Exception) {
+            L.w(e, "Unable to update Topway widget via reflection")
+        }
     }
 
     // --- CALLBACKS ---
