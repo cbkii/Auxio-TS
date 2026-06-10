@@ -72,7 +72,7 @@ interface Musikr {
         fun new(context: Context, config: Config, noisyDirs: Set<String> = emptySet()): Musikr =
             MusikrImpl(
                 config,
-                ExploreStep.from(context, config, noisyDirs),
+                ExploreStep.from(config, noisyDirs),
                 ExtractStep.from(context, config),
                 EvaluateStep.new(context, config, config.interpretation),
             )

@@ -30,14 +30,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.R as MR
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.DialogMusicLocationsBinding
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.TopwaySourcePolicy
-import org.oxycblt.auxio.storage.StoragePickerCapabilityProbe
 import org.oxycblt.auxio.ui.ViewBindingMaterialDialogFragment
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.showToast
@@ -159,7 +163,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsExcludeAdd.contentDescription = getString(R.string.desc_add_folder)
         binding.locationsFilterAdd.contentDescription = getString(R.string.desc_add_folder)
         binding.locationsExtrasDropdown.setText(R.string.set_extra_settings)
-        binding.locationsAutoDetect.setOnClickListener { showCandidatePathPicker() }
+        binding.locationsAutoDetect.setOnClickListener {
+            pendingLocationCallback = { location ->
+                location.open(requireContext())?.let { opened ->
+                    includeLocationAdapter.add(opened)
+                    updateSaveButtonState()
+                }
+            }
+            showCandidatePathPicker()
+        }
 
         // Set up extras dropdown click listener
         binding.locationsExtrasDropdown.setOnClickListener {
@@ -281,7 +293,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     override fun onDestroyBinding(binding: DialogMusicLocationsBinding) {
         super.onDestroyBinding(binding)
         openDocumentTreeLauncher = null
+        localOnlyOpenDocumentTreeLauncher = null
         storagePermissionLauncher = null
+        pendingLocationCallback = null
         binding.locationsIncludeRecycler.adapter = null
         binding.locationsExcludeRecycler.adapter = null
         binding.locationsFilterRecycler.adapter = null
@@ -294,8 +308,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         try {
             launcher.launch(null)
         } catch (e: ActivityNotFoundException) {
-            L.w("SAF tree picker activity not found. Probing capabilities.")
-            StoragePickerCapabilityProbe.probe(requireContext())
+            L.w("SAF tree picker activity not found; showing fallback sources.")
             showPickerUnavailableFallback()
         }
     }
@@ -304,34 +317,39 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         AlertDialog.Builder(requireContext())
             .setMessage(R.string.set_picker_unavailable_fallback)
             .setPositiveButton(R.string.lbl_ok) { _, _ -> showCandidatePathPicker() }
-            .setNegativeButton(R.string.lbl_cancel, null)
+            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
+            .setOnCancelListener { pendingLocationCallback = null }
             .show()
     }
 
     private fun showCandidatePathPicker() {
-        val candidates = mutableListOf<String>()
-        candidates.addAll(TopwaySourcePolicy.SAFE_GENERIC_FALLBACKS)
-        candidates.addAll(TopwaySourcePolicy.TS18_USB_CANDIDATES)
+        lifecycleScope.launch {
+            val candidates =
+                TopwaySourcePolicy.SAFE_GENERIC_FALLBACKS + TopwaySourcePolicy.TS18_USB_CANDIDATES
+            val accessibleCandidates =
+                withContext(Dispatchers.IO) {
+                    candidates.filter { TopwaySourcePolicy.isAccessibleCandidate(it) }
+                }
 
-        val accessibleCandidates =
-            candidates.filter { TopwaySourcePolicy.isAccessibleCandidate(it) }
-
-        if (accessibleCandidates.isEmpty()) {
-            requireContext().showToast(R.string.err_bad_location)
-            return
-        }
-
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.set_select_source)
-            .setItems(accessibleCandidates.toTypedArray()) { _, which ->
-                val path = accessibleCandidates[which]
-                val uri = Uri.parse("file://$path")
-                val location = Location.Unopened.from(requireContext(), uri)
-                pendingLocationCallback?.invoke(location)
+            if (accessibleCandidates.isEmpty()) {
                 pendingLocationCallback = null
+                requireContext().showToast(R.string.err_bad_location)
+                return@launch
             }
-            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
-            .show()
+
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.set_select_source)
+                .setItems(accessibleCandidates.toTypedArray()) { _, which ->
+                    val path = accessibleCandidates[which]
+                    val uri = Uri.fromFile(File(path))
+                    val location = Location.Unopened.from(requireContext(), uri)
+                    pendingLocationCallback?.invoke(location)
+                    pendingLocationCallback = null
+                }
+                .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
+                .setOnCancelListener { pendingLocationCallback = null }
+                .show()
+        }
     }
 
     private fun addDocumentTreeUriToDirs(uri: Uri?, disableThirdParty: Boolean) {

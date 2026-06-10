@@ -38,21 +38,33 @@ internal class FilteredFS(
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
         val delegateChannel = Channel<File>(Channel.UNLIMITED)
         val delegateTask = delegate.explore(delegateChannel)
+        delegateTask.invokeOnCompletion { cause ->
+            if (cause != null) {
+                delegateChannel.close(cause)
+            } else {
+                delegateChannel.close()
+            }
+        }
 
         val filterTask =
             scope.tryAsync(Dispatchers.Default) {
-                for (file in delegateChannel) {
-                    val isNoisy = file.path.components.components.any { it in noisyDirs }
-                    if (!isNoisy) {
-                        files.send(file)
+                try {
+                    for (file in delegateChannel) {
+                        val isNoisy = file.path.components.components.any { it in noisyDirs }
+                        if (!isNoisy) {
+                            files.send(file)
+                        }
                     }
+                } finally {
+                    files.close()
                 }
             }
 
         return scope.tryAsync(Dispatchers.Default) {
-            val result = delegateTask.await()
-            filterTask.await()
-            result
+            val delegateResult = delegateTask.await()
+            delegateChannel.close()
+            filterTask.await().getOrThrow()
+            delegateResult.getOrThrow()
         }
     }
 

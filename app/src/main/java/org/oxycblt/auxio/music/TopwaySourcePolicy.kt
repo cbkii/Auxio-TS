@@ -62,8 +62,14 @@ object TopwaySourcePolicy {
 
     /** Checks if a given path is a valid and accessible candidate for music storage on TS18. */
     fun isAccessibleCandidate(path: String): Boolean {
-        val file = File(path)
-        return file.exists() && file.isDirectory && file.canRead()
+        return try {
+            val file = File(path)
+            file.exists() && file.isDirectory && file.canRead()
+        } catch (e: SecurityException) {
+            false
+        } catch (e: RuntimeException) {
+            false
+        }
     }
 
     /** Returns the first accessible candidate root from the priority list. */

@@ -200,6 +200,7 @@ private constructor(
                         if (location != null && !location.path.volume.isAccessible()) {
                             L.i("Source became inaccessible (unmounted?): ${location.uri}")
                             cancelCurrentIndex()
+                            return@collect
                         }
                     }
 
@@ -218,6 +219,7 @@ private constructor(
         trackingJob = null
     }
 
+    @Synchronized
     private fun cancelCurrentIndex() {
         currentIndexJob?.let {
             if (it.isActive) {
