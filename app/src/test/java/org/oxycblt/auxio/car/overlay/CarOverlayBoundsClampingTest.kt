@@ -93,8 +93,10 @@ class CarOverlayBoundsClampingTest {
 
     @Test
     fun `default position is top center at physical top edge on TS18`() {
-        val (x, y) = defaultTopCenterPosition()
-        assertEquals(465, x)
+        val bounds = Bounds()
+        val (x, y) = defaultTopCenterPosition(bounds)
+        val expectedX = (bounds.width - overlayWidth) / 2
+        assertEquals(expectedX, x)
         assertEquals(0, y)
         assertTrue(x >= 0, "Default X must be non-negative")
         assertTrue(y >= 0, "Default Y must be at or below physical top edge")
@@ -104,8 +106,10 @@ class CarOverlayBoundsClampingTest {
 
     @Test
     fun `default position centers against full display width fallback`() {
-        val (x, y) = defaultTopCenterPosition(Bounds(width = 1024, height = 600))
-        assertEquals(337, x)
+        val bounds = Bounds(width = 1024, height = 600)
+        val (x, y) = defaultTopCenterPosition(bounds)
+        val expectedX = (bounds.width - overlayWidth) / 2
+        assertEquals(expectedX, x)
         assertEquals(0, y)
     }
 

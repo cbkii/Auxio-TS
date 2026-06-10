@@ -71,7 +71,9 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         // Clear instead of writing a fixed X so the running service can re-center against the
         // current full physical display width. The property getters still expose the TS18 fallback
         // default for static callers.
-        prefs.edit {
+        // Uses commit=true to ensure the reset is synchronous, avoiding stale reads when the
+        // service immediately handles ACTION_RESET_POSITION.
+        prefs.edit(commit = true) {
             remove(KEY_POSITION_X)
             remove(KEY_POSITION_Y)
         }
