@@ -107,10 +107,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             ACTION_RESET_POSITION -> {
                 // Only reposition a live overlay. Position prefs are already updated by caller.
                 if (isOverlayAttached) {
-                    val (cx, cy) = resolveInitialPosition(overlaySize(overlayView))
-                    prefs.positionX = cx
-                    prefs.positionY = cy
-                    updateOverlayPosition(cx, cy)
+                    val bounds = fullDisplayBounds()
+                    val resolved = resolveInitialPosition(overlaySize(overlayView, bounds), bounds)
+                    updateOverlayPosition(resolved.x, resolved.y)
                 } else {
                     L.d("Ignoring reset-position command with no live overlay")
                     stopSelfCleanly()
@@ -180,12 +179,15 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         view.applyOpacity(prefs.opacityPercent)
 
         val params = createLayoutParams()
-        val (cx, cy) = resolveInitialPosition(overlaySize(view))
-        params.x = cx
-        params.y = cy
-        // Persist clamped position in case old prefs were out-of-bounds.
-        prefs.positionX = cx
-        prefs.positionY = cy
+        val bounds = fullDisplayBounds()
+        val resolved = resolveInitialPosition(overlaySize(view, bounds), bounds)
+        params.x = resolved.x
+        params.y = resolved.y
+
+        if (resolved.shouldPersist) {
+            prefs.positionX = resolved.x
+            prefs.positionY = resolved.y
+        }
 
         try {
             windowManager?.addView(view, params)
@@ -197,7 +199,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         overlayView = view
         isOverlayAttached = true
         isOverlayRuntimeAttached = true
-        L.d("Overlay attached at ($cx, $cy)")
+        L.d("Overlay attached at (${resolved.x}, ${resolved.y})")
     }
 
     private fun hideOverlay() {
@@ -264,12 +266,27 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
      * placed at top-centre with y=0. Deliberately dragged custom positions are preserved and only
      * clamped enough to avoid permanently losing the overlay off-screen.
      */
-    private fun resolveInitialPosition(size: OverlaySize = OverlaySize()): Pair<Int, Int> {
-        val bounds = fullDisplayBounds()
-        if (!prefs.hasSavedPosition || prefs.hasOldDefaultPosition) {
-            return defaultTopCenterPosition(bounds, size)
+    private fun resolveInitialPosition(
+        size: OverlaySize = OverlaySize(),
+        bounds: Rect = fullDisplayBounds(),
+    ): InitialPosition {
+        if (prefs.hasOldDefaultPosition) {
+            L.d("Migrating from legacy default position (437, 55)")
+            prefs.resetPosition()
+            val (dx, dy) = defaultTopCenterPosition(bounds, size)
+            return InitialPosition(dx, dy, shouldPersist = false)
         }
-        return clampPosition(prefs.positionX, prefs.positionY, bounds, size)
+
+        if (!prefs.hasSavedPosition) {
+            val (dx, dy) = defaultTopCenterPosition(bounds, size)
+            return InitialPosition(dx, dy, shouldPersist = false)
+        }
+
+        val sx = prefs.positionX
+        val sy = prefs.positionY
+        val (cx, cy) = clampPosition(sx, sy, bounds, size)
+
+        return InitialPosition(cx, cy, shouldPersist = (cx != sx || cy != sy))
     }
 
     @Suppress("DEPRECATION")
@@ -314,7 +331,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         return x.coerceIn(minX, maxX) to y.coerceIn(minY, maxY)
     }
 
-    private fun overlaySize(view: View?): OverlaySize {
+    private fun overlaySize(view: View?, bounds: Rect): OverlaySize {
         val width = view?.width?.takeIf { it > 0 }
         val height = view?.height?.takeIf { it > 0 }
         if (width != null && height != null) {
@@ -322,8 +339,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
 
         view?.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(
+                bounds.width().coerceAtLeast(0),
+                View.MeasureSpec.AT_MOST
+            ),
+            View.MeasureSpec.makeMeasureSpec(
+                bounds.height().coerceAtLeast(0),
+                View.MeasureSpec.AT_MOST
+            ),
         )
         return OverlaySize(
             width = view?.measuredWidth?.takeIf { it > 0 } ?: OVERLAY_ESTIMATED_WIDTH_PX,
@@ -334,6 +357,12 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     private data class OverlaySize(
         val width: Int = OVERLAY_ESTIMATED_WIDTH_PX,
         val height: Int = OVERLAY_ESTIMATED_HEIGHT_PX,
+    )
+
+    private data class InitialPosition(
+        val x: Int,
+        val y: Int,
+        val shouldPersist: Boolean,
     )
 
     // --- Foreground notification ---
@@ -400,7 +429,8 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     override fun onDragFinished(x: Int, y: Int) {
         val view = overlayView ?: return
         val params = view.layoutParams as? WindowManager.LayoutParams ?: return
-        val (cx, cy) = clampPosition(params.x, params.y, size = overlaySize(view))
+        val bounds = fullDisplayBounds()
+        val (cx, cy) = clampPosition(params.x, params.y, bounds = bounds, size = overlaySize(view, bounds))
         params.x = cx
         params.y = cy
         try {
