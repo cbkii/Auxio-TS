@@ -72,9 +72,8 @@ class MusicWidgetProvider : AppWidgetProvider() {
     ) {
         // Request a full state update from WidgetComponent.
         context.sendBroadcast(
-            Intent(org.oxycblt.auxio.widgets.WidgetProvider.ACTION_WIDGET_UPDATE).setPackage(
-                context.packageName
-            )
+            Intent(org.oxycblt.auxio.widgets.WidgetProvider.ACTION_WIDGET_UPDATE)
+                .setPackage(context.packageName)
         )
     }
 

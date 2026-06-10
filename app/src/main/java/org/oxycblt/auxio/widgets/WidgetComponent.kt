@@ -76,7 +76,9 @@ private constructor(
     private val topwayWidgetProvider: Any? =
         if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             try {
-                Class.forName("com.tw.music.view.MusicWidgetProvider").getDeclaredConstructor().newInstance()
+                Class.forName("com.tw.music.view.MusicWidgetProvider")
+                    .getDeclaredConstructor()
+                    .newInstance()
             } catch (e: Exception) {
                 L.w(e, "Topway widget provider not found in Topway flavor")
                 null
