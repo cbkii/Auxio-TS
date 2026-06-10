@@ -30,6 +30,7 @@ import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.File
+import org.oxycblt.musikr.pipeline.shim.FilteredFS
 import org.oxycblt.musikr.playlist.m3u.M3U
 import org.oxycblt.musikr.util.mapParallel
 import org.oxycblt.musikr.util.merge
@@ -39,18 +40,23 @@ internal interface ExploreStep {
     suspend fun explore(scope: CoroutineScope, explored: Channel<Explored>): Deferred<Result<Unit>>
 
     companion object {
-        fun from(context: Context, config: Config): ExploreStep =
-            ExploreStepImpl(config.fs, config.storage)
+        fun from(context: Context, config: Config, noisyDirs: Set<String> = emptySet()): ExploreStep =
+            ExploreStepImpl(config.fs, config.storage, noisyDirs)
     }
 }
 
-private class ExploreStepImpl(private val fs: FS, private val storage: Storage) : ExploreStep {
+private class ExploreStepImpl(
+    private val fs: FS,
+    private val storage: Storage,
+    private val noisyDirs: Set<String>
+) : ExploreStep {
     override suspend fun explore(
         scope: CoroutineScope,
         explored: Channel<Explored>,
     ): Deferred<Result<Unit>> {
+        val filteredFs = if (noisyDirs.isNotEmpty()) FilteredFS(fs, scope, noisyDirs) else fs
         val files = Channel<File>(Channel.UNLIMITED)
-        val filesTask = fs.explore(files)
+        val filesTask = filteredFs.explore(files)
 
         val classified = Channel<Classified>(Channel.UNLIMITED)
         val classifiedTask =

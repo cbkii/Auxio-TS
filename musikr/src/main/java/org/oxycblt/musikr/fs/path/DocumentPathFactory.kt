@@ -51,6 +51,14 @@ internal interface DocumentPathFactory {
      */
     fun unpackDocumentTreeUri(uri: Uri): Path?
 
+    /**
+     * Unpacks a file-scheme URI into a [Path] instance.
+     *
+     * @param uri The file URI to unpack.
+     * @return The [Path] instance, or null if the URI could not be unpacked.
+     */
+    fun unpackFileUri(uri: Uri): Path?
+
     companion object {
         fun from(context: Context): DocumentPathFactory {
             val volumeManager = VolumeManager.from(context)
@@ -104,6 +112,40 @@ private class DocumentPathFactoryImpl(
             )
         val treeUri = DocumentsContract.getTreeDocumentId(docUri)
         return fromDocumentId(treeUri)
+    }
+
+    override fun unpackFileUri(uri: Uri): Path? {
+        if (uri.scheme != "file") return null
+        val rawPathString = uri.path ?: return null
+        // Resolve symlinks (like /sdcard -> /storage/emulated/0) to ensure matching against volume paths.
+        val pathFile = File(rawPathString)
+        val pathString =
+            try {
+                pathFile.canonicalPath
+            } catch (e: Exception) {
+                pathFile.absolutePath
+            }
+
+        val volumes = volumeManager.getVolumes()
+
+        // Find the volume that this path is on.
+        for (volume in volumes) {
+            val volumePath = volume.components?.unixString ?: continue
+            if (pathString.startsWith(volumePath)) {
+                val relativePath = pathString.removePrefix(volumePath)
+                return Path(volume, Components.parseUnix(relativePath))
+            }
+        }
+
+        // Fallback to internal volume if no external volume matches.
+        val internalVolume = volumeManager.getInternalVolume()
+        val internalPath = internalVolume.components?.unixString
+        if (internalPath != null && pathString.startsWith(internalPath)) {
+            val relativePath = pathString.removePrefix(internalPath)
+            return Path(internalVolume, Components.parseUnix(relativePath))
+        }
+
+        return null
     }
 
     private fun fromDocumentId(path: String): Path? {

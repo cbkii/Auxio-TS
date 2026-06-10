@@ -67,6 +67,11 @@ private class VolumeManagerImpl(private val storageManager: StorageManager) : Vo
             get() = storageVolume.directoryCompat?.let(Components.Companion::parseUnix)
 
         override fun resolveName(context: Context) = storageVolume.getDescriptionCompat(context)
+
+        override fun isAccessible(): Boolean {
+            return storageVolume.stateCompat == android.os.Environment.MEDIA_MOUNTED ||
+                storageVolume.stateCompat == android.os.Environment.MEDIA_MOUNTED_READ_ONLY
+        }
     }
 
     private data class ExternalVolumeImpl(val storageVolume: StorageVolume) : Volume.External {
@@ -80,5 +85,10 @@ private class VolumeManagerImpl(private val storageManager: StorageManager) : Vo
             get() = storageVolume.directoryCompat?.let(Components.Companion::parseUnix)
 
         override fun resolveName(context: Context) = storageVolume.getDescriptionCompat(context)
+
+        override fun isAccessible(): Boolean {
+            return storageVolume.stateCompat == android.os.Environment.MEDIA_MOUNTED ||
+                storageVolume.stateCompat == android.os.Environment.MEDIA_MOUNTED_READ_ONLY
+        }
     }
 }
