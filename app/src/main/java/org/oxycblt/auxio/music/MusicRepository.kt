@@ -438,10 +438,12 @@ constructor(
             createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
 
         // Check accessibility before starting
-        val locations = when (musicSettings.locationMode) {
-            LocationMode.SAF -> musicSettings.safQuery.source
-            LocationMode.MEDIA_STORE -> emptyList() // MediaStore is always "accessible" as a provider
-        }
+        val locations =
+            when (musicSettings.locationMode) {
+                LocationMode.SAF -> musicSettings.safQuery.source
+                LocationMode.MEDIA_STORE ->
+                    emptyList() // MediaStore is always "accessible" as a provider
+            }
 
         if (locations.any { !it.path.volume.isAccessible() }) {
             L.w("One or more music sources are inaccessible. Aborting scan to preserve cache.")
@@ -454,7 +456,8 @@ constructor(
 
         L.d("Running index...")
         val start = System.currentTimeMillis()
-        val result = Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS).run(::emitIndexingProgress)
+        val result =
+            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS).run(::emitIndexingProgress)
         L.d("Index finished in ${System.currentTimeMillis() - start}ms")
 
         // Final accessibility check before committing empty state

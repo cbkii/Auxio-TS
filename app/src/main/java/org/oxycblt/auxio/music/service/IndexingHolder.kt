@@ -194,10 +194,11 @@ private constructor(
         trackingJob =
             indexScope.launch {
                 fs.track().collect { update ->
-                    if (update is FSUpdate.LocationChanged && update.location != null) {
+                    if (update is FSUpdate.LocationChanged) {
+                        val location = update.location
                         // Check if the location that changed is still accessible
-                        if (!update.location.path.volume.isAccessible()) {
-                            L.i("Source became inaccessible (unmounted?): ${update.location.uri}")
+                        if (location != null && !location.path.volume.isAccessible()) {
+                            L.i("Source became inaccessible (unmounted?): ${location.uri}")
                             cancelCurrentIndex()
                         }
                     }

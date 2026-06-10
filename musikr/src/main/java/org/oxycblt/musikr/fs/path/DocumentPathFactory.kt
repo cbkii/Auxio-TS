@@ -117,7 +117,8 @@ private class DocumentPathFactoryImpl(
     override fun unpackFileUri(uri: Uri): Path? {
         if (uri.scheme != "file") return null
         val rawPathString = uri.path ?: return null
-        // Resolve symlinks (like /sdcard -> /storage/emulated/0) to ensure matching against volume paths.
+        // Resolve symlinks (like /sdcard -> /storage/emulated/0) to ensure matching against volume
+        // paths.
         val pathFile = File(rawPathString)
         val pathString =
             try {
