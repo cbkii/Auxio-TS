@@ -134,8 +134,8 @@ private constructor(
 
     fun start(intent: Intent?) {
         // Handle Topway intents regardless of startId for better robustness with external
-        // launcher/widget commands.
-        if (handleTopwayStartIntent(intent)) {
+        // launcher/widget commands. Intent can be null on service restart.
+        if (intent != null && handleTopwayStartIntent(intent)) {
             return
         }
 
@@ -162,7 +162,9 @@ private constructor(
                     }
                 }
                 IntegerTable.START_ID_TOPWAY -> {
-                    // Handled above, but kept for legacy coverage.
+                    // Topway intents are handled early above. This branch remains as a
+                    // defensive no-op for any future fall-through from non-action intents
+                    // that still carry the Topway start ID.
                     null
                 }
                 else -> {

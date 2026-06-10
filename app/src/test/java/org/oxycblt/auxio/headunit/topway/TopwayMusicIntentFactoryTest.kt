@@ -54,6 +54,13 @@ class TopwayMusicIntentFactoryTest {
     }
 
     @Test
+    fun `progress intent clamps oversized values to Int MAX_VALUE`() {
+        val extras = TopwayMusicIntentFactory.progressExtras(Long.MAX_VALUE, Long.MAX_VALUE)
+        assertEquals(Int.MAX_VALUE, extras[TopwayMusicContract.EXTRA_PROGRESS])
+        assertEquals(Int.MAX_VALUE, extras[TopwayMusicContract.EXTRA_DURATION])
+    }
+
+    @Test
     fun `metadata extras handle null snapshot with empty placeholders`() {
         val extras = TopwayMusicIntentFactory.metadataExtras(null)
         assertEquals("", extras[TopwayMusicContract.EXTRA_MUSIC_TITLE])

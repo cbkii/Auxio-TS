@@ -43,7 +43,7 @@ object TopwayMusicIntentFactory {
 
     internal fun progressExtras(progressMs: Long, durationMs: Long): Map<String, Int> =
         mapOf(
-            TopwayMusicContract.EXTRA_PROGRESS to max(0L, progressMs).toInt(),
-            TopwayMusicContract.EXTRA_DURATION to max(0L, durationMs).toInt(),
+            TopwayMusicContract.EXTRA_PROGRESS to progressMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+            TopwayMusicContract.EXTRA_DURATION to durationMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
         )
 }

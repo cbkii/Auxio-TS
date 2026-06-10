@@ -87,6 +87,21 @@ private constructor(
             null
         }
 
+    private val topwayWidgetUpdateMethod =
+        topwayWidgetProvider?.let {
+            try {
+                it.javaClass.getMethod(
+                    "update",
+                    Context::class.java,
+                    UISettings::class.java,
+                    PlaybackState::class.java,
+                )
+            } catch (e: Exception) {
+                L.w(e, "Topway widget update method not found")
+                null
+            }
+        }
+
     private val topwayBridge = TopwayMusicBroadcastBridge(context, uiSettings)
 
     fun attach() {
@@ -185,16 +200,9 @@ private constructor(
     }
 
     private fun updateTopwayWidget(state: PlaybackState?) {
-        if (topwayWidgetProvider == null) return
+        if (topwayWidgetProvider == null || topwayWidgetUpdateMethod == null) return
         try {
-            val updateMethod =
-                topwayWidgetProvider.javaClass.getMethod(
-                    "update",
-                    Context::class.java,
-                    UISettings::class.java,
-                    PlaybackState::class.java,
-                )
-            updateMethod.invoke(topwayWidgetProvider, context, uiSettings, state)
+            topwayWidgetUpdateMethod.invoke(topwayWidgetProvider, context, uiSettings, state)
         } catch (e: Exception) {
             L.w(e, "Unable to update Topway widget via reflection")
         }

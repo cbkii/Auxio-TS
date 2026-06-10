@@ -81,11 +81,18 @@ class MusicWidgetProvider : AppWidgetProvider() {
      * Update the currently shown layout based on the given [WidgetComponent.PlaybackState]
      *
      * @param context [Context] required to update the widget layout.
-     * @param uiSettings [UISettings] to obtain round mode configuration
      * @param state [WidgetComponent.PlaybackState] to show, or null if no playback is going on.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun update(context: Context, uiSettings: UISettings, state: WidgetComponent.PlaybackState?) {
-        val awm = AppWidgetManager.getInstance(context)
+        val awm =
+            try {
+                AppWidgetManager.getInstance(context)
+            } catch (e: Exception) {
+                L.w(e, "Unable to get AppWidgetManager instance")
+                null
+            } ?: return
+
         val component = ComponentName(context, MusicWidgetProvider::class.java)
 
         // Only proceed if we are in the Topway flavor or if there are active widget instances.
