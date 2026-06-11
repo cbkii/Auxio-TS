@@ -20,6 +20,7 @@ package org.oxycblt.musikr.pipeline.shim
 
 import android.content.Context
 import android.net.Uri
+import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -28,6 +29,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,48 +45,99 @@ import org.oxycblt.musikr.util.tryAsync
 class FilteredFSTest {
     @Test
     fun exploreForwardsNonNoisyFilesAndClosesDownstream() = runTest {
-        val kept = file("Music/song.mp3")
-        val noisy = file("Android/cache/noise.mp3")
-        val fs = FilteredFS(EmittingFS(kept, noisy), this, setOf("Android"))
+        val fs = FilteredFS(EmittingFS(this, file("Music/song.mp3")), this, setOf("Android"))
         val output = Channel<File>(Channel.UNLIMITED)
 
-        val result = fs.explore(output).await()
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
 
         assertTrue(result.isSuccess)
-        assertEquals(kept, output.receive())
+        assertEquals("Music/song.mp3", output.receive().path.components.toString())
         assertTrue(output.receiveCatching().isClosed)
     }
 
     @Test
-    fun exploreClosesDownstreamWhenDelegateFails() = runTest {
+    fun exploreDropsNoisyFilesByPathComponent() = runTest {
+        val fs =
+            FilteredFS(
+                EmittingFS(
+                    this,
+                    file("Music/Androids/song.mp3"),
+                    file("Android/cache/noise.mp3"),
+                    file("Music/song.mp3"),
+                ),
+                this,
+                setOf("Android"),
+            )
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Music/Androids/song.mp3", output.receive().path.components.toString())
+        assertEquals("Music/song.mp3", output.receive().path.components.toString())
+        assertTrue(output.receiveCatching().isClosed)
+    }
+
+    @Test
+    fun exploreClosesDownstreamWhenDelegateReturnsFailure() = runTest {
         val failure = IllegalStateException("boom")
         val fs = FilteredFS(FailingFS(failure), this, setOf("Android"))
         val output = Channel<File>(Channel.UNLIMITED)
 
-        val result = fs.explore(output).await()
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
 
         assertTrue(result.isFailure)
-        assertEquals(failure, result.exceptionOrNull())
+        assertSameFailure(failure, result.exceptionOrNull())
         val downstreamResult = output.receiveCatching()
         assertTrue(downstreamResult.isClosed)
-        assertEquals(failure, downstreamResult.exceptionOrNull())
+        assertSameFailure(failure, downstreamResult.exceptionOrNull())
+    }
+
+    @Test
+    fun exploreClosesDownstreamWhenDelegateThrows() = runTest {
+        val failure = IllegalArgumentException("thrown")
+        val fs = FilteredFS(ThrowingFS(failure), this, setOf("Android"))
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isFailure)
+        assertSameFailure(failure, result.exceptionOrNull())
+        val downstreamResult = output.receiveCatching()
+        assertTrue(downstreamResult.isClosed)
+        assertSameFailure(failure, downstreamResult.exceptionOrNull())
     }
 
     @Test
     fun exploreDoesNotHangWhenDelegateLeavesChannelOpen() = runTest {
-        val fs = FilteredFS(LeakyButCompletedFS(file("Music/song.mp3")), this, setOf("Android"))
+        val fs =
+            FilteredFS(LeakyButCompletedFS(this, file("Music/song.mp3")), this, setOf("Android"))
         val output = Channel<File>(Channel.UNLIMITED)
 
-        val result = fs.explore(output).await()
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
 
         assertTrue(result.isSuccess)
-        assertEquals(file("Music/song.mp3"), output.receive())
+        assertEquals("Music/song.mp3", output.receive().path.components.toString())
         assertTrue(output.receiveCatching().isClosed)
     }
 
-    private class EmittingFS(private vararg val files: File) : FS {
+    @Test
+    fun exploreDoesNotMaskDelegateFailureAsSuccessfulEmptyScan() = runTest {
+        val failure = IllegalStateException("unmounted")
+        val fs = FilteredFS(FailingFS(failure), this, setOf("Android"))
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isFailure)
+        assertTrue(output.receiveCatching().isClosed)
+        assertSameFailure(failure, result.exceptionOrNull())
+    }
+
+    private class EmittingFS(private val scope: CoroutineScope, private vararg val files: File) :
+        FS {
         override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
-            CoroutineScope(Dispatchers.Unconfined).tryAsync(Dispatchers.Unconfined) {
+            scope.tryAsync(Dispatchers.Unconfined) {
                 this@EmittingFS.files.forEach { files.send(it) }
                 files.close()
             }
@@ -99,11 +152,17 @@ class FilteredFSTest {
         override fun track(): Flow<FSUpdate> = emptyFlow()
     }
 
-    private class LeakyButCompletedFS(private val file: File) : FS {
+    private class ThrowingFS(private val failure: Throwable) : FS {
         override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
-            CoroutineScope(Dispatchers.Unconfined).tryAsync(Dispatchers.Unconfined) {
-                files.send(file)
-            }
+            CompletableDeferred<Result<Unit>>().also { it.completeExceptionally(failure) }
+
+        override fun track(): Flow<FSUpdate> = emptyFlow()
+    }
+
+    private class LeakyButCompletedFS(private val scope: CoroutineScope, private val file: File) :
+        FS {
+        override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
+            scope.tryAsync(Dispatchers.Unconfined) { files.send(file) }
 
         override fun track(): Flow<FSUpdate> = emptyFlow()
     }
@@ -123,7 +182,7 @@ class FilteredFSTest {
 
     private fun file(path: String) =
         File(
-            uri = Uri.parse("content://test/$path"),
+            uri = mockk<Uri>(relaxed = true),
             path = Path(TestVolume, Components.parseUnix(path)),
             addedMs = TestAddedMs,
             modifiedMs = 0,
@@ -131,4 +190,13 @@ class FilteredFSTest {
             size = 1,
             parent = null,
         )
+
+    private fun assertSameFailure(expected: Throwable, actual: Throwable?) {
+        assertEquals(expected::class.java, actual?.javaClass)
+        assertEquals(expected.message, actual?.message)
+    }
+
+    private companion object {
+        const val TIMEOUT_MS = 1000L
+    }
 }
