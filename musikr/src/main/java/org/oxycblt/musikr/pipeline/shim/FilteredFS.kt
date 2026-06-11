@@ -42,6 +42,8 @@ internal class FilteredFS(
         val delegateTask =
             try {
                 delegate.explore(delegateChannel)
+            } catch (e: CancellationException) {
+                throw e
             } catch (t: Throwable) {
                 delegateChannel.close(t)
                 files.close(t)
@@ -71,6 +73,8 @@ internal class FilteredFS(
                 val delegateResult =
                     try {
                         delegateTask.await()
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (t: Throwable) {
                         Result.failure(t)
                     }
