@@ -18,7 +18,6 @@
 
 package org.oxycblt.musikr.pipeline
 
-import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +40,6 @@ internal interface ExploreStep {
 
     companion object {
         fun from(
-            context: Context,
             config: Config,
             noisyDirs: Set<String> = emptySet(),
         ): ExploreStep = ExploreStepImpl(config.fs, config.storage, noisyDirs)

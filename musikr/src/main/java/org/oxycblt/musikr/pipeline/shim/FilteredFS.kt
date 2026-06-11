@@ -50,9 +50,25 @@ internal class FilteredFS(
             }
 
         return scope.tryAsync(Dispatchers.Default) {
-            val result = delegateTask.await()
-            filterTask.await()
-            result
+            // delegateTask reports failures as Result values, so this task owns final channel
+            // closure: close delegateChannel with any delegate cause, await filterTask, then
+            // close downstream files with the first failure before surfacing it via getOrThrow().
+            val delegateResult =
+                try {
+                    delegateTask.await()
+                } catch (e: Throwable) {
+                    delegateChannel.close(e)
+                    val filterResult = filterTask.await()
+                    files.close(filterResult.exceptionOrNull() ?: e)
+                    filterResult.getOrThrow()
+                    throw e
+                }
+            delegateChannel.close(delegateResult.exceptionOrNull())
+            val filterResult = filterTask.await()
+            val failure = filterResult.exceptionOrNull() ?: delegateResult.exceptionOrNull()
+            files.close(failure)
+            filterResult.getOrThrow()
+            delegateResult.getOrThrow()
         }
     }
 

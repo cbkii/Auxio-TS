@@ -91,8 +91,14 @@ sealed interface Volume {
 
         override fun isAccessible(): Boolean {
             if (uri.scheme == "file") {
-                val file = File(uri.path ?: return false)
-                return file.exists() && file.isDirectory && file.canRead()
+                return try {
+                    val file = File(uri.path ?: return false)
+                    file.exists() && file.isDirectory && file.canRead()
+                } catch (e: SecurityException) {
+                    false
+                } catch (e: RuntimeException) {
+                    false
+                }
             }
             // For SAF/Document URIs, accessibility is harder to check purely from the Volume
             // data class without a Context/ContentResolver. However, ThirdParty volumes
