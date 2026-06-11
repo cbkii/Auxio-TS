@@ -40,8 +40,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.DialogMusicLocationsBinding
+import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicSettings
-import org.oxycblt.auxio.music.TopwaySourcePolicy
 import org.oxycblt.auxio.ui.ViewBindingMaterialDialogFragment
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.showToast
