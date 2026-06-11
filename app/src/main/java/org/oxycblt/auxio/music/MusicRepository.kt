@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
 import org.oxycblt.auxio.music.locations.LocationMode
@@ -435,10 +436,40 @@ constructor(
         val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
         val config =
             createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
+
+        // Check accessibility before starting
+        val locations =
+            when (musicSettings.locationMode) {
+                LocationMode.SAF -> musicSettings.safQuery.source
+                LocationMode.MEDIA_STORE ->
+                    emptyList() // MediaStore is always "accessible" as a provider
+            }
+
+        if (locations.any { !it.path.volume.isAccessible() }) {
+            L.w("One or more music sources are inaccessible. Aborting scan to preserve cache.")
+            // Mark last scan failed but keep library state USABLE if it was,
+            // or RECOVERY if it needs a scan.
+            musicSettings.lastScanFailed = true
+            emitIndexingCompletion(Exception("Music source inaccessible"))
+            return
+        }
+
         L.d("Running index...")
         val start = System.currentTimeMillis()
-        val result = Musikr.new(context, config).run(::emitIndexingProgress)
+        val result =
+            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS).run(::emitIndexingProgress)
         L.d("Index finished in ${System.currentTimeMillis() - start}ms")
+
+        // Final accessibility check before committing empty state
+        if (result.library.songs.isEmpty()) {
+            if (locations.any { !it.path.volume.isAccessible() }) {
+                L.w("Scan returned empty but sources became inaccessible. Preserving cache.")
+                musicSettings.lastScanFailed = true
+                emitIndexingCompletion(Exception("Source became inaccessible during scan"))
+                return
+            }
+        }
+
         // Music loading completed, update the revision right now so we re-use this work
         // later.
         L.d("Revisioning from $currentRevision -> $newRevision")

@@ -36,6 +36,7 @@ import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.getSystemServiceCompat
 import org.oxycblt.musikr.MusicParent
+import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import timber.log.Timber as L
@@ -192,7 +193,19 @@ private constructor(
             }
         trackingJob =
             indexScope.launch {
-                fs.track().collect {
+                fs.track().collect { update ->
+                    if (update is FSUpdate.LocationChanged) {
+                        val location = update.location
+                        // Check if the location that changed is still accessible
+                        if (location != null && !location.path.volume.isAccessible()) {
+                            L.i("Source became inaccessible (unmounted?): ${location.uri}")
+                            cancelCurrentIndex()
+                            // Skip this inaccessible update without stopping the tracker; keeping
+                            // it alive lets later remount/accessibility events trigger a real scan.
+                            return@collect
+                        }
+                    }
+
                     if (musicRepository.library == null) {
                         L.i("Ignoring storage change before cached/startup library is available")
                     } else {
@@ -206,6 +219,16 @@ private constructor(
     private fun stopTracking() {
         trackingJob?.cancel()
         trackingJob = null
+    }
+
+    @Synchronized
+    private fun cancelCurrentIndex() {
+        currentIndexJob?.let {
+            if (it.isActive) {
+                L.i("Cancelling active indexing job due to source change")
+                it.cancel()
+            }
+        }
     }
 
     override fun onMusicLocationsChanged() {

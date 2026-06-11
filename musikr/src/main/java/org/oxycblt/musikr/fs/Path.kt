@@ -68,6 +68,12 @@ sealed interface Volume {
     /** Resolves the name of the volume in a human-readable format. */
     fun resolveName(context: Context): String
 
+    /**
+     * Checks if the volume is currently accessible for exploration. This should be a cheap,
+     * non-recursive check for existence and readability.
+     */
+    fun isAccessible(): Boolean
+
     /** A volume representing the device's internal storage. */
     interface Internal : Volume
 
@@ -82,6 +88,24 @@ sealed interface Volume {
         override val components: Components? = null
 
         override fun resolveName(context: Context) = uri.toString()
+
+        override fun isAccessible(): Boolean {
+            if (uri.scheme == "file") {
+                return try {
+                    val file = File(uri.path ?: return false)
+                    file.exists() && file.isDirectory && file.canRead()
+                } catch (e: SecurityException) {
+                    false
+                } catch (e: RuntimeException) {
+                    false
+                }
+            }
+            // For SAF/Document URIs, accessibility is harder to check purely from the Volume
+            // data class without a Context/ContentResolver. However, ThirdParty volumes
+            // in this repo usually represent URIs that have already had permissions taken.
+            // We assume true for now, letting the explorer task fail if the URI is revoked.
+            return true
+        }
     }
 }
 

@@ -69,10 +69,10 @@ interface Musikr {
          * @param interpretation The configuration to use for interpreting certain vague tags. This
          *   should be configured by the user, if possible.
          */
-        fun new(context: Context, config: Config): Musikr =
+        fun new(context: Context, config: Config, noisyDirs: Set<String> = emptySet()): Musikr =
             MusikrImpl(
                 config,
-                ExploreStep.from(context, config),
+                ExploreStep.from(config, noisyDirs),
                 ExtractStep.from(context, config),
                 EvaluateStep.new(context, config, config.interpretation),
             )

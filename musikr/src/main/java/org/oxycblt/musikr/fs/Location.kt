@@ -34,6 +34,9 @@ sealed class Location(val uri: Uri, val path: Path) {
 
     class Unopened private constructor(uri: Uri, path: Path) : Location(uri, path) {
         fun open(context: Context): Opened? {
+            if (uri.scheme == "file") {
+                return Opened(uri, path)
+            }
             if (isUnopened(context, uri)) {
                 try {
                     context.contentResolverSafe.takePersistableUriPermission(
@@ -55,9 +58,10 @@ sealed class Location(val uri: Uri, val path: Path) {
         }
 
         private fun isUnopened(context: Context, uri: Uri) =
-            context.contentResolverSafe.persistedUriPermissions.none {
-                it.uri == uri && it.isReadPermission && it.isWritePermission
-            }
+            uri.scheme != "file" &&
+                context.contentResolverSafe.persistedUriPermissions.none {
+                    it.uri == uri && it.isReadPermission && it.isWritePermission
+                }
 
         companion object {
             fun from(context: Context, uri: Uri) =
@@ -67,8 +71,11 @@ sealed class Location(val uri: Uri, val path: Path) {
                 )
 
             private fun getTreePath(context: Context, uri: Uri): Path? {
-                if (!DocumentsContract.isTreeUri(uri)) return null
                 val documentPathFactory = DocumentPathFactory.from(context)
+                if (uri.scheme == "file") {
+                    return documentPathFactory.unpackFileUri(uri)
+                }
+                if (!DocumentsContract.isTreeUri(uri)) return null
                 return documentPathFactory.unpackDocumentTreeUri(uri)
             }
         }
