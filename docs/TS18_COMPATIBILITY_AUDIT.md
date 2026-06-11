@@ -39,3 +39,30 @@ These are safe, layered fallbacks: the primary path is unchanged when the native
 ## Remaining hardware-only checks
 
 Run the commands in `docs/TS18_RUNTIME_VALIDATION.md` on the actual head unit to validate install conflicts, DoFun launch/widget behavior, duplicate sessions/services/notifications, `/storage/usbdisk0` indexing, overlay permission revocation, boot, and ACC wake.
+
+## TS18 dedicated-app optimisation pass — 2026-06-11
+
+This pass re-read the committed DoFun Variety / stock `twmusic` APK references and the TS18 runtime-validation evidence before changing code. The evidence still supports the current Tier-1 public contract approach:
+
+- **Evidence confidence: Observed. Porting decision: Directly reusable requirement.** DoFun Variety's fixed music entries recognise `com.tw.music/com.tw.music.MusicActivity` and `com.tw.media/com.tw.music.MusicActivity`; Auxio-TS therefore keeps the dedicated Topway package identities and stock-name activity alias only in Topway-compatible variants.
+- **Evidence confidence: Observed. Porting decision: Directly reusable requirement.** Stock `twmusic` publishes the public metadata/progress broadcasts and accepts the public command/seek actions mirrored by the isolated Topway bridge.
+- **Evidence confidence: Observed. Porting decision: Useful as evidence only / Should be explicitly avoided for production.** Cardoor services, `android.uid.system`, `sharedUserId`, `TWUtil`, and Topway AIDL strings remain reference evidence only; production private/native integration is not for production by default and requires the formal gap-and-promotion process.
+- **Evidence confidence: Requires TS18 validation. Porting decision: Requires TS18 runtime validation.** The committed runtime evidence shows Android MediaSession visibility and stock/Auxio coexistence ambiguity, but it does not prove DoFun fixed-widget routing to Auxio while stock `com.tw.music` remains installed.
+
+### Implemented in this pass
+
+| Area | Evidence-backed issue | Change | Validation status |
+| ---- | --------------------- | ------ | ----------------- |
+| Topway progress broadcasts | The stock contract includes `com.tw.launcher.music_progress_duration` with `msg_music_progress` and `msg_music_duration`. A stale non-zero progress broadcast is misleading when Auxio no longer has a valid duration/current song. | `TopwayMusicBroadcastBridge.publishProgress()` now sends one `0/0` clear broadcast when duration becomes unknown after a previous active progress state, instead of silently leaving the last TS18 launcher value stale. | Unit regression added; physical TS18 launcher display still requires hardware validation. |
+| Release dependency triage | Dependabot PRs #70, #71, #73, and #75 are workflow or stable-Material updates with manageable TS18 risk; #72 and #74 remain risky/blocked by policy or existing pins. | Adopted setup-android v4, checkout v6.0.3 pinned SHA, upload-artifact v7, and Material Components 1.14.0 stable. Deferred setup-gradle v6 caching/licensing and the broad Gradle/UI dependency bundle. | Static/script checks pass where dependencies are available; Gradle build remains blocked in this snapshot until required submodules are bootstrapped. |
+
+### Dependency PR triage table
+
+| PR | URL | dependency | current | proposed | decision | reason | tests/checks |
+| -- | --- | ---------- | ------- | -------- | -------- | ------ | ------------ |
+| #70 | https://github.com/cbkii/Auxio-TS/pull/70 | `android-actions/setup-android` | `v3` | `v4` | Adopted | Manual release already installs explicit SDK components after setup; the Node/cmdline-tools major bump has no APK/runtime effect and improves release-runner currency. | Workflow syntax/static checks; release secrets unavailable locally. |
+| #71 | https://github.com/cbkii/Auxio-TS/pull/71 | `actions/checkout` | pinned `v5.0.1` SHA `93cb6efe18208431cddfb8368fd83d5badbf9bfd` | pinned `v6.0.3` SHA `df4cb1c069e1874edd31b4311f1884172cec0e10` | Adopted | Existing `fetch-depth`, `fetch-tags`, `persist-credentials`, and `submodules: false` settings are preserved, so repo-owned bootstrap remains authoritative. No workflow uses a container action that needs persisted checkout credentials. | Workflow static/script checks. |
+| #72 | https://github.com/cbkii/Auxio-TS/pull/72 | `gradle/actions/setup-gradle` | `v5` | `v6` | Deferred | Existing workflows use Gradle cache inputs; v6's separated caching component and terms need explicit maintainer acceptance or a deliberate no-cache configuration. | Not applied; documented blocker. |
+| #73 | https://github.com/cbkii/Auxio-TS/pull/73 | `actions/upload-artifact` | `v6` / pinned v6 SHA | `v7` / pinned v7 SHA | Adopted | Current uploads use normal archive/multi-path artifact flow, not `archive: false`; existing artifact names, conditions, and retention windows are preserved. | Workflow static/script checks. |
+| #74 | https://github.com/cbkii/Auxio-TS/pull/74 | Broad Gradle/toolchain/AndroidX/test bundle | mixed | mixed | Deferred | The grouped PR overrides deliberately pinned Fragment/RecyclerView/ViewPager2 versions tied to playback navigation and queue-sheet regressions, and also bundles toolchain/runtime/test changes that need separate validation. | Not applied; pin comments retained. |
+| #75 | https://github.com/cbkii/Auxio-TS/pull/75 | `com.google.android.material:material` | `1.14.0-alpha10` | `1.14.0` | Adopted | Stable Material 1.14.0 keeps minSdk compatibility with Auxio-TS and is preferable for prior playback-control/style crash risk, provided CI validates inflation and Roborazzi coverage. | Version-catalog sync check; Gradle layout tests pending submodule bootstrap. |
