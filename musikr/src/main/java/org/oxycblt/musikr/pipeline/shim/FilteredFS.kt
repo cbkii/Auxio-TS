@@ -18,6 +18,8 @@
 
 package org.oxycblt.musikr.pipeline.shim
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -37,38 +39,58 @@ internal class FilteredFS(
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
         val delegateChannel = Channel<File>(Channel.UNLIMITED)
-        val delegateTask = delegate.explore(delegateChannel)
+        val delegateTask =
+            try {
+                delegate.explore(delegateChannel)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                delegateChannel.close(t)
+                files.close(t)
+                return CompletableDeferred(Result.failure(t))
+            }
 
         val filterTask =
             scope.tryAsync(Dispatchers.Default) {
-                for (file in delegateChannel) {
-                    val isNoisy = file.path.components.components.any { it in noisyDirs }
-                    if (!isNoisy) {
-                        files.send(file)
+                try {
+                    for (file in delegateChannel) {
+                        val isNoisy = file.path.components.components.any { it in noisyDirs }
+                        if (!isNoisy) {
+                            files.send(file)
+                        }
                     }
+                    files.close()
+                } catch (t: Throwable) {
+                    delegateChannel.close(t)
+                    delegateTask.cancel(CancellationException("FilteredFS forwarding failed", t))
+                    files.close(t)
+                    throw t
                 }
             }
 
         return scope.tryAsync(Dispatchers.Default) {
-            // delegateTask reports failures as Result values, so this task owns final channel
-            // closure: close delegateChannel with any delegate cause, await filterTask, then
-            // close downstream files with the first failure before surfacing it via getOrThrow().
-            val delegateResult =
-                try {
-                    delegateTask.await()
-                } catch (e: Throwable) {
-                    delegateChannel.close(e)
-                    val filterResult = filterTask.await()
-                    files.close(filterResult.exceptionOrNull() ?: e)
-                    filterResult.getOrThrow()
-                    throw e
-                }
-            delegateChannel.close(delegateResult.exceptionOrNull())
-            val filterResult = filterTask.await()
-            val failure = filterResult.exceptionOrNull() ?: delegateResult.exceptionOrNull()
-            files.close(failure)
-            filterResult.getOrThrow()
-            delegateResult.getOrThrow()
+            try {
+                val delegateResult =
+                    try {
+                        delegateTask.await()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (t: Throwable) {
+                        Result.failure(t)
+                    }
+
+                // FS implementations normally close their output, but FilteredFS also owns this
+                // private delegate channel so a completed-but-leaky delegate cannot deadlock the
+                // classifier pipeline. Preserve failure causes on both the private and downstream
+                // channels where kotlinx.coroutines channels support them.
+                delegateChannel.close(delegateResult.exceptionOrNull())
+
+                val filterResult = filterTask.await()
+                filterResult.getOrThrow()
+                delegateResult.getOrThrow()
+            } finally {
+                delegateChannel.cancel()
+            }
         }
     }
 
