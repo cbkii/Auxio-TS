@@ -39,10 +39,8 @@ internal interface ExploreStep {
     suspend fun explore(scope: CoroutineScope, explored: Channel<Explored>): Deferred<Result<Unit>>
 
     companion object {
-        fun from(
-            config: Config,
-            noisyDirs: Set<String> = emptySet(),
-        ): ExploreStep = ExploreStepImpl(config.fs, config.storage, noisyDirs)
+        fun from(config: Config, noisyDirs: Set<String> = emptySet()): ExploreStep =
+            ExploreStepImpl(config.fs, config.storage, noisyDirs)
     }
 }
 

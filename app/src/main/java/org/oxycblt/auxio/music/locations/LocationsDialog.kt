@@ -291,10 +291,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsFilterRecycler.adapter = null
     }
 
-    private fun onNewLocation(
-        launcher: ActivityResultLauncher<Uri?>?,
-        disableThirdParty: Boolean,
-    ) {
+    private fun onNewLocation(launcher: ActivityResultLauncher<Uri?>?, disableThirdParty: Boolean) {
         L.d("Opening launcher")
         val launcher = requireNotNull(launcher) { "Document tree launcher was not available" }
 
