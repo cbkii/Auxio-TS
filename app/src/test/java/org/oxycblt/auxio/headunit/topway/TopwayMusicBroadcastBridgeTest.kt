@@ -22,11 +22,14 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.accent.Accent
 
+@RunWith(RobolectricTestRunner::class)
 class TopwayMusicBroadcastBridgeTest {
     @Test
     fun `publishProgress clears stale Topway progress when duration becomes unknown`() {
@@ -54,6 +57,35 @@ class TopwayMusicBroadcastBridgeTest {
             0,
             progressBroadcasts[1].getIntExtra(TopwayMusicContract.EXTRA_DURATION, -1),
         )
+    }
+
+    @Test
+    fun `publishProgress uses consistent time base for clearing to avoid suppressing future updates`() {
+        val context = RecordingContext(ApplicationProvider.getApplicationContext<Context>())
+        val bridge =
+            TopwayMusicBroadcastBridge(context, FakeUiSettings(headUnitLandscapeMode = true))
+
+        // 1. Publish active progress at deterministic time
+        bridge.publishProgress(progressMs = 1_000L, durationMs = 5_000L, nowMs = 10_000L)
+
+        // 2. Publish invalid duration, causing clear, also at deterministic time
+        // If this used real SystemClock.elapsedRealtime() internally, it could be > 10_000 + MIN_INTERVAL
+        bridge.publishProgress(progressMs = 1_500L, durationMs = 0L, nowMs = 10_100L)
+
+        // 3. Publish active progress again at a time that is > 1000ms after the PREVIOUS deterministic time (10_100)
+        // and exceeds the minIntervalMs (1000ms) to ensure it triggers a broadcast under the refined policy.
+        // We use 12_200 to be well past 11_100 (10_100 + 1000).
+        bridge.publishProgress(progressMs = 2_500L, durationMs = 5_000L, nowMs = 12_200L)
+
+        val progressBroadcasts =
+            context.broadcasts.filter { it.action == TopwayMusicContract.ACTION_PROGRESS_DURATION }
+
+        // Should have 3 broadcasts: Active(1000/5000), Clear(0/0), Active(2500/5000)
+        assertEquals(3, progressBroadcasts.size, "Should have 3 broadcasts including the recovery")
+
+        assertEquals(1_000, progressBroadcasts[0].getIntExtra(TopwayMusicContract.EXTRA_PROGRESS, -1))
+        assertEquals(0, progressBroadcasts[1].getIntExtra(TopwayMusicContract.EXTRA_PROGRESS, -1))
+        assertEquals(2_500, progressBroadcasts[2].getIntExtra(TopwayMusicContract.EXTRA_PROGRESS, -1))
     }
 
     private class RecordingContext(base: Context) : ContextWrapper(base) {
