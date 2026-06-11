@@ -65,7 +65,9 @@ class FilteredFSTest {
 
         assertTrue(result.isFailure)
         assertEquals(failure, result.exceptionOrNull())
-        assertTrue(output.receiveCatching().isClosed)
+        val downstreamResult = output.receiveCatching()
+        assertTrue(downstreamResult.isClosed)
+        assertEquals(failure, downstreamResult.exceptionOrNull())
     }
 
     @Test

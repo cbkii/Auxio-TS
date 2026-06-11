@@ -164,13 +164,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsFilterAdd.contentDescription = getString(R.string.desc_add_folder)
         binding.locationsExtrasDropdown.setText(R.string.set_extra_settings)
         binding.locationsAutoDetect.setOnClickListener {
-            pendingLocationCallback = { location ->
-                location.open(requireContext())?.let { opened ->
-                    includeLocationAdapter.add(opened)
-                    updateSaveButtonState()
-                }
-            }
-            showCandidatePathPicker()
+            pendingLocationCallback = { location -> addIncludeLocation(location) }
+            showCandidatePathPicker(disableThirdParty = false)
         }
 
         // Set up extras dropdown click listener
@@ -194,27 +189,22 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         // Set up add folder buttons
         binding.locationsIncludeAdd.setOnClickListener {
-            pendingLocationCallback = { location ->
-                location.open(requireContext())?.let { opened ->
-                    includeLocationAdapter.add(opened)
-                    updateSaveButtonState()
-                }
-            }
-            onNewLocation(openDocumentTreeLauncher)
+            pendingLocationCallback = { location -> addIncludeLocation(location) }
+            onNewLocation(openDocumentTreeLauncher, disableThirdParty = false)
         }
         binding.locationsExcludeAdd.setOnClickListener {
             pendingLocationCallback = { location ->
                 excludeLocationAdapter.add(location)
                 updateSaveButtonState()
             }
-            onNewLocation(openDocumentTreeLauncher)
+            onNewLocation(openDocumentTreeLauncher, disableThirdParty = false)
         }
         binding.locationsFilterAdd.setOnClickListener {
             pendingLocationCallback = { location ->
                 filterLocationAdapter.add(location)
                 updateSaveButtonState()
             }
-            onNewLocation(localOnlyOpenDocumentTreeLauncher)
+            onNewLocation(localOnlyOpenDocumentTreeLauncher, disableThirdParty = true)
         }
 
         // Set up grant permission card click
@@ -301,7 +291,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsFilterRecycler.adapter = null
     }
 
-    private fun onNewLocation(launcher: ActivityResultLauncher<Uri?>?) {
+    private fun onNewLocation(
+        launcher: ActivityResultLauncher<Uri?>?,
+        disableThirdParty: Boolean,
+    ) {
         L.d("Opening launcher")
         val launcher = requireNotNull(launcher) { "Document tree launcher was not available" }
 
@@ -309,20 +302,28 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             launcher.launch(null)
         } catch (e: ActivityNotFoundException) {
             L.w("SAF tree picker activity not found; showing fallback sources.")
-            showPickerUnavailableFallback()
+            showPickerUnavailableFallback(disableThirdParty)
         }
     }
 
-    private fun showPickerUnavailableFallback() {
-        AlertDialog.Builder(requireContext())
+    private fun showPickerUnavailableFallback(disableThirdParty: Boolean) {
+        val ctx =
+            context
+                ?: run {
+                    pendingLocationCallback = null
+                    return
+                }
+        AlertDialog.Builder(ctx)
             .setMessage(R.string.set_picker_unavailable_fallback)
-            .setPositiveButton(R.string.lbl_ok) { _, _ -> showCandidatePathPicker() }
+            .setPositiveButton(R.string.lbl_ok) { _, _ ->
+                showCandidatePathPicker(disableThirdParty)
+            }
             .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
             .setOnCancelListener { pendingLocationCallback = null }
             .show()
     }
 
-    private fun showCandidatePathPicker() {
+    private fun showCandidatePathPicker(disableThirdParty: Boolean) {
         lifecycleScope.launch {
             val candidates =
                 TopwaySourcePolicy.SAFE_GENERIC_FALLBACKS + TopwaySourcePolicy.TS18_USB_CANDIDATES
@@ -330,21 +331,36 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 withContext(Dispatchers.IO) {
                     candidates.filter { TopwaySourcePolicy.isAccessibleCandidate(it) }
                 }
+            val ctx =
+                context
+                    ?: run {
+                        pendingLocationCallback = null
+                        return@launch
+                    }
 
             if (accessibleCandidates.isEmpty()) {
                 pendingLocationCallback = null
-                requireContext().showToast(R.string.err_bad_location)
+                ctx.showToast(R.string.err_bad_location)
                 return@launch
             }
 
-            AlertDialog.Builder(requireContext())
+            AlertDialog.Builder(ctx)
                 .setTitle(R.string.set_select_source)
                 .setItems(accessibleCandidates.toTypedArray()) { _, which ->
-                    val path = accessibleCandidates[which]
-                    val uri = Uri.fromFile(File(path))
-                    val location = Location.Unopened.from(requireContext(), uri)
-                    pendingLocationCallback?.invoke(location)
-                    pendingLocationCallback = null
+                    val currentContext = context
+                    if (currentContext == null) {
+                        pendingLocationCallback = null
+                    } else {
+                        val path = accessibleCandidates[which]
+                        val uri = Uri.fromFile(File(path))
+                        val location = Location.Unopened.from(currentContext, uri)
+                        if (disableThirdParty && location.path.volume is Volume.ThirdParty) {
+                            currentContext.showToast(R.string.err_bad_location)
+                        } else {
+                            pendingLocationCallback?.invoke(location)
+                        }
+                        pendingLocationCallback = null
+                    }
                 }
                 .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
                 .setOnCancelListener { pendingLocationCallback = null }
@@ -358,16 +374,29 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             pendingLocationCallback = null
             return
         }
-        val context = requireContext()
-        val location = Location.Unopened.from(context, uri)
+        val ctx =
+            context
+                ?: run {
+                    pendingLocationCallback = null
+                    return
+                }
+        val location = Location.Unopened.from(ctx, uri)
 
         if (location.path.volume is Volume.ThirdParty && disableThirdParty) {
-            requireContext().showToast(R.string.err_bad_location)
+            ctx.showToast(R.string.err_bad_location)
             pendingLocationCallback = null
             return
         }
         pendingLocationCallback?.invoke(location)
         pendingLocationCallback = null
+    }
+
+    private fun addIncludeLocation(location: Location.Unopened) {
+        val ctx = context ?: return
+        location.open(ctx)?.let { opened ->
+            includeLocationAdapter.add(opened)
+            updateSaveButtonState()
+        }
     }
 
     private fun updateModeUI(binding: DialogMusicLocationsBinding) {

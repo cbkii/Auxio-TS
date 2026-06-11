@@ -200,6 +200,8 @@ private constructor(
                         if (location != null && !location.path.volume.isAccessible()) {
                             L.i("Source became inaccessible (unmounted?): ${location.uri}")
                             cancelCurrentIndex()
+                            // Skip this inaccessible update without stopping the tracker; keeping
+                            // it alive lets later remount/accessibility events trigger a real scan.
                             return@collect
                         }
                     }

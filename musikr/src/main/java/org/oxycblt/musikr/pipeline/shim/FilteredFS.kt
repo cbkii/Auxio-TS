@@ -38,32 +38,36 @@ internal class FilteredFS(
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
         val delegateChannel = Channel<File>(Channel.UNLIMITED)
         val delegateTask = delegate.explore(delegateChannel)
-        delegateTask.invokeOnCompletion { cause ->
-            if (cause != null) {
-                delegateChannel.close(cause)
-            } else {
-                delegateChannel.close()
-            }
-        }
 
         val filterTask =
             scope.tryAsync(Dispatchers.Default) {
-                try {
-                    for (file in delegateChannel) {
-                        val isNoisy = file.path.components.components.any { it in noisyDirs }
-                        if (!isNoisy) {
-                            files.send(file)
-                        }
+                for (file in delegateChannel) {
+                    val isNoisy = file.path.components.components.any { it in noisyDirs }
+                    if (!isNoisy) {
+                        files.send(file)
                     }
-                } finally {
-                    files.close()
                 }
             }
 
         return scope.tryAsync(Dispatchers.Default) {
-            val delegateResult = delegateTask.await()
-            delegateChannel.close()
-            filterTask.await().getOrThrow()
+            // delegateTask reports failures as Result values, so this task owns final channel
+            // closure: close delegateChannel with any delegate cause, await filterTask, then
+            // close downstream files with the first failure before surfacing it via getOrThrow().
+            val delegateResult =
+                try {
+                    delegateTask.await()
+                } catch (e: Throwable) {
+                    delegateChannel.close(e)
+                    val filterResult = filterTask.await()
+                    files.close(filterResult.exceptionOrNull() ?: e)
+                    filterResult.getOrThrow()
+                    throw e
+                }
+            delegateChannel.close(delegateResult.exceptionOrNull())
+            val filterResult = filterTask.await()
+            val failure = filterResult.exceptionOrNull() ?: delegateResult.exceptionOrNull()
+            files.close(failure)
+            filterResult.getOrThrow()
             delegateResult.getOrThrow()
         }
     }
