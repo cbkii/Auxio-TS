@@ -34,5 +34,18 @@ object TopwayProgressStatePolicy {
         nowMs: Long,
         lastAtMs: Long,
         minIntervalMs: Long,
-    ): Boolean = next != last || nowMs - lastAtMs >= minIntervalMs
+    ): Boolean {
+        if (last == null) return true
+        if (last == CLEAR) return true
+        if (next.durationMs != last.durationMs) return true
+
+        val elapsedMs = nowMs - lastAtMs
+        if (elapsedMs >= minIntervalMs) return true
+        if (elapsedMs < 0L) return false
+
+        val expectedProgressMs = (last.progressMs + elapsedMs).coerceIn(0L, next.durationMs)
+        val deviationMs = kotlin.math.abs(next.progressMs - expectedProgressMs)
+
+        return deviationMs >= minIntervalMs
+    }
 }

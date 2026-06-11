@@ -62,7 +62,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         fetch-depth: 0
         persist-credentials: false
@@ -88,7 +88,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         # fetch-depth: 0 (full history) is required here.
         # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
@@ -131,7 +131,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace spotlessCheck
     - name: Upload formatting reports
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: android-quality-format-reports
         path: |
@@ -209,7 +209,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         # fetch-depth: 0 (full history) is required here.
         # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
@@ -258,7 +258,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
     - name: Upload unit test reports
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: android-quality-unit-test-reports
         path: |
@@ -275,7 +275,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         # fetch-depth: 0 (full history) is required here.
         # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
@@ -322,7 +322,7 @@ jobs:
       run: ./gradlew --no-daemon --stacktrace :app:lintStandardDebug
     - name: Upload Android lint reports
       if: failure()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: android-quality-lint-reports
         path: |
@@ -338,7 +338,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
       with:
         fetch-depth: 0
         persist-credentials: false

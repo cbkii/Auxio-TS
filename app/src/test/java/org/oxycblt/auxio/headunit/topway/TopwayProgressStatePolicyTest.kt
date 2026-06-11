@@ -40,12 +40,57 @@ class TopwayProgressStatePolicyTest {
     }
 
     @Test
-    fun `publish policy allows changes or elapsed interval`() {
-        val a = TopwayProgressSnapshot(1_000L, 5_000L)
-        val b = TopwayProgressSnapshot(2_000L, 5_000L)
-        assertTrue(TopwayProgressStatePolicy.shouldPublish(a, null, 0L, 0L, 1_000L))
-        assertTrue(TopwayProgressStatePolicy.shouldPublish(b, a, 100L, 0L, 1_000L))
-        assertFalse(TopwayProgressStatePolicy.shouldPublish(a, a, 100L, 0L, 1_000L))
-        assertTrue(TopwayProgressStatePolicy.shouldPublish(a, a, 1_000L, 0L, 1_000L))
+    fun `publish policy allows first snapshot`() {
+        val next = TopwayProgressSnapshot(1_000L, 5_000L)
+        assertTrue(TopwayProgressStatePolicy.shouldPublish(next, null, 10_000L, 0L, 1_000L))
+    }
+
+    @Test
+    fun `publish policy allows transition from CLEAR`() {
+        val next = TopwayProgressSnapshot(1_000L, 5_000L)
+        assertTrue(
+            TopwayProgressStatePolicy.shouldPublish(
+                next,
+                TopwayProgressStatePolicy.CLEAR,
+                10_000L,
+                9_900L,
+                1_000L,
+            )
+        )
+    }
+
+    @Test
+    fun `publish policy allows duration changes`() {
+        val last = TopwayProgressSnapshot(1_000L, 5_000L)
+        val next = TopwayProgressSnapshot(1_100L, 6_000L)
+        assertTrue(TopwayProgressStatePolicy.shouldPublish(next, last, 10_100L, 10_000L, 1_000L))
+    }
+
+    @Test
+    fun `publish policy suppresses normal progress within interval`() {
+        val last = TopwayProgressSnapshot(1_000L, 5_000L)
+        val next = TopwayProgressSnapshot(1_100L, 5_000L)
+        assertFalse(TopwayProgressStatePolicy.shouldPublish(next, last, 10_100L, 10_000L, 1_000L))
+    }
+
+    @Test
+    fun `publish policy allows normal progress after interval`() {
+        val last = TopwayProgressSnapshot(1_000L, 5_000L)
+        val next = TopwayProgressSnapshot(2_100L, 5_000L)
+        assertTrue(TopwayProgressStatePolicy.shouldPublish(next, last, 11_100L, 10_000L, 1_000L))
+    }
+
+    @Test
+    fun `publish policy allows seeks within interval`() {
+        val last = TopwayProgressSnapshot(1_000L, 5_000L)
+        val next = TopwayProgressSnapshot(3_000L, 5_000L)
+        assertTrue(TopwayProgressStatePolicy.shouldPublish(next, last, 10_100L, 10_000L, 1_000L))
+    }
+
+    @Test
+    fun `publish policy handles negative elapsed time conservatively`() {
+        val last = TopwayProgressSnapshot(1_000L, 5_000L)
+        val next = TopwayProgressSnapshot(1_100L, 5_000L)
+        assertFalse(TopwayProgressStatePolicy.shouldPublish(next, last, 9_000L, 10_000L, 1_000L))
     }
 }
