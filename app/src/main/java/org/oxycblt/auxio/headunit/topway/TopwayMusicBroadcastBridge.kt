@@ -59,7 +59,7 @@ class TopwayMusicBroadcastBridge(private val context: Context, private val uiSet
         val snapshot =
             TopwayProgressStatePolicy.active(progressMs, durationMs)
                 ?: run {
-                    clearProgress()
+                    clearProgress(nowMs)
                     return
                 }
         if (
@@ -82,15 +82,16 @@ class TopwayMusicBroadcastBridge(private val context: Context, private val uiSet
 
     fun clear() {
         if (!bridgeEnabled) return
+        val nowMs = SystemClock.elapsedRealtime()
         clearMetadata()
-        clearProgress()
+        clearProgress(nowMs)
     }
 
-    private fun clearProgress() {
+    private fun clearProgress(nowMs: Long) {
         if (lastProgress != TopwayProgressStatePolicy.CLEAR) {
             context.sendBroadcast(TopwayMusicIntentFactory.progressIntent(0L, 0L))
             lastProgress = TopwayProgressStatePolicy.CLEAR
-            lastProgressAtMs = SystemClock.elapsedRealtime()
+            lastProgressAtMs = nowMs
         }
     }
 
