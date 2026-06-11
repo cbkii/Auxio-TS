@@ -48,7 +48,15 @@ class TopwayProgressStatePolicyTest {
     @Test
     fun `publish policy allows transition from CLEAR`() {
         val next = TopwayProgressSnapshot(1_000L, 5_000L)
-        assertTrue(TopwayProgressStatePolicy.shouldPublish(next, TopwayProgressStatePolicy.CLEAR, 10_000L, 9_900L, 1_000L))
+        assertTrue(
+            TopwayProgressStatePolicy.shouldPublish(
+                next,
+                TopwayProgressStatePolicy.CLEAR,
+                10_000L,
+                9_900L,
+                1_000L,
+            )
+        )
     }
 
     @Test
