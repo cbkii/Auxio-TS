@@ -73,8 +73,9 @@ class TopwayMusicBroadcastBridgeTest {
         bridge.publishProgress(progressMs = 1_500L, durationMs = 0L, nowMs = 10_100L)
 
         // 3. Publish active progress again at a time that is > 1000ms after the PREVIOUS deterministic time (10_100)
-        // but might be BEFORE a real clock value if the clear used real time.
-        bridge.publishProgress(progressMs = 2_500L, durationMs = 5_000L, nowMs = 11_200L)
+        // and exceeds the minIntervalMs (1000ms) to ensure it triggers a broadcast under the refined policy.
+        // We use 12_200 to be well past 11_100 (10_100 + 1000).
+        bridge.publishProgress(progressMs = 2_500L, durationMs = 5_000L, nowMs = 12_200L)
 
         val progressBroadcasts =
             context.broadcasts.filter { it.action == TopwayMusicContract.ACTION_PROGRESS_DURATION }
