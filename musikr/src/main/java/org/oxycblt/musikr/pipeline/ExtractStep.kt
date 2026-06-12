@@ -127,6 +127,9 @@ private class ExtractStepImpl(
                         when (item) {
                             is Finalized -> {
                                 if (item.extracted is RawSong) {
+                                    // Cache-hit songs have no CachedFile instance in scope
+                                    // anymore; the conversion is a plain field copy, so
+                                    // rebuilding it here is cheap.
                                     exclude.add(item.extracted.toCachedFile())
                                 }
                                 item

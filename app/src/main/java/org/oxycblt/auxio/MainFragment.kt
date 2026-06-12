@@ -353,7 +353,9 @@ class MainFragment :
 
         // Mutating the sheet background shape invalidates the drawable; only do it when the
         // ratio actually changed so idle frames don't redraw the sheet background every vsync
-        // on weak head-unit GPUs.
+        // on weak head-unit GPUs. Exact equality is intentional: idle frames recompute the
+        // ratio from identical inputs, yielding a bit-identical value, while any real sheet
+        // movement must always be applied.
         val stretchChanged = playbackLastStretchRatio != lastStretchRatio
         if (stretchChanged) {
             lastStretchRatio = playbackLastStretchRatio
