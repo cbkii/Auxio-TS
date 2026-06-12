@@ -57,7 +57,7 @@ abstract class CoverCompositionFetcher(
             data.covers.covers
                 .asFlow()
                 .mapNotNull { cover -> cover.open() }
-                .mapNotNull { stream -> BitmapFactory.decodeStream(stream).also { stream.close() } }
+                .mapNotNull { stream -> stream.use { BitmapFactory.decodeStream(it) } }
                 .take(4)
                 .toList()
         if (bitmaps.size < 4) {

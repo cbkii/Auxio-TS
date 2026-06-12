@@ -82,15 +82,23 @@ class Auxio : Application() {
         }
         // Dynamic shortcuts are a non-essential convenience. Some OEM launchers (including
         // head-unit launchers such as DoFun) ship a partial or buggy ShortcutManager that can
-        // throw from setDynamicShortcuts; never let that crash every app launch.
-        try {
-            ShortcutManagerCompat.setDynamicShortcuts(
-                this,
-                HeadUnitEntryPoints.createDynamicShortcuts(this),
+        // throw from setDynamicShortcuts; never let that crash every app launch. Publishing
+        // involves synchronous binder calls to system_server, so keep it off the main thread
+        // to avoid slowing first-frame startup on weak head-unit hardware.
+        Thread(
+                {
+                    try {
+                        ShortcutManagerCompat.setDynamicShortcuts(
+                            this,
+                            HeadUnitEntryPoints.createDynamicShortcuts(this),
+                        )
+                    } catch (e: Exception) {
+                        Timber.w(e, "Unable to register dynamic shortcuts")
+                    }
+                },
+                "Auxio:ShortcutPublish",
             )
-        } catch (e: Exception) {
-            Timber.w(e, "Unable to register dynamic shortcuts")
-        }
+            .start()
 
         // Register car floating controls visibility hooks for the Topway/TS18 variant.
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {

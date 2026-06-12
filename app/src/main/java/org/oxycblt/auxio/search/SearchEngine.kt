@@ -118,9 +118,15 @@ class SearchEngineImpl @Inject constructor(@ApplicationContext private val conte
                 // any non-alphabetical characters with their alphabetical representations,
                 // which
                 // could make it match the query.
+                // Most names (plain ASCII) are already NFKD-normalized; skip the expensive
+                // Normalizer pass for them since this runs per item per keystroke.
                 val normalizedName =
                     NORMALIZE_POST_PROCESSING_REGEX.replace(
-                        Normalizer.normalize(resolvedName, Normalizer.Form.NFKD),
+                        if (Normalizer.isNormalized(resolvedName, Normalizer.Form.NFKD)) {
+                            resolvedName
+                        } else {
+                            Normalizer.normalize(resolvedName, Normalizer.Form.NFKD)
+                        },
                         "",
                     )
                 if (normalizedName.contains(query, ignoreCase = true)) {

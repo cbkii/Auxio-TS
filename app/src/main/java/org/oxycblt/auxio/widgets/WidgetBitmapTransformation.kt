@@ -46,7 +46,9 @@ class WidgetBitmapTransformation(reduce: Float) : Transformation() {
             throw IllegalArgumentException("WidgetBitmapTransformation requires original size.")
         }
         val inputArea = input.width * input.height
-        if (inputArea != maxBitmapArea) {
+        if (inputArea > maxBitmapArea) {
+            // Only ever scale *down* to fit the RemoteViews bitmap memory cap. Upscaling a
+            // smaller cover wastes memory and CPU on weak head-unit hardware for no visual gain.
             val scale = sqrt(maxBitmapArea / inputArea.toDouble())
             val newWidth = (input.width * scale).toInt()
             val newHeight = (input.height * scale).toInt()

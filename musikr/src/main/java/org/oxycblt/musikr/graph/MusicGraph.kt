@@ -306,13 +306,17 @@ private class MusicGraphBuilderImpl : MusicGraph.Builder {
             vertex.artistVertices = vertex.artistVertices.distinct().toMutableList()
             vertex.genreVertices = vertex.genreVertices.distinct().toMutableList()
 
-            playlistVertices.forEach {
+            if (playlistVertices.isNotEmpty()) {
+                // Hoist pointer construction out of the playlist loop so a large library does
+                // not allocate 3 pointers per song *per playlist*.
                 val v363Pointer = SongPointer.UID(entry.key)
-                it.pointerMap[v363Pointer]?.forEach { index -> it.songVertices[index] = vertex }
                 val v400Pointer = SongPointer.UID(entry.value.preSong.v400Uid)
-                it.pointerMap[v400Pointer]?.forEach { index -> it.songVertices[index] = vertex }
                 val v401Pointer = SongPointer.UID(entry.value.preSong.v401Uid)
-                it.pointerMap[v401Pointer]?.forEach { index -> it.songVertices[index] = vertex }
+                playlistVertices.forEach {
+                    it.pointerMap[v363Pointer]?.forEach { index -> it.songVertices[index] = vertex }
+                    it.pointerMap[v400Pointer]?.forEach { index -> it.songVertices[index] = vertex }
+                    it.pointerMap[v401Pointer]?.forEach { index -> it.songVertices[index] = vertex }
+                }
             }
         }
 

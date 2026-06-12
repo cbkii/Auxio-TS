@@ -94,14 +94,22 @@ constructor(
     override fun onMusicChanges(changes: MusicRepository.Changes) {
         if (!changes.deviceLibrary) return
         val library = musicRepository.library ?: return
+        // Compute both totals in a single pass; this runs on the main thread for every
+        // library change and large libraries make two full iterations needlessly expensive.
+        var totalDurationMs = 0L
+        var totalSize = 0L
+        for (song in library.songs) {
+            totalDurationMs += song.durationMs
+            totalSize += song.size
+        }
         _statistics.value =
             Statistics(
                 library.songs.size,
                 library.albums.size,
                 library.artists.size,
                 library.genres.size,
-                library.songs.sumOf { it.durationMs },
-                library.songs.sumOf { it.size },
+                totalDurationMs,
+                totalSize,
             )
         L.d("Updated statistics: ${_statistics.value}")
     }

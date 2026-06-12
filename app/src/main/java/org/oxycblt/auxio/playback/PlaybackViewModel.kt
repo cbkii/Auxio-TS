@@ -204,12 +204,19 @@ constructor(
         // state information.
         lastPositionJob?.cancel()
         lastPositionJob =
-            viewModelScope.launch {
-                while (true) {
-                    _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
-                    // Wait a deci-second for the next position tick.
-                    delay(100)
+            // While paused the position cannot advance, so polling would just re-set the
+            // same value every deci-second and waste CPU on weak head-unit hardware. Any
+            // play/pause/seek transition delivers a fresh Progression that restarts polling.
+            if (progression.isPlaying) {
+                viewModelScope.launch {
+                    while (true) {
+                        _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
+                        // Wait a deci-second for the next position tick.
+                        delay(100)
+                    }
                 }
+            } else {
+                null
             }
     }
 

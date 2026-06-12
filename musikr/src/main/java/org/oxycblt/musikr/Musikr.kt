@@ -180,28 +180,51 @@ private class MusikrImpl(
         val trackedExploredChannel = Channel<Explored>(Channel.UNLIMITED)
         val trackedExploredTask =
             tryAsyncWith(trackedExploredChannel, Dispatchers.Main) {
+                var lastEmitMs = 0L
                 for (item in exploredChannel) {
                     explored++
-                    onProgress(IndexingProgress.Songs(loaded, explored))
+                    // Emitting per-item progress floods the main thread with state updates
+                    // (notification/UI refreshes) on large libraries; throttle to a humane rate.
+                    val now = System.currentTimeMillis()
+                    if (now - lastEmitMs >= PROGRESS_INTERVAL_MS) {
+                        lastEmitMs = now
+                        onProgress(IndexingProgress.Songs(loaded, explored))
+                    }
                     trackedExploredChannel.send(item)
                 }
+                onProgress(IndexingProgress.Songs(loaded, explored))
             }
         val extractedChannel = Channel<Extracted>(Channel.UNLIMITED)
         val extractedTask = extractStep.extract(this, trackedExploredChannel, extractedChannel)
         val trackedExtractedChannel = Channel<Extracted>(Channel.UNLIMITED)
         val trackedExtractedTask =
             tryAsyncWith(trackedExtractedChannel, Dispatchers.Main) {
+                var lastEmitMs = 0L
                 for (item in extractedChannel) {
                     loaded++
-                    onProgress(IndexingProgress.Songs(loaded, explored))
+                    val now = System.currentTimeMillis()
+                    if (now - lastEmitMs >= PROGRESS_INTERVAL_MS) {
+                        lastEmitMs = now
+                        onProgress(IndexingProgress.Songs(loaded, explored))
+                    }
                     trackedExtractedChannel.send(item)
                 }
+                onProgress(IndexingProgress.Songs(loaded, explored))
                 onProgress(IndexingProgress.Indeterminate)
             }
         val library = evaluateStep.evaluate(trackedExtractedChannel)
         merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
         Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
         LibraryResultImpl(config, library)
+    }
+
+    private companion object {
+        /**
+         * Minimum interval between [IndexingProgress.Songs] emissions. Progress consumers update
+         * notifications/UI on the main thread, so per-item emission floods weak head-unit CPUs
+         * during large scans.
+         */
+        const val PROGRESS_INTERVAL_MS = 100L
     }
 }
 
