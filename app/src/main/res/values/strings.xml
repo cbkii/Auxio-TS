@@ -340,6 +340,10 @@
     <string name="set_audio">Audio</string>
     <string name="set_audio_desc">Configure sound and playback behavior</string>
     <string name="set_playback">Playback</string>
+    <string name="set_autostart_on_boot">Autostart</string>
+    <string name="set_autostart_on_boot_desc">Launch Auxio-TS when the device boots</string>
+    <string name="set_autoplay_on_launch">Autoplay</string>
+    <string name="set_autoplay_on_launch_desc">Start playback when Auxio-TS launches</string>
     <string name="set_headset_autoplay">Headset autoplay</string>
     <string name="set_headset_autoplay_desc">Always start playing when a headset is connected (may not work on all devices)</string>
     <string name="set_rewind_prev">Rewind before skipping back</string>

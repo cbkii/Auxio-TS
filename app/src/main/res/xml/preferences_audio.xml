@@ -5,6 +5,18 @@
     <PreferenceCategory android:title="@string/set_playback">
 
         <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="@string/set_key_autostart_on_boot"
+            app:summary="@string/set_autostart_on_boot_desc"
+            app:title="@string/set_autostart_on_boot" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="@string/set_key_autoplay_on_launch"
+            app:summary="@string/set_autoplay_on_launch_desc"
+            app:title="@string/set_autoplay_on_launch" />
+
+        <SwitchPreferenceCompat
             app:key="@string/set_key_headset_autoplay"
             app:summary="@string/set_headset_autoplay_desc"
             app:title="@string/set_headset_autoplay" />

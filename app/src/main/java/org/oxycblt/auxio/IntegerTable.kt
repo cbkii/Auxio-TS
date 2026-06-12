@@ -71,6 +71,8 @@ object IntegerTable {
     const val START_ID_MEDIA_BUTTON = 0xA052
     /** Topway bridge receiver AuxioService Start ID */
     const val START_ID_TOPWAY = 0xA053
+    /** Boot receiver AuxioService Start ID */
+    const val START_ID_BOOT = 0xA054
     /** RepeatMode.NONE */
     const val REPEAT_MODE_NONE = 0xA100
     /** RepeatMode.ALL */

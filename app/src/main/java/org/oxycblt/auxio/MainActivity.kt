@@ -33,7 +33,9 @@ import org.oxycblt.auxio.databinding.ActivityMainBinding
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
+import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.isNight
@@ -58,6 +60,7 @@ import timber.log.Timber as L
 class MainActivity : AppCompatActivity() {
     private val playbackModel: PlaybackViewModel by viewModels()
     @Inject lateinit var uiSettings: UISettings
+    @Inject lateinit var playbackSettings: PlaybackSettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,8 +87,12 @@ class MainActivity : AppCompatActivity() {
         )
 
         if (!startIntentAction(intent)) {
-            // No intent action to do, just restore the previously saved state.
-            playbackModel.playDeferred(DeferredPlayback.RestoreState(false))
+            // No intent action to do, restore the previously saved state.
+            // If autoplay is enabled, restore with play=true and shuffle-all fallback.
+            val action = StartupPlaybackPolicy.restoreActionForLaunch(
+                playbackSettings.autoplayOnLaunch
+            )
+            playbackModel.playDeferred(action)
         }
     }
 

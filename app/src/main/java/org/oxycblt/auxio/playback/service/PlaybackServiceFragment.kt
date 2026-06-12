@@ -34,6 +34,7 @@ import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.headunit.topway.TopwayStartCallbacks
 import org.oxycblt.auxio.headunit.topway.TopwayStartIntentHandler
 import org.oxycblt.auxio.playback.PlaybackSettings
+import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
@@ -166,6 +167,13 @@ private constructor(
                     // defensive no-op for any future fall-through from non-action intents
                     // that still carry the Topway start ID.
                     null
+                }
+                IntegerTable.START_ID_BOOT -> {
+                    // Boot receiver started the service (Activity launch was blocked).
+                    // Respect the autoplay setting for the restore action.
+                    StartupPlaybackPolicy.restoreActionForBoot(
+                        playbackSettings.autoplayOnLaunch
+                    )
                 }
                 else -> {
                     L.d("Handling non-native start.")
