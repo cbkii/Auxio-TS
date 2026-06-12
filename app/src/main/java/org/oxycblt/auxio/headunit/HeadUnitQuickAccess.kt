@@ -36,7 +36,7 @@ enum class QuickPickAction {
     HEAD_UNIT_SETTINGS,
 }
 
-data class QuickPickItem(val action: QuickPickAction, val enabled: Boolean)
+internal data class QuickPickItem(val action: QuickPickAction, val enabled: Boolean)
 
 data class MetadataChipState(
     val genres: Boolean,
@@ -48,28 +48,25 @@ data class MetadataChipState(
 
 object HeadUnitQuickAccess {
     /**
-     * Return the set of dashboard quick-pick items for a given library state.
+     * Return the dashboard quick-pick items for tests that only need action/enabled state.
      *
-     * This is used for tests to verify consistency with [HeadUnitDashboardPolicy.entries].
+     * The returned list mirrors [HeadUnitDashboardPolicy.entries] and is intentionally not a fixed
+     * action set: unavailable content-specific actions, such as [QuickPickAction.FAVOURITES], may be
+     * omitted entirely instead of being returned disabled.
      */
-    fun quickPicks(
+    internal fun quickPicks(
         hasLibraryContent: Boolean,
         hasFavourites: Boolean,
         isIndexing: Boolean,
     ): List<QuickPickItem> =
-        listOf(
-                QuickPickItem(QuickPickAction.NOW_PLAYING, true),
-                QuickPickItem(QuickPickAction.QUEUE, true),
-                QuickPickItem(QuickPickAction.SHUFFLE_ALL, hasLibraryContent && !isIndexing),
-                QuickPickItem(QuickPickAction.RECENTLY_ADDED, hasLibraryContent && !isIndexing),
+        HeadUnitDashboardPolicy.entries(
+                HeadUnitDashboardState(
+                    hasLibraryContent = hasLibraryContent,
+                    hasFavourites = hasFavourites,
+                    isIndexing = isIndexing,
+                )
             )
-            .let { base ->
-                if (hasFavourites) {
-                    base + QuickPickItem(QuickPickAction.FAVOURITES, true)
-                } else {
-                    base
-                }
-            } + QuickPickItem(QuickPickAction.HEAD_UNIT_SETTINGS, !isIndexing)
+            .map { entry -> QuickPickItem(entry.action, entry.enabled) }
 
     fun metadataChipState(
         genreCount: Int,
