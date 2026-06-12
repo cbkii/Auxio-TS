@@ -51,8 +51,8 @@ object HeadUnitQuickAccess {
      * Return the dashboard quick-pick items for tests that only need action/enabled state.
      *
      * The returned list mirrors [HeadUnitDashboardPolicy.entries] and is intentionally not a fixed
-     * action set: unavailable content-specific actions, such as [QuickPickAction.FAVOURITES], may be
-     * omitted entirely instead of being returned disabled.
+     * action set: unavailable content-specific actions, such as [QuickPickAction.FAVOURITES], may
+     * be omitted entirely instead of being returned disabled.
      */
     internal fun quickPicks(
         hasLibraryContent: Boolean,
