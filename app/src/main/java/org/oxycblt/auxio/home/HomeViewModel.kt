@@ -254,9 +254,7 @@ constructor(
                 }
             }
         invalidationJobs[type] = job
-        job.invokeOnCompletion {
-            if (invalidationJobs[type] === job) invalidationJobs.remove(type)
-        }
+        job.invokeOnCompletion { if (invalidationJobs[type] === job) invalidationJobs.remove(type) }
     }
 
     override fun invalidateTabs() {
