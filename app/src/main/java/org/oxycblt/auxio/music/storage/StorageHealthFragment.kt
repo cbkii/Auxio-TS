@@ -132,7 +132,16 @@ class StorageHealthViewModel @Inject constructor(private val musicSettings: Musi
 
         val allPaths = mutableListOf<String>()
         if (musicSettings.locationMode == LocationMode.SAF) {
-            musicSettings.safQuery.source.forEach { allPaths.add(it.path) }
+            musicSettings.safQuery.source.forEach { location ->
+                val volumeComponents = location.path.volume.components
+                val pathString =
+                    if (volumeComponents != null) {
+                        "/${volumeComponents.unixString}/${location.path.components.unixString}"
+                    } else {
+                        "${location.path.volume}/${location.path.components.unixString}"
+                    }
+                allPaths.add(pathString)
+            }
         } else {
             // Find some media store paths via a quick scan or just mention that.
             // For now, we only deduplicate based on existing noisy/selected paths
