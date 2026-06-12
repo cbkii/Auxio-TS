@@ -29,69 +29,66 @@ class HeadUnitQuickAccessTest {
         val picks =
             HeadUnitQuickAccess.quickPicks(
                     hasLibraryContent = false,
-                    hasFolderSupport = true,
-                    hasFavouritesSupport = false,
-                    hasYearMetadata = false,
+                    hasFavourites = false,
+                    isIndexing = false,
                 )
                 .associateBy { it.action }
         assertTrue(picks.getValue(QuickPickAction.NOW_PLAYING).enabled)
+        assertTrue(picks.getValue(QuickPickAction.QUEUE).enabled)
         assertFalse(picks.getValue(QuickPickAction.SHUFFLE_ALL).enabled)
-        assertFalse(picks.getValue(QuickPickAction.GENRES).enabled)
-        assertFalse(picks.getValue(QuickPickAction.PLAYLISTS).enabled)
         assertFalse(picks.getValue(QuickPickAction.RECENTLY_ADDED).enabled)
-        assertFalse(picks.getValue(QuickPickAction.DECADES).enabled)
-        assertTrue(picks.getValue(QuickPickAction.FOLDERS).enabled)
-        assertFalse(picks.getValue(QuickPickAction.FAVOURITES).enabled)
+        assertFalse(
+            "Favourites is excluded when not present",
+            picks.containsKey(QuickPickAction.FAVOURITES),
+        )
+        assertTrue(picks.getValue(QuickPickAction.HEAD_UNIT_SETTINGS).enabled)
     }
 
     @Test
-    fun quickPicks_decadesRequiresYearMetadata() {
-        val noYears =
-            HeadUnitQuickAccess.quickPicks(
-                    true,
-                    hasFolderSupport = true,
-                    hasFavouritesSupport = false,
-                    hasYearMetadata = false,
-                )
-                .associateBy { it.action }
-        val withYears =
-            HeadUnitQuickAccess.quickPicks(
-                    true,
-                    hasFolderSupport = true,
-                    hasFavouritesSupport = false,
-                    hasYearMetadata = true,
-                )
-                .associateBy { it.action }
-        assertFalse(noYears.getValue(QuickPickAction.DECADES).enabled)
-        assertTrue(withYears.getValue(QuickPickAction.DECADES).enabled)
-    }
-
-    @Test
-    fun quickPicks_favourites_enabledWhenSupported() {
+    fun quickPicks_indexing_disablesLibraryDependentAndSettingsShortcuts() {
         val picks =
             HeadUnitQuickAccess.quickPicks(
                     hasLibraryContent = true,
-                    hasFolderSupport = true,
-                    hasFavouritesSupport = true,
-                    hasYearMetadata = false,
+                    hasFavourites = true,
+                    isIndexing = true,
+                )
+                .associateBy { it.action }
+        assertTrue(picks.getValue(QuickPickAction.NOW_PLAYING).enabled)
+        assertTrue(picks.getValue(QuickPickAction.QUEUE).enabled)
+        assertFalse(picks.getValue(QuickPickAction.SHUFFLE_ALL).enabled)
+        assertFalse(picks.getValue(QuickPickAction.RECENTLY_ADDED).enabled)
+        assertTrue(
+            "Favourites remains enabled while indexing if it exists",
+            picks.getValue(QuickPickAction.FAVOURITES).enabled,
+        )
+        assertFalse(picks.getValue(QuickPickAction.HEAD_UNIT_SETTINGS).enabled)
+    }
+
+    @Test
+    fun quickPicks_favourites_enabledWhenPresent() {
+        val picks =
+            HeadUnitQuickAccess.quickPicks(
+                    hasLibraryContent = true,
+                    hasFavourites = true,
+                    isIndexing = false,
                 )
                 .associateBy { it.action }
         assertTrue(picks.getValue(QuickPickAction.FAVOURITES).enabled)
     }
 
     @Test
-    fun quickPicks_favourites_markedDisabledWhenNoPlaylist() {
+    fun quickPicks_favourites_disabledWhenNotPresent() {
         val picks =
             HeadUnitQuickAccess.quickPicks(
                     hasLibraryContent = true,
-                    hasFolderSupport = true,
-                    hasFavouritesSupport = false,
-                    hasYearMetadata = false,
+                    hasFavourites = false,
+                    isIndexing = false,
                 )
                 .associateBy { it.action }
-        // The FAVOURITES item is present in the list but disabled; the UI layer filters it from
-        // display so it is never shown as a dead placeholder.
-        assertFalse(picks.getValue(QuickPickAction.FAVOURITES).enabled)
+        assertFalse(
+            "Favourites is excluded when not present",
+            picks.containsKey(QuickPickAction.FAVOURITES),
+        )
     }
 
     @Test

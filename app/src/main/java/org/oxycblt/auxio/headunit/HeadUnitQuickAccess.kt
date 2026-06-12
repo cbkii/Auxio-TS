@@ -36,7 +36,7 @@ enum class QuickPickAction {
     HEAD_UNIT_SETTINGS,
 }
 
-data class QuickPickItem(val action: QuickPickAction, val enabled: Boolean)
+internal data class QuickPickItem(val action: QuickPickAction, val enabled: Boolean)
 
 data class MetadataChipState(
     val genres: Boolean,
@@ -47,25 +47,26 @@ data class MetadataChipState(
 )
 
 object HeadUnitQuickAccess {
-    fun quickPicks(
+    /**
+     * Return the dashboard quick-pick items for tests that only need action/enabled state.
+     *
+     * The returned list mirrors [HeadUnitDashboardPolicy.entries] and is intentionally not a fixed
+     * action set: unavailable content-specific actions, such as [QuickPickAction.FAVOURITES], may
+     * be omitted entirely instead of being returned disabled.
+     */
+    internal fun quickPicks(
         hasLibraryContent: Boolean,
-        hasFolderSupport: Boolean,
-        hasFavouritesSupport: Boolean,
-        hasYearMetadata: Boolean,
+        hasFavourites: Boolean,
+        isIndexing: Boolean,
     ): List<QuickPickItem> =
-        listOf(
-            QuickPickItem(QuickPickAction.NOW_PLAYING, true),
-            QuickPickItem(QuickPickAction.SHUFFLE_ALL, hasLibraryContent),
-            QuickPickItem(QuickPickAction.GENRES, hasLibraryContent),
-            QuickPickItem(QuickPickAction.ARTISTS, hasLibraryContent),
-            QuickPickItem(QuickPickAction.ALBUMS, hasLibraryContent),
-            QuickPickItem(QuickPickAction.PLAYLISTS, hasLibraryContent),
-            QuickPickItem(QuickPickAction.QUEUE, true),
-            QuickPickItem(QuickPickAction.RECENTLY_ADDED, hasLibraryContent),
-            QuickPickItem(QuickPickAction.DECADES, hasLibraryContent && hasYearMetadata),
-            QuickPickItem(QuickPickAction.FOLDERS, hasFolderSupport),
-            QuickPickItem(QuickPickAction.FAVOURITES, hasFavouritesSupport),
-        )
+        HeadUnitDashboardPolicy.entries(
+                HeadUnitDashboardState(
+                    hasLibraryContent = hasLibraryContent,
+                    hasFavourites = hasFavourites,
+                    isIndexing = isIndexing,
+                )
+            )
+            .map { entry -> QuickPickItem(entry.action, entry.enabled) }
 
     fun metadataChipState(
         genreCount: Int,
