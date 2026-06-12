@@ -58,6 +58,9 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** The currently configured MediaStore query (if any) * */
     var mediaStoreQuery: MediaStore.Query
 
+    /** Whether to use the default system filter for MediaStore scans. */
+    var useDefaultSystemFilter: Boolean
+
     /** Whether to be actively watching for changes in the music library. */
     val shouldBeObserving: Boolean
 
@@ -225,6 +228,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     },
                 filtered = filteredLocations,
                 excludeNonMusic = excludeNonMusic,
+                useDefaultSystemFilter = useDefaultSystemFilter,
             )
         }
         set(value) {
@@ -240,6 +244,19 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     value.filtered.stringify(),
                 )
                 putBoolean(getString(R.string.set_key_exclude_non_music), value.excludeNonMusic)
+                apply()
+            }
+        }
+
+    override var useDefaultSystemFilter: Boolean
+        get() =
+            sharedPreferences.getBoolean(
+                getString(R.string.set_key_use_default_system_filter),
+                true,
+            )
+        set(value) {
+            sharedPreferences.edit {
+                putBoolean(getString(R.string.set_key_use_default_system_filter), value)
                 apply()
             }
         }
@@ -269,6 +286,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             getString(R.string.set_key_filter_mode),
             getString(R.string.set_key_filtered_locations),
             getString(R.string.set_key_exclude_non_music),
+            getString(R.string.set_key_use_default_system_filter),
             getString(R.string.set_key_separators),
             getString(R.string.set_key_auto_sort_names) -> {
                 L.d("Dispatching indexing setting change for $key")

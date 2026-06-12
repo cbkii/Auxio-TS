@@ -167,6 +167,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             pendingLocationCallback = { location -> addIncludeLocation(location) }
             showCandidatePathPicker(disableThirdParty = false)
         }
+        binding.locationsManualPath.contentDescription = getString(R.string.set_manual_path)
+        binding.locationsManualPath.setOnClickListener {
+            pendingLocationCallback = { location -> addIncludeLocation(location) }
+            showManualPathDialog()
+        }
 
         // Set up extras dropdown click listener
         binding.locationsExtrasDropdown.setOnClickListener {
@@ -210,6 +215,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         // Set up grant permission card click
         binding.locationsPermsCard.setOnClickListener { requestStoragePermission() }
 
+        binding.locationsExcludeNonMusicSwitch.setOnCheckedChangeListener { _, isChecked ->
+            updateSaveButtonState()
+        }
+
         // Initialize UI state
         updateModeUI(binding)
         updateExtrasVisibility(binding)
@@ -242,7 +251,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         // Load MediaStore data
         musicSettings.mediaStoreQuery.let { query ->
             filterLocationAdapter.addAll(query.filtered)
-            binding.locationsExcludeNonMusicSwitch.isChecked = query.excludeNonMusic
+            if (isFilePickerMode) {
+                binding.locationsExcludeNonMusicSwitch.isChecked = query.excludeNonMusic
+            } else {
+                binding.locationsExcludeNonMusicSwitch.isChecked = query.useDefaultSystemFilter
+            }
 
             isIncludeMode = query.mode == MediaStore.FilterMode.INCLUDE
             binding.locationsExcludeModeExclude.isChecked = isIncludeMode
@@ -257,6 +270,14 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         isFilePickerMode = filePicker
         updateModeUI(binding)
+
+        // Update the switch value when toggling mode
+        if (isFilePickerMode) {
+            binding.locationsExcludeNonMusicSwitch.isChecked = musicSettings.mediaStoreQuery.excludeNonMusic
+        } else {
+            binding.locationsExcludeNonMusicSwitch.isChecked = musicSettings.useDefaultSystemFilter
+        }
+
         updateSaveButtonState()
     }
 
@@ -335,34 +356,73 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         return@launch
                     }
 
-            if (accessibleCandidates.isEmpty()) {
-                pendingLocationCallback = null
-                ctx.showToast(R.string.err_bad_location)
-                return@launch
-            }
+            val options = mutableListOf<String>()
+            options.addAll(accessibleCandidates)
+            options.add(getString(R.string.set_manual_path))
 
             AlertDialog.Builder(ctx)
                 .setTitle(R.string.set_select_source)
-                .setItems(accessibleCandidates.toTypedArray()) { _, which ->
-                    val currentContext = context
-                    if (currentContext == null) {
-                        pendingLocationCallback = null
-                    } else {
-                        val path = accessibleCandidates[which]
-                        val uri = Uri.fromFile(File(path))
-                        val location = Location.Unopened.from(currentContext, uri)
-                        if (disableThirdParty && location.path.volume is Volume.ThirdParty) {
-                            currentContext.showToast(R.string.err_bad_location)
+                .setItems(options.toTypedArray()) { _, which ->
+                    if (which < accessibleCandidates.size) {
+                        val currentContext = context
+                        if (currentContext == null) {
+                            pendingLocationCallback = null
                         } else {
-                            pendingLocationCallback?.invoke(location)
+                            val path = accessibleCandidates[which]
+                            val uri = Uri.fromFile(File(path))
+                            val location = Location.Unopened.from(currentContext, uri)
+                            if (disableThirdParty && location.path.volume is Volume.ThirdParty) {
+                                currentContext.showToast(R.string.err_bad_location)
+                            } else {
+                                pendingLocationCallback?.invoke(location)
+                            }
+                            pendingLocationCallback = null
                         }
-                        pendingLocationCallback = null
+                    } else {
+                        showManualPathDialog()
                     }
                 }
                 .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
                 .setOnCancelListener { pendingLocationCallback = null }
                 .show()
         }
+    }
+
+    private fun showManualPathDialog() {
+        val ctx = context ?: return
+        val input = android.widget.EditText(ctx).apply {
+            hint = getString(R.string.set_manual_path_hint)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+        }
+
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.set_manual_path)
+            .setView(input)
+            .setPositiveButton(R.string.lbl_ok) { _, _ ->
+                val rawPath = input.text.toString().trim()
+                if (rawPath.isEmpty()) {
+                    pendingLocationCallback = null
+                    return@setPositiveButton
+                }
+
+                lifecycleScope.launch {
+                    val isValid = withContext(Dispatchers.IO) {
+                        TopwaySourcePolicy.isAccessibleCandidate(rawPath)
+                    }
+                    if (isValid) {
+                        val uri = Uri.fromFile(File(rawPath))
+                        val location = Location.Unopened.from(ctx, uri)
+                        pendingLocationCallback?.invoke(location)
+                    } else {
+                        ctx.showToast(R.string.err_bad_location)
+                    }
+                    pendingLocationCallback = null
+                }
+            }
+            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
+            .setOnCancelListener { pendingLocationCallback = null }
+            .show()
     }
 
     private fun addDocumentTreeUriToDirs(uri: Uri?, disableThirdParty: Boolean) {
@@ -401,6 +461,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             if (isFilePickerMode) {
                 // File Picker mode
                 locationsModeDesc.setText(R.string.lng_file_picker)
+
+                locationsExcludeNonMusicTitle.setText(R.string.set_exclude_non_music)
+                locationsExcludeNonMusicDesc.setText(R.string.set_exclude_non_music_desc)
+                locationsExcludeNonMusicSwitch.isChecked = musicSettings.mediaStoreQuery.excludeNonMusic
 
                 // Update permission section
                 locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
@@ -571,6 +635,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 locationsMultithread.isVisible = isExtrasExpanded
             } else {
                 // System Database mode - show filter mode when expanded
+
+                // Use existing non-music switch to toggle system filter
+                locationsExcludeNonMusicTitle.setText(R.string.set_use_default_system_filter)
+                locationsExcludeNonMusicDesc.setText(R.string.set_use_default_system_filter_desc)
+
                 // Hide include section
                 locationsIncludeListHeaderDivider.isVisible = false
                 locationsIncludeListHeader.isVisible = false
@@ -649,7 +718,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 MediaStore.Query(
                     mode = filterMode,
                     filtered = filterLocationAdapter.locations,
-                    excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
+                    excludeNonMusic = currentMediaStoreQuery.excludeNonMusic, // Preserve non-music if we're in system mode
+                    useDefaultSystemFilter = binding.locationsExcludeNonMusicSwitch.isChecked,
                 )
 
             if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) {
@@ -658,6 +728,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
             // Save the new MediaStore query
             musicSettings.mediaStoreQuery = newMediaStoreQuery
+
+            // Also save the non-music setting if we are in SAF mode
+            val currentMediaStoreQuery = musicSettings.mediaStoreQuery
+            musicSettings.mediaStoreQuery = currentMediaStoreQuery.copy(
+                excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked
+            )
+
+            // Also save the system filter setting if we are in system mode
+            musicSettings.useDefaultSystemFilter = binding.locationsExcludeNonMusicSwitch.isChecked
         }
 
         // Save the mode setting

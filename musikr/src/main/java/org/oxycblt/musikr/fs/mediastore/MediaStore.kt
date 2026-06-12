@@ -66,6 +66,18 @@ private constructor(
                 selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
             }
 
+            // Optimized system scan: only include common music/download folders.
+            // This is especially important for slow TS18 head units.
+            if (query.useDefaultSystemFilter) {
+                selector += " AND (" +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Music/%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/music/%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Download/%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/download/%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Media/%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/media/%')"
+            }
+
             // Handle include/exclude directories
             when (query.mode) {
                 FilterMode.INCLUDE -> {
@@ -151,6 +163,7 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
+        val useDefaultSystemFilter: Boolean = false,
     )
 
     enum class FilterMode {

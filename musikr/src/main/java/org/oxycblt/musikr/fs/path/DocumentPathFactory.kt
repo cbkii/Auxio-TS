@@ -150,7 +150,9 @@ private class DocumentPathFactoryImpl(
             }
         }
 
-        return null
+        // TS18/OEM Hardening: If no known volume matches, treat it as a ThirdParty volume
+        // using the direct file URI to avoid crashing or losing the path.
+        return Path(Volume.ThirdParty(uri), Components.root())
     }
 
     private fun normalizeRootPath(rootPath: String) =

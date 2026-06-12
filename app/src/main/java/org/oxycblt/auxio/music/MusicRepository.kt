@@ -374,17 +374,29 @@ constructor(
         val start = System.currentTimeMillis()
         val priorState = musicSettings.libraryState
         val revisionKnown = musicSettings.revision != null
-        L.i("Startup library load begins [state=$priorState, revisionKnown=$revisionKnown]")
+        val twStorageSwitch = try {
+            System.getProperty("persist.tw.storage.switch")
+        } catch (e: Exception) {
+            null
+        }
+        L.i("Startup library load begins [state=$priorState, revisionKnown=$revisionKnown, twStorageSwitch=$twStorageSwitch]")
         val decision =
             StartupLibraryStartup.run(
                 hasInMemoryLibrary = library != null,
                 revisionKnown = revisionKnown,
                 priorState = priorState,
                 lastScanFailed = { musicSettings.lastScanFailed },
-                loadCachedLibrary = { loadCachedLibrary() },
+                loadCachedLibrary = {
+                    val loadStart = System.currentTimeMillis()
+                    val lib = loadCachedLibrary()
+                    L.d("MusicRepository: loadCachedLibrary took ${System.currentTimeMillis() - loadStart}ms")
+                    lib
+                },
                 cachedSongCount = { it.songs.size },
                 emitCachedLibrary = {
+                    val emitStart = System.currentTimeMillis()
                     emitLibrary(it)
+                    L.d("MusicRepository: emitLibrary took ${System.currentTimeMillis() - emitStart}ms")
                     L.i(
                         "Startup library available in " +
                             "${System.currentTimeMillis() - start}ms " +
@@ -494,7 +506,7 @@ constructor(
         val revision = musicSettings.revision ?: UUID.randomUUID()
         val config = createConfig(revision, cache)
         val start = System.currentTimeMillis()
-        return Musikr.loadCached(context, config).also {
+        return Musikr.loadCached(context, config, skipCovers = true).also {
             L.d("Cached library loaded in ${System.currentTimeMillis() - start}ms")
         }
     }

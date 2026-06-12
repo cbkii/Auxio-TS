@@ -38,15 +38,15 @@ interface HomeGenerator {
 
     fun empty(): Boolean
 
-    fun songs(): List<Song>
+    suspend fun songs(): List<Song>
 
-    fun albums(): List<Album>
+    suspend fun albums(): List<Album>
 
-    fun artists(): List<Artist>
+    suspend fun artists(): List<Artist>
 
-    fun genres(): List<Genre>
+    suspend fun genres(): List<Genre>
 
-    fun playlists(): List<Playlist>
+    suspend fun playlists(): List<Playlist>
 
     fun tabs(): List<MusicType>
 
@@ -123,6 +123,7 @@ private class HomeGeneratorImpl(
     }
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
+        val start = System.currentTimeMillis()
         invalidator.invalidateEmpty()
 
         val library = musicRepository.library
@@ -140,6 +141,7 @@ private class HomeGeneratorImpl(
             L.d("Refreshing playlists")
             invalidator.invalidateMusic(MusicType.PLAYLISTS, UpdateInstructions.Diff)
         }
+        L.d("HomeGenerator: onMusicChanges took ${System.currentTimeMillis() - start}ms")
     }
 
     override fun release() {
@@ -150,13 +152,15 @@ private class HomeGeneratorImpl(
 
     override fun empty() = musicRepository.library?.empty() ?: true
 
-    override fun songs() =
+    override suspend fun songs() = withContext(Dispatchers.Default) {
         musicRepository.library?.let { listSettings.songSort.songs(it.songs) } ?: emptyList()
+    }
 
-    override fun albums() =
+    override suspend fun albums() = withContext(Dispatchers.Default) {
         musicRepository.library?.let { listSettings.albumSort.albums(it.albums) } ?: emptyList()
+    }
 
-    override fun artists() =
+    override suspend fun artists() = withContext(Dispatchers.Default) {
         musicRepository.library?.let { deviceLibrary ->
             val sorted = listSettings.artistSort.artists(deviceLibrary.artists)
             if (homeSettings.shouldHideCollaborators) {
@@ -165,13 +169,16 @@ private class HomeGeneratorImpl(
                 sorted
             }
         } ?: emptyList()
+    }
 
-    override fun genres() =
+    override suspend fun genres() = withContext(Dispatchers.Default) {
         musicRepository.library?.let { listSettings.genreSort.genres(it.genres) } ?: emptyList()
+    }
 
-    override fun playlists() =
+    override suspend fun playlists() = withContext(Dispatchers.Default) {
         musicRepository.library?.let { listSettings.playlistSort.playlists(it.playlists) }
             ?: emptyList()
+    }
 
     override fun tabs() = homeSettings.homeTabs.filterIsInstance<Tab.Visible>().map { it.type }
 }

@@ -83,24 +83,43 @@ interface Musikr {
          * This gives callers a fast startup path: the returned library can be displayed and used by
          * media/session code immediately while any explicit or first-run scan happens later.
          */
-        suspend fun loadCached(context: Context, config: Config): MutableLibrary {
+        suspend fun loadCached(context: Context, config: Config, skipCovers: Boolean = true): MutableLibrary {
+            val start = System.currentTimeMillis()
             val extracted = Channel<Extracted>(Channel.UNLIMITED)
-            for (cachedFile in config.storage.cache.snapshot()) {
-                cachedFile.toRawSong(config.storage)?.let { extracted.send(it) }
+            val cacheSnapshot = config.storage.cache.snapshot()
+            Log.d("Musikr", "loadCached: cache snapshot took ${System.currentTimeMillis() - start}ms [rows=${cacheSnapshot.size}]")
+
+            val convertStart = System.currentTimeMillis()
+            for (cachedFile in cacheSnapshot) {
+                cachedFile.toRawSong(config.storage, skipCovers)?.let { extracted.send(it) }
             }
-            for (playlist in config.storage.storedPlaylists.read()) {
+            Log.d("Musikr", "loadCached: song conversion took ${System.currentTimeMillis() - convertStart}ms")
+
+            val playlistStart = System.currentTimeMillis()
+            val storedPlaylists = config.storage.storedPlaylists.read()
+            for (playlist in storedPlaylists) {
                 extracted.send(RawPlaylist(playlist))
             }
+            Log.d("Musikr", "loadCached: playlist load took ${System.currentTimeMillis() - playlistStart}ms")
+
             extracted.close()
-            return EvaluateStep.new(context, config, config.interpretation).evaluate(extracted)
+            val evalStart = System.currentTimeMillis()
+            val library = EvaluateStep.new(context, config, config.interpretation).evaluate(extracted)
+            Log.d("Musikr", "loadCached: evaluation took ${System.currentTimeMillis() - evalStart}ms")
+            Log.d("Musikr", "loadCached total took ${System.currentTimeMillis() - start}ms")
+            return library
         }
 
-        private suspend fun CachedFile.toRawSong(storage: Storage): RawSong? {
+        private suspend fun CachedFile.toRawSong(storage: Storage, skipCovers: Boolean = false): RawSong? {
             val audio = audio ?: return null
             val cover =
-                when (val result = audio.coverId?.let { storage.covers.obtain(it) }) {
-                    is CoverResult.Hit -> result.cover
-                    else -> null
+                if (skipCovers) {
+                    null
+                } else {
+                    when (val result = audio.coverId?.let { storage.covers.obtain(it) }) {
+                        is CoverResult.Hit -> result.cover
+                        else -> null
+                    }
                 }
             return RawSong(file, audio.properties, audio.tags, cover, addedMs)
         }

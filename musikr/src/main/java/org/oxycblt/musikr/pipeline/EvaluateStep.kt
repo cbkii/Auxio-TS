@@ -54,6 +54,7 @@ private class EvaluateStepImpl(
     private val libraryFactory: LibraryFactory,
 ) : EvaluateStep {
     override suspend fun evaluate(extractedMusic: Channel<Extracted>): MutableLibrary {
+        val start = System.currentTimeMillis()
         val builder = MusicGraph.builder()
         for (extracted in extractedMusic) {
             when (extracted) {
@@ -63,10 +64,12 @@ private class EvaluateStepImpl(
                 is InvalidSong -> {}
             }
         }
+        val buildStart = System.currentTimeMillis()
         val graph = builder.build()
+        Log.d("EvaluateStep", "Graph build took ${System.currentTimeMillis() - buildStart}ms")
 
-        // Render graph to Graphviz in debug mode
-        if (BuildConfig.DEBUG) {
+        // Render graph to Graphviz in debug mode if explicitly enabled via system property
+        if (BuildConfig.DEBUG && System.getProperty("org.oxycblt.musikr.render_graph") == "true") {
             try {
                 val fileName = "music_graph_debug.dot"
                 graph.renderToGraphviz(context, fileName)
@@ -78,6 +81,10 @@ private class EvaluateStepImpl(
             }
         }
 
-        return libraryFactory.create(graph, storedPlaylists, playlistInterpreter)
+        val factoryStart = System.currentTimeMillis()
+        val library = libraryFactory.create(graph, storedPlaylists, playlistInterpreter)
+        Log.d("EvaluateStep", "Library factory took ${System.currentTimeMillis() - factoryStart}ms")
+        Log.d("EvaluateStep", "Total evaluation took ${System.currentTimeMillis() - start}ms")
+        return library
     }
 }

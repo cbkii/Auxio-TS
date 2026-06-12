@@ -19,10 +19,12 @@
 package org.oxycblt.auxio.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
@@ -215,27 +217,33 @@ constructor(
     }
 
     override fun invalidateMusic(type: MusicType, instructions: UpdateInstructions) {
-        when (type) {
-            MusicType.SONGS -> {
-                _allSongs = homeGenerator.songs()
-                _songInstructions.put(instructions)
-                _songList.value = _allSongs.filteredByDecade(_decadeFilter.value)
-            }
-            MusicType.ALBUMS -> {
-                _albumInstructions.put(instructions)
-                _albumList.value = homeGenerator.albums()
-            }
-            MusicType.ARTISTS -> {
-                _artistInstructions.put(instructions)
-                _artistList.value = homeGenerator.artists()
-            }
-            MusicType.GENRES -> {
-                _genreInstructions.put(instructions)
-                _genreList.value = homeGenerator.genres()
-            }
-            MusicType.PLAYLISTS -> {
-                _playlistInstructions.put(instructions)
-                _playlistList.value = homeGenerator.playlists()
+        viewModelScope.launch {
+            when (type) {
+                MusicType.SONGS -> {
+                    _allSongs = homeGenerator.songs()
+                    _songInstructions.put(instructions)
+                    _songList.value = _allSongs.filteredByDecade(_decadeFilter.value)
+                }
+                MusicType.ALBUMS -> {
+                    val albums = homeGenerator.albums()
+                    _albumInstructions.put(instructions)
+                    _albumList.value = albums
+                }
+                MusicType.ARTISTS -> {
+                    val artists = homeGenerator.artists()
+                    _artistInstructions.put(instructions)
+                    _artistList.value = artists
+                }
+                MusicType.GENRES -> {
+                    val genres = homeGenerator.genres()
+                    _genreInstructions.put(instructions)
+                    _genreList.value = genres
+                }
+                MusicType.PLAYLISTS -> {
+                    val playlists = homeGenerator.playlists()
+                    _playlistInstructions.put(instructions)
+                    _playlistList.value = playlists
+                }
             }
         }
     }

@@ -178,11 +178,11 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             // listener with a non-consuming listener.
             setOnApplyWindowInsetsListener { _, insets -> insets }
 
-            // We know that there will only be a fixed amount of tabs, so we manually set this
-            // limit to the maximum amount possible. This will prevent the tab ripple from
-            // bugging out due to dynamically inflating each fragment, at the cost of slower
-            // debug UI performance.
-            offscreenPageLimit = Tab.MAX_SEQUENCE_IDX + 1
+            // We know that there will only be a fixed amount of tabs. Previously this was set
+            // to the maximum amount possible to prevent tab ripple issues, but it causes
+            // significant startup slowness as all fragments are inflated at once.
+            // Reducing it to 1 to allow lazy loading of non-adjacent tabs.
+            offscreenPageLimit = 1
 
             dampen()
         }

@@ -150,6 +150,11 @@
     <string name="set_auto_detect_usb">Auto-detect USB</string>
     <string name="set_picker_unavailable_fallback">System picker unavailable. Select from available music sources?</string>
     <string name="set_select_source">Select music source</string>
+    <string name="set_manual_path">Manual path entry</string>
+    <string name="set_manual_path_hint">Enter absolute filesystem path (e.g. /storage/usbdisk0/Music)</string>
+    <string name="set_use_default_system_filter">Optimized system scan</string>
+    <string name="set_use_default_system_filter_desc">Only scan folders named music, download, or media. Recommended for head units.</string>
+    <string name="set_key_use_default_system_filter" translatable="false">use_default_system_filter</string>
     <string name="lbl_shuffle_shortcut_short">Shuffle</string>
     <!-- Limit to 25 characters -->
     <string name="lbl_shuffle_shortcut_long">Shuffle all</string>
