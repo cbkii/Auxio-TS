@@ -79,13 +79,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
             playbackModel.prev()
             context.showToast(R.string.msg_playback_previous)
         }
-        binding.playbackPlayPause.setOnClickListener {
-            playbackModel.togglePlaying()
-            context.showToast(
-                if (playbackModel.isPlaying.value) R.string.msg_playback_play
-                else R.string.msg_playback_pause
-            )
-        }
+        binding.playbackPlayPause.setOnClickListener { playbackModel.togglePlaying() }
         binding.playbackSkipNext.setOnClickListener {
             playbackModel.next()
             context.showToast(R.string.msg_playback_next)
