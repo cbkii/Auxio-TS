@@ -4,6 +4,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     app:startDestination="@id/home_fragment">
 
+    <!-- Global action for opening the song menu from anywhere (e.g. playback panel) -->
+    <action
+        android:id="@+id/action_global_open_song_menu"
+        app:destination="@id/song_menu_dialog" />
+
     <fragment
         android:id="@+id/home_fragment"
         android:name="org.oxycblt.auxio.home.HomeFragment"
