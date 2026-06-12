@@ -65,6 +65,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Only treat a launch with no saved instance state as a cold launch, so that activity
+        // recreation (e.g. configuration changes or restoration after process death) does not
+        // re-trigger autoplay.
+        isFirstResume = savedInstanceState == null
         setupTheme()
         if (uiSettings.headUnitLandscapeMode) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
