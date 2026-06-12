@@ -64,19 +64,38 @@ sealed class Location(val uri: Uri, val path: Path) {
                 }
 
         companion object {
-            fun from(context: Context, uri: Uri) =
-                Unopened(
-                    uri,
-                    getTreePath(context, uri) ?: Path(Volume.ThirdParty(uri), Components.root()),
+            fun from(context: Context, uri: Uri): Unopened {
+                val normalizedUri = normalizeUri(uri)
+                return Unopened(
+                    normalizedUri,
+                    getTreePath(context, normalizedUri)
+                        ?: Path(Volume.ThirdParty(normalizedUri), Components.root()),
                 )
+            }
+
+            fun fromPath(context: Context, rawPath: String): Unopened? {
+                val normalizedPath = rawPath.trim()
+                if (!normalizedPath.startsWith("/")) return null
+                return from(context, Uri.fromFile(java.io.File(normalizedPath)))
+            }
+
+            private fun normalizeUri(uri: Uri): Uri {
+                if (uri.scheme != null) return uri
+                val raw = uri.toString().trim()
+                return if (raw.startsWith("/")) Uri.fromFile(java.io.File(raw)) else uri
+            }
 
             private fun getTreePath(context: Context, uri: Uri): Path? {
                 val documentPathFactory = DocumentPathFactory.from(context)
                 if (uri.scheme == "file") {
                     return documentPathFactory.unpackFileUri(uri)
                 }
-                if (!DocumentsContract.isTreeUri(uri)) return null
-                return documentPathFactory.unpackDocumentTreeUri(uri)
+                return try {
+                    if (!DocumentsContract.isTreeUri(uri)) return null
+                    documentPathFactory.unpackDocumentTreeUri(uri)
+                } catch (e: IllegalArgumentException) {
+                    null
+                }
             }
         }
     }

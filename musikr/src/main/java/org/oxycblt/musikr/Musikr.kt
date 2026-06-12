@@ -83,11 +83,21 @@ interface Musikr {
          * This gives callers a fast startup path: the returned library can be displayed and used by
          * media/session code immediately while any explicit or first-run scan happens later.
          */
-        suspend fun loadCached(context: Context, config: Config): MutableLibrary {
+        suspend fun loadCached(
+            context: Context,
+            config: Config,
+            hydrateCovers: Boolean = true,
+        ): MutableLibrary {
             val extracted = Channel<Extracted>(Channel.UNLIMITED)
+            val start = System.currentTimeMillis()
             for (cachedFile in config.storage.cache.snapshot()) {
-                cachedFile.toRawSong(config.storage)?.let { extracted.send(it) }
+                cachedFile.toRawSong(config.storage, hydrateCovers)?.let { extracted.send(it) }
             }
+            Log.d(
+                "Musikr",
+                "Cached rows converted in ${System.currentTimeMillis() - start}ms " +
+                    "[hydrateCovers=$hydrateCovers]",
+            )
             for (playlist in config.storage.storedPlaylists.read()) {
                 extracted.send(RawPlaylist(playlist))
             }
@@ -95,12 +105,16 @@ interface Musikr {
             return EvaluateStep.new(context, config, config.interpretation).evaluate(extracted)
         }
 
-        private suspend fun CachedFile.toRawSong(storage: Storage): RawSong? {
+        private suspend fun CachedFile.toRawSong(storage: Storage, hydrateCovers: Boolean): RawSong? {
             val audio = audio ?: return null
             val cover =
-                when (val result = audio.coverId?.let { storage.covers.obtain(it) }) {
-                    is CoverResult.Hit -> result.cover
-                    else -> null
+                if (hydrateCovers) {
+                    when (val result = audio.coverId?.let { storage.covers.obtain(it) }) {
+                        is CoverResult.Hit -> result.cover
+                        else -> null
+                    }
+                } else {
+                    null
                 }
             return RawSong(file, audio.properties, audio.tags, cover, addedMs)
         }

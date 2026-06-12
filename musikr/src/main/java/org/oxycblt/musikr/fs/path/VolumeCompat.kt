@@ -40,6 +40,8 @@ import org.oxycblt.musikr.util.lazyReflectedMethod
 @Suppress("NewApi")
 private val svApi21GetPathMethod: Method by lazyReflectedMethod(StorageVolume::class, "getPath")
 
+private val smGetVolumeListMethod: Method by lazyReflectedMethod(StorageManager::class, "getVolumeList")
+
 /**
  * The list of [StorageVolume]s currently recognized by [StorageManager], in a version-compatible
  * manner.
@@ -47,7 +49,20 @@ private val svApi21GetPathMethod: Method by lazyReflectedMethod(StorageVolume::c
  * @see StorageManager.getStorageVolumes
  */
 internal val StorageManager.storageVolumesCompat: List<StorageVolume>
-    get() = storageVolumes.toList()
+    get() {
+        val publicVolumes = storageVolumes.toList()
+        if (publicVolumes.isNotEmpty()) {
+            return publicVolumes
+        }
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            (smGetVolumeListMethod.invoke(this) as? Array<StorageVolume>)?.toList().orEmpty()
+        } catch (e: ReflectiveOperationException) {
+            emptyList()
+        } catch (e: RuntimeException) {
+            emptyList()
+        }
+    }
 
 /**
  * The the absolute path to this [StorageVolume]'s directory within the file-system, in a

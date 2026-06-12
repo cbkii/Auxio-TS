@@ -29,6 +29,18 @@ object TopwaySourcePolicy {
     /** Observed primary shared music directory on TS18. */
     const val EMULATED_MUSIC = "/storage/emulated/0/Music"
 
+    /** Observed primary shared download directory on TS18. */
+    const val EMULATED_DOWNLOAD = "/storage/emulated/0/Download"
+
+    /** Observed primary shared media directory on TS18. */
+    const val EMULATED_MEDIA = "/storage/emulated/0/Media"
+
+    /** Observed primary removable USB music directory on TS18. */
+    const val USB_DISK_0_MUSIC = "/storage/usbdisk0/Music"
+
+    /** Observed primary removable USB download directory on TS18. */
+    const val USB_DISK_0_DOWNLOAD = "/storage/usbdisk0/Download"
+
     /** Legacy/alias path for emulated music. */
     const val SDCARD_MUSIC = "/sdcard/Music"
 
@@ -36,22 +48,34 @@ object TopwaySourcePolicy {
      * Safe generic shared-storage fallbacks. These are preferred over device-specific paths when
      * SAF picker is unavailable.
      */
-    val SAFE_GENERIC_FALLBACKS = listOf(EMULATED_MUSIC, SDCARD_MUSIC)
+    val SAFE_GENERIC_FALLBACKS =
+        listOf(EMULATED_MUSIC, EMULATED_MEDIA, EMULATED_DOWNLOAD, SDCARD_MUSIC)
 
     /**
      * TS18-specific removable USB candidate. Should only be used on Topway/TS18 builds and after
      * explicit validation.
      */
-    val TS18_USB_CANDIDATES = listOf(USB_DISK_0)
+    val TS18_USB_CANDIDATES = listOf(USB_DISK_0_MUSIC, USB_DISK_0_DOWNLOAD, USB_DISK_0)
+
+    /** Legacy/OEM removable roots seen in Topway-family file managers. Validate before use. */
+    val LEGACY_OEM_CANDIDATES =
+        listOf(
+            "/storage/extsd",
+            "/storage/extsd0",
+            "/storage/extsd1",
+            "/storage/extsd2",
+            "/mnt/extsd",
+            "/mnt/storage",
+            "/mnt/usbhost",
+        )
 
     /** List of all candidate roots. */
-    val CANDIDATE_ROOTS = SAFE_GENERIC_FALLBACKS + TS18_USB_CANDIDATES
+    val CANDIDATE_ROOTS = SAFE_GENERIC_FALLBACKS + TS18_USB_CANDIDATES + LEGACY_OEM_CANDIDATES
 
     /** Directories that are known to be noisy or irrelevant on TS18 and should be skipped. */
     val NOISY_DIRS =
         setOf(
             "Android",
-            "Download",
             "DCIM",
             "Pictures",
             "Movies",

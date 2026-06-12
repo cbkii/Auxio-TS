@@ -216,6 +216,11 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     .toUnopenedLocations()
             val excludeNonMusic =
                 sharedPreferences.getBoolean(getString(R.string.set_key_exclude_non_music), true)
+            val restrictToLikelyAudioDirs =
+                sharedPreferences.getBoolean(
+                    getString(R.string.set_key_system_likely_audio_dirs),
+                    true,
+                )
             return MediaStore.Query(
                 mode =
                     when (filterMode) {
@@ -225,6 +230,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     },
                 filtered = filteredLocations,
                 excludeNonMusic = excludeNonMusic,
+                restrictToLikelyAudioDirs = restrictToLikelyAudioDirs,
             )
         }
         set(value) {
@@ -240,6 +246,10 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     value.filtered.stringify(),
                 )
                 putBoolean(getString(R.string.set_key_exclude_non_music), value.excludeNonMusic)
+                putBoolean(
+                    getString(R.string.set_key_system_likely_audio_dirs),
+                    value.restrictToLikelyAudioDirs,
+                )
                 apply()
             }
         }
@@ -269,6 +279,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             getString(R.string.set_key_filter_mode),
             getString(R.string.set_key_filtered_locations),
             getString(R.string.set_key_exclude_non_music),
+            getString(R.string.set_key_system_likely_audio_dirs),
             getString(R.string.set_key_separators),
             getString(R.string.set_key_auto_sort_names) -> {
                 L.d("Dispatching indexing setting change for $key")

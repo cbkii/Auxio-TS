@@ -202,6 +202,7 @@ class Auxio : Application() {
                 appendLine("  sdkInt: ${Build.VERSION.SDK_INT}")
                 appendLine("  buildId: ${Build.ID}")
                 appendLine("  fingerprint: ${Build.FINGERPRINT}")
+                appendLine("  persist.tw.storage.switch: ${readSystemProperty("persist.tw.storage.switch")}")
                 appendLine()
                 appendLine("Thread")
                 appendLine("  name: ${thread.name}")
@@ -212,6 +213,17 @@ class Auxio : Application() {
                 appendLine(stackTrace.toString())
             }
         }
+
+        private fun readSystemProperty(name: String): String =
+            try {
+                Class.forName("android.os.SystemProperties")
+                    .getMethod("get", String::class.java, String::class.java)
+                    .invoke(null, name, "<unavailable>") as String
+            } catch (e: ReflectiveOperationException) {
+                "<unavailable>"
+            } catch (e: RuntimeException) {
+                "<unavailable>"
+            }
 
         private fun pruneOldReports(diagnosticsDir: File) {
             diagnosticsDir

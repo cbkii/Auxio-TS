@@ -28,6 +28,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
+import org.oxycblt.auxio.image.covers.NullCovers
 import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
 import org.oxycblt.auxio.music.locations.LocationMode
@@ -43,6 +44,12 @@ import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.covers.stored.CoverStorage
+import org.oxycblt.musikr.fs.FS
+import org.oxycblt.musikr.fs.CompositeFS
+import org.oxycblt.musikr.fs.EmptyFS
+import org.oxycblt.musikr.fs.direct.DirectFS
+import org.oxycblt.musikr.fs.direct.DirectPathFilter
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
@@ -492,14 +499,48 @@ constructor(
 
     private suspend fun loadCachedLibrary(): MutableLibrary {
         val revision = musicSettings.revision ?: UUID.randomUUID()
-        val config = createConfig(revision, cache)
         val start = System.currentTimeMillis()
-        return Musikr.loadCached(context, config).also {
-            L.d("Cached library loaded in ${System.currentTimeMillis() - start}ms")
+        val config = createCachedStartupConfig(revision, cache)
+        return Musikr.loadCached(context, config, hydrateCovers = false).also {
+            L.i(
+                "Cached library loaded without cover hydration in " +
+                    "${System.currentTimeMillis() - start}ms"
+            )
         }
     }
 
     private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
+        val start = System.currentTimeMillis()
+        val config =
+            Config(
+                createFilesystem(),
+                Storage(cache, settingCovers.mutate(context, revision), storedPlaylists),
+                createInterpretation(),
+            )
+        L.d("Created full scan config in ${System.currentTimeMillis() - start}ms")
+        return config
+    }
+
+    private suspend fun createCachedStartupConfig(revision: UUID, cache: MutableCache): Config {
+        val start = System.currentTimeMillis()
+        val config =
+            Config(
+                EmptyFS,
+                Storage(
+                    cache,
+                    NullCovers(CoverStorage.at(context.filesDir.resolve("covers"))),
+                    storedPlaylists,
+                ),
+                createInterpretation(),
+            )
+        L.d(
+            "Created cached-startup config in " +
+                "${System.currentTimeMillis() - start}ms [revision=$revision]"
+        )
+        return config
+    }
+
+    private fun createInterpretation(): Interpretation {
         val separators = Separators.from(musicSettings.separators)
         val nameFactory =
             if (musicSettings.intelligentSorting) {
@@ -507,18 +548,38 @@ constructor(
             } else {
                 Naming.simple()
             }
-        val covers = settingCovers.mutate(context, revision)
-        val fs =
-            when (musicSettings.locationMode) {
-                LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
-                LocationMode.MEDIA_STORE -> MediaStore.from(context, musicSettings.mediaStoreQuery)
-            }
-        return Config(
-            fs,
-            Storage(cache, covers, storedPlaylists),
-            Interpretation(nameFactory, separators),
-        )
+        return Interpretation(nameFactory, separators)
     }
+
+    private fun createFilesystem() =
+        when (musicSettings.locationMode) {
+            LocationMode.SAF -> {
+                val query = musicSettings.safQuery
+                val (directSources, safSources) = query.source.partition { it.uri.scheme == "file" }
+                val delegates = mutableListOf<FS>()
+                if (safSources.isNotEmpty()) {
+                    delegates.add(SAF.from(context, query.copy(source = safSources)))
+                }
+                if (directSources.isNotEmpty()) {
+                    delegates.add(
+                        DirectFS.from(
+                            DirectFS.Query(
+                                source = directSources,
+                                exclude = query.exclude,
+                                withHidden = query.withHidden,
+                                pathFilter = DirectPathFilter.ts18Default(),
+                            )
+                        )
+                    )
+                }
+                when (delegates.size) {
+                    0 -> EmptyFS
+                    1 -> delegates.single()
+                    else -> CompositeFS(delegates)
+                }
+            }
+            LocationMode.MEDIA_STORE -> MediaStore.from(context, musicSettings.mediaStoreQuery)
+        }
 
     private suspend fun emitIndexingProgress(progress: IndexingProgress) {
         yield()

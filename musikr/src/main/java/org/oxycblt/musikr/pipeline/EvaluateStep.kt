@@ -21,7 +21,6 @@ package org.oxycblt.musikr.pipeline
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.channels.Channel
-import org.oxycblt.musikr.BuildConfig
 import org.oxycblt.musikr.Config
 import org.oxycblt.musikr.Interpretation
 import org.oxycblt.musikr.MutableLibrary
@@ -65,8 +64,9 @@ private class EvaluateStepImpl(
         }
         val graph = builder.build()
 
-        // Render graph to Graphviz in debug mode
-        if (BuildConfig.DEBUG) {
+        // Debug APKs are routinely used on slow head units, so graph rendering must be an
+        // explicit developer opt-in instead of a blanket BuildConfig.DEBUG side effect.
+        if (System.getProperty("auxio.musikr.renderGraphviz") == "true") {
             try {
                 val fileName = "music_graph_debug.dot"
                 graph.renderToGraphviz(context, fileName)

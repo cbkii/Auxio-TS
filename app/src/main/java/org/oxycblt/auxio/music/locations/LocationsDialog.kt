@@ -20,11 +20,13 @@ package org.oxycblt.auxio.music.locations
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.widget.EditText
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -243,6 +245,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         musicSettings.mediaStoreQuery.let { query ->
             filterLocationAdapter.addAll(query.filtered)
             binding.locationsExcludeNonMusicSwitch.isChecked = query.excludeNonMusic
+            binding.locationsWithHiddenSwitch.isChecked = query.restrictToLikelyAudioDirs
 
             isIncludeMode = query.mode == MediaStore.FilterMode.INCLUDE
             binding.locationsExcludeModeExclude.isChecked = isIncludeMode
@@ -292,15 +295,35 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun onNewLocation(launcher: ActivityResultLauncher<Uri?>?, disableThirdParty: Boolean) {
-        L.d("Opening launcher")
+        L.d("Opening SAF tree picker")
         val launcher = requireNotNull(launcher) { "Document tree launcher was not available" }
+        if (!canLaunchDocumentTreePicker()) {
+            L.w("SAF tree picker has no resolvable activity; showing manual/direct fallback.")
+            showPickerUnavailableFallback(disableThirdParty)
+            return
+        }
 
         try {
             launcher.launch(null)
         } catch (e: ActivityNotFoundException) {
-            L.w("SAF tree picker activity not found; showing fallback sources.")
+            L.w(e, "SAF tree picker activity not found; showing manual/direct fallback.")
+            showPickerUnavailableFallback(disableThirdParty)
+        } catch (e: RuntimeException) {
+            L.w(e, "SAF tree picker launch failed; showing manual/direct fallback.")
             showPickerUnavailableFallback(disableThirdParty)
         }
+    }
+
+    private fun canLaunchDocumentTreePicker(): Boolean {
+        val ctx = context ?: return false
+        val intent =
+            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+            )
+        return intent.resolveActivity(ctx.packageManager) != null
     }
 
     private fun showPickerUnavailableFallback(disableThirdParty: Boolean) {
@@ -312,8 +335,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 }
         AlertDialog.Builder(ctx)
             .setMessage(R.string.set_picker_unavailable_fallback)
-            .setPositiveButton(R.string.lbl_ok) { _, _ ->
+            .setPositiveButton(R.string.set_select_source) { _, _ ->
                 showCandidatePathPicker(disableThirdParty)
+            }
+            .setNeutralButton(R.string.set_manual_path) { _, _ ->
+                showManualPathEntry(disableThirdParty)
             }
             .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
             .setOnCancelListener { pendingLocationCallback = null }
@@ -336,8 +362,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     }
 
             if (accessibleCandidates.isEmpty()) {
-                pendingLocationCallback = null
-                ctx.showToast(R.string.err_bad_location)
+                showManualPathEntry(disableThirdParty)
                 return@launch
             }
 
@@ -359,10 +384,92 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         pendingLocationCallback = null
                     }
                 }
+                .setPositiveButton(R.string.set_manual_path) { _, _ ->
+                    showManualPathEntry(disableThirdParty)
+                }
                 .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
                 .setOnCancelListener { pendingLocationCallback = null }
                 .show()
         }
+    }
+
+    private fun showManualPathEntry(disableThirdParty: Boolean) {
+        val ctx =
+            context
+                ?: run {
+                    pendingLocationCallback = null
+                    return
+                }
+        val input =
+            EditText(ctx).apply {
+                setSingleLine(true)
+                hint = TopwaySourcePolicy.EMULATED_MUSIC
+            }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.set_manual_path)
+            .setView(input)
+            .setPositiveButton(R.string.lbl_ok) { _, _ ->
+                validateAndAddManualPath(input.text?.toString().orEmpty(), disableThirdParty)
+            }
+            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
+            .setOnCancelListener { pendingLocationCallback = null }
+            .show()
+    }
+
+    private fun validateAndAddManualPath(rawPath: String, disableThirdParty: Boolean) {
+        lifecycleScope.launch {
+            val normalized = rawPath.trim().trimEnd(File.separatorChar)
+            val state =
+                withContext(Dispatchers.IO) {
+                    try {
+                        if (normalized.startsWith(File.separator)) {
+                            val file = File(normalized)
+                            when {
+                                !file.exists() -> ManualPathState.MISSING
+                                !file.isDirectory -> ManualPathState.NOT_DIRECTORY
+                                !file.canRead() -> ManualPathState.INACCESSIBLE
+                                else -> ManualPathState.ACCESSIBLE
+                            }
+                        } else {
+                            ManualPathState.MALFORMED
+                        }
+                    } catch (e: SecurityException) {
+                        ManualPathState.INACCESSIBLE
+                    } catch (e: RuntimeException) {
+                        ManualPathState.INACCESSIBLE
+                    }
+                }
+            val ctx = context
+            if (ctx == null) {
+                pendingLocationCallback = null
+                return@launch
+            }
+            if (state != ManualPathState.ACCESSIBLE) {
+                L.w("Manual source path rejected [path=$normalized, state=$state]")
+                ctx.showToast(R.string.err_bad_location)
+                pendingLocationCallback = null
+                return@launch
+            }
+            val location = Location.Unopened.fromPath(ctx, normalized)
+            if (
+                location == null ||
+                    (disableThirdParty && location.path.volume is Volume.ThirdParty)
+            ) {
+                ctx.showToast(R.string.err_bad_location)
+                pendingLocationCallback = null
+                return@launch
+            }
+            pendingLocationCallback?.invoke(location)
+            pendingLocationCallback = null
+        }
+    }
+
+    private enum class ManualPathState {
+        ACCESSIBLE,
+        MISSING,
+        NOT_DIRECTORY,
+        INACCESSIBLE,
+        MALFORMED,
     }
 
     private fun addDocumentTreeUriToDirs(uri: Uri?, disableThirdParty: Boolean) {
@@ -377,7 +484,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     pendingLocationCallback = null
                     return
                 }
-        val location = Location.Unopened.from(ctx, uri)
+        val location =
+            try {
+                Location.Unopened.from(ctx, uri)
+            } catch (e: IllegalArgumentException) {
+                L.w(e, "Malformed SAF tree URI returned by picker: $uri")
+                ctx.showToast(R.string.err_bad_location)
+                pendingLocationCallback = null
+                return
+            }
 
         if (location.path.volume is Volume.ThirdParty && disableThirdParty) {
             ctx.showToast(R.string.err_bad_location)
@@ -558,6 +673,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
                 // Config section
                 configDivider.isVisible = isExtrasExpanded
+                locationsWithHiddenTitle.setText(R.string.set_with_hidden)
+                locationsWithHiddenDesc.setText(R.string.set_with_hidden_desc)
                 locationsWithHiddenTitle.isVisible = isExtrasExpanded
                 locationsWithHiddenDesc.isVisible = isExtrasExpanded
                 locationsWithHidden.isVisible = isExtrasExpanded
@@ -594,9 +711,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
                 // Config section
                 configDivider.isVisible = isExtrasExpanded
-                locationsWithHiddenTitle.isVisible = false
-                locationsWithHiddenDesc.isVisible = false
-                locationsWithHidden.isVisible = false
+                locationsWithHiddenTitle.setText(R.string.set_system_likely_audio_dirs)
+                locationsWithHiddenDesc.setText(R.string.set_system_likely_audio_dirs_desc)
+                locationsWithHiddenTitle.isVisible = isExtrasExpanded
+                locationsWithHiddenDesc.isVisible = isExtrasExpanded
+                locationsWithHidden.isVisible = isExtrasExpanded
 
                 locationsExcludeNonMusicTitle.isVisible = isExtrasExpanded
                 locationsExcludeNonMusicDesc.isVisible = isExtrasExpanded
@@ -650,6 +769,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     mode = filterMode,
                     filtered = filterLocationAdapter.locations,
                     excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
+                    restrictToLikelyAudioDirs = binding.locationsWithHiddenSwitch.isChecked,
                 )
 
             if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) {

@@ -66,6 +66,10 @@ private constructor(
                 selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
             }
 
+            if (query.restrictToLikelyAudioDirs) {
+                selector += " AND (${likelyAudioPathSelector()})"
+            }
+
             // Handle include/exclude directories
             when (query.mode) {
                 FilterMode.INCLUDE -> {
@@ -86,9 +90,6 @@ private constructor(
                 }
             }
 
-            // Collect all files and track unique directories
-            val allFiles = mutableListOf<File>()
-
             context.contentResolverSafe.useQuery(
                 AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                 projection,
@@ -107,6 +108,12 @@ private constructor(
 
                 while (cursor.moveToNext()) {
                     val path = pathInterpreter.extract() ?: continue
+                    if (
+                        query.restrictToLikelyAudioDirs &&
+                            !isLikelyAudioPath(path.components.unixString)
+                    ) {
+                        continue
+                    }
 
                     val id = cursor.getLong(idIndex)
                     val uri =
@@ -132,7 +139,6 @@ private constructor(
                             parent = null,
                         )
 
-                    allFiles.add(deviceFile)
                     it.send(deviceFile)
                 }
             }
@@ -151,6 +157,7 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
+        val restrictToLikelyAudioDirs: Boolean = true,
     )
 
     enum class FilterMode {
@@ -175,6 +182,25 @@ private constructor(
          * size.
          */
         private const val BASE_SELECTOR = "NOT ${AOSPMediaStore.Audio.Media.SIZE}=0"
+
+        private fun likelyAudioPathSelector(): String {
+            val column =
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    AOSPMediaStore.Audio.AudioColumns.RELATIVE_PATH
+                } else {
+                    AOSPMediaStore.Audio.AudioColumns.DATA
+                }
+            return LIKELY_AUDIO_DIR_KEYWORDS.joinToString(" OR ") {
+                "LOWER($column) LIKE '%$it%'"
+            }
+        }
+
+        private fun isLikelyAudioPath(path: String): Boolean {
+            val normalized = path.lowercase()
+            return LIKELY_AUDIO_DIR_KEYWORDS.any { normalized.contains(it) }
+        }
+
+        private val LIKELY_AUDIO_DIR_KEYWORDS = setOf("music", "download", "media")
 
         /** The base projection that works across all versions of android. */
         private val BASE_PROJECTION =
