@@ -46,7 +46,9 @@ class HomeLayoutZOrderTest {
         val pagerIndex = homeContent.indexOfChild(pager)
         val shortcutsIndex = homeContent.indexOfChild(shortcuts)
 
-        assertTrue("Shortcuts ($shortcutsIndex) must be after Pager ($pagerIndex) in FrameLayout for top Z-order",
-            shortcutsIndex > pagerIndex)
+        assertTrue(
+            "Shortcuts ($shortcutsIndex) must be after Pager ($pagerIndex) in FrameLayout for top Z-order",
+            shortcutsIndex > pagerIndex,
+        )
     }
 }
