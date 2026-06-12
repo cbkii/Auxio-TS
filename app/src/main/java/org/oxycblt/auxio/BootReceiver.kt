@@ -21,11 +21,11 @@ package org.oxycblt.auxio
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
-import androidx.core.content.ContextCompat
 
 /**
  * A [BroadcastReceiver] that launches Auxio-TS on device boot when the Autostart setting is
