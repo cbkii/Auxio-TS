@@ -24,9 +24,11 @@ import android.view.LayoutInflater
 import android.view.MenuItem
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import android.view.ViewTreeObserver
 import androidx.core.view.MenuCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
@@ -189,6 +191,21 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         setupPager(binding)
         setupHeadUnitQuickAccess(binding)
 
+        binding.homeHeadUnitShortcuts.viewTreeObserver.addOnGlobalLayoutListener(
+            object : ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    val binding = requireBinding()
+                    val height =
+                        if (binding.homeHeadUnitShortcuts.isVisible) {
+                            binding.homeHeadUnitShortcuts.height
+                        } else {
+                            0
+                        }
+                    binding.homePager.updatePadding(top = height)
+                }
+            }
+        )
+
         // --- VIEWMODEL SETUP ---
         collect(homeModel.recreateTabs.flow, ::handleRecreate)
         collect(homeModel.chooseMusicLocations.flow, ::handleChooseFolders)
@@ -230,6 +247,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         if (!uiSettings.showHeadUnitDashboardQuickAccess) {
             return
         }
+        binding.homeHeadUnitShortcuts.bringToFront()
         val hasLibrary = homeModel.hasAnySongs
         binding.homeQuickPicks.setPadding(
             binding.homeQuickPicks.paddingLeft,
@@ -487,6 +505,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val songs = homeModel.songsForDecade(decade)
         if (songs.isEmpty()) {
             L.d("Ignoring stale decade chip for $decade with no matching songs")
+            requireContext().showToast(R.string.msg_empty_decade)
             return
         }
         playbackModel.play(songs)
@@ -501,6 +520,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             L.d("Ignoring Recently Added generated playlist with no songs")
             if (deferIfEmpty) {
                 pendingEntryDestination = HeadUnitEntryPoints.EntryDestination.RECENTLY_ADDED
+            } else {
+                requireContext().showToast(R.string.msg_empty_recently_added)
             }
             return false
         }
@@ -515,6 +536,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val playlist = favouritesPlaylist
         if (playlist?.songs?.isNotEmpty() != true) {
             L.d("Opening Playlists because Favourites is missing or empty")
+            requireContext().showToast(R.string.msg_empty_favourites)
             return openTabHandled(MusicType.PLAYLISTS)
         }
         playbackModel.play(playlist)

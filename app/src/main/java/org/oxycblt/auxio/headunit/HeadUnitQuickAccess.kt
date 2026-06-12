@@ -47,24 +47,23 @@ data class MetadataChipState(
 )
 
 object HeadUnitQuickAccess {
+    /**
+     * Return the set of dashboard quick-pick items for a given library state.
+     *
+     * This is used for tests to verify consistency with [HeadUnitDashboardPolicy.entries].
+     */
     fun quickPicks(
         hasLibraryContent: Boolean,
-        hasFolderSupport: Boolean,
-        hasFavouritesSupport: Boolean,
-        hasYearMetadata: Boolean,
+        hasFavourites: Boolean,
+        isIndexing: Boolean,
     ): List<QuickPickItem> =
         listOf(
             QuickPickItem(QuickPickAction.NOW_PLAYING, true),
-            QuickPickItem(QuickPickAction.SHUFFLE_ALL, hasLibraryContent),
-            QuickPickItem(QuickPickAction.GENRES, hasLibraryContent),
-            QuickPickItem(QuickPickAction.ARTISTS, hasLibraryContent),
-            QuickPickItem(QuickPickAction.ALBUMS, hasLibraryContent),
-            QuickPickItem(QuickPickAction.PLAYLISTS, hasLibraryContent),
             QuickPickItem(QuickPickAction.QUEUE, true),
-            QuickPickItem(QuickPickAction.RECENTLY_ADDED, hasLibraryContent),
-            QuickPickItem(QuickPickAction.DECADES, hasLibraryContent && hasYearMetadata),
-            QuickPickItem(QuickPickAction.FOLDERS, hasFolderSupport),
-            QuickPickItem(QuickPickAction.FAVOURITES, hasFavouritesSupport),
+            QuickPickItem(QuickPickAction.SHUFFLE_ALL, hasLibraryContent && !isIndexing),
+            QuickPickItem(QuickPickAction.RECENTLY_ADDED, hasLibraryContent && !isIndexing),
+            QuickPickItem(QuickPickAction.FAVOURITES, hasFavourites),
+            QuickPickItem(QuickPickAction.HEAD_UNIT_SETTINGS, !isIndexing),
         )
 
     fun metadataChipState(

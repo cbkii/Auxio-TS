@@ -58,14 +58,22 @@
         app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior">
 
 
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/home_pager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:layout="@layout/fragment_home_list" />
+
         <LinearLayout
             android:id="@+id/home_head_unit_shortcuts"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
             android:layout_marginStart="@dimen/spacing_medium"
             android:layout_marginEnd="@dimen/spacing_medium"
             android:layout_marginTop="@dimen/spacing_small"
+            android:orientation="vertical"
             android:paddingBottom="@dimen/spacing_small">
 
             <com.google.android.material.chip.ChipGroup
@@ -82,14 +90,6 @@
                 app:chipSpacingHorizontal="@dimen/spacing_tiny"
                 app:singleLine="false" />
         </LinearLayout>
-
-        <androidx.viewpager2.widget.ViewPager2
-            android:id="@+id/home_pager"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior"
-            tools:layout="@layout/fragment_home_list" />
 
 
         <com.google.android.material.card.MaterialCardView
