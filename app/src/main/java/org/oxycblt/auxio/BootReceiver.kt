@@ -25,6 +25,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
+import androidx.core.content.ContextCompat
 
 /**
  * A [BroadcastReceiver] that launches Auxio-TS on device boot when the Autostart setting is
@@ -62,7 +63,7 @@ class BootReceiver : BroadcastReceiver() {
                     Intent(context, AuxioService::class.java)
                         .setAction(AuxioService.ACTION_START)
                         .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
-                context.startForegroundService(serviceIntent)
+                ContextCompat.startForegroundService(context, serviceIntent)
                 L.d("Started AuxioService from boot")
             } catch (e: Exception) {
                 L.w("Cannot start AuxioService from boot: $e")

@@ -171,9 +171,7 @@ private constructor(
                 IntegerTable.START_ID_BOOT -> {
                     // Boot receiver started the service (Activity launch was blocked).
                     // Respect the autoplay setting for the restore action.
-                    StartupPlaybackPolicy.restoreActionForBoot(
-                        playbackSettings.autoplayOnLaunch
-                    )
+                    StartupPlaybackPolicy.restoreActionForBoot(playbackSettings.autoplayOnLaunch)
                 }
                 else -> {
                     L.d("Handling non-native start.")
