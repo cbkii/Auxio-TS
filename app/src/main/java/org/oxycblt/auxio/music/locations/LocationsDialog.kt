@@ -273,7 +273,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         // Update the switch value when toggling mode
         if (isFilePickerMode) {
-            binding.locationsExcludeNonMusicSwitch.isChecked = musicSettings.mediaStoreQuery.excludeNonMusic
+            binding.locationsExcludeNonMusicSwitch.isChecked =
+                musicSettings.mediaStoreQuery.excludeNonMusic
         } else {
             binding.locationsExcludeNonMusicSwitch.isChecked = musicSettings.useDefaultSystemFilter
         }
@@ -390,11 +391,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun showManualPathDialog() {
         val ctx = context ?: return
-        val input = android.widget.EditText(ctx).apply {
-            hint = getString(R.string.set_manual_path_hint)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-            setSingleLine()
-        }
+        val input =
+            android.widget.EditText(ctx).apply {
+                hint = getString(R.string.set_manual_path_hint)
+                inputType = android.text.InputType.TYPE_CLASS_TEXT
+                setSingleLine()
+            }
 
         AlertDialog.Builder(ctx)
             .setTitle(R.string.set_manual_path)
@@ -407,9 +409,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 }
 
                 lifecycleScope.launch {
-                    val isValid = withContext(Dispatchers.IO) {
-                        TopwaySourcePolicy.isAccessibleCandidate(rawPath)
-                    }
+                    val isValid =
+                        withContext(Dispatchers.IO) {
+                            TopwaySourcePolicy.isAccessibleCandidate(rawPath)
+                        }
                     if (isValid) {
                         val uri = Uri.fromFile(File(rawPath))
                         val location = Location.Unopened.from(ctx, uri)
@@ -464,7 +467,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
                 locationsExcludeNonMusicTitle.setText(R.string.set_exclude_non_music)
                 locationsExcludeNonMusicDesc.setText(R.string.set_exclude_non_music_desc)
-                locationsExcludeNonMusicSwitch.isChecked = musicSettings.mediaStoreQuery.excludeNonMusic
+                locationsExcludeNonMusicSwitch.isChecked =
+                    musicSettings.mediaStoreQuery.excludeNonMusic
 
                 // Update permission section
                 locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
@@ -547,10 +551,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 // File Picker mode - use secondary colors
                 setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
                 binding.locationsPermsDesc.setTextColor(
-                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
                 )
                 binding.locationsPermsSubtitle.setTextColor(
-                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
                 )
                 binding.locationsPermsOpen.imageTintList =
                     context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
@@ -560,23 +564,23 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 if (hasStoragePermission) {
                     // Has permission - use secondary colors
                     setCardBackgroundColor(
-                        context.getAttrColorCompat(MR.attr.colorSecondaryContainer)
+                        context.getAttrColorCompat(MR.attr.colorSecondaryContainer),
                     )
                     binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
                     )
                     binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
                     )
                     binding.locationsPermsOpen.imageTintList =
                         context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                 } else {
                     setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorErrorContainer))
                     binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer),
                     )
                     binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer),
                     )
                     binding.locationsPermsOpen.imageTintList =
                         context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
@@ -705,6 +709,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
             // Save the new SAF query
             musicSettings.safQuery = newSafQuery
+
+            // Also save the non-music setting if we are in SAF mode
+            val queryForUpdate = musicSettings.mediaStoreQuery
+            musicSettings.mediaStoreQuery =
+                queryForUpdate.copy(
+                    excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
+                )
         } else {
             // Check if MediaStore query changed
             val currentMediaStoreQuery = musicSettings.mediaStoreQuery
@@ -728,12 +739,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
             // Save the new MediaStore query
             musicSettings.mediaStoreQuery = newMediaStoreQuery
-
-            // Also save the non-music setting if we are in SAF mode
-            val currentMediaStoreQuery = musicSettings.mediaStoreQuery
-            musicSettings.mediaStoreQuery = currentMediaStoreQuery.copy(
-                excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked
-            )
 
             // Also save the system filter setting if we are in system mode
             musicSettings.useDefaultSystemFilter = binding.locationsExcludeNonMusicSwitch.isChecked

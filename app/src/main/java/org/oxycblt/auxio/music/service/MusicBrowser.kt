@@ -22,6 +22,7 @@ import android.content.Context
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 import javax.inject.Inject
+import kotlinx.coroutines.runBlocking
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.detail.DetailGenerator
@@ -219,42 +220,44 @@ private constructor(
             }
             is TabNode.Home ->
                 // homeGenerator returns emptyLists
-                when (node.type) {
-                    MusicType.SONGS ->
-                        homeGenerator
-                            .songs()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.ALBUMS ->
-                        homeGenerator
-                            .albums()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.ARTISTS ->
-                        homeGenerator
-                            .artists()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.GENRES ->
-                        homeGenerator
-                            .genres()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.PLAYLISTS ->
-                        homeGenerator
-                            .playlists()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
+                runBlocking {
+                    when (node.type) {
+                        MusicType.SONGS ->
+                            homeGenerator
+                                .songs()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
+                                }
+                        MusicType.ALBUMS ->
+                            homeGenerator
+                                .albums()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
+                                }
+                        MusicType.ARTISTS ->
+                            homeGenerator
+                                .artists()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
+                                }
+                        MusicType.GENRES ->
+                            homeGenerator
+                                .genres()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
+                                }
+                        MusicType.PLAYLISTS ->
+                            homeGenerator
+                                .playlists()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
+                                }
+                    }
                 }
         }
 

@@ -19,6 +19,8 @@
 package org.oxycblt.auxio.home
 
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
@@ -152,33 +154,38 @@ private class HomeGeneratorImpl(
 
     override fun empty() = musicRepository.library?.empty() ?: true
 
-    override suspend fun songs() = withContext(Dispatchers.Default) {
-        musicRepository.library?.let { listSettings.songSort.songs(it.songs) } ?: emptyList()
-    }
+    override suspend fun songs() =
+        withContext(Dispatchers.Default) {
+            musicRepository.library?.let { listSettings.songSort.songs(it.songs) } ?: emptyList()
+        }
 
-    override suspend fun albums() = withContext(Dispatchers.Default) {
-        musicRepository.library?.let { listSettings.albumSort.albums(it.albums) } ?: emptyList()
-    }
+    override suspend fun albums() =
+        withContext(Dispatchers.Default) {
+            musicRepository.library?.let { listSettings.albumSort.albums(it.albums) } ?: emptyList()
+        }
 
-    override suspend fun artists() = withContext(Dispatchers.Default) {
-        musicRepository.library?.let { deviceLibrary ->
-            val sorted = listSettings.artistSort.artists(deviceLibrary.artists)
-            if (homeSettings.shouldHideCollaborators) {
-                sorted.filter { it.explicitAlbums.isNotEmpty() }
-            } else {
-                sorted
-            }
-        } ?: emptyList()
-    }
+    override suspend fun artists() =
+        withContext(Dispatchers.Default) {
+            musicRepository.library?.let { deviceLibrary ->
+                val sorted = listSettings.artistSort.artists(deviceLibrary.artists)
+                if (homeSettings.shouldHideCollaborators) {
+                    sorted.filter { it.explicitAlbums.isNotEmpty() }
+                } else {
+                    sorted
+                }
+            } ?: emptyList()
+        }
 
-    override suspend fun genres() = withContext(Dispatchers.Default) {
-        musicRepository.library?.let { listSettings.genreSort.genres(it.genres) } ?: emptyList()
-    }
+    override suspend fun genres() =
+        withContext(Dispatchers.Default) {
+            musicRepository.library?.let { listSettings.genreSort.genres(it.genres) } ?: emptyList()
+        }
 
-    override suspend fun playlists() = withContext(Dispatchers.Default) {
-        musicRepository.library?.let { listSettings.playlistSort.playlists(it.playlists) }
-            ?: emptyList()
-    }
+    override suspend fun playlists() =
+        withContext(Dispatchers.Default) {
+            musicRepository.library?.let { listSettings.playlistSort.playlists(it.playlists) }
+                ?: emptyList()
+        }
 
     override fun tabs() = homeSettings.homeTabs.filterIsInstance<Tab.Visible>().map { it.type }
 }
