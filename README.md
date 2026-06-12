@@ -80,15 +80,24 @@ Auxio-TS targets compatibility surfaces needed by DoFun Variety and TS18/Topway 
 
 Observed private/system/vendor hooks from stock TS18 apps have been treated as reference evidence only so far. Auxio-TS won't copy private system privileges or vendor-only APIs into production code unless a protocol is fully understood, justified, reviewed, and implemented safely.
 
-### Important install constraint for real TS18 firmware
+## Constraints on TS18 firmware
 
-The exact target TS18 diagnostics show stock `com.tw.music` already installed as a system priv-app:
+Stock TS* / Topway / DoFun environment has some limits users should know about.
+
+The target TS18 firmware already includes the stock music app as a protected system app `com.tw.music`.
+Because of this, the `topwayTwMusicRelease` APK may not install like a normal app on locked stock firmware; To install this (most-integrated) variant, some units may require an advanced install method, such as ADB, Shizuku, root, disabling the stock app for the current user, or matching the system app signature.
+
+Storage and memory may have some practical limits on TS18 units; for this reason, Auxio-TS can limit TS18 system scans to likely music folders by looking for familiar folder-names **containing** keywords such as `music`, `download`, or `media` (case-insensitive).
+
+For the most reliable library scanning and folder selection, keep music in plainly named folders on the default `storage` or `usb` drive. Recommended examples:
 
 ```text
-/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
+/storage/usbdisk0/*
+/storage/emulated/0/*
+ensure path contains: *music|media|download*
 ```
 
-That means a user-signed `topwayTwMusicRelease` APK cannot be assumed to install over stock firmware through the normal package installer. Installation may require ADB shell, Shizuku, root, system-image control, package disable/uninstall-for-user, or matching signing.
+Avoid unusual folder names, including names with emoji, invisible characters, excessive punctuation, very long names, or names that only differ by capitalisation or symbols.
 
 See [`docs/TS18_INSTALLATION_CONSTRAINTS.md`](docs/TS18_INSTALLATION_CONSTRAINTS.md) before treating a Topway APK as installable on locked stock firmware.
 
