@@ -36,7 +36,7 @@ enum class QuickPickAction {
     HEAD_UNIT_SETTINGS,
 }
 
-internal data class QuickPickItem(val action: QuickPickAction, val enabled: Boolean)
+data class QuickPickItem(val action: QuickPickAction, val enabled: Boolean)
 
 data class MetadataChipState(
     val genres: Boolean,
@@ -54,19 +54,24 @@ object HeadUnitQuickAccess {
      * action set: unavailable content-specific actions, such as [QuickPickAction.FAVOURITES], may
      * be omitted entirely instead of being returned disabled.
      */
-    internal fun quickPicks(
+    fun quickPicks(
         hasLibraryContent: Boolean,
         hasFavourites: Boolean,
         isIndexing: Boolean,
     ): List<QuickPickItem> =
-        HeadUnitDashboardPolicy.entries(
-                HeadUnitDashboardState(
-                    hasLibraryContent = hasLibraryContent,
-                    hasFavourites = hasFavourites,
-                    isIndexing = isIndexing,
-                )
+        listOf(
+                QuickPickItem(QuickPickAction.NOW_PLAYING, true),
+                QuickPickItem(QuickPickAction.QUEUE, true),
+                QuickPickItem(QuickPickAction.SHUFFLE_ALL, hasLibraryContent && !isIndexing),
+                QuickPickItem(QuickPickAction.RECENTLY_ADDED, hasLibraryContent && !isIndexing),
             )
-            .map { entry -> QuickPickItem(entry.action, entry.enabled) }
+            .let { base ->
+                if (hasFavourites) {
+                    base + QuickPickItem(QuickPickAction.FAVOURITES, true)
+                } else {
+                    base
+                }
+            } + QuickPickItem(QuickPickAction.HEAD_UNIT_SETTINGS, !isIndexing)
 
     fun metadataChipState(
         genreCount: Int,
