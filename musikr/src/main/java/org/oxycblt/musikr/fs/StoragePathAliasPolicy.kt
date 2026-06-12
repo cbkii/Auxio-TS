@@ -36,47 +36,25 @@ object StoragePathAliasPolicy {
         val groups = mutableMapOf<String, MutableList<String>>()
 
         for (path in paths) {
-            val canonical =
-                try {
-                    File(path).canonicalPath
-                } catch (e: Exception) {
-                    // Fallback to absolute path or normalized TS18 path
-                    normalizePath(path)
-                }
-            groups.getOrPut(canonical) { mutableListOf() }.add(path)
+            groups.getOrPut(canonicalize(path)) { mutableListOf() }.add(path)
         }
 
         return groups.map { AliasGroup(it.key, it.value) }
     }
 
-    /** Deduplicates files based on metadata (size, modified time, canonical path). */
+    /** Deduplicates files using their canonical path and size as identity. */
     fun <T> deduplicateFiles(
         files: List<T>,
         pathSelector: (T) -> String,
         sizeSelector: (T) -> Long,
-        modifiedMsSelector: (T) -> Long,
     ): List<T> {
-        // Group by size and modified time as a quick filter, then by canonical path
         val deduped = mutableListOf<T>()
         val seen = mutableSetOf<String>()
 
         for (file in files) {
-            val path = pathSelector(file)
-            val size = sizeSelector(file)
-            val modified = modifiedMsSelector(file)
-
-            val canonical =
-                try {
-                    File(path).canonicalPath
-                } catch (e: Exception) {
-                    normalizePath(path)
-                }
-
-            // To be safe, we use canonical path + size to uniquely identify files.
-            // Some file systems might report different modified times depending on access route,
-            // so we just use canonicalPath + size for identity.
-            val identity = "${canonical}_${size}"
-
+            // Different mount aliases can report different modified times for the same physical
+            // file, so identity is based on the canonical path and size only.
+            val identity = "${canonicalize(pathSelector(file))}_${sizeSelector(file)}"
             if (seen.add(identity)) {
                 deduped.add(file)
             }
@@ -85,14 +63,33 @@ object StoragePathAliasPolicy {
         return deduped
     }
 
-    private fun normalizePath(path: String): String {
-        // Try to resolve known TS18 aliases if canonical path fails
-        var normalized = path
-        if (normalized.startsWith("/mnt/media_rw/usbdisk0")) {
-            normalized = normalized.replaceFirst("/mnt/media_rw/usbdisk0", "/storage/usbdisk0")
-        } else if (normalized.startsWith("/sdcard")) {
-            normalized = normalized.replaceFirst("/sdcard", "/storage/emulated/0")
+    /**
+     * Resolves a path to a canonical form, first collapsing known TS18 mount aliases so that the
+     * same physical file reached via different mount points produces the same identity.
+     */
+    fun canonicalize(path: String): String {
+        val normalized = normalize(path)
+        return try {
+            File(normalized).canonicalPath
+        } catch (e: Exception) {
+            normalized
         }
-        return normalized
+    }
+
+    /**
+     * Collapses known TS18 mount aliases to a single canonical-looking string without performing
+     * any disk I/O. Suitable for hot paths such as the MediaStore scan loop.
+     */
+    fun normalize(path: String): String {
+        // canonicalPath does not throw for missing or unmounted paths, so alias collapsing must
+        // happen explicitly rather than only in a failure fallback.
+        return when {
+            // Any USB port index (usbdisk0, usbdisk1, ...) is exposed under both mount roots.
+            path.startsWith("/mnt/media_rw/usbdisk") ->
+                path.replaceFirst("/mnt/media_rw/usbdisk", "/storage/usbdisk")
+            path == "/sdcard" || path.startsWith("/sdcard/") ->
+                path.replaceFirst("/sdcard", "/storage/emulated/0")
+            else -> path
+        }
     }
 }

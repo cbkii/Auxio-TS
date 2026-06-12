@@ -35,6 +35,7 @@ import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.Location
+import org.oxycblt.musikr.fs.StoragePathAliasPolicy
 import org.oxycblt.musikr.fs.path.MediaStorePathInterpreter
 import org.oxycblt.musikr.fs.path.VolumeManager
 import org.oxycblt.musikr.fs.saf.contentResolverSafe
@@ -98,10 +99,7 @@ private constructor(
                 }
             }
 
-            // Collect all files and track unique directories
-            val allFiles = mutableListOf<File>()
-
-            // Deduplicate files
+            // Track identities to deduplicate files reached via multiple mount aliases.
             val seenIdentities = mutableSetOf<String>()
 
             val volumeNames = mutableSetOf<String>()
@@ -109,11 +107,18 @@ private constructor(
                 try {
                     volumeNames.addAll(AOSPMediaStore.getExternalVolumeNames(context))
                 } catch (e: Exception) {
+                    android.util.Log.e(TAG, "Failed to enumerate external volumes", e)
+                }
+                // Some devices/ROMs return an empty set; always scan the primary volume.
+                if (volumeNames.isEmpty()) {
                     volumeNames.add(AOSPMediaStore.VOLUME_EXTERNAL)
                 }
             } else {
-                volumeNames.add("external")
+                volumeNames.add(AOSPMediaStore.VOLUME_EXTERNAL)
             }
+
+            var anyVolumeSucceeded = false
+            var lastVolumeError: Exception? = null
 
             for (volumeName in volumeNames) {
                 val contentUri =
@@ -164,14 +169,17 @@ private constructor(
                             val dateModified =
                                 cursor.getLong(dateModifiedIndex) * 1000 // Convert to milliseconds
 
-                            // Alias deduplication
-                            val canonical =
-                                try {
-                                    java.io.File(path).canonicalPath
-                                } catch (e: Exception) {
-                                    path
+                            // Alias deduplication: collapse the same physical file reached via
+                            // different mount aliases. Identity is derived from the path string
+                            // (no per-file disk I/O) plus size.
+                            val volumeComponents = path.volume.components
+                            val absolutePath =
+                                if (volumeComponents != null) {
+                                    "/${volumeComponents.unixString}/${path.components.unixString}"
+                                } else {
+                                    path.components.unixString
                                 }
-                            val identity = "${canonical}_${size}"
+                            val identity = "${StoragePathAliasPolicy.normalize(absolutePath)}_$size"
                             if (!seenIdentities.add(identity)) {
                                 continue // Skip duplicate
                             }
@@ -188,13 +196,23 @@ private constructor(
                                     parent = null,
                                 )
 
-                            allFiles.add(deviceFile)
                             it.send(deviceFile)
                         }
                     }
+                    anyVolumeSucceeded = true
                 } catch (e: Exception) {
-                    // Log failures per volume without failing the entire scan
+                    // Tolerate a single failing/slow volume, but remember the failure so a scan
+                    // where every volume fails is not reported as an empty success (which would
+                    // wipe the cached library).
+                    lastVolumeError = e
+                    android.util.Log.e(TAG, "Failed to query volume: $volumeName", e)
                 }
+            }
+
+            // If every volume query failed, surface the failure instead of returning an empty
+            // (but "successful") library.
+            if (!anyVolumeSucceeded) {
+                lastVolumeError?.let { throw it }
             }
         }
     }
@@ -229,6 +247,8 @@ private constructor(
     }
 
     companion object {
+        private const val TAG = "MediaStore"
+
         fun from(context: Context, query: Query) =
             MediaStore(
                 context = context,

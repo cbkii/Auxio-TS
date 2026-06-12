@@ -48,13 +48,7 @@ class StoragePathAliasPolicyTest {
                 MockFile("/storage/usbdisk0/Music/A.flac", 200L, 2000L),
             )
 
-        val deduped =
-            StoragePathAliasPolicy.deduplicateFiles(
-                files,
-                { it.path },
-                { it.size },
-                { it.modified },
-            )
+        val deduped = StoragePathAliasPolicy.deduplicateFiles(files, { it.path }, { it.size })
 
         assertEquals(2, deduped.size)
     }

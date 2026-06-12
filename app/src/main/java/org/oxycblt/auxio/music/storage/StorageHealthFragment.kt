@@ -30,8 +30,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -67,18 +69,15 @@ class StorageHealthViewModel @Inject constructor(private val musicSettings: Musi
     }
 
     fun excludePath(context: Context, path: String) {
+        val location =
+            Location.Unopened.from(context, android.net.Uri.parse("file://$path")) ?: return
         if (musicSettings.locationMode == LocationMode.SAF) {
             val currentQuery = musicSettings.safQuery
-            val newExclude =
-                currentQuery.exclude +
-                    Location.Unopened.from(context, android.net.Uri.parse("file://$path"))!!
-            musicSettings.safQuery = currentQuery.copy(exclude = newExclude)
+            musicSettings.safQuery = currentQuery.copy(exclude = currentQuery.exclude + location)
         } else {
             val currentQuery = musicSettings.mediaStoreQuery
-            val newFiltered =
-                currentQuery.filtered +
-                    Location.Unopened.from(context, android.net.Uri.parse("file://$path"))!!
-            musicSettings.mediaStoreQuery = currentQuery.copy(filtered = newFiltered)
+            musicSettings.mediaStoreQuery =
+                currentQuery.copy(filtered = currentQuery.filtered + location)
         }
     }
 
@@ -182,6 +181,10 @@ class StorageHealthFragment : Fragment() {
 
     private val viewModel: StorageHealthViewModel by viewModels()
 
+    private var reportText: TextView? = null
+    private var exportButton: Button? = null
+    private var noisyPathsContainer: LinearLayout? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -212,10 +215,12 @@ class StorageHealthFragment : Fragment() {
                 typeface = android.graphics.Typeface.MONOSPACE
             }
         view.addView(reportText)
+        this.reportText = reportText
 
         val noisyPathsContainer =
             LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         view.addView(noisyPathsContainer)
+        this.noisyPathsContainer = noisyPathsContainer
 
         val exportButton =
             Button(context).apply {
@@ -223,13 +228,14 @@ class StorageHealthFragment : Fragment() {
                 visibility = View.GONE
             }
         view.addView(exportButton)
+        this.exportButton = exportButton
 
         runButton.setOnClickListener { viewModel.generateReport(context) }
 
         exportButton.setOnClickListener {
             val report = viewModel.reportState.value
             if (report != null) {
-                // simple export via copy to clipboard or share intent
+                // simple export via share intent
                 val intent =
                     android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                         type = "text/plain"
@@ -241,43 +247,64 @@ class StorageHealthFragment : Fragment() {
             }
         }
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.reportState.collect { report ->
-                if (report != null) {
-                    reportText.text = report
-                    exportButton.visibility = View.VISIBLE
-                }
-            }
-        }
+        return view
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val context = view.context
 
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.noisyPaths.collect { paths ->
-                noisyPathsContainer.removeAllViews()
-                if (paths.isNotEmpty()) {
-                    val title =
-                        TextView(context).apply {
-                            text = "Some folders are likely slowing scans. Click to exclude:"
-                            textSize = 16f
-                            setTypeface(null, android.graphics.Typeface.BOLD)
-                        }
-                    noisyPathsContainer.addView(title)
-
-                    paths.forEach { path ->
-                        val pathBtn =
-                            Button(context).apply {
-                                text = "Exclude $path"
-                                setOnClickListener {
-                                    viewModel.excludePath(context, path)
-                                    Toast.makeText(context, "Excluded $path", Toast.LENGTH_SHORT)
-                                        .show()
-                                }
-                            }
-                        noisyPathsContainer.addView(pathBtn)
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.reportState.collect { report ->
+                    if (report != null) {
+                        reportText?.text = report
+                        exportButton?.visibility = View.VISIBLE
                     }
                 }
             }
         }
 
-        return view
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.noisyPaths.collect { paths ->
+                    val container = noisyPathsContainer ?: return@collect
+                    container.removeAllViews()
+                    if (paths.isNotEmpty()) {
+                        val title =
+                            TextView(context).apply {
+                                text = "Some folders are likely slowing scans. Click to exclude:"
+                                textSize = 16f
+                                setTypeface(null, android.graphics.Typeface.BOLD)
+                            }
+                        container.addView(title)
+
+                        paths.forEach { path ->
+                            val pathBtn =
+                                Button(context).apply {
+                                    text = "Exclude $path"
+                                    setOnClickListener {
+                                        viewModel.excludePath(context, path)
+                                        Toast.makeText(
+                                                context,
+                                                "Excluded $path",
+                                                Toast.LENGTH_SHORT,
+                                            )
+                                            .show()
+                                    }
+                                }
+                            container.addView(pathBtn)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        reportText = null
+        exportButton = null
+        noisyPathsContainer = null
     }
 }
