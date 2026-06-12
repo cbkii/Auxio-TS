@@ -22,6 +22,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.util.Log
 import java.io.File
 import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.Path
@@ -154,6 +155,7 @@ private class DocumentPathFactoryImpl(
         // StorageManager (common on TS18 where /storage/usbdisk0 may not appear in
         // storageVolumes), create a ThirdParty volume so the path is still usable.
         // This prevents fallback source selections from being rejected as unrecognized.
+        Log.d("DocumentPathFactory", "ThirdParty fallback for unmapped path: $pathString")
         return Path(Volume.ThirdParty(uri), Components.parseUnix(pathString))
     }
 

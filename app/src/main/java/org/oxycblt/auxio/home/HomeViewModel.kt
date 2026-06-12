@@ -172,6 +172,9 @@ constructor(
 
     private val homeGenerator = homeGeneratorFactory.create(this)
 
+    // Thread-safety: invalidateMusic is only called from dispatchLibraryChange which runs on
+    // Dispatchers.Main, and viewModelScope.launch also dispatches on Main, so all map access
+    // is confined to the main thread.
     /** Per-type invalidation jobs for cancellation of stale updates. */
     private val invalidationJobs = mutableMapOf<MusicType, Job>()
 
