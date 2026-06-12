@@ -65,8 +65,10 @@ private class EvaluateStepImpl(
         }
         val graph = builder.build()
 
-        // Render graph to Graphviz in debug mode
-        if (BuildConfig.DEBUG) {
+        // Render graph to Graphviz only when explicitly opted in via system property.
+        // This avoids catastrophic startup cost on debug/head-unit builds where the graph
+        // can be very large. Enable with: adb shell setprop debug.auxio.graphviz true
+        if (BuildConfig.DEBUG && System.getProperty("debug.auxio.graphviz") == "true") {
             try {
                 val fileName = "music_graph_debug.dot"
                 graph.renderToGraphviz(context, fileName)

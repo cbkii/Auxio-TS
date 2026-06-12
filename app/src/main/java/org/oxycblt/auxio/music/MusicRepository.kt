@@ -22,11 +22,15 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
@@ -43,6 +47,8 @@ import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.fs.FS
+import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
@@ -456,8 +462,19 @@ constructor(
 
         L.d("Running index...")
         val start = System.currentTimeMillis()
+        // Apply TS18 system source path filter when enabled - only include files whose path
+        // contains music/download/media keywords to avoid scanning huge irrelevant USB trees.
+        val pathKeywords =
+            if (musicSettings.ts18SystemSourceFilter &&
+                musicSettings.locationMode == LocationMode.MEDIA_STORE
+            ) {
+                TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
+            } else {
+                emptyList()
+            }
         val result =
-            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS).run(::emitIndexingProgress)
+            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS, pathKeywords)
+                .run(::emitIndexingProgress)
         L.d("Index finished in ${System.currentTimeMillis() - start}ms")
 
         // Final accessibility check before committing empty state
@@ -492,11 +509,36 @@ constructor(
 
     private suspend fun loadCachedLibrary(): MutableLibrary {
         val revision = musicSettings.revision ?: UUID.randomUUID()
-        val config = createConfig(revision, cache)
+        // Use a lightweight config for cached startup: no filesystem construction needed
+        // since loadCached only reads from the DB cache and stored playlists.
+        val config = createCachedConfig(revision)
         val start = System.currentTimeMillis()
         return Musikr.loadCached(context, config).also {
             L.d("Cached library loaded in ${System.currentTimeMillis() - start}ms")
         }
+    }
+
+    /**
+     * Builds a minimal [Config] for cached startup that avoids touching the filesystem,
+     * storage providers, or cover storage initialization. This prevents SAF/MediaStore
+     * provider queries from competing with the cached library load on slow TS18 firmware.
+     */
+    private suspend fun createCachedConfig(revision: UUID): Config {
+        val separators = Separators.from(musicSettings.separators)
+        val nameFactory =
+            if (musicSettings.intelligentSorting) {
+                Naming.intelligent()
+            } else {
+                Naming.simple()
+            }
+        val covers = settingCovers.mutate(context, revision)
+        // Use a no-op FS since loadCached doesn't explore the filesystem
+        val fs = NoOpFS
+        return Config(
+            fs,
+            Storage(cache, covers, storedPlaylists),
+            Interpretation(nameFactory, separators),
+        )
     }
 
     private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
@@ -583,4 +625,21 @@ constructor(
             listener.onMusicChanges(changes)
         }
     }
+}
+
+/**
+ * A no-op [FS] implementation used during cached startup.
+ * Cached startup loads from the DB cache without exploring the filesystem,
+ * so no real FS is needed. This avoids triggering SAF/MediaStore/StorageManager
+ * queries on startup.
+ */
+private object NoOpFS : FS {
+    override suspend fun explore(
+        files: Channel<org.oxycblt.musikr.fs.File>
+    ): kotlinx.coroutines.Deferred<Result<Unit>> {
+        files.close()
+        return CompletableDeferred(Result.success(Unit))
+    }
+
+    override fun track(): Flow<FSUpdate> = emptyFlow()
 }

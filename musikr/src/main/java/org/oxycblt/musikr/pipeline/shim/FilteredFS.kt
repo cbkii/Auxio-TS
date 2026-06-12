@@ -35,6 +35,7 @@ internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
     private val noisyDirs: Set<String>,
+    private val pathKeywords: List<String> = emptyList(),
 ) : FS {
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
@@ -55,9 +56,15 @@ internal class FilteredFS(
                 try {
                     for (file in delegateChannel) {
                         val isNoisy = file.path.components.components.any { it in noisyDirs }
-                        if (!isNoisy) {
-                            files.send(file)
+                        if (isNoisy) continue
+                        // If pathKeywords are configured, require the full path to contain
+                        // at least one keyword (case-insensitive). This prevents scanning
+                        // huge irrelevant directory trees on TS18.
+                        if (pathKeywords.isNotEmpty()) {
+                            val fullPath = file.path.toString().lowercase()
+                            if (pathKeywords.none { fullPath.contains(it) }) continue
                         }
+                        files.send(file)
                     }
                     files.close()
                 } catch (t: Throwable) {

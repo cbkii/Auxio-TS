@@ -93,7 +93,9 @@ private constructor(
         musicRepository.addUpdateListener(this)
         musicRepository.addIndexingListener(this)
         musicRepository.registerWorker(this)
-        startTracking()
+        // Delay storage tracking until the cached library is emitted (or first index completes).
+        // On TS18 firmware, SAF/MediaStore tracking setup can trigger slow provider queries that
+        // compete with the cached startup path. Tracking will begin once onMusicChanges fires.
     }
 
     fun release() {
@@ -166,6 +168,11 @@ private constructor(
     override fun onMusicChanges(changes: MusicRepository.Changes) {
         val library = musicRepository.library ?: return
         L.d("Music changed, updating shared objects")
+        // Start tracking now that we have a library available.
+        // This ensures tracking doesn't start before cached startup completes.
+        if (trackingJob == null) {
+            startTracking()
+        }
         // Wipe possibly-invalidated outdated covers
         imageLoader.memoryCache?.clear()
         // Clear invalid models from PlaybackStateManager. This is not connected

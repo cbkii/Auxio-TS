@@ -70,6 +70,12 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** Whether to use the file-system cache for improved loading times. */
     val useFileTreeCache: Boolean
 
+    /**
+     * Whether to apply the TS18 system source path filter (only include paths containing
+     * music/download/media keywords) when using MediaStore mode. Default true for TS18 builds.
+     */
+    var ts18SystemSourceFilter: Boolean
+
     fun forceLocationUpdate()
 
     interface Listener {
@@ -146,6 +152,13 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     override val useFileTreeCache: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_fs_cache), false)
+
+    override var ts18SystemSourceFilter: Boolean
+        get() =
+            sharedPreferences.getBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, true)
+        set(value) {
+            sharedPreferences.edit { putBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, value) }
+        }
 
     override var locationMode: LocationMode
         get() {
@@ -327,6 +340,10 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         }
 
         return split
+    }
+
+    private companion object {
+        const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
     }
 }
 
