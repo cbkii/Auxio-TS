@@ -29,6 +29,8 @@
     <string name="set_key_auto_sort_names" translatable="false">auxio_auto_sort_names</string>
     <string name="set_key_locations_mode" translatable="false">auxio_locations_mode</string>
 
+    <string name="set_key_autostart_on_boot" translatable="false">auxio_autostart_on_boot</string>
+    <string name="set_key_autoplay_on_launch" translatable="false">auxio_autoplay_on_launch</string>
     <string name="set_key_headset_autoplay" translatable="false">auxio_headset_autoplay</string>
     <string name="set_key_replay_gain" translatable="false">auxio_replay_gain</string>
     <string name="set_key_pre_amp" translatable="false">auxio_pre_amp</string>

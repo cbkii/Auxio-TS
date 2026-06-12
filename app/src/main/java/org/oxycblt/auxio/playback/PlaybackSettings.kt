@@ -60,6 +60,10 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
     val rememberPause: Boolean
     /** Whether to always exit when task is removed, even if playing. */
     val exitOnTaskRemoval: Boolean
+    /** Whether to launch Auxio-TS automatically on device boot. */
+    val autostartOnBoot: Boolean
+    /** Whether to start playback automatically when Auxio-TS launches. */
+    val autoplayOnLaunch: Boolean
 
     interface Listener {
         /** Called when one of the ReplayGain configurations have changed. */
@@ -136,6 +140,12 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
 
     override val exitOnTaskRemoval: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_task_exit), false)
+
+    override val autostartOnBoot: Boolean
+        get() = sharedPreferences.getBoolean(getString(R.string.set_key_autostart_on_boot), false)
+
+    override val autoplayOnLaunch: Boolean
+        get() = sharedPreferences.getBoolean(getString(R.string.set_key_autoplay_on_launch), false)
 
     override fun migrate() {
         // MusicMode was converted to PlaySong in 3.2.0

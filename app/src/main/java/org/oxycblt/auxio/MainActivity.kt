@@ -33,7 +33,9 @@ import org.oxycblt.auxio.databinding.ActivityMainBinding
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
+import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.isNight
@@ -58,9 +60,15 @@ import timber.log.Timber as L
 class MainActivity : AppCompatActivity() {
     private val playbackModel: PlaybackViewModel by viewModels()
     @Inject lateinit var uiSettings: UISettings
+    @Inject lateinit var playbackSettings: PlaybackSettings
+    private var isFirstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Only treat a launch with no saved instance state as a cold launch, so that activity
+        // recreation (e.g. configuration changes or restoration after process death) does not
+        // re-trigger autoplay.
+        isFirstResume = savedInstanceState == null
         setupTheme()
         if (uiSettings.headUnitLandscapeMode) {
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -84,9 +92,16 @@ class MainActivity : AppCompatActivity() {
         )
 
         if (!startIntentAction(intent)) {
-            // No intent action to do, just restore the previously saved state.
-            playbackModel.playDeferred(DeferredPlayback.RestoreState(false))
+            // No intent action to do, restore the previously saved state.
+            // Only autoplay on the first resume (cold launch) so that returning to the app
+            // from the background does not force playback to resume after the user paused it.
+            val action =
+                StartupPlaybackPolicy.restoreActionForLaunch(
+                    playbackSettings.autoplayOnLaunch && isFirstResume
+                )
+            playbackModel.playDeferred(action)
         }
+        isFirstResume = false
     }
 
     override fun onNewIntent(intent: Intent) {
