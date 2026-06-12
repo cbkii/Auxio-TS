@@ -137,13 +137,11 @@ class RoborazziSmokeScreenshotTest {
         heightPx: Int,
         shuffleScope: ShuffleScope,
     ) {
-        captureFullScreen(fileName, widthPx, heightPx, R.layout.fragment_playback_panel) {
-            view, _ ->
+        captureFullScreen(fileName, widthPx, heightPx, R.layout.fragment_playback_panel) { view, _
+            ->
             view.findViewById<TextView>(R.id.playback_song).text = "Dream Nexus Highway"
             view.findViewById<TextView>(R.id.playback_artist).text = "Auxio-TS • DoFun preview"
-            view
-                .findViewById<MaterialButton>(R.id.playback_shuffle)
-                .applyShuffleScope(shuffleScope)
+            view.findViewById<MaterialButton>(R.id.playback_shuffle).applyShuffleScope(shuffleScope)
             view.findViewById<MaterialButton>(R.id.playback_repeat).isChecked = false
         }
     }
