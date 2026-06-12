@@ -228,8 +228,7 @@ class PlaybackPanelFragment :
                 L.w("playbackMore clicked but no current song")
                 return@setOnClickListener
             }
-            val parcel =
-                Menu.ForSong(R.menu.playback_song, song, PlaySong.ByItself).parcel
+            val parcel = Menu.ForSong(R.menu.playback_song, song, PlaySong.ByItself).parcel
             val innerNavController =
                 requireParentFragment()
                     .requireView()
