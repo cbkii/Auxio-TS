@@ -101,51 +101,92 @@ private constructor(
             // Collect all files and track unique directories
             val allFiles = mutableListOf<File>()
 
-            context.contentResolverSafe.useQuery(
-                AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                selector,
-                args.toTypedArray(),
-            ) { cursor ->
-                val pathInterpreter = pathInterpreterFactory.wrap(cursor)
-                val idIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
-                val mimeTypeIndex =
-                    cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.MIME_TYPE)
-                val sizeIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.SIZE)
-                val dateAddedIndex =
-                    cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_ADDED)
-                val dateModifiedIndex =
-                    cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED)
+            // Deduplicate files
+            val seenIdentities = mutableSetOf<String>()
 
-                while (cursor.moveToNext()) {
-                    val path = pathInterpreter.extract() ?: continue
+            val volumeNames = mutableSetOf<String>()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                try {
+                    volumeNames.addAll(AOSPMediaStore.getExternalVolumeNames(context))
+                } catch (e: Exception) {
+                    volumeNames.add(AOSPMediaStore.VOLUME_EXTERNAL)
+                }
+            } else {
+                volumeNames.add("external")
+            }
 
-                    val id = cursor.getLong(idIndex)
-                    val uri =
-                        Uri.withAppendedPath(
-                            AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                            id.toString(),
-                        )
-                    val mimeType = cursor.getStringOrNull(mimeTypeIndex) ?: "audio/*"
-                    val size = cursor.getLong(sizeIndex)
-                    val dateAdded = cursor.getLong(dateAddedIndex) * 1000 // Convert to milliseconds
-                    val dateModified =
-                        cursor.getLong(dateModifiedIndex) * 1000 // Convert to milliseconds
+            for (volumeName in volumeNames) {
+                val contentUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    try {
+                        AOSPMediaStore.Audio.Media.getContentUri(volumeName)
+                    } catch (e: Exception) {
+                        AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                    }
+                } else {
+                    AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                }
 
-                    // Create file with empty deferred parent
-                    val deviceFile =
-                        File(
-                            uri = uri,
-                            path = path,
-                            modifiedMs = dateModified,
-                            mimeType = mimeType,
-                            size = size,
-                            addedMs = ForwardDateAdded(dateAdded),
-                            parent = null,
-                        )
+                try {
+                    context.contentResolverSafe.useQuery(
+                        contentUri,
+                        projection,
+                        selector,
+                        args.toTypedArray(),
+                    ) { cursor ->
+                        val pathInterpreter = pathInterpreterFactory.wrap(cursor)
+                        val idIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
+                        val mimeTypeIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.MIME_TYPE)
+                        val sizeIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.SIZE)
+                        val dateAddedIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_ADDED)
+                        val dateModifiedIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED)
 
-                    allFiles.add(deviceFile)
-                    it.send(deviceFile)
+                        while (cursor.moveToNext()) {
+                            val path = pathInterpreter.extract() ?: continue
+
+                            val id = cursor.getLong(idIndex)
+                            val uri =
+                                Uri.withAppendedPath(
+                                    contentUri,
+                                    id.toString(),
+                                )
+                            val mimeType = cursor.getStringOrNull(mimeTypeIndex) ?: "audio/*"
+                            val size = cursor.getLong(sizeIndex)
+                            val dateAdded = cursor.getLong(dateAddedIndex) * 1000 // Convert to milliseconds
+                            val dateModified =
+                                cursor.getLong(dateModifiedIndex) * 1000 // Convert to milliseconds
+
+                            // Alias deduplication
+                            val canonical = try {
+                                java.io.File(path).canonicalPath
+                            } catch (e: Exception) {
+                                path
+                            }
+                            val identity = "${canonical}_${size}"
+                            if (!seenIdentities.add(identity)) {
+                                continue // Skip duplicate
+                            }
+
+                            // Create file with empty deferred parent
+                            val deviceFile =
+                                File(
+                                    uri = uri,
+                                    path = path,
+                                    modifiedMs = dateModified,
+                                    mimeType = mimeType,
+                                    size = size,
+                                    addedMs = ForwardDateAdded(dateAdded),
+                                    parent = null,
+                                )
+
+                            allFiles.add(deviceFile)
+                            it.send(deviceFile)
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Log failures per volume without failing the entire scan
                 }
             }
         }

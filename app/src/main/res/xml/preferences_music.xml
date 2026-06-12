@@ -26,6 +26,11 @@
             app:summary="@string/set_hide_collaborators_desc"
             app:title="@string/set_hide_collaborators" />
 
+        <Preference
+            app:key="@string/set_key_storage_health"
+            app:title="@string/set_storage_health"
+            app:summary="@string/set_storage_health_desc" />
+
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/set_images">

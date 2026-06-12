@@ -63,7 +63,15 @@
         <action
             android:id="@+id/separators_settings"
             app:destination="@id/separators_dialog" />
+        <action
+            android:id="@+id/storage_health"
+            app:destination="@id/storage_health_fragment" />
     </fragment>
+
+    <fragment
+        android:id="@+id/storage_health_fragment"
+        android:name="org.oxycblt.auxio.music.storage.StorageHealthFragment"
+        android:label="storage_health_fragment" />
 
     <fragment
         android:id="@+id/audio_preferences_fragment"
