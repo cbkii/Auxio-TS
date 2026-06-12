@@ -151,6 +151,7 @@ Always distinguish between: product requirement / Android-standard implementatio
 - Do not spread TS18 conditionals through core playback/library code.
 - Do not claim TS18 compatibility without runtime evidence.
 - Do not add in-app probe frameworks or speculative default-off adapters.
+- Runtime APKs must not include diagnostics/probe/capture tooling (except if within scope of the 'on-demand Storage Health diagnostic screen' functionality).
 - Do not add TWUtil/TWClient reflection scanners or vendor package scanners.
 - Do not add vendor-service binders or fake Cardoor media services without an explicit approved design PR and proven binder/AIDL protocol.
 - Do not add product-code calls to `com.tw.music.action.*` outside the isolated Topway bridge package/test scope.
@@ -412,4 +413,4 @@ Agents must read these concise, redacted context files before exact-device TS18 
 
 Direct dependencies on external/vendor `com.tw.*` APIs remain forbidden in production code. Thin compatibility wrapper classes under approved Topway/DoFun source sets are allowed only to expose stock-compatible package/class/component names and delegate into Auxio-owned code. Approved wrapper areas include `app/src/topwayCompat/java/com/tw/music/**` (and any future explicitly shared Topway/DoFun wrapper equivalent).
 
-`com.tw.media` is an alternate DoFun fixed-entry variant, not a general no-root bypass. It may conflict on some firmware and still requires real-device validation. Private/native integration remains not for production by default and requires the evidence-gated tier process. Runtime APKs must not include diagnostics/probe/capture tooling.
+`com.tw.media` is an alternate DoFun fixed-entry variant, not a general no-root bypass. It may conflict on some firmware and still requires real-device validation. Private/native integration remains not for production by default and requires the evidence-gated tier process.
