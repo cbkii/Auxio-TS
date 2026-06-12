@@ -48,7 +48,7 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        L.d("Autostart enabled, launching Auxio-TS on boot")
+        L.d("Autostart enabled, attempting to launch Auxio-TS on boot")
 
         // Prefer launching the Activity UI for head-unit use.
         // On Android 10+ background-start restrictions may block this in some contexts,
