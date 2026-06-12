@@ -34,6 +34,7 @@ import com.google.android.material.tabs.TabLayout
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -61,7 +62,7 @@ class RoborazziSmokeScreenshotTest {
             "playback-page-shuffle-off-landscape.png",
             LANDSCAPE_WIDTH_PX,
             LANDSCAPE_HEIGHT_PX,
-            shuffleEnabled = false,
+            shuffleScope = ShuffleScope.OFF,
         )
     }
 
@@ -72,7 +73,18 @@ class RoborazziSmokeScreenshotTest {
             "playback-page-shuffle-on-landscape.png",
             LANDSCAPE_WIDTH_PX,
             LANDSCAPE_HEIGHT_PX,
-            shuffleEnabled = true,
+            shuffleScope = ShuffleScope.ALL,
+        )
+    }
+
+    @Test
+    @Config(qualifiers = "w1280dp-h720dp-land")
+    fun capturePlaybackShuffleGenreLandscape() {
+        capturePlayback(
+            "playback-page-shuffle-genre-landscape.png",
+            LANDSCAPE_WIDTH_PX,
+            LANDSCAPE_HEIGHT_PX,
+            shuffleScope = ShuffleScope.GENRE,
         )
     }
 
@@ -83,7 +95,7 @@ class RoborazziSmokeScreenshotTest {
             "playback-page-shuffle-off-portrait.png",
             PORTRAIT_WIDTH_PX,
             PORTRAIT_HEIGHT_PX,
-            shuffleEnabled = false,
+            shuffleScope = ShuffleScope.OFF,
         )
     }
 
@@ -94,7 +106,7 @@ class RoborazziSmokeScreenshotTest {
             "playback-page-shuffle-on-portrait.png",
             PORTRAIT_WIDTH_PX,
             PORTRAIT_HEIGHT_PX,
-            shuffleEnabled = true,
+            shuffleScope = ShuffleScope.ALL,
         )
     }
 
@@ -123,14 +135,36 @@ class RoborazziSmokeScreenshotTest {
         fileName: String,
         widthPx: Int,
         heightPx: Int,
-        shuffleEnabled: Boolean,
+        shuffleScope: ShuffleScope,
     ) {
-        captureFullScreen(fileName, widthPx, heightPx, R.layout.fragment_playback_panel) { view, _
-            ->
+        captureFullScreen(fileName, widthPx, heightPx, R.layout.fragment_playback_panel) {
+            view, _ ->
             view.findViewById<TextView>(R.id.playback_song).text = "Dream Nexus Highway"
             view.findViewById<TextView>(R.id.playback_artist).text = "Auxio-TS • DoFun preview"
-            view.findViewById<MaterialButton>(R.id.playback_shuffle).isChecked = shuffleEnabled
+            view
+                .findViewById<MaterialButton>(R.id.playback_shuffle)
+                .applyShuffleScope(shuffleScope)
             view.findViewById<MaterialButton>(R.id.playback_repeat).isChecked = false
+        }
+    }
+
+    private fun MaterialButton.applyShuffleScope(scope: ShuffleScope) {
+        when (scope) {
+            ShuffleScope.OFF -> {
+                isChecked = false
+                setIconResource(R.drawable.sel_shuffle_state_24)
+                contentDescription = context.getString(R.string.desc_shuffle_off)
+            }
+            ShuffleScope.ALL -> {
+                isChecked = true
+                setIconResource(R.drawable.sel_shuffle_state_24)
+                contentDescription = context.getString(R.string.desc_shuffle_all_songs)
+            }
+            ShuffleScope.GENRE -> {
+                isChecked = true
+                setIconResource(R.drawable.ic_shuffle_genre_state_24)
+                contentDescription = context.getString(R.string.desc_shuffle_current_genre)
+            }
         }
     }
 

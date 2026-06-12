@@ -23,6 +23,7 @@ import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
 import androidx.core.view.updateLayoutParams
+import com.google.android.material.button.MaterialButton
 import org.oxycblt.auxio.R
 
 /**
@@ -69,10 +70,24 @@ object HeadUnitUiAdapter {
                 if (compact) R.dimen.size_touchable_head_unit_media_compact_primary
                 else R.dimen.size_touchable_head_unit_media_primary
             )
+        val iconSize =
+            resources.getDimensionPixelSize(
+                if (compact) R.dimen.size_playback_icon_head_unit_media_compact
+                else R.dimen.size_playback_icon_head_unit_media
+            )
+        val primaryIconSize =
+            resources.getDimensionPixelSize(
+                if (compact) R.dimen.size_playback_icon_head_unit_media_compact_primary
+                else R.dimen.size_playback_icon_head_unit_media_primary
+            )
         buttons.forEach { view ->
-            val buttonSize = if (view == primaryButton) primarySize else size
+            val isPrimaryButton = view == primaryButton
+            val buttonSize = if (isPrimaryButton) primarySize else size
             view.minimumWidth = buttonSize
             view.minimumHeight = buttonSize
+            if (view is MaterialButton) {
+                view.iconSize = if (isPrimaryButton) primaryIconSize else iconSize
+            }
             view.updateLayoutParams {
                 width = buttonSize
                 height = buttonSize
