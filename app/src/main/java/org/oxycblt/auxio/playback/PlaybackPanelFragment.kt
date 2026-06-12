@@ -234,8 +234,8 @@ class PlaybackPanelFragment :
                 requireParentFragment()
                     .requireView()
                     .findViewById<View>(R.id.explore_nav_host)
-                    .findNavController()
-            innerNavController.navigateSafe(
+                    ?.findNavController()
+            innerNavController?.navigateSafe(
                 HomeFragmentDirections.actionGlobalOpenSongMenu(parcel)
             )
         }
