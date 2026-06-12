@@ -30,10 +30,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -48,6 +45,7 @@ import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
+import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.StoragePathAliasPolicy
 
@@ -254,48 +252,35 @@ class StorageHealthFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         val context = view.context
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.reportState.collect { report ->
-                    if (report != null) {
-                        reportText?.text = report
-                        exportButton?.visibility = View.VISIBLE
-                    }
-                }
+        collectImmediately(viewModel.reportState) { report ->
+            if (report != null) {
+                reportText?.text = report
+                exportButton?.visibility = View.VISIBLE
             }
         }
 
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.noisyPaths.collect { paths ->
-                    val container = noisyPathsContainer ?: return@collect
-                    container.removeAllViews()
-                    if (paths.isNotEmpty()) {
-                        val title =
-                            TextView(context).apply {
-                                text = "Some folders are likely slowing scans. Click to exclude:"
-                                textSize = 16f
-                                setTypeface(null, android.graphics.Typeface.BOLD)
-                            }
-                        container.addView(title)
-
-                        paths.forEach { path ->
-                            val pathBtn =
-                                Button(context).apply {
-                                    text = "Exclude $path"
-                                    setOnClickListener {
-                                        viewModel.excludePath(context, path)
-                                        Toast.makeText(
-                                                context,
-                                                "Excluded $path",
-                                                Toast.LENGTH_SHORT,
-                                            )
-                                            .show()
-                                    }
-                                }
-                            container.addView(pathBtn)
-                        }
+        collectImmediately(viewModel.noisyPaths) { paths ->
+            val container = noisyPathsContainer ?: return@collectImmediately
+            container.removeAllViews()
+            if (paths.isNotEmpty()) {
+                val title =
+                    TextView(context).apply {
+                        text = "Some folders are likely slowing scans. Click to exclude:"
+                        textSize = 16f
+                        setTypeface(null, android.graphics.Typeface.BOLD)
                     }
+                container.addView(title)
+
+                paths.forEach { path ->
+                    val pathBtn =
+                        Button(context).apply {
+                            text = "Exclude $path"
+                            setOnClickListener {
+                                viewModel.excludePath(context, path)
+                                Toast.makeText(context, "Excluded $path", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    container.addView(pathBtn)
                 }
             }
         }

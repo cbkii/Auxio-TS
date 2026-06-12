@@ -173,13 +173,18 @@ private constructor(
                             // different mount aliases. Identity is derived from the path string
                             // (no per-file disk I/O) plus size.
                             val volumeComponents = path.volume.components
-                            val absolutePath =
+                            val pathIdentity =
                                 if (volumeComponents != null) {
-                                    "/${volumeComponents.unixString}/${path.components.unixString}"
+                                    val absolutePath =
+                                        "/${volumeComponents.unixString}/${path.components.unixString}"
+                                    StoragePathAliasPolicy.normalize(absolutePath)
                                 } else {
-                                    path.components.unixString
+                                    // No filesystem mount root (e.g. a SAF-backed volume); qualify
+                                    // by the volume so identical relative paths on different
+                                    // volumes are not collapsed.
+                                    "${path.volume}/${path.components.unixString}"
                                 }
-                            val identity = "${StoragePathAliasPolicy.normalize(absolutePath)}_$size"
+                            val identity = "${pathIdentity}_$size"
                             if (!seenIdentities.add(identity)) {
                                 continue // Skip duplicate
                             }
