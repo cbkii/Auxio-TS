@@ -35,6 +35,7 @@ import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.Location
+import org.oxycblt.musikr.fs.StoragePathAliasPolicy
 import org.oxycblt.musikr.fs.path.MediaStorePathInterpreter
 import org.oxycblt.musikr.fs.path.VolumeManager
 import org.oxycblt.musikr.fs.saf.contentResolverSafe
@@ -98,55 +99,125 @@ private constructor(
                 }
             }
 
-            // Collect all files and track unique directories
-            val allFiles = mutableListOf<File>()
+            // Track identities to deduplicate files reached via multiple mount aliases.
+            val seenIdentities = mutableSetOf<String>()
 
-            context.contentResolverSafe.useQuery(
-                AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                projection,
-                selector,
-                args.toTypedArray(),
-            ) { cursor ->
-                val pathInterpreter = pathInterpreterFactory.wrap(cursor)
-                val idIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
-                val mimeTypeIndex =
-                    cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.MIME_TYPE)
-                val sizeIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.SIZE)
-                val dateAddedIndex =
-                    cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_ADDED)
-                val dateModifiedIndex =
-                    cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED)
-
-                while (cursor.moveToNext()) {
-                    val path = pathInterpreter.extract() ?: continue
-
-                    val id = cursor.getLong(idIndex)
-                    val uri =
-                        Uri.withAppendedPath(
-                            AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                            id.toString(),
-                        )
-                    val mimeType = cursor.getStringOrNull(mimeTypeIndex) ?: "audio/*"
-                    val size = cursor.getLong(sizeIndex)
-                    val dateAdded = cursor.getLong(dateAddedIndex) * 1000 // Convert to milliseconds
-                    val dateModified =
-                        cursor.getLong(dateModifiedIndex) * 1000 // Convert to milliseconds
-
-                    // Create file with empty deferred parent
-                    val deviceFile =
-                        File(
-                            uri = uri,
-                            path = path,
-                            modifiedMs = dateModified,
-                            mimeType = mimeType,
-                            size = size,
-                            addedMs = ForwardDateAdded(dateAdded),
-                            parent = null,
-                        )
-
-                    allFiles.add(deviceFile)
-                    it.send(deviceFile)
+            val volumeNames = mutableSetOf<String>()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                try {
+                    volumeNames.addAll(AOSPMediaStore.getExternalVolumeNames(context))
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "Failed to enumerate external volumes", e)
                 }
+                // Some devices/ROMs return an empty set; always scan the primary volume.
+                if (volumeNames.isEmpty()) {
+                    volumeNames.add(AOSPMediaStore.VOLUME_EXTERNAL)
+                }
+            } else {
+                volumeNames.add(AOSPMediaStore.VOLUME_EXTERNAL)
+            }
+
+            var anyVolumeSucceeded = false
+            var lastVolumeError: Exception? = null
+
+            for (volumeName in volumeNames) {
+                val contentUri =
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        try {
+                            AOSPMediaStore.Audio.Media.getContentUri(volumeName)
+                        } catch (e: Exception) {
+                            AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                        }
+                    } else {
+                        AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                    }
+
+                try {
+                    context.contentResolverSafe.useQuery(
+                        contentUri,
+                        projection,
+                        selector,
+                        args.toTypedArray(),
+                    ) { cursor ->
+                        val pathInterpreter = pathInterpreterFactory.wrap(cursor)
+                        val idIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
+                        val mimeTypeIndex =
+                            cursor.getColumnIndexOrThrow(
+                                AOSPMediaStore.Audio.AudioColumns.MIME_TYPE
+                            )
+                        val sizeIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.SIZE)
+                        val dateAddedIndex =
+                            cursor.getColumnIndexOrThrow(
+                                AOSPMediaStore.Audio.AudioColumns.DATE_ADDED
+                            )
+                        val dateModifiedIndex =
+                            cursor.getColumnIndexOrThrow(
+                                AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED
+                            )
+
+                        while (cursor.moveToNext()) {
+                            val path = pathInterpreter.extract() ?: continue
+
+                            val id = cursor.getLong(idIndex)
+                            val uri = Uri.withAppendedPath(contentUri, id.toString())
+                            val mimeType = cursor.getStringOrNull(mimeTypeIndex) ?: "audio/*"
+                            val size = cursor.getLong(sizeIndex)
+                            val dateAdded =
+                                cursor.getLong(dateAddedIndex) * 1000 // Convert to milliseconds
+                            val dateModified =
+                                cursor.getLong(dateModifiedIndex) * 1000 // Convert to milliseconds
+
+                            // Alias deduplication: collapse the same physical file reached via
+                            // different mount aliases. Identity is derived from the path string
+                            // (no per-file disk I/O) plus size.
+                            val volumeComponents = path.volume.components
+                            val pathIdentity =
+                                if (volumeComponents != null) {
+                                    val absolutePath =
+                                        "/${volumeComponents.unixString}/${path.components.unixString}"
+                                    StoragePathAliasPolicy.normalize(absolutePath)
+                                } else {
+                                    // No filesystem mount root (e.g. a SAF-backed volume); qualify
+                                    // by the volume so identical relative paths on different
+                                    // volumes are not collapsed.
+                                    "${path.volume}/${path.components.unixString}"
+                                }
+                            val identity = "${pathIdentity}_$size"
+                            if (!seenIdentities.add(identity)) {
+                                continue // Skip duplicate
+                            }
+
+                            // Create file with empty deferred parent
+                            val deviceFile =
+                                File(
+                                    uri = uri,
+                                    path = path,
+                                    modifiedMs = dateModified,
+                                    mimeType = mimeType,
+                                    size = size,
+                                    addedMs = ForwardDateAdded(dateAdded),
+                                    parent = null,
+                                )
+
+                            it.send(deviceFile)
+                        }
+                    }
+                    anyVolumeSucceeded = true
+                } catch (e: Exception) {
+                    // Tolerate a single failing/slow volume, but remember the failure so a scan
+                    // where every volume fails is not reported as an empty success (which would
+                    // wipe the cached library).
+                    lastVolumeError = e
+                    android.util.Log.e(TAG, "Failed to query volume: $volumeName", e)
+                }
+            }
+
+            // If every volume query failed, surface the failure instead of returning an empty
+            // (but "successful") library.
+            if (!anyVolumeSucceeded) {
+                lastVolumeError?.let { throw it }
             }
         }
     }
@@ -181,6 +252,8 @@ private constructor(
     }
 
     companion object {
+        private const val TAG = "MediaStore"
+
         fun from(context: Context, query: Query) =
             MediaStore(
                 context = context,

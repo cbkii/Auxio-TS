@@ -221,6 +221,7 @@ Manual checks:
 - confirm Auxio-TS can scan `/sdcard/Music`;
 - confirm Auxio-TS can scan or otherwise access `/storage/usbdisk0` where permitted;
 - confirm playback works from the same storage locations stock `twMusic` can access;
+- test Storage Health screen (under Settings > Music > Storage Health) to verify path aliasing, volume-aware querying, and noisy-path exclusion;
 - retest after ACC/reboot and after USB disk re-mount.
 
 ## Overlay validation for PR #53 and later

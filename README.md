@@ -99,6 +99,8 @@ ensure path contains: *music|media|download*
 
 Avoid unusual folder names, including names with emoji, invisible characters, excessive punctuation, very long names, or names that only differ by capitalisation or symbols.
 
+**Note:** Auxio-TS includes a manual **Storage Health** diagnostic screen (under Settings > Music > Storage Health) to help debug USB mount points, alias duplication, and noisy folders on TS18 hardware. It runs only on-demand and can export a plain-text report for troubleshooting.
+
 See [`docs/TS18_INSTALLATION_CONSTRAINTS.md`](docs/TS18_INSTALLATION_CONSTRAINTS.md) before treating a Topway APK as installable on locked stock firmware.
 
 ## Building
