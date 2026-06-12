@@ -61,6 +61,7 @@ class MainActivity : AppCompatActivity() {
     private val playbackModel: PlaybackViewModel by viewModels()
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
+    private var isFirstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,12 +89,15 @@ class MainActivity : AppCompatActivity() {
 
         if (!startIntentAction(intent)) {
             // No intent action to do, restore the previously saved state.
-            // If autoplay is enabled, restore with play=true and shuffle-all fallback.
-            val action = StartupPlaybackPolicy.restoreActionForLaunch(
-                playbackSettings.autoplayOnLaunch
-            )
+            // Only autoplay on the first resume (cold launch) so that returning to the app
+            // from the background does not force playback to resume after the user paused it.
+            val action =
+                StartupPlaybackPolicy.restoreActionForLaunch(
+                    playbackSettings.autoplayOnLaunch && isFirstResume
+                )
             playbackModel.playDeferred(action)
         }
+        isFirstResume = false
     }
 
     override fun onNewIntent(intent: Intent) {

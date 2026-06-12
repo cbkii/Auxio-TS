@@ -21,9 +21,9 @@ package org.oxycblt.auxio
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import org.oxycblt.auxio.playback.PlaybackSettings
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
 
 /**
@@ -50,23 +50,34 @@ class BootReceiver : BroadcastReceiver() {
 
         L.d("Autostart enabled, attempting to launch Auxio-TS on boot")
 
-        // Prefer launching the Activity UI for head-unit use.
-        // On Android 10+ background-start restrictions may block this in some contexts,
-        // so fall back to starting the service.
+        // When autoplay is enabled, start the playback service first so that music can begin
+        // even if the background activity start is blocked. The service start is only performed
+        // for autoplay because a foreground service that does not promptly begin playback (and
+        // therefore never posts a media notification) would be killed by the system. On Android
+        // 14+ a mediaPlayback foreground service started from BOOT_COMPLETED is rejected, so the
+        // start is wrapped to degrade gracefully instead of crashing the receiver.
+        if (playbackSettings.autoplayOnLaunch) {
+            try {
+                val serviceIntent =
+                    Intent(context, AuxioService::class.java)
+                        .setAction(AuxioService.ACTION_START)
+                        .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
+                context.startForegroundService(serviceIntent)
+                L.d("Started AuxioService from boot")
+            } catch (e: Exception) {
+                L.w("Cannot start AuxioService from boot: $e")
+            }
+        }
+
+        // Attempt to show the activity UI for head-unit use. Background activity starts may be
+        // silently blocked on Android 10+ without throwing, so this is best-effort only.
         try {
             val activityIntent =
-                Intent(context, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(activityIntent)
             L.d("Started MainActivity from boot")
         } catch (e: Exception) {
-            L.w("Cannot start Activity from boot, falling back to service start: $e")
-            val serviceIntent =
-                Intent(context, AuxioService::class.java)
-                    .setAction(AuxioService.ACTION_START)
-                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
-            context.startForegroundService(serviceIntent)
-            L.d("Started AuxioService from boot")
+            L.w("Cannot start Activity from boot: $e")
         }
     }
 }
