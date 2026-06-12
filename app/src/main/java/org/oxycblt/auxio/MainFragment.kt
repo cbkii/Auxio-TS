@@ -399,7 +399,7 @@ class MainFragment :
             binding.playbackBarFragment.alpha = playbackOutRatio
             binding.playbackPanelFragment.alpha = playbackInRatio
             if (stretchChanged) {
-                (binding.queueSheet.background as MaterialShapeDrawable).shapeAppearanceModel =
+                (binding.queueSheet.background as? MaterialShapeDrawable)?.shapeAppearanceModel =
                     ShapeAppearanceModel.builder()
                         .setTopLeftCornerSize(normalCornerSize)
                         .setTopRightCornerSize(normalCornerSize * (1 - playbackLastStretchRatio))
