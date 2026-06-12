@@ -36,6 +36,7 @@ import androidx.core.view.updatePaddingRelative
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
+import androidx.navigation.findNavController
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
@@ -43,7 +44,8 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.headunit.HeadUnitUiAdapter
-import org.oxycblt.auxio.list.ListViewModel
+import org.oxycblt.auxio.home.HomeFragmentDirections
+import org.oxycblt.auxio.list.menu.Menu
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.queue.QueueViewModel
@@ -59,6 +61,7 @@ import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.dampen
+import org.oxycblt.auxio.util.navigateSafe
 import org.oxycblt.auxio.util.recycler
 import org.oxycblt.auxio.util.showToast
 import org.oxycblt.auxio.util.systemBarInsetsCompat
@@ -83,7 +86,6 @@ class PlaybackPanelFragment :
     private val coverPagerAdapter = CoverPagerAdapter(this)
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
-    private val listModel: ListViewModel by activityViewModels()
     @Inject lateinit var uiSettings: UISettings
     private val queueModel: QueueViewModel by viewModels()
     private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
@@ -221,9 +223,20 @@ class PlaybackPanelFragment :
         }
         binding.playbackShuffle.setOnClickListener { playbackModel.cycleShuffleScope() }
         binding.playbackMore?.setOnClickListener {
-            playbackModel.song.value?.let {
-                listModel.openMenu(R.menu.playback_song, it, PlaySong.ByItself)
+            val song = playbackModel.song.value
+            if (song == null) {
+                L.w("playbackMore clicked but no current song")
+                return@setOnClickListener
             }
+            val parcel = Menu.ForSong(R.menu.playback_song, song, PlaySong.ByItself).parcel
+            val innerNavController =
+                requireParentFragment()
+                    .requireView()
+                    .findViewById<View>(R.id.explore_nav_host)
+                    ?.findNavController()
+            innerNavController?.navigateSafe(
+                HomeFragmentDirections.actionGlobalOpenSongMenu(parcel)
+            )
         }
 
         // --- VIEWMODEL SETUP --
@@ -276,12 +289,15 @@ class PlaybackPanelFragment :
     }
 
     private fun updateSong(song: Song?) {
+        val binding = requireBinding()
+        // Disable the more button when there is no current song to prevent dead taps.
+        binding.playbackMore?.isEnabled = song != null
+
         if (song == null) {
             // Nothing to do.
             return
         }
 
-        val binding = requireBinding()
         val context = requireContext()
         L.d("Updating song display: $song")
         binding.playbackSong.text = song.name.resolve(context)
