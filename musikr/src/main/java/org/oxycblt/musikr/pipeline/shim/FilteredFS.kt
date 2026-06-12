@@ -35,7 +35,10 @@ internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
     private val noisyDirs: Set<String>,
+    pathKeywords: List<String> = emptyList(),
 ) : FS {
+    // Pre-lowercase keywords once to avoid repeated allocations during filtering.
+    private val lowercaseKeywords = pathKeywords.map { it.lowercase() }
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
         val delegateChannel = Channel<File>(Channel.UNLIMITED)
@@ -55,9 +58,15 @@ internal class FilteredFS(
                 try {
                     for (file in delegateChannel) {
                         val isNoisy = file.path.components.components.any { it in noisyDirs }
-                        if (!isNoisy) {
-                            files.send(file)
+                        if (isNoisy) continue
+                        // If pathKeywords are configured, require the full path to contain
+                        // at least one keyword (case-insensitive). This prevents scanning
+                        // huge irrelevant directory trees on TS18.
+                        if (lowercaseKeywords.isNotEmpty()) {
+                            val fullPath = file.path.toString().lowercase()
+                            if (lowercaseKeywords.none { fullPath.contains(it) }) continue
                         }
+                        files.send(file)
                     }
                     files.close()
                 } catch (t: Throwable) {

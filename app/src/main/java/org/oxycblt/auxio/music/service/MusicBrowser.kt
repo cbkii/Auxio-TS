@@ -218,43 +218,57 @@ private constructor(
                 }
             }
             is TabNode.Home ->
-                // homeGenerator returns emptyLists
-                when (node.type) {
-                    MusicType.SONGS ->
-                        homeGenerator
-                            .songs()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.ALBUMS ->
-                        homeGenerator
-                            .albums()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.ARTISTS ->
-                        homeGenerator
-                            .artists()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.GENRES ->
-                        homeGenerator
-                            .genres()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
-                    MusicType.PLAYLISTS ->
-                        homeGenerator
-                            .playlists()
-                            .map { it.toMediaItem(context) }
-                            .ifEmpty {
-                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
-                            }
+                // homeGenerator list methods are now suspend; use runBlocking here since
+                // MusicBrowser.getChildren is called from a MediaBrowserService binder thread
+                // (not the main thread) via Result.dispatch.
+                kotlinx.coroutines.runBlocking {
+                    when (node.type) {
+                        MusicType.SONGS ->
+                            homeGenerator
+                                .songs()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                }
+                        MusicType.ALBUMS ->
+                            homeGenerator
+                                .albums()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                }
+                        MusicType.ARTISTS ->
+                            homeGenerator
+                                .artists()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                }
+                        MusicType.GENRES ->
+                            homeGenerator
+                                .genres()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                }
+                        MusicType.PLAYLISTS ->
+                            homeGenerator
+                                .playlists()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                }
+                    }
                 }
         }
 

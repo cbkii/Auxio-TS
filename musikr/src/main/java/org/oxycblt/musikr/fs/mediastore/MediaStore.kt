@@ -66,6 +66,18 @@ private constructor(
                 selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
             }
 
+            // TS18/head-unit optimization: restrict to likely-audio directories.
+            // SQLite LIKE is case-insensitive for ASCII, so only 3 clauses needed.
+            // Use substring matching (no slash boundaries) to align with
+            // TopwaySourcePolicy.matchesSystemSourceFilter Kotlin-side behaviour.
+            if (query.useDefaultSystemFilter) {
+                selector +=
+                    " AND (" +
+                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%music%' OR " +
+                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%download%' OR " +
+                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%media%')"
+            }
+
             // Handle include/exclude directories
             when (query.mode) {
                 FilterMode.INCLUDE -> {
@@ -151,6 +163,12 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
+        /**
+         * Restrict MediaStore scan to paths containing /Music/, /Download/, or /Media/. This
+         * dramatically reduces query time on slow TS18 head units with large USB storage. SQLite
+         * LIKE is case-insensitive for ASCII so only 3 clauses are needed.
+         */
+        val useDefaultSystemFilter: Boolean = false,
     )
 
     enum class FilterMode {

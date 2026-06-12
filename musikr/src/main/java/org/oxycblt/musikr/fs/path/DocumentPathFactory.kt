@@ -22,6 +22,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.util.Log
 import java.io.File
 import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.Path
@@ -150,6 +151,17 @@ private class DocumentPathFactoryImpl(
             }
         }
 
+        // TS18/OEM fallback: if path is under a recognizable storage root but not reported by
+        // StorageManager (common on TS18 where /storage/usbdisk0 may not appear in
+        // storageVolumes), create a ThirdParty volume so the path is still usable.
+        // This prevents fallback source selections from being rejected as unrecognized.
+        // Guard: only apply for paths under /storage/ or /mnt/ — typical Android mount points.
+        if (pathString.startsWith("/storage/") || pathString.startsWith("/mnt/")) {
+            Log.d("DocumentPathFactory", "ThirdParty fallback for unmapped path: $pathString")
+            return Path(Volume.ThirdParty(uri), Components.parseUnix(pathString))
+        }
+
+        Log.w("DocumentPathFactory", "Rejecting unrecognized path: $pathString")
         return null
     }
 

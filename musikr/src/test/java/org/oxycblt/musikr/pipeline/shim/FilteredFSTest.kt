@@ -134,6 +134,98 @@ class FilteredFSTest {
         assertSameFailure(failure, result.exceptionOrNull())
     }
 
+    @Test
+    fun exploreFiltersByPathKeywordsWhenSet() = runTest {
+        val fs =
+            FilteredFS(
+                EmittingFS(
+                    this,
+                    file("Music/song.mp3"),
+                    file("Videos/clip.mp4"),
+                    file("Download/track.mp3"),
+                    file("Photos/img.jpg"),
+                ),
+                this,
+                noisyDirs = emptySet(),
+                pathKeywords = listOf("music", "download"),
+            )
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Music/song.mp3", output.receive().path.components.toString())
+        assertEquals("Download/track.mp3", output.receive().path.components.toString())
+        assertTrue(output.receiveCatching().isClosed)
+    }
+
+    @Test
+    fun explorePathKeywordsAreCaseInsensitive() = runTest {
+        val fs =
+            FilteredFS(
+                EmittingFS(
+                    this,
+                    file("MUSIC/SONG.mp3"),
+                    file("My Music Archive/track.mp3"),
+                    file("Other/noise.mp3"),
+                ),
+                this,
+                noisyDirs = emptySet(),
+                pathKeywords = listOf("music"),
+            )
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isSuccess)
+        assertEquals("MUSIC/SONG.mp3", output.receive().path.components.toString())
+        assertEquals("My Music Archive/track.mp3", output.receive().path.components.toString())
+        assertTrue(output.receiveCatching().isClosed)
+    }
+
+    @Test
+    fun exploreEmptyPathKeywordsPassesAllFiles() = runTest {
+        val fs =
+            FilteredFS(
+                EmittingFS(this, file("Photos/img.jpg"), file("Videos/clip.mp4")),
+                this,
+                noisyDirs = emptySet(),
+                pathKeywords = emptyList(),
+            )
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Photos/img.jpg", output.receive().path.components.toString())
+        assertEquals("Videos/clip.mp4", output.receive().path.components.toString())
+        assertTrue(output.receiveCatching().isClosed)
+    }
+
+    @Test
+    fun exploreNoisyDirsAndPathKeywordsApplyTogether() = runTest {
+        val fs =
+            FilteredFS(
+                EmittingFS(
+                    this,
+                    file("Music/song.mp3"),
+                    file("Android/Music/cached.mp3"),
+                    file("Download/video.mp4"),
+                ),
+                this,
+                noisyDirs = setOf("Android"),
+                pathKeywords = listOf("music", "download"),
+            )
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Music/song.mp3", output.receive().path.components.toString())
+        assertEquals("Download/video.mp4", output.receive().path.components.toString())
+        assertTrue(output.receiveCatching().isClosed)
+    }
+
     private class EmittingFS(private val scope: CoroutineScope, private vararg val files: File) :
         FS {
         override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =

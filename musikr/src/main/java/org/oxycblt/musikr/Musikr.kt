@@ -20,10 +20,12 @@ package org.oxycblt.musikr
 
 import android.content.Context
 import android.util.Log
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import org.oxycblt.musikr.cache.CachedFile
+import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.pipeline.EvaluateStep
 import org.oxycblt.musikr.pipeline.ExploreStep
@@ -69,10 +71,15 @@ interface Musikr {
          * @param interpretation The configuration to use for interpreting certain vague tags. This
          *   should be configured by the user, if possible.
          */
-        fun new(context: Context, config: Config, noisyDirs: Set<String> = emptySet()): Musikr =
+        fun new(
+            context: Context,
+            config: Config,
+            noisyDirs: Set<String> = emptySet(),
+            pathKeywords: List<String> = emptyList(),
+        ): Musikr =
             MusikrImpl(
                 config,
-                ExploreStep.from(config, noisyDirs),
+                ExploreStep.from(config, noisyDirs, pathKeywords),
                 ExtractStep.from(context, config),
                 EvaluateStep.new(context, config, config.interpretation),
             )
@@ -82,17 +89,35 @@ interface Musikr {
          *
          * This gives callers a fast startup path: the returned library can be displayed and used by
          * media/session code immediately while any explicit or first-run scan happens later.
+         *
+         * Cover hydration is intentionally skipped during cached startup to avoid blocking first UI
+         * availability on cover storage I/O. Covers are referenced by ID and can be loaded lazily
+         * by image loaders when needed.
          */
         suspend fun loadCached(context: Context, config: Config): MutableLibrary {
+            val start = System.currentTimeMillis()
             val extracted = Channel<Extracted>(Channel.UNLIMITED)
             for (cachedFile in config.storage.cache.snapshot()) {
-                cachedFile.toRawSong(config.storage)?.let { extracted.send(it) }
+                cachedFile.toRawSongFast(config.storage)?.let { extracted.send(it) }
             }
             for (playlist in config.storage.storedPlaylists.read()) {
                 extracted.send(RawPlaylist(playlist))
             }
             extracted.close()
+            Log.d("Musikr", "Cached snapshot prepared in ${System.currentTimeMillis() - start}ms")
             return EvaluateStep.new(context, config, config.interpretation).evaluate(extracted)
+        }
+
+        /**
+         * Fast conversion from [CachedFile] to [RawSong] that skips cover hydration (obtain). The
+         * cover ID is preserved as a stub so image loaders can resolve it lazily.
+         */
+        private fun CachedFile.toRawSongFast(storage: Storage): RawSong? {
+            val audio = audio ?: return null
+            // Create a lightweight cover reference without doing I/O to verify it exists.
+            // The image loader will call covers.obtain(id) lazily when the art is displayed.
+            val cover = audio.coverId?.let { id -> LazyIdCover(id) }
+            return RawSong(file, audio.properties, audio.tags, cover, addedMs)
         }
 
         private suspend fun CachedFile.toRawSong(storage: Storage): RawSong? {
@@ -185,4 +210,18 @@ private class LibraryResultImpl(private val config: Config, override val library
     override suspend fun cleanup() {
         config.storage.covers.cleanup(library.songs.mapNotNull { it.cover })
     }
+}
+
+/**
+ * A lightweight [Cover] stub that only holds an ID for deferred resolution.
+ *
+ * Used during cached startup to avoid blocking library emission on cover I/O. Image loaders resolve
+ * the actual cover data lazily via [Covers.obtain].
+ */
+internal class LazyIdCover(override val id: String) : Cover {
+    override suspend fun open(): InputStream? = null
+
+    override fun equals(other: Any?) = other is Cover && id == other.id
+
+    override fun hashCode() = id.hashCode()
 }

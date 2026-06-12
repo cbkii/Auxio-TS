@@ -62,7 +62,6 @@ import org.oxycblt.auxio.home.list.GenreListFragment
 import org.oxycblt.auxio.home.list.PlaylistListFragment
 import org.oxycblt.auxio.home.list.SongListFragment
 import org.oxycblt.auxio.home.tabs.NamedTabStrategy
-import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.list.SelectionFragment
 import org.oxycblt.auxio.list.menu.Menu
@@ -178,11 +177,11 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             // listener with a non-consuming listener.
             setOnApplyWindowInsetsListener { _, insets -> insets }
 
-            // We know that there will only be a fixed amount of tabs, so we manually set this
-            // limit to the maximum amount possible. This will prevent the tab ripple from
-            // bugging out due to dynamically inflating each fragment, at the cost of slower
-            // debug UI performance.
-            offscreenPageLimit = Tab.MAX_SEQUENCE_IDX + 1
+            // Keep one offscreen page to avoid tab ripple bugs on switch while still
+            // reducing startup inflation cost on slow TS18 devices. The original value of
+            // Tab.MAX_SEQUENCE_IDX + 1 inflated *all* tab fragments at launch, blocking first
+            // frame. Value of 1 means only the adjacent tabs are inflated eagerly.
+            offscreenPageLimit = 1
 
             dampen()
         }

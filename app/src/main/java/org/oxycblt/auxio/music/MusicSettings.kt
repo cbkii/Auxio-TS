@@ -70,6 +70,12 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** Whether to use the file-system cache for improved loading times. */
     val useFileTreeCache: Boolean
 
+    /**
+     * Whether to apply the TS18 system source path filter (only include paths containing
+     * music/download/media keywords) when using MediaStore mode. Default true for TS18 builds.
+     */
+    var ts18SystemSourceFilter: Boolean
+
     fun forceLocationUpdate()
 
     interface Listener {
@@ -146,6 +152,19 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     override val useFileTreeCache: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_fs_cache), false)
+
+    override var ts18SystemSourceFilter: Boolean
+        get() {
+            // Default to true only on detected TS18/Topway head units to avoid
+            // silently filtering custom directories on standard phones/tablets.
+            val isTs18 =
+                android.os.Build.DEVICE.orEmpty().lowercase().contains("s9863a1h10") ||
+                    android.os.Build.BOARD.orEmpty().lowercase().contains("s9863a1h10")
+            return sharedPreferences.getBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, isTs18)
+        }
+        set(value) {
+            sharedPreferences.edit { putBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, value) }
+        }
 
     override var locationMode: LocationMode
         get() {
@@ -270,7 +289,8 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             getString(R.string.set_key_filtered_locations),
             getString(R.string.set_key_exclude_non_music),
             getString(R.string.set_key_separators),
-            getString(R.string.set_key_auto_sort_names) -> {
+            getString(R.string.set_key_auto_sort_names),
+            KEY_TS18_SYSTEM_SOURCE_FILTER -> {
                 L.d("Dispatching indexing setting change for $key")
                 listener.onIndexingSettingChanged()
             }
@@ -327,6 +347,10 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         }
 
         return split
+    }
+
+    private companion object {
+        const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
     }
 }
 

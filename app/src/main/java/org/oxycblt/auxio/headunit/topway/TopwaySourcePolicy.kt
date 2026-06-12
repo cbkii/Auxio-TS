@@ -60,6 +60,22 @@ object TopwaySourcePolicy {
             ".DFMusicLog",
         )
 
+    /**
+     * Keywords for default System source path filtering on TS18. When enabled, only MediaStore
+     * results whose full path contains one of these keywords (case-insensitive) will be included.
+     * This prevents scanning huge irrelevant USB root directories on TS18.
+     */
+    val SYSTEM_SOURCE_PATH_KEYWORDS = listOf("music", "download", "media")
+
+    /**
+     * Checks if a path matches the default TS18 system source filter. Returns true if the full path
+     * contains at least one keyword (case-insensitive).
+     */
+    fun matchesSystemSourceFilter(fullPath: String): Boolean {
+        val lower = fullPath.lowercase()
+        return SYSTEM_SOURCE_PATH_KEYWORDS.any { lower.contains(it) }
+    }
+
     /** Checks if a given path is a valid and accessible candidate for music storage on TS18. */
     fun isAccessibleCandidate(path: String): Boolean {
         return try {

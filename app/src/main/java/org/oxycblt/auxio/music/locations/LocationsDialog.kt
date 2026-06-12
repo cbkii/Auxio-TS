@@ -336,8 +336,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     }
 
             if (accessibleCandidates.isEmpty()) {
-                pendingLocationCallback = null
-                ctx.showToast(R.string.err_bad_location)
+                // No auto-detected candidates; offer manual path entry directly.
+                showManualPathEntry(disableThirdParty)
                 return@launch
             }
 
@@ -351,7 +351,14 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         val path = accessibleCandidates[which]
                         val uri = Uri.fromFile(File(path))
                         val location = Location.Unopened.from(currentContext, uri)
-                        if (disableThirdParty && location.path.volume is Volume.ThirdParty) {
+                        // For file:// URIs from validated accessible candidates, allow
+                        // ThirdParty volumes. These are proven-accessible TS18 paths that
+                        // StorageManager may not report but that work with direct file I/O.
+                        if (
+                            disableThirdParty &&
+                                location.path.volume is Volume.ThirdParty &&
+                                uri.scheme != "file"
+                        ) {
                             currentContext.showToast(R.string.err_bad_location)
                         } else {
                             pendingLocationCallback?.invoke(location)
@@ -359,10 +366,74 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         pendingLocationCallback = null
                     }
                 }
+                .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
+                    showManualPathEntry(disableThirdParty)
+                }
                 .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
                 .setOnCancelListener { pendingLocationCallback = null }
                 .show()
         }
+    }
+
+    private fun showManualPathEntry(disableThirdParty: Boolean) {
+        val ctx =
+            context
+                ?: run {
+                    pendingLocationCallback = null
+                    return
+                }
+        val input =
+            androidx.appcompat.widget.AppCompatEditText(ctx).apply {
+                hint = ctx.getString(R.string.set_enter_path_hint)
+                setSingleLine()
+                inputType =
+                    android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            }
+        val padding = (16 * ctx.resources.displayMetrics.density).toInt()
+        val container =
+            android.widget.FrameLayout(ctx).apply {
+                setPadding(padding, padding / 2, padding, 0)
+                addView(input)
+            }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.set_select_source)
+            .setView(container)
+            .setPositiveButton(R.string.lbl_ok) { _, _ ->
+                val pathText = input.text?.toString()?.trim().orEmpty()
+                if (pathText.isEmpty()) {
+                    pendingLocationCallback = null
+                    return@setPositiveButton
+                }
+                lifecycleScope.launch {
+                    val accessible =
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val file = File(pathText)
+                                file.exists() && file.isDirectory && file.canRead()
+                            } catch (e: Exception) {
+                                false
+                            }
+                        }
+                    val currentContext = context
+                    if (currentContext == null) {
+                        pendingLocationCallback = null
+                        return@launch
+                    }
+                    if (!accessible) {
+                        currentContext.showToast(R.string.set_path_inaccessible)
+                        pendingLocationCallback = null
+                        return@launch
+                    }
+                    val uri = Uri.fromFile(File(pathText))
+                    val location = Location.Unopened.from(currentContext, uri)
+                    pendingLocationCallback?.invoke(location)
+                    pendingLocationCallback = null
+                }
+            }
+            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
+            .setOnCancelListener { pendingLocationCallback = null }
+            .show()
     }
 
     private fun addDocumentTreeUriToDirs(uri: Uri?, disableThirdParty: Boolean) {

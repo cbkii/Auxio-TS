@@ -23,8 +23,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
@@ -43,6 +47,8 @@ import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.fs.FS
+import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
@@ -432,6 +438,22 @@ constructor(
 
     private suspend fun indexImpl(withCache: Boolean) {
         L.d("Index requested, initializing")
+
+        // TS18 diagnostic: log the OEM storage switch property value (read-only, never modified)
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val twStorageSwitch =
+                try {
+                    val clazz = Class.forName("android.os.SystemProperties")
+                    val get = clazz.getMethod("get", String::class.java)
+                    get.invoke(null, "persist.tw.storage.switch") as? String
+                } catch (e: Exception) {
+                    null
+                }
+            if (!twStorageSwitch.isNullOrEmpty()) {
+                L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
+            }
+        }
+
         val currentRevision = musicSettings.revision
         val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
         val config =
@@ -456,8 +478,22 @@ constructor(
 
         L.d("Running index...")
         val start = System.currentTimeMillis()
+        // When ts18SystemSourceFilter is enabled, the path restriction is now applied at the
+        // SQL level in the MediaStore query (useDefaultSystemFilter). For SAF mode, the
+        // FilteredFS pathKeywords still serve as the filtering mechanism since there is no
+        // SQL query to augment.
+        val pathKeywords =
+            if (
+                musicSettings.ts18SystemSourceFilter &&
+                    musicSettings.locationMode == LocationMode.SAF
+            ) {
+                TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
+            } else {
+                emptyList()
+            }
         val result =
-            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS).run(::emitIndexingProgress)
+            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS, pathKeywords)
+                .run(::emitIndexingProgress)
         L.d("Index finished in ${System.currentTimeMillis() - start}ms")
 
         // Final accessibility check before committing empty state
@@ -492,14 +528,21 @@ constructor(
 
     private suspend fun loadCachedLibrary(): MutableLibrary {
         val revision = musicSettings.revision ?: UUID.randomUUID()
-        val config = createConfig(revision, cache)
+        // Use a lightweight config for cached startup: no filesystem construction needed
+        // since loadCached only reads from the DB cache and stored playlists.
+        val config = createCachedConfig(revision)
         val start = System.currentTimeMillis()
         return Musikr.loadCached(context, config).also {
             L.d("Cached library loaded in ${System.currentTimeMillis() - start}ms")
         }
     }
 
-    private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
+    /**
+     * Builds a minimal [Config] for cached startup that avoids touching the filesystem, storage
+     * providers, or cover storage initialization. This prevents SAF/MediaStore provider queries
+     * from competing with the cached library load on slow TS18 firmware.
+     */
+    private suspend fun createCachedConfig(revision: UUID): Config {
         val separators = Separators.from(musicSettings.separators)
         val nameFactory =
             if (musicSettings.intelligentSorting) {
@@ -508,11 +551,43 @@ constructor(
                 Naming.simple()
             }
         val covers = settingCovers.mutate(context, revision)
+        // Use a no-op FS since loadCached doesn't explore the filesystem
+        val fs = NoOpFS
+        return Config(
+            fs,
+            Storage(cache, covers, storedPlaylists),
+            Interpretation(nameFactory, separators),
+        )
+    }
+
+    private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
+        val configStart = System.currentTimeMillis()
+        val separators = Separators.from(musicSettings.separators)
+        val nameFactory =
+            if (musicSettings.intelligentSorting) {
+                Naming.intelligent()
+            } else {
+                Naming.simple()
+            }
+        val covers = settingCovers.mutate(context, revision)
+        L.d("Config: covers init ${System.currentTimeMillis() - configStart}ms")
+        val fsStart = System.currentTimeMillis()
         val fs =
             when (musicSettings.locationMode) {
                 LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
-                LocationMode.MEDIA_STORE -> MediaStore.from(context, musicSettings.mediaStoreQuery)
+                LocationMode.MEDIA_STORE -> {
+                    // Merge TS18 system source filter into the MediaStore query so the SQL
+                    // WHERE clause limits rows before cursor iteration.
+                    val query =
+                        musicSettings.mediaStoreQuery.copy(
+                            useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
+                        )
+                    MediaStore.from(context, query)
+                }
             }
+        L.d(
+            "Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]"
+        )
         return Config(
             fs,
             Storage(cache, covers, storedPlaylists),
@@ -531,6 +606,7 @@ constructor(
     }
 
     private suspend fun emitLibrary(newLibrary: MutableLibrary) {
+        val emitStart = System.currentTimeMillis()
         val deviceLibraryChanged: Boolean
         val userLibraryChanged: Boolean
         // We want to make sure that all reads and writes are synchronized due to the sheer
@@ -561,6 +637,7 @@ constructor(
         withContext(Dispatchers.Main) {
             dispatchLibraryChange(deviceLibraryChanged, userLibraryChanged)
         }
+        L.d("emitLibrary completed in ${System.currentTimeMillis() - emitStart}ms")
     }
 
     private suspend fun emitIndexingCompletion(error: Exception?) {
@@ -583,4 +660,20 @@ constructor(
             listener.onMusicChanges(changes)
         }
     }
+}
+
+/**
+ * A no-op [FS] implementation used during cached startup. Cached startup loads from the DB cache
+ * without exploring the filesystem, so no real FS is needed. This avoids triggering
+ * SAF/MediaStore/StorageManager queries on startup.
+ */
+private object NoOpFS : FS {
+    override suspend fun explore(
+        files: Channel<org.oxycblt.musikr.fs.File>
+    ): kotlinx.coroutines.Deferred<Result<Unit>> {
+        files.close()
+        return CompletableDeferred(Result.success(Unit))
+    }
+
+    override fun track(): Flow<FSUpdate> = emptyFlow()
 }

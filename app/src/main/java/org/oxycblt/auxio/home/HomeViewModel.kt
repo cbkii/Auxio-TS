@@ -19,10 +19,13 @@
 package org.oxycblt.auxio.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
@@ -169,6 +172,12 @@ constructor(
 
     private val homeGenerator = homeGeneratorFactory.create(this)
 
+    // Thread-safety: invalidateMusic is only called from dispatchLibraryChange which runs on
+    // Dispatchers.Main, and viewModelScope.launch also dispatches on Main, so all map access
+    // is confined to the main thread.
+    /** Per-type invalidation jobs for cancellation of stale updates. */
+    private val invalidationJobs = mutableMapOf<MusicType, Job>()
+
     /**
      * A list of [MusicType] corresponding to the current [Tab] configuration, excluding invisible
      * [Tab]s.
@@ -215,29 +224,37 @@ constructor(
     }
 
     override fun invalidateMusic(type: MusicType, instructions: UpdateInstructions) {
-        when (type) {
-            MusicType.SONGS -> {
-                _allSongs = homeGenerator.songs()
-                _songInstructions.put(instructions)
-                _songList.value = _allSongs.filteredByDecade(_decadeFilter.value)
+        // Cancel any previous in-flight invalidation for this type to avoid stale
+        // older jobs overwriting newer state (race-safe latest-wins semantics).
+        invalidationJobs[type]?.cancel()
+        val job =
+            viewModelScope.launch {
+                when (type) {
+                    MusicType.SONGS -> {
+                        _allSongs = homeGenerator.songs()
+                        _songInstructions.put(instructions)
+                        _songList.value = _allSongs.filteredByDecade(_decadeFilter.value)
+                    }
+                    MusicType.ALBUMS -> {
+                        _albumInstructions.put(instructions)
+                        _albumList.value = homeGenerator.albums()
+                    }
+                    MusicType.ARTISTS -> {
+                        _artistInstructions.put(instructions)
+                        _artistList.value = homeGenerator.artists()
+                    }
+                    MusicType.GENRES -> {
+                        _genreInstructions.put(instructions)
+                        _genreList.value = homeGenerator.genres()
+                    }
+                    MusicType.PLAYLISTS -> {
+                        _playlistInstructions.put(instructions)
+                        _playlistList.value = homeGenerator.playlists()
+                    }
+                }
             }
-            MusicType.ALBUMS -> {
-                _albumInstructions.put(instructions)
-                _albumList.value = homeGenerator.albums()
-            }
-            MusicType.ARTISTS -> {
-                _artistInstructions.put(instructions)
-                _artistList.value = homeGenerator.artists()
-            }
-            MusicType.GENRES -> {
-                _genreInstructions.put(instructions)
-                _genreList.value = homeGenerator.genres()
-            }
-            MusicType.PLAYLISTS -> {
-                _playlistInstructions.put(instructions)
-                _playlistList.value = homeGenerator.playlists()
-            }
-        }
+        invalidationJobs[type] = job
+        job.invokeOnCompletion { if (invalidationJobs[type] === job) invalidationJobs.remove(type) }
     }
 
     override fun invalidateTabs() {

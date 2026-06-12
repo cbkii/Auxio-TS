@@ -39,8 +39,11 @@ internal interface ExploreStep {
     suspend fun explore(scope: CoroutineScope, explored: Channel<Explored>): Deferred<Result<Unit>>
 
     companion object {
-        fun from(config: Config, noisyDirs: Set<String> = emptySet()): ExploreStep =
-            ExploreStepImpl(config.fs, config.storage, noisyDirs)
+        fun from(
+            config: Config,
+            noisyDirs: Set<String> = emptySet(),
+            pathKeywords: List<String> = emptyList(),
+        ): ExploreStep = ExploreStepImpl(config.fs, config.storage, noisyDirs, pathKeywords)
     }
 }
 
@@ -48,12 +51,16 @@ private class ExploreStepImpl(
     private val fs: FS,
     private val storage: Storage,
     private val noisyDirs: Set<String>,
+    private val pathKeywords: List<String>,
 ) : ExploreStep {
     override suspend fun explore(
         scope: CoroutineScope,
         explored: Channel<Explored>,
     ): Deferred<Result<Unit>> {
-        val filteredFs = if (noisyDirs.isNotEmpty()) FilteredFS(fs, scope, noisyDirs) else fs
+        val filteredFs =
+            if (noisyDirs.isNotEmpty() || pathKeywords.isNotEmpty())
+                FilteredFS(fs, scope, noisyDirs, pathKeywords)
+            else fs
         val files = Channel<File>(Channel.UNLIMITED)
         val filesTask = filteredFs.explore(files)
 
