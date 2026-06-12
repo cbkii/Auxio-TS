@@ -82,12 +82,17 @@ object TopwayWidgetProviderPolicy {
         hasAnyWidgetInstances: Boolean,
     ): Boolean = topwayCompatFlavor || hasAnyWidgetInstances
 
-    internal fun providerClassNames(topwayCompatFlavor: Boolean): List<String> =
-        buildList {
-                add(WidgetProvider::class.java.name)
-                if (topwayCompatFlavor) {
-                    add(STOCK_WIDGET_PROVIDER_CLASS)
-                }
+    @Volatile private var cachedClassNames: List<String>? = null
+    
+    internal fun providerClassNames(topwayCompatFlavor: Boolean): List<String> {
+        val cached = cachedClassNames
+        if (cached != null) return cached
+        
+        return buildList {
+            add(WidgetProvider::class.java.name)
+            if (topwayCompatFlavor) {
+                add(STOCK_WIDGET_PROVIDER_CLASS)
             }
-            .distinct()
+        }.also { cachedClassNames = it }
+    }
 }

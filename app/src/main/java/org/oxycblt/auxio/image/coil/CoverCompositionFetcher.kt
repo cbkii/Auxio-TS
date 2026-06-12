@@ -56,9 +56,9 @@ abstract class CoverCompositionFetcher(
         val bitmaps =
             data.covers.covers
                 .asFlow()
+                .take(4)
                 .mapNotNull { cover -> cover.open() }
                 .mapNotNull { stream -> BitmapFactory.decodeStream(stream).also { stream.close() } }
-                .take(4)
                 .toList()
         if (bitmaps.size < 4) {
             val first = bitmaps.firstOrNull() ?: return null

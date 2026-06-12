@@ -64,12 +64,18 @@ class StartActionRunner : TaskerPluginRunnerActionNoOutputOrInput() {
                 .setAction(AuxioService.ACTION_START)
                 .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TASKER),
         )
-        while (!AuxioService.isForeground) {
+        
+        // Wait for service to become foreground, with a timeout
+        val startTime = System.currentTimeMillis()
+        while (!AuxioService.isForeground && System.currentTimeMillis() - startTime < 5000) {
             Thread.sleep(100)
         }
-        // Actually need to sleep even longer since for some reason the notification still
-        // won't accept media button events for an arbitrary period.
-        Thread.sleep(100)
+        
+        if (AuxioService.isForeground) {
+            // Actually need to sleep even longer since for some reason the notification still
+            // won't accept media button events for an arbitrary period.
+            Thread.sleep(100)
+        }
         return TaskerPluginResultSucess()
     }
 }

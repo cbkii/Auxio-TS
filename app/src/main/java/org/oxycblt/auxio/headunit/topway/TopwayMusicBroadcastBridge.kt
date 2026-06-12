@@ -96,6 +96,6 @@ class TopwayMusicBroadcastBridge(private val context: Context, private val uiSet
     }
 
     private companion object {
-        const val MIN_PROGRESS_INTERVAL_MS = 1000L
+        const val MIN_PROGRESS_INTERVAL_MS = 2500L
     }
 }
