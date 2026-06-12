@@ -37,7 +37,10 @@ class HeadUnitQuickAccessTest {
         assertTrue(picks.getValue(QuickPickAction.QUEUE).enabled)
         assertFalse(picks.getValue(QuickPickAction.SHUFFLE_ALL).enabled)
         assertFalse(picks.getValue(QuickPickAction.RECENTLY_ADDED).enabled)
-        assertFalse(picks.getValue(QuickPickAction.FAVOURITES).enabled)
+        assertFalse(
+            "Favourites is excluded when not present",
+            picks.containsKey(QuickPickAction.FAVOURITES),
+        )
         assertTrue(picks.getValue(QuickPickAction.HEAD_UNIT_SETTINGS).enabled)
     }
 
@@ -82,7 +85,10 @@ class HeadUnitQuickAccessTest {
                     isIndexing = false,
                 )
                 .associateBy { it.action }
-        assertFalse(picks.getValue(QuickPickAction.FAVOURITES).enabled)
+        assertFalse(
+            "Favourites is excluded when not present",
+            picks.containsKey(QuickPickAction.FAVOURITES),
+        )
     }
 
     @Test

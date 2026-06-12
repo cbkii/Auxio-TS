@@ -188,7 +188,7 @@
     <string name="msg_empty_recently_added">No recently added songs</string>
     <string name="lbl_decades">Decades</string>
     <string name="msg_empty_decade">No songs for this decade</string>
-    <string name="msg_empty_favourites">Favourites playlist is empty</string>
+    <string name="msg_empty_favourites">Favourites playlist is empty, opening Playlists</string>
     <!-- Format string for an individual decade chip label, e.g. "1990s" -->
     <string name="lbl_decade_fmt">%1$ds</string>
     <string name="lbl_folders">Folders</string>

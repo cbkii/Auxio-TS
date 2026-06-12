@@ -58,13 +58,18 @@ object HeadUnitQuickAccess {
         isIndexing: Boolean,
     ): List<QuickPickItem> =
         listOf(
-            QuickPickItem(QuickPickAction.NOW_PLAYING, true),
-            QuickPickItem(QuickPickAction.QUEUE, true),
-            QuickPickItem(QuickPickAction.SHUFFLE_ALL, hasLibraryContent && !isIndexing),
-            QuickPickItem(QuickPickAction.RECENTLY_ADDED, hasLibraryContent && !isIndexing),
-            QuickPickItem(QuickPickAction.FAVOURITES, hasFavourites),
-            QuickPickItem(QuickPickAction.HEAD_UNIT_SETTINGS, !isIndexing),
-        )
+                QuickPickItem(QuickPickAction.NOW_PLAYING, true),
+                QuickPickItem(QuickPickAction.QUEUE, true),
+                QuickPickItem(QuickPickAction.SHUFFLE_ALL, hasLibraryContent && !isIndexing),
+                QuickPickItem(QuickPickAction.RECENTLY_ADDED, hasLibraryContent && !isIndexing),
+            )
+            .let { base ->
+                if (hasFavourites) {
+                    base + QuickPickItem(QuickPickAction.FAVOURITES, true)
+                } else {
+                    base
+                }
+            } + QuickPickItem(QuickPickAction.HEAD_UNIT_SETTINGS, !isIndexing)
 
     fun metadataChipState(
         genreCount: Int,
