@@ -86,9 +86,9 @@ object StoragePathAliasPolicy {
         return when {
             // Any USB port index (usbdisk0, usbdisk1, ...) is exposed under both mount roots.
             path.startsWith("/mnt/media_rw/usbdisk") ->
-                path.replaceFirst("/mnt/media_rw/usbdisk", "/storage/usbdisk")
+                "/storage/usbdisk" + path.removePrefix("/mnt/media_rw/usbdisk")
             path == "/sdcard" || path.startsWith("/sdcard/") ->
-                path.replaceFirst("/sdcard", "/storage/emulated/0")
+                "/storage/emulated/0" + path.removePrefix("/sdcard")
             else -> path
         }
     }
