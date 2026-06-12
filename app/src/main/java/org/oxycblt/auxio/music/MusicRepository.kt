@@ -438,6 +438,21 @@ constructor(
 
     private suspend fun indexImpl(withCache: Boolean) {
         L.d("Index requested, initializing")
+
+        // TS18 diagnostic: log the OEM storage switch property value (read-only, never modified)
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val twStorageSwitch = try {
+                val clazz = Class.forName("android.os.SystemProperties")
+                val get = clazz.getMethod("get", String::class.java)
+                get.invoke(null, "persist.tw.storage.switch") as? String
+            } catch (e: Exception) {
+                null
+            }
+            if (!twStorageSwitch.isNullOrEmpty()) {
+                L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
+            }
+        }
+
         val currentRevision = musicSettings.revision
         val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
         val config =
@@ -462,11 +477,13 @@ constructor(
 
         L.d("Running index...")
         val start = System.currentTimeMillis()
-        // Apply TS18 system source path filter when enabled - only include files whose path
-        // contains music/download/media keywords to avoid scanning huge irrelevant USB trees.
+        // When ts18SystemSourceFilter is enabled, the path restriction is now applied at the
+        // SQL level in the MediaStore query (useDefaultSystemFilter). For SAF mode, the
+        // FilteredFS pathKeywords still serve as the filtering mechanism since there is no
+        // SQL query to augment.
         val pathKeywords =
             if (musicSettings.ts18SystemSourceFilter &&
-                musicSettings.locationMode == LocationMode.MEDIA_STORE
+                musicSettings.locationMode == LocationMode.SAF
             ) {
                 TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
             } else {
@@ -556,7 +573,14 @@ constructor(
         val fs =
             when (musicSettings.locationMode) {
                 LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
-                LocationMode.MEDIA_STORE -> MediaStore.from(context, musicSettings.mediaStoreQuery)
+                LocationMode.MEDIA_STORE -> {
+                    // Merge TS18 system source filter into the MediaStore query so the SQL
+                    // WHERE clause limits rows before cursor iteration.
+                    val query = musicSettings.mediaStoreQuery.copy(
+                        useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
+                    )
+                    MediaStore.from(context, query)
+                }
             }
         L.d("Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]")
         return Config(

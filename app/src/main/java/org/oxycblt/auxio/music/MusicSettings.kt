@@ -154,8 +154,13 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_fs_cache), false)
 
     override var ts18SystemSourceFilter: Boolean
-        get() =
-            sharedPreferences.getBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, true)
+        get() {
+            // Default to true only on detected TS18/Topway head units to avoid
+            // silently filtering custom directories on standard phones/tablets.
+            val isTs18 = android.os.Build.DEVICE.orEmpty().lowercase().contains("s9863a1h10") ||
+                android.os.Build.BOARD.orEmpty().lowercase().contains("s9863a1h10")
+            return sharedPreferences.getBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, isTs18)
+        }
         set(value) {
             sharedPreferences.edit { putBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, value) }
         }

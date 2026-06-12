@@ -19,6 +19,8 @@
 package org.oxycblt.auxio.home
 
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
@@ -38,15 +40,15 @@ interface HomeGenerator {
 
     fun empty(): Boolean
 
-    fun songs(): List<Song>
+    suspend fun songs(): List<Song>
 
-    fun albums(): List<Album>
+    suspend fun albums(): List<Album>
 
-    fun artists(): List<Artist>
+    suspend fun artists(): List<Artist>
 
-    fun genres(): List<Genre>
+    suspend fun genres(): List<Genre>
 
-    fun playlists(): List<Playlist>
+    suspend fun playlists(): List<Playlist>
 
     fun tabs(): List<MusicType>
 
@@ -150,14 +152,23 @@ private class HomeGeneratorImpl(
 
     override fun empty() = musicRepository.library?.empty() ?: true
 
-    override fun songs() =
-        musicRepository.library?.let { listSettings.songSort.songs(it.songs) } ?: emptyList()
+    override suspend fun songs() = withContext(Dispatchers.Default) {
+        val start = System.currentTimeMillis()
+        val result = musicRepository.library?.let { listSettings.songSort.songs(it.songs) } ?: emptyList()
+        L.d("HomeGenerator.songs() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms")
+        result
+    }
 
-    override fun albums() =
-        musicRepository.library?.let { listSettings.albumSort.albums(it.albums) } ?: emptyList()
+    override suspend fun albums() = withContext(Dispatchers.Default) {
+        val start = System.currentTimeMillis()
+        val result = musicRepository.library?.let { listSettings.albumSort.albums(it.albums) } ?: emptyList()
+        L.d("HomeGenerator.albums() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms")
+        result
+    }
 
-    override fun artists() =
-        musicRepository.library?.let { deviceLibrary ->
+    override suspend fun artists() = withContext(Dispatchers.Default) {
+        val start = System.currentTimeMillis()
+        val result = musicRepository.library?.let { deviceLibrary ->
             val sorted = listSettings.artistSort.artists(deviceLibrary.artists)
             if (homeSettings.shouldHideCollaborators) {
                 sorted.filter { it.explicitAlbums.isNotEmpty() }
@@ -165,13 +176,24 @@ private class HomeGeneratorImpl(
                 sorted
             }
         } ?: emptyList()
+        L.d("HomeGenerator.artists() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms")
+        result
+    }
 
-    override fun genres() =
-        musicRepository.library?.let { listSettings.genreSort.genres(it.genres) } ?: emptyList()
+    override suspend fun genres() = withContext(Dispatchers.Default) {
+        val start = System.currentTimeMillis()
+        val result = musicRepository.library?.let { listSettings.genreSort.genres(it.genres) } ?: emptyList()
+        L.d("HomeGenerator.genres() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms")
+        result
+    }
 
-    override fun playlists() =
-        musicRepository.library?.let { listSettings.playlistSort.playlists(it.playlists) }
+    override suspend fun playlists() = withContext(Dispatchers.Default) {
+        val start = System.currentTimeMillis()
+        val result = musicRepository.library?.let { listSettings.playlistSort.playlists(it.playlists) }
             ?: emptyList()
+        L.d("HomeGenerator.playlists() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms")
+        result
+    }
 
     override fun tabs() = homeSettings.homeTabs.filterIsInstance<Tab.Visible>().map { it.type }
 }

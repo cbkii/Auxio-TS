@@ -66,6 +66,15 @@ private constructor(
                 selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
             }
 
+            // TS18/head-unit optimization: restrict to likely-audio directories.
+            // SQLite LIKE is case-insensitive for ASCII, so only 3 clauses needed.
+            if (query.useDefaultSystemFilter) {
+                selector += " AND (" +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Music/%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Download/%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Media/%')"
+            }
+
             // Handle include/exclude directories
             when (query.mode) {
                 FilterMode.INCLUDE -> {
@@ -151,6 +160,10 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
+        /** Restrict MediaStore scan to paths containing /Music/, /Download/, or /Media/.
+         *  This dramatically reduces query time on slow TS18 head units with large USB storage.
+         *  SQLite LIKE is case-insensitive for ASCII so only 3 clauses are needed. */
+        val useDefaultSystemFilter: Boolean = false,
     )
 
     enum class FilterMode {

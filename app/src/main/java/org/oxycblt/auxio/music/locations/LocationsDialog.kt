@@ -379,7 +379,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             pendingLocationCallback = null
             return
         }
-        val input = android.widget.EditText(ctx).apply {
+        val input = androidx.appcompat.widget.AppCompatEditText(ctx).apply {
             hint = ctx.getString(R.string.set_enter_path_hint)
             setSingleLine()
             inputType =
@@ -404,7 +404,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         try {
                             val file = File(pathText)
                             file.exists() && file.isDirectory && file.canRead()
-                        } catch (e: SecurityException) {
+                        } catch (e: Exception) {
                             false
                         }
                     }
