@@ -150,6 +150,9 @@
     <string name="set_auto_detect_usb">Auto-detect USB</string>
     <string name="set_picker_unavailable_fallback">System picker unavailable. Select from available music sources?</string>
     <string name="set_select_source">Select music source</string>
+    <string name="set_enter_path_manually">Enter path manually…</string>
+    <string name="set_enter_path_hint">e.g. /storage/usbdisk0/Music</string>
+    <string name="set_path_inaccessible">Path is not accessible or does not exist</string>
     <string name="lbl_shuffle_shortcut_short">Shuffle</string>
     <!-- Limit to 25 characters -->
     <string name="lbl_shuffle_shortcut_long">Shuffle all</string>

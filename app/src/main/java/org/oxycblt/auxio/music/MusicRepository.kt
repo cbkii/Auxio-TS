@@ -542,6 +542,7 @@ constructor(
     }
 
     private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
+        val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
         val nameFactory =
             if (musicSettings.intelligentSorting) {
@@ -550,11 +551,14 @@ constructor(
                 Naming.simple()
             }
         val covers = settingCovers.mutate(context, revision)
+        L.d("Config: covers init ${System.currentTimeMillis() - configStart}ms")
+        val fsStart = System.currentTimeMillis()
         val fs =
             when (musicSettings.locationMode) {
                 LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
                 LocationMode.MEDIA_STORE -> MediaStore.from(context, musicSettings.mediaStoreQuery)
             }
+        L.d("Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]")
         return Config(
             fs,
             Storage(cache, covers, storedPlaylists),
@@ -573,6 +577,7 @@ constructor(
     }
 
     private suspend fun emitLibrary(newLibrary: MutableLibrary) {
+        val emitStart = System.currentTimeMillis()
         val deviceLibraryChanged: Boolean
         val userLibraryChanged: Boolean
         // We want to make sure that all reads and writes are synchronized due to the sheer
@@ -603,6 +608,7 @@ constructor(
         withContext(Dispatchers.Main) {
             dispatchLibraryChange(deviceLibraryChanged, userLibraryChanged)
         }
+        L.d("emitLibrary completed in ${System.currentTimeMillis() - emitStart}ms")
     }
 
     private suspend fun emitIndexingCompletion(error: Exception?) {

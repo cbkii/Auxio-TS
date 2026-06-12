@@ -150,7 +150,11 @@ private class DocumentPathFactoryImpl(
             }
         }
 
-        return null
+        // TS18/OEM fallback: if path is under a recognizable storage root but not reported by
+        // StorageManager (common on TS18 where /storage/usbdisk0 may not appear in
+        // storageVolumes), create a ThirdParty volume so the path is still usable.
+        // This prevents fallback source selections from being rejected as unrecognized.
+        return Path(Volume.ThirdParty(uri), Components.parseUnix(pathString))
     }
 
     private fun normalizeRootPath(rootPath: String) =
