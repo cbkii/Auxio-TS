@@ -157,8 +157,9 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         get() {
             // Default to true only on detected TS18/Topway head units to avoid
             // silently filtering custom directories on standard phones/tablets.
-            val isTs18 = android.os.Build.DEVICE.orEmpty().lowercase().contains("s9863a1h10") ||
-                android.os.Build.BOARD.orEmpty().lowercase().contains("s9863a1h10")
+            val isTs18 =
+                android.os.Build.DEVICE.orEmpty().lowercase().contains("s9863a1h10") ||
+                    android.os.Build.BOARD.orEmpty().lowercase().contains("s9863a1h10")
             return sharedPreferences.getBoolean(KEY_TS18_SYSTEM_SOURCE_FILTER, isTs18)
         }
         set(value) {

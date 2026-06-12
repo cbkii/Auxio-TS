@@ -68,13 +68,14 @@ private class EvaluateStepImpl(
         // Render graph to Graphviz only when explicitly opted in via Android system property.
         // This avoids catastrophic startup cost on debug/head-unit builds where the graph
         // can be very large. Enable with: adb shell setprop debug.auxio.graphviz true
-        val isGraphvizEnabled = try {
-            val clazz = Class.forName("android.os.SystemProperties")
-            val get = clazz.getMethod("get", String::class.java)
-            get.invoke(null, "debug.auxio.graphviz") == "true"
-        } catch (e: Exception) {
-            false
-        }
+        val isGraphvizEnabled =
+            try {
+                val clazz = Class.forName("android.os.SystemProperties")
+                val get = clazz.getMethod("get", String::class.java)
+                get.invoke(null, "debug.auxio.graphviz") == "true"
+            } catch (e: Exception) {
+                false
+            }
         if (BuildConfig.DEBUG && isGraphvizEnabled) {
             try {
                 val fileName = "music_graph_debug.dot"

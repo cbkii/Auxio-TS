@@ -354,9 +354,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         // For file:// URIs from validated accessible candidates, allow
                         // ThirdParty volumes. These are proven-accessible TS18 paths that
                         // StorageManager may not report but that work with direct file I/O.
-                        if (disableThirdParty &&
-                            location.path.volume is Volume.ThirdParty &&
-                            uri.scheme != "file"
+                        if (
+                            disableThirdParty &&
+                                location.path.volume is Volume.ThirdParty &&
+                                uri.scheme != "file"
                         ) {
                             currentContext.showToast(R.string.err_bad_location)
                         } else {
@@ -375,21 +376,26 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun showManualPathEntry(disableThirdParty: Boolean) {
-        val ctx = context ?: run {
-            pendingLocationCallback = null
-            return
-        }
-        val input = androidx.appcompat.widget.AppCompatEditText(ctx).apply {
-            hint = ctx.getString(R.string.set_enter_path_hint)
-            setSingleLine()
-            inputType =
-                android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        }
+        val ctx =
+            context
+                ?: run {
+                    pendingLocationCallback = null
+                    return
+                }
+        val input =
+            androidx.appcompat.widget.AppCompatEditText(ctx).apply {
+                hint = ctx.getString(R.string.set_enter_path_hint)
+                setSingleLine()
+                inputType =
+                    android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            }
         val padding = (16 * ctx.resources.displayMetrics.density).toInt()
-        val container = android.widget.FrameLayout(ctx).apply {
-            setPadding(padding, padding / 2, padding, 0)
-            addView(input)
-        }
+        val container =
+            android.widget.FrameLayout(ctx).apply {
+                setPadding(padding, padding / 2, padding, 0)
+                addView(input)
+            }
         AlertDialog.Builder(ctx)
             .setTitle(R.string.set_select_source)
             .setView(container)
@@ -400,14 +406,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     return@setPositiveButton
                 }
                 lifecycleScope.launch {
-                    val accessible = withContext(Dispatchers.IO) {
-                        try {
-                            val file = File(pathText)
-                            file.exists() && file.isDirectory && file.canRead()
-                        } catch (e: Exception) {
-                            false
+                    val accessible =
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val file = File(pathText)
+                                file.exists() && file.isDirectory && file.canRead()
+                            } catch (e: Exception) {
+                                false
+                            }
                         }
-                    }
                     val currentContext = context
                     if (currentContext == null) {
                         pendingLocationCallback = null

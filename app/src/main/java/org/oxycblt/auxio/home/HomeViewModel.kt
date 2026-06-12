@@ -227,31 +227,32 @@ constructor(
         // Cancel any previous in-flight invalidation for this type to avoid stale
         // older jobs overwriting newer state (race-safe latest-wins semantics).
         invalidationJobs[type]?.cancel()
-        invalidationJobs[type] = viewModelScope.launch {
-            when (type) {
-                MusicType.SONGS -> {
-                    _allSongs = homeGenerator.songs()
-                    _songInstructions.put(instructions)
-                    _songList.value = _allSongs.filteredByDecade(_decadeFilter.value)
-                }
-                MusicType.ALBUMS -> {
-                    _albumInstructions.put(instructions)
-                    _albumList.value = homeGenerator.albums()
-                }
-                MusicType.ARTISTS -> {
-                    _artistInstructions.put(instructions)
-                    _artistList.value = homeGenerator.artists()
-                }
-                MusicType.GENRES -> {
-                    _genreInstructions.put(instructions)
-                    _genreList.value = homeGenerator.genres()
-                }
-                MusicType.PLAYLISTS -> {
-                    _playlistInstructions.put(instructions)
-                    _playlistList.value = homeGenerator.playlists()
+        invalidationJobs[type] =
+            viewModelScope.launch {
+                when (type) {
+                    MusicType.SONGS -> {
+                        _allSongs = homeGenerator.songs()
+                        _songInstructions.put(instructions)
+                        _songList.value = _allSongs.filteredByDecade(_decadeFilter.value)
+                    }
+                    MusicType.ALBUMS -> {
+                        _albumInstructions.put(instructions)
+                        _albumList.value = homeGenerator.albums()
+                    }
+                    MusicType.ARTISTS -> {
+                        _artistInstructions.put(instructions)
+                        _artistList.value = homeGenerator.artists()
+                    }
+                    MusicType.GENRES -> {
+                        _genreInstructions.put(instructions)
+                        _genreList.value = homeGenerator.genres()
+                    }
+                    MusicType.PLAYLISTS -> {
+                        _playlistInstructions.put(instructions)
+                        _playlistList.value = homeGenerator.playlists()
+                    }
                 }
             }
-        }
     }
 
     override fun invalidateTabs() {

@@ -90,9 +90,9 @@ interface Musikr {
          * This gives callers a fast startup path: the returned library can be displayed and used by
          * media/session code immediately while any explicit or first-run scan happens later.
          *
-         * Cover hydration is intentionally skipped during cached startup to avoid blocking first
-         * UI availability on cover storage I/O. Covers are referenced by ID and can be loaded
-         * lazily by image loaders when needed.
+         * Cover hydration is intentionally skipped during cached startup to avoid blocking first UI
+         * availability on cover storage I/O. Covers are referenced by ID and can be loaded lazily
+         * by image loaders when needed.
          */
         suspend fun loadCached(context: Context, config: Config): MutableLibrary {
             val start = System.currentTimeMillis()
@@ -109,8 +109,8 @@ interface Musikr {
         }
 
         /**
-         * Fast conversion from [CachedFile] to [RawSong] that skips cover hydration (obtain).
-         * The cover ID is preserved as a stub so image loaders can resolve it lazily.
+         * Fast conversion from [CachedFile] to [RawSong] that skips cover hydration (obtain). The
+         * cover ID is preserved as a stub so image loaders can resolve it lazily.
          */
         private fun CachedFile.toRawSongFast(storage: Storage): RawSong? {
             val audio = audio ?: return null
@@ -215,8 +215,8 @@ private class LibraryResultImpl(private val config: Config, override val library
 /**
  * A lightweight [Cover] stub that only holds an ID for deferred resolution.
  *
- * Used during cached startup to avoid blocking library emission on cover I/O.
- * Image loaders resolve the actual cover data lazily via [Covers.obtain].
+ * Used during cached startup to avoid blocking library emission on cover I/O. Image loaders resolve
+ * the actual cover data lazily via [Covers.obtain].
  */
 internal class LazyIdCover(override val id: String) : Cover {
     override suspend fun open(): InputStream? = null

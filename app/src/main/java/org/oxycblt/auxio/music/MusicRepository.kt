@@ -22,15 +22,15 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
@@ -441,13 +441,14 @@ constructor(
 
         // TS18 diagnostic: log the OEM storage switch property value (read-only, never modified)
         if (android.os.Build.VERSION.SDK_INT >= 29) {
-            val twStorageSwitch = try {
-                val clazz = Class.forName("android.os.SystemProperties")
-                val get = clazz.getMethod("get", String::class.java)
-                get.invoke(null, "persist.tw.storage.switch") as? String
-            } catch (e: Exception) {
-                null
-            }
+            val twStorageSwitch =
+                try {
+                    val clazz = Class.forName("android.os.SystemProperties")
+                    val get = clazz.getMethod("get", String::class.java)
+                    get.invoke(null, "persist.tw.storage.switch") as? String
+                } catch (e: Exception) {
+                    null
+                }
             if (!twStorageSwitch.isNullOrEmpty()) {
                 L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
             }
@@ -482,8 +483,9 @@ constructor(
         // FilteredFS pathKeywords still serve as the filtering mechanism since there is no
         // SQL query to augment.
         val pathKeywords =
-            if (musicSettings.ts18SystemSourceFilter &&
-                musicSettings.locationMode == LocationMode.SAF
+            if (
+                musicSettings.ts18SystemSourceFilter &&
+                    musicSettings.locationMode == LocationMode.SAF
             ) {
                 TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
             } else {
@@ -536,9 +538,9 @@ constructor(
     }
 
     /**
-     * Builds a minimal [Config] for cached startup that avoids touching the filesystem,
-     * storage providers, or cover storage initialization. This prevents SAF/MediaStore
-     * provider queries from competing with the cached library load on slow TS18 firmware.
+     * Builds a minimal [Config] for cached startup that avoids touching the filesystem, storage
+     * providers, or cover storage initialization. This prevents SAF/MediaStore provider queries
+     * from competing with the cached library load on slow TS18 firmware.
      */
     private suspend fun createCachedConfig(revision: UUID): Config {
         val separators = Separators.from(musicSettings.separators)
@@ -576,13 +578,16 @@ constructor(
                 LocationMode.MEDIA_STORE -> {
                     // Merge TS18 system source filter into the MediaStore query so the SQL
                     // WHERE clause limits rows before cursor iteration.
-                    val query = musicSettings.mediaStoreQuery.copy(
-                        useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
-                    )
+                    val query =
+                        musicSettings.mediaStoreQuery.copy(
+                            useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
+                        )
                     MediaStore.from(context, query)
                 }
             }
-        L.d("Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]")
+        L.d(
+            "Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]"
+        )
         return Config(
             fs,
             Storage(cache, covers, storedPlaylists),
@@ -658,10 +663,9 @@ constructor(
 }
 
 /**
- * A no-op [FS] implementation used during cached startup.
- * Cached startup loads from the DB cache without exploring the filesystem,
- * so no real FS is needed. This avoids triggering SAF/MediaStore/StorageManager
- * queries on startup.
+ * A no-op [FS] implementation used during cached startup. Cached startup loads from the DB cache
+ * without exploring the filesystem, so no real FS is needed. This avoids triggering
+ * SAF/MediaStore/StorageManager queries on startup.
  */
 private object NoOpFS : FS {
     override suspend fun explore(
