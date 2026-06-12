@@ -20,54 +20,41 @@ package org.oxycblt.musikr.fs
 
 import java.io.File
 
-/**
- * Deduplicates paths that represent the same physical location (aliases).
- */
+/** Deduplicates paths that represent the same physical location (aliases). */
 object StoragePathAliasPolicy {
 
-    /**
-     * Identifies a group of aliases pointing to the same file or directory.
-     */
-    data class AliasGroup(
-        val canonicalPath: String,
-        val paths: List<String>
-    )
+    /** Identifies a group of aliases pointing to the same file or directory. */
+    data class AliasGroup(val canonicalPath: String, val paths: List<String>)
 
-    /**
-     * Deduplicates a list of file paths.
-     * Returns a list of paths where duplicates are removed.
-     */
+    /** Deduplicates a list of file paths. Returns a list of paths where duplicates are removed. */
     fun deduplicatePaths(paths: List<String>): List<String> {
         return groupAliases(paths).map { it.paths.first() }
     }
 
-    /**
-     * Groups paths into alias groups.
-     */
+    /** Groups paths into alias groups. */
     fun groupAliases(paths: List<String>): List<AliasGroup> {
         val groups = mutableMapOf<String, MutableList<String>>()
 
         for (path in paths) {
-            val canonical = try {
-                File(path).canonicalPath
-            } catch (e: Exception) {
-                // Fallback to absolute path or normalized TS18 path
-                normalizePath(path)
-            }
+            val canonical =
+                try {
+                    File(path).canonicalPath
+                } catch (e: Exception) {
+                    // Fallback to absolute path or normalized TS18 path
+                    normalizePath(path)
+                }
             groups.getOrPut(canonical) { mutableListOf() }.add(path)
         }
 
         return groups.map { AliasGroup(it.key, it.value) }
     }
 
-    /**
-     * Deduplicates files based on metadata (size, modified time, canonical path).
-     */
+    /** Deduplicates files based on metadata (size, modified time, canonical path). */
     fun <T> deduplicateFiles(
         files: List<T>,
         pathSelector: (T) -> String,
         sizeSelector: (T) -> Long,
-        modifiedMsSelector: (T) -> Long
+        modifiedMsSelector: (T) -> Long,
     ): List<T> {
         // Group by size and modified time as a quick filter, then by canonical path
         val deduped = mutableListOf<T>()
@@ -77,23 +64,24 @@ object StoragePathAliasPolicy {
             val path = pathSelector(file)
             val size = sizeSelector(file)
             val modified = modifiedMsSelector(file)
-            
-            val canonical = try {
-                File(path).canonicalPath
-            } catch (e: Exception) {
-                normalizePath(path)
-            }
-            
+
+            val canonical =
+                try {
+                    File(path).canonicalPath
+                } catch (e: Exception) {
+                    normalizePath(path)
+                }
+
             // To be safe, we use canonical path + size to uniquely identify files.
             // Some file systems might report different modified times depending on access route,
             // so we just use canonicalPath + size for identity.
             val identity = "${canonical}_${size}"
-            
+
             if (seen.add(identity)) {
                 deduped.add(file)
             }
         }
-        
+
         return deduped
     }
 

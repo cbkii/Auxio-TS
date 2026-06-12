@@ -116,15 +116,16 @@ private constructor(
             }
 
             for (volumeName in volumeNames) {
-                val contentUri = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    try {
-                        AOSPMediaStore.Audio.Media.getContentUri(volumeName)
-                    } catch (e: Exception) {
+                val contentUri =
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        try {
+                            AOSPMediaStore.Audio.Media.getContentUri(volumeName)
+                        } catch (e: Exception) {
+                            AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                        }
+                    } else {
                         AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
                     }
-                } else {
-                    AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                }
 
                 try {
                     context.contentResolverSafe.useQuery(
@@ -134,36 +135,42 @@ private constructor(
                         args.toTypedArray(),
                     ) { cursor ->
                         val pathInterpreter = pathInterpreterFactory.wrap(cursor)
-                        val idIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
+                        val idIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
                         val mimeTypeIndex =
-                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.MIME_TYPE)
-                        val sizeIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.SIZE)
+                            cursor.getColumnIndexOrThrow(
+                                AOSPMediaStore.Audio.AudioColumns.MIME_TYPE
+                            )
+                        val sizeIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.SIZE)
                         val dateAddedIndex =
-                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_ADDED)
+                            cursor.getColumnIndexOrThrow(
+                                AOSPMediaStore.Audio.AudioColumns.DATE_ADDED
+                            )
                         val dateModifiedIndex =
-                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED)
+                            cursor.getColumnIndexOrThrow(
+                                AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED
+                            )
 
                         while (cursor.moveToNext()) {
                             val path = pathInterpreter.extract() ?: continue
 
                             val id = cursor.getLong(idIndex)
-                            val uri =
-                                Uri.withAppendedPath(
-                                    contentUri,
-                                    id.toString(),
-                                )
+                            val uri = Uri.withAppendedPath(contentUri, id.toString())
                             val mimeType = cursor.getStringOrNull(mimeTypeIndex) ?: "audio/*"
                             val size = cursor.getLong(sizeIndex)
-                            val dateAdded = cursor.getLong(dateAddedIndex) * 1000 // Convert to milliseconds
+                            val dateAdded =
+                                cursor.getLong(dateAddedIndex) * 1000 // Convert to milliseconds
                             val dateModified =
                                 cursor.getLong(dateModifiedIndex) * 1000 // Convert to milliseconds
 
                             // Alias deduplication
-                            val canonical = try {
-                                java.io.File(path).canonicalPath
-                            } catch (e: Exception) {
-                                path
-                            }
+                            val canonical =
+                                try {
+                                    java.io.File(path).canonicalPath
+                                } catch (e: Exception) {
+                                    path
+                                }
                             val identity = "${canonical}_${size}"
                             if (!seenIdentities.add(identity)) {
                                 continue // Skip duplicate
