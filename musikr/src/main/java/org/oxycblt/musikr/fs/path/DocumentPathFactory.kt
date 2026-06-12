@@ -155,8 +155,14 @@ private class DocumentPathFactoryImpl(
         // StorageManager (common on TS18 where /storage/usbdisk0 may not appear in
         // storageVolumes), create a ThirdParty volume so the path is still usable.
         // This prevents fallback source selections from being rejected as unrecognized.
-        Log.d("DocumentPathFactory", "ThirdParty fallback for unmapped path: $pathString")
-        return Path(Volume.ThirdParty(uri), Components.parseUnix(pathString))
+        // Guard: only apply for paths under /storage/ or /mnt/ — typical Android mount points.
+        if (pathString.startsWith("/storage/") || pathString.startsWith("/mnt/")) {
+            Log.d("DocumentPathFactory", "ThirdParty fallback for unmapped path: $pathString")
+            return Path(Volume.ThirdParty(uri), Components.parseUnix(pathString))
+        }
+
+        Log.w("DocumentPathFactory", "Rejecting unrecognized path: $pathString")
+        return null
     }
 
     private fun normalizeRootPath(rootPath: String) =

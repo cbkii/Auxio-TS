@@ -289,7 +289,8 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             getString(R.string.set_key_filtered_locations),
             getString(R.string.set_key_exclude_non_music),
             getString(R.string.set_key_separators),
-            getString(R.string.set_key_auto_sort_names) -> {
+            getString(R.string.set_key_auto_sort_names),
+            KEY_TS18_SYSTEM_SOURCE_FILTER -> {
                 L.d("Dispatching indexing setting change for $key")
                 listener.onIndexingSettingChanged()
             }

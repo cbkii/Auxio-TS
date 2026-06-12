@@ -68,12 +68,14 @@ private constructor(
 
             // TS18/head-unit optimization: restrict to likely-audio directories.
             // SQLite LIKE is case-insensitive for ASCII, so only 3 clauses needed.
+            // Use substring matching (no slash boundaries) to align with
+            // TopwaySourcePolicy.matchesSystemSourceFilter Kotlin-side behaviour.
             if (query.useDefaultSystemFilter) {
                 selector +=
                     " AND (" +
-                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Music/%' OR " +
-                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Download/%' OR " +
-                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%/Media/%')"
+                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%music%' OR " +
+                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%download%' OR " +
+                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%media%')"
             }
 
             // Handle include/exclude directories

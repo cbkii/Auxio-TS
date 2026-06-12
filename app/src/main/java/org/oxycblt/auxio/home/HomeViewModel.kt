@@ -227,7 +227,7 @@ constructor(
         // Cancel any previous in-flight invalidation for this type to avoid stale
         // older jobs overwriting newer state (race-safe latest-wins semantics).
         invalidationJobs[type]?.cancel()
-        invalidationJobs[type] =
+        val job =
             viewModelScope.launch {
                 when (type) {
                     MusicType.SONGS -> {
@@ -253,6 +253,10 @@ constructor(
                     }
                 }
             }
+        invalidationJobs[type] = job
+        job.invokeOnCompletion {
+            if (invalidationJobs[type] === job) invalidationJobs.remove(type)
+        }
     }
 
     override fun invalidateTabs() {
