@@ -125,15 +125,21 @@ private class ExtractStepImpl(
                 for (item in parsed) {
                     val result =
                         when (item) {
-                            is Finalized -> item
+                            is Finalized -> {
+                                if (item.extracted is RawSong) {
+                                    exclude.add(item.extracted.toCachedFile())
+                                }
+                                item
+                            }
                             is NeedsCaching -> {
-                                cache.write(item.rawSong.toCachedFile())
+                                // Convert once and reuse for both the cache write and the
+                                // cleanup exclude list to avoid duplicate per-song allocations.
+                                val cachedFile = item.rawSong.toCachedFile()
+                                cache.write(cachedFile)
+                                exclude.add(cachedFile)
                                 Finalized(item.rawSong)
                             }
                         }
-                    if (result.extracted is RawSong) {
-                        exclude.add(result.extracted.toCachedFile())
-                    }
                     it.send(result.extracted)
                 }
                 cache.cleanup(exclude)
