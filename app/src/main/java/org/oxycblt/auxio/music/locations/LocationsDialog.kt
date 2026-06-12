@@ -551,10 +551,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 // File Picker mode - use secondary colors
                 setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
                 binding.locationsPermsDesc.setTextColor(
-                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
+                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                 )
                 binding.locationsPermsSubtitle.setTextColor(
-                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
+                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                 )
                 binding.locationsPermsOpen.imageTintList =
                     context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
@@ -564,23 +564,23 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 if (hasStoragePermission) {
                     // Has permission - use secondary colors
                     setCardBackgroundColor(
-                        context.getAttrColorCompat(MR.attr.colorSecondaryContainer),
+                        context.getAttrColorCompat(MR.attr.colorSecondaryContainer)
                     )
                     binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
+                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                     )
                     binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer),
+                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                     )
                     binding.locationsPermsOpen.imageTintList =
                         context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                 } else {
                     setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorErrorContainer))
                     binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer),
+                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
                     )
                     binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer),
+                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
                     )
                     binding.locationsPermsOpen.imageTintList =
                         context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
@@ -714,7 +714,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             val queryForUpdate = musicSettings.mediaStoreQuery
             musicSettings.mediaStoreQuery =
                 queryForUpdate.copy(
-                    excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
+                    excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked
                 )
         } else {
             // Check if MediaStore query changed
@@ -730,7 +730,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     mode = filterMode,
                     filtered = filterLocationAdapter.locations,
                     excludeNonMusic = currentMediaStoreQuery.excludeNonMusic, // Preserve non-music if we're in system mode
-                    useDefaultSystemFilter = binding.locationsExcludeNonMusicSwitch.isChecked,
+                    useDefaultSystemFilter = binding.locationsExcludeNonMusicSwitch.isChecked
                 )
 
             if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) {
