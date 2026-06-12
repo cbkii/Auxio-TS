@@ -206,6 +206,16 @@ jobs:
           if-no-files-found: warn
           retention-days: 20
 
+      - name: Upload PNG - playback shuffle genre landscape
+        id: upload_png_playback_shuffle_genre_landscape
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: auxio-ts-${{ inputs.variant }}-playback-page-shuffle-genre-landscape.png
+          path: app/build/outputs/roborazzi/playback-page-shuffle-genre-landscape.png
+          if-no-files-found: warn
+          retention-days: 20
+
       - name: Upload PNG - playback shuffle off portrait
         id: upload_png_playback_shuffle_off_portrait
         if: always()
@@ -260,6 +270,7 @@ jobs:
           MAIN_PORTRAIT_URL: ${{ steps.upload_png_main_launch_portrait.outputs.artifact-url }}
           PLAYBACK_OFF_LANDSCAPE_URL: ${{ steps.upload_png_playback_shuffle_off_landscape.outputs.artifact-url }}
           PLAYBACK_ON_LANDSCAPE_URL: ${{ steps.upload_png_playback_shuffle_on_landscape.outputs.artifact-url }}
+          PLAYBACK_GENRE_LANDSCAPE_URL: ${{ steps.upload_png_playback_shuffle_genre_landscape.outputs.artifact-url }}
           PLAYBACK_OFF_PORTRAIT_URL: ${{ steps.upload_png_playback_shuffle_off_portrait.outputs.artifact-url }}
           PLAYBACK_ON_PORTRAIT_URL: ${{ steps.upload_png_playback_shuffle_on_portrait.outputs.artifact-url }}
         run: |
@@ -290,6 +301,7 @@ jobs:
             printf '| `%s` | ' 'main-launch-portrait.png'; write_link "${MAIN_PORTRAIT_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-off-landscape.png'; write_link "${PLAYBACK_OFF_LANDSCAPE_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-on-landscape.png'; write_link "${PLAYBACK_ON_LANDSCAPE_URL}"; echo ' |'
+            printf '| `%s` | ' 'playback-page-shuffle-genre-landscape.png'; write_link "${PLAYBACK_GENRE_LANDSCAPE_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-off-portrait.png'; write_link "${PLAYBACK_OFF_PORTRAIT_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-on-portrait.png'; write_link "${PLAYBACK_ON_PORTRAIT_URL}"; echo ' |'
             echo
@@ -317,6 +329,7 @@ jobs:
           MAIN_PORTRAIT_URL: ${{ steps.upload_png_main_launch_portrait.outputs.artifact-url }}
           PLAYBACK_OFF_LANDSCAPE_URL: ${{ steps.upload_png_playback_shuffle_off_landscape.outputs.artifact-url }}
           PLAYBACK_ON_LANDSCAPE_URL: ${{ steps.upload_png_playback_shuffle_on_landscape.outputs.artifact-url }}
+          PLAYBACK_GENRE_LANDSCAPE_URL: ${{ steps.upload_png_playback_shuffle_genre_landscape.outputs.artifact-url }}
           PLAYBACK_OFF_PORTRAIT_URL: ${{ steps.upload_png_playback_shuffle_off_portrait.outputs.artifact-url }}
           PLAYBACK_ON_PORTRAIT_URL: ${{ steps.upload_png_playback_shuffle_on_portrait.outputs.artifact-url }}
         run: |
@@ -350,6 +363,7 @@ jobs:
             printf '| `%s` | ' 'main-launch-portrait.png'; write_link "${MAIN_PORTRAIT_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-off-landscape.png'; write_link "${PLAYBACK_OFF_LANDSCAPE_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-on-landscape.png'; write_link "${PLAYBACK_ON_LANDSCAPE_URL}"; echo ' |'
+            printf '| `%s` | ' 'playback-page-shuffle-genre-landscape.png'; write_link "${PLAYBACK_GENRE_LANDSCAPE_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-off-portrait.png'; write_link "${PLAYBACK_OFF_PORTRAIT_URL}"; echo ' |'
             printf '| `%s` | ' 'playback-page-shuffle-on-portrait.png'; write_link "${PLAYBACK_ON_PORTRAIT_URL}"; echo ' |'
             echo
