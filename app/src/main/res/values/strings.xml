@@ -273,8 +273,6 @@
     <string name="lbl_enabled">enabled</string>
     <string name="lbl_disabled">disabled</string>
 
-    <string name="msg_playback_play">Play</string>
-    <string name="msg_playback_pause">Pause</string>
     <string name="msg_playback_next">Next track</string>
     <string name="msg_playback_previous">Previous track</string>
     <string name="msg_playback_shuffle_on">Shuffle on</string>
