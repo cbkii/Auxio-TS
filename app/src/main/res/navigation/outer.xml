@@ -70,7 +70,7 @@
 
     <fragment
         android:id="@+id/storage_health_fragment"
-        android:name="org.oxycblt.auxio.music.storage.StorageHealthFragment"
+        android:name="org.oxycblt.auxio.music.storage.TS18HealthDiagnosticsFragment"
         android:label="storage_health_fragment" />
 
     <fragment

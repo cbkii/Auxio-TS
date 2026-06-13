@@ -42,10 +42,20 @@ object TopwaySourcePolicy {
      * TS18-specific removable USB candidate. Should only be used on Topway/TS18 builds and after
      * explicit validation.
      */
-    val TS18_USB_CANDIDATES = listOf(USB_DISK_0)
+    val TS18_USB_CANDIDATES: List<String>
+        get() {
+            val storage = File("/storage")
+            if (!storage.exists() || !storage.isDirectory) return listOf(USB_DISK_0)
+            val usbDisks =
+                storage.listFiles()?.filter { it.name.startsWith("usbdisk") }?.map {
+                    it.absolutePath
+                } ?: emptyList()
+            return usbDisks.ifEmpty { listOf(USB_DISK_0) }
+        }
 
     /** List of all candidate roots. */
-    val CANDIDATE_ROOTS = SAFE_GENERIC_FALLBACKS + TS18_USB_CANDIDATES
+    val CANDIDATE_ROOTS
+        get() = SAFE_GENERIC_FALLBACKS + TS18_USB_CANDIDATES
 
     /** Directories that are known to be noisy or irrelevant on TS18 and should be skipped. */
     val NOISY_DIRS =

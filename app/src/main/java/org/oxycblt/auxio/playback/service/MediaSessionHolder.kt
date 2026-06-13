@@ -482,11 +482,16 @@ private class PlaybackNotification(
     fun updateMetadata(metadata: MediaMetadataCompat) {
         L.d("Updating shown metadata")
         val albumArt = metadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
-        if (albumArt != null) {
+        if (albumArt != null && albumArt.width >= 128 && albumArt.height >= 128) {
             setLargeIcon(albumArt)
+        } else if (albumArt != null) {
+            // Small or unusually shaped artwork can crash the TS18 renderer.
+            // Re-wrap or fallback to safe empty bitmap.
+            L.w("Artwork too small (${albumArt.width}x${albumArt.height}), using safe fallback")
+            setLargeIcon(EMPTY_BITMAP)
         } else {
             // setLargeIcon(null) doesn't reliably clear the icon on all devices.
-            // Use a transparent 1x1 bitmap instead.
+            // Use a transparent safe-minimum bitmap instead.
             setLargeIcon(EMPTY_BITMAP)
         }
         setContentTitle(metadata.getString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE))
@@ -597,7 +602,13 @@ private class PlaybackNotification(
                 nameRes = R.string.lbl_playback,
             )
 
-        /** Cached 1x1 transparent bitmap. */
-        private val EMPTY_BITMAP: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        /**
+         * Cached transparent bitmap used when artwork is missing.
+         *
+         * On TS18 head units, a 1x1 bitmap can cause a RemoteServiceException during notification
+         * inflation if the renderer attempts to crop it with a larger region. 128x128 is used as a
+         * safe minimum that satisfies the renderer without excessive memory usage.
+         */
+        private val EMPTY_BITMAP: Bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
     }
 }

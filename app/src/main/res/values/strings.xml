@@ -153,6 +153,7 @@
     <string name="set_enter_path_manually">Enter path manually…</string>
     <string name="set_enter_path_hint">e.g. /storage/usbdisk0/Music</string>
     <string name="set_path_inaccessible">Path is not accessible or does not exist</string>
+    <string name="set_path_needs_correction">Path must not have trailing slashes or whitespace. Please correct it manually.</string>
     <string name="lbl_shuffle_shortcut_short">Shuffle</string>
     <!-- Limit to 25 characters -->
     <string name="lbl_shuffle_shortcut_long">Shuffle all</string>
@@ -328,8 +329,8 @@
     <string name="set_hide_collaborators">Hide collaborators</string>
     <string name="set_hide_collaborators_desc">Only show artists that are directly credited on an album (works best on well-tagged libraries)</string>
 
-    <string name="set_storage_health">Storage Health</string>
-    <string name="set_storage_health_desc">Check TS18 USB music storage</string>
+    <string name="set_storage_health">TS18 Health Diagnostics</string>
+    <string name="set_storage_health_desc">Run TS18 integration and storage diagnostics</string>
 
     <string name="set_images">Images</string>
     <string name="set_cover_mode">Album covers</string>

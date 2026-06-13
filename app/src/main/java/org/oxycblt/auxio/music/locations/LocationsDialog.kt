@@ -322,11 +322,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun showCandidatePathPicker(disableThirdParty: Boolean) {
         lifecycleScope.launch {
-            val candidates =
-                TopwaySourcePolicy.SAFE_GENERIC_FALLBACKS + TopwaySourcePolicy.TS18_USB_CANDIDATES
             val accessibleCandidates =
                 withContext(Dispatchers.IO) {
-                    candidates.filter { TopwaySourcePolicy.isAccessibleCandidate(it) }
+                    TopwaySourcePolicy.CANDIDATE_ROOTS.filter {
+                        TopwaySourcePolicy.isAccessibleCandidate(it)
+                    }
                 }
             val ctx =
                 context
@@ -400,11 +400,23 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setTitle(R.string.set_select_source)
             .setView(container)
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
-                val pathText = input.text?.toString()?.trim().orEmpty()
-                if (pathText.isEmpty()) {
+                val rawPath = input.text?.toString().orEmpty()
+                if (rawPath.isEmpty()) {
                     pendingLocationCallback = null
                     return@setPositiveButton
                 }
+
+                val currentContext = context ?: return@setPositiveButton
+
+                // Requirement: Do not silently trim or alter manual input.
+                // Require correction for whitespace or trailing slashes.
+                if (rawPath != rawPath.trim() || rawPath.endsWith("/") || rawPath.endsWith("\\")) {
+                    currentContext.showToast(R.string.set_path_needs_correction)
+                    pendingLocationCallback = null
+                    return@setPositiveButton
+                }
+
+                val pathText = rawPath
                 lifecycleScope.launch {
                     val accessible =
                         withContext(Dispatchers.IO) {
@@ -415,13 +427,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                                 false
                             }
                         }
-                    val currentContext = context
-                    if (currentContext == null) {
+                    val updatedContext = context
+                    if (updatedContext == null) {
                         pendingLocationCallback = null
                         return@launch
                     }
                     if (!accessible) {
-                        currentContext.showToast(R.string.set_path_inaccessible)
+                        updatedContext.showToast(R.string.set_path_inaccessible)
                         pendingLocationCallback = null
                         return@launch
                     }
