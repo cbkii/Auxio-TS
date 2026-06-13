@@ -197,38 +197,41 @@ private class HomeGeneratorImpl(
 
     override suspend fun songs() =
         withContext(Dispatchers.Default) {
+            val songSort = listSettings.songSort
             cachedOrCompute(
                 cachedSongs,
-                listSettings.songSort,
+                songSort,
                 null,
                 "songs",
-                { listSettings.songSort.songs(it.songs) },
+                { songSort.songs(it.songs) },
                 { cachedSongs = it },
             )
         }
 
     override suspend fun albums() =
         withContext(Dispatchers.Default) {
+            val albumSort = listSettings.albumSort
             cachedOrCompute(
                 cachedAlbums,
-                listSettings.albumSort,
+                albumSort,
                 null,
                 "albums",
-                { listSettings.albumSort.albums(it.albums) },
+                { albumSort.albums(it.albums) },
                 { cachedAlbums = it },
             )
         }
 
     override suspend fun artists() =
         withContext(Dispatchers.Default) {
+            val artistSort = listSettings.artistSort
             val hideCollaborators = homeSettings.shouldHideCollaborators
             cachedOrCompute(
                 cachedArtists,
-                listSettings.artistSort,
+                artistSort,
                 hideCollaborators,
                 "artists",
                 { library ->
-                    val sorted = listSettings.artistSort.artists(library.artists)
+                    val sorted = artistSort.artists(library.artists)
                     if (hideCollaborators) {
                         sorted.filter { it.explicitAlbums.isNotEmpty() }
                     } else {
@@ -241,24 +244,26 @@ private class HomeGeneratorImpl(
 
     override suspend fun genres() =
         withContext(Dispatchers.Default) {
+            val genreSort = listSettings.genreSort
             cachedOrCompute(
                 cachedGenres,
-                listSettings.genreSort,
+                genreSort,
                 null,
                 "genres",
-                { listSettings.genreSort.genres(it.genres) },
+                { genreSort.genres(it.genres) },
                 { cachedGenres = it },
             )
         }
 
     override suspend fun playlists() =
         withContext(Dispatchers.Default) {
+            val playlistSort = listSettings.playlistSort
             cachedOrCompute(
                 cachedPlaylists,
-                listSettings.playlistSort,
+                playlistSort,
                 null,
                 "playlists",
-                { listSettings.playlistSort.playlists(it.playlists) },
+                { playlistSort.playlists(it.playlists) },
                 { cachedPlaylists = it },
             )
         }

@@ -22,6 +22,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.joaomgcd.taskerpluginlibrary.action.TaskerPluginRunnerActionNoOutputOrInput
 import com.joaomgcd.taskerpluginlibrary.config.TaskerPluginConfig
@@ -33,6 +34,7 @@ import com.joaomgcd.taskerpluginlibrary.runner.TaskerPluginResultSucess
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
+import timber.log.Timber as L
 
 class StartActionHelper(config: TaskerPluginConfig<Unit>) :
     TaskerPluginConfigHelperNoOutputOrInput<StartActionRunner>(config) {
@@ -65,17 +67,28 @@ class StartActionRunner : TaskerPluginRunnerActionNoOutputOrInput() {
                 .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TASKER),
         )
 
-        // Wait for service to become foreground, with a timeout
-        val startTime = System.currentTimeMillis()
-        while (!AuxioService.isForeground && System.currentTimeMillis() - startTime < 5000) {
-            Thread.sleep(100)
+        // Wait for the service to become foreground, but never block Tasker indefinitely.
+        val startTime = SystemClock.elapsedRealtime()
+        while (
+            !AuxioService.isForeground &&
+                SystemClock.elapsedRealtime() - startTime < FOREGROUND_TIMEOUT_MS
+        ) {
+            Thread.sleep(FOREGROUND_POLL_INTERVAL_MS)
         }
 
         if (AuxioService.isForeground) {
             // Actually need to sleep even longer since for some reason the notification still
             // won't accept media button events for an arbitrary period.
-            Thread.sleep(100)
+            Thread.sleep(MEDIA_BUTTON_SETTLE_DELAY_MS)
+        } else {
+            L.w("Timed out waiting for AuxioService to enter foreground for Tasker start action")
         }
         return TaskerPluginResultSucess()
+    }
+
+    private companion object {
+        const val FOREGROUND_TIMEOUT_MS = 5000L
+        const val FOREGROUND_POLL_INTERVAL_MS = 100L
+        const val MEDIA_BUTTON_SETTLE_DELAY_MS = 100L
     }
 }
