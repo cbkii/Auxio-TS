@@ -322,12 +322,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun showCandidatePathPicker(disableThirdParty: Boolean) {
         lifecycleScope.launch {
-            val candidates =
-                TopwaySourcePolicy.SAFE_GENERIC_FALLBACKS + TopwaySourcePolicy.TS18_USB_CANDIDATES
             val accessibleCandidates =
-                withContext(Dispatchers.IO) {
-                    candidates.filter { TopwaySourcePolicy.isAccessibleCandidate(it) }
-                }
+                withContext(Dispatchers.IO) { TopwaySourcePolicy.discoverCandidateRoots() }
             val ctx =
                 context
                     ?: run {
@@ -400,8 +396,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setTitle(R.string.set_select_source)
             .setView(container)
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
-                val pathText = input.text?.toString()?.trim().orEmpty()
+                val pathText = input.text?.toString().orEmpty()
                 if (pathText.isEmpty()) {
+                    pendingLocationCallback = null
+                    return@setPositiveButton
+                }
+                if (pathText != pathText.trim()) {
+                    ctx.showToast(R.string.set_path_whitespace_invalid)
                     pendingLocationCallback = null
                     return@setPositiveButton
                 }

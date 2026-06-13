@@ -88,8 +88,31 @@ object TopwaySourcePolicy {
         }
     }
 
-    /** Returns the first accessible candidate root from the priority list. */
+    /**
+     * Discovers currently existing, readable source roots without recursively traversing them.
+     * Preserves each returned path exactly as discovered so UI selection can persist it unchanged.
+     */
+    fun discoverCandidateRoots(): List<String> {
+        val out = linkedSetOf<String>()
+        SAFE_GENERIC_FALLBACKS.filterTo(out) { isAccessibleCandidate(it) }
+        discoverChildren(File("/storage"), removableOnly = false).filterTo(out) { isAccessibleCandidate(it) }
+        discoverChildren(File("/mnt/media_rw"), removableOnly = true).filterTo(out) { isAccessibleCandidate(it) }
+        return out.toList()
+    }
+
+    private fun discoverChildren(root: File, removableOnly: Boolean): List<String> {
+        val children = try { root.listFiles() } catch (e: Exception) { null } ?: return emptyList()
+        return children.asSequence()
+            .filter { it.isDirectory }
+            .filter { !removableOnly || it.name.startsWith("usbdisk", ignoreCase = true) }
+            .filter { it.name != "self" && it.name != "emulated" }
+            .map { it.absolutePath }
+            .sortedWith(compareBy<String> { !it.substringAfterLast('/').startsWith("usbdisk", true) }.thenBy { it })
+            .toList()
+    }
+
+    /** Returns the first accessible candidate root from dynamic discovery. */
     fun findFirstAccessibleCandidate(): String? {
-        return CANDIDATE_ROOTS.firstOrNull { isAccessibleCandidate(it) }
+        return discoverCandidateRoots().firstOrNull()
     }
 }

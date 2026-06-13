@@ -39,11 +39,18 @@ sealed class Location(val uri: Uri, val path: Path) {
             }
             if (isUnopened(context, uri)) {
                 try {
-                    context.contentResolverSafe.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                    )
+                    try {
+                        context.contentResolverSafe.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    } catch (readOnlyFailure: Exception) {
+                        context.contentResolverSafe.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                        )
+                    }
                 } catch (e: Exception) {
                     // Not fully sure what happens if I'm disallowed to take the permission,
                     // check for both circumstances (error or no-op)
@@ -60,7 +67,7 @@ sealed class Location(val uri: Uri, val path: Path) {
         private fun isUnopened(context: Context, uri: Uri) =
             uri.scheme != "file" &&
                 context.contentResolverSafe.persistedUriPermissions.none {
-                    it.uri == uri && it.isReadPermission && it.isWritePermission
+                    it.uri == uri && it.isReadPermission
                 }
 
         companion object {

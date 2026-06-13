@@ -21,7 +21,6 @@ package org.oxycblt.auxio.playback.service
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
@@ -53,6 +52,7 @@ import org.oxycblt.auxio.util.newBroadcastPendingIntent
 import org.oxycblt.auxio.util.newNowPlayingPendingIntent
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
+import org.oxycblt.auxio.util.NotificationBitmapSafety
 import timber.log.Timber as L
 
 /**
@@ -481,17 +481,27 @@ private class PlaybackNotification(
      */
     fun updateMetadata(metadata: MediaMetadataCompat) {
         L.d("Updating shown metadata")
-        val albumArt = metadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
+        val albumArt = NotificationBitmapSafety.sanitize(
+            metadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
+        )
         if (albumArt != null) {
             setLargeIcon(albumArt)
         } else {
-            // setLargeIcon(null) doesn't reliably clear the icon on all devices.
-            // Use a transparent 1x1 bitmap instead.
-            setLargeIcon(EMPTY_BITMAP)
+            // TS18/DoFun SystemUI crashes when it crops Auxio's previous 1x1 transparent
+            // placeholder. Use a bounded, RemoteViews-safe canvas instead of a tiny bitmap.
+            setLargeIcon(NotificationBitmapSafety.fallbackBitmap())
         }
-        setContentTitle(metadata.getString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE))
-        setContentText(metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE))
-        setSubText(metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION))
+        setContentTitle(
+            metadata.getString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE)
+                ?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.app_name)
+        )
+        setContentText(
+            metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE)
+                ?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.lbl_unknown)
+        )
+        setSubText(metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION)?.takeIf { it.isNotBlank() })
     }
 
     /**
@@ -597,7 +607,5 @@ private class PlaybackNotification(
                 nameRes = R.string.lbl_playback,
             )
 
-        /** Cached 1x1 transparent bitmap. */
-        private val EMPTY_BITMAP: Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
     }
 }
