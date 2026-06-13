@@ -47,9 +47,10 @@ object TopwaySourcePolicy {
             val storage = File("/storage")
             if (!storage.exists() || !storage.isDirectory) return listOf(USB_DISK_0)
             val usbDisks =
-                storage.listFiles()?.filter { it.name.startsWith("usbdisk") }?.map {
-                    it.absolutePath
-                } ?: emptyList()
+                storage
+                    .listFiles()
+                    ?.filter { it.name.startsWith("usbdisk") }
+                    ?.map { it.absolutePath } ?: emptyList()
             return usbDisks.ifEmpty { listOf(USB_DISK_0) }
         }
 

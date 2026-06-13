@@ -50,10 +50,15 @@ class TS18HealthDiagnosticsFragment : Fragment() {
         savedInstanceState: Bundle?,
     ): View {
         val context = requireContext()
-        val root = ScrollView(context).apply {
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            isFillViewport = true
-        }
+        val root =
+            ScrollView(context).apply {
+                layoutParams =
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                isFillViewport = true
+            }
 
         val view =
             LinearLayout(context).apply {
@@ -88,9 +93,7 @@ class TS18HealthDiagnosticsFragment : Fragment() {
         view.addView(noisyPathsContainer)
         this.noisyPathsContainer = noisyPathsContainer
 
-        val buttonContainer = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
+        val buttonContainer = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         view.addView(buttonContainer)
 
         val exportButton =
@@ -101,10 +104,11 @@ class TS18HealthDiagnosticsFragment : Fragment() {
         buttonContainer.addView(exportButton)
         this.exportButton = exportButton
 
-        val saveButton = Button(context).apply {
-            text = "Save to file"
-            visibility = View.GONE
-        }
+        val saveButton =
+            Button(context).apply {
+                text = "Save to file"
+                visibility = View.GONE
+            }
         buttonContainer.addView(saveButton)
         this.saveButton = saveButton
 
@@ -124,9 +128,7 @@ class TS18HealthDiagnosticsFragment : Fragment() {
             }
         }
 
-        saveButton.setOnClickListener {
-            showSaveDestinationPicker()
-        }
+        saveButton.setOnClickListener { showSaveDestinationPicker() }
 
         return root
     }

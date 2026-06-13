@@ -21,7 +21,6 @@ package org.oxycblt.auxio.music.storage
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.provider.MediaStore
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.ViewModel
@@ -44,12 +43,13 @@ import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.musikr.fs.Location
-import org.oxycblt.musikr.fs.StoragePathAliasPolicy
 
 @HiltViewModel
-class TS18HealthDiagnosticsViewModel @Inject constructor(
+class TS18HealthDiagnosticsViewModel
+@Inject
+constructor(
     private val musicSettings: MusicSettings,
-    private val playbackManager: PlaybackStateManager
+    private val playbackManager: PlaybackStateManager,
 ) : ViewModel() {
 
     private val _reportState = MutableStateFlow<String?>(null)
@@ -103,18 +103,19 @@ class TS18HealthDiagnosticsViewModel @Inject constructor(
     fun saveReportToFile(context: Context, dest: File) {
         val report = _reportState.value ?: return
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
-                val filename = "Auxio-TS-health-$timestamp.txt"
+            val result =
+                withContext(Dispatchers.IO) {
+                    val timestamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+                    val filename = "Auxio-TS-health-$timestamp.txt"
 
-                val file = File(dest, filename)
-                try {
-                    file.writeText(report)
-                    "Report saved to: ${file.absolutePath}"
-                } catch (e: Exception) {
-                    "Failed to save report: ${e.message}"
+                    val file = File(dest, filename)
+                    try {
+                        file.writeText(report)
+                        "Report saved to: ${file.absolutePath}"
+                    } catch (e: Exception) {
+                        "Failed to save report: ${e.message}"
+                    }
                 }
-            }
             _saveResult.value = result
         }
     }
@@ -145,17 +146,23 @@ class TS18HealthDiagnosticsViewModel @Inject constructor(
         sb.append("Fingerprint: ${android.os.Build.FINGERPRINT}\n")
 
         val displayMetrics = context.resources.displayMetrics
-        sb.append("Display: ${displayMetrics.widthPixels}x${displayMetrics.heightPixels} (${displayMetrics.densityDpi}dpi)\n")
+        sb.append(
+            "Display: ${displayMetrics.widthPixels}x${displayMetrics.heightPixels} (${displayMetrics.densityDpi}dpi)\n"
+        )
 
         if (android.os.Build.VERSION.RELEASE == "13" && android.os.Build.VERSION.SDK_INT == 29) {
-            sb.append("Mismatch detected: Firmware reports Android 13 but SDK is 29 (Android 10).\n")
+            sb.append(
+                "Mismatch detected: Firmware reports Android 13 but SDK is 29 (Android 10).\n"
+            )
         }
         sb.append("\n")
     }
 
     private fun appendRuntimeInfo(sb: StringBuilder, context: Context) {
         sb.append("--- Auxio Runtime ---\n")
-        sb.append("Playback State: ${if (playbackManager.progression.isPlaying) "Playing" else "Paused/Stopped"}\n")
+        sb.append(
+            "Playback State: ${if (playbackManager.progression.isPlaying) "Playing" else "Paused/Stopped"}\n"
+        )
         sb.append("Current Song: ${playbackManager.currentSong?.name ?: "None"}\n")
 
         val nm = NotificationManagerCompat.from(context)
@@ -164,7 +171,9 @@ class TS18HealthDiagnosticsViewModel @Inject constructor(
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             sb.append("Channels:\n")
             nm.notificationChannels.forEach { channel ->
-                sb.append("  - ${channel.id}: importance=${channel.importance}, enabled=${channel.importance != NotificationManagerCompat.IMPORTANCE_NONE}\n")
+                sb.append(
+                    "  - ${channel.id}: importance=${channel.importance}, enabled=${channel.importance != NotificationManagerCompat.IMPORTANCE_NONE}\n"
+                )
             }
         }
 
@@ -218,7 +227,9 @@ class TS18HealthDiagnosticsViewModel @Inject constructor(
         val storage = File("/storage")
         if (storage.exists() && storage.isDirectory) {
             storage.listFiles()?.forEach { file ->
-                sb.append("  - ${file.absolutePath}: exists=${file.exists()}, readable=${file.canRead()}, listable=${file.list() != null}\n")
+                sb.append(
+                    "  - ${file.absolutePath}: exists=${file.exists()}, readable=${file.canRead()}, listable=${file.list() != null}\n"
+                )
             }
         }
 
@@ -259,7 +270,9 @@ class TS18HealthDiagnosticsViewModel @Inject constructor(
 
     private fun findNoisyPaths(): List<String> {
         val candidates = mutableListOf<String>()
-        val baseRoots = listOf(File("/storage/emulated/0")) + TopwaySourcePolicy.TS18_USB_CANDIDATES.map { File(it) }
+        val baseRoots =
+            listOf(File("/storage/emulated/0")) +
+                TopwaySourcePolicy.TS18_USB_CANDIDATES.map { File(it) }
 
         for (root in baseRoots) {
             if (root.exists() && root.isDirectory) {
