@@ -718,7 +718,9 @@ class ExoPlaybackStateHolder(
         if (timeline.isEmpty) {
             return emptyList()
         }
-        val queue = mutableListOf<Int>()
+        // Use a deque: prepending to an ArrayList in the loop below would shift the whole
+        // backing array each time, going quadratic on long shuffled queues.
+        val queue = ArrayDeque<Int>()
 
         // Add the active queue item.
         val currentMediaItemIndex = currentMediaItemIndex
@@ -750,7 +752,7 @@ class ExoPlaybackStateHolder(
                         shuffleModeEnabled,
                     )
                 if (firstMediaItemIndex != C.INDEX_UNSET) {
-                    queue.add(0, firstMediaItemIndex)
+                    queue.addFirst(firstMediaItemIndex)
                 }
             }
         }

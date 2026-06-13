@@ -99,6 +99,7 @@ class MainFragment :
     private var normalCornerSize = 0f
     private var maxScaleXDistance = 0f
     private var sheetRising: Boolean? = null
+    private var lastStretchRatio = -1f
     @Inject lateinit var uiSettings: UISettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -183,6 +184,9 @@ class MainFragment :
         }
 
         normalCornerSize = playbackSheetBehavior.sheetBackgroundDrawable.topLeftCornerResolvedSize
+        // The sheet background drawables were just recreated; force the next onPreDraw pass to
+        // re-apply corner sizes regardless of the previous ratio.
+        lastStretchRatio = -1f
         maxScaleXDistance =
             context.getDimen(MR.dimen.m3_back_progress_bottom_container_max_scale_x_distance)
 
@@ -347,9 +351,18 @@ class MainFragment :
         val playbackLastStretchRatio = min(playbackEdgeRatio * playbackBackRatio, 1f)
         binding.mainSheetScrim.alpha = playbackLastStretchRatio
 
-        playbackSheetBehavior.sheetBackgroundDrawable.setCornerSize(
-            normalCornerSize * (1 - playbackLastStretchRatio)
-        )
+        // Mutating the sheet background shape invalidates the drawable; only do it when the
+        // ratio actually changed so idle frames don't redraw the sheet background every vsync
+        // on weak head-unit GPUs. Exact equality is intentional: idle frames recompute the
+        // ratio from identical inputs, yielding a bit-identical value, while any real sheet
+        // movement must always be applied.
+        val stretchChanged = playbackLastStretchRatio != lastStretchRatio
+        if (stretchChanged) {
+            lastStretchRatio = playbackLastStretchRatio
+            playbackSheetBehavior.sheetBackgroundDrawable.setCornerSize(
+                normalCornerSize * (1 - playbackLastStretchRatio)
+            )
+        }
         binding.exploreNavHost.isInvisible = playbackLastStretchRatio == 1f
         binding.playbackSheet.translationZ = (1 - playbackLastStretchRatio) * elevationNormal
 
@@ -385,11 +398,13 @@ class MainFragment :
             // No queue sheet, fade normally based on the playback sheet
             binding.playbackBarFragment.alpha = playbackOutRatio
             binding.playbackPanelFragment.alpha = playbackInRatio
-            (binding.queueSheet.background as MaterialShapeDrawable).shapeAppearanceModel =
-                ShapeAppearanceModel.builder()
-                    .setTopLeftCornerSize(normalCornerSize)
-                    .setTopRightCornerSize(normalCornerSize * (1 - playbackLastStretchRatio))
-                    .build()
+            if (stretchChanged) {
+                (binding.queueSheet.background as? MaterialShapeDrawable)?.shapeAppearanceModel =
+                    ShapeAppearanceModel.builder()
+                        .setTopLeftCornerSize(normalCornerSize)
+                        .setTopRightCornerSize(normalCornerSize * (1 - playbackLastStretchRatio))
+                        .build()
+            }
         }
         // Fade out the playback bar as the panel expands.
         binding.playbackBarFragment.apply {

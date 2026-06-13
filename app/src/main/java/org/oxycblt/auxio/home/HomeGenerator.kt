@@ -24,11 +24,13 @@ import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
+import org.oxycblt.musikr.Library
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
@@ -152,70 +154,118 @@ private class HomeGeneratorImpl(
 
     override fun empty() = musicRepository.library?.empty() ?: true
 
+    /**
+     * A sorted list snapshot tied to the exact library instance, [Sort], and any extra setting that
+     * influenced it. Re-sorting a large library is expensive on weak head-unit CPUs, and both the
+     * home UI and MediaBrowser browse requests hit these methods repeatedly, so cache the result
+     * and recompute only when an input actually changes.
+     */
+    private data class CachedList<T>(
+        val library: Library,
+        val sort: Sort,
+        val extra: Any?,
+        val items: List<T>,
+    )
+
+    @Volatile private var cachedSongs: CachedList<Song>? = null
+    @Volatile private var cachedAlbums: CachedList<Album>? = null
+    @Volatile private var cachedArtists: CachedList<Artist>? = null
+    @Volatile private var cachedGenres: CachedList<Genre>? = null
+    @Volatile private var cachedPlaylists: CachedList<Playlist>? = null
+
+    private inline fun <T> cachedOrCompute(
+        cached: CachedList<T>?,
+        sort: Sort,
+        extra: Any?,
+        label: String,
+        compute: (Library) -> List<T>,
+        store: (CachedList<T>) -> Unit,
+    ): List<T> {
+        val library = musicRepository.library ?: return emptyList()
+        val hit = cached
+        if (hit != null && hit.library === library && hit.sort == sort && hit.extra == extra) {
+            return hit.items
+        }
+        val start = System.currentTimeMillis()
+        val result = compute(library)
+        L.d(
+            "HomeGenerator.$label() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms"
+        )
+        store(CachedList(library, sort, extra, result))
+        return result
+    }
+
     override suspend fun songs() =
         withContext(Dispatchers.Default) {
-            val start = System.currentTimeMillis()
-            val result =
-                musicRepository.library?.let { listSettings.songSort.songs(it.songs) }
-                    ?: emptyList()
-            L.d(
-                "HomeGenerator.songs() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms"
+            val songSort = listSettings.songSort
+            cachedOrCompute(
+                cachedSongs,
+                songSort,
+                null,
+                "songs",
+                { songSort.songs(it.songs) },
+                { cachedSongs = it },
             )
-            result
         }
 
     override suspend fun albums() =
         withContext(Dispatchers.Default) {
-            val start = System.currentTimeMillis()
-            val result =
-                musicRepository.library?.let { listSettings.albumSort.albums(it.albums) }
-                    ?: emptyList()
-            L.d(
-                "HomeGenerator.albums() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms"
+            val albumSort = listSettings.albumSort
+            cachedOrCompute(
+                cachedAlbums,
+                albumSort,
+                null,
+                "albums",
+                { albumSort.albums(it.albums) },
+                { cachedAlbums = it },
             )
-            result
         }
 
     override suspend fun artists() =
         withContext(Dispatchers.Default) {
-            val start = System.currentTimeMillis()
-            val result =
-                musicRepository.library?.let { deviceLibrary ->
-                    val sorted = listSettings.artistSort.artists(deviceLibrary.artists)
-                    if (homeSettings.shouldHideCollaborators) {
+            val artistSort = listSettings.artistSort
+            val hideCollaborators = homeSettings.shouldHideCollaborators
+            cachedOrCompute(
+                cachedArtists,
+                artistSort,
+                hideCollaborators,
+                "artists",
+                { library ->
+                    val sorted = artistSort.artists(library.artists)
+                    if (hideCollaborators) {
                         sorted.filter { it.explicitAlbums.isNotEmpty() }
                     } else {
                         sorted
                     }
-                } ?: emptyList()
-            L.d(
-                "HomeGenerator.artists() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms"
+                },
+                { cachedArtists = it },
             )
-            result
         }
 
     override suspend fun genres() =
         withContext(Dispatchers.Default) {
-            val start = System.currentTimeMillis()
-            val result =
-                musicRepository.library?.let { listSettings.genreSort.genres(it.genres) }
-                    ?: emptyList()
-            L.d(
-                "HomeGenerator.genres() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms"
+            val genreSort = listSettings.genreSort
+            cachedOrCompute(
+                cachedGenres,
+                genreSort,
+                null,
+                "genres",
+                { genreSort.genres(it.genres) },
+                { cachedGenres = it },
             )
-            result
         }
 
     override suspend fun playlists() =
         withContext(Dispatchers.Default) {
-            val start = System.currentTimeMillis()
-            val result =
-                musicRepository.library?.let { listSettings.playlistSort.playlists(it.playlists) }
-                    ?: emptyList()
-            L.d(
-                "HomeGenerator.playlists() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms"
+            val playlistSort = listSettings.playlistSort
+            cachedOrCompute(
+                cachedPlaylists,
+                playlistSort,
+                null,
+                "playlists",
+                { playlistSort.playlists(it.playlists) },
+                { cachedPlaylists = it },
             )
-            result
         }
 
     override fun tabs() = homeSettings.homeTabs.filterIsInstance<Tab.Visible>().map { it.type }

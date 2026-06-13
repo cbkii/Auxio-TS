@@ -74,13 +74,23 @@ constructor(
      * full decade list regardless of any active [decadeFilter].
      */
     private var _allSongs: List<Song> = emptyList()
+        set(value) {
+            field = value
+            // Invalidate the derived year list so allSongYears recomputes lazily.
+            _cachedSongYears = null
+        }
+
+    private var _cachedSongYears: List<Int>? = null
 
     /**
      * All valid release years in the unfiltered library, for computing available decade chips. This
-     * is always derived from the full library, independent of [decadeFilter].
+     * is always derived from the full library, independent of [decadeFilter]. Cached because it is
+     * read on every home header rebind and deriving it walks the entire library.
      */
     val allSongYears: List<Int>
-        get() = _allSongs.mapNotNull { it.album.dates?.min?.year }
+        get() =
+            _cachedSongYears
+                ?: _allSongs.mapNotNull { it.album.dates?.min?.year }.also { _cachedSongYears = it }
 
     /** `true` if the library has at least one song, independent of any active [decadeFilter]. */
     val hasAnySongs: Boolean

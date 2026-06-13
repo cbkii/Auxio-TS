@@ -82,12 +82,14 @@ object TopwayWidgetProviderPolicy {
         hasAnyWidgetInstances: Boolean,
     ): Boolean = topwayCompatFlavor || hasAnyWidgetInstances
 
+    private val standardClassNames: List<String> by
+        lazy(LazyThreadSafetyMode.PUBLICATION) { listOf(WidgetProvider::class.java.name) }
+
+    private val topwayCompatClassNames: List<String> by
+        lazy(LazyThreadSafetyMode.PUBLICATION) {
+            listOf(WidgetProvider::class.java.name, STOCK_WIDGET_PROVIDER_CLASS)
+        }
+
     internal fun providerClassNames(topwayCompatFlavor: Boolean): List<String> =
-        buildList {
-                add(WidgetProvider::class.java.name)
-                if (topwayCompatFlavor) {
-                    add(STOCK_WIDGET_PROVIDER_CLASS)
-                }
-            }
-            .distinct()
+        if (topwayCompatFlavor) topwayCompatClassNames else standardClassNames
 }

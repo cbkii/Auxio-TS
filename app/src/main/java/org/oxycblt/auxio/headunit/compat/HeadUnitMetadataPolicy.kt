@@ -50,10 +50,17 @@ object HeadUnitMetadataPolicy {
         val safeAlbumArtist = albumArtist?.trim().orEmpty()
         val safeAlbum = albumTitle?.trim().orEmpty()
         val subtitle =
-            listOf(safeArtist, safeAlbumArtist)
-                .filter { it.isNotBlank() }
-                .distinct()
-                .joinToString(" • ")
+            if (safeArtist.isNotBlank()) {
+                if (safeAlbumArtist.isNotBlank() && safeArtist != safeAlbumArtist) {
+                    "$safeArtist • $safeAlbumArtist"
+                } else {
+                    safeArtist
+                }
+            } else if (safeAlbumArtist.isNotBlank()) {
+                safeAlbumArtist
+            } else {
+                ""
+            }
         val description = if (safeAlbum.isNotBlank()) safeAlbum else subtitle
         return HeadUnitMetadataSnapshot(
             displayTitle = safeTitle,
