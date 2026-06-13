@@ -24,6 +24,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.view.LayoutInflater
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -298,7 +299,16 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         try {
             launcher.launch(null)
         } catch (e: ActivityNotFoundException) {
-            L.w("SAF tree picker activity not found; showing fallback sources.")
+            L.w(e, "SAF tree picker activity not found; showing fallback sources.")
+            showPickerUnavailableFallback(disableThirdParty)
+        } catch (e: SecurityException) {
+            L.w(e, "SAF tree picker launch denied; showing fallback sources.")
+            showPickerUnavailableFallback(disableThirdParty)
+        } catch (e: IllegalStateException) {
+            L.w(e, "SAF tree picker launcher unavailable; showing fallback sources.")
+            showPickerUnavailableFallback(disableThirdParty)
+        } catch (e: RuntimeException) {
+            L.w(e, "SAF tree picker failed; showing fallback sources.")
             showPickerUnavailableFallback(disableThirdParty)
         }
     }
@@ -449,6 +459,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     pendingLocationCallback = null
                     return
                 }
+        if (uri.scheme != "file" && !DocumentsContract.isTreeUri(uri)) {
+            L.w("SAF picker returned a non-tree URI: $uri")
+            ctx.showToast(R.string.err_bad_location)
+            pendingLocationCallback = null
+            return
+        }
         val location = Location.Unopened.from(ctx, uri)
 
         if (location.path.volume is Volume.ThirdParty && disableThirdParty) {
@@ -462,9 +478,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun addIncludeLocation(location: Location.Unopened) {
         val ctx = context ?: return
-        location.open(ctx)?.let { opened ->
+        val opened = location.open(ctx)
+        if (opened != null) {
             includeLocationAdapter.add(opened)
             updateSaveButtonState()
+        } else {
+            ctx.showToast(R.string.err_bad_location)
         }
     }
 

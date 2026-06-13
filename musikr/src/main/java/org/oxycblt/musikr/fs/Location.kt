@@ -42,13 +42,13 @@ sealed class Location(val uri: Uri, val path: Path) {
                     try {
                         context.contentResolverSafe.takePersistableUriPermission(
                             uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                        )
-                    } catch (readOnlyFailure: Exception) {
-                        context.contentResolverSafe.takePersistableUriPermission(
-                            uri,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION or
                                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                        )
+                    } catch (writeFailure: Exception) {
+                        context.contentResolverSafe.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
                         )
                     }
                 } catch (e: Exception) {

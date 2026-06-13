@@ -21,7 +21,9 @@ package org.oxycblt.auxio.music.storage
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -30,6 +32,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
@@ -50,13 +53,19 @@ import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
+import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.StoragePathAliasPolicy
+import timber.log.Timber as L
 
 @HiltViewModel
-class StorageHealthViewModel @Inject constructor(private val musicSettings: MusicSettings) :
-    ViewModel() {
+class StorageHealthViewModel
+@Inject
+constructor(
+    private val musicSettings: MusicSettings,
+    private val playbackManager: PlaybackStateManager,
+) : ViewModel() {
 
     private val _reportState = MutableStateFlow<String?>(null)
     val reportState: StateFlow<String?> = _reportState.asStateFlow()
@@ -93,6 +102,7 @@ class StorageHealthViewModel @Inject constructor(private val musicSettings: Musi
             out.writeText(report, Charsets.UTF_8)
             out
         } catch (e: Exception) {
+            L.w(e, "Failed to save TS18 health report to ${destination.absolutePath}")
             null
         }
     }
@@ -122,7 +132,10 @@ class StorageHealthViewModel @Inject constructor(private val musicSettings: Musi
                 sb.append("Channel: ${ch.id} importance=${ch.importance} name=${ch.name}\n")
             }
         }
+        sb.append("Playback state: ${if (playbackManager.progression.isPlaying) "Playing" else "Paused/stopped"}\n")
+        sb.append("Current song: ${playbackManager.currentSong?.name ?: "None"}\n")
         sb.append("Foreground service active: ${org.oxycblt.auxio.AuxioService.isForeground}\n")
+        sb.append("Overlay permission: ${Settings.canDrawOverlays(context)}\n")
         sb.append("Safe TS18 notification bitmap policy: active; fallback=${org.oxycblt.auxio.util.NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX}px, min=${org.oxycblt.auxio.util.NotificationBitmapSafety.MIN_ICON_SIZE_PX}px\n")
         sb.append("Privileged SystemUI/DoFun/kernel logs: Unavailable without privileged/system access\n\n")
 
@@ -193,14 +206,22 @@ class StorageHealthViewModel @Inject constructor(private val musicSettings: Musi
     fun discoverWritableDestinations(context: Context): List<File> {
         val out = linkedSetOf<File>()
         context.getExternalFilesDir(null)?.let { if (ensureWritable(it)) out += it }
-        listOf("Download", "Downloads", "Documents").map { File("/storage/emulated/0", it) }.filterTo(out) { ensureWritable(it) }
+        listOf(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            )
+            .filterTo(out) { ensureWritable(it) }
         TopwaySourcePolicy.discoverCandidateRoots().map(::File).filterTo(out) { ensureWritable(it) }
         return out.toList()
     }
 
-    private fun ensureWritable(file: File): Boolean = try {
-        (file.exists() || file.mkdirs()) && file.isDirectory && file.canWrite()
-    } catch (e: Exception) { false }
+    private fun ensureWritable(file: File): Boolean =
+        try {
+            (file.exists() || file.mkdirs()) && file.isDirectory && file.canWrite()
+        } catch (e: Exception) {
+            L.w(e, "Destination is not writable: ${file.absolutePath}")
+            false
+        }
 
     private fun findNoisyPaths(baseRootPaths: List<String> = TopwaySourcePolicy.discoverCandidateRoots()): List<String> {
         val candidates = mutableListOf<String>()
@@ -249,7 +270,7 @@ class StorageHealthFragment : Fragment() {
 
         val explanationText =
             TextView(context).apply {
-                text = "Run a one-time check of storage, source filters, and exclusions."
+                text = "Run a comprehensive on-demand TS18 health and integration diagnostics check."
                 textSize = 16f
                 setPadding(0, 0, 0, 32)
             }
@@ -317,8 +338,18 @@ class StorageHealthFragment : Fragment() {
                     AlertDialog.Builder(context)
                         .setTitle("Save TS18 health report")
                         .setItems(destinations.map { it.absolutePath }.toTypedArray()) { _, which ->
-                            val saved = viewModel.saveReport(context, destinations[which], report)
-                            Toast.makeText(context, saved?.let { "Saved: ${it.absolutePath}" } ?: "Save failed", Toast.LENGTH_LONG).show()
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                val saved =
+                                    withContext(Dispatchers.IO) {
+                                        viewModel.saveReport(context, destinations[which], report)
+                                    }
+                                Toast.makeText(
+                                        context,
+                                        saved?.let { "Saved: ${it.absolutePath}" } ?: "Save failed",
+                                        Toast.LENGTH_LONG,
+                                    )
+                                    .show()
+                            }
                         }
                         .show()
                 }

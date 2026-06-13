@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.headunit.topway
 
 import java.io.File
+import timber.log.Timber as L
 
 /** Policy for identifying and prioritizing TS18-specific candidate music source roots. */
 object TopwaySourcePolicy {
@@ -92,22 +93,41 @@ object TopwaySourcePolicy {
      * Discovers currently existing, readable source roots without recursively traversing them.
      * Preserves each returned path exactly as discovered so UI selection can persist it unchanged.
      */
-    fun discoverCandidateRoots(): List<String> {
+    fun discoverCandidateRoots(): List<String> =
+        discoverCandidateRoots(File("/storage"), File("/mnt/media_rw"), includeGenericFallbacks = true)
+
+    internal fun discoverCandidateRoots(
+        storageRoot: File,
+        mediaRwRoot: File,
+        includeGenericFallbacks: Boolean = false,
+    ): List<String> {
         val out = linkedSetOf<String>()
-        SAFE_GENERIC_FALLBACKS.filterTo(out) { isAccessibleCandidate(it) }
-        discoverChildren(File("/storage"), removableOnly = false).filterTo(out) { isAccessibleCandidate(it) }
-        discoverChildren(File("/mnt/media_rw"), removableOnly = true).filterTo(out) { isAccessibleCandidate(it) }
+        if (includeGenericFallbacks) {
+            SAFE_GENERIC_FALLBACKS.filterTo(out) { isAccessibleCandidate(it) }
+        }
+        discoverChildren(storageRoot, removableOnly = false).filterTo(out) { isAccessibleCandidate(it) }
+        discoverChildren(mediaRwRoot, removableOnly = true).filterTo(out) { isAccessibleCandidate(it) }
         return out.toList()
     }
 
     private fun discoverChildren(root: File, removableOnly: Boolean): List<String> {
-        val children = try { root.listFiles() } catch (e: Exception) { null } ?: return emptyList()
-        return children.asSequence()
+        val children =
+            try {
+                root.listFiles()
+            } catch (e: Exception) {
+                L.w(e, "Failed to list candidate roots under ${root.absolutePath}")
+                null
+            } ?: return emptyList()
+        return children
+            .asSequence()
             .filter { it.isDirectory }
             .filter { !removableOnly || it.name.startsWith("usbdisk", ignoreCase = true) }
             .filter { it.name != "self" && it.name != "emulated" }
+            .sortedWith(
+                compareBy<File> { !it.name.startsWith("usbdisk", ignoreCase = true) }
+                    .thenBy { it.absolutePath }
+            )
             .map { it.absolutePath }
-            .sortedWith(compareBy<String> { !it.substringAfterLast('/').startsWith("usbdisk", true) }.thenBy { it })
             .toList()
     }
 
