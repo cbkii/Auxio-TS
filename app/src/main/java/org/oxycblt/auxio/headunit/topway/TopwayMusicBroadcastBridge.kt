@@ -49,7 +49,7 @@ class TopwayMusicBroadcastBridge(
         journal?.log(
             DiagnosticJournal.CAT_TOPWAY_BROADCAST,
             "Metadata",
-            "Title: ${snapshot.title}, Artist: ${snapshot.artist}"
+            "Title: ${snapshot.displayTitle}, Artist: ${snapshot.artist}",
         )
         lastMetadata = snapshot
     }
@@ -109,6 +109,31 @@ class TopwayMusicBroadcastBridge(
             lastProgress = TopwayProgressStatePolicy.CLEAR
             lastProgressAtMs = nowMs
         }
+    }
+
+    fun publishMarker(label: String) {
+        if (!bridgeEnabled) return
+        val marker =
+            HeadUnitMetadataSnapshot(
+                displayTitle = "DIAGNOSTIC MARKER",
+                displaySubtitle = label,
+                artist = label,
+                albumArtist = "Auxio-TS",
+                albumTitle = "Health Check",
+                displayDescription = "TS18 Diagnostic Marker",
+                durationMs = 0,
+                mediaId = "marker",
+                mediaUri = "",
+                artworkUri = null,
+                hasArtwork = false,
+            )
+        context.sendBroadcast(TopwayMusicIntentFactory.metadataIntent(marker))
+        journal?.log(DiagnosticJournal.CAT_TOPWAY_BROADCAST, "Marker Published", label)
+    }
+
+    fun restore(snapshot: HeadUnitMetadataSnapshot?) {
+        lastMetadata = null // Force re-publish
+        publishMetadata(snapshot)
     }
 
     private companion object {

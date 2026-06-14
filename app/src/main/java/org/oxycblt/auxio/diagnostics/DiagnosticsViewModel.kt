@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.diagnostics
 
 import android.content.Context
+import android.content.Intent
 import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -50,6 +51,7 @@ class DiagnosticsViewModel @Inject constructor(
     private val repository: DiagnosticsRepository,
     private val journal: DiagnosticJournal,
     private val musicSettings: MusicSettings,
+    private val diagSettings: DiagnosticsSettings,
     private val reportGenerator: DiagnosticReportGenerator
 ) : ViewModel() {
 
@@ -115,10 +117,12 @@ class DiagnosticsViewModel @Inject constructor(
 
         // Metadata marker test
         val marker = "MARKER-${UUID.randomUUID().toString().take(4)}"
-        context.sendBroadcast(Intent(PlaybackActions.ACTION_DIAG_MARKER).apply {
-            setPackage(context.packageName)
-            putExtra(PlaybackActions.EXTRA_MARKER_LABEL, marker)
-        })
+        context.sendBroadcast(
+            Intent(PlaybackActions.ACTION_DIAG_MARKER).apply {
+                setPackage(context.packageName)
+                putExtra(PlaybackActions.EXTRA_MARKER_LABEL, marker)
+            }
+        )
         journal.log(DiagnosticJournal.CAT_TOPWAY_BROADCAST, "Guided test marker set", marker)
 
         _guidedTestState.value = GuidedTestState.Capturing
@@ -136,9 +140,11 @@ class DiagnosticsViewModel @Inject constructor(
             DiagnosticService.stop(context)
 
             // Restore genuine metadata
-            context.sendBroadcast(Intent(PlaybackActions.ACTION_DIAG_RESTORE).apply {
-                setPackage(context.packageName)
-            })
+            context.sendBroadcast(
+                Intent(PlaybackActions.ACTION_DIAG_RESTORE).apply {
+                    setPackage(context.packageName)
+                }
+            )
 
             _guidedTestState.value = GuidedTestState.Questionnaire
         }
@@ -243,6 +249,18 @@ class DiagnosticsViewModel @Inject constructor(
                 DiagnosticService.stop(context)
             }
         }
+    }
+
+    fun armBootCapture() {
+        val id = "boot-${UUID.randomUUID().toString().take(8)}"
+        diagSettings.armedBootCaptureId = id
+        diagSettings.armedExpiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L) // 24h
+        journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture armed for next start", "ID: $id")
+    }
+
+    fun disarmBootCapture() {
+        diagSettings.armedBootCaptureId = null
+        journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture disarmed")
     }
 
     fun stopCapture() {

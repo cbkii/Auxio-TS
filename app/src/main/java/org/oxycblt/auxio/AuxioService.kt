@@ -68,7 +68,7 @@ open class AuxioService :
         journal.log(
             DiagnosticJournal.CAT_LIFECYCLE,
             "AuxioService onStartCommand",
-            "Action: ${intent?.action}, StartId: $startId"
+            "Action: ${intent?.action}, StartId: $startId",
         )
         // Playback services are expected to survive process churn when possible so that
         // MediaSession/controller interactions continue to route to the same service endpoint.

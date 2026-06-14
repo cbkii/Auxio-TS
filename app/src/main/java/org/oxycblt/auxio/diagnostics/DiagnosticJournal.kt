@@ -18,16 +18,16 @@
 
 package org.oxycblt.auxio.diagnostics
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Singleton journal for recording and retrieving diagnostic events.
- * It is concurrency-safe and automatically prunes old events.
+ * Singleton journal for recording and retrieving diagnostic events. It is concurrency-safe and
+ * automatically prunes old events.
  */
 @Singleton
 class DiagnosticJournal @Inject constructor() {
@@ -40,15 +40,13 @@ class DiagnosticJournal @Inject constructor() {
 
     private var currentSessionId: String? = null
 
-    /**
-     * Records a new diagnostic event.
-     */
+    /** Records a new diagnostic event. */
     fun log(
         category: String,
         event: String,
         detail: String? = null,
         result: String? = null,
-        evidence: EvidenceClassification = EvidenceClassification.OBSERVED_BY_AUXIO
+        evidence: EvidenceClassification = EvidenceClassification.OBSERVED_BY_AUXIO,
     ) {
         val entry = DiagnosticEvent(
             sessionId = currentSessionId,
