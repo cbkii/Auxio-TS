@@ -25,6 +25,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,22 +43,18 @@ import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.service.PlaybackActions
 import org.oxycblt.musikr.fs.Location
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
-import javax.inject.Inject
 import timber.log.Timber as L
 
 @HiltViewModel
-class DiagnosticsViewModel @Inject constructor(
+class DiagnosticsViewModel
+@Inject
+constructor(
     @ApplicationContext private val context: Context,
     private val repository: DiagnosticsRepository,
     private val journal: DiagnosticJournal,
     private val musicSettings: MusicSettings,
     private val diagSettings: DiagnosticsSettings,
-    private val reportGenerator: DiagnosticReportGenerator
+    private val reportGenerator: DiagnosticReportGenerator,
 ) : ViewModel() {
 
     private val _automatedReport = MutableStateFlow<List<DiagnosticEntry>?>(null)
@@ -76,20 +78,38 @@ class DiagnosticsViewModel @Inject constructor(
 
     sealed class GuidedTestState {
         object Idle : GuidedTestState()
+
         object Instructions : GuidedTestState()
+
         object CountingDown : GuidedTestState()
+
         object Capturing : GuidedTestState()
+
         object Questionnaire : GuidedTestState()
+
         data class Result(val report: String) : GuidedTestState()
     }
 
     fun runAutomatedDiagnostics() {
         viewModelScope.launch {
             _isGenerating.value = true
-            val results = repository.runAutomatedChecks()
-            _automatedReport.value = results
-            _isGenerating.value = false
-            _noisyPaths.value = findNoisyPaths()
+            try {
+                val results = repository.runAutomatedChecks()
+                _automatedReport.value = results
+                _noisyPaths.value = withContext(Dispatchers.IO) { findNoisyPaths() }
+            } catch (e: Exception) {
+                L.w(e, "Automated diagnostics failed")
+                _automatedReport.value =
+                    listOf(
+                        DiagnosticEntry(
+                            "Automated diagnostics",
+                            "Failed: ${e.message ?: e.javaClass.simpleName}",
+                            EvidenceClassification.QUERY_FAILED,
+                        )
+                    )
+            } finally {
+                _isGenerating.value = false
+            }
         }
     }
 
@@ -111,8 +131,11 @@ class DiagnosticsViewModel @Inject constructor(
         }
     }
 
+    private var guidedSessionId: String? = null
+
     fun actuallyBeginCapture() {
         val sessionId = "guided-${UUID.randomUUID().toString().take(8)}"
+        guidedSessionId = sessionId
         DiagnosticService.start(context, sessionId)
 
         // Metadata marker test
@@ -129,9 +152,11 @@ class DiagnosticsViewModel @Inject constructor(
     }
 
     fun cancelGuidedTest() {
+        restoreDiagnosticMarker()
         if (isCaptureActive.value) {
             DiagnosticService.stop(context)
         }
+        guidedSessionId = null
         _guidedTestState.value = GuidedTestState.Idle
     }
 
@@ -139,12 +164,7 @@ class DiagnosticsViewModel @Inject constructor(
         if (_guidedTestState.value == GuidedTestState.Capturing) {
             DiagnosticService.stop(context)
 
-            // Restore genuine metadata
-            context.sendBroadcast(
-                Intent(PlaybackActions.ACTION_DIAG_RESTORE).apply {
-                    setPackage(context.packageName)
-                }
-            )
+            restoreDiagnosticMarker()
 
             _guidedTestState.value = GuidedTestState.Questionnaire
         }
@@ -152,11 +172,13 @@ class DiagnosticsViewModel @Inject constructor(
 
     fun submitQuestionnaire(answers: Map<Int, Int>, otherTexts: Map<Int, String>) {
         viewModelScope.launch {
-            val report = withContext(Dispatchers.Default) {
-                correlateGuidedTest(answers, otherTexts)
-            }
+            val report =
+                withContext(Dispatchers.Default) { correlateGuidedTest(answers, otherTexts) }
             _guidedTestState.value = GuidedTestState.Result(report)
-            _automatedReport.value = repository.runAutomatedChecks() // Refresh automated results with user-confirmed evidence labels if we had them
+            _automatedReport.value =
+                repository
+                    .runAutomatedChecks() // Refresh automated results with user-confirmed evidence
+            // labels if we had them
         }
     }
 
@@ -166,40 +188,42 @@ class DiagnosticsViewModel @Inject constructor(
 
         sb.append("== User Confirmed Responses ==\n")
         answers.forEach { (q, a) ->
-            val questionText = when(q) {
-                1 -> "Which app opened after tapping Music card?"
-                2 -> "Did controls affect Auxio?"
-                3 -> "Did title/artist change?"
-                4 -> "Did progress/seek change?"
-                5 -> "Did you see the diagnostic marker?"
-                else -> "Question $q"
-            }
-            val answerText = when(q to a) {
-                1 to 1 -> "Auxio-TS"
-                1 to 2 -> "Stock TW Music"
-                1 to 3 -> "Another app"
-                1 to 4 -> "No app opened"
-                1 to 5 -> "Not sure"
-                2 to 1 -> "All affected Auxio"
-                2 to 2 -> "Some affected Auxio"
-                2 to 3 -> "None affected"
-                2 to 4 -> "Could not tell"
-                3 to 1 -> "Matched Auxio"
-                3 to 2 -> "Matched stock"
-                3 to 3 -> "Changed, unknown source"
-                3 to 4 -> "Did not change"
-                3 to 5 -> "Could not tell"
-                4 to 1 -> "Yes, matched Auxio"
-                4 to 2 -> "Yes, did not match"
-                4 to 3 -> "No"
-                4 to 4 -> "No progress control"
-                4 to 5 -> "Could not tell"
-                5 to 1 -> "Yes, I saw DIAGNOSTIC MARKER"
-                5 to 2 -> "No, I saw real metadata"
-                5 to 3 -> "I saw something else"
-                5 to 4 -> "Not sure"
-                else -> "Option $a"
-            }
+            val questionText =
+                when (q) {
+                    1 -> "Which app opened after tapping Music card?"
+                    2 -> "Did controls affect Auxio?"
+                    3 -> "Did title/artist change?"
+                    4 -> "Did progress/seek change?"
+                    5 -> "Did you see the diagnostic marker?"
+                    else -> "Question $q"
+                }
+            val answerText =
+                when (q to a) {
+                    1 to 1 -> "Auxio-TS"
+                    1 to 2 -> "Stock TW Music"
+                    1 to 3 -> "Another app"
+                    1 to 4 -> "No app opened"
+                    1 to 5 -> "Not sure"
+                    2 to 1 -> "All affected Auxio"
+                    2 to 2 -> "Some affected Auxio"
+                    2 to 3 -> "None affected"
+                    2 to 4 -> "Could not tell"
+                    3 to 1 -> "Matched Auxio"
+                    3 to 2 -> "Matched stock"
+                    3 to 3 -> "Changed, unknown source"
+                    3 to 4 -> "Did not change"
+                    3 to 5 -> "Could not tell"
+                    4 to 1 -> "Yes, matched Auxio"
+                    4 to 2 -> "Yes, did not match"
+                    4 to 3 -> "No"
+                    4 to 4 -> "No progress control"
+                    4 to 5 -> "Could not tell"
+                    5 to 1 -> "Yes, I saw DIAGNOSTIC MARKER"
+                    5 to 2 -> "No, I saw real metadata"
+                    5 to 3 -> "I saw something else"
+                    5 to 4 -> "Not sure"
+                    else -> "Option $a"
+                }
             sb.append("$questionText: $answerText")
             otherTexts[q]?.let { sb.append(" (Other: $it)") }
             sb.append("\n")
@@ -207,8 +231,12 @@ class DiagnosticsViewModel @Inject constructor(
 
         sb.append("\n== Correlation Analysis ==\n")
 
-        val cmds = journalEvents.value.filter { it.category == DiagnosticJournal.CAT_TOPWAY_CMD }
-        val broadcasts = journalEvents.value.filter { it.category == DiagnosticJournal.CAT_TOPWAY_BROADCAST }
+        val sessionId = guidedSessionId
+        val sessionEvents =
+            journalEvents.value.filter { sessionId == null || it.sessionId == sessionId }
+        val cmds = sessionEvents.filter { it.category == DiagnosticJournal.CAT_TOPWAY_CMD }
+        val broadcasts =
+            sessionEvents.filter { it.category == DiagnosticJournal.CAT_TOPWAY_BROADCAST }
 
         if (cmds.isNotEmpty()) {
             sb.append("Observed ${cmds.size} Topway commands during capture.\n")
@@ -220,12 +248,16 @@ class DiagnosticsViewModel @Inject constructor(
             sb.append("Observed ${broadcasts.size} metadata/progress broadcasts sent.\n")
         }
 
-        val analysis = when {
-            cmds.isNotEmpty() && answers[1] == 1 -> "Auxio activity launched and Topway commands received. [Success]"
-            cmds.isNotEmpty() && answers[1] == 2 -> "Auxio received controls but the card opened stock music. [Partial/Ambiguous]"
-            cmds.isEmpty() && answers[1] == 2 -> "No Auxio events observed and user reports stock app opened. [Likely stock priority]"
-            else -> "Inconclusive results."
-        }
+        val analysis =
+            when {
+                cmds.isNotEmpty() && answers[1] == 1 ->
+                    "Auxio activity launched and Topway commands received. [Success]"
+                cmds.isNotEmpty() && answers[1] == 2 ->
+                    "Auxio received controls but the card opened stock music. [Partial/Ambiguous]"
+                cmds.isEmpty() && answers[1] == 2 ->
+                    "No Auxio events observed and user reports stock app opened. [Likely stock priority]"
+                else -> "Inconclusive results."
+            }
         sb.append("\nConclusion: $analysis\n")
 
         return sb.toString()
@@ -236,7 +268,7 @@ class DiagnosticsViewModel @Inject constructor(
         return reportGenerator.generate(
             automatedReport.value ?: emptyList(),
             journalEvents.value,
-            guided
+            guided,
         )
     }
 
@@ -264,17 +296,26 @@ class DiagnosticsViewModel @Inject constructor(
     }
 
     fun stopCapture() {
+        restoreDiagnosticMarker()
         DiagnosticService.stop(context)
     }
 
+    private fun restoreDiagnosticMarker() {
+        context.sendBroadcast(
+            Intent(PlaybackActions.ACTION_DIAG_RESTORE).apply { setPackage(context.packageName) }
+        )
+    }
+
     fun excludePath(context: Context, path: String) {
-        val location = Location.Unopened.from(context, android.net.Uri.parse("file://$path")) ?: return
+        val location =
+            Location.Unopened.from(context, android.net.Uri.parse("file://$path")) ?: return
         if (musicSettings.locationMode == LocationMode.SAF) {
             val currentQuery = musicSettings.safQuery
             musicSettings.safQuery = currentQuery.copy(exclude = currentQuery.exclude + location)
         } else {
             val currentQuery = musicSettings.mediaStoreQuery
-            musicSettings.mediaStoreQuery = currentQuery.copy(filtered = currentQuery.filtered + location)
+            musicSettings.mediaStoreQuery =
+                currentQuery.copy(filtered = currentQuery.filtered + location)
         }
     }
 
@@ -282,19 +323,21 @@ class DiagnosticsViewModel @Inject constructor(
         val out = linkedSetOf<File>()
         context.getExternalFilesDir(null)?.let { if (ensureWritable(it)) out += it }
         listOf(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
-        ).filterTo(out) { ensureWritable(it) }
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            )
+            .filterTo(out) { ensureWritable(it) }
         TopwaySourcePolicy.discoverCandidateRoots().map(::File).filterTo(out) { ensureWritable(it) }
         return out.toList()
     }
 
-    private fun ensureWritable(file: File): Boolean = try {
-        (file.exists() || file.mkdirs()) && file.isDirectory && file.canWrite()
-    } catch (e: Exception) {
-        L.w(e, "Destination is not writable: ${file.absolutePath}")
-        false
-    }
+    private fun ensureWritable(file: File): Boolean =
+        try {
+            (file.exists() || file.mkdirs()) && file.isDirectory && file.canWrite()
+        } catch (e: Exception) {
+            L.w(e, "Destination is not writable: ${file.absolutePath}")
+            false
+        }
 
     fun saveReport(destination: File, report: String): File? {
         return try {
@@ -318,7 +361,10 @@ class DiagnosticsViewModel @Inject constructor(
             if (root.exists() && root.isDirectory) {
                 root.listFiles()?.forEach { file ->
                     if (file.isDirectory) {
-                        if (TopwaySourcePolicy.NOISY_DIRS.contains(file.name) || file.name.startsWith(".")) {
+                        if (
+                            TopwaySourcePolicy.NOISY_DIRS.contains(file.name) ||
+                                file.name.startsWith(".")
+                        ) {
                             candidates.add(file.absolutePath)
                         }
                     }

@@ -38,7 +38,13 @@ class DiagnosticJournal @Inject constructor() {
 
     private val eventList = Collections.synchronizedList(mutableListOf<DiagnosticEvent>())
 
-    private var currentSessionId: String? = null
+    @Volatile private var currentSessionId: String? = null
+
+    val activeSessionId: String?
+        get() = currentSessionId
+
+    val hasActiveSession: Boolean
+        get() = currentSessionId != null
 
     /** Records a new diagnostic event. */
     fun log(
@@ -48,14 +54,18 @@ class DiagnosticJournal @Inject constructor() {
         result: String? = null,
         evidence: EvidenceClassification = EvidenceClassification.OBSERVED_BY_AUXIO,
     ) {
-        val entry = DiagnosticEvent(
-            sessionId = currentSessionId,
-            category = category,
-            event = event,
-            detail = detail,
-            result = result,
-            evidence = evidence
-        )
+        val sessionId = currentSessionId
+        if (sessionId == null && category != "SESSION") return
+
+        val entry =
+            DiagnosticEvent(
+                sessionId = sessionId,
+                category = category,
+                event = event,
+                detail = detail,
+                result = result,
+                evidence = evidence,
+            )
 
         synchronized(eventList) {
             eventList.add(entry)
@@ -66,28 +76,24 @@ class DiagnosticJournal @Inject constructor() {
         }
     }
 
-    /**
-     * Starts a new capture session identifier.
-     */
-    fun startSession(id: String): Boolean {
-        if (currentSessionId != null) return false
-        currentSessionId = id
-        log("SESSION", "Started", "Session ID: $id")
-        return true
-    }
+    /** Starts a new capture session identifier. */
+    fun startSession(id: String): Boolean =
+        synchronized(eventList) {
+            if (currentSessionId != null) return@synchronized false
+            currentSessionId = id
+            log("SESSION", "Started", "Session ID: $id")
+            true
+        }
 
-    /**
-     * Clears the current session identifier.
-     */
-    fun endSession() {
-        if (currentSessionId == null) return
-        log("SESSION", "Ended", "Session ID: $currentSessionId")
-        currentSessionId = null
-    }
+    /** Clears the current session identifier. */
+    fun endSession() =
+        synchronized(eventList) {
+            val sessionId = currentSessionId ?: return@synchronized
+            log("SESSION", "Ended", "Session ID: $sessionId")
+            currentSessionId = null
+        }
 
-    /**
-     * Clears all recorded events.
-     */
+    /** Clears all recorded events. */
     fun clear() {
         synchronized(eventList) {
             eventList.clear()

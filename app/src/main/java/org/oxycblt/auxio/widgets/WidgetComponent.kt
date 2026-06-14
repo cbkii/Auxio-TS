@@ -78,7 +78,7 @@ private constructor(
                 bitmapProvider,
                 playbackManager,
                 uiSettings,
-                journal
+                journal,
             )
     }
 
@@ -196,6 +196,16 @@ private constructor(
                 }
             },
         )
+    }
+
+    /** Publish a short-lived diagnostic marker through the isolated Topway metadata bridge. */
+    fun publishMarker(label: String) {
+        topwayBridge.publishMarker(label)
+    }
+
+    /** Restore the Topway bridge to the current playback metadata after a diagnostic marker. */
+    fun restoreBridge() {
+        update()
     }
 
     /** Release this instance, preventing any further events from updating the widget instances. */
