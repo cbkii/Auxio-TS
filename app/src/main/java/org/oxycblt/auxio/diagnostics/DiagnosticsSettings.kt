@@ -21,9 +21,9 @@ package org.oxycblt.auxio.diagnostics
 import android.content.Context
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
-import org.oxycblt.auxio.settings.Settings
 import javax.inject.Inject
 import javax.inject.Singleton
+import org.oxycblt.auxio.settings.Settings
 
 interface DiagnosticsSettings : Settings<DiagnosticsSettings.Listener> {
     var armedBootCaptureId: String?
@@ -40,11 +40,19 @@ class DiagnosticsSettingsImpl @Inject constructor(@ApplicationContext context: C
 
     override var armedBootCaptureId: String?
         get() = sharedPreferences.getString("diag_armed_id", null)
-        set(value) = sharedPreferences.edit { putString("diag_armed_id", value); apply() }
+        set(value) =
+            sharedPreferences.edit {
+                putString("diag_armed_id", value)
+                apply()
+            }
 
     override var armedExpiryTime: Long
         get() = sharedPreferences.getLong("diag_armed_expiry", 0L)
-        set(value) = sharedPreferences.edit { putLong("diag_armed_expiry", value); apply() }
+        set(value) =
+            sharedPreferences.edit {
+                putLong("diag_armed_expiry", value)
+                apply()
+            }
 
     override fun onSettingChanged(key: String, listener: DiagnosticsSettings.Listener) {
         listener.onDiagnosticsSettingsChanged()

@@ -82,9 +82,7 @@ class DiagnosticJournal @Inject constructor() {
         currentSessionId = null
     }
 
-    /**
-     * Clears all recorded events.
-     */
+    /** Clears all recorded events. */
     fun clear() {
         synchronized(eventList) {
             eventList.clear()

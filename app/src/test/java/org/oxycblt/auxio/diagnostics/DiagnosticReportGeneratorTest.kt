@@ -26,12 +26,16 @@ class DiagnosticReportGeneratorTest {
     @Test
     fun `test report generation`() {
         val generator = DiagnosticReportGenerator()
-        val automated = listOf(
-            DiagnosticEntry("Test Entry", "Test Value", EvidenceClassification.OBSERVED_BY_AUXIO, detail = "Some detail")
-        )
-        val events = listOf(
-            DiagnosticEvent(category = "CAT", event = "EVT", detail = "DET")
-        )
+        val automated =
+            listOf(
+                DiagnosticEntry(
+                    "Test Entry",
+                    "Test Value",
+                    EvidenceClassification.OBSERVED_BY_AUXIO,
+                    detail = "Some detail",
+                )
+            )
+        val events = listOf(DiagnosticEvent(category = "CAT", event = "EVT", detail = "DET"))
 
         val report = generator.generate(automated, events, "GUIDED RESULTS")
 

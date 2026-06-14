@@ -20,11 +20,8 @@ package org.oxycblt.auxio.diagnostics
 
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
-import java.util.Date
 
-/**
- * Evidence classification for a diagnostic finding or event.
- */
+/** Evidence classification for a diagnostic finding or event. */
 @Parcelize
 enum class EvidenceClassification : Parcelable {
     OBSERVED_BY_AUXIO,
@@ -57,9 +54,7 @@ enum class EvidenceClassification : Parcelable {
         }
 }
 
-/**
- * A single entry in the automated diagnostic report.
- */
+/** A single entry in the automated diagnostic report. */
 @Parcelize
 data class DiagnosticEntry(
     val name: String,
@@ -70,12 +65,10 @@ data class DiagnosticEntry(
     val detail: String? = null,
     val confidence: Float = 1.0f,
     val error: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
 ) : Parcelable
 
-/**
- * A single event in the diagnostics journal.
- */
+/** A single event in the diagnostics journal. */
 @Parcelize
 data class DiagnosticEvent(
     val wallTime: Long = System.currentTimeMillis(),
@@ -85,16 +78,14 @@ data class DiagnosticEvent(
     val event: String,
     val detail: String? = null,
     val result: String? = null,
-    val evidence: EvidenceClassification = EvidenceClassification.OBSERVED_BY_AUXIO
+    val evidence: EvidenceClassification = EvidenceClassification.OBSERVED_BY_AUXIO,
 ) : Parcelable
 
-/**
- * Status categories for diagnostic checks.
- */
+/** Status categories for diagnostic checks. */
 enum class DiagnosticStatus {
     HEALTHY,
     WARNING,
     CRITICAL,
     UNKNOWN,
-    NOT_APPLICABLE
+    NOT_APPLICABLE,
 }

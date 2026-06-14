@@ -26,6 +26,5 @@ import dagger.hilt.components.SingletonComponent
 @Module
 @InstallIn(SingletonComponent::class)
 interface DiagnosticsModule {
-    @Binds
-    fun settings(settings: DiagnosticsSettingsImpl): DiagnosticsSettings
+    @Binds fun settings(settings: DiagnosticsSettingsImpl): DiagnosticsSettings
 }

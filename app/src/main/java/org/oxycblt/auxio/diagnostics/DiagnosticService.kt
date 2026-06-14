@@ -23,7 +23,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
@@ -31,9 +30,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
-import javax.inject.Inject
 import timber.log.Timber as L
 
 @AndroidEntryPoint
@@ -42,15 +41,24 @@ class DiagnosticService : Service() {
     @Inject lateinit var repository: DiagnosticsRepository
     @Inject lateinit var journal: DiagnosticJournal
 
-    private val eventReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent?) {
-            val action = intent?.action ?: return
-            journal.log(DiagnosticJournal.CAT_SYSTEM, "System Intent", action)
-            if (action == Intent.ACTION_MEDIA_MOUNTED || action == Intent.ACTION_MEDIA_UNMOUNTED || action == Intent.ACTION_MEDIA_EJECT) {
-                journal.log(DiagnosticJournal.CAT_STORAGE, "Media Event", "Action: $action, Data: ${intent.data}")
+    private val eventReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent?) {
+                val action = intent?.action ?: return
+                journal.log(DiagnosticJournal.CAT_SYSTEM, "System Intent", action)
+                if (
+                    action == Intent.ACTION_MEDIA_MOUNTED ||
+                        action == Intent.ACTION_MEDIA_UNMOUNTED ||
+                        action == Intent.ACTION_MEDIA_EJECT
+                ) {
+                    journal.log(
+                        DiagnosticJournal.CAT_STORAGE,
+                        "Media Event",
+                        "Action: $action, Data: ${intent.data}",
+                    )
+                }
             }
         }
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -76,17 +84,22 @@ class DiagnosticService : Service() {
                 stopSelfCleanly()
                 return START_NOT_STICKY
             }
-            journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture Service Started", "Session: $sessionId")
+            journal.log(
+                DiagnosticJournal.CAT_SYSTEM,
+                "Capture Service Started",
+                "Session: $sessionId",
+            )
 
-            val filter = IntentFilter().apply {
-                addAction(Intent.ACTION_MEDIA_MOUNTED)
-                addAction(Intent.ACTION_MEDIA_UNMOUNTED)
-                addAction(Intent.ACTION_MEDIA_EJECT)
-                addAction(Intent.ACTION_PACKAGE_ADDED)
-                addAction(Intent.ACTION_PACKAGE_REMOVED)
-                addDataScheme("file")
-                addDataScheme("package")
-            }
+            val filter =
+                IntentFilter().apply {
+                    addAction(Intent.ACTION_MEDIA_MOUNTED)
+                    addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+                    addAction(Intent.ACTION_MEDIA_EJECT)
+                    addAction(Intent.ACTION_PACKAGE_ADDED)
+                    addAction(Intent.ACTION_PACKAGE_REMOVED)
+                    addDataScheme("file")
+                    addDataScheme("package")
+                }
             registerReceiver(eventReceiver, filter)
         }
 
@@ -115,22 +128,30 @@ class DiagnosticService : Service() {
 
     private fun promoteForeground(): Boolean {
         val nm = NotificationManagerCompat.from(this)
-        val channel = NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-            .setName("TS18 Diagnostics")
-            .setShowBadge(false)
-            .build()
+        val channel =
+            NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+                .setName("TS18 Diagnostics")
+                .setShowBadge(false)
+                .build()
         nm.createNotificationChannel(channel)
 
         val stopIntent = Intent(this, DiagnosticService::class.java).setAction(ACTION_STOP)
-        val stopPendingIntent = android.app.PendingIntent.getService(this, 0, stopIntent, android.app.PendingIntent.FLAG_IMMUTABLE)
+        val stopPendingIntent =
+            android.app.PendingIntent.getService(
+                this,
+                0,
+                stopIntent,
+                android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_auxio_24)
-            .setContentTitle("Auxio-TS Diagnostics Active")
-            .setContentText("Recording integration events...")
-            .setOngoing(true)
-            .addAction(0, "Stop", stopPendingIntent)
-            .build()
+        val notification =
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_auxio_24)
+                .setContentTitle("Auxio-TS Diagnostics Active")
+                .setContentText("Recording integration events...")
+                .setOngoing(true)
+                .addAction(0, "Stop", stopPendingIntent)
+                .build()
 
         return try {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, 0)
@@ -155,17 +176,17 @@ class DiagnosticService : Service() {
         const val EXTRA_SESSION_ID = "extra_session_id"
 
         fun start(context: Context, sessionId: String) {
-            val intent = Intent(context, DiagnosticService::class.java).apply {
-                action = ACTION_START_CAPTURE
-                putExtra(EXTRA_SESSION_ID, sessionId)
-            }
+            val intent =
+                Intent(context, DiagnosticService::class.java).apply {
+                    action = ACTION_START_CAPTURE
+                    putExtra(EXTRA_SESSION_ID, sessionId)
+                }
             ContextCompat.startForegroundService(context, intent)
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, DiagnosticService::class.java).apply {
-                action = ACTION_STOP
-            }
+            val intent =
+                Intent(context, DiagnosticService::class.java).apply { action = ACTION_STOP }
             context.startService(intent)
         }
     }

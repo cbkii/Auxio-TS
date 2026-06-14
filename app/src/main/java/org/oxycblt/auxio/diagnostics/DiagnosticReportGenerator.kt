@@ -28,7 +28,7 @@ class DiagnosticReportGenerator @Inject constructor() {
     fun generate(
         automatedReport: List<DiagnosticEntry>,
         events: List<DiagnosticEvent>,
-        guidedTestReport: String? = null
+        guidedTestReport: String? = null,
     ): String {
         val sb = StringBuilder()
         val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())

@@ -78,7 +78,7 @@ private constructor(
                 bitmapProvider,
                 playbackManager,
                 uiSettings,
-                journal
+                journal,
             )
     }
 

@@ -28,7 +28,7 @@ import org.oxycblt.auxio.ui.UISettings
 class TopwayMusicBroadcastBridge(
     private val context: Context,
     private val uiSettings: UISettings,
-    private val journal: DiagnosticJournal? = null
+    private val journal: DiagnosticJournal? = null,
 ) {
     private var lastMetadata: HeadUnitMetadataSnapshot? = null
     private var lastProgress: TopwayProgressSnapshot? = null
@@ -90,7 +90,7 @@ class TopwayMusicBroadcastBridge(
         journal?.log(
             DiagnosticJournal.CAT_TOPWAY_BROADCAST,
             "Progress",
-            "${snapshot.progressMs} / ${snapshot.durationMs}"
+            "${snapshot.progressMs} / ${snapshot.durationMs}",
         )
         lastProgress = snapshot
         lastProgressAtMs = nowMs
