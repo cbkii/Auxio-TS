@@ -406,7 +406,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setTitle(R.string.set_select_source)
             .setView(container)
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
-                val pathText = input.text?.toString().orEmpty()
+                val pathText = input.text?.toString()?.trim().orEmpty()
                 if (pathText.isEmpty()) {
                     pendingLocationCallback = null
                     return@setPositiveButton
