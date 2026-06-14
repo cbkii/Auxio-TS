@@ -77,6 +77,16 @@ class DiagnosticJournalTest {
     }
 
     @Test
+    fun `stale owner cannot end active session`() {
+        assertTrue(journal.startSession("newer"))
+        assertFalse(journal.endSession("older"))
+        assertTrue(journal.hasActiveSession)
+        assertEquals("newer", journal.activeSessionId)
+        assertTrue(journal.endSession("newer"))
+        assertFalse(journal.hasActiveSession)
+    }
+
+    @Test
     fun `test clear`() {
         journal.startSession("sess")
         journal.log("CAT", "Event")

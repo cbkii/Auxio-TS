@@ -26,6 +26,16 @@
             android:textSize="18sp"
             android:paddingBottom="24dp" />
 
+
+        <CheckBox
+            android:id="@+id/guided_marker_checkbox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="Optional: publish temporary metadata marker (does not start playback)"
+            android:textSize="16sp"
+            android:paddingBottom="16dp" />
+
         <TextView
             android:id="@+id/guided_countdown_text"
             android:layout_width="match_parent"

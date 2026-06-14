@@ -23,6 +23,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -71,12 +73,16 @@ class DiagnosticsFragment : Fragment() {
             viewModel.startGuidedTest()
         }
         view.findViewById<Button>(R.id.start_capture_btn).setOnClickListener {
-            viewModel.startTimedCapture(5)
+            showTimedCapturePicker()
         }
         view.findViewById<Button>(R.id.arm_boot_btn).setOnClickListener {
             viewModel.armBootCapture()
             Toast.makeText(requireContext(), "Capture armed for next start", Toast.LENGTH_SHORT)
                 .show()
+        }
+        view.findViewById<Button>(R.id.disarm_boot_btn).setOnClickListener {
+            viewModel.disarmBootCapture()
+            Toast.makeText(requireContext(), "Armed capture cancelled", Toast.LENGTH_SHORT).show()
         }
         view.findViewById<Button>(R.id.stop_capture_btn).setOnClickListener {
             viewModel.stopCapture()
@@ -121,6 +127,8 @@ class DiagnosticsFragment : Fragment() {
             }
         }
 
+        collectImmediately(viewModel.noisyPaths) { paths -> renderNoisyPaths(paths) }
+
         collectImmediately(viewModel.journalEvents) { events ->
             val container = timelineContainer ?: return@collectImmediately
             container.removeAllViews()
@@ -161,7 +169,9 @@ class DiagnosticsFragment : Fragment() {
                 val view =
                     layoutInflater.inflate(R.layout.layout_guided_instructions, container, true)
                 view.findViewById<Button>(R.id.guided_begin_btn).setOnClickListener {
-                    viewModel.beginGuidedCountdown()
+                    viewModel.actuallyBeginCapture(
+                        view.findViewById<CheckBox>(R.id.guided_marker_checkbox).isChecked
+                    )
                 }
                 view.findViewById<Button>(R.id.guided_cancel_btn).setOnClickListener {
                     viewModel.cancelGuidedTest()
@@ -177,7 +187,9 @@ class DiagnosticsFragment : Fragment() {
                 countdownText.text = "Starting..."
 
                 view.findViewById<Button>(R.id.guided_begin_btn).setOnClickListener {
-                    viewModel.actuallyBeginCapture()
+                    viewModel.actuallyBeginCapture(
+                        view.findViewById<CheckBox>(R.id.guided_marker_checkbox).isChecked
+                    )
                 }
                 view.findViewById<Button>(R.id.guided_cancel_btn).setOnClickListener {
                     viewModel.cancelGuidedTest()
@@ -213,6 +225,7 @@ class DiagnosticsFragment : Fragment() {
         val view = layoutInflater.inflate(R.layout.layout_guided_questionnaire, parent, true)
         val container = view.findViewById<LinearLayout>(R.id.questionnaire_container)
         val answers = mutableMapOf<Int, Int>()
+        val otherTexts = mutableMapOf<Int, EditText>()
 
         val questions =
             listOf(
@@ -279,11 +292,74 @@ class DiagnosticsFragment : Fragment() {
             answers[qNum] = options.size
 
             container.addView(rg, container.childCount - 1)
+
+            val other =
+                EditText(requireContext()).apply {
+                    hint = "Optional: other details for question $qNum"
+                    minLines = 1
+                }
+            otherTexts[qNum] = other
+            container.addView(other, container.childCount - 1)
         }
 
         view.findViewById<Button>(R.id.questionnaire_submit_btn).setOnClickListener {
-            viewModel.submitQuestionnaire(answers, emptyMap())
+            viewModel.submitQuestionnaire(
+                answers,
+                otherTexts.mapValues { it.value.text.toString() },
+            )
         }
+    }
+
+    private fun showTimedCapturePicker() {
+        val durations = intArrayOf(2, 5, 10, 15)
+        AlertDialog.Builder(requireContext())
+            .setTitle("Start timed diagnostic capture")
+            .setItems(durations.map { "$it minutes" }.toTypedArray()) { _, which ->
+                viewModel.startTimedCapture(durations[which])
+            }
+            .show()
+    }
+
+    private fun renderNoisyPaths(paths: List<String>) {
+        val container = reportContainer ?: return
+        if (paths.isEmpty()) return
+        TextView(requireContext()).apply {
+            text = "Noisy/problem paths"
+            textSize = 16f
+            setPadding(0, 16, 0, 4)
+            container.addView(this)
+        }
+        paths.forEach { path ->
+            Button(requireContext()).apply {
+                text = "Exclude: $path"
+                setOnClickListener { confirmExcludePath(path) }
+                container.addView(this)
+            }
+        }
+    }
+
+    private fun confirmExcludePath(path: String) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Exclude noisy path?")
+            .setMessage(
+                "Auxio will add this exact path to the active source exclusion settings:\n\n$path"
+            )
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Exclude") { _, _ ->
+                try {
+                    viewModel.excludePath(requireContext(), path)
+                    viewModel.runAutomatedDiagnostics()
+                    Toast.makeText(requireContext(), "Excluded: $path", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Toast.makeText(
+                            requireContext(),
+                            "Exclude failed: ${e.message}",
+                            Toast.LENGTH_LONG,
+                        )
+                        .show()
+                }
+            }
+            .show()
     }
 
     private fun exportReport() {
@@ -328,7 +404,4 @@ class DiagnosticsFragment : Fragment() {
         statusText = null
         overlayContainer = null
     }
-
-    private val Float.sp
-        get() = this * resources.displayMetrics.scaledDensity
 }

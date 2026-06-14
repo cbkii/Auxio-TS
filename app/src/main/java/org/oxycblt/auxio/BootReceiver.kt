@@ -52,20 +52,24 @@ class BootReceiver : BroadcastReceiver() {
         val armedCaptureId = diagnosticsSettings.armedBootCaptureId
         val armedExpiry = diagnosticsSettings.armedExpiryTime
         if (armedCaptureId != null) {
-            diagnosticsSettings.armedBootCaptureId = null
-            diagnosticsSettings.armedExpiryTime = 0L
             if (System.currentTimeMillis() <= armedExpiry) {
                 try {
-                    DiagnosticService.start(context, armedCaptureId)
-                    journal.log(
-                        DiagnosticJournal.CAT_BOOT,
-                        "Boot capture started",
-                        "Session: $armedCaptureId",
+                    DiagnosticService.start(
+                        context,
+                        armedCaptureId,
+                        diagnosticsSettings.armedDurationMs,
+                        DiagnosticService.ORIGIN_BOOT,
                     )
                 } catch (e: Exception) {
-                    L.w(e, "Cannot start armed diagnostic capture from boot")
+                    L.w(
+                        e,
+                        "Cannot start armed diagnostic capture from boot; preserving app-start fallback",
+                    )
+                    diagnosticsSettings.armedCaptureOrigin =
+                        DiagnosticService.ORIGIN_APP_START_FALLBACK
                 }
             } else {
+                diagnosticsSettings.clearArmedCapture()
                 L.d("Expired armed boot capture ignored")
             }
         }

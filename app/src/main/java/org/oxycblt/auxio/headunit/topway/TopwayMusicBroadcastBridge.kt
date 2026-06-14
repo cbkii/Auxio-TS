@@ -133,6 +133,10 @@ class TopwayMusicBroadcastBridge(
     }
 
     fun restore(snapshot: HeadUnitMetadataSnapshot?) {
+        if (snapshot == null) {
+            clearMetadata()
+            return
+        }
         lastMetadata = null // Force re-publish
         publishMetadata(snapshot)
     }

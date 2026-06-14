@@ -348,33 +348,51 @@ constructor(
                 try {
                     MediaStore.getExternalVolumeNames(context)
                 } catch (e: Exception) {
-                    emptySet()
+                    entries.add(
+                        DiagnosticEntry(
+                            "MediaStore External Volumes",
+                            "Query failed: ${e.javaClass.simpleName}: ${e.message ?: "no message"}",
+                            EvidenceClassification.QUERY_FAILED,
+                            primaryMethod = "MediaStore.getExternalVolumeNames",
+                        )
+                    )
+                    null
                 }
-            entries.add(
-                DiagnosticEntry(
-                    "MediaStore External Volumes",
-                    volumes.joinToString(),
-                    EvidenceClassification.INFERRED_FROM_PUBLIC_ANDROID_STATE,
-                    primaryMethod = "MediaStore.getExternalVolumeNames",
+            if (volumes != null) {
+                entries.add(
+                    DiagnosticEntry(
+                        "MediaStore External Volumes",
+                        volumes.joinToString(),
+                        EvidenceClassification.INFERRED_FROM_PUBLIC_ANDROID_STATE,
+                        primaryMethod = "MediaStore.getExternalVolumeNames",
+                    )
                 )
-            )
+            }
         }
 
         return entries
     }
 
-    fun startCapture(sessionId: String): Boolean {
+    fun startCapture(
+        sessionId: String,
+        origin: String = DiagnosticService.ORIGIN_MANUAL,
+        durationMs: Long = 15 * 60 * 1000L,
+    ): Boolean {
         val started = journal.startSession(sessionId)
+        _isCaptureActive.value = journal.hasActiveSession
         if (started) {
-            _isCaptureActive.value = true
-        } else {
-            _isCaptureActive.value = journal.hasActiveSession
+            journal.log(
+                DiagnosticJournal.CAT_SESSION,
+                "Capture owner established",
+                "origin=$origin, durationMs=${DiagnosticService.clampDurationMs(durationMs)}",
+            )
         }
         return started
     }
 
-    fun stopCapture() {
-        journal.endSession()
-        _isCaptureActive.value = false
+    fun stopCapture(sessionId: String? = null): Boolean {
+        val ended = journal.endSession(sessionId)
+        _isCaptureActive.value = journal.hasActiveSession
+        return ended
     }
 }

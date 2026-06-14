@@ -65,6 +65,13 @@
                     android:text="Arm Boot" />
 
                 <Button
+                    android:id="@+id/disarm_boot_btn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Cancel Arm" />
+
+                <Button
                     android:id="@+id/stop_capture_btn"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"

@@ -117,10 +117,18 @@ constructor(
     }
 
     fun startGuidedTest() {
+        if (_guidedTestState.value != GuidedTestState.Idle) return
         _guidedTestState.value = GuidedTestState.Instructions
+        beginGuidedCountdown()
     }
 
     fun beginGuidedCountdown() {
+        if (
+            _guidedTestState.value != GuidedTestState.Instructions &&
+                _guidedTestState.value != GuidedTestState.CountingDown
+        ) {
+            return
+        }
         viewModelScope.launch {
             _guidedTestState.value = GuidedTestState.CountingDown
             for (i in 120 downTo 0) {
@@ -135,32 +143,71 @@ constructor(
     }
 
     private var guidedSessionId: String? = null
+    private var guidedStartRequested = false
 
-    fun actuallyBeginCapture() {
+    fun actuallyBeginCapture(markerEnabled: Boolean = true) {
+        if (guidedStartRequested || _guidedTestState.value == GuidedTestState.Capturing) return
         val sessionId = "guided-${UUID.randomUUID().toString().take(8)}"
         guidedSessionId = sessionId
-        DiagnosticService.start(context, sessionId)
+        guidedStartRequested = true
+        try {
+            DiagnosticService.start(
+                context,
+                sessionId,
+                GUIDED_CAPTURE_DURATION_MS,
+                DiagnosticService.ORIGIN_GUIDED,
+            )
+        } catch (e: Exception) {
+            guidedStartRequested = false
+            guidedSessionId = null
+            restoreDiagnosticMarker()
+            _guidedTestState.value = GuidedTestState.Result("Guided capture failed: ${e.message}")
+            return
+        }
 
-        // Metadata marker test
-        val marker = "MARKER-${UUID.randomUUID().toString().take(4)}"
-        markerController.publishMarker(marker)
-        journal.log(DiagnosticJournal.CAT_TOPWAY_BROADCAST, "Guided test marker set", marker)
-
-        _guidedTestState.value = GuidedTestState.Capturing
+        viewModelScope.launch {
+            repeat(20) {
+                if (journal.activeSessionId == sessionId) {
+                    if (markerEnabled) {
+                        val marker = "MARKER-${UUID.randomUUID().toString().take(4)}"
+                        markerController.publishMarker(marker)
+                        journal.log(
+                            DiagnosticJournal.CAT_TOPWAY_BROADCAST,
+                            "Guided test marker set",
+                            marker,
+                        )
+                    } else {
+                        journal.log(DiagnosticJournal.CAT_TOPWAY_BROADCAST, "Guided marker skipped")
+                    }
+                    _guidedTestState.value = GuidedTestState.Capturing
+                    guidedStartRequested = false
+                    return@launch
+                }
+                delay(100)
+            }
+            guidedStartRequested = false
+            guidedSessionId = null
+            restoreDiagnosticMarker()
+            _guidedTestState.value =
+                GuidedTestState.Result(
+                    "Guided capture failed: service did not confirm the session."
+                )
+        }
     }
 
     fun cancelGuidedTest() {
         restoreDiagnosticMarker()
         if (isCaptureActive.value) {
-            DiagnosticService.stop(context)
+            DiagnosticService.stop(context, guidedSessionId)
         }
+        guidedStartRequested = false
         guidedSessionId = null
         _guidedTestState.value = GuidedTestState.Idle
     }
 
     fun returnFromGuidedTest() {
         if (_guidedTestState.value == GuidedTestState.Capturing) {
-            DiagnosticService.stop(context)
+            DiagnosticService.stop(context, guidedSessionId)
 
             restoreDiagnosticMarker()
 
@@ -173,10 +220,13 @@ constructor(
             val report =
                 withContext(Dispatchers.Default) { correlateGuidedTest(answers, otherTexts) }
             _guidedTestState.value = GuidedTestState.Result(report)
-            _automatedReport.value =
-                repository
-                    .runAutomatedChecks() // Refresh automated results with user-confirmed evidence
-            // labels if we had them
+            try {
+                _automatedReport.value = repository.runAutomatedChecks()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w(e, "Automated refresh after questionnaire failed")
+            }
         }
     }
 
@@ -230,8 +280,11 @@ constructor(
         sb.append("\n== Correlation Analysis ==\n")
 
         val sessionId = guidedSessionId
-        val sessionEvents =
-            journalEvents.value.filter { sessionId == null || it.sessionId == sessionId }
+        if (sessionId == null) {
+            sb.append("Guided session correlation unavailable: missing guided session ID.\n")
+            return sb.toString()
+        }
+        val sessionEvents = journalEvents.value.filter { it.sessionId == sessionId }
         val cmds = sessionEvents.filter { it.category == DiagnosticJournal.CAT_TOPWAY_CMD }
         val broadcasts =
             sessionEvents.filter { it.category == DiagnosticJournal.CAT_TOPWAY_BROADCAST }
@@ -271,31 +324,29 @@ constructor(
     }
 
     fun startTimedCapture(minutes: Int) {
-        val sessionId = "timed-${minutes}m-${UUID.randomUUID().toString().take(8)}"
-        DiagnosticService.start(context, sessionId)
-        viewModelScope.launch {
-            delay(minutes * 60 * 1000L)
-            if (isCaptureActive.value) {
-                DiagnosticService.stop(context)
-            }
-        }
+        val boundedMinutes = minutes.coerceIn(2, 15)
+        val durationMs = boundedMinutes.toLong().times(60_000L)
+        val sessionId = "timed-${boundedMinutes}m-${UUID.randomUUID().toString().take(8)}"
+        DiagnosticService.start(context, sessionId, durationMs, DiagnosticService.ORIGIN_TIMED)
     }
 
     fun armBootCapture() {
         val id = "boot-${UUID.randomUUID().toString().take(8)}"
         diagSettings.armedBootCaptureId = id
         diagSettings.armedExpiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L) // 24h
+        diagSettings.armedCaptureOrigin = DiagnosticService.ORIGIN_APP_START_FALLBACK
+        diagSettings.armedDurationMs = BOOT_CAPTURE_DURATION_MS
         journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture armed for next start", "ID: $id")
     }
 
     fun disarmBootCapture() {
-        diagSettings.armedBootCaptureId = null
+        diagSettings.clearArmedCapture()
         journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture disarmed")
     }
 
     fun stopCapture() {
         restoreDiagnosticMarker()
-        DiagnosticService.stop(context)
+        DiagnosticService.stop(context, guidedSessionId ?: journal.activeSessionId)
     }
 
     private fun restoreDiagnosticMarker() {
@@ -317,19 +368,21 @@ constructor(
 
     fun discoverWritableDestinations(context: Context): List<File> {
         val out = linkedSetOf<File>()
-        context.getExternalFilesDir(null)?.let { if (ensureWritable(it)) out += it }
+        context.getExternalFilesDir(null)?.let { if (isWritableDirectory(it)) out += it }
         listOf(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
             )
-            .filterTo(out) { ensureWritable(it) }
-        TopwaySourcePolicy.discoverCandidateRoots().map(::File).filterTo(out) { ensureWritable(it) }
+            .filterTo(out) { isWritableDirectory(it) }
+        TopwaySourcePolicy.discoverCandidateRoots().map(::File).filterTo(out) {
+            isWritableDirectory(it)
+        }
         return out.toList()
     }
 
-    private fun ensureWritable(file: File): Boolean =
+    private fun isWritableDirectory(file: File): Boolean =
         try {
-            (file.exists() || file.mkdirs()) && file.isDirectory && file.canWrite()
+            file.exists() && file.isDirectory && file.canWrite()
         } catch (e: Exception) {
             L.w(e, "Destination is not writable: ${file.absolutePath}")
             false
@@ -337,7 +390,7 @@ constructor(
 
     fun saveReport(destination: File, report: String): File? {
         return try {
-            if (!destination.exists()) destination.mkdirs()
+            if (!destination.exists() && !destination.mkdirs()) return null
             if (!destination.isDirectory || !destination.canWrite()) return null
             val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
             val out = File(destination, "Auxio-TS-diagnostics-$stamp.txt")
@@ -368,5 +421,10 @@ constructor(
             }
         }
         return candidates
+    }
+
+    companion object {
+        const val GUIDED_CAPTURE_DURATION_MS = 15 * 60 * 1000L
+        const val BOOT_CAPTURE_DURATION_MS = 5 * 60 * 1000L
     }
 }

@@ -43,33 +43,50 @@ class DiagnosticService : Service() {
 
     @Inject lateinit var repository: DiagnosticsRepository
     @Inject lateinit var journal: DiagnosticJournal
+    @Inject lateinit var markerController: DiagnosticMarkerController
+    @Inject lateinit var diagnosticsSettings: DiagnosticsSettings
 
     private val timeoutHandler = Handler(Looper.getMainLooper())
     private var receiverRegistered = false
+    private var activeSessionId: String? = null
+    private var activeOrigin: String = ORIGIN_MANUAL
+    private var activeDurationMs: Long = MAX_CAPTURE_DURATION_MS
     private val timeoutRunnable = Runnable {
-        journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture timed out", "15 minute limit reached")
-        stopCapture()
+        val sessionId = activeSessionId
+        journal.log(
+            DiagnosticJournal.CAT_SYSTEM,
+            "Capture timed out",
+            "Session: $sessionId, durationMs=$activeDurationMs",
+        )
+        stopCapture(sessionId, "timeout")
         stopSelfCleanly()
     }
 
-    private val eventReceiver =
+    private val packageReceiver =
         object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent?) {
-                val action = intent?.action ?: return
-                journal.log(DiagnosticJournal.CAT_SYSTEM, "System Intent", action)
-                if (
-                    action == Intent.ACTION_MEDIA_MOUNTED ||
-                        action == Intent.ACTION_MEDIA_UNMOUNTED ||
-                        action == Intent.ACTION_MEDIA_EJECT
-                ) {
-                    journal.log(
-                        DiagnosticJournal.CAT_STORAGE,
-                        "Media Event",
-                        "Action: $action, Data: ${intent.data}",
-                    )
-                }
-            }
+            override fun onReceive(context: Context, intent: Intent?) = handleEventIntent(intent)
         }
+
+    private val storageReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent?) = handleEventIntent(intent)
+        }
+
+    private fun handleEventIntent(intent: Intent?) {
+        val action = intent?.action ?: return
+        journal.log(DiagnosticJournal.CAT_SYSTEM, "System Intent", action)
+        if (
+            action == Intent.ACTION_MEDIA_MOUNTED ||
+                action == Intent.ACTION_MEDIA_UNMOUNTED ||
+                action == Intent.ACTION_MEDIA_EJECT
+        ) {
+            journal.log(
+                DiagnosticJournal.CAT_STORAGE,
+                "Media Event",
+                "Action: $action, Data: ${intent.data}",
+            )
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -77,35 +94,48 @@ class DiagnosticService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent == null || intent.action == ACTION_STOP) {
-            stopCapture()
+        val action = intent?.action
+        if (action == ACTION_STOP) {
+            stopCapture(intent.getStringExtra(EXTRA_SESSION_ID), "user stop")
+            stopSelfCleanly()
+            return START_NOT_STICKY
+        }
+        if (action != ACTION_START_CAPTURE) {
             stopSelfCleanly()
             return START_NOT_STICKY
         }
 
-        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: "default"
+        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return START_NOT_STICKY
+        val requestedDurationMs =
+            clampDurationMs(intent.getLongExtra(EXTRA_DURATION_MS, MAX_CAPTURE_DURATION_MS))
+        val origin = intent.getStringExtra(EXTRA_ORIGIN) ?: ORIGIN_MANUAL
 
         if (!promoteForeground()) {
+            markerController.restoreCurrentMetadata()
             stopSelfCleanly()
             return START_NOT_STICKY
         }
 
-        if (intent.action == ACTION_START_CAPTURE) {
-            if (!repository.startCapture(sessionId)) {
-                stopSelfCleanly()
-                return START_NOT_STICKY
-            }
-            journal.log(
-                DiagnosticJournal.CAT_SYSTEM,
-                "Capture Service Started",
-                "Session: $sessionId",
-            )
-
-            registerEventReceiverOnce()
-            timeoutHandler.removeCallbacks(timeoutRunnable)
-            timeoutHandler.postDelayed(timeoutRunnable, MAX_CAPTURE_DURATION_MS)
+        if (!repository.startCapture(sessionId, origin, requestedDurationMs)) {
+            markerController.restoreCurrentMetadata()
+            stopSelfCleanly()
+            return START_NOT_STICKY
         }
+        activeSessionId = sessionId
+        activeOrigin = origin
+        activeDurationMs = requestedDurationMs
+        if (origin == ORIGIN_BOOT || origin == ORIGIN_APP_START_FALLBACK) {
+            diagnosticsSettings.clearArmedCapture()
+        }
+        journal.log(
+            DiagnosticJournal.CAT_SYSTEM,
+            "Capture Service Started",
+            "Session: $sessionId, origin=$origin, durationMs=$requestedDurationMs",
+        )
 
+        registerEventReceiversOnce()
+        timeoutHandler.removeCallbacks(timeoutRunnable)
+        timeoutHandler.postDelayed(timeoutRunnable, requestedDurationMs)
         return START_STICKY
     }
 
@@ -113,29 +143,24 @@ class DiagnosticService : Service() {
 
     override fun onDestroy() {
         timeoutHandler.removeCallbacks(timeoutRunnable)
-        if (receiverRegistered) {
-            repeat(2) {
-                try {
-                    unregisterReceiver(eventReceiver)
-                } catch (e: Exception) {
-                    L.w(e, "Failed to unregister diagnostic event receiver")
-                }
-            }
-            receiverRegistered = false
-        }
-        stopCapture()
+        unregisterEventReceivers()
+        stopCapture(activeSessionId, "service destroyed")
+        markerController.restoreCurrentMetadata()
         L.d("DiagnosticService destroyed")
         super.onDestroy()
     }
 
-    private fun stopCapture() {
+    private fun stopCapture(sessionId: String?, reason: String) {
+        if (sessionId == null) return
         if (repository.isCaptureActive.value) {
-            repository.stopCapture()
-            journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture Service Stopped")
+            journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture Service Stopping", reason)
+            repository.stopCapture(sessionId)
+            journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture Service Stopped", reason)
         }
+        if (activeSessionId == sessionId) activeSessionId = null
     }
 
-    private fun registerEventReceiverOnce() {
+    private fun registerEventReceiversOnce() {
         if (receiverRegistered) return
         val packageFilter =
             IntentFilter().apply {
@@ -152,17 +177,32 @@ class DiagnosticService : Service() {
             }
         ContextCompat.registerReceiver(
             this,
-            eventReceiver,
+            packageReceiver,
             packageFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         ContextCompat.registerReceiver(
             this,
-            eventReceiver,
+            storageReceiver,
             storageFilter,
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         receiverRegistered = true
+    }
+
+    private fun unregisterEventReceivers() {
+        if (!receiverRegistered) return
+        try {
+            unregisterReceiver(packageReceiver)
+        } catch (e: Exception) {
+            L.w(e, "Failed to unregister diagnostic package receiver")
+        }
+        try {
+            unregisterReceiver(storageReceiver)
+        } catch (e: Exception) {
+            L.w(e, "Failed to unregister diagnostic storage receiver")
+        }
+        receiverRegistered = false
     }
 
     private fun promoteForeground(): Boolean {
@@ -224,18 +264,39 @@ class DiagnosticService : Service() {
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".diagnostics.STOP"
         const val EXTRA_SESSION_ID = "extra_session_id"
 
-        fun start(context: Context, sessionId: String) {
+        const val EXTRA_DURATION_MS = "extra_duration_ms"
+        const val EXTRA_ORIGIN = "extra_origin"
+        const val ORIGIN_MANUAL = "manual"
+        const val ORIGIN_GUIDED = "guided"
+        const val ORIGIN_TIMED = "timed"
+        const val ORIGIN_BOOT = "boot"
+        const val ORIGIN_APP_START_FALLBACK = "app_start_fallback"
+
+        fun clampDurationMs(durationMs: Long): Long =
+            durationMs.coerceIn(1_000L, MAX_CAPTURE_DURATION_MS)
+
+        fun start(
+            context: Context,
+            sessionId: String,
+            durationMs: Long = MAX_CAPTURE_DURATION_MS,
+            origin: String = ORIGIN_MANUAL,
+        ) {
             val intent =
                 Intent(context, DiagnosticService::class.java).apply {
                     action = ACTION_START_CAPTURE
                     putExtra(EXTRA_SESSION_ID, sessionId)
+                    putExtra(EXTRA_DURATION_MS, clampDurationMs(durationMs))
+                    putExtra(EXTRA_ORIGIN, origin)
                 }
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun stop(context: Context) {
+        fun stop(context: Context, sessionId: String? = null) {
             val intent =
-                Intent(context, DiagnosticService::class.java).apply { action = ACTION_STOP }
+                Intent(context, DiagnosticService::class.java).apply {
+                    action = ACTION_STOP
+                    sessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
+                }
             context.startService(intent)
         }
     }
