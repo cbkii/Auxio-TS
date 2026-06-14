@@ -21,6 +21,7 @@ package org.oxycblt.auxio.playback.service
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
@@ -48,11 +49,11 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.util.NotificationBitmapSafety
 import org.oxycblt.auxio.util.newBroadcastPendingIntent
 import org.oxycblt.auxio.util.newNowPlayingPendingIntent
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
-import org.oxycblt.auxio.util.NotificationBitmapSafety
 import timber.log.Timber as L
 
 /**
@@ -494,7 +495,7 @@ private class PlaybackNotification(
         setContentTitle(
             metadata.getString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE)
                 ?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.app_name)
+                ?: context.getString(R.string.info_app_name)
         )
         setContentText(
             metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE)

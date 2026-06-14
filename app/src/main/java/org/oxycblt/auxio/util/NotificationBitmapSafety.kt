@@ -24,17 +24,25 @@ object NotificationBitmapSafety {
 
     fun sanitize(input: Bitmap?): Bitmap? {
         val source = input?.takeIf { !it.isRecycled && it.width > 0 && it.height > 0 } ?: return null
-        val software = source.toSafeSoftwareBitmap() ?: return null
-        val bounded = if (maxOf(software.width, software.height) > MAX_ICON_SIZE_PX) {
-            software.scaleToMaxSide(MAX_ICON_SIZE_PX)
-        } else {
-            software
+        var working = source.toSafeSoftwareBitmap() ?: return null
+
+        if (maxOf(working.width, working.height) > MAX_ICON_SIZE_PX) {
+            val scaled = working.scaleToMaxSide(MAX_ICON_SIZE_PX) ?: return null
+            if (scaled !== working && working !== source && !working.isRecycled) {
+                working.recycle()
+            }
+            working = scaled
         }
-        return if (minOf(bounded.width, bounded.height) < MIN_ICON_SIZE_PX) {
-            bounded.centerInSafeCanvas()
-        } else {
-            bounded
+
+        if (minOf(working.width, working.height) < MIN_ICON_SIZE_PX) {
+            val centered = working.centerInSafeCanvas() ?: return null
+            if (centered !== working && working !== source && !working.isRecycled) {
+                working.recycle()
+            }
+            working = centered
         }
+
+        return working
     }
 
     @Synchronized
@@ -52,7 +60,7 @@ object NotificationBitmapSafety {
     private fun Bitmap.toSafeSoftwareBitmap(): Bitmap? {
         if (isRecycled) return null
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && config == Bitmap.Config.HARDWARE) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && config?.name == "HARDWARE") {
                 copy(Bitmap.Config.ARGB_8888, false)
             } else {
                 this
@@ -63,30 +71,45 @@ object NotificationBitmapSafety {
         }
     }
 
-    private fun Bitmap.scaleToMaxSide(maxSide: Int): Bitmap {
+    private fun Bitmap.scaleToMaxSide(maxSide: Int): Bitmap? {
         val scale = maxSide.toFloat() / maxOf(width, height)
         val scaledWidth = (width * scale).roundToInt().coerceAtLeast(1)
         val scaledHeight = (height * scale).roundToInt().coerceAtLeast(1)
-        return Bitmap.createScaledBitmap(this, scaledWidth, scaledHeight, true)
+        return try {
+            Bitmap.createScaledBitmap(this, scaledWidth, scaledHeight, true)
+        } catch (e: RuntimeException) {
+            L.w(e, "Failed to scale notification artwork bitmap")
+            null
+        }
     }
 
-    private fun Bitmap.centerInSafeCanvas(): Bitmap {
-        val out = Bitmap.createBitmap(
-            FALLBACK_ICON_SIZE_PX,
-            FALLBACK_ICON_SIZE_PX,
-            Bitmap.Config.ARGB_8888,
-        )
-        val canvas = Canvas(out)
-        canvas.drawColor(Color.TRANSPARENT)
-        val scale = minOf(
-            FALLBACK_ICON_SIZE_PX.toFloat() / width,
-            FALLBACK_ICON_SIZE_PX.toFloat() / height,
-        )
-        val scaledWidth = width * scale
-        val scaledHeight = height * scale
-        val left = (FALLBACK_ICON_SIZE_PX - scaledWidth) / 2f
-        val top = (FALLBACK_ICON_SIZE_PX - scaledHeight) / 2f
-        canvas.drawBitmap(this, null, RectF(left, top, left + scaledWidth, top + scaledHeight), paint)
-        return out
+    private fun Bitmap.centerInSafeCanvas(): Bitmap? {
+        return try {
+            val out = Bitmap.createBitmap(
+                FALLBACK_ICON_SIZE_PX,
+                FALLBACK_ICON_SIZE_PX,
+                Bitmap.Config.ARGB_8888,
+            )
+            val canvas = Canvas(out)
+            canvas.drawColor(Color.TRANSPARENT)
+            val scale = minOf(
+                FALLBACK_ICON_SIZE_PX.toFloat() / width,
+                FALLBACK_ICON_SIZE_PX.toFloat() / height,
+            )
+            val scaledWidth = width * scale
+            val scaledHeight = height * scale
+            val left = (FALLBACK_ICON_SIZE_PX - scaledWidth) / 2f
+            val top = (FALLBACK_ICON_SIZE_PX - scaledHeight) / 2f
+            canvas.drawBitmap(
+                this,
+                null,
+                RectF(left, top, left + scaledWidth, top + scaledHeight),
+                paint,
+            )
+            out
+        } catch (e: RuntimeException) {
+            L.w(e, "Failed to center notification artwork bitmap on safe canvas")
+            null
+        }
     }
 }

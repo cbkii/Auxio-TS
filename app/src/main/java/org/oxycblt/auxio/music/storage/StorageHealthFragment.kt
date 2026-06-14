@@ -93,7 +93,7 @@ constructor(
         }
     }
 
-    fun saveReport(context: Context, destination: File, report: String): File? {
+    fun saveReport(destination: File, report: String): File? {
         return try {
             if (!destination.exists()) destination.mkdirs()
             if (!destination.isDirectory || !destination.canWrite()) return null
@@ -115,10 +115,18 @@ constructor(
         sb.append("Auxio-TS Health Diagnostics Report\n")
         sb.append("Timestamp: ${java.util.Date()}\n\n")
         sb.append("== Device/platform ==\n")
-        sb.append("App package/version: $pkg / ${packageInfo?.versionName ?: "unknown"} (${packageInfo?.longVersionCode ?: -1})\n")
-        sb.append("SDK / reported release: ${android.os.Build.VERSION.SDK_INT} / ${android.os.Build.VERSION.RELEASE}\n")
-        sb.append("Release-SDK mismatch: ${android.os.Build.VERSION.RELEASE.startsWith("13") && android.os.Build.VERSION.SDK_INT == 29}\n")
-        sb.append("Device/product/board/hardware: ${android.os.Build.DEVICE} / ${android.os.Build.PRODUCT} / ${android.os.Build.BOARD} / ${android.os.Build.HARDWARE}\n")
+        sb.append(
+            "App package/version: $pkg / ${packageInfo?.versionName ?: "unknown"} (${packageInfo?.longVersionCode ?: -1})\n"
+        )
+        sb.append(
+            "SDK / reported release: ${android.os.Build.VERSION.SDK_INT} / ${android.os.Build.VERSION.RELEASE}\n"
+        )
+        sb.append(
+            "Release-SDK mismatch: ${android.os.Build.VERSION.RELEASE.startsWith("13") && android.os.Build.VERSION.SDK_INT == 29}\n"
+        )
+        sb.append(
+            "Device/product/board/hardware: ${android.os.Build.DEVICE} / ${android.os.Build.PRODUCT} / ${android.os.Build.BOARD} / ${android.os.Build.HARDWARE}\n"
+        )
         sb.append("Fingerprint: ${android.os.Build.FINGERPRINT}\n")
         val dm = context.resources.displayMetrics
         sb.append("Display: ${dm.widthPixels}x${dm.heightPixels} density=${dm.density} dpi=${dm.densityDpi}\n\n")
@@ -127,7 +135,9 @@ constructor(
         val nm = androidx.core.app.NotificationManagerCompat.from(context)
         sb.append("Notifications enabled: ${nm.areNotificationsEnabled()}\n")
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val sysNm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val sysNm =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as
+                    android.app.NotificationManager
             sysNm.notificationChannels.filter { it.id.startsWith(pkg) }.forEach { ch ->
                 sb.append("Channel: ${ch.id} importance=${ch.importance} name=${ch.name}\n")
             }
@@ -136,15 +146,31 @@ constructor(
         sb.append("Current song: ${playbackManager.currentSong?.name ?: "None"}\n")
         sb.append("Foreground service active: ${org.oxycblt.auxio.AuxioService.isForeground}\n")
         sb.append("Overlay permission: ${Settings.canDrawOverlays(context)}\n")
-        sb.append("Safe TS18 notification bitmap policy: active; fallback=${org.oxycblt.auxio.util.NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX}px, min=${org.oxycblt.auxio.util.NotificationBitmapSafety.MIN_ICON_SIZE_PX}px\n")
+        sb.append(
+            "Safe TS18 notification bitmap policy: active; fallback=${org.oxycblt.auxio.util.NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX}px, min=${org.oxycblt.auxio.util.NotificationBitmapSafety.MIN_ICON_SIZE_PX}px\n"
+        )
         sb.append("Privileged SystemUI/DoFun/kernel logs: Unavailable without privileged/system access\n\n")
 
         sb.append("== DoFun launcher integration ==\n")
         appendPackage(sb, context, "com.dofun.variety")
-        appendResolvable(sb, context, "DoFun launcher", "com.dofun.variety", "com.dofun.overseasvariety.Launcher")
-        appendResolvable(sb, context, "DoFun NotifyService", "com.dofun.variety", "cn.cardoor.basic.media.NotifyService")
+        appendResolvable(
+            sb,
+            context,
+            "DoFun launcher",
+            "com.dofun.variety",
+            "com.dofun.overseasvariety.Launcher",
+        )
+        appendResolvable(
+            sb,
+            context,
+            "DoFun NotifyService",
+            "com.dofun.variety",
+            "cn.cardoor.basic.media.NotifyService",
+        )
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        sb.append("Default/available HOME: ${pm.resolveActivity(home, 0)?.activityInfo?.packageName ?: "unresolved"}\n")
+        sb.append(
+            "Default/available HOME: ${pm.resolveActivity(home, 0)?.activityInfo?.packageName ?: "unresolved"}\n"
+        )
         appendResolvable(sb, context, "Auxio Topway MusicActivity", pkg, "com.tw.music.MusicActivity")
         sb.append("Private DoFun windows/listener internals: Unavailable without privileged/system access\n\n")
 
@@ -160,14 +186,26 @@ constructor(
         candidates.forEach { sb.append("  - $it\n") }
         sb.append("/mnt/media_rw accessible: ${File("/mnt/media_rw").canRead()}\n")
         sb.append("Music source mode: ${musicSettings.locationMode.name}\n")
-        sb.append("TS18 fast filter enabled: ${musicSettings.ts18SystemSourceFilter} keywords=${TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS.joinToString()}\n")
+        sb.append(
+            "TS18 fast filter enabled: ${musicSettings.ts18SystemSourceFilter} keywords=${TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS.joinToString()}\n"
+        )
         sb.append("Persisted SAF permissions:\n")
-        context.contentResolver.persistedUriPermissions.forEach { p -> sb.append("  - ${p.uri} read=${p.isReadPermission} write=${p.isWritePermission}\n") }
+        context.contentResolver.persistedUriPermissions.forEach { p ->
+            sb.append("  - ${p.uri} read=${p.isReadPermission} write=${p.isWritePermission}\n")
+        }
         sb.append("Selected SAF source paths (exact URI/path identity preserved by settings):\n")
-        musicSettings.safQuery.source.forEach { location -> sb.append("  - ${location.uri} accessible=${location.path.volume.isAccessible()}\n") }
-        sb.append("MediaStore filter mode: ${musicSettings.mediaStoreQuery.mode.name} exclusions=${musicSettings.mediaStoreQuery.filtered.size}\n")
+        musicSettings.safQuery.source.forEach { location ->
+            sb.append("  - ${location.uri} accessible=${location.path.volume.isAccessible()}\n")
+        }
+        sb.append(
+            "MediaStore filter mode: ${musicSettings.mediaStoreQuery.mode.name} exclusions=${musicSettings.mediaStoreQuery.filtered.size}\n"
+        )
         sb.append("MediaStore volumes (names only; counts skipped to avoid expensive launch-time scans):\n")
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) MediaStore.getExternalVolumeNames(context).forEach { sb.append("  - $it\n") } else sb.append("  - external\n")
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            MediaStore.getExternalVolumeNames(context).forEach { sb.append("  - $it\n") }
+        } else {
+            sb.append("  - external\n")
+        }
 
         val noisy = findNoisyPaths(candidates)
         _noisyPaths.value = noisy
@@ -177,12 +215,18 @@ constructor(
         }
         val aliases = StoragePathAliasPolicy.groupAliases(candidates).filter { it.paths.size > 1 }
         sb.append("Alias groups / duplicate-source risk:\n")
-        if (aliases.isEmpty()) sb.append("  none detected from bounded roots\n") else aliases.forEach { group -> group.paths.forEach { sb.append("  - $it\n") } }
+        if (aliases.isEmpty()) {
+            sb.append("  none detected from bounded roots\n")
+        } else {
+            aliases.forEach { group -> group.paths.forEach { sb.append("  - $it\n") } }
+        }
         sb.append("Temporary USB absence policy: selected paths are reported inaccessible, not rewritten or cleared by diagnostics.\n\n")
 
         sb.append("== Logs and collection limits ==\n")
         sb.append("Auxio app-owned crash/diagnostic files: see app files directory if present: ${context.filesDir.absolutePath}\n")
-        sb.append("SystemUI/DoFun/stock music/kernel logs: Unavailable without privileged/system access. Collect externally with adb bugreport/logcat/dmesg where available.\n")
+        sb.append(
+            "SystemUI/DoFun/stock music/kernel logs: Unavailable without privileged/system access. Collect externally with adb bugreport/logcat/dmesg where available.\n"
+        )
         return sb.toString()
     }
 
@@ -193,10 +237,18 @@ constructor(
         val system = info?.flags?.and(android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
         val source = info?.sourceDir ?: "unavailable"
         val privileged = source.contains("/priv-app/")
-        sb.append("$packageName installed=${info != null} enabled=${info?.enabled} version=${pkg?.versionName ?: "unknown"} system=$system privileged=$privileged source=$source\n")
+        sb.append(
+            "$packageName installed=${info != null} enabled=${info?.enabled} version=${pkg?.versionName ?: "unknown"} system=$system privileged=$privileged source=$source\n"
+        )
     }
 
-    private fun appendResolvable(sb: StringBuilder, context: Context, label: String, packageName: String, className: String) {
+    private fun appendResolvable(
+        sb: StringBuilder,
+        context: Context,
+        label: String,
+        packageName: String,
+        className: String,
+    ) {
         val intent = Intent().setClassName(packageName, className)
         val activity = context.packageManager.resolveActivity(intent, 0)
         val service = context.packageManager.resolveService(intent, 0)
@@ -223,7 +275,9 @@ constructor(
             false
         }
 
-    private fun findNoisyPaths(baseRootPaths: List<String> = TopwaySourcePolicy.discoverCandidateRoots()): List<String> {
+    private fun findNoisyPaths(
+        baseRootPaths: List<String> = TopwaySourcePolicy.discoverCandidateRoots()
+    ): List<String> {
         val candidates = mutableListOf<String>()
         val baseRoots = baseRootPaths.map(::File)
 
@@ -314,8 +368,12 @@ class StorageHealthFragment : Fragment() {
         exportButton.setOnClickListener {
             val report = viewModel.reportState.value
             if (report != null) {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Auxio-TS health", report))
+                val clipboard =
+                    context.getSystemService(Context.CLIPBOARD_SERVICE) as
+                        android.content.ClipboardManager
+                clipboard.setPrimaryClip(
+                    android.content.ClipData.newPlainText("Auxio-TS health", report)
+                )
                 // simple export via share intent
                 val intent =
                     android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -331,7 +389,8 @@ class StorageHealthFragment : Fragment() {
         saveButton.setOnClickListener {
             val report = viewModel.reportState.value ?: return@setOnClickListener
             viewLifecycleOwner.lifecycleScope.launch {
-                val destinations = withContext(Dispatchers.IO) { viewModel.discoverWritableDestinations(context) }
+                val destinations =
+                    withContext(Dispatchers.IO) { viewModel.discoverWritableDestinations(context) }
                 if (destinations.isEmpty()) {
                     Toast.makeText(context, "No writable destinations found", Toast.LENGTH_LONG).show()
                 } else {
@@ -341,7 +400,7 @@ class StorageHealthFragment : Fragment() {
                             viewLifecycleOwner.lifecycleScope.launch {
                                 val saved =
                                     withContext(Dispatchers.IO) {
-                                        viewModel.saveReport(context, destinations[which], report)
+                                        viewModel.saveReport(destinations[which], report)
                                     }
                                 Toast.makeText(
                                         context,

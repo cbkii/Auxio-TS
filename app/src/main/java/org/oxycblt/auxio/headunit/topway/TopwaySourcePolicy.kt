@@ -94,7 +94,11 @@ object TopwaySourcePolicy {
      * Preserves each returned path exactly as discovered so UI selection can persist it unchanged.
      */
     fun discoverCandidateRoots(): List<String> =
-        discoverCandidateRoots(File("/storage"), File("/mnt/media_rw"), includeGenericFallbacks = true)
+        discoverCandidateRoots(
+            File("/storage"),
+            File("/mnt/media_rw"),
+            includeGenericFallbacks = true,
+        )
 
     internal fun discoverCandidateRoots(
         storageRoot: File,
