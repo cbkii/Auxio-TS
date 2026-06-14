@@ -71,15 +71,18 @@ class DiagnosticJournal @Inject constructor() {
     /**
      * Starts a new capture session identifier.
      */
-    fun startSession(id: String) {
+    fun startSession(id: String): Boolean {
+        if (currentSessionId != null) return false
         currentSessionId = id
         log("SESSION", "Started", "Session ID: $id")
+        return true
     }
 
     /**
      * Clears the current session identifier.
      */
     fun endSession() {
+        if (currentSessionId == null) return
         log("SESSION", "Ended", "Session ID: $currentSessionId")
         currentSessionId = null
     }

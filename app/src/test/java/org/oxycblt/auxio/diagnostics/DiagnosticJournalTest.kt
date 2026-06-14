@@ -78,4 +78,11 @@ class DiagnosticJournalTest {
         journal.clear()
         assertEquals(0, journal.events.value.size)
     }
+
+    @Test fun `test overlapping capture is prevented`() {
+        assertTrue(journal.startSession("first"))
+        assertFalse(journal.startSession("second"))
+        journal.endSession()
+        assertTrue(journal.startSession("third"))
+    }
 }

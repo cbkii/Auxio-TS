@@ -150,6 +150,7 @@ class DiagnosticsViewModel @Inject constructor(
                 correlateGuidedTest(answers, otherTexts)
             }
             _guidedTestState.value = GuidedTestState.Result(report)
+            _automatedReport.value = repository.runAutomatedChecks() // Refresh automated results with user-confirmed evidence labels if we had them
         }
     }
 

@@ -106,57 +106,55 @@ class DiagnosticsRepository @Inject constructor(
 
     private fun checkPackage(packageName: String, label: String): DiagnosticEntry {
         val pm = context.packageManager
-        return try {
-            val info = pm.getApplicationInfo(packageName, 0)
-            val pkg = pm.getPackageInfo(packageName, 0)
-            val system = (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-            val priv = info.sourceDir.contains("/priv-app/")
+        val ai = runCatching { pm.getApplicationInfo(packageName, 0) }.getOrNull()
+        val pi = runCatching { pm.getPackageInfo(packageName, 0) }.getOrNull()
+
+        return if (ai != null || pi != null) {
+            val system = ai?.flags?.and(android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
+            val priv = ai?.sourceDir?.contains("/priv-app/") == true
             DiagnosticEntry(
                 "$label ($packageName)",
-                "Installed: true, Enabled: ${info.enabled}, System: $system, Privileged: $priv, Version: ${pkg.versionName}",
+                "visible=true enabled=${ai?.enabled} system=$system privileged=$priv version=${pi?.versionName} source=${ai?.sourceDir}",
                 EvidenceClassification.OBSERVED_BY_AUXIO,
-                primaryMethod = "PackageManager.getApplicationInfo"
+                primaryMethod = "targeted getPackageInfo/getApplicationInfo"
             )
-        } catch (e: PackageManager.NameNotFoundException) {
+        } else {
             DiagnosticEntry(
                 "$label ($packageName)",
-                "Not installed",
-                EvidenceClassification.OBSERVED_BY_AUXIO,
-                primaryMethod = "PackageManager.getApplicationInfo"
-            )
-        } catch (e: Exception) {
-            DiagnosticEntry(
-                "$label ($packageName)",
-                "Query failed: ${e.message}",
-                EvidenceClassification.QUERY_FAILED
+                "not visible or absent; not treated as proven absent",
+                EvidenceClassification.NOT_VISIBLE_TO_THIS_APP,
+                primaryMethod = "targeted getPackageInfo/getApplicationInfo",
+                fallbackMethod = "explicit launch/component resolution"
             )
         }
     }
 
     private fun checkComponents(): List<DiagnosticEntry> {
-        val components = listOf(
-            Triple("com.tw.music.MusicActivity", "Topway Activity", true),
-            Triple("com.tw.music.MusicService", "Topway Service", false),
-            Triple("com.tw.music.view.MusicWidgetProvider", "Topway Widget Provider", false),
-            Triple("org.oxycblt.auxio.headunit.topway.TopwayMusicBridgeReceiver", "Topway Bridge Receiver", false)
+        return listOf(
+            component("DoFun launcher activity", "com.dofun.variety", "com.dofun.overseasvariety.Launcher", "activity"),
+            component("Stock MusicActivity", "com.tw.music", "com.tw.music.MusicActivity", "activity"),
+            component("Stock MusicService", "com.tw.music", "com.tw.music.MusicService", "service"),
+            component("Stock-name Topway provider", context.packageName, "com.tw.music.view.MusicWidgetProvider", "receiver"),
+            component("Auxio playback service", context.packageName, "org.oxycblt.auxio.AuxioService", "service"),
+            component("Topway bridge receiver", context.packageName, "org.oxycblt.auxio.headunit.topway.TopwayMusicBridgeReceiver", "receiver"),
+            component("Auxio cover provider", context.packageName, "org.oxycblt.auxio.image.CoverProvider", "provider")
         )
+    }
 
-        return components.map { (cls, label, isActivity) ->
-            val intent = Intent().setClassName(context.packageName, cls)
-            val pm = context.packageManager
-            val resolvable = if (isActivity) {
-                pm.resolveActivity(intent, 0) != null
-            } else {
-                pm.resolveService(intent, 0) != null || pm.queryBroadcastReceivers(intent, 0).isNotEmpty()
+    private fun component(label: String, pkg: String, cls: String, type: String): DiagnosticEntry {
+        val pm = context.packageManager
+        val cn = android.content.ComponentName(pkg, cls)
+        val value = runCatching {
+            when (type) {
+                "activity" -> pm.getActivityInfo(cn, 0).let { "present enabled=${it.enabled} exported=${it.exported} process=${it.processName} permission=${it.permission} meta=${it.metaData != null}" }
+                "service" -> pm.getServiceInfo(cn, 0).let { "present enabled=${it.enabled} exported=${it.exported} process=${it.processName} permission=${it.permission} meta=${it.metaData != null}" }
+                "receiver" -> pm.getReceiverInfo(cn, 0).let { "present enabled=${it.enabled} exported=${it.exported} process=${it.processName} permission=${it.permission} meta=${it.metaData != null}" }
+                else -> pm.getProviderInfo(cn, 0).let { "present enabled=${it.enabled} exported=${it.exported} process=${it.processName} readPermission=${it.readPermission} writePermission=${it.writePermission} meta=${it.metaData != null}" }
             }
-
-            DiagnosticEntry(
-                "$label ($cls)",
-                "Resolvable: $resolvable",
-                EvidenceClassification.OBSERVED_BY_AUXIO,
-                primaryMethod = if (isActivity) "resolveActivity" else "resolveService/queryReceivers"
-            )
+        }.getOrElse {
+            "direct $type query failed: ${it.javaClass.simpleName}; explicit intent resolves activity=${pm.resolveActivity(Intent().setComponent(cn), 0) != null} service=${pm.resolveService(Intent().setComponent(cn), 0) != null}"
         }
+        return DiagnosticEntry(label, value, EvidenceClassification.OBSERVED_BY_AUXIO, primaryMethod = "PackageManager.get${type.capitalize()}Info")
     }
 
     private fun checkLauncherState(): DiagnosticEntry {
@@ -203,6 +201,14 @@ class DiagnosticsRepository @Inject constructor(
                 EvidenceClassification.OBSERVED_BY_AUXIO
             ))
         }
+
+        val listeners = runCatching { android.provider.Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: "none visible" }.getOrElse { "query failed: ${it.javaClass.simpleName}" }
+        entries.add(DiagnosticEntry(
+            "Notification Listener Visibility",
+            listeners,
+            EvidenceClassification.INFERRED_FROM_PUBLIC_ANDROID_STATE,
+            primaryMethod = "Settings.Secure.getString(enabled_notification_listeners)"
+        ))
 
         return entries
     }
@@ -294,9 +300,12 @@ class DiagnosticsRepository @Inject constructor(
         return entries
     }
 
-    fun startCapture(sessionId: String) {
-        journal.startSession(sessionId)
-        _isCaptureActive.value = true
+    fun startCapture(sessionId: String): Boolean {
+        if (journal.startSession(sessionId)) {
+            _isCaptureActive.value = true
+            return true
+        }
+        return false
     }
 
     fun stopCapture() {

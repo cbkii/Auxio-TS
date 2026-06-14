@@ -72,7 +72,10 @@ class DiagnosticService : Service() {
         }
 
         if (intent.action == ACTION_START_CAPTURE) {
-            repository.startCapture(sessionId)
+            if (!repository.startCapture(sessionId)) {
+                stopSelfCleanly()
+                return START_NOT_STICKY
+            }
             journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture Service Started", "Session: $sessionId")
 
             val filter = IntentFilter().apply {
