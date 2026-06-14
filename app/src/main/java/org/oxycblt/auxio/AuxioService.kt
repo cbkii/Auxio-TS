@@ -33,6 +33,7 @@ import androidx.media.MediaBrowserServiceCompat
 import androidx.media.utils.MediaConstants
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.music.service.MusicServiceFragment
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
 import timber.log.Timber
@@ -46,6 +47,8 @@ open class AuxioService :
     @Inject lateinit var musicFragmentFactory: MusicServiceFragment.Factory
     private lateinit var musicFragment: MusicServiceFragment
 
+    @Inject lateinit var journal: DiagnosticJournal
+
     @SuppressLint("WrongConstant")
     override fun onCreate() {
         super.onCreate()
@@ -54,6 +57,7 @@ open class AuxioService :
         sessionToken = playbackFragment.attach()
         musicFragment.attach()
         Timber.d("Service Created")
+        journal.log(DiagnosticJournal.CAT_LIFECYCLE, "AuxioService onCreate")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -61,6 +65,11 @@ open class AuxioService :
         //  service, we might need more handling here.
         super.onStartCommand(intent, flags, startId)
         onHandleForeground(intent)
+        journal.log(
+            DiagnosticJournal.CAT_LIFECYCLE,
+            "AuxioService onStartCommand",
+            "Action: ${intent?.action}, StartId: $startId"
+        )
         // Playback services are expected to survive process churn when possible so that
         // MediaSession/controller interactions continue to route to the same service endpoint.
         // Keep this service sticky and let playback/session state restoration decide whether
@@ -88,6 +97,7 @@ open class AuxioService :
         super.onDestroy()
         musicFragment.release()
         playbackFragment.release()
+        journal.log(DiagnosticJournal.CAT_LIFECYCLE, "AuxioService onDestroy")
     }
 
     override fun onGetRoot(

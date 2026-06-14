@@ -24,6 +24,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
 
@@ -37,6 +38,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var playbackSettings: PlaybackSettings
+    @Inject lateinit var journal: DiagnosticJournal
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) {
@@ -50,6 +52,7 @@ class BootReceiver : BroadcastReceiver() {
         }
 
         L.d("Autostart enabled, attempting to launch Auxio-TS on boot")
+        journal.log(DiagnosticJournal.CAT_BOOT, "Boot Received", "Autostart enabled")
 
         // When autoplay is enabled, start the playback service first so that music can begin
         // even if the background activity start is blocked. The service start is only performed

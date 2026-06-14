@@ -26,6 +26,7 @@ import coil3.request.transformations
 import coil3.size.Size
 import javax.inject.Inject
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayMusicBroadcastBridge
 import org.oxycblt.auxio.image.BitmapProvider
@@ -57,6 +58,7 @@ private constructor(
     private val bitmapProvider: BitmapProvider,
     private val playbackManager: PlaybackStateManager,
     private val uiSettings: UISettings,
+    private val journal: DiagnosticJournal,
 ) : PlaybackStateManager.Listener, UISettings.Listener, ImageSettings.Listener {
     private var lastRenderedIsPlaying: Boolean? = null
 
@@ -67,9 +69,17 @@ private constructor(
         private val bitmapProvider: BitmapProvider,
         private val playbackManager: PlaybackStateManager,
         private val uiSettings: UISettings,
+        private val journal: DiagnosticJournal,
     ) {
         fun create(context: Context) =
-            WidgetComponent(context, imageSettings, bitmapProvider, playbackManager, uiSettings)
+            WidgetComponent(
+                context,
+                imageSettings,
+                bitmapProvider,
+                playbackManager,
+                uiSettings,
+                journal
+            )
     }
 
     private val widgetProvider = WidgetProvider()
@@ -102,7 +112,7 @@ private constructor(
             }
         }
 
-    private val topwayBridge = TopwayMusicBroadcastBridge(context, uiSettings)
+    private val topwayBridge = TopwayMusicBroadcastBridge(context, uiSettings, journal)
 
     fun attach() {
         playbackManager.addListener(this)

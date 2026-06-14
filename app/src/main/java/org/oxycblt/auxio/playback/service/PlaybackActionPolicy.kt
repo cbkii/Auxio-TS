@@ -31,6 +31,8 @@ object PlaybackActionPolicy {
             PlaybackActions.ACTION_SKIP_PREV,
             PlaybackActions.ACTION_SKIP_NEXT,
             PlaybackActions.ACTION_EXIT,
+            PlaybackActions.ACTION_DIAG_MARKER,
+            PlaybackActions.ACTION_DIAG_RESTORE,
             WidgetProvider.ACTION_WIDGET_UPDATE,
         ) + TopwayMusicContract.INCOMING_ACTIONS
 

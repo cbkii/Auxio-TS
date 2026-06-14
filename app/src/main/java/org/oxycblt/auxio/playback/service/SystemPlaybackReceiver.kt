@@ -140,6 +140,13 @@ private constructor(
                 L.d("Received exit event")
                 onExitRequested()
             }
+            PlaybackActions.ACTION_DIAG_MARKER -> {
+                val label = intent.getStringExtra(PlaybackActions.EXTRA_MARKER_LABEL) ?: "Test"
+                widgetComponent.publishMarker(label)
+            }
+            PlaybackActions.ACTION_DIAG_RESTORE -> {
+                widgetComponent.restoreBridge()
+            }
             WidgetProvider.ACTION_WIDGET_UPDATE -> {
                 L.d("Received widget update event")
                 widgetComponent.update()
@@ -218,6 +225,8 @@ private constructor(
                 addAction(PlaybackActions.ACTION_PLAY_PAUSE)
                 addAction(PlaybackActions.ACTION_SKIP_NEXT)
                 addAction(PlaybackActions.ACTION_EXIT)
+                addAction(PlaybackActions.ACTION_DIAG_MARKER)
+                addAction(PlaybackActions.ACTION_DIAG_RESTORE)
                 addAction(WidgetProvider.ACTION_WIDGET_UPDATE)
                 addAction(TopwayMusicContract.ACTION_CMD)
                 addAction(TopwayMusicContract.ACTION_PREV)

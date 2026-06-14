@@ -21,10 +21,15 @@ package org.oxycblt.auxio.headunit.topway
 import android.content.Context
 import android.os.SystemClock
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataSnapshot
 import org.oxycblt.auxio.ui.UISettings
 
-class TopwayMusicBroadcastBridge(private val context: Context, private val uiSettings: UISettings) {
+class TopwayMusicBroadcastBridge(
+    private val context: Context,
+    private val uiSettings: UISettings,
+    private val journal: DiagnosticJournal? = null
+) {
     private var lastMetadata: HeadUnitMetadataSnapshot? = null
     private var lastProgress: TopwayProgressSnapshot? = null
     private var lastProgressAtMs = 0L
@@ -39,7 +44,13 @@ class TopwayMusicBroadcastBridge(private val context: Context, private val uiSet
             return
         }
         if (snapshot == lastMetadata) return
-        context.sendBroadcast(TopwayMusicIntentFactory.metadataIntent(snapshot))
+        val intent = TopwayMusicIntentFactory.metadataIntent(snapshot)
+        context.sendBroadcast(intent)
+        journal?.log(
+            DiagnosticJournal.CAT_TOPWAY_BROADCAST,
+            "Metadata",
+            "Title: ${snapshot.title}, Artist: ${snapshot.artist}"
+        )
         lastMetadata = snapshot
     }
 
@@ -75,6 +86,11 @@ class TopwayMusicBroadcastBridge(private val context: Context, private val uiSet
         }
         context.sendBroadcast(
             TopwayMusicIntentFactory.progressIntent(snapshot.progressMs, snapshot.durationMs)
+        )
+        journal?.log(
+            DiagnosticJournal.CAT_TOPWAY_BROADCAST,
+            "Progress",
+            "${snapshot.progressMs} / ${snapshot.durationMs}"
         )
         lastProgress = snapshot
         lastProgressAtMs = nowMs
