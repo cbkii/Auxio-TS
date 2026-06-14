@@ -48,14 +48,15 @@ class DiagnosticJournal @Inject constructor() {
         result: String? = null,
         evidence: EvidenceClassification = EvidenceClassification.OBSERVED_BY_AUXIO,
     ) {
-        val entry = DiagnosticEvent(
-            sessionId = currentSessionId,
-            category = category,
-            event = event,
-            detail = detail,
-            result = result,
-            evidence = evidence
-        )
+        val entry =
+            DiagnosticEvent(
+                sessionId = currentSessionId,
+                category = category,
+                event = event,
+                detail = detail,
+                result = result,
+                evidence = evidence,
+            )
 
         synchronized(eventList) {
             eventList.add(entry)
@@ -66,9 +67,7 @@ class DiagnosticJournal @Inject constructor() {
         }
     }
 
-    /**
-     * Starts a new capture session identifier.
-     */
+    /** Starts a new capture session identifier. */
     fun startSession(id: String): Boolean {
         if (currentSessionId != null) return false
         currentSessionId = id
@@ -76,9 +75,7 @@ class DiagnosticJournal @Inject constructor() {
         return true
     }
 
-    /**
-     * Clears the current session identifier.
-     */
+    /** Clears the current session identifier. */
     fun endSession() {
         if (currentSessionId == null) return
         log("SESSION", "Ended", "Session ID: $currentSessionId")

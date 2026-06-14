@@ -114,6 +114,25 @@ private constructor(
 
     private val topwayBridge = TopwayMusicBroadcastBridge(context, uiSettings, journal)
 
+    fun publishMarker(label: String) = topwayBridge.publishMarker(label)
+
+    fun restoreBridge() {
+        val song = playbackManager.currentSong ?: return
+        val metadataSnapshot =
+            HeadUnitMetadataPolicy.fromRaw(
+                title = song.name.resolve(context),
+                artist = song.artists.resolveNames(context),
+                albumArtist = song.album.artists.resolveNames(context),
+                albumTitle = song.album.name.resolve(context),
+                durationMs = song.durationMs,
+                mediaId = song.uid.toString(),
+                mediaUri = song.uri.toString(),
+                artworkUri = null,
+                hasArtwork = false,
+            )
+        topwayBridge.restore(metadataSnapshot)
+    }
+
     fun attach() {
         playbackManager.addListener(this)
         uiSettings.registerListener(this)

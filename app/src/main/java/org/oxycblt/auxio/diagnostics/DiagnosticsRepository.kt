@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.diagnostics
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -252,7 +253,7 @@ class DiagnosticsRepository @Inject constructor(
         ))
         entries.add(DiagnosticEntry(
             "Current Song",
-            playbackManager.currentSong?.name ?: "None",
+            playbackManager.currentSong?.name?.resolve(context) ?: "None",
             EvidenceClassification.OBSERVED_BY_AUXIO
         ))
         entries.add(DiagnosticEntry(
@@ -294,9 +295,12 @@ class DiagnosticsRepository @Inject constructor(
         return entries
     }
 
-    fun startCapture(sessionId: String) {
-        journal.startSession(sessionId)
-        _isCaptureActive.value = true
+    fun startCapture(sessionId: String): Boolean {
+        if (journal.startSession(sessionId)) {
+            _isCaptureActive.value = true
+            return true
+        }
+        return false
     }
 
     fun stopCapture() {

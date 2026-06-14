@@ -40,20 +40,21 @@ enum class EvidenceClassification : Parcelable {
     REQUIRES_EXTERNAL_TS18_VALIDATION,
     UNAVAILABLE_FROM_NORMAL_APP_CONTEXT;
 
-    override fun toString(): String = when (this) {
-        OBSERVED_BY_AUXIO -> "Observed by Auxio"
-        USER_CONFIRMED -> "User confirmed"
-        INFERRED_FROM_PUBLIC_ANDROID_STATE -> "Inferred from public Android state"
-        NOT_APPLICABLE -> "Not applicable"
-        NOT_VISIBLE_TO_THIS_APP -> "Not visible to this app"
-        PERMISSION_DENIED -> "Permission denied"
-        API_UNAVAILABLE -> "API unavailable"
-        QUERY_FAILED -> "Query failed"
-        NO_EVENT_OBSERVED -> "No event observed"
-        HYPOTHESIS -> "Hypothesis"
-        REQUIRES_EXTERNAL_TS18_VALIDATION -> "Requires external TS18 validation"
-        UNAVAILABLE_FROM_NORMAL_APP_CONTEXT -> "Unavailable from normal app context"
-    }
+    override fun toString(): String =
+        when (this) {
+            OBSERVED_BY_AUXIO -> "Observed by Auxio"
+            USER_CONFIRMED -> "User confirmed"
+            INFERRED_FROM_PUBLIC_ANDROID_STATE -> "Inferred from public Android state"
+            NOT_APPLICABLE -> "Not applicable"
+            NOT_VISIBLE_TO_THIS_APP -> "Not visible to this app"
+            PERMISSION_DENIED -> "Permission denied"
+            API_UNAVAILABLE -> "API unavailable"
+            QUERY_FAILED -> "Query failed"
+            NO_EVENT_OBSERVED -> "No event observed"
+            HYPOTHESIS -> "Hypothesis"
+            REQUIRES_EXTERNAL_TS18_VALIDATION -> "Requires external TS18 validation"
+            UNAVAILABLE_FROM_NORMAL_APP_CONTEXT -> "Unavailable from normal app context"
+        }
 }
 
 /**

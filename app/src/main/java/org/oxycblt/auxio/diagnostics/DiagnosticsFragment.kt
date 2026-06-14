@@ -216,7 +216,7 @@ class DiagnosticsFragment : Fragment() {
             val qNum = index + 1
             val tv = TextView(requireContext()).apply {
                 text = qText
-                textSize = 18sp
+                textSize = 18f
                 setPadding(0, 16, 0, 8)
             }
             container.addView(tv, container.childCount - 1)
