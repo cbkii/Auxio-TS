@@ -19,6 +19,8 @@ on:
         type: boolean
 
 permissions:
+  actions: read
+  checks: read
   contents: write
   pull-requests: read
 
@@ -349,6 +351,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload signed APK workflow artifacts
+        id: signed_apk_artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: Auxio-TS-${{ steps.version.outputs.release_tag }}-signed-apks
@@ -563,20 +566,316 @@ jobs:
           done
 
       - name: Write release summary
+        if: ${{ always() }}
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          RELEASE_VERSION_NAME: ${{ steps.version.outputs.release_version_name }}
+          RELEASE_VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
+          RELEASE_URL: ${{ steps.release.outputs.release_url }}
+          APK_NAMES: ${{ steps.apks.outputs.apk_names }}
+          SIGNED_APK_ARTIFACT_URL: ${{ steps.signed_apk_artifact.outputs.artifact-url }}
+          SIGNED_APK_ARTIFACT_NAME: Auxio-TS-${{ steps.version.outputs.release_tag }}-signed-apks
         run: |
           set -euo pipefail
+
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          run_url="${repo_url}/actions/runs/${GITHUB_RUN_ID}"
+          release_tag="${RELEASE_TAG:-<not computed>}"
+
+          case "${JOB_STATUS}" in
+            success)
+              result_message="✅ Release workflow completed successfully."
+              ;;
+            failure)
+              result_message="❌ Release workflow failed. Inspect the unique warnings/errors/failures below and the linked run logs."
+              ;;
+            cancelled)
+              result_message="⚠️ Release workflow was cancelled before completion."
+              ;;
+            *)
+              result_message="⚠️ Release workflow finished with status: ${JOB_STATUS}."
+              ;;
+          esac
+
+          write_artifact_links() {
+            local artifacts_json
+            local remaining_count=0
+            local emitted=false
+
+            # Preferred source: upload-artifact's own browser-facing URL.
+            if [[ -n "${SIGNED_APK_ARTIFACT_URL:-}" ]]; then
+              echo "- [${SIGNED_APK_ARTIFACT_NAME}](${SIGNED_APK_ARTIFACT_URL})"
+              emitted=true
+            fi
+
+            # Discover any additional artifacts created by this workflow run.
+            if artifacts_json="$(
+              gh api \
+                "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+                2>/dev/null
+            )"; then
+              remaining_count="$(
+                jq -r \
+                  --arg preferred_name "${SIGNED_APK_ARTIFACT_NAME:-}" \
+                  '
+                    [
+                      .artifacts[]?
+                      | select(
+                          ((.expired // false) | not)
+                          and .name != $preferred_name
+                        )
+                    ]
+                    | unique_by(.id)
+                    | length
+                  ' <<< "${artifacts_json}"
+              )"
+
+              if (( remaining_count > 0 )); then
+                jq -r \
+                  --arg run_url "${run_url}" \
+                  --arg preferred_name "${SIGNED_APK_ARTIFACT_NAME:-}" \
+                  '
+                    .artifacts
+                    | map(
+                        select(
+                          ((.expired // false) | not)
+                          and .name != $preferred_name
+                        )
+                      )
+                    | unique_by(.id)
+                    | sort_by(.name)[]
+                    | "- [" + .name + "]("
+                        + $run_url + "/artifacts/" + (.id | tostring)
+                        + ") — expires " + (.expires_at // "unknown")
+                  ' <<< "${artifacts_json}"
+                emitted=true
+              fi
+            elif [[ "${emitted}" == false ]]; then
+              echo "- Workflow artifacts could not be queried."
+              return
+            fi
+
+            if [[ "${emitted}" == false ]]; then
+              echo "- No downloadable workflow artifacts were found for this run."
+            fi
+          }
+
+          write_release_asset_links() {
+            if [[ -z "${RELEASE_TAG:-}" ]]; then
+              echo "- Release tag was not computed; no release assets are available yet."
+              return
+            fi
+
+            local rest_release_json
+            local cli_release_json
+
+            # Preferred source: Releases REST API browser_download_url.
+            if rest_release_json="$(
+              gh api \
+                "/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+                2>/dev/null
+            )" &&
+              jq -e \
+                '.assets | type == "array" and length > 0' \
+                <<< "${rest_release_json}" >/dev/null; then
+
+              jq -r \
+                --arg repo_url "${repo_url}" \
+                --arg tag "${RELEASE_TAG}" \
+                '
+                  def release_download_url:
+                    if (
+                      (.browser_download_url // "")
+                      | startswith("https://")
+                    ) then
+                      .browser_download_url
+                    elif (
+                      ((.url // "") | startswith("https://github.com/"))
+                      and
+                      ((.url // "") | contains("/releases/download/"))
+                    ) then
+                      .url
+                    else
+                      $repo_url
+                      + "/releases/download/"
+                      + ($tag | @uri)
+                      + "/"
+                      + (.name | @uri)
+                    end;
+
+                  .assets
+                  | unique_by(.name)
+                  | sort_by(.name)[]
+                  | "- [" + .name + "](" + release_download_url + ") — "
+                      + ((.size // 0) | tostring) + " bytes"
+                ' <<< "${rest_release_json}"
+              return
+            fi
+
+            # Secondary source: GitHub CLI release asset output.
+            if cli_release_json="$(
+              gh release view "${RELEASE_TAG}" \
+                --json assets \
+                2>/dev/null
+            )" &&
+              jq -e \
+                '.assets | type == "array" and length > 0' \
+                <<< "${cli_release_json}" >/dev/null; then
+
+              jq -r \
+                --arg repo_url "${repo_url}" \
+                --arg tag "${RELEASE_TAG}" \
+                '
+                  def release_download_url:
+                    if (
+                      ((.url // "") | startswith("https://github.com/"))
+                      and
+                      ((.url // "") | contains("/releases/download/"))
+                    ) then
+                      .url
+                    else
+                      $repo_url
+                      + "/releases/download/"
+                      + ($tag | @uri)
+                      + "/"
+                      + (.name | @uri)
+                    end;
+
+                  .assets
+                  | unique_by(.name)
+                  | sort_by(.name)[]
+                  | "- [" + .name + "](" + release_download_url + ") — "
+                      + ((.size // 0) | tostring) + " bytes"
+                ' <<< "${cli_release_json}"
+              return
+            fi
+
+            # Final safe fallback: release page, never an API-only asset URL.
+            echo "- Individual release assets could not be queried."
+            echo "- [Open release ${RELEASE_TAG}](${repo_url}/releases/tag/${RELEASE_TAG})"
+          }
+
+          write_unique_findings() {
+            local jobs_json
+            local check_runs_json
+            local annotations_file
+            local findings_file
+
+            jobs_json="$(mktemp)"
+            check_runs_json="$(mktemp)"
+            annotations_file="$(mktemp)"
+            findings_file="$(mktemp)"
+
+            if gh api               "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100"               > "${jobs_json}" 2>/dev/null; then
+              jq -r '
+                .jobs[]? as $job
+                | $job.steps[]?
+                | select(
+                    (.conclusion // "")
+                    | IN(
+                        "failure",
+                        "cancelled",
+                        "timed_out",
+                        "action_required"
+                      )
+                  )
+                | "- **Step " + (.conclusion // "unknown")
+                    + "** — " + $job.name + " / " + .name
+              ' "${jobs_json}" >> "${findings_file}"
+            fi
+
+            if gh api               -H "Accept: application/vnd.github+json"               "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100"               > "${check_runs_json}" 2>/dev/null; then
+              jq -r --arg run_id "${GITHUB_RUN_ID}" '
+                .check_runs[]?
+                | select(
+                    (.details_url // "")
+                    | contains("/actions/runs/" + $run_id + "/")
+                  )
+                | .id
+              ' "${check_runs_json}" |
+                while IFS= read -r check_run_id; do
+                  [[ -z "${check_run_id}" ]] && continue
+
+                  gh api                     -H "Accept: application/vnd.github+json"                     "/repos/${GITHUB_REPOSITORY}/check-runs/${check_run_id}/annotations"                     --paginate 2>/dev/null |
+                    jq -r '
+                      .[]?
+                      | select(
+                          (.annotation_level // "")
+                          | IN("warning", "failure")
+                        )
+                      | "- **" + (.annotation_level // "notice")
+                          + "** — "
+                          + (
+                              (.path // "workflow")
+                              + (
+                                  if .start_line
+                                  then ":" + (.start_line | tostring)
+                                  else ""
+                                  end
+                                )
+                            )
+                          + " — "
+                          + (.message // .title // "")
+                    ' >> "${annotations_file}" || true
+                done
+            fi
+
+            sed -E 's/[[:space:]]+$//' "${annotations_file}" |
+              awk 'NF && !seen[$0]++' >> "${findings_file}"
+
+            if [[ -s "${findings_file}" ]]; then
+              awk 'NF && !seen[$0]++' "${findings_file}"
+            else
+              echo "- No warnings, errors, failures, or cancellations were available through the Actions jobs or check-annotations APIs at summary time."
+            fi
+          }
+
           {
             echo "# Auxio-TS release"
             echo
-            echo "- Tag: \`${{ steps.version.outputs.release_tag }}\`"
-            echo "- Version name: \`${{ steps.version.outputs.release_version_name }}\`"
-            echo "- Version code: \`${{ steps.version.outputs.release_version_code }}\`"
+            echo "${result_message}"
+            echo
+            echo "## Release details"
+            echo
+            echo "- Tag: \`${release_tag}\`"
+            echo "- Version name: \`${RELEASE_VERSION_NAME:-<not computed>}\`"
+            echo "- Version code: \`${RELEASE_VERSION_CODE:-<not computed>}\`"
             echo "- Draft: \`${{ inputs.draft }}\`"
             echo "- Prerelease: \`${{ inputs.prerelease }}\`"
-            echo "- APKs:"
-            while IFS= read -r apk_name; do
-              [ -n "${apk_name}" ] && echo "  - \`${apk_name}\`"
-            done <<< "${{ steps.apks.outputs.apk_names }}"
-            echo "- Release: [${{ steps.version.outputs.release_tag }}](${{ steps.release.outputs.release_url }})"
+            echo "- Workflow run: [${GITHUB_RUN_ID}](${run_url})"
+
+            if [[ -n "${RELEASE_URL:-}" ]]; then
+              echo "- Release: [${release_tag}](${RELEASE_URL})"
+            fi
+
+            echo
+            echo "## Expected APK names"
+            echo
+
+            if [[ -n "${APK_NAMES:-}" ]]; then
+              while IFS= read -r apk_name; do
+                [[ -n "${apk_name}" ]] && echo "- \`${apk_name}\`"
+              done <<< "${APK_NAMES}"
+            else
+              echo "- APK names were not produced before the workflow stopped."
+            fi
+
+            echo
+            echo "## Downloadable workflow artifacts"
+            echo
+            write_artifact_links
+
+            echo
+            echo "## Downloadable release assets"
+            echo
+            write_release_asset_links
+
+            echo
+            echo "## Unique warnings/errors/failures"
+            echo
+            write_unique_findings
           } >> "$GITHUB_STEP_SUMMARY"

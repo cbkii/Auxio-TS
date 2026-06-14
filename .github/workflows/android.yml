@@ -50,6 +50,8 @@ on:
       - 'docs/**'
 
 permissions:
+  actions: read
+  checks: read
   contents: read
 
 concurrency:
@@ -111,6 +113,7 @@ jobs:
     - name: Validate DoFun/Topway compatibility sources
       run: bash ./scripts/check-dofun-topway-compat.sh
     - name: Upload build reports
+      id: build_reports_artifact
       if: failure()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
@@ -121,6 +124,7 @@ jobs:
         if-no-files-found: ignore
         retention-days: 7
     - name: Upload build diagnostics (always)
+      id: build_diagnostics_artifact
       if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
@@ -130,6 +134,7 @@ jobs:
         if-no-files-found: ignore
         retention-days: 3
     - name: Upload debug APK artifact
+      id: debug_apks_artifact
       if: success()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
@@ -140,3 +145,259 @@ jobs:
           ./app/build/outputs/apk/topwayTwMedia/debug/*.apk
         if-no-files-found: error
         retention-days: 7
+    - name: Write Android build summary
+      if: ${{ always() }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_TOKEN: ${{ github.token }}
+        JOB_STATUS: ${{ job.status }}
+        BUILD_REPORTS_ARTIFACT_URL: ${{ steps.build_reports_artifact.outputs.artifact-url }}
+        BUILD_DIAGNOSTICS_ARTIFACT_URL: ${{ steps.build_diagnostics_artifact.outputs.artifact-url }}
+        DEBUG_APKS_ARTIFACT_URL: ${{ steps.debug_apks_artifact.outputs.artifact-url }}
+      run: |
+        set -u
+        set -o pipefail
+
+        repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+        run_url="${repo_url}/actions/runs/${GITHUB_RUN_ID}"
+
+        case "${JOB_STATUS}" in
+          success)
+            result_message="✅ Android Build completed successfully."
+            ;;
+          failure)
+            result_message="❌ Android Build failed. Inspect the findings, downloadable diagnostics, and linked run logs below."
+            ;;
+          cancelled)
+            result_message="⚠️ Android Build was cancelled before completion."
+            ;;
+          *)
+            result_message="⚠️ Android Build finished with status: ${JOB_STATUS}."
+            ;;
+        esac
+
+        write_artifact_links() {
+          local artifacts_json
+          local name
+          local artifact_id
+          local expires_at
+          local emitted_count=0
+
+          declare -A emitted_names=()
+
+          emit_known_artifact() {
+            local artifact_name="$1"
+            local artifact_url="$2"
+
+            if [[ -n "${artifact_url}" ]]; then
+              echo "- [${artifact_name}](${artifact_url})"
+              emitted_names["${artifact_name}"]=1
+              emitted_count=$((emitted_count + 1))
+            fi
+          }
+
+          # Preferred source: URLs returned directly by upload-artifact.
+          emit_known_artifact \
+            "android-build-reports" \
+            "${BUILD_REPORTS_ARTIFACT_URL:-}"
+
+          emit_known_artifact \
+            "android-build-diagnostics" \
+            "${BUILD_DIAGNOSTICS_ARTIFACT_URL:-}"
+
+          emit_known_artifact \
+            "auxio-ts-debug-apks" \
+            "${DEBUG_APKS_ARTIFACT_URL:-}"
+
+          # Fallback and future-proofing: enumerate every other non-expired
+          # artifact associated with this workflow run.
+          if artifacts_json="$(
+            gh api \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+              2>/dev/null
+          )"; then
+            while IFS=$'\t' read -r name artifact_id expires_at; do
+              [[ -z "${name}" || -z "${artifact_id}" ]] && continue
+
+              if [[ -n "${emitted_names[$name]+present}" ]]; then
+                continue
+              fi
+
+              echo "- [${name}](${run_url}/artifacts/${artifact_id}) — expires ${expires_at}"
+              emitted_names["${name}"]=1
+              emitted_count=$((emitted_count + 1))
+            done < <(
+              jq -r '
+                .artifacts
+                | map(select((.expired // false) | not))
+                | unique_by(.id)
+                | sort_by(.name)[]
+                | [
+                    .name,
+                    (.id | tostring),
+                    (.expires_at // "unknown")
+                  ]
+                | @tsv
+              ' <<< "${artifacts_json}" 2>/dev/null
+            )
+          fi
+
+          if (( emitted_count == 0 )); then
+            echo "- No downloadable artifacts were produced."
+            echo "- [Open this workflow run to inspect logs](${run_url})"
+          fi
+        }
+
+        write_unique_findings() {
+          local jobs_json
+          local check_runs_json
+          local findings_file
+          local annotations_file
+          local final_file
+
+          jobs_json="$(mktemp)"
+          check_runs_json="$(mktemp)"
+          findings_file="$(mktemp)"
+          annotations_file="$(mktemp)"
+          final_file="$(mktemp)"
+
+          if gh api \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+            > "${jobs_json}" 2>/dev/null; then
+
+            # Job-level failures, timeouts and cancellations.
+            jq -r '
+              .jobs[]?
+              | select(
+                  (.conclusion // "")
+                  | IN(
+                      "failure",
+                      "cancelled",
+                      "timed_out",
+                      "action_required"
+                    )
+                )
+              | "- **Job " + (.conclusion // "unknown")
+                  + "** — " + (.name // "unnamed job")
+            ' "${jobs_json}" >> "${findings_file}" 2>/dev/null || true
+
+            # Step-level failures and cancellations.
+            jq -r '
+              .jobs[]? as $job
+              | $job.steps[]?
+              | select(
+                  (.conclusion // "")
+                  | IN("failure", "cancelled")
+                )
+              | "- **Step " + (.conclusion // "unknown")
+                  + "** — " + ($job.name // "unnamed job")
+                  + " / " + (.name // "unnamed step")
+            ' "${jobs_json}" >> "${findings_file}" 2>/dev/null || true
+          fi
+
+          # Capture warning/failure annotations generated by actions, Gradle,
+          # Android lint, or workflow commands for this exact Actions run.
+          if gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+            > "${check_runs_json}" 2>/dev/null; then
+
+            jq -r --arg run_id "${GITHUB_RUN_ID}" '
+              .check_runs[]?
+              | select(
+                  (.details_url // "")
+                  | contains("/actions/runs/" + $run_id + "/")
+                )
+              | .id
+            ' "${check_runs_json}" 2>/dev/null |
+              while IFS= read -r check_run_id; do
+                [[ -z "${check_run_id}" ]] && continue
+
+                gh api \
+                  -H "Accept: application/vnd.github+json" \
+                  "/repos/${GITHUB_REPOSITORY}/check-runs/${check_run_id}/annotations" \
+                  --paginate 2>/dev/null |
+                  jq -r '
+                    .[]?
+                    | select(
+                        (.annotation_level // "")
+                        | IN("warning", "failure")
+                      )
+                    | "- **" + (.annotation_level // "notice")
+                        + "** — "
+                        + (
+                            (.path // "workflow")
+                            + (
+                                if .start_line
+                                then ":" + (.start_line | tostring)
+                                else ""
+                                end
+                              )
+                          )
+                        + " — "
+                        + (.message // .title // "")
+                  ' >> "${annotations_file}" 2>/dev/null || true
+              done
+          fi
+
+          cat "${findings_file}" "${annotations_file}" |
+            sed -E 's/[[:space:]]+$//' |
+            awk 'NF && !seen[$0]++' > "${final_file}"
+
+          if [[ -s "${final_file}" ]]; then
+            cat "${final_file}"
+          elif [[ "${JOB_STATUS}" == "success" ]]; then
+            echo "- No warning, failure, cancellation, or timeout findings were exposed through the Actions jobs or check-annotations APIs."
+          else
+            echo "- No detailed findings were available through the Actions APIs at summary time."
+            echo "- [Open the complete workflow logs](${run_url})"
+          fi
+
+          rm -f \
+            "${jobs_json}" \
+            "${check_runs_json}" \
+            "${findings_file}" \
+            "${annotations_file}" \
+            "${final_file}"
+        }
+
+        {
+          echo "# Auxio-TS Android Build"
+          echo
+          echo "${result_message}"
+          echo
+          echo "## Build details"
+          echo
+          echo "- Event: \`${GITHUB_EVENT_NAME}\`"
+          echo "- Ref: \`${GITHUB_REF}\`"
+          echo "- Commit: [\`${GITHUB_SHA}\`](${repo_url}/commit/${GITHUB_SHA})"
+          echo "- Workflow run: [${GITHUB_RUN_ID}](${run_url})"
+          echo
+          echo "## Build scope"
+          echo
+          echo "- Standard debug APK"
+          echo "- Topway/DoFun \`com.tw.music\` debug APK"
+          echo "- Topway/DoFun \`com.tw.media\` debug APK"
+
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            echo "- Standard and Topway release APK builds"
+          else
+            echo "- Release APK builds skipped for pull-request validation"
+          fi
+
+          echo
+          echo "## Downloadable artifacts"
+          echo
+          write_artifact_links
+
+          echo
+          echo "## Unique warnings/errors/failures"
+          echo
+          write_unique_findings
+
+          echo
+          echo "## Logs"
+          echo
+          echo "- [Open the complete Android Build run](${run_url})"
+        } >> "$GITHUB_STEP_SUMMARY"
