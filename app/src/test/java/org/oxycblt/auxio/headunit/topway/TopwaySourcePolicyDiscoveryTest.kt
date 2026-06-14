@@ -34,26 +34,37 @@ class TopwaySourcePolicyDiscoveryTest {
 
     @Test
     fun discoversMultipleReadableUsbDisksWithoutFixedMaximum() {
-        val storage = Files.createTempDirectory("storage").toFile()
-        val mediaRw = Files.createTempDirectory("media-rw").toFile()
-        File(storage, "usbdisk2").mkdir()
-        File(storage, "usbdisk1").mkdir()
-        File(storage, "emulated").mkdir()
-        File(storage, "self").mkdir()
-        File(mediaRw, "usbdisk3").mkdir()
-        File(mediaRw, "not-usb").mkdir()
+        val tempRoot = Files.createTempDirectory("topway-source-policy").toFile()
+        try {
+            val storage = File(tempRoot, "storage")
+            val mediaRw = File(tempRoot, "media-rw")
+            assertTrue(storage.mkdir())
+            assertTrue(mediaRw.mkdir())
 
-        val roots =
-            TopwaySourcePolicy.discoverCandidateRoots(storageRoot = storage, mediaRwRoot = mediaRw)
+            File(storage, "usbdisk2").mkdir()
+            File(storage, "usbdisk1").mkdir()
+            File(storage, "emulated").mkdir()
+            File(storage, "self").mkdir()
+            File(mediaRw, "usbdisk3").mkdir()
+            File(mediaRw, "not-usb").mkdir()
 
-        assertEquals(
-            listOf(
-                File(storage, "usbdisk1").absolutePath,
-                File(storage, "usbdisk2").absolutePath,
-                File(mediaRw, "usbdisk3").absolutePath,
-            ),
-            roots,
-        )
+            val roots =
+                TopwaySourcePolicy.discoverCandidateRoots(
+                    storageRoot = storage,
+                    mediaRwRoot = mediaRw,
+                )
+
+            assertEquals(
+                listOf(
+                    File(storage, "usbdisk1").absolutePath,
+                    File(storage, "usbdisk2").absolutePath,
+                    File(mediaRw, "usbdisk3").absolutePath,
+                ),
+                roots,
+            )
+        } finally {
+            tempRoot.deleteRecursively()
+        }
     }
 
     @Test

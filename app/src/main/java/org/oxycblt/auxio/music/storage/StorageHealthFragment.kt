@@ -33,6 +33,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.ViewModel
@@ -112,11 +113,12 @@ constructor(
         val pm = context.packageManager
         val pkg = context.packageName
         val packageInfo = runCatching { pm.getPackageInfo(pkg, 0) }.getOrNull()
+        val versionCode = packageInfo?.let { PackageInfoCompat.getLongVersionCode(it) } ?: -1L
         sb.append("Auxio-TS Health Diagnostics Report\n")
         sb.append("Timestamp: ${java.util.Date()}\n\n")
         sb.append("== Device/platform ==\n")
         sb.append(
-            "App package/version: $pkg / ${packageInfo?.versionName ?: "unknown"} (${packageInfo?.longVersionCode ?: -1})\n"
+            "App package/version: $pkg / ${packageInfo?.versionName ?: "unknown"} ($versionCode)\n"
         )
         sb.append(
             "SDK / reported release: ${android.os.Build.VERSION.SDK_INT} / ${android.os.Build.VERSION.RELEASE}\n"

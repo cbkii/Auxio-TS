@@ -330,20 +330,27 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .show()
     }
 
+    private fun clearPendingLocationCallback(callback: (Location.Unopened) -> Unit) {
+        if (pendingLocationCallback === callback) {
+            pendingLocationCallback = null
+        }
+    }
+
     private fun showCandidatePathPicker(disableThirdParty: Boolean) {
+        val callback = pendingLocationCallback ?: return
         lifecycleScope.launch {
             val accessibleCandidates =
                 withContext(Dispatchers.IO) { TopwaySourcePolicy.discoverCandidateRoots() }
             val ctx =
                 context
                     ?: run {
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                         return@launch
                     }
 
             if (accessibleCandidates.isEmpty()) {
                 // No auto-detected candidates; offer manual path entry directly.
-                showManualPathEntry(disableThirdParty)
+                showManualPathEntry(disableThirdParty, callback)
                 return@launch
             }
 
@@ -352,7 +359,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 .setItems(accessibleCandidates.toTypedArray()) { _, which ->
                     val currentContext = context
                     if (currentContext == null) {
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                     } else {
                         val path = accessibleCandidates[which]
                         val uri = Uri.fromFile(File(path))
@@ -367,25 +374,30 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         ) {
                             currentContext.showToast(R.string.err_bad_location)
                         } else {
-                            pendingLocationCallback?.invoke(location)
+                            callback(location)
                         }
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                     }
                 }
                 .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
-                    showManualPathEntry(disableThirdParty)
+                    showManualPathEntry(disableThirdParty, callback)
                 }
-                .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
-                .setOnCancelListener { pendingLocationCallback = null }
+                .setNegativeButton(R.string.lbl_cancel) { _, _ ->
+                    clearPendingLocationCallback(callback)
+                }
+                .setOnCancelListener { clearPendingLocationCallback(callback) }
                 .show()
         }
     }
 
-    private fun showManualPathEntry(disableThirdParty: Boolean) {
+    private fun showManualPathEntry(
+        disableThirdParty: Boolean,
+        callback: (Location.Unopened) -> Unit,
+    ) {
         val ctx =
             context
                 ?: run {
-                    pendingLocationCallback = null
+                    clearPendingLocationCallback(callback)
                     return
                 }
         val input =
@@ -408,12 +420,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
                 val pathText = input.text?.toString()?.trim().orEmpty()
                 if (pathText.isEmpty()) {
-                    pendingLocationCallback = null
+                    clearPendingLocationCallback(callback)
                     return@setPositiveButton
                 }
                 if (pathText != pathText.trim()) {
                     ctx.showToast(R.string.set_path_whitespace_invalid)
-                    pendingLocationCallback = null
+                    clearPendingLocationCallback(callback)
                     return@setPositiveButton
                 }
                 lifecycleScope.launch {
@@ -428,22 +440,24 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         }
                     val currentContext = context
                     if (currentContext == null) {
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                         return@launch
                     }
                     if (!accessible) {
                         currentContext.showToast(R.string.set_path_inaccessible)
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                         return@launch
                     }
                     val uri = Uri.fromFile(File(pathText))
                     val location = Location.Unopened.from(currentContext, uri)
-                    pendingLocationCallback?.invoke(location)
-                    pendingLocationCallback = null
+                    callback(location)
+                    clearPendingLocationCallback(callback)
                 }
             }
-            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
-            .setOnCancelListener { pendingLocationCallback = null }
+            .setNegativeButton(R.string.lbl_cancel) { _, _ ->
+                clearPendingLocationCallback(callback)
+            }
+            .setOnCancelListener { clearPendingLocationCallback(callback) }
             .show()
     }
 
