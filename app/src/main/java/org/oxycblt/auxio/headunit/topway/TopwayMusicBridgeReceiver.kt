@@ -24,6 +24,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticJournal
 import timber.log.Timber as L
 
 /**
@@ -64,6 +65,12 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         extras.widgetProgress?.let {
             serviceIntent.putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, it)
         }
+        Ts18DiagnosticJournal.record(
+            "topway",
+            "incoming_command",
+            "action=$action cmd=${extras.cmd} widgetProgress=${extras.widgetProgress}",
+            "forwarding_to_service",
+        )
         serviceIntent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TOPWAY)
         try {
             ContextCompat.startForegroundService(context, serviceIntent)

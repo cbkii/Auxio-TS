@@ -24,6 +24,8 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticsCaptureService
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticJournal
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
 
@@ -42,6 +44,19 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) {
             L.w("Ignoring non-boot intent: ${intent.action}")
             return
+        }
+
+        val diagPrefs = context.getSharedPreferences("ts18_diagnostics", Context.MODE_PRIVATE)
+        val armedId = diagPrefs.getString("armed_id", null)
+        val armedUntil = diagPrefs.getLong("armed_until", 0L)
+        if (armedId != null && System.currentTimeMillis() <= armedUntil) {
+            diagPrefs.edit().remove("armed_id").remove("armed_until").apply()
+            Ts18DiagnosticJournal.record("boot", "armed_capture", "id=$armedId", "starting_one_shot_capture")
+            try {
+                Ts18DiagnosticsCaptureService.start(context, 5 * 60_000L, "one-shot boot/ACC wake capture $armedId")
+            } catch (e: Exception) {
+                Ts18DiagnosticJournal.record("boot", "armed_capture", "id=$armedId", "failed:${e.javaClass.simpleName}")
+            }
         }
 
         if (!playbackSettings.autostartOnBoot) {

@@ -51,6 +51,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticJournal
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticsCaptureService
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticsReporter
+import org.oxycblt.auxio.diagnostics.Ts18GuidedDoFunTest
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
@@ -76,9 +80,46 @@ constructor(
 
     fun generateReport(context: Context) {
         viewModelScope.launch {
-            val report = withContext(Dispatchers.IO) { buildReport(context) }
+            val report = withContext(Dispatchers.IO) { Ts18DiagnosticsReporter(context).buildAutomatedReport() }
             _reportState.value = report
         }
+    }
+
+    fun startTimedCapture(context: Context, minutes: Int) {
+        Ts18DiagnosticsCaptureService.start(context, minutes * 60_000L, "manual ${minutes}m capture")
+        _reportState.value = "Timed TS18 integration capture started for $minutes minutes. Return here and run automated diagnostics or save the report after testing."
+    }
+
+    fun armNextStart(context: Context) {
+        val prefs = context.getSharedPreferences("ts18_diagnostics", Context.MODE_PRIVATE)
+        val id = java.util.UUID.randomUUID().toString().take(8)
+        prefs.edit().putString("armed_id", id).putLong("armed_until", System.currentTimeMillis() + 6 * 60 * 60_000L).apply()
+        _reportState.value = "Armed one-shot next-start/reboot diagnostics capture $id. It expires in about 6 hours and self-disarms after first app start."
+    }
+
+    fun beginGuidedTest(context: Context, marker: Boolean) {
+        val id = Ts18DiagnosticJournal.startCapture(2 * 60_000L, "guided DoFun integration test")
+        val markerText = if (marker) "AUXIO-TS-${System.currentTimeMillis().toString().takeLast(5)}" else null
+        markerText?.let { Ts18DiagnosticJournal.record("topway", "metadata_marker", it, "user_consented_marker_requested") }
+        _reportState.value = """
+            Guided DoFun capture active (${id ?: "existing capture"}). Leave Auxio once, complete the numbered DoFun sequence, then return once.
+
+            ${Ts18GuidedDoFunTest.instructions(markerText)}
+
+            After return, answer:
+
+            ${Ts18GuidedDoFunTest.questions.joinToString("\n\n")}
+        """.trimIndent()
+    }
+
+    fun finishGuidedReport(context: Context, answers: List<String>) {
+        Ts18DiagnosticJournal.stopCapture("guided answers collected")
+        _reportState.value = Ts18DiagnosticsReporter(context).render(
+            "Guided DoFun Integration Test",
+            emptyList(),
+            Ts18DiagnosticJournal.snapshot(),
+            answers.map { "User confirmed ==> $it" },
+        )
     }
 
     fun excludePath(context: Context, path: String) {
@@ -363,8 +404,27 @@ class StorageHealthFragment : Fragment() {
             }
         content.addView(explanationText)
 
-        val runButton = Button(context).apply { text = "Run / refresh TS18 diagnostics" }
+        fun heading(text: String) = TextView(context).apply { this.text = text; textSize = 18f; setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 24, 0, 8) }
+        content.addView(heading("Automated diagnostics"))
+        val runButton = Button(context).apply { text = "Run automated diagnostics" }
         content.addView(runButton)
+
+        content.addView(heading("Guided DoFun test"))
+        val guidedInfo = TextView(context).apply { text = "One external phase only: read all numbered instructions, leave Auxio once, interact with DoFun, return once, then answer all numbered questions."; textSize = 15f }
+        content.addView(guidedInfo)
+        val guidedButton = Button(context).apply { text = "Run guided DoFun integration test" }
+        content.addView(guidedButton)
+
+        content.addView(heading("Timed capture"))
+        val captureRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(2, 5, 10, 15).forEach { mins -> captureRow.addView(Button(context).apply { text = "Capture ${mins}m"; setOnClickListener { viewModel.startTimedCapture(context, mins) } }) }
+        content.addView(captureRow)
+
+        content.addView(heading("Next-start/reboot capture"))
+        val armButton = Button(context).apply { text = "Arm diagnostics for next reboot or ACC wake" }
+        content.addView(armButton)
+
+        content.addView(heading("Latest results / event timeline"))
 
         val reportText =
             TextView(context).apply {
@@ -380,6 +440,19 @@ class StorageHealthFragment : Fragment() {
             LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         content.addView(noisyPathsContainer)
         this.noisyPathsContainer = noisyPathsContainer
+
+        val finishGuidedButton = Button(context).apply { text = "Finish guided test / enter answers"; visibility = View.VISIBLE }
+        content.addView(finishGuidedButton)
+        finishGuidedButton.setOnClickListener {
+            val answerChoices = Ts18GuidedDoFunTest.questions.toTypedArray()
+            val selected = BooleanArray(answerChoices.size)
+            AlertDialog.Builder(context)
+                .setTitle("Post-return guided answers")
+                .setMultiChoiceItems(answerChoices, selected) { _, which, checked -> selected[which] = checked }
+                .setPositiveButton("Save answers") { _, _ -> viewModel.finishGuidedReport(context, answerChoices.filterIndexed { i, _ -> selected[i] }) }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
 
         val exportButton =
             Button(context).apply {
@@ -397,6 +470,18 @@ class StorageHealthFragment : Fragment() {
         this.saveButton = saveButton
 
         runButton.setOnClickListener { viewModel.generateReport(context) }
+        guidedButton.setOnClickListener {
+            AlertDialog.Builder(context)
+                .setTitle("Guided DoFun integration test")
+                .setMessage("Begin now or wait about ${Ts18GuidedDoFunTest.COUNTDOWN_SECONDS} seconds; capture is bounded and continues while Auxio is backgrounded.
+
+${Ts18GuidedDoFunTest.instructions(null)}")
+                .setPositiveButton("Begin now") { _, _ -> viewModel.beginGuidedTest(context, marker = false) }
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("Begin with marker") { _, _ -> viewModel.beginGuidedTest(context, marker = true) }
+                .show()
+        }
+        armButton.setOnClickListener { viewModel.armNextStart(context) }
 
         exportButton.setOnClickListener {
             val report = viewModel.reportState.value

@@ -29,6 +29,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticJournal
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticsCaptureService
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
@@ -80,6 +82,8 @@ class Auxio : Application() {
                 Timber.e(e, "Failed to migrate settings: ${settings.javaClass.simpleName}")
             }
         }
+        startPendingTs18DiagnosticsCaptureIfArmed()
+
         // Dynamic shortcuts are a non-essential convenience. Some OEM launchers (including
         // head-unit launchers such as DoFun) ship a partial or buggy ShortcutManager that can
         // throw from setDynamicShortcuts; never let that crash every app launch. Publishing
@@ -115,6 +119,24 @@ class Auxio : Application() {
             } catch (e: ReflectiveOperationException) {
                 Timber.w(e, "Car overlay visibility hooks not available")
             }
+        }
+    }
+
+    private fun startPendingTs18DiagnosticsCaptureIfArmed() {
+        val prefs = getSharedPreferences("ts18_diagnostics", MODE_PRIVATE)
+        val armedId = prefs.getString("armed_id", null) ?: return
+        val armedUntil = prefs.getLong("armed_until", 0L)
+        if (System.currentTimeMillis() > armedUntil) {
+            prefs.edit().remove("armed_id").remove("armed_until").apply()
+            Ts18DiagnosticJournal.record("startup", "armed_capture", "id=$armedId", "expired_before_start")
+            return
+        }
+        prefs.edit().remove("armed_id").remove("armed_until").apply()
+        Ts18DiagnosticJournal.record("startup", "armed_capture", "id=$armedId", "starting_first_app_start_fallback")
+        try {
+            Ts18DiagnosticsCaptureService.start(this, 5 * 60_000L, "one-shot first-start fallback capture $armedId")
+        } catch (e: Exception) {
+            Ts18DiagnosticJournal.record("startup", "armed_capture", "id=$armedId", "failed:${e.javaClass.simpleName}")
         }
     }
 

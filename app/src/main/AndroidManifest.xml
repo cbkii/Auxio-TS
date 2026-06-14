@@ -22,7 +22,15 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
-    <queries />
+    <queries>
+        <package android:name="com.dofun.variety" />
+        <package android:name="com.tw.music" />
+        <package android:name="com.tw.media" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
 
     <application
         android:name=".Auxio"
@@ -115,6 +123,11 @@
             android:authorities="${applicationId}.image.CoverProvider"
             android:exported="true"
             tools:ignore="ExportedContentProvider" />
+
+        <service
+            android:name=".diagnostics.Ts18DiagnosticsCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!--
         Work around apps that blindly query for ACTION_MEDIA_BUTTON working.

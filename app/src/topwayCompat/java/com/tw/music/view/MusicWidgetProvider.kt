@@ -30,6 +30,7 @@ import com.tw.music.MusicService
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.diagnostics.Ts18DiagnosticJournal
 import org.oxycblt.auxio.headunit.topway.TopwayBridgeExtrasPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayMusicContract
 import org.oxycblt.auxio.headunit.topway.TopwayWidgetProviderPolicy
@@ -70,6 +71,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
+        Ts18DiagnosticJournal.record("widget", "topway_on_update", "ids=${appWidgetIds.joinToString()}", "requesting_widget_component_update")
         // Request a full state update from WidgetComponent.
         context.sendBroadcast(
             Intent(org.oxycblt.auxio.widgets.WidgetProvider.ACTION_WIDGET_UPDATE)
@@ -149,8 +151,10 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
         try {
             awm.updateAppWidget(component, views)
+            Ts18DiagnosticJournal.record("widget", "topway_remoteviews_update", "state=${state != null}", "updated")
             L.d("Successfully updated Topway RemoteViews layout")
         } catch (e: Exception) {
+            Ts18DiagnosticJournal.record("widget", "topway_remoteviews_update", "state=${state != null}", "failed:${e.javaClass.simpleName}")
             L.w(e, "Unable to update Topway widget")
         }
     }
@@ -202,6 +206,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
             serviceIntent.putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, it)
         }
 
+        Ts18DiagnosticJournal.record("widget", "topway_provider_command", "action=$action cmd=${extras.cmd} widgetProgress=${extras.widgetProgress}", "forwarding_to_service")
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
         } catch (e: IllegalStateException) {

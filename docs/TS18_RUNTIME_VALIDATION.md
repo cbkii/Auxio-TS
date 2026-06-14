@@ -352,3 +352,22 @@ Expected: songs copied to local `/sdcard/Music` and to `/storage/usbdisk0` appea
 - Duplicate service lifecycle/notification behaviour: inspect `adb shell dumpsys activity services | grep -E 'AuxioService|MusicService'` and `adb shell dumpsys notification | grep -E 'Auxio|com.tw.music|com.tw.media'` before and after DoFun/widget actions. Failure interpretation: two simultaneous foreground playback services or duplicate media notifications means the wrapper/base-service routing needs another implementation pass.
 - Music-library visibility for `/sdcard/Music`, `/storage/usbdisk0`, and USB/UDisk scanning on Android 10.
 - Overlay permission grant/revoke, 1280x720 bounds with about 55px top/right system bars, background-start behaviour, boot completed, and ACC wake/restore.
+
+## TS18 Health Diagnostics workflows
+
+Auxio-TS now separates TS18 Health Diagnostics into distinct workflows rather than treating compatibility as one Boolean result:
+
+- **Run automated diagnostics** is a no-input, in-app snapshot. It uses public Android APIs and app-owned state with fallbacks, and labels unavailable privileged state honestly.
+- **Run guided DoFun integration test** is a one-external-phase workflow: the user reads all numbered instructions first, leaves Auxio once, performs the DoFun Music-card interaction sequence once, returns once, and only then answers numbered questions. User answers are labelled **User confirmed** and are not presented as app-observed facts.
+- **Capture TS18 integration activity** starts a bounded visible foreground diagnostic capture for 2, 5, 10, or 15 minutes. It records app-owned Topway command, broadcast, widget, storage/package-change and lifecycle evidence without permanent monitoring.
+- **Arm diagnostics for next reboot or ACC wake** is one-shot and self-disarming. If true boot startup is blocked by Android/firmware, the pending state is preserved until the first subsequent Auxio start within expiry and the report must say boot-time start was not proven.
+
+Important interpretation rules:
+
+- `com.tw.media` is an alternate fixed DoFun entry variant for firmware that recognises `com.tw.media/com.tw.music.MusicActivity`; it is not a universal no-root replacement for stock `com.tw.music`.
+- Runtime storage diagnostics use dynamically discovered `/storage/usbdiskN` roots and do not depend on `/mnt/media_rw` being readable.
+- Generic Android MediaSession visibility does not prove fixed DoFun Music-card control.
+- Zero AppWidget IDs do not prove the fixed DoFun Music card is absent, because DoFun may use a custom fixed launcher card instead of hosting Auxio as a normal AppWidget.
+- App-observed evidence, user-confirmed answers and externally collected privileged evidence are separate evidence classes.
+- TWTHEME/Topway compatibility is a set of individually measured states: package/component visibility, fixed-entry launch, commands, broadcasts, widget/provider updates, notification state, overlay state, playback/service state and storage availability.
+- Private/native state remains not for production by default; it requires the formal gap-and-promotion process before production integration.
