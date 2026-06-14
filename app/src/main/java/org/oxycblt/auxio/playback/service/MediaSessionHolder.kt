@@ -482,9 +482,10 @@ private class PlaybackNotification(
      */
     fun updateMetadata(metadata: MediaMetadataCompat) {
         L.d("Updating shown metadata")
-        val albumArt = NotificationBitmapSafety.sanitize(
-            metadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
-        )
+        val albumArt =
+            NotificationBitmapSafety.sanitize(
+                metadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART)
+            )
         if (albumArt != null) {
             setLargeIcon(albumArt)
         } else {
@@ -493,16 +494,20 @@ private class PlaybackNotification(
             setLargeIcon(NotificationBitmapSafety.fallbackBitmap())
         }
         setContentTitle(
-            metadata.getString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE)
-                ?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.info_app_name)
+            metadata.getString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE)?.takeIf {
+                it.isNotBlank()
+            } ?: context.getString(R.string.info_app_name)
         )
         setContentText(
-            metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE)
-                ?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.lbl_unknown)
+            metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE)?.takeIf {
+                it.isNotBlank()
+            } ?: context.getString(R.string.lbl_unknown)
         )
-        setSubText(metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION)?.takeIf { it.isNotBlank() })
+        setSubText(
+            metadata.getText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION)?.takeIf {
+                it.isNotBlank()
+            }
+        )
     }
 
     /**
@@ -607,6 +612,5 @@ private class PlaybackNotification(
                 id = BuildConfig.APPLICATION_ID + ".channel.PLAYBACK",
                 nameRes = R.string.lbl_playback,
             )
-
     }
 }

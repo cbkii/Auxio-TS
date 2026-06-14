@@ -109,8 +109,12 @@ object TopwaySourcePolicy {
         if (includeGenericFallbacks) {
             SAFE_GENERIC_FALLBACKS.filterTo(out) { isAccessibleCandidate(it) }
         }
-        discoverChildren(storageRoot, removableOnly = false).filterTo(out) { isAccessibleCandidate(it) }
-        discoverChildren(mediaRwRoot, removableOnly = true).filterTo(out) { isAccessibleCandidate(it) }
+        discoverChildren(storageRoot, removableOnly = false).filterTo(out) {
+            isAccessibleCandidate(it)
+        }
+        discoverChildren(mediaRwRoot, removableOnly = true).filterTo(out) {
+            isAccessibleCandidate(it)
+        }
         return out.toList()
     }
 

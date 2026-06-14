@@ -129,27 +129,35 @@ constructor(
         )
         sb.append("Fingerprint: ${android.os.Build.FINGERPRINT}\n")
         val dm = context.resources.displayMetrics
-        sb.append("Display: ${dm.widthPixels}x${dm.heightPixels} density=${dm.density} dpi=${dm.densityDpi}\n\n")
+        sb.append(
+            "Display: ${dm.widthPixels}x${dm.heightPixels} density=${dm.density} dpi=${dm.densityDpi}\n\n"
+        )
 
         sb.append("== Notifications/runtime ==\n")
         val nm = androidx.core.app.NotificationManagerCompat.from(context)
         sb.append("Notifications enabled: ${nm.areNotificationsEnabled()}\n")
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val sysNm =
-                context.getSystemService(Context.NOTIFICATION_SERVICE) as
-                    android.app.NotificationManager
-            sysNm.notificationChannels.filter { it.id.startsWith(pkg) }.forEach { ch ->
-                sb.append("Channel: ${ch.id} importance=${ch.importance} name=${ch.name}\n")
-            }
+                context.getSystemService(Context.NOTIFICATION_SERVICE)
+                    as android.app.NotificationManager
+            sysNm.notificationChannels
+                .filter { it.id.startsWith(pkg) }
+                .forEach { ch ->
+                    sb.append("Channel: ${ch.id} importance=${ch.importance} name=${ch.name}\n")
+                }
         }
-        sb.append("Playback state: ${if (playbackManager.progression.isPlaying) "Playing" else "Paused/stopped"}\n")
+        sb.append(
+            "Playback state: ${if (playbackManager.progression.isPlaying) "Playing" else "Paused/stopped"}\n"
+        )
         sb.append("Current song: ${playbackManager.currentSong?.name ?: "None"}\n")
         sb.append("Foreground service active: ${org.oxycblt.auxio.AuxioService.isForeground}\n")
         sb.append("Overlay permission: ${Settings.canDrawOverlays(context)}\n")
         sb.append(
             "Safe TS18 notification bitmap policy: active; fallback=${org.oxycblt.auxio.util.NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX}px, min=${org.oxycblt.auxio.util.NotificationBitmapSafety.MIN_ICON_SIZE_PX}px\n"
         )
-        sb.append("Privileged SystemUI/DoFun/kernel logs: Unavailable without privileged/system access\n\n")
+        sb.append(
+            "Privileged SystemUI/DoFun/kernel logs: Unavailable without privileged/system access\n\n"
+        )
 
         sb.append("== DoFun launcher integration ==\n")
         appendPackage(sb, context, "com.dofun.variety")
@@ -171,12 +179,26 @@ constructor(
         sb.append(
             "Default/available HOME: ${pm.resolveActivity(home, 0)?.activityInfo?.packageName ?: "unresolved"}\n"
         )
-        appendResolvable(sb, context, "Auxio Topway MusicActivity", pkg, "com.tw.music.MusicActivity")
-        sb.append("Private DoFun windows/listener internals: Unavailable without privileged/system access\n\n")
+        appendResolvable(
+            sb,
+            context,
+            "Auxio Topway MusicActivity",
+            pkg,
+            "com.tw.music.MusicActivity",
+        )
+        sb.append(
+            "Private DoFun windows/listener internals: Unavailable without privileged/system access\n\n"
+        )
 
         sb.append("== Stock music app integration ==\n")
         appendPackage(sb, context, "com.tw.music")
-        appendResolvable(sb, context, "Stock MusicActivity", "com.tw.music", "com.tw.music.MusicActivity")
+        appendResolvable(
+            sb,
+            context,
+            "Stock MusicActivity",
+            "com.tw.music",
+            "com.tw.music.MusicActivity",
+        )
         sb.append("Current Auxio variant package: $pkg\n")
         sb.append("Package conflict with stock com.tw.music: ${pkg == "com.tw.music"}\n\n")
 
@@ -200,7 +222,9 @@ constructor(
         sb.append(
             "MediaStore filter mode: ${musicSettings.mediaStoreQuery.mode.name} exclusions=${musicSettings.mediaStoreQuery.filtered.size}\n"
         )
-        sb.append("MediaStore volumes (names only; counts skipped to avoid expensive launch-time scans):\n")
+        sb.append(
+            "MediaStore volumes (names only; counts skipped to avoid expensive launch-time scans):\n"
+        )
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             MediaStore.getExternalVolumeNames(context).forEach { sb.append("  - $it\n") }
         } else {
@@ -220,10 +244,14 @@ constructor(
         } else {
             aliases.forEach { group -> group.paths.forEach { sb.append("  - $it\n") } }
         }
-        sb.append("Temporary USB absence policy: selected paths are reported inaccessible, not rewritten or cleared by diagnostics.\n\n")
+        sb.append(
+            "Temporary USB absence policy: selected paths are reported inaccessible, not rewritten or cleared by diagnostics.\n\n"
+        )
 
         sb.append("== Logs and collection limits ==\n")
-        sb.append("Auxio app-owned crash/diagnostic files: see app files directory if present: ${context.filesDir.absolutePath}\n")
+        sb.append(
+            "Auxio app-owned crash/diagnostic files: see app files directory if present: ${context.filesDir.absolutePath}\n"
+        )
         sb.append(
             "SystemUI/DoFun/stock music/kernel logs: Unavailable without privileged/system access. Collect externally with adb bugreport/logcat/dmesg where available.\n"
         )
@@ -252,7 +280,9 @@ constructor(
         val intent = Intent().setClassName(packageName, className)
         val activity = context.packageManager.resolveActivity(intent, 0)
         val service = context.packageManager.resolveService(intent, 0)
-        sb.append("$label ($packageName/$className) resolvable activity=${activity != null} service=${service != null}\n")
+        sb.append(
+            "$label ($packageName/$className) resolvable activity=${activity != null} service=${service != null}\n"
+        )
     }
 
     fun discoverWritableDestinations(context: Context): List<File> {
@@ -324,7 +354,8 @@ class StorageHealthFragment : Fragment() {
 
         val explanationText =
             TextView(context).apply {
-                text = "Run a comprehensive on-demand TS18 health and integration diagnostics check."
+                text =
+                    "Run a comprehensive on-demand TS18 health and integration diagnostics check."
                 textSize = 16f
                 setPadding(0, 0, 0, 32)
             }
@@ -369,8 +400,8 @@ class StorageHealthFragment : Fragment() {
             val report = viewModel.reportState.value
             if (report != null) {
                 val clipboard =
-                    context.getSystemService(Context.CLIPBOARD_SERVICE) as
-                        android.content.ClipboardManager
+                    context.getSystemService(Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
                 clipboard.setPrimaryClip(
                     android.content.ClipData.newPlainText("Auxio-TS health", report)
                 )
@@ -392,7 +423,8 @@ class StorageHealthFragment : Fragment() {
                 val destinations =
                     withContext(Dispatchers.IO) { viewModel.discoverWritableDestinations(context) }
                 if (destinations.isEmpty()) {
-                    Toast.makeText(context, "No writable destinations found", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "No writable destinations found", Toast.LENGTH_LONG)
+                        .show()
                 } else {
                     AlertDialog.Builder(context)
                         .setTitle("Save TS18 health report")

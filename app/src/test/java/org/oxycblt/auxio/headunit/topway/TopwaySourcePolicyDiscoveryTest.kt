@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * TopwaySourcePolicyDiscoveryTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package org.oxycblt.auxio.headunit.topway
 
 import java.io.File
@@ -8,12 +26,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TopwaySourcePolicyDiscoveryTest {
-    @Test fun fixedUsbDiskZeroIsOnlyASeedNotTheDiscoveryLimit() {
+    @Test
+    fun fixedUsbDiskZeroIsOnlyASeedNotTheDiscoveryLimit() {
         assertTrue(TopwaySourcePolicy.TS18_USB_CANDIDATES.contains("/storage/usbdisk0"))
         assertFalse(TopwaySourcePolicy.TS18_USB_CANDIDATES.contains("/storage/usbdisk1"))
     }
 
-    @Test fun discoversMultipleReadableUsbDisksWithoutFixedMaximum() {
+    @Test
+    fun discoversMultipleReadableUsbDisksWithoutFixedMaximum() {
         val storage = Files.createTempDirectory("storage").toFile()
         val mediaRw = Files.createTempDirectory("media-rw").toFile()
         File(storage, "usbdisk2").mkdir()
@@ -24,10 +44,7 @@ class TopwaySourcePolicyDiscoveryTest {
         File(mediaRw, "not-usb").mkdir()
 
         val roots =
-            TopwaySourcePolicy.discoverCandidateRoots(
-                storageRoot = storage,
-                mediaRwRoot = mediaRw,
-            )
+            TopwaySourcePolicy.discoverCandidateRoots(storageRoot = storage, mediaRwRoot = mediaRw)
 
         assertEquals(
             listOf(
@@ -39,7 +56,10 @@ class TopwaySourcePolicyDiscoveryTest {
         )
     }
 
-    @Test fun systemSourceFilterStillAcceptsUsbDiskOneMusicPaths() {
-        assertTrue(TopwaySourcePolicy.matchesSystemSourceFilter("/storage/usbdisk1/My Music/song.flac"))
+    @Test
+    fun systemSourceFilterStillAcceptsUsbDiskOneMusicPaths() {
+        assertTrue(
+            TopwaySourcePolicy.matchesSystemSourceFilter("/storage/usbdisk1/My Music/song.flac")
+        )
     }
 }

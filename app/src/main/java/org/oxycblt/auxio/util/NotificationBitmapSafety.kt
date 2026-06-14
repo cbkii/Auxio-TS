@@ -1,7 +1,21 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * NotificationBitmapSafety.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 package org.oxycblt.auxio.util
 
 import android.graphics.Bitmap
@@ -23,7 +37,8 @@ object NotificationBitmapSafety {
     private var cachedFallback: Bitmap? = null
 
     fun sanitize(input: Bitmap?): Bitmap? {
-        val source = input?.takeIf { !it.isRecycled && it.width > 0 && it.height > 0 } ?: return null
+        val source =
+            input?.takeIf { !it.isRecycled && it.width > 0 && it.height > 0 } ?: return null
         var working = source.toSafeSoftwareBitmap() ?: return null
 
         if (maxOf(working.width, working.height) > MAX_ICON_SIZE_PX) {
@@ -85,17 +100,19 @@ object NotificationBitmapSafety {
 
     private fun Bitmap.centerInSafeCanvas(): Bitmap? {
         return try {
-            val out = Bitmap.createBitmap(
-                FALLBACK_ICON_SIZE_PX,
-                FALLBACK_ICON_SIZE_PX,
-                Bitmap.Config.ARGB_8888,
-            )
+            val out =
+                Bitmap.createBitmap(
+                    FALLBACK_ICON_SIZE_PX,
+                    FALLBACK_ICON_SIZE_PX,
+                    Bitmap.Config.ARGB_8888,
+                )
             val canvas = Canvas(out)
             canvas.drawColor(Color.TRANSPARENT)
-            val scale = minOf(
-                FALLBACK_ICON_SIZE_PX.toFloat() / width,
-                FALLBACK_ICON_SIZE_PX.toFloat() / height,
-            )
+            val scale =
+                minOf(
+                    FALLBACK_ICON_SIZE_PX.toFloat() / width,
+                    FALLBACK_ICON_SIZE_PX.toFloat() / height,
+                )
             val scaledWidth = width * scale
             val scaledHeight = height * scale
             val left = (FALLBACK_ICON_SIZE_PX - scaledWidth) / 2f
