@@ -24,6 +24,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.view.LayoutInflater
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -298,7 +299,16 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         try {
             launcher.launch(null)
         } catch (e: ActivityNotFoundException) {
-            L.w("SAF tree picker activity not found; showing fallback sources.")
+            L.w(e, "SAF tree picker activity not found; showing fallback sources.")
+            showPickerUnavailableFallback(disableThirdParty)
+        } catch (e: SecurityException) {
+            L.w(e, "SAF tree picker launch denied; showing fallback sources.")
+            showPickerUnavailableFallback(disableThirdParty)
+        } catch (e: IllegalStateException) {
+            L.w(e, "SAF tree picker launcher unavailable; showing fallback sources.")
+            showPickerUnavailableFallback(disableThirdParty)
+        } catch (e: RuntimeException) {
+            L.w(e, "SAF tree picker failed; showing fallback sources.")
             showPickerUnavailableFallback(disableThirdParty)
         }
     }
@@ -320,24 +330,27 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .show()
     }
 
+    private fun clearPendingLocationCallback(callback: (Location.Unopened) -> Unit) {
+        if (pendingLocationCallback === callback) {
+            pendingLocationCallback = null
+        }
+    }
+
     private fun showCandidatePathPicker(disableThirdParty: Boolean) {
+        val callback = pendingLocationCallback ?: return
         lifecycleScope.launch {
-            val candidates =
-                TopwaySourcePolicy.SAFE_GENERIC_FALLBACKS + TopwaySourcePolicy.TS18_USB_CANDIDATES
             val accessibleCandidates =
-                withContext(Dispatchers.IO) {
-                    candidates.filter { TopwaySourcePolicy.isAccessibleCandidate(it) }
-                }
+                withContext(Dispatchers.IO) { TopwaySourcePolicy.discoverCandidateRoots() }
             val ctx =
                 context
                     ?: run {
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                         return@launch
                     }
 
             if (accessibleCandidates.isEmpty()) {
                 // No auto-detected candidates; offer manual path entry directly.
-                showManualPathEntry(disableThirdParty)
+                showManualPathEntry(disableThirdParty, callback)
                 return@launch
             }
 
@@ -346,7 +359,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 .setItems(accessibleCandidates.toTypedArray()) { _, which ->
                     val currentContext = context
                     if (currentContext == null) {
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                     } else {
                         val path = accessibleCandidates[which]
                         val uri = Uri.fromFile(File(path))
@@ -361,25 +374,30 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         ) {
                             currentContext.showToast(R.string.err_bad_location)
                         } else {
-                            pendingLocationCallback?.invoke(location)
+                            callback(location)
                         }
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                     }
                 }
                 .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
-                    showManualPathEntry(disableThirdParty)
+                    showManualPathEntry(disableThirdParty, callback)
                 }
-                .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
-                .setOnCancelListener { pendingLocationCallback = null }
+                .setNegativeButton(R.string.lbl_cancel) { _, _ ->
+                    clearPendingLocationCallback(callback)
+                }
+                .setOnCancelListener { clearPendingLocationCallback(callback) }
                 .show()
         }
     }
 
-    private fun showManualPathEntry(disableThirdParty: Boolean) {
+    private fun showManualPathEntry(
+        disableThirdParty: Boolean,
+        callback: (Location.Unopened) -> Unit,
+    ) {
         val ctx =
             context
                 ?: run {
-                    pendingLocationCallback = null
+                    clearPendingLocationCallback(callback)
                     return
                 }
         val input =
@@ -402,7 +420,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
                 val pathText = input.text?.toString()?.trim().orEmpty()
                 if (pathText.isEmpty()) {
-                    pendingLocationCallback = null
+                    clearPendingLocationCallback(callback)
+                    return@setPositiveButton
+                }
+                if (pathText != pathText.trim()) {
+                    ctx.showToast(R.string.set_path_whitespace_invalid)
+                    clearPendingLocationCallback(callback)
                     return@setPositiveButton
                 }
                 lifecycleScope.launch {
@@ -417,22 +440,24 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         }
                     val currentContext = context
                     if (currentContext == null) {
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                         return@launch
                     }
                     if (!accessible) {
                         currentContext.showToast(R.string.set_path_inaccessible)
-                        pendingLocationCallback = null
+                        clearPendingLocationCallback(callback)
                         return@launch
                     }
                     val uri = Uri.fromFile(File(pathText))
                     val location = Location.Unopened.from(currentContext, uri)
-                    pendingLocationCallback?.invoke(location)
-                    pendingLocationCallback = null
+                    callback(location)
+                    clearPendingLocationCallback(callback)
                 }
             }
-            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
-            .setOnCancelListener { pendingLocationCallback = null }
+            .setNegativeButton(R.string.lbl_cancel) { _, _ ->
+                clearPendingLocationCallback(callback)
+            }
+            .setOnCancelListener { clearPendingLocationCallback(callback) }
             .show()
     }
 
@@ -448,6 +473,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     pendingLocationCallback = null
                     return
                 }
+        if (uri.scheme != "file" && !DocumentsContract.isTreeUri(uri)) {
+            L.w("SAF picker returned a non-tree URI: $uri")
+            ctx.showToast(R.string.err_bad_location)
+            pendingLocationCallback = null
+            return
+        }
         val location = Location.Unopened.from(ctx, uri)
 
         if (location.path.volume is Volume.ThirdParty && disableThirdParty) {
@@ -461,9 +492,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun addIncludeLocation(location: Location.Unopened) {
         val ctx = context ?: return
-        location.open(ctx)?.let { opened ->
+        val opened = location.open(ctx)
+        if (opened != null) {
             includeLocationAdapter.add(opened)
             updateSaveButtonState()
+        } else {
+            ctx.showToast(R.string.err_bad_location)
         }
     }
 
