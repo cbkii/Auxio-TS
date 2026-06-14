@@ -29,12 +29,14 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
+import org.oxycblt.auxio.util.NotificationBitmapSafety
 import timber.log.Timber
 
 internal object CrashReportStorage {
@@ -53,6 +55,7 @@ internal object CrashReportStorage {
  */
 @HiltAndroidApp
 class Auxio : Application() {
+    @Inject lateinit var journal: DiagnosticJournal
     @Inject lateinit var imageSettings: ImageSettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var uiSettings: UISettings
@@ -61,6 +64,8 @@ class Auxio : Application() {
     override fun onCreate() {
         installCrashHandler()
         super.onCreate()
+
+        NotificationBitmapSafety.journal = journal
         @Suppress("KotlinConstantConditions")
         if (
             BuildConfig.APPLICATION_ID != "org.oxycblt.auxio" &&

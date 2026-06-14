@@ -22,8 +22,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import timber.log.Timber as L
 
 /**
@@ -33,13 +36,17 @@ import timber.log.Timber as L
  * only the allowlisted actions from [TopwayMusicContract] and immediately delegates to Auxio's
  * service-specific Topway path. It must never route through generic media-button restore logic.
  */
+@AndroidEntryPoint
 class TopwayMusicBridgeReceiver : BroadcastReceiver() {
+    @Inject lateinit var journal: DiagnosticJournal
+
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (!TopwayMusicContract.isIncomingAction(action)) {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
+        journal.log(DiagnosticJournal.CAT_TOPWAY_CMD, "Incoming Intent", action)
         val serviceClass =
             if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 try {

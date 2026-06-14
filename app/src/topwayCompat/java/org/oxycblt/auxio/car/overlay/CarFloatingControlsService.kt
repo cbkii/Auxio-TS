@@ -36,8 +36,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.playback.service.PlaybackActions
 import timber.log.Timber as L
 
@@ -50,7 +53,10 @@ import timber.log.Timber as L
  * to [org.oxycblt.auxio.playback.state.PlaybackStateManager]. This is the same path used by
  * notifications and widgets -- not generic media key dispatch.
  */
+@AndroidEntryPoint
 class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks {
+
+    @Inject lateinit var journal: DiagnosticJournal
 
     private lateinit var prefs: CarOverlayPrefs
     private var overlayView: CarFloatingControlsView? = null
@@ -65,6 +71,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         prefs = CarOverlayPrefs.from(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         L.d("CarFloatingControlsService created")
+        journal.log(DiagnosticJournal.CAT_OVERLAY, "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -175,6 +182,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         if (isOverlayAttached) return
         if (isAuxioForeground && prefs.hideWhileAuxioForeground) return
 
+        journal.log(DiagnosticJournal.CAT_OVERLAY, "Attaching overlay")
         val view = CarFloatingControlsView(this, this)
         view.applyOpacity(prefs.opacityPercent)
 
