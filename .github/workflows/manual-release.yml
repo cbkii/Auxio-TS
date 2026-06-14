@@ -577,6 +577,8 @@ jobs:
           RELEASE_VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           APK_NAMES: ${{ steps.apks.outputs.apk_names }}
+          SIGNED_APK_ARTIFACT_URL: ${{ steps.signed_apk_artifact.outputs.artifact-url }}
+          SIGNED_APK_ARTIFACT_NAME: Auxio-TS-${{ steps.version.outputs.release_tag }}-signed-apks
         run: |
           set -euo pipefail
 
@@ -601,28 +603,65 @@ jobs:
 
           write_artifact_links() {
             local artifacts_json
+            local remaining_count=0
+            local emitted=false
 
-            if ! artifacts_json="$(
-              gh api                 "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100"                 2>/dev/null
+            # Preferred source: upload-artifact's own browser-facing URL.
+            if [[ -n "${SIGNED_APK_ARTIFACT_URL:-}" ]]; then
+              echo "- [${SIGNED_APK_ARTIFACT_NAME}](${SIGNED_APK_ARTIFACT_URL})"
+              emitted=true
+            fi
+
+            # Discover any additional artifacts created by this workflow run.
+            if artifacts_json="$(
+              gh api \
+                "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+                2>/dev/null
             )"; then
-              echo "- Unable to query workflow artifacts."
+              remaining_count="$(
+                jq -r \
+                  --arg preferred_name "${SIGNED_APK_ARTIFACT_NAME:-}" \
+                  '
+                    [
+                      .artifacts[]?
+                      | select(
+                          ((.expired // false) | not)
+                          and .name != $preferred_name
+                        )
+                    ]
+                    | unique_by(.id)
+                    | length
+                  ' <<< "${artifacts_json}"
+              )"
+
+              if (( remaining_count > 0 )); then
+                jq -r \
+                  --arg run_url "${run_url}" \
+                  --arg preferred_name "${SIGNED_APK_ARTIFACT_NAME:-}" \
+                  '
+                    .artifacts
+                    | map(
+                        select(
+                          ((.expired // false) | not)
+                          and .name != $preferred_name
+                        )
+                      )
+                    | unique_by(.id)
+                    | sort_by(.name)[]
+                    | "- [" + .name + "]("
+                        + $run_url + "/artifacts/" + (.id | tostring)
+                        + ") — expires " + (.expires_at // "unknown")
+                  ' <<< "${artifacts_json}"
+                emitted=true
+              fi
+            elif [[ "${emitted}" == false ]]; then
+              echo "- Workflow artifacts could not be queried."
               return
             fi
 
-            if ! jq -e '.artifacts | length > 0'               <<< "${artifacts_json}" >/dev/null; then
+            if [[ "${emitted}" == false ]]; then
               echo "- No downloadable workflow artifacts were found for this run."
-              return
             fi
-
-            jq -r --arg run_url "${run_url}" '
-              .artifacts
-              | map(select((.expired // false) | not))
-              | unique_by(.id)
-              | sort_by(.name)[]
-              | "- [" + .name + "]("
-                  + $run_url + "/artifacts/" + (.id | tostring)
-                  + ") — expires " + (.expires_at // "unknown")
-            ' <<< "${artifacts_json}"
           }
 
           write_release_asset_links() {
@@ -631,26 +670,93 @@ jobs:
               return
             fi
 
-            local assets_json
-            if ! assets_json="$(
-              gh release view "${RELEASE_TAG}"                 --json assets,url,isDraft,isPrerelease                 2>/dev/null
-            )"; then
-              echo "- GitHub release was not created or is not readable for tag \`${RELEASE_TAG}\`."
+            local rest_release_json
+            local cli_release_json
+
+            # Preferred source: Releases REST API browser_download_url.
+            if rest_release_json="$(
+              gh api \
+                "/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+                2>/dev/null
+            )" &&
+              jq -e \
+                '.assets | type == "array" and length > 0' \
+                <<< "${rest_release_json}" >/dev/null; then
+
+              jq -r \
+                --arg repo_url "${repo_url}" \
+                --arg tag "${RELEASE_TAG}" \
+                '
+                  def release_download_url:
+                    if (
+                      (.browser_download_url // "")
+                      | startswith("https://")
+                    ) then
+                      .browser_download_url
+                    elif (
+                      ((.url // "") | startswith("https://github.com/"))
+                      and
+                      ((.url // "") | contains("/releases/download/"))
+                    ) then
+                      .url
+                    else
+                      $repo_url
+                      + "/releases/download/"
+                      + ($tag | @uri)
+                      + "/"
+                      + (.name | @uri)
+                    end;
+
+                  .assets
+                  | unique_by(.name)
+                  | sort_by(.name)[]
+                  | "- [" + .name + "](" + release_download_url + ") — "
+                      + ((.size // 0) | tostring) + " bytes"
+                ' <<< "${rest_release_json}"
               return
             fi
 
-            if ! jq -e '.assets | length > 0'               <<< "${assets_json}" >/dev/null; then
-              echo "- Release exists, but no downloadable release assets were found."
+            # Secondary source: GitHub CLI release asset output.
+            if cli_release_json="$(
+              gh release view "${RELEASE_TAG}" \
+                --json assets \
+                2>/dev/null
+            )" &&
+              jq -e \
+                '.assets | type == "array" and length > 0' \
+                <<< "${cli_release_json}" >/dev/null; then
+
+              jq -r \
+                --arg repo_url "${repo_url}" \
+                --arg tag "${RELEASE_TAG}" \
+                '
+                  def release_download_url:
+                    if (
+                      ((.url // "") | startswith("https://github.com/"))
+                      and
+                      ((.url // "") | contains("/releases/download/"))
+                    ) then
+                      .url
+                    else
+                      $repo_url
+                      + "/releases/download/"
+                      + ($tag | @uri)
+                      + "/"
+                      + (.name | @uri)
+                    end;
+
+                  .assets
+                  | unique_by(.name)
+                  | sort_by(.name)[]
+                  | "- [" + .name + "](" + release_download_url + ") — "
+                      + ((.size // 0) | tostring) + " bytes"
+                ' <<< "${cli_release_json}"
               return
             fi
 
-            jq -r '
-              .assets
-              | unique_by(.name)
-              | sort_by(.name)[]
-              | "- [" + .name + "](" + .url + ") — "
-                  + ((.size // 0) | tostring) + " bytes"
-            ' <<< "${assets_json}"
+            # Final safe fallback: release page, never an API-only asset URL.
+            echo "- Individual release assets could not be queried."
+            echo "- [Open release ${RELEASE_TAG}](${repo_url}/releases/tag/${RELEASE_TAG})"
           }
 
           write_unique_findings() {
