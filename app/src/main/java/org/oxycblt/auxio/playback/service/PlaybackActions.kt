@@ -27,8 +27,4 @@ object PlaybackActions {
     const val ACTION_PLAY_PAUSE = BuildConfig.APPLICATION_ID + ".action.PLAY_PAUSE"
     const val ACTION_SKIP_NEXT = BuildConfig.APPLICATION_ID + ".action.NEXT"
     const val ACTION_EXIT = BuildConfig.APPLICATION_ID + ".action.EXIT"
-
-    const val ACTION_DIAG_MARKER = BuildConfig.APPLICATION_ID + ".action.DIAG_MARKER"
-    const val ACTION_DIAG_RESTORE = BuildConfig.APPLICATION_ID + ".action.DIAG_RESTORE"
-    const val EXTRA_MARKER_LABEL = "extra_marker_label"
 }

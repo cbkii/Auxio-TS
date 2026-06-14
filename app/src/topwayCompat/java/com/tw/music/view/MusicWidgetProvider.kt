@@ -47,6 +47,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class MusicWidgetProvider : AppWidgetProvider() {
     @Inject lateinit var journal: DiagnosticJournal
+
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent == null) {
             L.d("Ignoring null Topway widget/provider intent")

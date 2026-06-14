@@ -192,10 +192,7 @@
         <service
             android:name=".diagnostics.DiagnosticService"
             android:exported="false"
-            android:foregroundServiceType="specialUse"
-            tools:ignore="ForegroundServiceDeclaration">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="TS18 integration diagnostics"/>
+            android:foregroundServiceType="dataSync">
         </service>
     </application>
 </manifest>

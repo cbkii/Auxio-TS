@@ -28,7 +28,7 @@ class DiagnosticReportGenerator @Inject constructor() {
     fun generate(
         automatedReport: List<DiagnosticEntry>,
         events: List<DiagnosticEvent>,
-        guidedTestReport: String? = null
+        guidedTestReport: String? = null,
     ): String {
         val sb = StringBuilder()
         val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
@@ -60,8 +60,9 @@ class DiagnosticReportGenerator @Inject constructor() {
         if (events.isEmpty()) {
             sb.append("No events observed during the active capture.\n\n")
         }
+        val eventTimeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
         events.forEach { event ->
-            val time = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date(event.wallTime))
+            val time = eventTimeFormat.format(Date(event.wallTime))
             val session = if (event.sessionId != null) "[${event.sessionId}] " else ""
             sb.append("[$time] $session${event.category}: ${event.event}\n")
             if (event.detail != null) sb.append("  Detail: ${event.detail}\n")

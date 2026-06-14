@@ -78,7 +78,7 @@ private constructor(
                 bitmapProvider,
                 playbackManager,
                 uiSettings,
-                journal
+                journal,
             )
     }
 
@@ -113,6 +113,25 @@ private constructor(
         }
 
     private val topwayBridge = TopwayMusicBroadcastBridge(context, uiSettings, journal)
+
+    fun publishMarker(label: String) = topwayBridge.publishMarker(label)
+
+    fun restoreBridge() {
+        val song = playbackManager.currentSong ?: return
+        val metadataSnapshot =
+            HeadUnitMetadataPolicy.fromRaw(
+                title = song.name.resolve(context),
+                artist = song.artists.resolveNames(context),
+                albumArtist = song.album.artists.resolveNames(context),
+                albumTitle = song.album.name.resolve(context),
+                durationMs = song.durationMs,
+                mediaId = song.uid.toString(),
+                mediaUri = song.uri.toString(),
+                artworkUri = null,
+                hasArtwork = false,
+            )
+        topwayBridge.restore(metadataSnapshot)
+    }
 
     fun attach() {
         playbackManager.addListener(this)
@@ -196,6 +215,16 @@ private constructor(
                 }
             },
         )
+    }
+
+    /** Publish a short-lived diagnostic marker through the isolated Topway metadata bridge. */
+    fun publishMarker(label: String) {
+        topwayBridge.publishMarker(label)
+    }
+
+    /** Restore the Topway bridge to the current playback metadata after a diagnostic marker. */
+    fun restoreBridge() {
+        update()
     }
 
     /** Release this instance, preventing any further events from updating the widget instances. */

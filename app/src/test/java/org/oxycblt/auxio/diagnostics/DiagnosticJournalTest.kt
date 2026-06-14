@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.diagnostics
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -37,16 +38,18 @@ class DiagnosticJournalTest {
 
     @Test
     fun `test event recording`() {
+        journal.startSession("sess")
         journal.log("CAT", "Event", "Detail")
         val events = journal.events.value
-        assertEquals(1, events.size)
-        assertEquals("CAT", events[0].category)
-        assertEquals("Event", events[0].event)
-        assertEquals("Detail", events[0].detail)
+        assertEquals(2, events.size)
+        assertEquals("CAT", events[1].category)
+        assertEquals("Event", events[1].event)
+        assertEquals("Detail", events[1].detail)
     }
 
     @Test
     fun `test event pruning`() {
+        journal.startSession("sess")
         // Log more than MAX_EVENT_COUNT (1000)
         for (i in 1..1100) {
             journal.log("CAT", "Event $i")
@@ -69,17 +72,20 @@ class DiagnosticJournalTest {
         journal.endSession()
         journal.log("CAT", "Event2")
         val eventsAfter = journal.events.value
-        assertEquals(null, eventsAfter.last().sessionId)
+        assertEquals("Ended", eventsAfter.last().event)
+        assertFalse(journal.hasActiveSession)
     }
 
     @Test
     fun `test clear`() {
+        journal.startSession("sess")
         journal.log("CAT", "Event")
         journal.clear()
         assertEquals(0, journal.events.value.size)
     }
 
-    @Test fun `test overlapping capture is prevented`() {
+    @Test
+    fun `test overlapping capture is prevented`() {
         assertTrue(journal.startSession("first"))
         assertFalse(journal.startSession("second"))
         journal.endSession()
