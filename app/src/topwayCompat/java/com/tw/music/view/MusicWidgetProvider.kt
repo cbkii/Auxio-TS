@@ -27,9 +27,12 @@ import android.content.Intent
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import com.tw.music.MusicService
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.topway.TopwayBridgeExtrasPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayMusicContract
 import org.oxycblt.auxio.headunit.topway.TopwayWidgetProviderPolicy
@@ -41,7 +44,10 @@ import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.auxio.widgets.WidgetTimeline
 import timber.log.Timber as L
 
+@AndroidEntryPoint
 class MusicWidgetProvider : AppWidgetProvider() {
+    @Inject lateinit var journal: DiagnosticJournal
+
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent == null) {
             L.d("Ignoring null Topway widget/provider intent")
@@ -70,6 +76,8 @@ class MusicWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
+        L.d("onUpdate called for Topway widget with ${appWidgetIds.size} IDs")
+        journal.log(DiagnosticJournal.CAT_WIDGET, "onUpdate", "IDs: ${appWidgetIds.joinToString()}")
         // Request a full state update from WidgetComponent.
         context.sendBroadcast(
             Intent(org.oxycblt.auxio.widgets.WidgetProvider.ACTION_WIDGET_UPDATE)

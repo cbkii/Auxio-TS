@@ -29,12 +29,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.diagnostics.DiagnosticService
+import org.oxycblt.auxio.diagnostics.DiagnosticsSettings
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
+import org.oxycblt.auxio.util.NotificationBitmapSafety
 import timber.log.Timber
 
 internal object CrashReportStorage {
@@ -53,6 +57,8 @@ internal object CrashReportStorage {
  */
 @HiltAndroidApp
 class Auxio : Application() {
+    @Inject lateinit var journal: DiagnosticJournal
+    @Inject lateinit var diagnosticsSettings: DiagnosticsSettings
     @Inject lateinit var imageSettings: ImageSettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var uiSettings: UISettings
@@ -61,6 +67,8 @@ class Auxio : Application() {
     override fun onCreate() {
         installCrashHandler()
         super.onCreate()
+
+        NotificationBitmapSafety.journal = journal
         @Suppress("KotlinConstantConditions")
         if (
             BuildConfig.APPLICATION_ID != "org.oxycblt.auxio" &&
@@ -100,6 +108,8 @@ class Auxio : Application() {
             )
             .start()
 
+        startArmedDiagnosticCaptureIfNeeded()
+
         // Register car floating controls visibility hooks for the Topway/TS18 variant.
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             try {
@@ -115,6 +125,23 @@ class Auxio : Application() {
             } catch (e: ReflectiveOperationException) {
                 Timber.w(e, "Car overlay visibility hooks not available")
             }
+        }
+    }
+
+    private fun startArmedDiagnosticCaptureIfNeeded() {
+        val id = diagnosticsSettings.armedBootCaptureId ?: return
+        val expiry = diagnosticsSettings.armedExpiryTime
+        if (System.currentTimeMillis() > expiry) {
+            diagnosticsSettings.clearArmedCapture()
+            return
+        }
+        val origin =
+            diagnosticsSettings.armedCaptureOrigin ?: DiagnosticService.ORIGIN_APP_START_FALLBACK
+        if (origin != DiagnosticService.ORIGIN_APP_START_FALLBACK) return
+        try {
+            DiagnosticService.start(this, id, diagnosticsSettings.armedDurationMs, origin)
+        } catch (e: Exception) {
+            Timber.w(e, "Unable to start armed diagnostic capture on app start")
         }
     }
 

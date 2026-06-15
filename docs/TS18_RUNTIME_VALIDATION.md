@@ -201,17 +201,13 @@ adb shell am broadcast -a com.android.launcher.widget_music_progress --ei music_
 
 ## Storage/media-library validation
 
-The exact target diagnostics showed USB storage at:
-
-```text
-/storage/usbdisk0
-```
+The exact target diagnostics showed USB storage under a `/storage/usbdiskN` style mount. Do not hard-code `usbdisk0`; use the diagnostics screen and shell inspection to record the actual mounted suffix on the device under test.
 
 Validate at least:
 
 ```sh
-adb shell ls -lah /storage/usbdisk0
-adb shell ls -lah /storage/usbdisk0/Music 2>/dev/null || true
+adb shell ls -lah /storage | grep -i usbdisk || true
+adb shell find /storage -maxdepth 1 -type d -name 'usbdisk*' -print 2>/dev/null
 adb shell ls -lah /sdcard/Music 2>/dev/null || true
 ```
 
@@ -219,9 +215,14 @@ Manual checks:
 
 - grant Android 10 storage permission when prompted;
 - confirm Auxio-TS can scan `/sdcard/Music`;
-- confirm Auxio-TS can scan or otherwise access `/storage/usbdisk0` where permitted;
+- confirm Auxio-TS can scan or otherwise access `/storage/usbdiskN` where permitted;
 - confirm playback works from the same storage locations stock `twMusic` can access;
-- test Storage Health screen (under Settings > Music > Storage Health) to verify path aliasing, volume-aware querying, and noisy-path exclusion;
+- test TS18 Health Diagnostics screen (under Settings > Music > TS18 Health Diagnostics) to verify the separate automated report, guided DoFun integration test, timed activity capture, one-shot startup capture, and event journal;
+- in the guided DoFun test, verify all instructions are visible before departure, the optional metadata-marker consent checkbox is honoured, the countdown automatically starts capture, the user leaves Auxio once, taps the DoFun Music card last, returns once, and answers numbered questions with numbered choices plus optional free text;
+- in timed capture, verify 2, 5, 10, and 15 minute selections are enforced by the foreground service and the Stop action preserves a partial report;
+- arm one-shot startup capture, then validate true boot capture when Android permits it and first normal Auxio-start fallback when boot foreground-service start is blocked; after successful capture, the armed ID/expiry should be consumed;
+- verify noisy/problem path display, confirmation before exclusion, exact user-selected source preservation, alias/canonical distinction, and report output for SAF grants, MediaStore volumes, dynamic `/storage/usbdiskN` roots, exclusions, and temporarily unavailable sources;
+- verify save/copy/share output: failed saves must not discard the report, successful saves should show the full path, and destination discovery must not create directories until save time;
 - retest after ACC/reboot and after USB disk re-mount.
 
 ## Overlay validation for PR #53 and later
@@ -338,10 +339,10 @@ Expected for release variants: `com.tw.music/com.tw.music.MusicService` for `top
 ```sh
 adb shell cmd media_session list-sessions 2>/dev/null || true
 adb shell content query --uri content://media/external/audio/media --projection _id:_display_name:relative_path:volume_name --where "is_music=1" | head -50
-adb shell find /sdcard/Music /storage/emulated/0/Music /storage/usbdisk0 -maxdepth 2 -type f 2>/dev/null | head -50
+adb shell find /sdcard/Music /storage/emulated/0/Music /storage/usbdiskN -maxdepth 2 -type f 2>/dev/null | head -50
 ```
 
-Expected: songs copied to local `/sdcard/Music` and to `/storage/usbdisk0` appear either in MediaStore query output or in the filesystem probe. Failure interpretation: if `/storage/usbdisk0` files exist but do not appear in MediaStore after a media rescan/reboot, the app may need a user-selected SAF folder lane for that firmware; do not add broad storage permissions without a separate evidence-backed design.
+Expected: songs copied to local `/sdcard/Music` and to the discovered `/storage/usbdiskN` root appear either in MediaStore query output or in the filesystem probe. Failure interpretation: if discovered USB files exist but do not appear in MediaStore after a media rescan/reboot, use the diagnostics report to compare source accessibility, aliases, SAF grants, exclusions, and temporary-unavailable state before proposing any broader storage permission change.
 
 ### Runtime checks that require the real TS18 unit
 
@@ -350,5 +351,5 @@ Expected: songs copied to local `/sdcard/Music` and to `/storage/usbdisk0` appea
 - DoFun hotseat/widget launch for both `com.tw.music/com.tw.music.MusicActivity` and `com.tw.media/com.tw.music.MusicActivity`.
 - Duplicate media-session/service behaviour: inspect `adb shell dumpsys media_session`, start playback from DoFun/widget, and verify only one active Auxio playback session controls audio. Expected: the Topway-compatible APK exposes `com.tw.music.MusicService` as the external browse component; `org.oxycblt.auxio.AuxioService` should not appear as an additional external browse-service resolution in Topway variants.
 - Duplicate service lifecycle/notification behaviour: inspect `adb shell dumpsys activity services | grep -E 'AuxioService|MusicService'` and `adb shell dumpsys notification | grep -E 'Auxio|com.tw.music|com.tw.media'` before and after DoFun/widget actions. Failure interpretation: two simultaneous foreground playback services or duplicate media notifications means the wrapper/base-service routing needs another implementation pass.
-- Music-library visibility for `/sdcard/Music`, `/storage/usbdisk0`, and USB/UDisk scanning on Android 10.
+- Music-library visibility for `/sdcard/Music`, `/storage/usbdiskN`, and USB/UDisk scanning on Android 10.
 - Overlay permission grant/revoke, 1280x720 bounds with about 55px top/right system bars, background-start behaviour, boot completed, and ACC wake/restore.

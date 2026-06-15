@@ -25,10 +25,13 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.os.Build
 import kotlin.math.roundToInt
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import timber.log.Timber as L
 
 /** TS18-safe large-icon bitmap policy for RemoteViews/SystemUI renderers. */
 object NotificationBitmapSafety {
+    var journal: DiagnosticJournal? = null
+
     const val MIN_ICON_SIZE_PX = 96
     const val MAX_ICON_SIZE_PX = 512
     const val FALLBACK_ICON_SIZE_PX = 256
@@ -39,6 +42,13 @@ object NotificationBitmapSafety {
     fun sanitize(input: Bitmap?): Bitmap? {
         val source =
             input?.takeIf { !it.isRecycled && it.width > 0 && it.height > 0 } ?: return null
+
+        journal?.log(
+            DiagnosticJournal.CAT_NOTIFICATION,
+            "Artwork Input",
+            "Size: ${source.width}x${source.height}, Config: ${source.config}",
+        )
+
         var working = source.toSafeSoftwareBitmap() ?: return null
 
         if (maxOf(working.width, working.height) > MAX_ICON_SIZE_PX) {
@@ -56,6 +66,12 @@ object NotificationBitmapSafety {
             }
             working = centered
         }
+
+        journal?.log(
+            DiagnosticJournal.CAT_NOTIFICATION,
+            "Artwork Sanitisied",
+            "Size: ${working.width}x${working.height}, Config: ${working.config}",
+        )
 
         return working
     }
