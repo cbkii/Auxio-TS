@@ -96,7 +96,7 @@ class DiagnosticService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         if (action == ACTION_STOP) {
-            stopCapture(intent.getStringExtra(EXTRA_SESSION_ID), "user stop")
+            stopCapture(intent.getStringExtra(EXTRA_SESSION_ID) ?: activeSessionId, "user stop")
             stopSelfCleanly()
             return START_NOT_STICKY
         }
@@ -117,6 +117,16 @@ class DiagnosticService : Service() {
         }
 
         if (!repository.startCapture(sessionId, origin, requestedDurationMs)) {
+            val existingSessionId = activeSessionId ?: journal.activeSessionId
+            if (existingSessionId != null) {
+                activeSessionId = existingSessionId
+                journal.log(
+                    DiagnosticJournal.CAT_SYSTEM,
+                    "Capture start ignored",
+                    "Active: $existingSessionId, requested: $sessionId",
+                )
+                return START_STICKY
+            }
             markerController.restoreCurrentMetadata()
             stopSelfCleanly()
             return START_NOT_STICKY
@@ -214,7 +224,10 @@ class DiagnosticService : Service() {
                 .build()
         nm.createNotificationChannel(channel)
 
-        val stopIntent = Intent(this, DiagnosticService::class.java).setAction(ACTION_STOP)
+        val stopIntent =
+            Intent(this, DiagnosticService::class.java)
+                .setAction(ACTION_STOP)
+                .putExtra(EXTRA_SESSION_ID, activeSessionId)
         val stopPendingIntent =
             android.app.PendingIntent.getService(
                 this,

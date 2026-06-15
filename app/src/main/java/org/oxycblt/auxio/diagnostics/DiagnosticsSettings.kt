@@ -31,6 +31,8 @@ interface DiagnosticsSettings : Settings<DiagnosticsSettings.Listener> {
     var armedCaptureOrigin: String?
     var armedDurationMs: Long
 
+    fun armCapture(id: String, expiryTime: Long, origin: String, durationMs: Long)
+
     fun clearArmedCapture()
 
     interface Listener {
@@ -57,6 +59,15 @@ class DiagnosticsSettingsImpl @Inject constructor(@ApplicationContext context: C
     override var armedDurationMs: Long
         get() = sharedPreferences.getLong(KEY_ARMED_DURATION_MS, DEFAULT_ARMED_DURATION_MS)
         set(value) = sharedPreferences.edit { putLong(KEY_ARMED_DURATION_MS, value) }
+
+    override fun armCapture(id: String, expiryTime: Long, origin: String, durationMs: Long) {
+        sharedPreferences.edit {
+            putString(KEY_ARMED_ID, id)
+            putLong(KEY_ARMED_EXPIRY, expiryTime)
+            putString(KEY_ARMED_ORIGIN, origin)
+            putLong(KEY_ARMED_DURATION_MS, durationMs)
+        }
+    }
 
     override fun clearArmedCapture() {
         sharedPreferences.edit {

@@ -332,10 +332,12 @@ constructor(
 
     fun armBootCapture() {
         val id = "boot-${UUID.randomUUID().toString().take(8)}"
-        diagSettings.armedBootCaptureId = id
-        diagSettings.armedExpiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L) // 24h
-        diagSettings.armedCaptureOrigin = DiagnosticService.ORIGIN_APP_START_FALLBACK
-        diagSettings.armedDurationMs = BOOT_CAPTURE_DURATION_MS
+        diagSettings.armCapture(
+            id,
+            System.currentTimeMillis() + (24 * 60 * 60 * 1000L), // 24h
+            DiagnosticService.ORIGIN_APP_START_FALLBACK,
+            BOOT_CAPTURE_DURATION_MS,
+        )
         journal.log(DiagnosticJournal.CAT_SYSTEM, "Capture armed for next start", "ID: $id")
     }
 

@@ -53,6 +53,7 @@ class DiagnosticsFragment : Fragment() {
     private var timelineContainer: LinearLayout? = null
     private var statusText: TextView? = null
     private var overlayContainer: ViewGroup? = null
+    private var latestNoisyPaths: List<String> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -125,9 +126,13 @@ class DiagnosticsFragment : Fragment() {
                     }
                 container.addView(entryView)
             }
+            renderNoisyPaths(latestNoisyPaths)
         }
 
-        collectImmediately(viewModel.noisyPaths) { paths -> renderNoisyPaths(paths) }
+        collectImmediately(viewModel.noisyPaths) { paths ->
+            latestNoisyPaths = paths
+            renderNoisyPaths(paths)
+        }
 
         collectImmediately(viewModel.journalEvents) { events ->
             val container = timelineContainer ?: return@collectImmediately
@@ -215,6 +220,7 @@ class DiagnosticsFragment : Fragment() {
                 AlertDialog.Builder(requireContext())
                     .setTitle("Guided Test Result")
                     .setMessage(state.report)
+                    .setCancelable(false)
                     .setPositiveButton("OK") { _, _ -> viewModel.cancelGuidedTest() }
                     .show()
             }
@@ -322,8 +328,10 @@ class DiagnosticsFragment : Fragment() {
 
     private fun renderNoisyPaths(paths: List<String>) {
         val container = reportContainer ?: return
+        removeNoisyPathViews(container)
         if (paths.isEmpty()) return
         TextView(requireContext()).apply {
+            tag = NOISY_PATH_VIEW_TAG
             text = "Noisy/problem paths"
             textSize = 16f
             setPadding(0, 16, 0, 4)
@@ -331,9 +339,18 @@ class DiagnosticsFragment : Fragment() {
         }
         paths.forEach { path ->
             Button(requireContext()).apply {
+                tag = NOISY_PATH_VIEW_TAG
                 text = "Exclude: $path"
                 setOnClickListener { confirmExcludePath(path) }
                 container.addView(this)
+            }
+        }
+    }
+
+    private fun removeNoisyPathViews(container: LinearLayout) {
+        for (i in container.childCount - 1 downTo 0) {
+            if (container.getChildAt(i).tag == NOISY_PATH_VIEW_TAG) {
+                container.removeViewAt(i)
             }
         }
     }
@@ -360,6 +377,10 @@ class DiagnosticsFragment : Fragment() {
                 }
             }
             .show()
+    }
+
+    private companion object {
+        const val NOISY_PATH_VIEW_TAG = "diagnostics_noisy_path_view"
     }
 
     private fun exportReport() {
