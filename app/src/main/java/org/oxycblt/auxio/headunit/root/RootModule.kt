@@ -27,7 +27,5 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object RootModule {
-    @Provides
-    @Singleton
-    fun provideRootStateHolder(): RootStateHolder = RootStateHolder()
+    @Provides @Singleton fun provideRootStateHolder(): RootStateHolder = RootStateHolder()
 }

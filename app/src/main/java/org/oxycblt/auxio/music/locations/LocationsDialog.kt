@@ -747,7 +747,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     multithread = binding.locationsMultithreadSwitch.isChecked,
                 )
 
-            if (!modeChanged && (currentMode == LocationMode.SAF || currentMode == LocationMode.DIRECT_FS)) {
+            if (
+                !modeChanged && (currentMode == LocationMode.SAF || currentMode == LocationMode.DIRECT_FS)
+            ) {
                 configChanged = currentSafQuery != newSafQuery
             }
 

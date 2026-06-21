@@ -29,8 +29,8 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
-import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.headunit.root.RootStateHolder
+import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
@@ -38,6 +38,7 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.getSystemServiceCompat
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.fs.FSUpdate
+import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import timber.log.Timber as L
@@ -117,12 +118,13 @@ private constructor(
             L.d("Startup library load already running; ignoring duplicate start")
             return
         }
-        startupJob = indexScope.launch {
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                rootGate.probeSync()
+        startupJob =
+            indexScope.launch {
+                if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    rootGate.probeSync()
+                }
+                musicRepository.startup(this@IndexingHolder)
             }
-            musicRepository.startup(this@IndexingHolder)
-        }
     }
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
@@ -150,10 +152,10 @@ private constructor(
     @Synchronized
     override fun requestIndex(withCache: Boolean) {
         if (currentIndexJob?.isActive == true) {
-            L.i("Ignoring duplicate indexing request while scan is running [cache=$withCache]")
+            L.i("Ignoring duplicate indexing request while scan is running [cache=]")
             return
         }
-        L.i("Starting new indexing job [cache=$withCache]")
+        L.i("Starting new indexing job [cache=]")
         currentIndexJob =
             indexScope.launch {
                 try {
@@ -190,8 +192,7 @@ private constructor(
         playbackManager.toSavedState()?.let { savedState ->
             playbackManager.applySavedState(
                 savedState.copy(
-                    parent =
-                        savedState.parent?.let { musicRepository.find(it.uid) as? MusicParent? },
+                    parent = savedState.parent?.let { musicRepository.find(it.uid) as? MusicParent? },
                     heap = savedState.heap.map { song -> song?.let { library.findSong(it.uid) } },
                 ),
                 true,

@@ -20,6 +20,7 @@ package org.oxycblt.musikr.fs.direct
 
 import android.net.Uri
 import android.webkit.MimeTypeMap
+import java.io.File as JavaFile
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -39,7 +40,6 @@ import org.oxycblt.musikr.fs.RootGate
 import org.oxycblt.musikr.util.tryAsync
 import org.oxycblt.musikr.util.tryAsyncWith
 import org.oxycblt.musikr.util.tryAwaitAll
-import java.io.File as JavaFile
 
 /**
  * A direct filesystem [FS] implementation that uses [java.io.File] and optionally [RootGate].
@@ -47,21 +47,23 @@ import java.io.File as JavaFile
  * This is used as the primary strategy for TS18 head units where SAF/MediaStore may be
  * unreliable or absent, but direct filesystem access (or root-assisted access) is available.
  */
-class DirectFS(
-    private val roots: List<Location.Opened>,
-    private val rootGate: RootGate? = null
-) : FS {
+class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
+    FS {
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
-            roots.map { location ->
-                exploreDirectoryImpl(
-                    JavaFile(location.uri.path ?: return@map CompletableDeferred(Result.success(Unit))),
-                    location.path,
-                    null,
-                    files
-                )
-            }.tryAwaitAll()
+            roots
+                .map { location ->
+                    exploreDirectoryImpl(
+                        JavaFile(
+                            location.uri.path ?: return@map CompletableDeferred(Result.success(Unit))
+                        ),
+                        location.path,
+                        null,
+                        files,
+                    )
+                }
+                .tryAwaitAll()
         }
     }
 
@@ -71,36 +73,43 @@ class DirectFS(
         directory: JavaFile,
         relativePath: Path,
         parent: Deferred<Directory>?,
-        files: Channel<File>
-    ): Deferred<Result<Unit>> = tryAsync(Dispatchers.IO) {
-        val directoryDeferred = CompletableDeferred<Directory>()
-        val children = mutableListOf<File>()
-        val recursive = mutableListOf<Deferred<Result<Unit>>>()
+        files: Channel<File>,
+    ): Deferred<Result<Unit>> =
+        tryAsync(Dispatchers.IO) {
+            val directoryDeferred = CompletableDeferred<Directory>()
+            val children = mutableListOf<File>()
+            val recursive = mutableListOf<Deferred<Result<Unit>>>()
 
-        val list = listFilesSafe(directory)
-        for (item in list) {
-            if (item.name.startsWith(".")) continue
+            val list = listFilesSafe(directory)
+            for (item in list) {
+                if (item.name.startsWith(".")) continue
 
-            val newPath = relativePath.file(item.name)
-            if (item.isDirectory) {
-                recursive.add(exploreDirectoryImpl(item, newPath, directoryDeferred, files))
-            } else {
-                val file = File(
-                    uri = Uri.fromFile(item),
-                    path = newPath,
-                    addedMs = ConstantAddedMs(item.lastModified()), // Inexact, but best available for direct FS
-                    modifiedMs = item.lastModified(),
-                    mimeType = getMimeType(item),
-                    size = item.length(),
-                    parent = directoryDeferred
-                )
-                children.add(file)
-                files.send(file)
+                val newPath = relativePath.file(item.name)
+                if (item.isDirectory) {
+                    recursive.add(exploreDirectoryImpl(item, newPath, directoryDeferred, files))
+                } else {
+                    val file =
+                        File(
+                            uri = Uri.fromFile(item),
+                            path = newPath,
+                            addedMs =
+                                ConstantAddedMs(
+                                    item.lastModified()
+                                ), // Inexact, but best available for direct FS
+                            modifiedMs = item.lastModified(),
+                            mimeType = getMimeType(item),
+                            size = item.length(),
+                            parent = directoryDeferred,
+                        )
+                    children.add(file)
+                    files.send(file)
+                }
             }
+            directoryDeferred.complete(
+                Directory(Uri.fromFile(directory), relativePath, parent, children)
+            )
+            recursive.tryAwaitAll()
         }
-        directoryDeferred.complete(Directory(Uri.fromFile(directory), relativePath, parent, children))
-        recursive.tryAwaitAll()
-    }
 
     private fun listFilesSafe(directory: JavaFile): List<JavaFile> {
         val normal = try {
@@ -121,7 +130,8 @@ class DirectFS(
 
     private fun getMimeType(file: JavaFile): String {
         val extension = file.extension.lowercase()
-        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension) ?: "application/octet-stream"
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: "application/octet-stream"
     }
 
     private class ConstantAddedMs(private val time: Long) : AddedMs {

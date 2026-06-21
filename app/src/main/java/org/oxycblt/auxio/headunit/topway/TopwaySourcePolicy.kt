@@ -18,8 +18,8 @@
 
 package org.oxycblt.auxio.headunit.topway
 
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import java.io.File
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import timber.log.Timber as L
 
 /** Policy for identifying and prioritizing TS18-specific candidate music source roots. */
@@ -146,15 +146,16 @@ object TopwaySourcePolicy {
     }
 
     /**
-     * Attempts to list a directory using root if available, otherwise falls back to normal File APIs.
-     * Only for use on TS18 variants when a standard access fails.
+     * Attempts to list a directory using root if available, otherwise falls back to normal File
+     * APIs. Only for use on TS18 variants when a standard access fails.
      */
     fun listFilesSafe(directory: File, rootGate: RootStateHolder? = null): List<File> {
-        val normalFiles = try {
-            directory.listFiles()?.toList()
-        } catch (e: Exception) {
-            null
-        }
+        val normalFiles =
+            try {
+                directory.listFiles()?.toList()
+            } catch (e: Exception) {
+                null
+            }
 
         if (normalFiles != null) return normalFiles
 
@@ -163,9 +164,7 @@ object TopwaySourcePolicy {
             L.d("Normal access failed for ${directory.absolutePath}, trying root...")
             val result = rootGate.runRootCommandRawSync("ls -1 \"${directory.absolutePath}\"")
             if (result != null && result.exitCode == 0) {
-                return result.stdout.lines()
-                    .filter { it.isNotBlank() }
-                    .map { File(directory, it) }
+                return result.stdout.lines().filter { it.isNotBlank() }.map { File(directory, it) }
             }
         }
 
@@ -181,14 +180,14 @@ object TopwaySourcePolicy {
             File("/storage"),
             File("/mnt/media_rw"),
             includeGenericFallbacks = true,
-            rootGate = rootGate
+            rootGate = rootGate,
         )
 
     internal fun discoverCandidateRoots(
         storageRoot: File,
         mediaRwRoot: File,
         includeGenericFallbacks: Boolean = false,
-        rootGate: RootStateHolder? = null
+        rootGate: RootStateHolder? = null,
     ): List<String> {
         val out = linkedSetOf<String>()
         if (includeGenericFallbacks) {
@@ -203,10 +202,14 @@ object TopwaySourcePolicy {
         return out.toList()
     }
 
-    private fun discoverChildren(root: File, removableOnly: Boolean, rootGate: RootStateHolder? = null): List<String> {
+    private fun discoverChildren(
+        root: File,
+        removableOnly: Boolean,
+        rootGate: RootStateHolder? = null,
+    ): List<String> {
         val children = listFilesSafe(root, rootGate)
         if (children.isEmpty() && rootGate == null) {
-             L.w("Failed to list candidate roots under ${root.absolutePath}")
+            L.w("Failed to list candidate roots under ${root.absolutePath}")
         }
         return children
             .asSequence()

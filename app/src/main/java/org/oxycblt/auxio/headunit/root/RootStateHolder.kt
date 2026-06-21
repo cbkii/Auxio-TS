@@ -18,18 +18,16 @@
 
 package org.oxycblt.auxio.headunit.root
 
-import org.oxycblt.auxio.BuildConfig
-import org.oxycblt.musikr.fs.RootGate
-import timber.log.Timber as L
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.musikr.fs.RootGate
+import timber.log.Timber as L
 
-/**
- * Global gate for root/superuser state on TS18 variants.
- */
+/** Global gate for root/superuser state on TS18 variants. */
 @Singleton
 class RootStateHolder @Inject constructor() : RootGate {
 
@@ -39,7 +37,7 @@ class RootStateHolder @Inject constructor() : RootGate {
         Unavailable,
         Denied,
         TimedOut,
-        UnsupportedForVariant
+        UnsupportedForVariant,
     }
 
     @Volatile
@@ -53,8 +51,8 @@ class RootStateHolder @Inject constructor() : RootGate {
     }
 
     /**
-     * Performs a one-time root probe if the state is currently Unknown.
-     * This should be called off the main thread.
+     * Performs a one-time root probe if the state is currently Unknown. This should be called off
+     * the main thread.
      */
     fun probeSync(): State {
         if (state != State.Unknown) return state
@@ -67,31 +65,32 @@ class RootStateHolder @Inject constructor() : RootGate {
         L.d("Probing root capability...")
         val result = runRootCommandRawSync("id", timeoutMs = 2000)
 
-        state = when {
-            result == null -> State.TimedOut
-            result.exitCode == 0 && result.stdout.contains("uid=0") -> State.Available
-            result.exitCode == 1 -> State.Denied
-            else -> State.Unavailable
-        }
+        state =
+            when {
+                result == null -> State.TimedOut
+                result.exitCode == 0 && result.stdout.contains("uid=0") -> State.Available
+                result.exitCode == 1 -> State.Denied
+                else -> State.Unavailable
+            }
 
-        L.i("Root probe completed: $state")
+        L.i("Root probe completed: ")
         return state
     }
 
-    /**
-     * Resets the root gate, allowing a new probe to be performed.
-     */
+    /** Resets the root gate, allowing a new probe to be performed. */
     fun reset() {
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.Unknown
         }
     }
 
-    /**
-     * Helper to run a command via su with a timeout.
-     */
+    /** Helper to run a command via su with a timeout. */
     fun runRootCommandRawSync(command: String, timeoutMs: Long = 5000): CommandResult? {
-        if (state == State.UnsupportedForVariant || state == State.Denied || state == State.Unavailable) {
+        if (
+            state == State.UnsupportedForVariant ||
+                state == State.Denied ||
+                state == State.Unavailable
+        ) {
             return null
         }
 
@@ -108,7 +107,7 @@ class RootStateHolder @Inject constructor() : RootGate {
             val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
 
             if (!finished) {
-                L.w("Root command timed out: $command")
+                L.w("Root command timed out: ")
                 process.destroy()
                 return null
             }
@@ -119,7 +118,7 @@ class RootStateHolder @Inject constructor() : RootGate {
 
             CommandResult(exitCode, stdout, stderr)
         } catch (e: Exception) {
-            L.e(e, "Failed to run root command: $command")
+            L.e(e, "Failed to run root command: ")
             null
         }
     }
