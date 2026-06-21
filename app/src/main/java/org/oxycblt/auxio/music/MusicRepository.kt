@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
@@ -49,6 +50,7 @@ import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
+import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
@@ -258,6 +260,7 @@ constructor(
     private val storedPlaylists: StoredPlaylists,
     private val settingCovers: SettingCovers,
     private val musicSettings: MusicSettings,
+    private val rootGate: RootStateHolder,
 ) : MusicRepository {
     private val updateListeners = mutableListOf<MusicRepository.UpdateListener>()
     private val indexingListeners = mutableListOf<MusicRepository.IndexingListener>()
@@ -462,7 +465,8 @@ constructor(
         // Check accessibility before starting
         val locations =
             when (musicSettings.locationMode) {
-                LocationMode.SAF -> musicSettings.safQuery.source
+                LocationMode.SAF,
+                LocationMode.DIRECT_FS -> musicSettings.safQuery.source
                 LocationMode.MEDIA_STORE ->
                     emptyList() // MediaStore is always "accessible" as a provider
             }
@@ -492,7 +496,13 @@ constructor(
                 emptyList()
             }
         val result =
-            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS, pathKeywords)
+            Musikr.new(
+                    context = context,
+                    config = config,
+                    noisyDirs = TopwaySourcePolicy.NOISY_DIRS,
+                    pathKeywords = pathKeywords,
+                    rootGate = rootGate
+                )
                 .run(::emitIndexingProgress)
         L.d("Index finished in ${System.currentTimeMillis() - start}ms")
 
@@ -584,6 +594,7 @@ constructor(
                         )
                     MediaStore.from(context, query)
                 }
+                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source, rootGate)
             }
         L.d(
             "Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]"

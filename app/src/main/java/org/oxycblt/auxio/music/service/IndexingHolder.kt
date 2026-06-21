@@ -30,6 +30,7 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.music.IndexingState
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
@@ -49,6 +50,7 @@ private constructor(
     private val musicRepository: MusicRepository,
     private val musicSettings: MusicSettings,
     private val imageLoader: ImageLoader,
+    private val rootGate: RootStateHolder,
 ) :
     MusicRepository.IndexingWorker,
     MusicRepository.IndexingListener,
@@ -61,6 +63,7 @@ private constructor(
         private val musicRepository: MusicRepository,
         private val musicSettings: MusicSettings,
         private val imageLoader: ImageLoader,
+        private val rootGate: RootStateHolder,
     ) {
         fun create(context: Context, listener: ForegroundListener) =
             IndexingHolder(
@@ -70,6 +73,7 @@ private constructor(
                 musicRepository,
                 musicSettings,
                 imageLoader,
+                rootGate,
             )
     }
 
@@ -113,7 +117,12 @@ private constructor(
             L.d("Startup library load already running; ignoring duplicate start")
             return
         }
-        startupJob = indexScope.launch { musicRepository.startup(this@IndexingHolder) }
+        startupJob = indexScope.launch {
+            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                rootGate.probeSync()
+            }
+            musicRepository.startup(this@IndexingHolder)
+        }
     }
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
@@ -197,6 +206,7 @@ private constructor(
                 LocationMode.MEDIA_STORE ->
                     MediaStore.from(workerContext, musicSettings.mediaStoreQuery)
                 LocationMode.SAF -> SAF.from(workerContext, musicSettings.safQuery)
+                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source, rootGate)
             }
         trackingJob =
             indexScope.launch {

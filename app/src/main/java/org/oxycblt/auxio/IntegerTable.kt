@@ -155,6 +155,8 @@ object IntegerTable {
     const val LOCATION_MODE_SAF = 0xA127
     /** LocationMode.MediaStore */
     const val LOCATION_MODE_MEDIA_STORE = 0xA128
+    /** LocationMode.DirectFS */
+    const val LOCATION_MODE_DIRECT_FS = 0xA12B
     /** LocationMode.FileSystem */
     const val FILTER_MODE_INCLUDE = 0xA129
     /** LocationMode.FileSystem */

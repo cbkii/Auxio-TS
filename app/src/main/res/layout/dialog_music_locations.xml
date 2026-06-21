@@ -54,6 +54,15 @@
                 android:checkable="true"
                 tools:text="System" />
 
+            <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                android:id="@+id/locations_mode_direct"
+                style="?attr/materialButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:checkable="true"
+                tools:text="Direct" />
+
         </com.google.android.material.button.MaterialButtonGroup>
 
         <TextView
