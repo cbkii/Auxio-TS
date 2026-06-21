@@ -192,7 +192,8 @@ private constructor(
         playbackManager.toSavedState()?.let { savedState ->
             playbackManager.applySavedState(
                 savedState.copy(
-                    parent = savedState.parent?.let { musicRepository.find(it.uid) as? MusicParent? },
+                    parent =
+                        savedState.parent?.let { musicRepository.find(it.uid) as? MusicParent? },
                     heap = savedState.heap.map { song -> song?.let { library.findSong(it.uid) } },
                 ),
                 true,

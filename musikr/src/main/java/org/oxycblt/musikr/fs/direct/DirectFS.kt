@@ -44,8 +44,8 @@ import org.oxycblt.musikr.util.tryAwaitAll
 /**
  * A direct filesystem [FS] implementation that uses [java.io.File] and optionally [RootGate].
  *
- * This is used as the primary strategy for TS18 head units where SAF/MediaStore may be
- * unreliable or absent, but direct filesystem access (or root-assisted access) is available.
+ * This is used as the primary strategy for TS18 head units where SAF/MediaStore may be unreliable
+ * or absent, but direct filesystem access (or root-assisted access) is available.
  */
 class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
     FS {
@@ -56,7 +56,8 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                 .map { location ->
                     exploreDirectoryImpl(
                         JavaFile(
-                            location.uri.path ?: return@map CompletableDeferred(Result.success(Unit))
+                            location.uri.path
+                                ?: return@map CompletableDeferred(Result.success(Unit))
                         ),
                         location.path,
                         null,
@@ -112,11 +113,12 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         }
 
     private fun listFilesSafe(directory: JavaFile): List<JavaFile> {
-        val normal = try {
-            directory.listFiles()?.toList()
-        } catch (e: Exception) {
-            null
-        }
+        val normal =
+            try {
+                directory.listFiles()?.toList()
+            } catch (e: Exception) {
+                null
+            }
         if (normal != null) return normal
 
         if (rootGate != null) {

@@ -748,7 +748,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 )
 
             if (
-                !modeChanged && (currentMode == LocationMode.SAF || currentMode == LocationMode.DIRECT_FS)
+                !modeChanged &&
+                    (currentMode == LocationMode.SAF || currentMode == LocationMode.DIRECT_FS)
             ) {
                 configChanged = currentSafQuery != newSafQuery
             }

@@ -22,10 +22,8 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -50,7 +48,6 @@ import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
-import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
@@ -153,8 +150,8 @@ interface MusicRepository {
     fun unregisterWorker(worker: IndexingWorker)
 
     /**
-     * Request that the library be indexed. This will trigger a call to [IndexingWorker.requestIndex]
-     * on the registered worker.
+     * Request that the library be indexed. This will trigger a call to
+     * [IndexingWorker.requestIndex] on the registered worker.
      *
      * @param withCache Whether to use the file-system cache for improved loading times.
      */
@@ -370,7 +367,8 @@ constructor(
 
         val currentRevision = musicSettings.revision
         val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
-        val config = createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
+        val config =
+            createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
 
         // Check accessibility before starting
         val locations =
