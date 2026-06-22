@@ -21,6 +21,7 @@ package org.oxycblt.auxio.music
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import javax.inject.Inject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -233,8 +234,8 @@ constructor(
     private val musicSettings: MusicSettings,
     private val rootGate: org.oxycblt.auxio.headunit.root.RootStateHolder,
 ) : MusicRepository {
-    private val updateListeners = mutableListOf<MusicRepository.UpdateListener>()
-    private val indexingListeners = mutableListOf<MusicRepository.IndexingListener>()
+    private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
+    private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
 
     @Volatile override var library: MutableLibrary? = null

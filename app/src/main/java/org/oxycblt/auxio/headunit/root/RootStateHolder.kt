@@ -18,8 +18,6 @@
 
 package org.oxycblt.auxio.headunit.root
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,28 +43,32 @@ class RootStateHolder @Inject constructor() : RootGate {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) state = State.UnsupportedForVariant
     }
 
+    @Synchronized
     fun probeSync(): State {
         if (state != State.Unknown) return state
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant
             return state
         }
-        val process =
-            try {
-                Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-            } catch (e: Exception) {
-                state = State.Unavailable
-                return state
+        val process = try {
+            Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+        } catch (e: Exception) {
+            state = State.Unavailable
+            return state
+        }
+        try {
+            val finished = process.waitFor(2000, TimeUnit.MILLISECONDS)
+            if (!finished) {
+                process.destroy()
+                state = State.TimedOut
+            } else {
+                val stdout = process.inputStream.bufferedReader().use { it.readText() }
+                state = if (process.exitValue() == 0 && stdout.contains("uid=0")) State.Available else State.Denied
             }
-        val finished = process.waitFor(2000, TimeUnit.MILLISECONDS)
-        if (!finished) {
-            process.destroy()
-            state = State.TimedOut
-        } else {
-            val stdout = BufferedReader(InputStreamReader(process.inputStream)).readText()
-            state =
-                if (process.exitValue() == 0 && stdout.contains("uid=0")) State.Available
-                else State.Denied
+        } finally {
+            process.inputStream.closeQuietly()
+            process.errorStream.closeQuietly()
+            process.outputStream.closeQuietly()
         }
         return state
     }
@@ -76,19 +78,30 @@ class RootStateHolder @Inject constructor() : RootGate {
         if (state != State.Available) return null
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
-                process.destroy()
-                null
-            } else {
-                if (process.exitValue() != 0) null
-                else
-                    BufferedReader(InputStreamReader(process.inputStream)).readLines().filter {
-                        it.isNotBlank()
+            try {
+                if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+                    process.destroy()
+                    null
+                } else {
+                    if (process.exitValue() != 0) null
+                    else process.inputStream.bufferedReader().use { reader ->
+                        reader.readLines().filter { it.isNotBlank() }
                     }
+                }
+            } finally {
+                process.inputStream.closeQuietly()
+                process.errorStream.closeQuietly()
+                process.outputStream.closeQuietly()
             }
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun java.io.Closeable.closeQuietly() {
+        try {
+            close()
+        } catch (_: Exception) {}
     }
 }
 

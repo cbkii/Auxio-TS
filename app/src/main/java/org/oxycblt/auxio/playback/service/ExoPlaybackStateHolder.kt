@@ -238,7 +238,7 @@ class ExoPlaybackStateHolder(
                 ?.let { command.queue.indexOf(it) }
                 .also { check(it != -1) { "Start song not in queue" } }
         if (command.shuffled) {
-            player.setShuffleOrder(BetterShuffleOrder(command.queue.size, startIndex))
+            player.setShuffleOrder(BetterShuffleOrder(command.queue.size, startIndex ?: -1))
         }
         player.seekTo(startIndex ?: 0, C.TIME_UNSET)
         player.prepare()
