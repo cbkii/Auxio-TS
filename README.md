@@ -3,12 +3,7 @@
 <h4 align="center">TS18/Topway/DoFun Theme variant of Auxio — a replacement/compatibility target for stock <code>twmusic</code> / <code>com.tw.music</code></h4>
 
 <p align="center">
-    <a href="https://github.com/cbkii/Auxio-TS/releases/">
-        <img alt="Release" src="https://img.shields.io/github/v/release/cbkii/Auxio-TS">
-    </a>
-    <a href="https://www.gnu.org/licenses/gpl-3.0">
-        <img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-2B6DBE.svg?style=flat">
-    </a>
+    <a href="https://www.gnu.org/licenses/gpl-3.0"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-2B6DBE.svg?style=flat"></a>
     <img alt="Minimum SDK Version" src="https://img.shields.io/badge/API-24%2B-1450A8?style=flat">
 </p>
 
