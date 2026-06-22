@@ -11,7 +11,10 @@ object RawQueue {
             pool.shuffle()
             return pool
         }
-        pool.remove(anchor)
+        if (!pool.remove(anchor)) {
+            pool.shuffle()
+            return pool
+        }
         pool.shuffle()
         pool.add(0, anchor)
         return pool

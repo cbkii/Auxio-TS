@@ -14,7 +14,9 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
             roots.map { location ->
-                val path = location.uri.path ?: return@map CompletableDeferred(Result.success(Unit))
+                val path =
+                    location.uri.path?.takeIf { location.uri.scheme == "file" }
+                        ?: return@map CompletableDeferred(Result.success(Unit))
                 exploreDirectoryImpl(JavaFile(path), location.path, null, files)
             }.tryAwaitAll()
         }
