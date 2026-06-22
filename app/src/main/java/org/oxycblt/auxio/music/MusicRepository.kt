@@ -20,7 +20,10 @@ package org.oxycblt.auxio.music
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +32,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.image.covers.SettingCovers
@@ -127,6 +131,22 @@ interface MusicRepository {
      * @param name The new name of the playlist.
      */
     suspend fun renamePlaylist(playlist: Playlist, name: String)
+
+    /**
+     * Add songs to the given [Playlist].
+     *
+     * @param songs The [Song]s to add.
+     * @param playlist The [Playlist] to mutate.
+     */
+    suspend fun addToPlaylist(songs: List<Song>, playlist: Playlist)
+
+    /**
+     * Replace the songs in the given [Playlist].
+     *
+     * @param playlist The [Playlist] to mutate.
+     * @param songs The replacement [Song] list.
+     */
+    suspend fun rewritePlaylist(playlist: Playlist, songs: List<Song>)
 
     /**
      * Delete the given [Playlist] from the music library.
@@ -317,6 +337,22 @@ constructor(
         withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
+    override suspend fun addToPlaylist(songs: List<Song>, playlist: Playlist) {
+        val library = synchronized(this) { library ?: return }
+        L.d("Adding ${songs.size} song(s) to $playlist")
+        val newLibrary = library.addToPlaylist(playlist, songs)
+        synchronized(this) { this.library = newLibrary }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
+    }
+
+    override suspend fun rewritePlaylist(playlist: Playlist, songs: List<Song>) {
+        val library = synchronized(this) { library ?: return }
+        L.d("Rewriting $playlist with ${songs.size} song(s)")
+        val newLibrary = library.rewritePlaylist(playlist, songs)
+        synchronized(this) { this.library = newLibrary }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
+    }
+
     override suspend fun deletePlaylist(playlist: Playlist) {
         val library = synchronized(this) { library ?: return }
         L.d("Deleting $playlist")
@@ -333,15 +369,28 @@ constructor(
         val start = System.currentTimeMillis()
         L.i("Music system starting...")
 
-        // Cached library load is independent of the indexing worker.
-        // It provides the fast UI path.
-        val cachedLibrary = loadCachedLibrary()
-        synchronized(this) { this.library = cachedLibrary }
-        withContext(Dispatchers.Main) { dispatchLibraryChange(device = true, user = true) }
-        L.d("Startup cached library emitted in ${System.currentTimeMillis() - start}ms")
-
-        // Once the cached library is available, trigger a background scan via the worker.
-        worker.requestIndex(withCache = true)
+        val decision =
+            StartupLibraryStartup.run(
+                hasInMemoryLibrary = synchronized(this) { library != null },
+                revisionKnown = musicSettings.revision != null,
+                priorState = musicSettings.libraryState,
+                lastScanFailed = { musicSettings.lastScanFailed },
+                loadCachedLibrary = { loadCachedLibrary() },
+                cachedSongCount = { it.songs.size },
+                emitCachedLibrary = {
+                    synchronized(this) { this.library = it }
+                    withContext(Dispatchers.Main) {
+                        dispatchLibraryChange(device = true, user = true)
+                    }
+                },
+                emitCachedLoadFailure = { L.w(it, "Cached library load failed during startup") },
+                setLibraryState = { musicSettings.libraryState = it },
+                requestIndex = { withCache -> worker.requestIndex(withCache) },
+            )
+        L.d(
+            "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
+                "[state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
+        )
     }
 
     override suspend fun index(worker: IndexingWorker, withCache: Boolean) {
@@ -355,8 +404,14 @@ constructor(
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             val twStorageSwitch =
                 try {
-                    val process = Runtime.getRuntime().exec("getprop persist.tw.storage.switch")
-                    BufferedReader(InputStreamReader(process.inputStream)).readText().trim()
+                    val process =
+                        ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
+                    if (!process.waitFor(500, TimeUnit.MILLISECONDS)) {
+                        process.destroyForcibly()
+                        null
+                    } else {
+                        BufferedReader(InputStreamReader(process.inputStream)).readText().trim()
+                    }
                 } catch (e: Exception) {
                     null
                 }
