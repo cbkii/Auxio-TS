@@ -162,7 +162,8 @@ object TopwaySourcePolicy {
         // If normal access failed and we have a root gate, try root
         if (rootGate != null && rootGate.state == RootStateHolder.State.Available) {
             L.d("Normal access failed for ${directory.absolutePath}, trying root...")
-            val result = rootGate.runRootCommandRawSync("ls -1 \"${directory.absolutePath}\"")
+            val command = "ls -1 ${RootStateHolder.shellQuote(directory.absolutePath)}"
+            val result = rootGate.runRootCommandRawSync(command, timeoutMs = 1500)
             if (result != null && result.exitCode == 0) {
                 return result.stdout.lines().filter { it.isNotBlank() }.map { File(directory, it) }
             }

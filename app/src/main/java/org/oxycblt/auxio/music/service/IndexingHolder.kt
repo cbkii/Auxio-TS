@@ -121,7 +121,7 @@ private constructor(
         startupJob =
             indexScope.launch {
                 if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                    rootGate.probeSync()
+                    launch { rootGate.probeSync() }
                 }
                 musicRepository.startup(this@IndexingHolder)
             }
@@ -152,10 +152,10 @@ private constructor(
     @Synchronized
     override fun requestIndex(withCache: Boolean) {
         if (currentIndexJob?.isActive == true) {
-            L.i("Ignoring duplicate indexing request while scan is running [cache=]")
+            L.i("Ignoring duplicate indexing request while scan is running [cache=$withCache]")
             return
         }
-        L.i("Starting new indexing job [cache=]")
+        L.i("Starting new indexing job [cache=$withCache]")
         currentIndexJob =
             indexScope.launch {
                 try {

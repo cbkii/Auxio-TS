@@ -81,25 +81,27 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             val children = mutableListOf<File>()
             val recursive = mutableListOf<Deferred<Result<Unit>>>()
 
-            val list = listFilesSafe(directory)
+            val list = listFilesSafe(directory).getOrElse { throw it }
             for (item in list) {
                 if (item.name.startsWith(".")) continue
 
                 val newPath = relativePath.file(item.name)
                 if (item.isDirectory) {
-                    recursive.add(exploreDirectoryImpl(item, newPath, directoryDeferred, files))
+                    recursive.add(
+                        exploreDirectoryImpl(item.javaFile, newPath, directoryDeferred, files)
+                    )
                 } else {
                     val file =
                         File(
-                            uri = Uri.fromFile(item),
+                            uri = Uri.fromFile(item.javaFile),
                             path = newPath,
                             addedMs =
                                 ConstantAddedMs(
-                                    item.lastModified()
+                                    item.modifiedMs
                                 ), // Inexact, but best available for direct FS
-                            modifiedMs = item.lastModified(),
-                            mimeType = getMimeType(item),
-                            size = item.length(),
+                            modifiedMs = item.modifiedMs,
+                            mimeType = getMimeType(item.javaFile),
+                            size = item.size,
                             parent = directoryDeferred,
                         )
                     children.add(file)
@@ -112,22 +114,59 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             recursive.tryAwaitAll()
         }
 
-    private fun listFilesSafe(directory: JavaFile): List<JavaFile> {
+    private fun listFilesSafe(directory: JavaFile): Result<List<DirectEntry>> {
         val normal =
             try {
                 directory.listFiles()?.toList()
             } catch (e: Exception) {
                 null
             }
-        if (normal != null) return normal
-
-        if (rootGate != null) {
-            val lines = rootGate.runRootCommandSync("ls -1 \"${directory.absolutePath}\"")
-            if (lines != null) {
-                return lines.map { JavaFile(directory, it) }
-            }
+        if (normal != null) {
+            return Result.success(
+                normal.map {
+                    DirectEntry(
+                        javaFile = it,
+                        name = it.name,
+                        isDirectory = it.isDirectory,
+                        size = it.length(),
+                        modifiedMs = it.lastModified(),
+                    )
+                }
+            )
         }
-        return emptyList()
+
+        if (rootGate == null) {
+            return Result.failure(
+                SecurityException("DirectFS cannot list ${directory.absolutePath}")
+            )
+        }
+
+        val command =
+            DirectFsRootPolicy.buildRootListCommand(directory.absolutePath).getOrElse {
+                return Result.failure(it)
+            }
+        val lines =
+            rootGate.runRootCommandSync(command, ROOT_LIST_TIMEOUT_MS)
+                ?: return Result.failure(
+                    SecurityException(
+                        "Root-assisted DirectFS listing failed for ${directory.absolutePath}"
+                    )
+                )
+        return Result.success(lines.mapNotNull { parseRootEntry(directory, it) })
+    }
+
+    private fun parseRootEntry(parent: JavaFile, line: String): DirectEntry? {
+        val parts = line.split('\t', limit = 4)
+        if (parts.size != 4) return null
+        val name = parts[3]
+        if (name.isBlank() || name == "." || name == ".." || name.contains('/')) return null
+        return DirectEntry(
+            javaFile = JavaFile(parent, name),
+            name = name,
+            isDirectory = parts[0] == "d",
+            size = parts[1].toLongOrNull() ?: 0L,
+            modifiedMs = (parts[2].toLongOrNull() ?: 0L) * 1000L,
+        )
     }
 
     private fun getMimeType(file: JavaFile): String {
@@ -138,5 +177,50 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
 
     private class ConstantAddedMs(private val time: Long) : AddedMs {
         override suspend fun resolve(): Long = time
+    }
+
+    private data class DirectEntry(
+        val javaFile: JavaFile,
+        val name: String,
+        val isDirectory: Boolean,
+        val size: Long,
+        val modifiedMs: Long,
+    )
+
+    private companion object {
+        const val ROOT_LIST_TIMEOUT_MS = 1500L
+    }
+}
+
+internal object DirectFsRootPolicy {
+    fun buildRootListCommand(path: String): Result<String> {
+        if (!isAllowedRootPath(path)) {
+            return Result.failure(SecurityException("Rejected unsafe DirectFS root path: $path"))
+        }
+        val quoted = shellQuote(path)
+        return Result.success(
+            "for p in $quoted/* $quoted/.[!.]* $quoted/..?*; do " +
+                "[ -e \"\$p\" ] || continue; " +
+                "if [ -d \"\$p\" ]; then t=d; else t=f; fi; " +
+                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
+                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
+                "printf '%s\\t%s\\t%s\\t%s\\n' \"\$t\" \"\$s\" \"\$m\" \"\${p##*/}\"; " +
+                "done"
+        )
+    }
+
+    fun isAllowedRootPath(path: String): Boolean =
+        path.startsWith("/storage/") &&
+            path != "/storage/" &&
+            path != "/storage/." &&
+            path != "/storage/.." &&
+            !path.contains('\n') &&
+            !path.contains("/../") &&
+            !path.endsWith("/..")
+
+    fun shellQuote(value: String): String = buildString {
+        append('\'')
+        append(value.replace("'", "'\"'\"'"))
+        append('\'')
     }
 }
