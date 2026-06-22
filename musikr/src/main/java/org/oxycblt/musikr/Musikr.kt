@@ -75,7 +75,8 @@ interface Musikr {
             context: Context,
             config: Config,
             noisyDirs: Set<String> = emptySet(),
-            pathKeywords: List<String> = emptyList(), rootGate: org.oxycblt.musikr.fs.RootGate? = null,
+            pathKeywords: List<String> = emptyList(),
+            rootGate: org.oxycblt.musikr.fs.RootGate? = null,
         ): Musikr =
             MusikrImpl(
                 config,

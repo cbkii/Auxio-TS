@@ -43,7 +43,8 @@ internal interface ExploreStep {
             config: Config,
             noisyDirs: Set<String> = emptySet(),
             pathKeywords: List<String> = emptyList(),
-        ): ExploreStep = ExploreStepImpl(config.fs, config.storage, noisyDirs, pathKeywords, rootGate)
+        ): ExploreStep =
+            ExploreStepImpl(config.fs, config.storage, noisyDirs, pathKeywords, rootGate)
     }
 }
 
@@ -51,7 +52,8 @@ private class ExploreStepImpl(
     private val fs: FS,
     private val storage: Storage,
     private val noisyDirs: Set<String>,
-    private val pathKeywords: List<String>, rootGate: RootGate?
+    private val pathKeywords: List<String>,
+    rootGate: RootGate?,
 ) : ExploreStep {
     override suspend fun explore(
         scope: CoroutineScope,

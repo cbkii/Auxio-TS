@@ -168,9 +168,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             showCandidatePathPicker(disableThirdParty = false)
         }
 
-        binding.locationsUsbDetect.setOnClickListener {
-            autoDetectUsb()
-        }
+        binding.locationsUsbDetect.setOnClickListener { autoDetectUsb() }
 
         binding.locationsExtrasDropdown.setOnClickListener {
             isExtrasExpanded = !isExtrasExpanded
@@ -307,7 +305,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     val path = candidatePaths[which]
                     val uri = Uri.fromFile(File(path))
                     val location = Location.Unopened.from(currentContext, uri)
-                    if (disableThirdParty && location.path.volume is Volume.ThirdParty && uri.scheme != "file") {
+                    if (
+                        disableThirdParty &&
+                            location.path.volume is Volume.ThirdParty &&
+                            uri.scheme != "file"
+                    ) {
                         currentContext.showToast(R.string.err_bad_location)
                     } else {
                         callback(location)
@@ -317,68 +319,119 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
                     showManualPathEntry(disableThirdParty, callback)
                 }
-                .setNegativeButton(R.string.lbl_cancel) { _, _ -> clearPendingLocationCallback(callback) }
+                .setNegativeButton(R.string.lbl_cancel) { _, _ ->
+                    clearPendingLocationCallback(callback)
+                }
                 .setOnCancelListener { clearPendingLocationCallback(callback) }
                 .show()
         }
     }
 
-    private fun showManualPathEntry(disableThirdParty: Boolean, callback: (Location.Unopened) -> Unit) {
-        val ctx = context ?: run { clearPendingLocationCallback(callback); return }
-        val input = androidx.appcompat.widget.AppCompatEditText(ctx).apply {
-            hint = ctx.getString(R.string.set_enter_path_hint)
-            setSingleLine()
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        }
+    private fun showManualPathEntry(
+        disableThirdParty: Boolean,
+        callback: (Location.Unopened) -> Unit,
+    ) {
+        val ctx =
+            context
+                ?: run {
+                    clearPendingLocationCallback(callback)
+                    return
+                }
+        val input =
+            androidx.appcompat.widget.AppCompatEditText(ctx).apply {
+                hint = ctx.getString(R.string.set_enter_path_hint)
+                setSingleLine()
+                inputType =
+                    android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            }
         val padding = (16 * ctx.resources.displayMetrics.density).toInt()
-        val container = android.widget.FrameLayout(ctx).apply {
-            setPadding(padding, padding / 2, padding, 0)
-            addView(input)
-        }
+        val container =
+            android.widget.FrameLayout(ctx).apply {
+                setPadding(padding, padding / 2, padding, 0)
+                addView(input)
+            }
         AlertDialog.Builder(ctx)
             .setTitle(R.string.set_select_source)
             .setView(container)
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
                 val pathText = input.text?.toString()?.trim().orEmpty()
-                if (pathText.isEmpty()) { clearPendingLocationCallback(callback); return@setPositiveButton }
+                if (pathText.isEmpty()) {
+                    clearPendingLocationCallback(callback)
+                    return@setPositiveButton
+                }
                 lifecycleScope.launch {
-                    val accessible = withContext(Dispatchers.IO) {
-                        try { val file = File(pathText); file.exists() && file.isDirectory && file.canRead() } catch (e: Exception) { false }
+                    val accessible =
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val file = File(pathText)
+                                file.exists() && file.isDirectory && file.canRead()
+                            } catch (e: Exception) {
+                                false
+                            }
+                        }
+                    val currentContext =
+                        context
+                            ?: run {
+                                clearPendingLocationCallback(callback)
+                                return@launch
+                            }
+                    if (!accessible) {
+                        currentContext.showToast(R.string.set_path_inaccessible)
+                        clearPendingLocationCallback(callback)
+                        return@launch
                     }
-                    val currentContext = context ?: run { clearPendingLocationCallback(callback); return@launch }
-                    if (!accessible) { currentContext.showToast(R.string.set_path_inaccessible); clearPendingLocationCallback(callback); return@launch }
                     val uri = Uri.fromFile(File(pathText))
                     val location = Location.Unopened.from(currentContext, uri)
                     callback(location)
                     clearPendingLocationCallback(callback)
                 }
             }
-            .setNegativeButton(R.string.lbl_cancel) { _, _ -> clearPendingLocationCallback(callback) }
+            .setNegativeButton(R.string.lbl_cancel) { _, _ ->
+                clearPendingLocationCallback(callback)
+            }
             .setOnCancelListener { clearPendingLocationCallback(callback) }
             .show()
     }
 
     private fun addDocumentTreeUriToDirs(uri: Uri?, disableThirdParty: Boolean) {
-        if (uri == null) { pendingLocationCallback = null; return }
-        val ctx = context ?: run { pendingLocationCallback = null; return }
+        if (uri == null) {
+            pendingLocationCallback = null
+            return
+        }
+        val ctx =
+            context
+                ?: run {
+                    pendingLocationCallback = null
+                    return
+                }
         if (uri.scheme != "file" && !DocumentsContract.isTreeUri(uri)) {
-            ctx.showToast(R.string.err_bad_location); pendingLocationCallback = null; return
+            ctx.showToast(R.string.err_bad_location)
+            pendingLocationCallback = null
+            return
         }
         val location = Location.Unopened.from(ctx, uri)
         if (location.path.volume is Volume.ThirdParty && disableThirdParty) {
-            ctx.showToast(R.string.err_bad_location); pendingLocationCallback = null; return
+            ctx.showToast(R.string.err_bad_location)
+            pendingLocationCallback = null
+            return
         }
         pendingLocationCallback?.invoke(location)
         pendingLocationCallback = null
     }
 
     private fun clearPendingLocationCallback(callback: (Location.Unopened) -> Unit) {
-        if (pendingLocationCallback == callback) { pendingLocationCallback = null }
+        if (pendingLocationCallback == callback) {
+            pendingLocationCallback = null
+        }
     }
 
     private fun autoDetectUsb() {
         val usbPaths = TopwaySourcePolicy.discoverUsbStorage()
-        if (usbPaths.isEmpty()) { context?.showToast("No USB storage found"); return }
+        if (usbPaths.isEmpty()) {
+            context?.showToast("No USB storage found")
+            return
+        }
         val ctx = context ?: return
         var added = 0
         usbPaths.forEach { path ->
@@ -390,7 +443,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 added++
             }
         }
-        if (added > 0) { updateSaveButtonState(); ctx.showToast("Added $added USB source(s)") }
+        if (added > 0) {
+            updateSaveButtonState()
+            ctx.showToast("Added $added USB source(s)")
+        }
     }
 
     private fun addIncludeLocation(location: Location.Unopened) {
@@ -413,7 +469,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     locationsPermsSubtitle.setText(R.string.lng_grant_storage_anyway)
                 }
                 LocationMode.DIRECT_FS -> {
-                    locationsModeDesc.text = "Direct filesystem access. More reliable on head units."
+                    locationsModeDesc.text =
+                        "Direct filesystem access. More reliable on head units."
                     locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
                     locationsPermsSubtitle.setText(R.string.lng_grant_storage_anyway)
                 }
@@ -433,7 +490,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun updateExcludeModeUI(binding: DialogMusicLocationsBinding) {
         with(binding) {
-            locationsExcludeModeDesc.setText(if (isIncludeMode) R.string.lng_include_folders else R.string.lng_exclude_folders)
+            locationsExcludeModeDesc.setText(
+                if (isIncludeMode) R.string.lng_include_folders else R.string.lng_exclude_folders
+            )
         }
     }
 
@@ -468,20 +527,37 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         with(binding.locationsPermsCard) {
             if (locationMode != LocationMode.MEDIA_STORE) {
                 setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
-                binding.locationsPermsDesc.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
-                binding.locationsPermsSubtitle.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
-                binding.locationsPermsOpen.imageTintList = context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                binding.locationsPermsDesc.setTextColor(
+                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                )
+                binding.locationsPermsSubtitle.setTextColor(
+                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                )
+                binding.locationsPermsOpen.imageTintList =
+                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
             } else {
                 if (hasStoragePermission) {
-                    setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
-                    binding.locationsPermsDesc.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
-                    binding.locationsPermsSubtitle.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
-                    binding.locationsPermsOpen.imageTintList = context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                    setCardBackgroundColor(
+                        context.getAttrColorCompat(MR.attr.colorSecondaryContainer)
+                    )
+                    binding.locationsPermsDesc.setTextColor(
+                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                    )
+                    binding.locationsPermsSubtitle.setTextColor(
+                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                    )
+                    binding.locationsPermsOpen.imageTintList =
+                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                 } else {
                     setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorErrorContainer))
-                    binding.locationsPermsDesc.setTextColor(context.getAttrColorCompat(MR.attr.colorOnErrorContainer))
-                    binding.locationsPermsSubtitle.setTextColor(context.getAttrColorCompat(MR.attr.colorOnErrorContainer))
-                    binding.locationsPermsOpen.imageTintList = context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                    binding.locationsPermsDesc.setTextColor(
+                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                    )
+                    binding.locationsPermsSubtitle.setTextColor(
+                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                    )
+                    binding.locationsPermsOpen.imageTintList =
+                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
                 }
             }
         }
@@ -558,23 +634,30 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         var configChanged = modeChanged
         if (locationMode != LocationMode.MEDIA_STORE) {
             val currentSafQuery = musicSettings.safQuery
-            val newSafQuery = SAF.Query(
-                source = includeLocationAdapter.locations,
-                exclude = excludeLocationAdapter.locations,
-                withHidden = binding.locationsWithHiddenSwitch.isChecked,
-                multithread = binding.locationsMultithreadSwitch.isChecked,
-            )
-            if (!modeChanged && currentMode != LocationMode.MEDIA_STORE) { configChanged = currentSafQuery != newSafQuery }
+            val newSafQuery =
+                SAF.Query(
+                    source = includeLocationAdapter.locations,
+                    exclude = excludeLocationAdapter.locations,
+                    withHidden = binding.locationsWithHiddenSwitch.isChecked,
+                    multithread = binding.locationsMultithreadSwitch.isChecked,
+                )
+            if (!modeChanged && currentMode != LocationMode.MEDIA_STORE) {
+                configChanged = currentSafQuery != newSafQuery
+            }
             musicSettings.safQuery = newSafQuery
         } else {
             val currentMediaStoreQuery = musicSettings.mediaStoreQuery
-            val filterMode = if (isIncludeMode) MediaStore.FilterMode.INCLUDE else MediaStore.FilterMode.EXCLUDE
-            val newMediaStoreQuery = MediaStore.Query(
-                mode = filterMode,
-                filtered = filterLocationAdapter.locations,
-                excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
-            )
-            if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) { configChanged = currentMediaStoreQuery != newMediaStoreQuery }
+            val filterMode =
+                if (isIncludeMode) MediaStore.FilterMode.INCLUDE else MediaStore.FilterMode.EXCLUDE
+            val newMediaStoreQuery =
+                MediaStore.Query(
+                    mode = filterMode,
+                    filtered = filterLocationAdapter.locations,
+                    excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
+                )
+            if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) {
+                configChanged = currentMediaStoreQuery != newMediaStoreQuery
+            }
             musicSettings.mediaStoreQuery = newMediaStoreQuery
         }
         musicSettings.locationMode = locationMode
@@ -585,13 +668,23 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun checkStoragePermission(): Boolean {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
-        return ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED
+        val permission =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                Manifest.permission.READ_MEDIA_AUDIO
+            else Manifest.permission.READ_EXTERNAL_STORAGE
+        return ContextCompat.checkSelfPermission(requireContext(), permission) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestStoragePermission() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
-        val launcher = requireNotNull(storagePermissionLauncher) { "Storage permission launcher was not available" }
+        val permission =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                Manifest.permission.READ_MEDIA_AUDIO
+            else Manifest.permission.READ_EXTERNAL_STORAGE
+        val launcher =
+            requireNotNull(storagePermissionLauncher) {
+                "Storage permission launcher was not available"
+            }
         try {
             L.d("Requesting storage permission: $permission")
             launcher.launch(permission)
@@ -603,7 +696,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun updateSaveButtonState() {
         val dialog = dialog as? AlertDialog ?: return
-        val isEnabled = if (locationMode != LocationMode.MEDIA_STORE) includeLocationAdapter.locations.isNotEmpty() else hasStoragePermission
+        val isEnabled =
+            if (locationMode != LocationMode.MEDIA_STORE)
+                includeLocationAdapter.locations.isNotEmpty()
+            else hasStoragePermission
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isEnabled
     }
 }

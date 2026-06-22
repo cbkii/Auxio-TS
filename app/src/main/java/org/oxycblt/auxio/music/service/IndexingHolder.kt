@@ -37,9 +37,9 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.getSystemServiceCompat
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.fs.FSUpdate
+import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
-import org.oxycblt.musikr.fs.direct.DirectFS
 import timber.log.Timber as L
 
 class IndexingHolder
