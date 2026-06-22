@@ -19,7 +19,6 @@
 package org.oxycblt.auxio.headunit.topway
 
 import java.io.File
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import timber.log.Timber as L
 
 /** Policy for identifying and prioritizing TS18-specific candidate music source roots. */
@@ -144,84 +143,14 @@ object TopwaySourcePolicy {
     fun findFirstAccessibleCandidate(): String? {
         return discoverCandidateRoots().firstOrNull()
     }
-
-    /**
-     * Attempts to list a directory using root if available, otherwise falls back to normal File
-     * APIs. Only for use on TS18 variants when a standard access fails.
-     */
-    fun listFilesSafe(directory: File, rootGate: RootStateHolder? = null): List<File> {
-        val normalFiles =
-            try {
-                directory.listFiles()?.toList()
-            } catch (e: Exception) {
-                null
-            }
-
-        if (normalFiles != null) return normalFiles
-
-        // If normal access failed and we have a root gate, try root
-        if (rootGate != null && rootGate.state == RootStateHolder.State.Available) {
-            L.d("Normal access failed for ${directory.absolutePath}, trying root...")
-            val command = "ls -1 ${RootStateHolder.shellQuote(directory.absolutePath)}"
-            val result = rootGate.runRootCommandRawSync(command, timeoutMs = 1500)
-            if (result != null && result.exitCode == 0) {
-                return result.stdout.lines().filter { it.isNotBlank() }.map { File(directory, it) }
-            }
-        }
-
-        return emptyList()
-    }
-
-    /**
-     * Discovers currently existing, readable source roots without recursively traversing them.
-     * Preserves each returned path exactly as discovered so UI selection can persist it unchanged.
-     */
-    fun discoverCandidateRoots(rootGate: RootStateHolder? = null): List<String> =
-        discoverCandidateRoots(
-            File("/storage"),
-            File("/mnt/media_rw"),
-            includeGenericFallbacks = true,
-            rootGate = rootGate,
-        )
-
-    internal fun discoverCandidateRoots(
-        storageRoot: File,
-        mediaRwRoot: File,
-        includeGenericFallbacks: Boolean = false,
-        rootGate: RootStateHolder? = null,
-    ): List<String> {
-        val out = linkedSetOf<String>()
-        if (includeGenericFallbacks) {
-            SAFE_GENERIC_FALLBACKS.filterTo(out) { isAccessibleCandidate(it) }
-        }
-        discoverChildren(storageRoot, removableOnly = false, rootGate = rootGate).filterTo(out) {
-            isAccessibleCandidate(it)
-        }
-        discoverChildren(mediaRwRoot, removableOnly = true, rootGate = rootGate).filterTo(out) {
-            isAccessibleCandidate(it)
-        }
-        return out.toList()
-    }
-
-    private fun discoverChildren(
-        root: File,
-        removableOnly: Boolean,
-        rootGate: RootStateHolder? = null,
-    ): List<String> {
-        val children = listFilesSafe(root, rootGate)
-        if (children.isEmpty() && rootGate == null) {
-            L.w("Failed to list candidate roots under ${root.absolutePath}")
-        }
-        return children
-            .asSequence()
-            .filter { it.isDirectory }
-            .filter { !removableOnly || it.name.startsWith("usbdisk", ignoreCase = true) }
-            .filter { it.name != "self" && it.name != "emulated" }
-            .sortedWith(
-                compareBy<File> { !it.name.startsWith("usbdisk", ignoreCase = true) }
-                    .thenBy { it.absolutePath }
-            )
-            .map { it.absolutePath }
-            .toList()
-    }
 }
+
+    /** Discovers removable USB storage volumes on TS18 devices. */
+    fun discoverUsbStorage(): List<String> {
+        val storageRoot = java.io.File("/storage")
+        if (!storageRoot.exists() || !storageRoot.isDirectory) return emptyList()
+        return storageRoot.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("usbdisk", ignoreCase = true) }
+            ?.map { it.absolutePath }
+            ?: emptyList()
+    }

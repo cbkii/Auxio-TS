@@ -27,7 +27,6 @@ import kotlinx.coroutines.coroutineScope
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
-import org.oxycblt.musikr.fs.RootGate
 import org.oxycblt.musikr.pipeline.EvaluateStep
 import org.oxycblt.musikr.pipeline.ExploreStep
 import org.oxycblt.musikr.pipeline.Explored
@@ -76,8 +75,7 @@ interface Musikr {
             context: Context,
             config: Config,
             noisyDirs: Set<String> = emptySet(),
-            pathKeywords: List<String> = emptyList(),
-            rootGate: RootGate? = null,
+            pathKeywords: List<String> = emptyList(), rootGate: org.oxycblt.musikr.fs.RootGate? = null,
         ): Musikr =
             MusikrImpl(
                 config,

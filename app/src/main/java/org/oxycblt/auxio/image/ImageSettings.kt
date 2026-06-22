@@ -22,7 +22,6 @@ import android.content.Context
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
-import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.settings.Settings
 import timber.log.Timber as L
@@ -50,58 +49,28 @@ class ImageSettingsImpl @Inject constructor(@ApplicationContext context: Context
         get() =
             CoverMode.fromIntCode(
                 sharedPreferences.getInt(getString(R.string.set_key_cover_mode), Int.MIN_VALUE)
-            ) ?: CoverMode.OPTIMISED
+            ) ?: migrateLegacy()
+
+    private fun migrateLegacy(): CoverMode {
+        val oldCode = sharedPreferences.getInt(getString(R.string.set_key_cover_mode), -1)
+        val migrated =
+            when (oldCode) {
+                0xA11C -> CoverMode.OFF // OFF
+                0xA126 -> CoverMode.AS_IS // AS_IS
+                else -> CoverMode.OPTIMISED // BALANCED, SAVE_SPACE, HIGH_QUALITY
+            }
+        sharedPreferences.edit { putInt(getString(R.string.set_key_cover_mode), migrated.intCode) }
+        return migrated
+    }
 
     override val forceSquareCovers: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_square_covers), false)
 
     override fun migrate() {
-        // Migration to simplified TS18-optimised modes
-        if (sharedPreferences.contains(getString(R.string.set_key_cover_mode))) {
-            val oldCode = sharedPreferences.getInt(getString(R.string.set_key_cover_mode), -1)
-            if (
-                oldCode == IntegerTable.COVER_MODE_BALANCED ||
-                    oldCode == IntegerTable.COVER_MODE_SAVE_SPACE ||
-                    oldCode == IntegerTable.COVER_MODE_HIGH_QUALITY
-            ) {
-                L.d("Migrating legacy cover mode $oldCode to OPTIMISED")
-                sharedPreferences.edit {
-                    putInt(getString(R.string.set_key_cover_mode), CoverMode.OPTIMISED.intCode)
-                }
-            }
-        }
-
-        // Standard Auxio migration (legacy Show album covers and Quality covers)
-        if (
-            sharedPreferences.contains(OLD_KEY_SHOW_COVERS) ||
-                sharedPreferences.contains(OLD_KEY_QUALITY_COVERS)
-        ) {
-            L.d("Migrating cover settings")
-
-            val mode =
-                when {
-                    !sharedPreferences.getBoolean(OLD_KEY_SHOW_COVERS, true) -> CoverMode.OFF
-                    else -> CoverMode.OPTIMISED
-                }
-
-            sharedPreferences.edit {
-                putInt(getString(R.string.set_key_cover_mode), mode.intCode)
-                remove(OLD_KEY_SHOW_COVERS)
-                remove(OLD_KEY_QUALITY_COVERS)
-            }
-        }
-
-        if (sharedPreferences.contains(OLD_KEY_COVER_MODE)) {
-            L.d("Migrating cover mode setting")
-
-            val mode =
-                CoverMode.fromIntCode(sharedPreferences.getInt(OLD_KEY_COVER_MODE, Int.MIN_VALUE))
-                    ?: CoverMode.OPTIMISED
-
-            sharedPreferences.edit {
-                putInt(getString(R.string.set_key_cover_mode), mode.intCode)
-                remove(OLD_KEY_COVER_MODE)
-            }
+        // Handle standard Auxio migrations, then ensure TS18 mode simplification
+        val currentCode = sharedPreferences.getInt(getString(R.string.set_key_cover_mode), -1)
+        if (CoverMode.fromIntCode(currentCode) == null && currentCode != -1) {
+            migrateLegacy()
         }
     }
 

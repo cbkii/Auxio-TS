@@ -116,7 +116,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 addDocumentTreeUriToDirs(uri, false)
             }
 
-        // TODO: Add failure mode for introduction of third-party filters in system loader
         localOnlyOpenDocumentTreeLauncher =
             registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
                 addDocumentTreeUriToDirs(uri, true)
@@ -148,14 +147,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             itemAnimator = null
         }
 
-        // Load initial state from MusicSettings
         loadInitialState(binding)
 
-        // Set up string resources
         binding.locationsModeHeader.setText(R.string.set_load_from)
         binding.locationsModeExclude.setText(R.string.set_file_picker)
         binding.locationsModeInclude.setText(R.string.set_system_database)
-        binding.locationsModeDirect.setText(R.string.set_direct_fs)
+        binding.locationsModeDirect.text = "Direct"
         binding.locationsExcludeModeHeader.setText(R.string.set_filter_mode)
         binding.locationsExcludeModeExclude.setText(R.string.set_include)
         binding.locationsExcludeModeInclude.setText(R.string.set_exclude)
@@ -165,12 +162,16 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsExcludeAdd.contentDescription = getString(R.string.desc_add_folder)
         binding.locationsFilterAdd.contentDescription = getString(R.string.desc_add_folder)
         binding.locationsExtrasDropdown.setText(R.string.set_extra_settings)
+
         binding.locationsAutoDetect.setOnClickListener {
             pendingLocationCallback = { location -> addIncludeLocation(location) }
             showCandidatePathPicker(disableThirdParty = false)
         }
 
-        // Set up extras dropdown click listener
+        binding.locationsUsbDetect.setOnClickListener {
+            autoDetectUsb()
+        }
+
         binding.locationsExtrasDropdown.setOnClickListener {
             isExtrasExpanded = !isExtrasExpanded
             updateExtrasVisibility(binding)
@@ -192,10 +193,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             updateFilterMode(binding, include = false)
         }
 
-        // Set up add folder buttons
         binding.locationsIncludeAdd.setOnClickListener {
             pendingLocationCallback = { location -> addIncludeLocation(location) }
-            onNewLocation(openDocumentTreeLauncher, disableThirdParty = false)
+            if (locationMode == LocationMode.DIRECT_FS) {
+                showManualPathEntry(false) { location -> addIncludeLocation(location) }
+            } else {
+                onNewLocation(openDocumentTreeLauncher, disableThirdParty = false)
+            }
         }
         binding.locationsExcludeAdd.setOnClickListener {
             pendingLocationCallback = { location ->
@@ -212,44 +216,32 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             onNewLocation(localOnlyOpenDocumentTreeLauncher, disableThirdParty = true)
         }
 
-        // Set up grant permission card click
         binding.locationsPermsCard.setOnClickListener { requestStoragePermission() }
 
-        // Initialize UI state
         updateModeUI(binding)
         updateExtrasVisibility(binding)
         updateSaveButtonState()
     }
 
     private fun loadInitialState(binding: DialogMusicLocationsBinding) {
-        // Determine mode based on the locationMode setting
         locationMode = musicSettings.locationMode
-
-        // Load data for the initial mode
         loadModeData(binding)
-
-        // Set initial selection state (no group logic; we manage checked state ourselves)
         binding.locationsModeExclude.isChecked = locationMode == LocationMode.SAF
         binding.locationsModeInclude.isChecked = locationMode == LocationMode.MEDIA_STORE
         binding.locationsModeDirect.isChecked = locationMode == LocationMode.DIRECT_FS
-
-        // Check storage permission status
         hasStoragePermission = checkStoragePermission()
     }
 
     private fun loadModeData(binding: DialogMusicLocationsBinding) {
-        // Load SAF data
         musicSettings.safQuery.let { query ->
             includeLocationAdapter.addAll(query.source)
             excludeLocationAdapter.addAll(query.exclude)
             binding.locationsWithHiddenSwitch.isChecked = query.withHidden
             binding.locationsMultithreadSwitch.isChecked = query.multithread
         }
-        // Load MediaStore data
         musicSettings.mediaStoreQuery.let { query ->
             filterLocationAdapter.addAll(query.filtered)
             binding.locationsExcludeNonMusicSwitch.isChecked = query.excludeNonMusic
-
             isIncludeMode = query.mode == MediaStore.FilterMode.INCLUDE
             binding.locationsExcludeModeExclude.isChecked = isIncludeMode
             binding.locationsExcludeModeInclude.isChecked = !isIncludeMode
@@ -257,34 +249,24 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun updateLocationMode(binding: DialogMusicLocationsBinding, mode: LocationMode) {
-        // Enforce "selection required" behavior.
         binding.locationsModeExclude.isChecked = mode == LocationMode.SAF
         binding.locationsModeInclude.isChecked = mode == LocationMode.MEDIA_STORE
         binding.locationsModeDirect.isChecked = mode == LocationMode.DIRECT_FS
-
         locationMode = mode
         updateModeUI(binding)
         updateSaveButtonState()
     }
 
     private fun updateFilterMode(binding: DialogMusicLocationsBinding, include: Boolean) {
-        // Enforce "selection required" behavior.
         binding.locationsExcludeModeExclude.isChecked = include
         binding.locationsExcludeModeInclude.isChecked = !include
-
         isIncludeMode = include
         updateExcludeModeUI(binding)
     }
 
     override fun onStart() {
         super.onStart()
-        // Update save button state after dialog is shown
         updateSaveButtonState()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        // TODO
     }
 
     override fun onDestroyBinding(binding: DialogMusicLocationsBinding) {
@@ -299,201 +281,116 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun onNewLocation(launcher: ActivityResultLauncher<Uri?>?, disableThirdParty: Boolean) {
-        L.d("Opening launcher")
         val launcher = requireNotNull(launcher) { "Document tree launcher was not available" }
-
         try {
             launcher.launch(null)
-        } catch (e: ActivityNotFoundException) {
-            L.w(e, "SAF tree picker activity not found; showing fallback sources.")
-            showPickerUnavailableFallback(disableThirdParty)
-        } catch (e: SecurityException) {
-            L.w(e, "SAF tree picker launch denied; showing fallback sources.")
-            showPickerUnavailableFallback(disableThirdParty)
-        } catch (e: IllegalStateException) {
-            L.w(e, "SAF tree picker launcher unavailable; showing fallback sources.")
-            showPickerUnavailableFallback(disableThirdParty)
-        } catch (e: RuntimeException) {
-            L.w(e, "SAF tree picker failed; showing fallback sources.")
-            showPickerUnavailableFallback(disableThirdParty)
-        }
-    }
-
-    private fun showPickerUnavailableFallback(disableThirdParty: Boolean) {
-        val ctx =
-            context
-                ?: run {
-                    pendingLocationCallback = null
-                    return
-                }
-        AlertDialog.Builder(ctx)
-            .setMessage(R.string.set_picker_unavailable_fallback)
-            .setPositiveButton(R.string.lbl_ok) { _, _ ->
+        } catch (e: Exception) {
+            L.e(e, "Failed to launch document tree picker")
+            if (e is ActivityNotFoundException) {
                 showCandidatePathPicker(disableThirdParty)
+            } else {
+                requireContext().showToast(R.string.err_no_app)
             }
-            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
-            .setOnCancelListener { pendingLocationCallback = null }
-            .show()
-    }
-
-    private fun clearPendingLocationCallback(callback: (Location.Unopened) -> Unit) {
-        if (pendingLocationCallback === callback) {
-            pendingLocationCallback = null
         }
     }
 
     private fun showCandidatePathPicker(disableThirdParty: Boolean) {
         val callback = pendingLocationCallback ?: return
-        lifecycleScope.launch {
-            val accessibleCandidates =
-                withContext(Dispatchers.IO) { TopwaySourcePolicy.discoverCandidateRoots() }
-            val ctx =
-                context
-                    ?: run {
-                        clearPendingLocationCallback(callback)
-                        return@launch
-                    }
-
-            if (accessibleCandidates.isEmpty()) {
-                // No auto-detected candidates; offer manual path entry directly.
-                showManualPathEntry(disableThirdParty, callback)
-                return@launch
-            }
-
-            AlertDialog.Builder(ctx)
+        val currentContext = context ?: return
+        val candidatePaths = TopwaySourcePolicy.discoverCandidateRoots()
+        if (candidatePaths.isEmpty()) {
+            showManualPathEntry(disableThirdParty, callback)
+        } else {
+            AlertDialog.Builder(currentContext)
                 .setTitle(R.string.set_select_source)
-                .setItems(accessibleCandidates.toTypedArray()) { _, which ->
-                    val currentContext = context
-                    if (currentContext == null) {
-                        clearPendingLocationCallback(callback)
+                .setItems(candidatePaths.toTypedArray()) { _, which ->
+                    val path = candidatePaths[which]
+                    val uri = Uri.fromFile(File(path))
+                    val location = Location.Unopened.from(currentContext, uri)
+                    if (disableThirdParty && location.path.volume is Volume.ThirdParty && uri.scheme != "file") {
+                        currentContext.showToast(R.string.err_bad_location)
                     } else {
-                        val path = accessibleCandidates[which]
-                        val uri = Uri.fromFile(File(path))
-                        val location = Location.Unopened.from(currentContext, uri)
-                        // For file:// URIs from validated accessible candidates, allow
-                        // ThirdParty volumes. These are proven-accessible TS18 paths that
-                        // StorageManager may not report but that work with direct file I/O.
-                        if (
-                            disableThirdParty &&
-                                location.path.volume is Volume.ThirdParty &&
-                                uri.scheme != "file"
-                        ) {
-                            currentContext.showToast(R.string.err_bad_location)
-                        } else {
-                            callback(location)
-                        }
-                        clearPendingLocationCallback(callback)
+                        callback(location)
                     }
+                    clearPendingLocationCallback(callback)
                 }
                 .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
                     showManualPathEntry(disableThirdParty, callback)
                 }
-                .setNegativeButton(R.string.lbl_cancel) { _, _ ->
-                    clearPendingLocationCallback(callback)
-                }
+                .setNegativeButton(R.string.lbl_cancel) { _, _ -> clearPendingLocationCallback(callback) }
                 .setOnCancelListener { clearPendingLocationCallback(callback) }
                 .show()
         }
     }
 
-    private fun showManualPathEntry(
-        disableThirdParty: Boolean,
-        callback: (Location.Unopened) -> Unit,
-    ) {
-        val ctx =
-            context
-                ?: run {
-                    clearPendingLocationCallback(callback)
-                    return
-                }
-        val input =
-            androidx.appcompat.widget.AppCompatEditText(ctx).apply {
-                hint = ctx.getString(R.string.set_enter_path_hint)
-                setSingleLine()
-                inputType =
-                    android.text.InputType.TYPE_CLASS_TEXT or
-                        android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            }
+    private fun showManualPathEntry(disableThirdParty: Boolean, callback: (Location.Unopened) -> Unit) {
+        val ctx = context ?: run { clearPendingLocationCallback(callback); return }
+        val input = androidx.appcompat.widget.AppCompatEditText(ctx).apply {
+            hint = ctx.getString(R.string.set_enter_path_hint)
+            setSingleLine()
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
         val padding = (16 * ctx.resources.displayMetrics.density).toInt()
-        val container =
-            android.widget.FrameLayout(ctx).apply {
-                setPadding(padding, padding / 2, padding, 0)
-                addView(input)
-            }
+        val container = android.widget.FrameLayout(ctx).apply {
+            setPadding(padding, padding / 2, padding, 0)
+            addView(input)
+        }
         AlertDialog.Builder(ctx)
             .setTitle(R.string.set_select_source)
             .setView(container)
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
                 val pathText = input.text?.toString()?.trim().orEmpty()
-                if (pathText.isEmpty()) {
-                    clearPendingLocationCallback(callback)
-                    return@setPositiveButton
-                }
-                if (pathText != pathText.trim()) {
-                    ctx.showToast(R.string.set_path_whitespace_invalid)
-                    clearPendingLocationCallback(callback)
-                    return@setPositiveButton
-                }
+                if (pathText.isEmpty()) { clearPendingLocationCallback(callback); return@setPositiveButton }
                 lifecycleScope.launch {
-                    val accessible =
-                        withContext(Dispatchers.IO) {
-                            try {
-                                val file = File(pathText)
-                                file.exists() && file.isDirectory && file.canRead()
-                            } catch (e: Exception) {
-                                false
-                            }
-                        }
-                    val currentContext = context
-                    if (currentContext == null) {
-                        clearPendingLocationCallback(callback)
-                        return@launch
+                    val accessible = withContext(Dispatchers.IO) {
+                        try { val file = File(pathText); file.exists() && file.isDirectory && file.canRead() } catch (e: Exception) { false }
                     }
-                    if (!accessible) {
-                        currentContext.showToast(R.string.set_path_inaccessible)
-                        clearPendingLocationCallback(callback)
-                        return@launch
-                    }
+                    val currentContext = context ?: run { clearPendingLocationCallback(callback); return@launch }
+                    if (!accessible) { currentContext.showToast(R.string.set_path_inaccessible); clearPendingLocationCallback(callback); return@launch }
                     val uri = Uri.fromFile(File(pathText))
                     val location = Location.Unopened.from(currentContext, uri)
                     callback(location)
                     clearPendingLocationCallback(callback)
                 }
             }
-            .setNegativeButton(R.string.lbl_cancel) { _, _ ->
-                clearPendingLocationCallback(callback)
-            }
+            .setNegativeButton(R.string.lbl_cancel) { _, _ -> clearPendingLocationCallback(callback) }
             .setOnCancelListener { clearPendingLocationCallback(callback) }
             .show()
     }
 
     private fun addDocumentTreeUriToDirs(uri: Uri?, disableThirdParty: Boolean) {
-        if (uri == null) {
-            L.d("No URI given (user closed the dialog)")
-            pendingLocationCallback = null
-            return
-        }
-        val ctx =
-            context
-                ?: run {
-                    pendingLocationCallback = null
-                    return
-                }
+        if (uri == null) { pendingLocationCallback = null; return }
+        val ctx = context ?: run { pendingLocationCallback = null; return }
         if (uri.scheme != "file" && !DocumentsContract.isTreeUri(uri)) {
-            L.w("SAF picker returned a non-tree URI: $uri")
-            ctx.showToast(R.string.err_bad_location)
-            pendingLocationCallback = null
-            return
+            ctx.showToast(R.string.err_bad_location); pendingLocationCallback = null; return
         }
         val location = Location.Unopened.from(ctx, uri)
-
         if (location.path.volume is Volume.ThirdParty && disableThirdParty) {
-            ctx.showToast(R.string.err_bad_location)
-            pendingLocationCallback = null
-            return
+            ctx.showToast(R.string.err_bad_location); pendingLocationCallback = null; return
         }
         pendingLocationCallback?.invoke(location)
         pendingLocationCallback = null
+    }
+
+    private fun clearPendingLocationCallback(callback: (Location.Unopened) -> Unit) {
+        if (pendingLocationCallback == callback) { pendingLocationCallback = null }
+    }
+
+    private fun autoDetectUsb() {
+        val usbPaths = TopwaySourcePolicy.discoverUsbStorage()
+        if (usbPaths.isEmpty()) { context?.showToast("No USB storage found"); return }
+        val ctx = context ?: return
+        var added = 0
+        usbPaths.forEach { path ->
+            val uri = Uri.fromFile(File(path))
+            val location = Location.Unopened.from(ctx, uri)
+            val opened = location.open(ctx)
+            if (opened != null && includeLocationAdapter.locations.none { it.uri == uri }) {
+                includeLocationAdapter.add(opened)
+                added++
+            }
+        }
+        if (added > 0) { updateSaveButtonState(); ctx.showToast("Added $added USB source(s)") }
     }
 
     private fun addIncludeLocation(location: Location.Unopened) {
@@ -511,83 +408,55 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         with(binding) {
             when (locationMode) {
                 LocationMode.SAF -> {
-                    // File Picker mode
                     locationsModeDesc.setText(R.string.lng_file_picker)
-
-                    // Update permission section
+                    locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
+                    locationsPermsSubtitle.setText(R.string.lng_grant_storage_anyway)
+                }
+                LocationMode.DIRECT_FS -> {
+                    locationsModeDesc.text = "Direct filesystem access. More reliable on head units."
                     locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
                     locationsPermsSubtitle.setText(R.string.lng_grant_storage_anyway)
                 }
                 LocationMode.MEDIA_STORE -> {
-                    // System Database mode
                     locationsModeDesc.setText(R.string.lng_system_database)
-
-                    // Update permission section
                     locationsPermsDesc.setText(R.string.set_grant_storage)
                     locationsPermsSubtitle.setText(R.string.lng_grant_storage_required)
-
-                    // Update exclude mode description based on selection
                     updateExcludeModeUI(binding)
                 }
-                LocationMode.DIRECT_FS -> {
-                    // Direct FS mode
-                    locationsModeDesc.setText(R.string.lng_direct_fs)
-
-                    // Update permission section
-                    locationsPermsDesc.setText(R.string.set_grant_storage)
-                    locationsPermsSubtitle.setText(R.string.lng_grant_storage_required)
-                }
             }
-
-            // Update enabled state based on permission
             updatePermissionDependentUI(binding)
-            // Update card colors based on mode and permission
             updatePermissionCardColors(binding)
-            // Update permission card visibility
             updatePermissionCardVisibility(binding)
-            // Update extras visibility based on current state
             updateExtrasVisibility(binding)
         }
     }
 
     private fun updateExcludeModeUI(binding: DialogMusicLocationsBinding) {
         with(binding) {
-            if (isIncludeMode) {
-                locationsExcludeModeDesc.setText(R.string.lng_include_folders)
-            } else {
-                locationsExcludeModeDesc.setText(R.string.lng_exclude_folders)
-            }
+            locationsExcludeModeDesc.setText(if (isIncludeMode) R.string.lng_include_folders else R.string.lng_exclude_folders)
         }
     }
 
     private fun updatePermissionDependentUI(binding: DialogMusicLocationsBinding) {
         with(binding) {
-            // Only disable views in System Database and Direct FS mode when permission not granted
-            // File Picker mode doesn't require storage permission
-            val isEnabled = locationMode == LocationMode.SAF || hasStoragePermission
-
+            val isEnabled = locationMode != LocationMode.MEDIA_STORE || hasStoragePermission
             locationsIncludeListHeader.isEnabled = isEnabled
             locationsIncludeAdd.isEnabled = isEnabled
             locationsIncludeRecycler.isEnabled = isEnabled
-
             locationsExcludeModeHeader.isEnabled = isEnabled
             locationsExcludeModeGroup.isEnabled = isEnabled
             locationsExcludeModeDesc.isEnabled = isEnabled
             locationsExcludeModeExclude.isEnabled = isEnabled
             locationsExcludeModeInclude.isEnabled = isEnabled
-
             locationsExcludeListHeader.isEnabled = isEnabled
             locationsExcludeAdd.isEnabled = isEnabled
             locationsExcludeRecycler.isEnabled = isEnabled
-
             locationsFilterListHeader.isEnabled = isEnabled
             locationsFilterAdd.isEnabled = isEnabled
             locationsFilterRecycler.isEnabled = isEnabled
-
             locationsWithHiddenTitle.isEnabled = isEnabled
             locationsWithHiddenDesc.isEnabled = isEnabled
             locationsWithHidden.isEnabled = isEnabled
-
             locationsExcludeNonMusicTitle.isEnabled = isEnabled
             locationsExcludeNonMusicDesc.isEnabled = isEnabled
             locationsExcludeNonMusic.isEnabled = isEnabled
@@ -597,74 +466,43 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private fun updatePermissionCardColors(binding: DialogMusicLocationsBinding) {
         val context = requireContext()
         with(binding.locationsPermsCard) {
-            if (locationMode == LocationMode.SAF) {
-                // File Picker mode - use secondary colors
+            if (locationMode != LocationMode.MEDIA_STORE) {
                 setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
-                binding.locationsPermsDesc.setTextColor(
-                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-                )
-                binding.locationsPermsSubtitle.setTextColor(
-                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-                )
-                binding.locationsPermsOpen.imageTintList =
-                    context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                binding.locationsPermsDesc.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
+                binding.locationsPermsSubtitle.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
+                binding.locationsPermsOpen.imageTintList = context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
             } else {
-                // System Database mode - use error colors if no permission, secondary colors if
-                // granted
                 if (hasStoragePermission) {
-                    // Has permission - use secondary colors
-                    setCardBackgroundColor(
-                        context.getAttrColorCompat(MR.attr.colorSecondaryContainer)
-                    )
-                    binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-                    )
-                    binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-                    )
-                    binding.locationsPermsOpen.imageTintList =
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
+                    setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
+                    binding.locationsPermsDesc.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
+                    binding.locationsPermsSubtitle.setTextColor(context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer))
+                    binding.locationsPermsOpen.imageTintList = context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
                 } else {
                     setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorErrorContainer))
-                    binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
-                    )
-                    binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
-                    )
-                    binding.locationsPermsOpen.imageTintList =
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                    binding.locationsPermsDesc.setTextColor(context.getAttrColorCompat(MR.attr.colorOnErrorContainer))
+                    binding.locationsPermsSubtitle.setTextColor(context.getAttrColorCompat(MR.attr.colorOnErrorContainer))
+                    binding.locationsPermsOpen.imageTintList = context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
                 }
             }
         }
     }
 
     private fun updatePermissionCardVisibility(binding: DialogMusicLocationsBinding) {
-        with(binding) {
-            // Hide the permission card when permissions are granted
-            locationsPermsCard.isVisible = !hasStoragePermission
-        }
+        binding.locationsPermsCard.isVisible = !hasStoragePermission
     }
 
     private fun updateExtrasVisibility(binding: DialogMusicLocationsBinding) {
         with(binding) {
-            // Update dropdown icon rotation
             locationsExtrasDropdownIcon.rotation = if (isExtrasExpanded) 180f else 0f
-
-            if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
-                // File Picker / Direct mode - show include/exclude lists when expanded
-                // Include section
+            if (locationMode != LocationMode.MEDIA_STORE) {
                 locationsIncludeListHeaderDivider.isVisible = true
                 locationsIncludeListHeader.isVisible = true
                 locationsIncludeAdd.isVisible = true
                 locationsIncludeRecycler.isVisible = true
-
-                // Show dividers and exclude section only when expanded
+                locationsUsbDetect.isVisible = locationMode == LocationMode.DIRECT_FS
                 locationsExcludeListHeader.isVisible = isExtrasExpanded
                 locationsExcludeAdd.isVisible = isExtrasExpanded
                 locationsExcludeRecycler.isVisible = isExtrasExpanded
-
-                // Hide filter mode section completely
                 locationsExcludeModeHeader.isVisible = false
                 locationsExcludeModeGroup.isVisible = false
                 locationsExcludeModeDesc.isVisible = false
@@ -673,35 +511,25 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 locationsFilterAdd.isVisible = false
                 locationsFilterRecycler.isVisible = false
                 locationsExcludeListDivider.isVisible = false
-
-                // Config section
                 configDivider.isVisible = isExtrasExpanded
                 locationsWithHiddenTitle.isVisible = isExtrasExpanded
                 locationsWithHiddenDesc.isVisible = isExtrasExpanded
                 locationsWithHidden.isVisible = isExtrasExpanded
-
                 locationsExcludeNonMusicTitle.isVisible = false
                 locationsExcludeNonMusicDesc.isVisible = false
                 locationsExcludeNonMusic.isVisible = false
-
                 locationsMultithreadTitle.isVisible = isExtrasExpanded
                 locationsMultithreadDesc.isVisible = isExtrasExpanded
                 locationsMultithread.isVisible = isExtrasExpanded
             } else {
-                // System Database mode - show filter mode when expanded
-                // Hide include section
                 locationsIncludeListHeaderDivider.isVisible = false
                 locationsIncludeListHeader.isVisible = false
                 locationsIncludeAdd.isVisible = false
                 locationsIncludeRecycler.isVisible = false
-
-                // Hide exclude section (at bottom)
                 locationsExcludeListDivider.isVisible = false
                 locationsExcludeListHeader.isVisible = false
                 locationsExcludeAdd.isVisible = false
                 locationsExcludeRecycler.isVisible = false
-
-                // Show filter mode section only when expanded
                 locationsExcludeModeHeader.isVisible = isExtrasExpanded
                 locationsExcludeModeGroup.isVisible = isExtrasExpanded
                 locationsExcludeModeDesc.isVisible = isExtrasExpanded
@@ -709,17 +537,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 locationsFilterListHeader.isVisible = isExtrasExpanded
                 locationsFilterAdd.isVisible = isExtrasExpanded
                 locationsFilterRecycler.isVisible = isExtrasExpanded
-
-                // Config section
                 configDivider.isVisible = isExtrasExpanded
                 locationsWithHiddenTitle.isVisible = false
                 locationsWithHiddenDesc.isVisible = false
                 locationsWithHidden.isVisible = false
-
                 locationsExcludeNonMusicTitle.isVisible = isExtrasExpanded
                 locationsExcludeNonMusicDesc.isVisible = isExtrasExpanded
                 locationsExcludeNonMusic.isVisible = isExtrasExpanded
-
                 locationsMultithreadTitle.isVisible = false
                 locationsMultithreadDesc.isVisible = false
                 locationsMultithread.isVisible = false
@@ -729,62 +553,31 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun saveChanges() {
         val binding = requireBinding()
-
-        // Check if configuration has actually changed
         val currentMode = musicSettings.locationMode
         val modeChanged = currentMode != locationMode
-
         var configChanged = modeChanged
-
-        if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
-            // Check if SAF/Direct query changed
+        if (locationMode != LocationMode.MEDIA_STORE) {
             val currentSafQuery = musicSettings.safQuery
-            val newSafQuery =
-                SAF.Query(
-                    source = includeLocationAdapter.locations,
-                    exclude = excludeLocationAdapter.locations,
-                    withHidden = binding.locationsWithHiddenSwitch.isChecked,
-                    multithread = binding.locationsMultithreadSwitch.isChecked,
-                )
-
-            if (
-                !modeChanged &&
-                    (currentMode == LocationMode.SAF || currentMode == LocationMode.DIRECT_FS)
-            ) {
-                configChanged = currentSafQuery != newSafQuery
-            }
-
-            // Save the new SAF/Direct query
+            val newSafQuery = SAF.Query(
+                source = includeLocationAdapter.locations,
+                exclude = excludeLocationAdapter.locations,
+                withHidden = binding.locationsWithHiddenSwitch.isChecked,
+                multithread = binding.locationsMultithreadSwitch.isChecked,
+            )
+            if (!modeChanged && currentMode != LocationMode.MEDIA_STORE) { configChanged = currentSafQuery != newSafQuery }
             musicSettings.safQuery = newSafQuery
         } else {
-            // Check if MediaStore query changed
             val currentMediaStoreQuery = musicSettings.mediaStoreQuery
-            val filterMode =
-                if (isIncludeMode) {
-                    MediaStore.FilterMode.INCLUDE
-                } else {
-                    MediaStore.FilterMode.EXCLUDE
-                }
-            val newMediaStoreQuery =
-                MediaStore.Query(
-                    mode = filterMode,
-                    filtered = filterLocationAdapter.locations,
-                    excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
-                )
-
-            if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) {
-                configChanged = currentMediaStoreQuery != newMediaStoreQuery
-            }
-
-            // Save the new MediaStore query
+            val filterMode = if (isIncludeMode) MediaStore.FilterMode.INCLUDE else MediaStore.FilterMode.EXCLUDE
+            val newMediaStoreQuery = MediaStore.Query(
+                mode = filterMode,
+                filtered = filterLocationAdapter.locations,
+                excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
+            )
+            if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) { configChanged = currentMediaStoreQuery != newMediaStoreQuery }
             musicSettings.mediaStoreQuery = newMediaStoreQuery
         }
-
-        // Save the mode setting
         musicSettings.locationMode = locationMode
-
-        // If no configuration changed but permission was granted in this session,
-        // force a location update
         if (!configChanged && permissionGrantedInSession) {
             L.d("No config changes detected, but permission was granted - forcing location update")
             musicSettings.forceLocationUpdate()
@@ -792,51 +585,25 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun checkStoragePermission(): Boolean {
-        val permission =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Manifest.permission.READ_MEDIA_AUDIO
-            } else {
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            }
-        return ContextCompat.checkSelfPermission(requireContext(), permission) ==
-            PackageManager.PERMISSION_GRANTED
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+        return ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestStoragePermission() {
-        val permission =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Manifest.permission.READ_MEDIA_AUDIO
-            } else {
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            }
-
-        val launcher =
-            requireNotNull(storagePermissionLauncher) {
-                "Storage permission launcher was not available"
-            }
-
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+        val launcher = requireNotNull(storagePermissionLauncher) { "Storage permission launcher was not available" }
         try {
             L.d("Requesting storage permission: $permission")
             launcher.launch(permission)
         } catch (e: Exception) {
             L.e("Failed to request storage permission")
-            L.e(e.stackTraceToString())
             requireContext().showToast(R.string.err_no_app)
         }
     }
 
     private fun updateSaveButtonState() {
         val dialog = dialog as? AlertDialog ?: return
-
-        val isEnabled =
-            if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
-                // File Picker / Direct mode: Enable save only if there's at least one folder
-                includeLocationAdapter.locations.isNotEmpty()
-            } else {
-                // System mode: Enable save only if permission is granted
-                hasStoragePermission
-            }
-
+        val isEnabled = if (locationMode != LocationMode.MEDIA_STORE) includeLocationAdapter.locations.isNotEmpty() else hasStoragePermission
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isEnabled
     }
 }

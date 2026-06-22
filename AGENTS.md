@@ -6,8 +6,6 @@
 - For Codex/environment setup and validation flow, use `docs/DEVELOPMENT.md`.
 - Prefer consolidation/removal of stale docs over keeping historical wrappers.
 - **Auxio-TS is a TS18/TW/TWTHEME variant app.** TS18/TW/TWTHEME parity is the product target.
-- TS18 variants may use root/superuser paths as a first-class mechanism for filesystem access.
-- SAF/DocumentsUI must not be assumed to be present or usable on TS18 devices.
 - Android-standard APIs are the preferred **first implementation layer** (Tier 1), not the final authority.
 - Keep TS18/TW integration in adapter/facade boundaries.
 - Use `docs/evidence/t-music-snapshot/` as evidence only, not implementation source.
@@ -148,18 +146,9 @@ Always distinguish between: product requirement / Android-standard implementatio
 ## Hard constraints
 
 - Do not change the standard Auxio/Auxio-TS package identity to `com.tw.music` or `com.tw.media`; only dedicated, clearly named Topway/DoFun compatibility variants may install as those package IDs.
-- Root use is variant-scoped and must not leak into the standard APK.
-- Root operations must be narrow, bounded, logged, and safely degraded.
-- Root must be centrally gated (`RootStateHolder`) to avoid repeated wasted `su` attempts.
-- Speed and startup responsiveness take priority over repeated root retries.
 - Do not require privileged/system UID or platform signing.
-- Root must not be equated with platform signing or privileged UID.
 - Do not copy decompiled smali into app code.
 - Do not spread TS18 conditionals through core playback/library code.
-- All shuffle modes must preserve the currently playing track unless the user explicitly changes track.
-- Album-art modes are reduced to `off`, `as-is`, and `optimised`.
-- Autostart on rooted TS18 variants should prepare the app, floating controls, and library as early as safely possible after boot.
-- Real TS18 cold boot/reboot/ACC validation remains required before claiming device-level success.
 - Do not claim TS18 compatibility without runtime evidence.
 - Do not add in-app probe frameworks or speculative default-off adapters.
 - Runtime APKs must not include diagnostics/probe/capture tooling (except if within scope of the 'on-demand Storage Health diagnostic screen' functionality).
@@ -455,3 +444,12 @@ Agents must read these concise, redacted context files before exact-device TS18 
 Direct dependencies on external/vendor `com.tw.*` APIs remain forbidden in production code. Thin compatibility wrapper classes under approved Topway/DoFun source sets are allowed only to expose stock-compatible package/class/component names and delegate into Auxio-owned code. Approved wrapper areas include `app/src/topwayCompat/java/com/tw/music/**` (and any future explicitly shared Topway/DoFun wrapper equivalent).
 
 `com.tw.media` is an alternate DoFun fixed-entry variant, not a general no-root bypass. It may conflict on some firmware and still requires real-device validation. Private/native integration remains not for production by default and requires the evidence-gated tier process.
+
+## Auxio-TS Topway/TS18 Policy (Updated)
+- Auxio-TS is a Topway/TS18-focused variant app.
+- TS18 variants may use root/superuser paths as a first-class mechanism for filesystem access.
+- SAF/DocumentsUI must not be assumed on TS18; DirectFS is the primary fallback/alternative.
+- Root use is variant-scoped and centrally gated via `RootStateHolder`.
+- Root operations must be narrow, bounded (2s timeout for probes, 5s for ops), and safely degraded.
+- Playback Stability: All shuffle modes must preserve the currently playing track. Autoplay must not be interrupted by background state refreshes.
+- Album-Art Modes: Reduced to `off`, `as-is`, and `optimised`.
