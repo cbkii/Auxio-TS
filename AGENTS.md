@@ -6,6 +6,8 @@
 - For Codex/environment setup and validation flow, use `docs/DEVELOPMENT.md`.
 - Prefer consolidation/removal of stale docs over keeping historical wrappers.
 - **Auxio-TS is a TS18/TW/TWTHEME variant app.** TS18/TW/TWTHEME parity is the product target.
+- TS18 variants may use root/superuser paths as a first-class mechanism for filesystem access.
+- SAF/DocumentsUI must not be assumed to be present or usable on TS18 devices.
 - Android-standard APIs are the preferred **first implementation layer** (Tier 1), not the final authority.
 - Keep TS18/TW integration in adapter/facade boundaries.
 - Use `docs/evidence/t-music-snapshot/` as evidence only, not implementation source.
@@ -146,9 +148,18 @@ Always distinguish between: product requirement / Android-standard implementatio
 ## Hard constraints
 
 - Do not change the standard Auxio/Auxio-TS package identity to `com.tw.music` or `com.tw.media`; only dedicated, clearly named Topway/DoFun compatibility variants may install as those package IDs.
+- Root use is variant-scoped and must not leak into the standard APK.
+- Root operations must be narrow, bounded, logged, and safely degraded.
+- Root must be centrally gated (`RootStateHolder`) to avoid repeated wasted `su` attempts.
+- Speed and startup responsiveness take priority over repeated root retries.
 - Do not require privileged/system UID or platform signing.
+- Root must not be equated with platform signing or privileged UID.
 - Do not copy decompiled smali into app code.
 - Do not spread TS18 conditionals through core playback/library code.
+- All shuffle modes must preserve the currently playing track unless the user explicitly changes track.
+- Album-art modes are reduced to `off`, `as-is`, and `optimised`.
+- Autostart on rooted TS18 variants should prepare the app, floating controls, and library as early as safely possible after boot.
+- Real TS18 cold boot/reboot/ACC validation remains required before claiming device-level success.
 - Do not claim TS18 compatibility without runtime evidence.
 - Do not add in-app probe frameworks or speculative default-off adapters.
 - Runtime APKs must not include diagnostics/probe/capture tooling (except if within scope of the 'on-demand Storage Health diagnostic screen' functionality).

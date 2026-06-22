@@ -90,7 +90,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private var storagePermissionLauncher: ActivityResultLauncher<String>? = null
     @Inject lateinit var musicSettings: MusicSettings
 
-    private var isFilePickerMode = true
+    private var locationMode = LocationMode.SAF
     private var isIncludeMode = true
     private var hasStoragePermission = false
     private var isExtrasExpanded = false
@@ -155,6 +155,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsModeHeader.setText(R.string.set_load_from)
         binding.locationsModeExclude.setText(R.string.set_file_picker)
         binding.locationsModeInclude.setText(R.string.set_system_database)
+        binding.locationsModeDirect.setText(R.string.set_direct_fs)
         binding.locationsExcludeModeHeader.setText(R.string.set_filter_mode)
         binding.locationsExcludeModeExclude.setText(R.string.set_include)
         binding.locationsExcludeModeInclude.setText(R.string.set_exclude)
@@ -176,10 +177,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
 
         binding.locationsModeExclude.setOnClickListener {
-            updateLocationMode(binding, filePicker = true)
+            updateLocationMode(binding, LocationMode.SAF)
         }
         binding.locationsModeInclude.setOnClickListener {
-            updateLocationMode(binding, filePicker = false)
+            updateLocationMode(binding, LocationMode.MEDIA_STORE)
+        }
+        binding.locationsModeDirect.setOnClickListener {
+            updateLocationMode(binding, LocationMode.DIRECT_FS)
         }
         binding.locationsExcludeModeExclude.setOnClickListener {
             updateFilterMode(binding, include = true)
@@ -219,14 +223,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun loadInitialState(binding: DialogMusicLocationsBinding) {
         // Determine mode based on the locationMode setting
-        isFilePickerMode = musicSettings.locationMode == LocationMode.SAF
+        locationMode = musicSettings.locationMode
 
         // Load data for the initial mode
         loadModeData(binding)
 
         // Set initial selection state (no group logic; we manage checked state ourselves)
-        binding.locationsModeExclude.isChecked = isFilePickerMode
-        binding.locationsModeInclude.isChecked = !isFilePickerMode
+        binding.locationsModeExclude.isChecked = locationMode == LocationMode.SAF
+        binding.locationsModeInclude.isChecked = locationMode == LocationMode.MEDIA_STORE
+        binding.locationsModeDirect.isChecked = locationMode == LocationMode.DIRECT_FS
 
         // Check storage permission status
         hasStoragePermission = checkStoragePermission()
@@ -251,12 +256,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
     }
 
-    private fun updateLocationMode(binding: DialogMusicLocationsBinding, filePicker: Boolean) {
+    private fun updateLocationMode(binding: DialogMusicLocationsBinding, mode: LocationMode) {
         // Enforce "selection required" behavior.
-        binding.locationsModeExclude.isChecked = filePicker
-        binding.locationsModeInclude.isChecked = !filePicker
+        binding.locationsModeExclude.isChecked = mode == LocationMode.SAF
+        binding.locationsModeInclude.isChecked = mode == LocationMode.MEDIA_STORE
+        binding.locationsModeDirect.isChecked = mode == LocationMode.DIRECT_FS
 
-        isFilePickerMode = filePicker
+        locationMode = mode
         updateModeUI(binding)
         updateSaveButtonState()
     }
@@ -503,27 +509,34 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun updateModeUI(binding: DialogMusicLocationsBinding) {
         with(binding) {
-            if (isFilePickerMode) {
-                // File Picker mode
-                locationsModeDesc.setText(R.string.lng_file_picker)
+            when (locationMode) {
+                LocationMode.SAF -> {
+                    // File Picker mode
+                    locationsModeDesc.setText(R.string.lng_file_picker)
 
-                // Update permission section
-                locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
-                locationsPermsSubtitle.setText(R.string.lng_grant_storage_anyway)
+                    // Update permission section
+                    locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
+                    locationsPermsSubtitle.setText(R.string.lng_grant_storage_anyway)
+                }
+                LocationMode.MEDIA_STORE -> {
+                    // System Database mode
+                    locationsModeDesc.setText(R.string.lng_system_database)
 
-                // File Picker mode - no need to update switch text as it's set in XML
-            } else {
-                // System Database mode
-                locationsModeDesc.setText(R.string.lng_system_database)
+                    // Update permission section
+                    locationsPermsDesc.setText(R.string.set_grant_storage)
+                    locationsPermsSubtitle.setText(R.string.lng_grant_storage_required)
 
-                // Update permission section
-                locationsPermsDesc.setText(R.string.set_grant_storage)
-                locationsPermsSubtitle.setText(R.string.lng_grant_storage_required)
+                    // Update exclude mode description based on selection
+                    updateExcludeModeUI(binding)
+                }
+                LocationMode.DIRECT_FS -> {
+                    // Direct FS mode
+                    locationsModeDesc.setText(R.string.lng_direct_fs)
 
-                // Update exclude mode description based on selection
-                updateExcludeModeUI(binding)
-
-                // System Database mode - no need to update switch text as it's set in XML
+                    // Update permission section
+                    locationsPermsDesc.setText(R.string.set_grant_storage)
+                    locationsPermsSubtitle.setText(R.string.lng_grant_storage_required)
+                }
             }
 
             // Update enabled state based on permission
@@ -549,9 +562,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun updatePermissionDependentUI(binding: DialogMusicLocationsBinding) {
         with(binding) {
-            // Only disable views in System Database mode when permission not granted
+            // Only disable views in System Database and Direct FS mode when permission not granted
             // File Picker mode doesn't require storage permission
-            val isEnabled = isFilePickerMode || hasStoragePermission
+            val isEnabled = locationMode == LocationMode.SAF || hasStoragePermission
 
             locationsIncludeListHeader.isEnabled = isEnabled
             locationsIncludeAdd.isEnabled = isEnabled
@@ -584,7 +597,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private fun updatePermissionCardColors(binding: DialogMusicLocationsBinding) {
         val context = requireContext()
         with(binding.locationsPermsCard) {
-            if (isFilePickerMode) {
+            if (locationMode == LocationMode.SAF) {
                 // File Picker mode - use secondary colors
                 setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
                 binding.locationsPermsDesc.setTextColor(
@@ -638,8 +651,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             // Update dropdown icon rotation
             locationsExtrasDropdownIcon.rotation = if (isExtrasExpanded) 180f else 0f
 
-            if (isFilePickerMode) {
-                // File Picker mode - show include/exclude lists when expanded
+            if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
+                // File Picker / Direct mode - show include/exclude lists when expanded
                 // Include section
                 locationsIncludeListHeaderDivider.isVisible = true
                 locationsIncludeListHeader.isVisible = true
@@ -719,13 +732,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         // Check if configuration has actually changed
         val currentMode = musicSettings.locationMode
-        val modeChanged =
-            currentMode != (if (isFilePickerMode) LocationMode.SAF else LocationMode.MEDIA_STORE)
+        val modeChanged = currentMode != locationMode
 
         var configChanged = modeChanged
 
-        if (isFilePickerMode) {
-            // Check if SAF query changed
+        if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
+            // Check if SAF/Direct query changed
             val currentSafQuery = musicSettings.safQuery
             val newSafQuery =
                 SAF.Query(
@@ -735,11 +747,14 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     multithread = binding.locationsMultithreadSwitch.isChecked,
                 )
 
-            if (!modeChanged && currentMode == LocationMode.SAF) {
+            if (
+                !modeChanged &&
+                    (currentMode == LocationMode.SAF || currentMode == LocationMode.DIRECT_FS)
+            ) {
                 configChanged = currentSafQuery != newSafQuery
             }
 
-            // Save the new SAF query
+            // Save the new SAF/Direct query
             musicSettings.safQuery = newSafQuery
         } else {
             // Check if MediaStore query changed
@@ -766,8 +781,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
 
         // Save the mode setting
-        musicSettings.locationMode =
-            if (isFilePickerMode) LocationMode.SAF else LocationMode.MEDIA_STORE
+        musicSettings.locationMode = locationMode
 
         // If no configuration changed but permission was granted in this session,
         // force a location update
@@ -815,8 +829,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         val dialog = dialog as? AlertDialog ?: return
 
         val isEnabled =
-            if (isFilePickerMode) {
-                // File Picker mode: Enable save only if there's at least one folder
+            if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
+                // File Picker / Direct mode: Enable save only if there's at least one folder
                 includeLocationAdapter.locations.isNotEmpty()
             } else {
                 // System mode: Enable save only if permission is granted

@@ -245,3 +245,12 @@ Auxio-TS now provides two Topway-compatible release identities:
 Both variants reuse the same thin wrapper source set (`com.tw.music.MusicActivity`, `com.tw.music.MusicService`, and `com.tw.music.view.MusicWidgetProvider`) and delegate into Auxio-owned code. The wrapper exposes stock-compatible package/class/component names only; it does not add private Cardoor services, TWUtil reflection, vendor binders, system UID, `sharedUserId`, copied smali, or platform-signature requirements.
 
 Topway-compatible variants use `com.tw.music.MusicService` as the canonical exported external MediaBrowserService. The base Auxio `org.oxycblt.auxio.AuxioService` remains available for explicit in-app starts, but its inherited browse/search intent filters are removed in the Topway wrapper manifest so external TS18/DoFun clients do not split across two service component names. **Evidence confidence:** Inferred from manifest design. **Porting decision:** Requires TS18 runtime validation. Runtime validation must still check for duplicate active sessions, duplicate foreground services, and duplicate lifecycle starts before claiming final TS18 parity.
+
+## Root-Assisted Filesystem and Early Boot
+
+For TS18 variants, SAF/DocumentsUI is considered an unreliable primary assumption. Auxio-TS implements a root-first (where available) direct filesystem strategy for library scanning.
+
+- **Central Root Gate**: All `su` operations are mediated by `RootStateHolder`, which manages timeouts, caches negative results to avoid prompt-spam, and provides a process-wide status.
+- **Direct Filesystem (`DirectFS`)**: A specialized `musikr` explorer that uses direct `java.io.File` and root-assisted `ls -1` for reliable USB discovery and scanning.
+- **Early Boot readiness**: On devices with Autostart enabled, `BootReceiver` triggers an early root probe and library scan preparation to minimize "empty library" UI states on cold starts.
+- **Variant Policy**: `com.tw.music` treats root as primary; `com.tw.media` uses opportunistic root with complete non-root fallbacks; the standard APK never probes for root.

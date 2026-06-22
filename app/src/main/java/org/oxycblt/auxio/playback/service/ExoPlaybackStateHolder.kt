@@ -459,6 +459,7 @@ class ExoPlaybackStateHolder(
             sendNewPlaybackEvent = true
         }
         if (rawQueue != resolveQueue()) {
+            val wasPlaying = player.playWhenReady
             player.setMediaItems(rawQueue.heap.map { it.buildMediaItem() })
             if (rawQueue.isShuffled) {
                 player.shuffleModeEnabled = true
@@ -468,7 +469,11 @@ class ExoPlaybackStateHolder(
             }
             player.seekTo(rawQueue.heapIndex, C.TIME_UNSET)
             player.prepare()
-            player.pause()
+            if (wasPlaying) {
+                player.play()
+            } else {
+                player.pause()
+            }
             sendNewPlaybackEvent = true
             shouldSeek = true
         }

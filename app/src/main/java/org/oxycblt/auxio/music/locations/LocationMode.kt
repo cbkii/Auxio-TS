@@ -25,13 +25,16 @@ enum class LocationMode {
     /** Use Storage Access Framework (file picker) to select specific folders */
     SAF,
     /** Use system MediaStore database to load all music */
-    MEDIA_STORE;
+    MEDIA_STORE,
+    /** Use direct filesystem access (with optional root) to load music from specific paths */
+    DIRECT_FS;
 
     val intCode: Int
         get() =
             when (this) {
                 SAF -> IntegerTable.LOCATION_MODE_SAF
                 MEDIA_STORE -> IntegerTable.LOCATION_MODE_MEDIA_STORE
+                DIRECT_FS -> IntegerTable.LOCATION_MODE_DIRECT_FS
             }
 
     companion object {
@@ -39,6 +42,7 @@ enum class LocationMode {
             return when (int) {
                 IntegerTable.LOCATION_MODE_SAF -> SAF
                 IntegerTable.LOCATION_MODE_MEDIA_STORE -> MEDIA_STORE
+                IntegerTable.LOCATION_MODE_DIRECT_FS -> DIRECT_FS
                 else -> null
             }
         }

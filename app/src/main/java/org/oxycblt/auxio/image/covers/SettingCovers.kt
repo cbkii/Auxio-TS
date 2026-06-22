@@ -56,9 +56,7 @@ class SettingCoversImpl @Inject constructor(private val imageSettings: ImageSett
         val transcoding =
             when (imageSettings.coverMode) {
                 CoverMode.OFF -> return NullCovers(coverStorage)
-                CoverMode.SAVE_SPACE -> Compress(Bitmap.CompressFormat.JPEG, 500, 70)
-                CoverMode.BALANCED -> Compress(Bitmap.CompressFormat.JPEG, 750, 85)
-                CoverMode.HIGH_QUALITY -> Compress(Bitmap.CompressFormat.JPEG, 1000, 100)
+                CoverMode.OPTIMISED -> Compress(Bitmap.CompressFormat.JPEG, 750, 85)
                 CoverMode.AS_IS -> NoTranscoding
             }
         val revisionedTranscoding = RevisionedTranscoding(revision, transcoding)

@@ -20,16 +20,10 @@ package org.oxycblt.auxio.image
 
 import org.oxycblt.auxio.IntegerTable
 
-/**
- * Represents the options available for album cover loading.
- *
- * @author Alexander Capehart (OxygenCobalt)
- */
+/** Represents the options available for album cover loading. */
 enum class CoverMode {
     OFF,
-    SAVE_SPACE,
-    BALANCED,
-    HIGH_QUALITY,
+    OPTIMISED,
     AS_IS;
 
     /**
@@ -41,9 +35,7 @@ enum class CoverMode {
         get() =
             when (this) {
                 OFF -> IntegerTable.COVER_MODE_OFF
-                SAVE_SPACE -> IntegerTable.COVER_MODE_SAVE_SPACE
-                BALANCED -> IntegerTable.COVER_MODE_BALANCED
-                HIGH_QUALITY -> IntegerTable.COVER_MODE_HIGH_QUALITY
+                OPTIMISED -> IntegerTable.COVER_MODE_BALANCED
                 AS_IS -> IntegerTable.COVER_MODE_AS_IS
             }
 
@@ -58,9 +50,9 @@ enum class CoverMode {
         fun fromIntCode(intCode: Int) =
             when (intCode) {
                 IntegerTable.COVER_MODE_OFF -> OFF
-                IntegerTable.COVER_MODE_SAVE_SPACE -> SAVE_SPACE
-                IntegerTable.COVER_MODE_BALANCED -> BALANCED
-                IntegerTable.COVER_MODE_HIGH_QUALITY -> HIGH_QUALITY
+                IntegerTable.COVER_MODE_BALANCED,
+                IntegerTable.COVER_MODE_SAVE_SPACE,
+                IntegerTable.COVER_MODE_HIGH_QUALITY -> OPTIMISED
                 IntegerTable.COVER_MODE_AS_IS -> AS_IS
                 else -> null
             }

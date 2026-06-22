@@ -198,6 +198,8 @@ Use this repo for Auxio-TS-specific work, especially:
 - `com.tw.music` compatibility APK behaviour
 - `com.tw.media` alternate DoFun fixed-entry behaviour once implemented
 - Topway broadcast/control bridge behaviour
+- Root-assisted filesystem access and early-boot readiness
+- Simplified album-art management and playback stability
 - release and validation workflows for the TS18 variant
 
 Keep changes aligned with upstream Auxio where practical. Avoid unnecessary divergence from upstream unless required for the TS18/Topway/DoFun compatibility target.
