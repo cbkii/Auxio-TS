@@ -23,14 +23,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.inject.Inject
-import javax.inject.Singleton
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
@@ -387,7 +384,8 @@ constructor(
         // Check accessibility before starting
         val locations =
             when (musicSettings.locationMode) {
-                LocationMode.SAF, LocationMode.DIRECT_FS -> musicSettings.safQuery.source
+                LocationMode.SAF,
+                LocationMode.DIRECT_FS -> musicSettings.safQuery.source
                 LocationMode.MEDIA_STORE ->
                     emptyList() // MediaStore is always "accessible" as a provider
             }
@@ -410,7 +408,8 @@ constructor(
         val pathKeywords =
             if (
                 musicSettings.ts18SystemSourceFilter &&
-                    (musicSettings.locationMode == LocationMode.SAF || musicSettings.locationMode == LocationMode.DIRECT_FS)
+                    (musicSettings.locationMode == LocationMode.SAF ||
+                        musicSettings.locationMode == LocationMode.DIRECT_FS)
             ) {
                 TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
             } else {
@@ -500,7 +499,8 @@ constructor(
         val fs =
             when (musicSettings.locationMode) {
                 LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
-                LocationMode.DIRECT_FS -> org.oxycblt.musikr.fs.direct.DirectFS(musicSettings.safQuery.source, rootGate)
+                LocationMode.DIRECT_FS ->
+                    org.oxycblt.musikr.fs.direct.DirectFS(musicSettings.safQuery.source, rootGate)
                 LocationMode.MEDIA_STORE -> {
                     // Merge TS18 system source filter into the MediaStore query so the SQL
                     // WHERE clause limits rows before cursor iteration.

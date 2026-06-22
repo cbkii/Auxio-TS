@@ -145,12 +145,12 @@ object TopwaySourcePolicy {
     }
 }
 
-    /** Discovers removable USB storage volumes on TS18 devices. */
-    fun discoverUsbStorage(): List<String> {
-        val storageRoot = java.io.File("/storage")
-        if (!storageRoot.exists() || !storageRoot.isDirectory) return emptyList()
-        return storageRoot.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("usbdisk", ignoreCase = true) }
-            ?.map { it.absolutePath }
-            ?: emptyList()
-    }
+/** Discovers removable USB storage volumes on TS18 devices. */
+fun discoverUsbStorage(): List<String> {
+    val storageRoot = java.io.File("/storage")
+    if (!storageRoot.exists() || !storageRoot.isDirectory) return emptyList()
+    return storageRoot
+        .listFiles()
+        ?.filter { it.isDirectory && it.name.startsWith("usbdisk", ignoreCase = true) }
+        ?.map { it.absolutePath } ?: emptyList()
+}

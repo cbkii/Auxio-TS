@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * RootStateHolder.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package org.oxycblt.auxio.headunit.root
 
 import java.util.concurrent.TimeUnit
@@ -5,15 +23,25 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.musikr.fs.RootGate
-import timber.log.Timber as L
 
 @Singleton
 class RootStateHolder @Inject constructor() : RootGate {
-    enum class State { Unknown, Available, Unavailable, Denied, TimedOut, UnsupportedForVariant }
-    @Volatile var state: State = State.Unknown
+    enum class State {
+        Unknown,
+        Available,
+        Unavailable,
+        Denied,
+        TimedOut,
+        UnsupportedForVariant,
+    }
+
+    @Volatile
+    var state: State = State.Unknown
         private set
 
-    init { if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) state = State.UnsupportedForVariant }
+    init {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) state = State.UnsupportedForVariant
+    }
 
     @Synchronized
     fun probeSync(): State {
@@ -65,7 +93,9 @@ class RootStateHolder @Inject constructor() : RootGate {
                 process.errorStream.closeQuietly()
                 process.outputStream.closeQuietly()
             }
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun java.io.Closeable.closeQuietly() {

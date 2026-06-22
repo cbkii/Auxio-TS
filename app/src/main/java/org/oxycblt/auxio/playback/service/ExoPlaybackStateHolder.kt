@@ -36,13 +36,8 @@ import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.audio.ReplayGainAudioProcessor
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.session.MediaSession
-import androidx.media3.session.SessionCommand
-import androidx.media3.session.SessionResult
-import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.ArrayDeque
-import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +47,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.image.ImageSettings
-import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.media.BetterShuffleOrder
 import org.oxycblt.auxio.media.FfmpegAudioRenderer
 import org.oxycblt.auxio.music.MusicRepository
