@@ -210,10 +210,13 @@ internal object DirectFsRootPolicy {
     }
 
     fun isAllowedRootPath(path: String): Boolean =
-        path.startsWith("/storage/") &&
+        (path.startsWith("/storage/") || path.startsWith("/mnt/media_rw/")) &&
             path != "/storage/" &&
             path != "/storage/." &&
             path != "/storage/.." &&
+            path != "/mnt/media_rw/" &&
+            path != "/mnt/media_rw/." &&
+            path != "/mnt/media_rw/.." &&
             !path.contains('\n') &&
             !path.contains("/../") &&
             !path.endsWith("/..")

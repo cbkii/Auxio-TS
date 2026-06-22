@@ -85,15 +85,24 @@ class BootReceiver : BroadcastReceiver() {
         journal.log(DiagnosticJournal.CAT_BOOT, "Boot Received", "Autostart enabled")
 
         // TS18: Perform early root probe if autostart is enabled to speed up library readiness.
-        val pendingResult = goAsync()
-        val probeThread = Thread {
-            try {
-                rootGate.probeSync()
-            } finally {
-                pendingResult.finish()
-            }
+        // Avoid starting any root-related worker for the standard APK; RootStateHolder also gates
+        // standard variants, but skipping the thread entirely keeps the standard boot path clean.
+        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            val pendingResult = goAsync()
+            val probeThread =
+                Thread(
+                    {
+                        try {
+                            rootGate.probeSync()
+                        } finally {
+                            pendingResult.finish()
+                        }
+                    },
+                    "AuxioTsRootProbe",
+                )
+            probeThread.isDaemon = true
+            probeThread.start()
         }
-        probeThread.start()
 
         // When autoplay is enabled, start the playback service first so that music can begin
         // even if the background activity start is blocked. The service start is only performed

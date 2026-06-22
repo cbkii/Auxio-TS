@@ -27,10 +27,12 @@ class DirectFsRootPolicyTest {
     fun `root listing only allows explicit storage descendants`() {
         assertTrue(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0"))
         assertTrue(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0/Music"))
+        assertTrue(DirectFsRootPolicy.isAllowedRootPath("/mnt/media_rw/usbdisk0"))
 
         assertFalse(DirectFsRootPolicy.isAllowedRootPath(""))
         assertFalse(DirectFsRootPolicy.isAllowedRootPath("/"))
         assertFalse(DirectFsRootPolicy.isAllowedRootPath("/storage/"))
+        assertFalse(DirectFsRootPolicy.isAllowedRootPath("/mnt/media_rw/"))
         assertFalse(DirectFsRootPolicy.isAllowedRootPath("/data/data/org.oxycblt.auxio"))
         assertFalse(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0/../emulated"))
         assertFalse(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0\n/system"))
