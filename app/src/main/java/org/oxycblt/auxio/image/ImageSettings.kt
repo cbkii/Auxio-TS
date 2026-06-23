@@ -47,7 +47,8 @@ class ImageSettingsImpl @Inject constructor(@ApplicationContext context: Context
     Settings.Impl<ImageSettings.Listener>(context), ImageSettings {
     override val coverMode: CoverMode
         get() {
-            val code = sharedPreferences.getInt(getString(R.string.set_key_cover_mode), Int.MIN_VALUE)
+            val code =
+                sharedPreferences.getInt(getString(R.string.set_key_cover_mode), Int.MIN_VALUE)
             return CoverMode.fromIntCode(code)
                 ?: if (code == Int.MIN_VALUE) CoverMode.OPTIMISED else migrateLegacy()
         }

@@ -61,7 +61,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:checkable="true"
-                android:text="Direct" />
+                tools:text="Direct" />
 
         </com.google.android.material.button.MaterialButtonGroup>
 

@@ -50,20 +50,24 @@ class RootStateHolder @Inject constructor() : RootGate {
             state = State.UnsupportedForVariant
             return state
         }
-        val process = try {
-            Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-        } catch (e: Exception) {
-            state = State.Unavailable
-            return state
-        }
+        val process =
+            try {
+                Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+            } catch (e: Exception) {
+                state = State.Unavailable
+                return state
+            }
         try {
             val finished = process.waitFor(2000, TimeUnit.MILLISECONDS)
             if (!finished) {
                 process.destroy()
+                process.destroyForcibly()
                 state = State.TimedOut
             } else {
                 val stdout = process.inputStream.bufferedReader().use { it.readText() }
-                state = if (process.exitValue() == 0 && stdout.contains("uid=0")) State.Available else State.Denied
+                state =
+                    if (process.exitValue() == 0 && stdout.contains("uid=0")) State.Available
+                    else State.Denied
             }
         } finally {
             process.inputStream.closeQuietly()
@@ -81,12 +85,14 @@ class RootStateHolder @Inject constructor() : RootGate {
             try {
                 if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
                     process.destroy()
+                    process.destroyForcibly()
                     null
                 } else {
                     if (process.exitValue() != 0) null
-                    else process.inputStream.bufferedReader().use { reader ->
-                        reader.readLines().filter { it.isNotBlank() }
-                    }
+                    else
+                        process.inputStream.bufferedReader().use { reader ->
+                            reader.readLines().filter { it.isNotBlank() }
+                        }
                 }
             } finally {
                 process.inputStream.closeQuietly()
