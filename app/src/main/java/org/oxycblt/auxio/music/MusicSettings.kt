@@ -27,6 +27,7 @@ import javax.inject.Inject
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.locations.LocationMode
+import org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
 import org.oxycblt.auxio.settings.Settings
 import org.oxycblt.auxio.util.unlikelyToBeNull
 import org.oxycblt.musikr.fs.Location
@@ -188,7 +189,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 unlikelyToBeNull(
                         sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
                     )
-                    .toOpenedLocations()
+                    .toOpenedLocations(fileOnly = locationMode == LocationMode.DIRECT_FS)
             val excludedLocations =
                 unlikelyToBeNull(
                         sharedPreferences.getString(
@@ -196,7 +197,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                             "",
                         )
                     )
-                    .toUnopenedLocations()
+                    .toUnopenedLocations(fileOnly = locationMode == LocationMode.DIRECT_FS)
             val withHidden =
                 sharedPreferences.getBoolean(getString(R.string.set_key_with_hidden), false)
             val multithread =
@@ -232,7 +233,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                             "",
                         )
                     )
-                    .toUnopenedLocations()
+                    .toUnopenedLocations(fileOnly = false)
             val excludeNonMusic =
                 sharedPreferences.getBoolean(getString(R.string.set_key_exclude_non_music), true)
             return MediaStore.Query(
@@ -304,12 +305,18 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     private fun List<Location>.stringify(): String =
         joinToString(separator = ";") { it.uri.toString().replace(";", "\\;") }
 
-    private fun String.toOpenedLocations(): List<Location.Opened> =
+    private fun String.toOpenedLocations(fileOnly: Boolean): List<Location.Opened> =
         splitEscaped { it == ';' }
+            .mapNotNull { normalizePersistedLocation(it, fileOnly) }
             .mapNotNull { Location.Unopened.from(context, it.toUri()).open(context) }
 
-    private fun String.toUnopenedLocations(): List<Location.Unopened> =
-        splitEscaped { it == ';' }.mapNotNull { Location.Unopened.from(context, it.toUri()) }
+    private fun String.toUnopenedLocations(fileOnly: Boolean): List<Location.Unopened> =
+        splitEscaped { it == ';' }
+            .mapNotNull { normalizePersistedLocation(it, fileOnly) }
+            .mapNotNull { Location.Unopened.from(context, it.toUri()) }
+
+    private fun normalizePersistedLocation(value: String, fileOnly: Boolean): String? =
+        MusicSourcePathNormalizer.normalizePersistedLocation(value, fileOnly)
 
     private inline fun String.splitEscaped(selector: (Char) -> Boolean): List<String> {
         val split = mutableListOf<String>()
