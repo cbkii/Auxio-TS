@@ -19,6 +19,7 @@
 package org.oxycblt.musikr.fs.direct
 
 import android.net.Uri
+import android.util.Log
 import android.webkit.MimeTypeMap
 import java.io.File as JavaFile
 import kotlinx.coroutines.*
@@ -34,12 +35,15 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         tryAsyncWith(files, Dispatchers.IO) {
             roots
                 .map { location ->
-                    val root =
-                        location.uri.path
-                            ?.takeIf { location.uri.scheme == "file" }
-                            ?.let(::JavaFile)
-                            ?.takeIf(::isAllowedRoot)
-                            ?: return@map CompletableDeferred(Result.success(Unit))
+                    if (location.uri.scheme != "file") {
+                        Log.w(TAG, "Skipping non-file DirectFS source: ${location.uri}")
+                        return@map CompletableDeferred(Result.success(Unit))
+                    }
+                    val root = location.uri.path?.let(::JavaFile)
+                    if (root == null || !isAllowedRoot(root)) {
+                        Log.w(TAG, "Skipping unsafe DirectFS source: ${location.uri}")
+                        return@map CompletableDeferred(Result.success(Unit))
+                    }
                     exploreDirectoryImpl(root, location.path, null, files, 0)
                 }
                 .tryAwaitAll()
@@ -113,13 +117,17 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             }
         }
         val rootList =
-            rootGate?.runRootCommandSync(buildRootListCommand(directory.absolutePath))?.mapNotNull {
-                parseRootEntry(directory, it)
+            try {
+                rootGate
+                    ?.runRootCommandSync(buildRootListCommand(directory.absolutePath))
+                    ?.mapNotNull { parseRootEntry(directory, it) }
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "Root-assisted DirectFS listing failed for ${directory.path}", e)
+                null
             }
-        return rootList
-            ?: throw IllegalStateException(
-                "DirectFS root is unavailable or inaccessible: ${directory.path}"
-            )
+        if (rootList != null) return rootList
+        Log.w(TAG, "DirectFS root is unavailable or inaccessible: ${directory.path}")
+        return emptyList()
     }
 
     private data class DirectEntry(
@@ -152,6 +160,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
     }
 
     internal companion object {
+        private const val TAG = "DirectFS"
         private const val MAX_DEPTH = 32
 
         private val protectedRoots =
