@@ -258,6 +258,14 @@ dependencies {
     implementation "com.google.dagger:hilt-android:$hilt_version"
     ksp "com.google.dagger:hilt-android-compiler:$hilt_version"
 
+    // Kotlin 2.3.10 emits metadata newer than the kotlin-metadata-jvm reader
+    // currently resolved on Hilt's processing path. Keep the metadata reader aligned
+    // with the Kotlin compiler so Hilt can read Kotlin metadata during JavaCompile.
+    annotationProcessor "org.jetbrains.kotlin:kotlin-metadata-jvm:$kotlin_version"
+    testAnnotationProcessor "org.jetbrains.kotlin:kotlin-metadata-jvm:$kotlin_version"
+    ksp "org.jetbrains.kotlin:kotlin-metadata-jvm:$kotlin_version"
+    kspTest "org.jetbrains.kotlin:kotlin-metadata-jvm:$kotlin_version"
+
     // Logging
     implementation 'com.jakewharton.timber:timber:5.0.1'
 
