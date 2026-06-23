@@ -1,41 +1,68 @@
 version: 2
+
 updates:
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+    open-pull-requests-limit: 2
     groups:
-      # Low-risk minor/patch bumps are grouped into a single PR. Major bumps stay
-      # ungrouped so each one gets its own PR and full CI (build + native + tests).
-      gradle-patch-minor:
+      # TS18-safe automation: patch-only Gradle/library updates.
+      #
+      # Auxio-TS is not a generic phone app. Broad grouped minor updates can
+      # change Kotlin/KSP/Gradle behaviour, AndroidX runtime semantics, view
+      # behaviour, MediaSession/controller behaviour, and TS18/DoFun stability.
+      # Minor/major updates should be deliberate human-reviewed branches with
+      # full CI and, where relevant, physical TS18 validation.
+      gradle-ts18-safe-patches:
         update-types:
-          - "minor"
           - "patch"
     ignore:
-      # Do NOT auto-open Android Gradle Plugin (AGP) major upgrades. An AGP major
-      # bump (e.g. 9.x -> 10.x) routinely requires coordinated Kotlin/KSP/Gradle
-      # wrapper changes and manual migration steps, so it must be performed in a
-      # deliberate, human-reviewed PR rather than an automated Dependabot PR.
-      # Minor/patch AGP updates are still allowed. See docs/DEVELOPMENT.md
-      # ("Dependency update automation") for the rationale.
-      - dependency-name: "com.android.tools.build:gradle"
+      # Block broad automated Gradle ecosystem minor/major PRs. Patch updates
+      # remain allowed unless blocked below.
+      - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
+          - "version-update:semver-minor"
+
+      # Android Gradle Plugin, Kotlin, KSP and Gradle wrapper changes are
+      # coordinated toolchain work, not background dependency hygiene.
+      - dependency-name: "com.android.tools.build:gradle"
+      - dependency-name: "org.jetbrains.kotlin.plugin.parcelize"
+      - dependency-name: "org.jetbrains.kotlin:kotlin-stdlib"
+      - dependency-name: "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
+      - dependency-name: "org.jetbrains.kotlin:kotlin-stdlib-jdk7"
+      - dependency-name: "org.jetbrains.kotlin:kotlin-test-junit"
+      - dependency-name: "org.jetbrains.kotlin:kotlin-metadata-jvm"
+      - dependency-name: "com.google.devtools.ksp"
+      - dependency-name: "gradle-wrapper"
+
+      # These are intentionally pinned for observed/runtime behaviour in the
+      # Auxio-TS UI stack. Do not let Dependabot reopen them as routine updates.
+      - dependency-name: "androidx.recyclerview:recyclerview"
+      - dependency-name: "androidx.viewpager2:viewpager2"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+    open-pull-requests-limit: 2
     groups:
-      actions-patch-minor:
+      # Patch-only action updates are acceptable. Major/minor action runtime
+      # changes, especially checkout/runtime changes, should be human-reviewed.
+      actions-ts18-safe-patches:
         update-types:
-          - "minor"
           - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
 
   - package-ecosystem: "gitsubmodule"
     directory: "/"
     schedule:
       interval: "monthly"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 1
