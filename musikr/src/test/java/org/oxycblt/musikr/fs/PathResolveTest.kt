@@ -23,7 +23,12 @@ import android.net.Uri
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29])
 class PathResolveTest {
     private val unusedContext = mockk<Context>(relaxed = true)
 
