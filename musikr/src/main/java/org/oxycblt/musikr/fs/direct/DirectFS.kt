@@ -173,9 +173,10 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
 
         fun isSymbolicLinkCompat(file: JavaFile): Boolean {
             return try {
-                file.canonicalFile != file.absoluteFile
+                val stat = android.system.Os.lstat(file.absolutePath)
+                android.system.OsConstants.S_ISLNK(stat.st_mode)
             } catch (_: Exception) {
-                true
+                false
             }
         }
 
