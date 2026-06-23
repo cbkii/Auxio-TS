@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.music.locations
@@ -36,8 +44,8 @@ internal object MusicSourcePathNormalizer {
         val fileUri =
             when (candidate.scheme) {
                 "file" -> candidate
-                null, "" ->
-                    candidate.path?.takeIf { it.startsWith("/") }?.let { Uri.fromFile(File(it)) }
+                null,
+                "" -> candidate.path?.takeIf { it.startsWith("/") }?.let { Uri.fromFile(File(it)) }
                 "content" -> externalStorageTreeToFileUri(candidate)
                 else -> null
             }?.let(::repairAndCanonicalizeFileUri)
@@ -107,8 +115,7 @@ internal object MusicSourcePathNormalizer {
     private fun externalStorageTreeToFileUri(uri: Uri): Uri? {
         if (uri.authority != "com.android.externalstorage.documents") return null
         val encodedTree =
-            uri.pathSegments.zipWithNext().firstOrNull { it.first == "tree" }?.second
-                ?: return null
+            uri.pathSegments.zipWithNext().firstOrNull { it.first == "tree" }?.second ?: return null
         val treeId = Uri.decode(encodedTree)
         val parts = treeId.split(':', limit = 2)
         val volume = parts.firstOrNull() ?: return null
@@ -122,17 +129,7 @@ internal object MusicSourcePathNormalizer {
         if (clean.isBlank()) return false
         if (containsDotSegment(clean)) return false
         val protected =
-            listOf(
-                "/",
-                "/system",
-                "/vendor",
-                "/data",
-                "/proc",
-                "/sys",
-                "/dev",
-                "/acct",
-                "/config",
-            )
+            listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
         if (protected.any { clean == it }) return false
         if (
             clean.startsWith("/data/") ||
