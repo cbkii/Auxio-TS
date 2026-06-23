@@ -16,8 +16,8 @@
 # then remove the Groovy `ext`/inline versions and this drift guard.
 [versions]
 agp = "9.2.1"
-kotlin = "2.4.0"
-ksp = "2.3.9"
+kotlin = "2.3.10"
+ksp = "2.3.6"
 kotlinCoroutines = "1.11.0"
 navigation = "2.9.8"
 hilt = "2.59.2"

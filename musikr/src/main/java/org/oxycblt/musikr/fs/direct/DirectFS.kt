@@ -56,21 +56,22 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         depth: Int,
     ): Deferred<Result<Unit>> =
         tryAsync(Dispatchers.IO) {
-            require(depth <= MAX_DEPTH) {
-                "DirectFS traversal depth exceeded for ${directory.path}"
+            if (depth > MAX_DEPTH) {
+                return@tryAsync
             }
-            require(isAllowedRoot(directory)) {
-                "DirectFS rejected protected root ${directory.path}"
+            if (!isAllowedRoot(directory)) {
+                return@tryAsync
             }
             val directoryDeferred = CompletableDeferred<Directory>()
             val children = mutableListOf<File>()
             val recursive = mutableListOf<Deferred<Result<Unit>>>()
             val list = listFilesSafe(directory)
-            for (item in list) {
-                if (item.name.startsWith(".")) continue
-                if (java.nio.file.Files.isSymbolicLink(item.toPath())) continue
-                val newPath = relativePath.file(item.name)
-                if (item.isDirectory)
+            for (entry in list) {
+                if (entry.name.startsWith(".")) continue
+                if (entry.isSymlink) continue
+                val item = entry.javaFile
+                val newPath = relativePath.file(entry.name)
+                if (entry.isDirectory)
                     recursive.add(
                         exploreDirectoryImpl(item, newPath, directoryDeferred, files, depth + 1)
                     )
@@ -80,11 +81,11 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                             Uri.fromFile(item),
                             newPath,
                             object : AddedMs {
-                                override suspend fun resolve() = item.lastModified()
+                                override suspend fun resolve() = entry.modifiedMs
                             },
-                            item.lastModified(),
+                            entry.modifiedMs,
                             getMimeType(item),
-                            item.length(),
+                            entry.size,
                             directoryDeferred,
                         )
                     children.add(file)
@@ -97,17 +98,52 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             recursive.tryAwaitAll()
         }
 
-    private fun listFilesSafe(directory: JavaFile): List<JavaFile> {
+    private fun listFilesSafe(directory: JavaFile): List<DirectEntry> {
         val local = directory.listFiles()
-        if (local != null) return local.toList()
+        if (local != null) {
+            return local.map {
+                DirectEntry(
+                    javaFile = it,
+                    name = it.name,
+                    isDirectory = it.isDirectory,
+                    isSymlink = isSymbolicLinkCompat(it),
+                    modifiedMs = it.lastModified(),
+                    size = it.length(),
+                )
+            }
+        }
         val rootList =
-            rootGate?.runRootCommandSync("ls -1A ${shellQuote(directory.absolutePath)}")?.map {
-                JavaFile(directory, it)
+            rootGate?.runRootCommandSync(buildRootListCommand(directory.absolutePath))?.mapNotNull {
+                parseRootEntry(directory, it)
             }
         return rootList
             ?: throw IllegalStateException(
                 "DirectFS root is unavailable or inaccessible: ${directory.path}"
             )
+    }
+
+    private data class DirectEntry(
+        val javaFile: JavaFile,
+        val name: String,
+        val isDirectory: Boolean,
+        val isSymlink: Boolean,
+        val modifiedMs: Long,
+        val size: Long,
+    )
+
+    private fun parseRootEntry(parent: JavaFile, line: String): DirectEntry? {
+        val parts = line.split('\t', limit = 5)
+        if (parts.size != 5) return null
+        val name = parts[4]
+        if (name.isBlank() || name == "." || name == ".." || name.contains('/')) return null
+        return DirectEntry(
+            javaFile = JavaFile(parent, name),
+            name = name,
+            isDirectory = parts[0] == "d",
+            isSymlink = parts[1] == "l",
+            modifiedMs = (parts[2].toLongOrNull() ?: 0L) * 1000L,
+            size = parts[3].toLongOrNull() ?: 0L,
+        )
     }
 
     private fun getMimeType(file: JavaFile): String {
@@ -122,6 +158,26 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
 
         fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
+
+        fun buildRootListCommand(directory: String): String {
+            val quoted = shellQuote(directory)
+            return "for p in $quoted/* $quoted/.*; do " +
+                "[ -e \"\$p\" ] || continue; " +
+                "b=\${p##*/}; [ \"\$b\" = . ] && continue; [ \"\$b\" = .. ] && continue; " +
+                "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
+                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
+                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
+                "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
+                "done"
+        }
+
+        fun isSymbolicLinkCompat(file: JavaFile): Boolean {
+            return try {
+                file.canonicalFile != file.absoluteFile
+            } catch (_: Exception) {
+                true
+            }
+        }
 
         fun isAllowedRoot(file: JavaFile): Boolean {
             val canonical =
