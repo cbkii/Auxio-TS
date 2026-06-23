@@ -40,7 +40,7 @@ internal object MusicSourcePathNormalizer {
                     candidate.path?.takeIf { it.startsWith("/") }?.let { Uri.fromFile(File(it)) }
                 "content" -> externalStorageTreeToFileUri(candidate)
                 else -> null
-            }
+            }?.let(::repairAndCanonicalizeFileUri)
         val path = fileUri?.path ?: return null
         if (!isSafeDirectPath(path)) {
             L.w("Skipping unsafe DirectFS source: $candidate")
@@ -50,6 +50,30 @@ internal object MusicSourcePathNormalizer {
             L.i("Normalised DirectFS source $candidate -> $fileUri")
         }
         return fileUri.toString()
+    }
+
+    private fun repairAndCanonicalizeFileUri(uri: Uri): Uri? {
+        val repairedUri = repairDuplicatedStoragePath(uri) ?: uri
+        val rawPath = repairedUri.path ?: return null
+        if (containsDotSegment(rawPath)) {
+            L.w("Skipping DirectFS source with path traversal segment: $uri")
+            return null
+        }
+        val canonical =
+            try {
+                File(rawPath).canonicalFile
+            } catch (_: Exception) {
+                File(rawPath).absoluteFile
+            }
+        return Uri.fromFile(canonical)
+    }
+
+    private fun containsDotSegment(path: String): Boolean {
+        val clean = path.replace('\\', '/')
+        return clean.contains("/../") ||
+            clean.endsWith("/..") ||
+            clean.contains("/./") ||
+            clean.endsWith("/.")
     }
 
     fun repairDuplicatedStoragePath(uri: Uri): Uri? {
@@ -94,8 +118,9 @@ internal object MusicSourcePathNormalizer {
     }
 
     private fun isSafeDirectPath(path: String): Boolean {
-        val clean = path.trimEnd('/')
+        val clean = path.replace('\\', '/').trimEnd('/')
         if (clean.isBlank()) return false
+        if (containsDotSegment(clean)) return false
         val protected =
             listOf(
                 "/",

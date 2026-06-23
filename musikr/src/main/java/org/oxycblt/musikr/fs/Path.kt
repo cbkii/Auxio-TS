@@ -53,11 +53,13 @@ data class Path(val volume: Volume, val components: Components) {
      * @param context [Context] required to obtain human-readable strings.
      */
     fun resolve(context: Context): String {
+        val componentPath = components.unixString
         if (volume is Volume.ThirdParty && volume.uri.scheme == "file") {
             val filePath = volume.uri.path
-            if (!filePath.isNullOrBlank() && components.components.isEmpty()) return filePath
+            if (!filePath.isNullOrBlank()) {
+                return if (componentPath.isEmpty()) filePath else File(filePath, componentPath).path
+            }
         }
-        val componentPath = components.unixString
         if (componentPath.startsWith(File.separator)) return componentPath
         return if (componentPath.isEmpty()) {
             volume.resolveName(context)

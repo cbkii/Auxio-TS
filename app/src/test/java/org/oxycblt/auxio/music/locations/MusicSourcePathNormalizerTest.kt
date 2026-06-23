@@ -65,11 +65,32 @@ class MusicSourcePathNormalizerTest {
     }
 
     @Test
+    fun directFsRejectsDotSegmentTraversalBeforePrefixAllowList() {
+        assertNull(
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "file:///storage/../data",
+                true,
+            )
+        )
+    }
+
+    @Test
     fun duplicatedPersistedStoragePathIsRepairedWhenSafe() {
         assertEquals(
             "file:///storage/usbdisk0/Music",
             MusicSourcePathNormalizer.normalizePersistedLocation(
                 "file:///storage/usbdisk0/storage/usbdisk0/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun duplicatedContentTreePathIsRepairedAfterDirectFsConversion() {
+        assertEquals(
+            "file:///storage/emulated/0/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "content://com.android.externalstorage.documents/tree/primary%3Astorage%2Femulated%2F0%2FMusic",
                 true,
             ),
         )
