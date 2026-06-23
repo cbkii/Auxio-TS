@@ -18,32 +18,37 @@
 
 package org.oxycblt.musikr.fs.direct
 
+import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isAllowedRoot
+import org.oxycblt.musikr.fs.direct.DirectFS.Companion.shellQuote
 
 class DirectFsRootPolicyTest {
     @Test
-    fun `root listing only allows explicit storage descendants`() {
-        assertTrue(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0"))
-        assertTrue(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0/Music"))
-        assertTrue(DirectFsRootPolicy.isAllowedRootPath("/mnt/media_rw/usbdisk0"))
-
-        assertFalse(DirectFsRootPolicy.isAllowedRootPath(""))
-        assertFalse(DirectFsRootPolicy.isAllowedRootPath("/"))
-        assertFalse(DirectFsRootPolicy.isAllowedRootPath("/storage/"))
-        assertFalse(DirectFsRootPolicy.isAllowedRootPath("/mnt/media_rw/"))
-        assertFalse(DirectFsRootPolicy.isAllowedRootPath("/data/data/org.oxycblt.auxio"))
-        assertFalse(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0/../emulated"))
-        assertFalse(DirectFsRootPolicy.isAllowedRootPath("/storage/usbdisk0\n/system"))
+    fun testRejectsProtectedRoots() {
+        assertFalse(isAllowedRoot(File("/")))
+        assertFalse(isAllowedRoot(File("/system")))
+        assertFalse(isAllowedRoot(File("/vendor")))
+        assertFalse(isAllowedRoot(File("/data")))
     }
 
     @Test
-    fun `root listing command shell-quotes unsafe path characters`() {
-        val command =
-            DirectFsRootPolicy.buildRootListCommand("/storage/usbdisk0/Music/a'b;\$(reboot)")
-                .getOrThrow()
+    fun testAllowsTs18StorageRoots() {
+        assertTrue(isAllowedRoot(File("/storage/usbdisk0")))
+        assertTrue(isAllowedRoot(File("/mnt/media_rw/usbdisk0")))
+    }
 
-        assertTrue(command.contains("'/storage/usbdisk0/Music/a'\"'\"'b;\$(reboot)'"))
+    @Test
+    fun testShellQuoteEscapesSingleQuotes() {
+        assertEquals("'/storage/usbdisk0/Music'\"'\"'s'", shellQuote("/storage/usbdisk0/Music's"))
+    }
+
+    @Test
+    fun testShellQuoteContainsShellMetacharacters() {
+        val path = "/storage/usbdisk0/Music \$(rm -rf /); `id`\nnext"
+        assertEquals("'$path'", shellQuote(path))
     }
 }

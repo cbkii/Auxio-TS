@@ -21,48 +21,26 @@ package org.oxycblt.musikr.fs.direct
 import android.net.Uri
 import android.webkit.MimeTypeMap
 import java.io.File as JavaFile
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import org.oxycblt.musikr.fs.AddedMs
-import org.oxycblt.musikr.fs.Directory
-import org.oxycblt.musikr.fs.FS
-import org.oxycblt.musikr.fs.FSUpdate
-import org.oxycblt.musikr.fs.File
-import org.oxycblt.musikr.fs.Location
-import org.oxycblt.musikr.fs.Path
-import org.oxycblt.musikr.fs.RootGate
-import org.oxycblt.musikr.util.tryAsync
-import org.oxycblt.musikr.util.tryAsyncWith
-import org.oxycblt.musikr.util.tryAwaitAll
+import org.oxycblt.musikr.fs.*
+import org.oxycblt.musikr.util.*
 
-/**
- * A direct filesystem [FS] implementation that uses [java.io.File] and optionally [RootGate].
- *
- * This is used as the primary strategy for TS18 head units where SAF/MediaStore may be unreliable
- * or absent, but direct filesystem access (or root-assisted access) is available.
- */
 class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
     FS {
-
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
             roots
                 .map { location ->
-                    exploreDirectoryImpl(
-                        JavaFile(
-                            location.uri.path
-                                ?: return@map CompletableDeferred(Result.success(Unit))
-                        ),
-                        location.path,
-                        null,
-                        files,
-                    )
+                    val root =
+                        location.uri.path
+                            ?.takeIf { location.uri.scheme == "file" }
+                            ?.let(::JavaFile)
+                            ?.takeIf(::isAllowedRoot)
+                            ?: return@map CompletableDeferred(Result.success(Unit))
+                    exploreDirectoryImpl(root, location.path, null, files, 0)
                 }
                 .tryAwaitAll()
         }
@@ -75,34 +53,40 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         relativePath: Path,
         parent: Deferred<Directory>?,
         files: Channel<File>,
+        depth: Int,
     ): Deferred<Result<Unit>> =
         tryAsync(Dispatchers.IO) {
+            if (depth > MAX_DEPTH) {
+                return@tryAsync
+            }
+            if (!isAllowedRoot(directory)) {
+                return@tryAsync
+            }
             val directoryDeferred = CompletableDeferred<Directory>()
             val children = mutableListOf<File>()
             val recursive = mutableListOf<Deferred<Result<Unit>>>()
-
-            val list = listFilesSafe(directory).getOrElse { throw it }
-            for (item in list) {
-                if (item.name.startsWith(".")) continue
-
-                val newPath = relativePath.file(item.name)
-                if (item.isDirectory) {
+            val list = listFilesSafe(directory)
+            for (entry in list) {
+                if (entry.name.startsWith(".")) continue
+                if (entry.isSymlink) continue
+                val item = entry.javaFile
+                val newPath = relativePath.file(entry.name)
+                if (entry.isDirectory)
                     recursive.add(
-                        exploreDirectoryImpl(item.javaFile, newPath, directoryDeferred, files)
+                        exploreDirectoryImpl(item, newPath, directoryDeferred, files, depth + 1)
                     )
-                } else {
+                else {
                     val file =
                         File(
-                            uri = Uri.fromFile(item.javaFile),
-                            path = newPath,
-                            addedMs =
-                                ConstantAddedMs(
-                                    item.modifiedMs
-                                ), // Inexact, but best available for direct FS
-                            modifiedMs = item.modifiedMs,
-                            mimeType = getMimeType(item.javaFile),
-                            size = item.size,
-                            parent = directoryDeferred,
+                            Uri.fromFile(item),
+                            newPath,
+                            object : AddedMs {
+                                override suspend fun resolve() = entry.modifiedMs
+                            },
+                            entry.modifiedMs,
+                            getMimeType(item),
+                            entry.size,
+                            directoryDeferred,
                         )
                     children.add(file)
                     files.send(file)
@@ -114,116 +98,106 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             recursive.tryAwaitAll()
         }
 
-    private fun listFilesSafe(directory: JavaFile): Result<List<DirectEntry>> {
-        val normal =
-            try {
-                directory.listFiles()?.toList()
-            } catch (e: Exception) {
-                null
-            }
-        if (normal != null) {
-            return Result.success(
-                normal.map {
-                    DirectEntry(
-                        javaFile = it,
-                        name = it.name,
-                        isDirectory = it.isDirectory,
-                        size = it.length(),
-                        modifiedMs = it.lastModified(),
-                    )
-                }
-            )
-        }
-
-        if (rootGate == null) {
-            return Result.failure(
-                SecurityException("DirectFS cannot list ${directory.absolutePath}")
-            )
-        }
-
-        val command =
-            DirectFsRootPolicy.buildRootListCommand(directory.absolutePath).getOrElse {
-                return Result.failure(it)
-            }
-        val lines =
-            rootGate.runRootCommandSync(command, ROOT_LIST_TIMEOUT_MS)
-                ?: return Result.failure(
-                    SecurityException(
-                        "Root-assisted DirectFS listing failed for ${directory.absolutePath}"
-                    )
+    private fun listFilesSafe(directory: JavaFile): List<DirectEntry> {
+        val local = directory.listFiles()
+        if (local != null) {
+            return local.map {
+                DirectEntry(
+                    javaFile = it,
+                    name = it.name,
+                    isDirectory = it.isDirectory,
+                    isSymlink = isSymbolicLinkCompat(it),
+                    modifiedMs = it.lastModified(),
+                    size = it.length(),
                 )
-        return Result.success(lines.mapNotNull { parseRootEntry(directory, it) })
-    }
-
-    private fun parseRootEntry(parent: JavaFile, line: String): DirectEntry? {
-        val parts = line.split('\t', limit = 4)
-        if (parts.size != 4) return null
-        val name = parts[3]
-        if (name.isBlank() || name == "." || name == ".." || name.contains('/')) return null
-        return DirectEntry(
-            javaFile = JavaFile(parent, name),
-            name = name,
-            isDirectory = parts[0] == "d",
-            size = parts[1].toLongOrNull() ?: 0L,
-            modifiedMs = (parts[2].toLongOrNull() ?: 0L) * 1000L,
-        )
-    }
-
-    private fun getMimeType(file: JavaFile): String {
-        val extension = file.extension.lowercase()
-        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
-            ?: "application/octet-stream"
-    }
-
-    private class ConstantAddedMs(private val time: Long) : AddedMs {
-        override suspend fun resolve(): Long = time
+            }
+        }
+        val rootList =
+            rootGate?.runRootCommandSync(buildRootListCommand(directory.absolutePath))?.mapNotNull {
+                parseRootEntry(directory, it)
+            }
+        return rootList
+            ?: throw IllegalStateException(
+                "DirectFS root is unavailable or inaccessible: ${directory.path}"
+            )
     }
 
     private data class DirectEntry(
         val javaFile: JavaFile,
         val name: String,
         val isDirectory: Boolean,
-        val size: Long,
+        val isSymlink: Boolean,
         val modifiedMs: Long,
+        val size: Long,
     )
 
-    private companion object {
-        const val ROOT_LIST_TIMEOUT_MS = 1500L
-    }
-}
-
-internal object DirectFsRootPolicy {
-    fun buildRootListCommand(path: String): Result<String> {
-        if (!isAllowedRootPath(path)) {
-            return Result.failure(SecurityException("Rejected unsafe DirectFS root path: $path"))
-        }
-        val quoted = shellQuote(path)
-        return Result.success(
-            "for p in $quoted/* $quoted/.[!.]* $quoted/..?*; do " +
-                "[ -e \"\$p\" ] || continue; " +
-                "if [ -d \"\$p\" ]; then t=d; else t=f; fi; " +
-                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
-                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
-                "printf '%s\\t%s\\t%s\\t%s\\n' \"\$t\" \"\$s\" \"\$m\" \"\${p##*/}\"; " +
-                "done"
+    private fun parseRootEntry(parent: JavaFile, line: String): DirectEntry? {
+        val parts = line.split('\t', limit = 5)
+        if (parts.size != 5) return null
+        val name = parts[4]
+        if (name.isBlank() || name == "." || name == ".." || name.contains('/')) return null
+        return DirectEntry(
+            javaFile = JavaFile(parent, name),
+            name = name,
+            isDirectory = parts[0] == "d",
+            isSymlink = parts[1] == "l",
+            modifiedMs = (parts[2].toLongOrNull() ?: 0L) * 1000L,
+            size = parts[3].toLongOrNull() ?: 0L,
         )
     }
 
-    fun isAllowedRootPath(path: String): Boolean =
-        (path.startsWith("/storage/") || path.startsWith("/mnt/media_rw/")) &&
-            path != "/storage/" &&
-            path != "/storage/." &&
-            path != "/storage/.." &&
-            path != "/mnt/media_rw/" &&
-            path != "/mnt/media_rw/." &&
-            path != "/mnt/media_rw/.." &&
-            !path.contains('\n') &&
-            !path.contains("/../") &&
-            !path.endsWith("/..")
+    private fun getMimeType(file: JavaFile): String {
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
+            ?: "application/octet-stream"
+    }
 
-    fun shellQuote(value: String): String = buildString {
-        append('\'')
-        append(value.replace("'", "'\"'\"'"))
-        append('\'')
+    internal companion object {
+        private const val MAX_DEPTH = 32
+
+        private val protectedRoots =
+            listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
+
+        fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
+
+        fun buildRootListCommand(directory: String): String {
+            val quoted = shellQuote(directory)
+            return "for p in $quoted/* $quoted/.*; do " +
+                "[ -e \"\$p\" ] || continue; " +
+                "b=\${p##*/}; [ \"\$b\" = . ] && continue; [ \"\$b\" = .. ] && continue; " +
+                "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
+                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
+                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
+                "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
+                "done"
+        }
+
+        fun isSymbolicLinkCompat(file: JavaFile): Boolean {
+            return try {
+                val stat = android.system.Os.lstat(file.absolutePath)
+                android.system.OsConstants.S_ISLNK(stat.st_mode)
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        fun isAllowedRoot(file: JavaFile): Boolean {
+            val canonical =
+                try {
+                    file.canonicalFile
+                } catch (_: Exception) {
+                    return false
+                }
+            val path = canonical.path.trimEnd('/')
+            if (path.isBlank()) return false
+            if (protectedRoots.any { path == it.trimEnd('/') }) return false
+            if (
+                path.startsWith("/data/") ||
+                    path.startsWith("/system/") ||
+                    path.startsWith("/vendor/")
+            ) {
+                return false
+            }
+            return path.startsWith("/storage/") || path.startsWith("/mnt/media_rw/")
+        }
     }
 }

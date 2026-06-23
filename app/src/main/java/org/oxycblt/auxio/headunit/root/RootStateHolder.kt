@@ -18,19 +18,13 @@
 
 package org.oxycblt.auxio.headunit.root
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.musikr.fs.RootGate
-import timber.log.Timber as L
 
-/** Global gate for root/superuser state on TS18 variants. */
 @Singleton
 class RootStateHolder @Inject constructor() : RootGate {
-
     enum class State {
         Unknown,
         Available,
@@ -45,111 +39,108 @@ class RootStateHolder @Inject constructor() : RootGate {
         private set
 
     init {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            state = State.UnsupportedForVariant
-        }
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) state = State.UnsupportedForVariant
     }
 
-    /**
-     * Performs a one-time root probe if the state is currently Unknown. This should be called off
-     * the main thread.
-     */
     @Synchronized
     fun probeSync(): State {
-        if (state != State.Unknown) return state
-
+        // Timeouts are intentionally retryable: TS18 su prompts can be transient, and a
+        // process-wide permanent timeout would disable root-assisted DirectFS until restart.
+        if (state != State.Unknown && state != State.TimedOut) return state
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant
             return state
         }
-
-        L.d("Probing root capability...")
-        val result = runRootCommandInternalSync("id", timeoutMs = ROOT_PROBE_TIMEOUT_MS)
-
-        state =
-            when {
-                result == null -> State.TimedOut
-                result.exitCode == 0 && result.stdout.contains("uid=0") -> State.Available
-                result.exitCode == 1 ||
-                    result.stderr.contains("denied", ignoreCase = true) ||
-                    result.stderr.contains("permission", ignoreCase = true) -> State.Denied
-                else -> State.Unavailable
+        val process =
+            try {
+                Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+            } catch (e: Exception) {
+                state = State.Unavailable
+                return state
             }
-
-        L.i("Root probe completed: $state")
+        try {
+            val finished = process.waitForCompat(2000)
+            if (!finished) {
+                process.destroyCompat()
+                state = State.TimedOut
+            } else {
+                val stdout = process.inputStream.bufferedReader().use { it.readText() }
+                state =
+                    if (process.exitValue() == 0 && stdout.contains("uid=0")) State.Available
+                    else State.Denied
+            }
+        } finally {
+            process.inputStream.closeQuietly()
+            process.errorStream.closeQuietly()
+            process.outputStream.closeQuietly()
+        }
         return state
     }
 
-    /** Resets the root gate, allowing a new probe to be performed. */
-    fun reset() {
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            state = State.Unknown
-        }
-    }
-
-    /** Helper to run a command via su with a timeout. */
-    fun runRootCommandRawSync(
-        command: String,
-        timeoutMs: Long = ROOT_COMMAND_TIMEOUT_MS,
-    ): CommandResult? {
-        if (
-            state == State.UnsupportedForVariant ||
-                state == State.Denied ||
-                state == State.Unavailable ||
-                state == State.TimedOut
-        ) {
-            return null
-        }
-
-        if (state == State.Unknown) {
-            probeSync()
-        }
-
-        if (state != State.Available) {
-            return null
-        }
-        return runRootCommandInternalSync(command, timeoutMs)
-    }
-
-    private fun runRootCommandInternalSync(command: String, timeoutMs: Long): CommandResult? =
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf(SU_BINARY, "-c", command))
-            val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-
-            if (!finished) {
-                L.w("Root command timed out after ${timeoutMs}ms")
-                process.destroyForcibly()
-                return null
+    @Synchronized
+    override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
+        if (state == State.Unknown || state == State.TimedOut) probeSync()
+        if (state != State.Available) return null
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
+            try {
+                if (!process.waitForCompat(timeoutMs)) {
+                    process.destroyCompat()
+                    null
+                } else {
+                    if (process.exitValue() != 0) null
+                    else
+                        process.inputStream.bufferedReader().use { reader ->
+                            reader.readLines().filter { it.isNotBlank() }
+                        }
+                }
+            } finally {
+                process.inputStream.closeQuietly()
+                process.errorStream.closeQuietly()
+                process.outputStream.closeQuietly()
             }
-
-            val exitCode = process.exitValue()
-            val stdout = BufferedReader(InputStreamReader(process.inputStream)).readText()
-            val stderr = BufferedReader(InputStreamReader(process.errorStream)).readText()
-
-            CommandResult(exitCode, stdout, stderr)
         } catch (e: Exception) {
-            L.e(e, "Failed to run root command")
             null
         }
-
-    /** Implementation of [RootGate.runRootCommandSync] for use within the musikr library. */
-    override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
-        val result = runRootCommandRawSync(command, timeoutMs)
-        if (result == null || result.exitCode != 0) return null
-        return result.stdout.lines().filter { it.isNotBlank() }
     }
 
-    data class CommandResult(val exitCode: Int, val stdout: String, val stderr: String)
+    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
+        val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
+        while (true) {
+            try {
+                exitValue()
+                return true
+            } catch (_: IllegalThreadStateException) {}
 
-    companion object {
-        const val ROOT_PROBE_TIMEOUT_MS = 2000L
-        const val ROOT_COMMAND_TIMEOUT_MS = 5000L
-        private const val SU_BINARY = "su"
+            if (System.nanoTime() >= deadlineNanos) return false
 
-        fun shellQuote(value: String): String = buildString {
-            append('\'')
-            append(value.replace("'", "'\"'\"'"))
-            append('\'')
+            try {
+                val remainingMs =
+                    ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+                Thread.sleep(minOf(remainingMs, 25L))
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
         }
     }
+
+    private fun Process.destroyCompat() {
+        destroy()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            destroyForcibly()
+        }
+    }
+
+    private fun java.io.Closeable.closeQuietly() {
+        try {
+            close()
+        } catch (_: Exception) {}
+    }
+}
+
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface RootEntryPoint {
+    fun rootGate(): RootStateHolder
 }

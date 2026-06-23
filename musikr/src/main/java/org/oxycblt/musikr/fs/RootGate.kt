@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Auxio Project
+ * Copyright (c) 2026 Auxio Project
  * RootGate.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,19 +18,6 @@
 
 package org.oxycblt.musikr.fs
 
-/**
- * An interface for executing commands with root privileges.
- *
- * Used primarily for filesystem exploration on rooted head units where standard SAF or MediaStore
- * access is restricted or unreliable.
- */
 interface RootGate {
-    /**
-     * Executes a command with root privileges and returns the output lines.
-     *
-     * @param command The shell command to run.
-     * @param timeoutMs Maximum time to wait for the command to complete.
-     * @return List of output lines if successful, null if failed, denied, or timed out.
-     */
     fun runRootCommandSync(command: String, timeoutMs: Long = 5000): List<String>?
 }

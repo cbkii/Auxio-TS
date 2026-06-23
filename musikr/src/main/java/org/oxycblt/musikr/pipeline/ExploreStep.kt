@@ -55,7 +55,7 @@ private class ExploreStepImpl(
     private val storage: Storage,
     private val noisyDirs: Set<String>,
     private val pathKeywords: List<String>,
-    private val rootGate: RootGate?,
+    rootGate: RootGate?,
 ) : ExploreStep {
     override suspend fun explore(
         scope: CoroutineScope,

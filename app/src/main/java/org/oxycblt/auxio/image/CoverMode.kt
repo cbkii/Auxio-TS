@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Auxio Project
+ * Copyright (c) 2026 Auxio Project
  * CoverMode.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -26,11 +26,6 @@ enum class CoverMode {
     OPTIMISED,
     AS_IS;
 
-    /**
-     * The integer representation of this instance.
-     *
-     * @see fromIntCode
-     */
     val intCode: Int
         get() =
             when (this) {
@@ -40,19 +35,10 @@ enum class CoverMode {
             }
 
     companion object {
-        /**
-         * Convert a [CoverMode] integer representation into an instance.
-         *
-         * @param intCode An integer representation of a [CoverMode]
-         * @return The corresponding [CoverMode], or null if the [CoverMode] is invalid.
-         * @see CoverMode.intCode
-         */
         fun fromIntCode(intCode: Int) =
             when (intCode) {
                 IntegerTable.COVER_MODE_OFF -> OFF
-                IntegerTable.COVER_MODE_BALANCED,
-                IntegerTable.COVER_MODE_SAVE_SPACE,
-                IntegerTable.COVER_MODE_HIGH_QUALITY -> OPTIMISED
+                IntegerTable.COVER_MODE_BALANCED -> OPTIMISED
                 IntegerTable.COVER_MODE_AS_IS -> AS_IS
                 else -> null
             }
