@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Auxio Project
+ * Copyright (c) 2023 Auxio Project
  * MusicRepository.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
@@ -20,8 +20,10 @@ package org.oxycblt.auxio.music
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -30,10 +32,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.image.covers.SettingCovers
+import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
 import org.oxycblt.auxio.music.locations.LocationMode
-import org.oxycblt.auxio.music.playlist.StoredPlaylists
+import org.oxycblt.auxio.music.shim.WriteOnlyMutableCache
 import org.oxycblt.musikr.Config
 import org.oxycblt.musikr.IndexingProgress
 import org.oxycblt.musikr.Interpretation
@@ -41,186 +46,197 @@ import org.oxycblt.musikr.Library
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Musikr
 import org.oxycblt.musikr.MutableLibrary
+import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.MutableCache
-import org.oxycblt.musikr.cache.WriteOnlyMutableCache
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
+import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
-import org.oxycblt.musikr.interpretation.Naming
-import org.oxycblt.musikr.interpretation.Separators
-import org.oxycblt.musikr.playlist.Playlist
+import org.oxycblt.musikr.playlist.db.StoredPlaylists
+import org.oxycblt.musikr.tag.interpret.Naming
+import org.oxycblt.musikr.tag.interpret.Separators
 import timber.log.Timber as L
 
 /**
- * A central repository for accessing and managing the music library.
+ * Primary manager of music information and loading.
+ *
+ * Music information is loaded in-memory by this repository using an [IndexingWorker]. Changes in
+ * music (loading) can be reacted to with [UpdateListener] and [IndexingListener].
  *
  * @author Alexander Capehart (OxygenCobalt)
+ *
+ * TODO: Switch listeners to set when you can confirm there are no order-dependent listener
+ *   configurations
  */
 interface MusicRepository {
-    /** The currently loaded [Library], or null if it hasn't been loaded yet. */
+    /** The current library */
     val library: Library?
 
-    /** The current [IndexingState] of the library, or null if it's not being indexed. */
+    /** The current state of music loading. Null if no load has occurred yet. */
     val indexingState: IndexingState?
 
     /**
-     * Add a listener to be notified when the library is updated.
+     * Add an [UpdateListener] to receive updates from this instance.
      *
-     * @param listener The listener to add.
+     * @param listener The [UpdateListener] to add.
      */
     fun addUpdateListener(listener: UpdateListener)
 
     /**
-     * Remove a listener from being notified when the library is updated.
+     * Remove an [UpdateListener] such that it does not receive any further updates from this
+     * instance.
      *
-     * @param listener The listener to remove.
+     * @param listener The [UpdateListener] to remove.
      */
     fun removeUpdateListener(listener: UpdateListener)
 
     /**
-     * Add a listener to be notified when the indexing state changes.
+     * Add an [IndexingListener] to receive updates from this instance.
      *
-     * @param listener The listener to add.
+     * @param listener The [UpdateListener] to add.
      */
     fun addIndexingListener(listener: IndexingListener)
 
     /**
-     * Remove a listener from being notified when the indexing state changes.
+     * Remove an [IndexingListener] such that it does not receive any further updates from this
+     * instance.
      *
-     * @param listener The listener to remove.
+     * @param listener The [IndexingListener] to remove.
      */
     fun removeIndexingListener(listener: IndexingListener)
 
     /**
-     * Start the music repository. This will load the library from cache and start an index if
-     * necessary.
-     */
-    suspend fun startup(worker: IndexingWorker)
-
-    /**
-     * Request an index of the library.
+     * Synchronously returns the [Music] item with the given [Music.UID].
      *
-     * @param worker The worker to use for indexing.
-     * @param withCache Whether to use the cache for indexing.
-     */
-    suspend fun index(worker: IndexingWorker, withCache: Boolean)
-
-    /**
-     * Register an [IndexingWorker] to be used for indexing the library.
-     *
-     * @param worker The worker to register.
-     */
-    fun registerWorker(worker: IndexingWorker)
-
-    /**
-     * Unregister an [IndexingWorker].
-     *
-     * @param worker The worker to unregister.
-     */
-    fun unregisterWorker(worker: IndexingWorker)
-
-    /**
-     * Generically search for the [Music] associated with the given [Music.UID]. Note that this
-     * method is much slower that type-specific find implementations, so this should only be used if
-     * the type of music being searched for is entirely unknown.
-     *
-     * @param uid The [Music.UID] to search for.
-     * @return The expected [Music] information, or null if it could not be found.
+     * @param uid The [Music.UID] to find.
+     * @return The [Music] item with the given [Music.UID], or null if it does not exist.
      */
     fun find(uid: Music.UID): Music?
 
     /**
-     * Create a new [Playlist] of the given [Song]s.
+     * Create a new playlist in the music library.
      *
-     * @param name The name of the new [Playlist].
-     * @param songs The songs to populate the new [Playlist] with.
+     * @param name The name of the playlist to create.
+     * @param songs The songs to add to the playlist.
      */
     suspend fun createPlaylist(name: String, songs: List<Song>)
 
     /**
-     * Rename a [Playlist].
+     * Rename the given [Playlist] to the new name.
      *
      * @param playlist The [Playlist] to rename.
-     * @param name The name of the new [Playlist].
+     * @param name The new name of the playlist.
      */
     suspend fun renamePlaylist(playlist: Playlist, name: String)
 
     /**
-     * Delete a [Playlist].
+     * Add songs to the given [Playlist].
+     *
+     * @param songs The [Song]s to add.
+     * @param playlist The [Playlist] to mutate.
+     */
+    suspend fun addToPlaylist(songs: List<Song>, playlist: Playlist)
+
+    /**
+     * Replace the songs in the given [Playlist].
+     *
+     * @param playlist The [Playlist] to mutate.
+     * @param songs The replacement [Song] list.
+     */
+    suspend fun rewritePlaylist(playlist: Playlist, songs: List<Song>)
+
+    /**
+     * Delete the given [Playlist] from the music library.
      *
      * @param playlist The [Playlist] to delete.
      */
     suspend fun deletePlaylist(playlist: Playlist)
 
     /**
-     * Add [Song]s to a [Playlist].
+     * Register an [IndexingWorker] to this instance. Only one worker can be registered at a time.
      *
-     * @param playlist The [Playlist] to add songs to.
-     * @param songs The songs to add.
+     * @param worker The [IndexingWorker] to register.
      */
-    suspend fun addToPlaylist(playlist: Playlist, songs: List<Song>)
+    fun registerWorker(worker: IndexingWorker)
 
     /**
-     * Remove a [Song] from a [Playlist].
+     * Unregister an [IndexingWorker] from this instance.
      *
-     * @param playlist The [Playlist] to remove the song from.
-     * @param index The index of the song to remove.
+     * @param worker The [IndexingWorker] to unregister.
      */
-    suspend fun removeFromPlaylist(playlist: Playlist, index: Int)
+    fun unregisterWorker(worker: IndexingWorker)
 
     /**
-     * Move a [Song] within a [Playlist].
+     * Request that the library be indexed. This will trigger a call to
+     * [IndexingWorker.requestIndex] on the registered worker.
      *
-     * @param playlist The [Playlist] to move the song within.
-     * @param from The current index of the song.
-     * @param to The new index of the song.
+     * @param withCache Whether to use the file-system cache for improved loading times.
      */
-    suspend fun moveInPlaylist(playlist: Playlist, from: Int, to: Int)
+    fun requestIndex(withCache: Boolean)
 
-    /** A listener for when the library is updated. */
+    /**
+     * Start the music system. This should be called by the application at startup.
+     *
+     * @param worker The [IndexingWorker] to use for initial loading.
+     */
+    suspend fun startup(worker: IndexingWorker)
+
+    /**
+     * Re-index the music library. This will trigger a call to [IndexingWorker.requestIndex] on the
+     * registered worker.
+     *
+     * @param worker The [IndexingWorker] requesting the index.
+     * @param withCache Whether to use the file-system cache for improved loading times.
+     */
+    suspend fun index(worker: IndexingWorker, withCache: Boolean)
+
+    /** Data regarding the current changes in the music library. */
+    data class Changes(val deviceLibrary: Boolean, val userLibrary: Boolean)
+
+    /** Listener for changes in the music library. */
     interface UpdateListener {
         /**
-         * Called when the library is updated.
+         * Called when the music library has changed.
          *
-         * @param changes Information about what changed in the library.
+         * @param changes Information regarding what parts of the library have changed.
          */
         fun onMusicChanges(changes: Changes)
     }
 
-    /** A listener for when the indexing state changes. */
+    /** Listener for changes in the indexing state. */
     interface IndexingListener {
-        /** Called when the indexing state changes. */
+        /** Called when the [indexingState] has changed. */
         fun onIndexingStateChanged()
     }
 
-    /** A worker for indexing the library. */
+    /** A worker that performs library indexing and tag extraction. */
     interface IndexingWorker {
         /**
-         * Request an index of the library.
+         * Request that the library be indexed.
          *
-         * @param withCache Whether to use the cache for indexing.
+         * @param withCache Whether to use the file-system cache for improved loading times.
          */
         fun requestIndex(withCache: Boolean)
     }
-
-    /**
-     * Information about what changed in the library.
-     *
-     * @param deviceLibrary Whether the device-local music library changed.
-     * @param userLibrary Whether the user-created music library (playlists) changed.
-     */
-    data class Changes(val deviceLibrary: Boolean, val userLibrary: Boolean)
 }
 
-/** Represents the current state of indexing the library. */
+/** The current state of music loading. */
 sealed interface IndexingState {
-    /** Currently indexing the library. */
+    /**
+     * Currently indexing and extracting tags from device music.
+     *
+     * @param progress The current progress of the music pipeline.
+     */
     data class Indexing(val progress: IndexingProgress) : IndexingState
 
-    /** Indexing has completed. */
+    /**
+     * Music loading has completed.
+     *
+     * @param error If an error occurred during loading, it will be contained here.
+     */
     data class Completed(val error: Exception?) : IndexingState
 }
 
@@ -232,7 +248,7 @@ constructor(
     private val storedPlaylists: StoredPlaylists,
     private val settingCovers: SettingCovers,
     private val musicSettings: MusicSettings,
-    private val rootGate: org.oxycblt.auxio.headunit.root.RootStateHolder,
+    private val rootGate: RootStateHolder,
 ) : MusicRepository {
     private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
     private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
@@ -245,132 +261,144 @@ constructor(
         get() = currentIndexingState ?: previousCompletedState
 
     override fun addUpdateListener(listener: MusicRepository.UpdateListener) {
+        L.d("Adding $listener to update listeners")
         updateListeners.add(listener)
+        listener.onMusicChanges(MusicRepository.Changes(deviceLibrary = true, userLibrary = true))
     }
 
     override fun removeUpdateListener(listener: MusicRepository.UpdateListener) {
-        updateListeners.remove(listener)
+        L.d("Removing $listener to update listeners")
+        if (!updateListeners.remove(listener)) {
+            L.w("Update listener $listener was not added prior, cannot remove")
+        }
     }
 
     override fun addIndexingListener(listener: MusicRepository.IndexingListener) {
+        L.d("Adding $listener to indexing listeners")
         indexingListeners.add(listener)
+        listener.onIndexingStateChanged()
     }
 
     override fun removeIndexingListener(listener: MusicRepository.IndexingListener) {
-        indexingListeners.remove(listener)
+        L.d("Removing $listener from indexing listeners")
+        if (!indexingListeners.remove(listener)) {
+            L.w("Indexing listener $listener was not added prior, cannot remove")
+        }
     }
 
-    override fun registerWorker(worker: MusicRepository.IndexingWorker) {
+    @Synchronized
+    override fun registerWorker(worker: IndexingWorker) {
+        if (indexingWorker != null) {
+            L.w("Worker is already registered")
+            return
+        }
+        L.d("Registering worker $worker")
         indexingWorker = worker
     }
 
-    override fun unregisterWorker(worker: MusicRepository.IndexingWorker) {
-        if (indexingWorker == worker) {
-            indexingWorker = null
-        }
-    }
-
-    override suspend fun startup(worker: MusicRepository.IndexingWorker) {
-        if (library != null) {
+    @Synchronized
+    override fun unregisterWorker(worker: IndexingWorker) {
+        if (indexingWorker !== worker) {
+            L.w("Given worker did not match current worker")
             return
         }
-
-        L.i("Starting up MusicRepository")
-        library = loadCachedLibrary()
-        dispatchLibraryChange(device = true, user = true)
-
-        if (musicSettings.shouldBeIndexing) {
-            index(worker, withCache = true)
-        }
+        L.d("Unregistering worker $worker")
+        indexingWorker = null
+        currentIndexingState = null
     }
 
-    override fun find(uid: Music.UID): Music? = library?.find(uid)
+    @Synchronized
+    override fun find(uid: Music.UID) =
+        (library?.run {
+            findSong(uid)
+                ?: findAlbum(uid)
+                ?: findArtist(uid)
+                ?: findGenre(uid)
+                ?: findPlaylist(uid)
+        })
 
     override suspend fun createPlaylist(name: String, songs: List<Song>) {
-        storedPlaylists.create(name, songs)
-        library?.let { lib ->
-            L.d("Playlist created, refreshing library")
-            val playlists = storedPlaylists.read()
-            lib.updatePlaylists(playlists)
-            dispatchLibraryChange(device = false, user = true)
-        }
+        val library = synchronized(this) { library ?: return }
+        L.d("Creating playlist $name with ${songs.size} songs")
+        val newLibrary = library.createPlaylist(name, songs)
+        synchronized(this) { this.library = newLibrary }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
     override suspend fun renamePlaylist(playlist: Playlist, name: String) {
-        storedPlaylists.rename(playlist.uid, name)
-        library?.let { lib ->
-            L.d("Playlist renamed, refreshing library")
-            val playlists = storedPlaylists.read()
-            lib.updatePlaylists(playlists)
-            dispatchLibraryChange(device = false, user = true)
-        }
+        val library = synchronized(this) { library ?: return }
+        L.d("Renaming $playlist to $name")
+        val newLibrary = library.renamePlaylist(playlist, name)
+        synchronized(this) { this.library = newLibrary }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
+    }
+
+    override suspend fun addToPlaylist(songs: List<Song>, playlist: Playlist) {
+        val library = synchronized(this) { library ?: return }
+        L.d("Adding ${songs.size} song(s) to $playlist")
+        val newLibrary = library.addToPlaylist(playlist, songs)
+        synchronized(this) { this.library = newLibrary }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
+    }
+
+    override suspend fun rewritePlaylist(playlist: Playlist, songs: List<Song>) {
+        val library = synchronized(this) { library ?: return }
+        L.d("Rewriting $playlist with ${songs.size} song(s)")
+        val newLibrary = library.rewritePlaylist(playlist, songs)
+        synchronized(this) { this.library = newLibrary }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
     override suspend fun deletePlaylist(playlist: Playlist) {
-        storedPlaylists.delete(playlist.uid)
-        library?.let { lib ->
-            L.d("Playlist deleted, refreshing library")
-            val playlists = storedPlaylists.read()
-            lib.updatePlaylists(playlists)
-            dispatchLibraryChange(device = false, user = true)
-        }
+        val library = synchronized(this) { library ?: return }
+        L.d("Deleting $playlist")
+        val newLibrary = library.deletePlaylist(playlist)
+        synchronized(this) { this.library = newLibrary }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
-    override suspend fun addToPlaylist(playlist: Playlist, songs: List<Song>) {
-        storedPlaylists.add(playlist.uid, songs)
-        library?.let { lib ->
-            L.d("Songs added to playlist, refreshing library")
-            val playlists = storedPlaylists.read()
-            lib.updatePlaylists(playlists)
-            dispatchLibraryChange(device = false, user = true)
-        }
+    override fun requestIndex(withCache: Boolean) {
+        indexingWorker?.requestIndex(withCache)
     }
 
-    override suspend fun removeFromPlaylist(playlist: Playlist, index: Int) {
-        storedPlaylists.remove(playlist.uid, index)
-        library?.let { lib ->
-            L.d("Song removed from playlist, refreshing library")
-            val playlists = storedPlaylists.read()
-            lib.updatePlaylists(playlists)
-            dispatchLibraryChange(device = false, user = true)
-        }
+    override suspend fun startup(worker: IndexingWorker) {
+        val start = System.currentTimeMillis()
+        L.i("Music system starting...")
+
+        val decision =
+            StartupLibraryStartup.run(
+                hasInMemoryLibrary = synchronized(this) { library != null },
+                revisionKnown = musicSettings.revision != null,
+                priorState = musicSettings.libraryState,
+                lastScanFailed = { musicSettings.lastScanFailed },
+                loadCachedLibrary = { loadCachedLibrary() },
+                cachedSongCount = { it.songs.size },
+                emitCachedLibrary = {
+                    synchronized(this) { this.library = it }
+                    withContext(Dispatchers.Main) {
+                        dispatchLibraryChange(device = true, user = true)
+                    }
+                },
+                emitCachedLoadFailure = { L.w(it, "Cached library load failed during startup") },
+                setLibraryState = { musicSettings.libraryState = it },
+                requestIndex = { withCache -> worker.requestIndex(withCache) },
+            )
+        L.d(
+            "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
+                "[state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
+        )
     }
 
-    override suspend fun removeFromPlaylist(playlist: Playlist, songs: List<Song>) {
-        storedPlaylists.remove(playlist.uid, songs)
-        library?.let { lib ->
-            L.d("Songs removed from playlist, refreshing library")
-            val playlists = storedPlaylists.read()
-            lib.updatePlaylists(playlists)
-            dispatchLibraryChange(device = false, user = true)
-        }
-    }
-
-    override suspend fun moveInPlaylist(playlist: Playlist, from: Int, to: Int) {
-        storedPlaylists.move(playlist.uid, from, to)
-        library?.let { lib ->
-            L.d("Song moved in playlist, refreshing library")
-            val playlists = storedPlaylists.read()
-            lib.updatePlaylists(playlists)
-            dispatchLibraryChange(device = false, user = true)
-        }
-    }
-
-    override suspend fun index(worker: MusicRepository.IndexingWorker, withCache: Boolean) {
-        if (currentIndexingState != null) {
-            L.d("Ignoring indexing request: already indexing")
+    override suspend fun index(worker: IndexingWorker, withCache: Boolean) {
+        yield()
+        if (indexingWorker !== worker) {
+            L.w("Index requested from unregistered worker; ignoring")
             return
         }
 
-        if (org.oxycblt.auxio.BuildConfig.DEBUG) {
-            val twStorageSwitch =
-                try {
-                    val systemProperties = Class.forName("android.os.SystemProperties")
-                    val get = systemProperties.getMethod("get", String::class.java)
-                    get.invoke(null, "persist.tw.storage.switch") as? String
-                } catch (e: Exception) {
-                    null
-                }
+        // TS18 Health Diagnostics: Log persistent storage switch value during scan
+        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            val twStorageSwitch = readTwStorageSwitch()
             if (!twStorageSwitch.isNullOrEmpty()) {
                 L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
             }
@@ -408,15 +436,20 @@ constructor(
         val pathKeywords =
             if (
                 musicSettings.ts18SystemSourceFilter &&
-                    (musicSettings.locationMode == LocationMode.SAF ||
-                        musicSettings.locationMode == LocationMode.DIRECT_FS)
+                    musicSettings.locationMode == LocationMode.SAF
             ) {
                 TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
             } else {
                 emptyList()
             }
         val result =
-            Musikr.new(context, config, TopwaySourcePolicy.NOISY_DIRS, pathKeywords, rootGate)
+            Musikr.new(
+                    context = context,
+                    config = config,
+                    noisyDirs = TopwaySourcePolicy.NOISY_DIRS,
+                    pathKeywords = pathKeywords,
+                    rootGate = rootGate,
+                )
                 .run(::emitIndexingProgress)
         L.d("Index finished in ${System.currentTimeMillis() - start}ms")
 
@@ -484,6 +517,42 @@ constructor(
         )
     }
 
+    private fun readTwStorageSwitch(): String? {
+        val process =
+            try {
+                ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
+            } catch (e: Exception) {
+                L.w(e, "Unable to start TS18 storage switch diagnostic read")
+                return null
+            }
+        try {
+            return if (!process.waitFor(500, TimeUnit.MILLISECONDS)) {
+                process.destroy()
+                process.destroyForcibly()
+                null
+            } else {
+                process.inputStream
+                    .bufferedReader()
+                    .use { it.readText().trim() }
+                    .takeIf { it.isNotEmpty() }
+            }
+        } catch (e: Exception) {
+            L.w(e, "Unable to read TS18 storage switch diagnostic value")
+            return null
+        } finally {
+            process.inputStream.closeQuietly()
+            process.errorStream.closeQuietly()
+            process.outputStream.closeQuietly()
+            process.destroy()
+        }
+    }
+
+    private fun Closeable.closeQuietly() {
+        try {
+            close()
+        } catch (_: Exception) {}
+    }
+
     private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
         val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
@@ -499,8 +568,6 @@ constructor(
         val fs =
             when (musicSettings.locationMode) {
                 LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
-                LocationMode.DIRECT_FS ->
-                    org.oxycblt.musikr.fs.direct.DirectFS(musicSettings.safQuery.source, rootGate)
                 LocationMode.MEDIA_STORE -> {
                     // Merge TS18 system source filter into the MediaStore query so the SQL
                     // WHERE clause limits rows before cursor iteration.
@@ -510,6 +577,7 @@ constructor(
                         )
                     MediaStore.from(context, query)
                 }
+                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source, rootGate)
             }
         L.d(
             "Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]"
@@ -523,11 +591,9 @@ constructor(
 
     private suspend fun emitIndexingProgress(progress: IndexingProgress) {
         yield()
-        synchronized(this) {
-            currentIndexingState = IndexingState.Indexing(progress)
-            for (listener in indexingListeners) {
-                listener.onIndexingStateChanged()
-            }
+        currentIndexingState = IndexingState.Indexing(progress)
+        for (listener in indexingListeners) {
+            listener.onIndexingStateChanged()
         }
     }
 
@@ -568,17 +634,14 @@ constructor(
 
     private suspend fun emitIndexingCompletion(error: Exception?) {
         yield()
-        synchronized(this) {
-            previousCompletedState = IndexingState.Completed(error)
-            currentIndexingState = null
-            L.d("Dispatching completion state [error=$error]")
-            for (listener in indexingListeners) {
-                listener.onIndexingStateChanged()
-            }
+        previousCompletedState = IndexingState.Completed(error)
+        currentIndexingState = null
+        L.d("Dispatching completion state [error=$error]")
+        for (listener in indexingListeners) {
+            listener.onIndexingStateChanged()
         }
     }
 
-    @Synchronized
     private fun dispatchLibraryChange(device: Boolean, user: Boolean) {
         val changes = MusicRepository.Changes(device, user)
         L.d("Dispatching library change [changes=$changes]")

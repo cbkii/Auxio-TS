@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
@@ -50,7 +51,7 @@ private constructor(
     private val musicRepository: MusicRepository,
     private val musicSettings: MusicSettings,
     private val imageLoader: ImageLoader,
-    private val rootGate: org.oxycblt.auxio.headunit.root.RootStateHolder,
+    private val rootGate: RootStateHolder,
 ) :
     MusicRepository.IndexingWorker,
     MusicRepository.IndexingListener,
@@ -63,7 +64,7 @@ private constructor(
         private val musicRepository: MusicRepository,
         private val musicSettings: MusicSettings,
         private val imageLoader: ImageLoader,
-        private val rootGate: org.oxycblt.auxio.headunit.root.RootStateHolder,
+        private val rootGate: RootStateHolder,
     ) {
         fun create(context: Context, listener: ForegroundListener) =
             IndexingHolder(
@@ -97,6 +98,9 @@ private constructor(
         musicRepository.addUpdateListener(this)
         musicRepository.addIndexingListener(this)
         musicRepository.registerWorker(this)
+        // Delay storage tracking until the cached library is emitted (or first index completes).
+        // On TS18 firmware, SAF/MediaStore tracking setup can trigger slow provider queries that
+        // compete with the cached startup path. Tracking will begin once onMusicChanges fires.
     }
 
     fun release() {
@@ -116,8 +120,8 @@ private constructor(
         }
         startupJob =
             indexScope.launch {
-                if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                    rootGate.probeSync()
+                if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    launch { rootGate.probeSync() }
                 }
                 musicRepository.startup(this@IndexingHolder)
             }
@@ -126,11 +130,18 @@ private constructor(
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
         val state = musicRepository.indexingState
         if (state is IndexingState.Indexing) {
+            // There are a few reasons why we stay in the foreground with automatic rescanning:
+            // 1. Newer versions of Android have become more and more restrictive regarding
+            // how a foreground service starts. Thus, it's best to go foreground now so that
+            // we can go foreground later.
+            // 2. If a non-foreground service is killed, the app will probably still be alive,
+            // and thus the music library will not be updated at all.
             val changed = indexingNotification.updateIndexingState(state.progress)
             if (changed) {
                 post(indexingNotification)
             }
         } else if (musicSettings.shouldBeObserving) {
+            // Not observing and done loading, exit foreground.
             L.d("Exiting foreground")
             post(observingNotification)
         } else {
@@ -168,10 +179,16 @@ private constructor(
     override fun onMusicChanges(changes: MusicRepository.Changes) {
         val library = musicRepository.library ?: return
         L.d("Music changed, updating shared objects")
+        // Start tracking now that we have a library available.
+        // This ensures tracking doesn't start before cached startup completes.
         if (trackingJob == null) {
             startTracking()
         }
+        // Wipe possibly-invalidated outdated covers
         imageLoader.memoryCache?.clear()
+        // Clear invalid models from PlaybackStateManager. This is not connected
+        // to a listener as it is bad practice for a shared object to attach to
+        // the listener system of another.
         playbackManager.toSavedState()?.let { savedState ->
             playbackManager.applySavedState(
                 savedState.copy(
@@ -191,17 +208,19 @@ private constructor(
                 LocationMode.MEDIA_STORE ->
                     MediaStore.from(workerContext, musicSettings.mediaStoreQuery)
                 LocationMode.SAF -> SAF.from(workerContext, musicSettings.safQuery)
-                LocationMode.DIRECT_FS ->
-                    org.oxycblt.musikr.fs.direct.DirectFS(musicSettings.safQuery.source, rootGate)
+                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source, rootGate)
             }
         trackingJob =
             indexScope.launch {
                 fs.track().collect { update ->
                     if (update is FSUpdate.LocationChanged) {
                         val location = update.location
+                        // Check if the location that changed is still accessible
                         if (location != null && !location.path.volume.isAccessible()) {
                             L.i("Source became inaccessible (unmounted?): ${location.uri}")
                             cancelCurrentIndex()
+                            // Skip this inaccessible update without stopping the tracker; keeping
+                            // it alive lets later remount/accessibility events trigger a real scan.
                             return@collect
                         }
                     }
@@ -244,21 +263,32 @@ private constructor(
 
     override fun onObservingChanged() {
         super.onObservingChanged()
+        // Make sure we don't override the service state with the observing
+        // notification if we were actively loading when the automatic rescanning
+        // setting changed. In such a case, the state will still be updated when
+        // the music loading process ends.
         if (musicRepository.indexingState == null) {
             L.d("Not loading, updating idle session")
             foregroundListener.updateForeground(ForegroundListener.Change.INDEXER)
         }
     }
 
+    /** Utility to safely acquire a [PowerManager.WakeLock] without crashes/inefficiency. */
     private fun PowerManager.WakeLock.acquireSafe() {
-        if (!isHeld) {
+        // Avoid unnecessary acquire calls.
+        if (!wakeLock.isHeld) {
             L.d("Acquiring wake lock")
+            // Time out after a minute, which is the average music loading time for a medium-sized
+            // library. If this runs out, we will re-request the lock, and if music loading is
+            // shorter than the timeout, it will be released early.
             acquire(WAKELOCK_TIMEOUT_MS)
         }
     }
 
+    /** Utility to safely release a [PowerManager.WakeLock] without crashes/inefficiency. */
     private fun PowerManager.WakeLock.releaseSafe() {
-        if (isHeld) {
+        // Avoid unnecessary release calls.
+        if (wakeLock.isHeld) {
             L.d("Releasing wake lock")
             release()
         }

@@ -236,6 +236,7 @@
     <string name="lng_empty_playlists">Your playlists will show up here.</string>
     <string name="lng_file_picker">Load music from the folders that you select. Slower, but more reliable. Requires the vanilla file manager app to be installed.</string>
     <string name="lng_system_database">Load music that the Android OS automatically detects. Faster, but less reliable. No support for filesystem-dependent features like cover.jpg.</string>
+    <string name="lng_direct_fs">Load music directly from specific filesystem paths. Faster and more reliable for head units. Can use root if available.</string>
     <string name="lng_grant_storage_anyway">Granting external storage permissions can fix issues on some devices.</string>
     <string name="lng_grant_storage_required">Grant external storage permissions to enable this option.</string>
     <string name="lng_include_folders">Music outside of the selected folders will be ignored.</string>
@@ -337,7 +338,7 @@
     <string name="set_cover_mode">Album covers</string>
     <string name="set_cover_mode_off">Off</string>
     <string name="set_cover_mode_save_space">Save space</string>
-    <string name="set_cover_mode_optimised">Optimised</string>
+    <string name="set_cover_mode_balanced">Balanced</string>
     <string name="set_cover_mode_high_quality">High quality</string>
     <string name="set_cover_mode_as_is">As is</string>
     <string name="set_square_covers">Force square album covers</string>
@@ -376,6 +377,7 @@
     <string name="set_load_from">Load from</string>
     <string name="set_file_picker">File picker</string>
     <string name="set_system_database">System</string>
+    <string name="set_direct_fs">Direct</string>
     <string name="set_grant_storage_anyway">Storage access recommended</string>
     <string name="set_grant_storage">Storage access required</string>
     <string name="set_folders_to_load">Folders to load</string>

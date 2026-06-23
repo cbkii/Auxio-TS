@@ -32,12 +32,17 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
     FS {
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
-            roots.map { location ->
-                val path =
-                    location.uri.path?.takeIf { location.uri.scheme == "file" }
-                        ?: return@map CompletableDeferred(Result.success(Unit))
-                exploreDirectoryImpl(JavaFile(path), location.path, null, files)
-            }.tryAwaitAll()
+            roots
+                .map { location ->
+                    val root =
+                        location.uri.path
+                            ?.takeIf { location.uri.scheme == "file" }
+                            ?.let(::JavaFile)
+                            ?.takeIf(::isAllowedRoot)
+                            ?: return@map CompletableDeferred(Result.success(Unit))
+                    exploreDirectoryImpl(root, location.path, null, files, 0)
+                }
+                .tryAwaitAll()
         }
     }
 
@@ -48,17 +53,27 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         relativePath: Path,
         parent: Deferred<Directory>?,
         files: Channel<File>,
+        depth: Int,
     ): Deferred<Result<Unit>> =
         tryAsync(Dispatchers.IO) {
+            require(depth <= MAX_DEPTH) {
+                "DirectFS traversal depth exceeded for ${directory.path}"
+            }
+            require(isAllowedRoot(directory)) {
+                "DirectFS rejected protected root ${directory.path}"
+            }
             val directoryDeferred = CompletableDeferred<Directory>()
             val children = mutableListOf<File>()
             val recursive = mutableListOf<Deferred<Result<Unit>>>()
             val list = listFilesSafe(directory)
             for (item in list) {
                 if (item.name.startsWith(".")) continue
+                if (java.nio.file.Files.isSymbolicLink(item.toPath())) continue
                 val newPath = relativePath.file(item.name)
                 if (item.isDirectory)
-                    recursive.add(exploreDirectoryImpl(item, newPath, directoryDeferred, files))
+                    recursive.add(
+                        exploreDirectoryImpl(item, newPath, directoryDeferred, files, depth + 1)
+                    )
                 else {
                     val file =
                         File(
@@ -83,15 +98,49 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         }
 
     private fun listFilesSafe(directory: JavaFile): List<JavaFile> {
-        return directory.listFiles()?.toList()
-            ?: rootGate?.runRootCommandSync("ls -1 \"${directory.absolutePath}\"")?.map {
+        val local = directory.listFiles()
+        if (local != null) return local.toList()
+        val rootList =
+            rootGate?.runRootCommandSync("ls -1A ${shellQuote(directory.absolutePath)}")?.map {
                 JavaFile(directory, it)
             }
-            ?: emptyList()
+        return rootList
+            ?: throw IllegalStateException(
+                "DirectFS root is unavailable or inaccessible: ${directory.path}"
+            )
     }
 
     private fun getMimeType(file: JavaFile): String {
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
             ?: "application/octet-stream"
+    }
+
+    internal companion object {
+        private const val MAX_DEPTH = 32
+
+        private val protectedRoots =
+            listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
+
+        fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
+
+        fun isAllowedRoot(file: JavaFile): Boolean {
+            val canonical =
+                try {
+                    file.canonicalFile
+                } catch (_: Exception) {
+                    return false
+                }
+            val path = canonical.path.trimEnd('/')
+            if (path.isBlank()) return false
+            if (protectedRoots.any { path == it.trimEnd('/') }) return false
+            if (
+                path.startsWith("/data/") ||
+                    path.startsWith("/system/") ||
+                    path.startsWith("/vendor/")
+            ) {
+                return false
+            }
+            return path.startsWith("/storage/") || path.startsWith("/mnt/media_rw/")
+        }
     }
 }

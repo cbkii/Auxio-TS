@@ -29,6 +29,7 @@ import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.File
+import org.oxycblt.musikr.fs.RootGate
 import org.oxycblt.musikr.pipeline.shim.FilteredFS
 import org.oxycblt.musikr.playlist.m3u.M3U
 import org.oxycblt.musikr.util.mapParallel
@@ -43,6 +44,7 @@ internal interface ExploreStep {
             config: Config,
             noisyDirs: Set<String> = emptySet(),
             pathKeywords: List<String> = emptyList(),
+            rootGate: RootGate? = null,
         ): ExploreStep =
             ExploreStepImpl(config.fs, config.storage, noisyDirs, pathKeywords, rootGate)
     }
@@ -61,7 +63,7 @@ private class ExploreStepImpl(
     ): Deferred<Result<Unit>> {
         val filteredFs =
             if (noisyDirs.isNotEmpty() || pathKeywords.isNotEmpty())
-                FilteredFS(fs, scope, noisyDirs, pathKeywords, rootGate)
+                FilteredFS(fs, scope, noisyDirs, pathKeywords)
             else fs
         val files = Channel<File>(Channel.UNLIMITED)
         val filesTask = filteredFs.explore(files)
