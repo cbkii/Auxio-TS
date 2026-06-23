@@ -45,4 +45,10 @@ class DirectFsRootPolicyTest {
     fun testShellQuoteEscapesSingleQuotes() {
         assertEquals("'/storage/usbdisk0/Music'\"'\"'s'", shellQuote("/storage/usbdisk0/Music's"))
     }
+
+    @Test
+    fun testShellQuoteContainsShellMetacharacters() {
+        val path = "/storage/usbdisk0/Music \$(rm -rf /); `id`\nnext"
+        assertEquals("'$path'", shellQuote(path))
+    }
 }

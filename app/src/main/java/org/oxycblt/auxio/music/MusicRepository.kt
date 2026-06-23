@@ -20,9 +20,9 @@ package org.oxycblt.auxio.music
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.io.Closeable
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.CompletableDeferred
@@ -250,8 +250,8 @@ constructor(
     private val musicSettings: MusicSettings,
     private val rootGate: RootStateHolder,
 ) : MusicRepository {
-    private val updateListeners = mutableListOf<MusicRepository.UpdateListener>()
-    private val indexingListeners = mutableListOf<MusicRepository.IndexingListener>()
+    private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
+    private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
 
     @Volatile override var library: MutableLibrary? = null
@@ -260,14 +260,12 @@ constructor(
     override val indexingState: IndexingState?
         get() = currentIndexingState ?: previousCompletedState
 
-    @Synchronized
     override fun addUpdateListener(listener: MusicRepository.UpdateListener) {
         L.d("Adding $listener to update listeners")
         updateListeners.add(listener)
         listener.onMusicChanges(MusicRepository.Changes(deviceLibrary = true, userLibrary = true))
     }
 
-    @Synchronized
     override fun removeUpdateListener(listener: MusicRepository.UpdateListener) {
         L.d("Removing $listener to update listeners")
         if (!updateListeners.remove(listener)) {
@@ -275,14 +273,12 @@ constructor(
         }
     }
 
-    @Synchronized
     override fun addIndexingListener(listener: MusicRepository.IndexingListener) {
         L.d("Adding $listener to indexing listeners")
         indexingListeners.add(listener)
         listener.onIndexingStateChanged()
     }
 
-    @Synchronized
     override fun removeIndexingListener(listener: MusicRepository.IndexingListener) {
         L.d("Removing $listener from indexing listeners")
         if (!indexingListeners.remove(listener)) {
@@ -402,19 +398,7 @@ constructor(
 
         // TS18 Health Diagnostics: Log persistent storage switch value during scan
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            val twStorageSwitch =
-                try {
-                    val process =
-                        ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
-                    if (!process.waitFor(500, TimeUnit.MILLISECONDS)) {
-                        process.destroyForcibly()
-                        null
-                    } else {
-                        BufferedReader(InputStreamReader(process.inputStream)).readText().trim()
-                    }
-                } catch (e: Exception) {
-                    null
-                }
+            val twStorageSwitch = readTwStorageSwitch()
             if (!twStorageSwitch.isNullOrEmpty()) {
                 L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
             }
@@ -533,6 +517,42 @@ constructor(
         )
     }
 
+    private fun readTwStorageSwitch(): String? {
+        val process =
+            try {
+                ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
+            } catch (e: Exception) {
+                L.w(e, "Unable to start TS18 storage switch diagnostic read")
+                return null
+            }
+        try {
+            return if (!process.waitFor(500, TimeUnit.MILLISECONDS)) {
+                process.destroy()
+                process.destroyForcibly()
+                null
+            } else {
+                process.inputStream
+                    .bufferedReader()
+                    .use { it.readText().trim() }
+                    .takeIf { it.isNotEmpty() }
+            }
+        } catch (e: Exception) {
+            L.w(e, "Unable to read TS18 storage switch diagnostic value")
+            return null
+        } finally {
+            process.inputStream.closeQuietly()
+            process.errorStream.closeQuietly()
+            process.outputStream.closeQuietly()
+            process.destroy()
+        }
+    }
+
+    private fun Closeable.closeQuietly() {
+        try {
+            close()
+        } catch (_: Exception) {}
+    }
+
     private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
         val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
@@ -571,11 +591,9 @@ constructor(
 
     private suspend fun emitIndexingProgress(progress: IndexingProgress) {
         yield()
-        synchronized(this) {
-            currentIndexingState = IndexingState.Indexing(progress)
-            for (listener in indexingListeners) {
-                listener.onIndexingStateChanged()
-            }
+        currentIndexingState = IndexingState.Indexing(progress)
+        for (listener in indexingListeners) {
+            listener.onIndexingStateChanged()
         }
     }
 
@@ -616,17 +634,14 @@ constructor(
 
     private suspend fun emitIndexingCompletion(error: Exception?) {
         yield()
-        synchronized(this) {
-            previousCompletedState = IndexingState.Completed(error)
-            currentIndexingState = null
-            L.d("Dispatching completion state [error=$error]")
-            for (listener in indexingListeners) {
-                listener.onIndexingStateChanged()
-            }
+        previousCompletedState = IndexingState.Completed(error)
+        currentIndexingState = null
+        L.d("Dispatching completion state [error=$error]")
+        for (listener in indexingListeners) {
+            listener.onIndexingStateChanged()
         }
     }
 
-    @Synchronized
     private fun dispatchLibraryChange(device: Boolean, user: Boolean) {
         val changes = MusicRepository.Changes(device, user)
         L.d("Dispatching library change [changes=$changes]")

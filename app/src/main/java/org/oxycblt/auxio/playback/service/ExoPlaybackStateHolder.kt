@@ -67,6 +67,7 @@ import org.oxycblt.auxio.playback.state.RawQueue
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.StateAck
+import org.oxycblt.musikr.Library
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
@@ -214,6 +215,30 @@ class ExoPlaybackStateHolder(
             // Open -> Try to find the Song for the given file and then play it from all songs
             is DeferredPlayback.Open -> {
                 L.d("Opening specified file")
+                restoreScope.launch {
+                    val song = findDeferredOpenSong(action, library)
+                    if (song == null) {
+                        L.w("Unable to resolve opened file ${action.uri}")
+                        return@launch
+                    }
+                    val command =
+                        requireNotNull(commandFactory.songFromAll(song, ShuffleMode.IMPLICIT)) {
+                            "Invalid playback command"
+                        }
+                    withContext(Dispatchers.Main) { playbackManager.play(command) }
+                }
+            }
+        }
+
+        return true
+    }
+
+    private suspend fun findDeferredOpenSong(
+        action: DeferredPlayback.Open,
+        library: Library,
+    ): Song? =
+        withContext(Dispatchers.IO) {
+            try {
                 context.applicationContext.contentResolver
                     .query(
                         action.uri,
@@ -223,32 +248,23 @@ class ExoPlaybackStateHolder(
                         null,
                     )
                     ?.use { cursor ->
-                        val displayNameIndex =
-                            cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)
-                        val sizeIndex = cursor.getColumnIndexOrThrow(OpenableColumns.SIZE)
-                        if (cursor.moveToFirst()) {
-                            val displayName = cursor.getString(displayNameIndex)
-                            val size = cursor.getLong(sizeIndex)
-                            val song =
-                                library.songs.find {
-                                    it.path.name == displayName && it.size == size
-                                }
-                            if (song != null) {
-                                val command =
-                                    requireNotNull(
-                                        commandFactory.songFromAll(song, ShuffleMode.IMPLICIT)
-                                    ) {
-                                        "Invalid playback command"
-                                    }
-                                playbackManager.play(command)
-                            }
+                        val displayNameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (displayNameIndex == -1 || sizeIndex == -1 || !cursor.moveToFirst()) {
+                            return@use null
                         }
+                        val displayName = cursor.getString(displayNameIndex) ?: return@use null
+                        val size = cursor.getLong(sizeIndex)
+                        library.songs.find { it.path.name == displayName && it.size == size }
                     }
+            } catch (e: SecurityException) {
+                L.w(e, "No permission to resolve opened file ${action.uri}")
+                null
+            } catch (e: Exception) {
+                L.w(e, "Unable to resolve opened file ${action.uri}")
+                null
             }
         }
-
-        return true
-    }
 
     override fun playing(playing: Boolean) {
         if (playing && !requestAudioFocus()) {
@@ -364,7 +380,8 @@ class ExoPlaybackStateHolder(
 
     override fun goto(index: Int) {
         val indices = player.unscrambleQueueIndices()
-        if (indices.isEmpty()) {
+        if (index !in indices.indices) {
+            L.w("Ignoring goto with out-of-bounds index $index for ${indices.size} items")
             return
         }
 
@@ -407,7 +424,8 @@ class ExoPlaybackStateHolder(
 
     override fun move(from: Int, to: Int, ack: StateAck.Move) {
         val indices = player.unscrambleQueueIndices()
-        if (indices.isEmpty()) {
+        if (from !in indices.indices || to !in indices.indices) {
+            L.w("Ignoring move with out-of-bounds indices [$from, $to] for ${indices.size} items")
             return
         }
 
@@ -431,7 +449,8 @@ class ExoPlaybackStateHolder(
 
     override fun remove(at: Int, ack: StateAck.Remove) {
         val indices = player.unscrambleQueueIndices()
-        if (indices.isEmpty()) {
+        if (at !in indices.indices) {
+            L.w("Ignoring remove with out-of-bounds index $at for ${indices.size} items")
             return
         }
 
