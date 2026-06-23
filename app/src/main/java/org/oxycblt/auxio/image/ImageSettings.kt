@@ -54,13 +54,8 @@ class ImageSettingsImpl @Inject constructor(@ApplicationContext context: Context
         }
 
     private fun migrateLegacy(): CoverMode {
-        val oldCode = sharedPreferences.getInt(getString(R.string.set_key_cover_mode), -1)
-        val migrated =
-            when (oldCode) {
-                0xA11C -> CoverMode.OFF // OFF
-                0xA126 -> CoverMode.AS_IS // AS_IS
-                else -> CoverMode.OPTIMISED // BALANCED, SAVE_SPACE, HIGH_QUALITY
-            }
+        // Only legacy/unknown values that CoverMode.fromIntCode() cannot resolve reach this path.
+        val migrated = CoverMode.OPTIMISED
         sharedPreferences.edit { putInt(getString(R.string.set_key_cover_mode), migrated.intCode) }
         return migrated
     }
