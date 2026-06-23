@@ -52,7 +52,19 @@ data class Path(val volume: Volume, val components: Components) {
      *
      * @param context [Context] required to obtain human-readable strings.
      */
-    fun resolve(context: Context) = "${volume.resolveName(context)}/$components"
+    fun resolve(context: Context): String {
+        if (volume is Volume.ThirdParty && volume.uri.scheme == "file") {
+            val filePath = volume.uri.path
+            if (!filePath.isNullOrBlank() && components.components.isEmpty()) return filePath
+        }
+        val componentPath = components.unixString
+        if (componentPath.startsWith(File.separator)) return componentPath
+        return if (componentPath.isEmpty()) {
+            volume.resolveName(context)
+        } else {
+            "${volume.resolveName(context)}/$componentPath"
+        }
+    }
 }
 
 sealed interface Volume {

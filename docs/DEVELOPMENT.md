@@ -163,3 +163,9 @@ Remove stale required checks for deleted workflows such as `Manual Roborazzi`, `
 | `ts18-validation-tools.yml` | Validated deleted TS18 Python scripts and scenario map JSON. All referenced files are removed. Relevant headunit-safety check covered in `lint.yml`.                                                          |
 | `manual-roborazzi.yml`      | **Replaced** by `ui-screenshots.yml`. Functionality preserved and focused on current app UI needs.                                                                                                            |
 | `manual-ui-screenshots.yml` | Depended on deleted `scripts/capture-ui-screenshots.sh` and a brittle Android emulator setup. Superseded by the emulator-free Roborazzi approach in `ui-screenshots.yml`.                                     |
+
+## Music Source runtime hardening notes
+
+Music Source values are persisted as backend-compatible URI strings rather than display labels. SAF/File Picker mode preserves usable document tree `content://` URIs, DirectFS mode normalises saved values to safe local `file://` storage roots before creating the scanner, and MediaStore mode keeps filter locations as matchable filter values rather than recursive DirectFS roots. On load, duplicated Android storage-root paths are repaired only for known storage aliases; values that cannot be safely repaired or converted for the active backend are skipped individually so remaining sources can continue to load.
+
+DirectFS intentionally remains strict: it accepts only `file://` roots under approved storage mount points and logs/skips non-file or unsafe roots. Physical TS18 validation is still required for reboot, ACC sleep/wake, USB remove/remount, missing DocumentsUI, SAF permission loss, and large-library scan behavior.

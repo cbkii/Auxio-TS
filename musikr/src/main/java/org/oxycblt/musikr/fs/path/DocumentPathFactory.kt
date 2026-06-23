@@ -158,7 +158,7 @@ private class DocumentPathFactoryImpl(
         // Guard: only apply for paths under /storage/ or /mnt/ — typical Android mount points.
         if (pathString.startsWith("/storage/") || pathString.startsWith("/mnt/")) {
             Log.d("DocumentPathFactory", "ThirdParty fallback for unmapped path: $pathString")
-            return Path(Volume.ThirdParty(uri), Components.parseUnix(pathString))
+            return Path(Volume.ThirdParty(Uri.fromFile(File(pathString))), Components.root())
         }
 
         Log.w("DocumentPathFactory", "Rejecting unrecognized path: $pathString")
