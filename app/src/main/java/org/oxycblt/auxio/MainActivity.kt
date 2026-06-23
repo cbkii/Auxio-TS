@@ -38,6 +38,7 @@ import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.ui.UISettings
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.isNight
 import org.oxycblt.auxio.util.systemBarInsetsCompat
 import timber.log.Timber as L
@@ -64,44 +65,51 @@ class MainActivity : AppCompatActivity() {
     private var isFirstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // Only treat a launch with no saved instance state as a cold launch, so that activity
-        // recreation (e.g. configuration changes or restoration after process death) does not
-        // re-trigger autoplay.
-        isFirstResume = savedInstanceState == null
-        setupTheme()
-        if (uiSettings.headUnitLandscapeMode) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        PerfTimer.trace("MainActivity.onCreate") {
+            super.onCreate(savedInstanceState)
+            // Only treat a launch with no saved instance state as a cold launch, so that activity
+            // recreation (e.g. configuration changes or restoration after process death) does not
+            // re-trigger autoplay.
+            isFirstResume = savedInstanceState == null
+            setupTheme()
+            if (uiSettings.headUnitLandscapeMode) {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
+            // Inflate the views after setting up the theme so that the theme attributes are
+            // applied.
+            val binding = ActivityMainBinding.inflate(layoutInflater)
+            setContentView(binding.root)
+            setupEdgeToEdge(binding.root)
+            L.d("Activity created")
         }
-        // Inflate the views after setting up the theme so that the theme attributes are applied.
-        val binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        setupEdgeToEdge(binding.root)
-        L.d("Activity created")
     }
 
     override fun onResume() {
-        super.onResume()
+        PerfTimer.trace("MainActivity.onResume") {
+            super.onResume()
 
-        startService(
-            Intent(this, AuxioService::class.java)
-                .setAction(AuxioService.ACTION_START)
-                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
-        )
-
-        if (!startIntentAction(intent)) {
-            // No intent action to do, restore the previously saved state.
-            // Only autoplay on the first resume (cold launch) so that returning to the app
-            // from the background does not force playback to resume after the user paused it.
-            val action =
-                StartupPlaybackPolicy.restoreActionForLaunch(
-                    playbackSettings.autoplayOnLaunch && isFirstResume
+            if (!AuxioService.isForeground) {
+                startService(
+                    Intent(this, AuxioService::class.java)
+                        .setAction(AuxioService.ACTION_START)
+                        .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
                 )
-            playbackModel.playDeferred(action)
+            }
+
+            if (!startIntentAction(intent)) {
+                // No intent action to do, restore the previously saved state.
+                // Only autoplay on the first resume (cold launch) so that returning to the app
+                // from the background does not force playback to resume after the user paused it.
+                val action =
+                    StartupPlaybackPolicy.restoreActionForLaunch(
+                        playbackSettings.autoplayOnLaunch && isFirstResume
+                    )
+                playbackModel.playDeferred(action)
+            }
+            isFirstResume = false
         }
-        isFirstResume = false
     }
 
     override fun onNewIntent(intent: Intent) {

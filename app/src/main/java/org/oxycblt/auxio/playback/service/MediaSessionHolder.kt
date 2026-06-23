@@ -31,6 +31,7 @@ import androidx.car.app.mediaextensions.MetadataExtras
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
+import coil3.size.Size
 import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
@@ -50,6 +51,7 @@ import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.util.NotificationBitmapSafety
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.newBroadcastPendingIntent
 import org.oxycblt.auxio.util.newNowPlayingPendingIntent
 import org.oxycblt.musikr.MusicParent
@@ -94,6 +96,8 @@ private constructor(
     private val mediaSession = MediaSessionCompat(context, context.packageName)
     val token: MediaSessionCompat.Token
         get() = mediaSession.sessionToken
+
+    private var artworkRequestToken = 0L
 
     private val _notification = PlaybackNotification(context, mediaSession.sessionToken)
     val notification: ForegroundServiceNotification
@@ -219,130 +223,158 @@ private constructor(
      *   playback is currently occuring from all songs.
      */
     private fun updateMediaMetadata(song: Song?, parent: MusicParent?) {
-        L.d("Updating media metadata to $song with $parent")
-        if (song == null) {
-            // Nothing playing, reset the MediaSession and close the notification.
-            L.d("Nothing playing, resetting media session")
-            mediaSession.setMetadata(emptyMetadata)
-            _notification.updateMetadata(emptyMetadata)
-            return
-        }
+        PerfTimer.trace("MediaSessionHolder.updateMediaMetadata") {
+            L.d("Updating media metadata to $song with $parent")
+            if (song == null) {
+                // Nothing playing, reset the MediaSession and close the notification.
+                L.d("Nothing playing, resetting media session")
+                mediaSession.setMetadata(emptyMetadata)
+                _notification.updateMetadata(emptyMetadata)
+                return
+            }
 
-        // Populate MediaMetadataCompat. For efficiency, cache some fields that are re-used
-        // several times.
-        val title = song.name.resolve(context)
-        val artist = song.artists.resolveNames(context)
-        val albumArtist = song.album.artists.resolveNames(context)
-        val album = song.album.name.resolve(context)
-        val metadataSnapshot =
-            HeadUnitMetadataPolicy.fromRaw(
-                title = title,
-                artist = artist,
-                albumArtist = albumArtist,
-                albumTitle = album,
-                durationMs = song.durationMs,
-                mediaId = song.uid.toString(),
-                mediaUri = song.uri.toString(),
-                artworkUri =
-                    song.cover?.let {
-                        Uri.withAppendedPath(CoverProvider.CONTENT_URI, it.id).toString()
-                    },
-                hasArtwork = song.cover != null,
+            // Populate MediaMetadataCompat. For efficiency, cache some fields that are re-used
+            // several times.
+            val title = song.name.resolve(context)
+            val artist = song.artists.resolveNames(context)
+            val albumArtist = song.album.artists.resolveNames(context)
+            val album = song.album.name.resolve(context)
+            val metadataSnapshot =
+                HeadUnitMetadataPolicy.fromRaw(
+                    title = title,
+                    artist = artist,
+                    albumArtist = albumArtist,
+                    albumTitle = album,
+                    durationMs = song.durationMs,
+                    mediaId = song.uid.toString(),
+                    mediaUri = song.uri.toString(),
+                    artworkUri =
+                        song.cover?.let {
+                            Uri.withAppendedPath(CoverProvider.CONTENT_URI, it.id).toString()
+                        },
+                    hasArtwork = song.cover != null,
+                )
+                    ?: run {
+                        mediaSession.setMetadata(emptyMetadata)
+                        _notification.updateMetadata(emptyMetadata)
+                        return
+                    }
+            val builder =
+                MediaMetadataCompat.Builder()
+                    .putText(MediaMetadataCompat.METADATA_KEY_TITLE, metadataSnapshot.displayTitle)
+                    .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, metadataSnapshot.albumTitle)
+                    .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, metadataSnapshot.artist)
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST,
+                        metadataSnapshot.albumArtist,
+                    )
+                    .putText(MediaMetadataCompat.METADATA_KEY_AUTHOR, artist)
+                    .putText(MediaMetadataCompat.METADATA_KEY_COMPOSER, artist)
+                    .putText(MediaMetadataCompat.METADATA_KEY_WRITER, artist)
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_GENRE,
+                        song.genres.resolveNames(context),
+                    )
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE,
+                        metadataSnapshot.displayTitle,
+                    )
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
+                        metadataSnapshot.displaySubtitle,
+                    )
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION,
+                        metadataSnapshot.displayDescription,
+                    )
+                    .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, metadataSnapshot.mediaId)
+                    .putString(
+                        MediaMetadataCompat.METADATA_KEY_MEDIA_URI,
+                        metadataSnapshot.mediaUri,
+                    )
+                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, metadataSnapshot.durationMs)
+                    .putText(
+                        PlaybackNotification.KEY_PARENT,
+                        parent?.name?.resolve(context) ?: context.getString(R.string.lbl_all_songs),
+                    )
+                    .putText(
+                        MetadataExtras.KEY_SUBTITLE_LINK_MEDIA_ID,
+                        MediaSessionUID.SingleItem(song.artists[0].uid).toString(),
+                    )
+                    .putText(
+                        MetadataExtras.KEY_DESCRIPTION_LINK_MEDIA_ID,
+                        MediaSessionUID.SingleItem(song.album.uid).toString(),
+                    )
+            // These fields are nullable and so we must check first before adding them to the
+            // fields.
+            song.track?.let {
+                L.d("Adding track information")
+                builder.putLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER, it.toLong())
+            }
+            song.disc?.let {
+                L.d("Adding disc information")
+                builder.putLong(MediaMetadataCompat.METADATA_KEY_DISC_NUMBER, it.number.toLong())
+            }
+            song.date?.let {
+                L.d("Adding date information")
+                builder.putString(MediaMetadataCompat.METADATA_KEY_DATE, it.toString())
+                builder.putLong(MediaMetadataCompat.METADATA_KEY_YEAR, it.year.toLong())
+            }
+
+            // First publish text-only metadata for immediate responsiveness.
+            val initialMetadata = builder.build()
+            mediaSession.setMetadata(initialMetadata)
+            _notification.updateMetadata(initialMetadata)
+            foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
+
+            // Increment token to track this specific artwork request.
+            val requestToken = ++artworkRequestToken
+
+            // We are normally supposed to use URIs for album art, but that removes some of the
+            // nice things we can do like square cropping or high quality covers. Instead,
+            // we load a full-size bitmap into the media session and take the performance hit.
+            // On TS18/head-units, we bound this to 512px to reduce memory pressure.
+            bitmapProvider.load(
+                song,
+                object : BitmapProvider.Target {
+                    override fun onCompleted(bitmap: Bitmap?) {
+                        if (requestToken != artworkRequestToken) {
+                            L.d("Artwork loaded for stale request; ignoring")
+                            return
+                        }
+
+                        L.d("Bitmap loaded, applying media session and posting notification")
+                        if (bitmap != null) {
+                            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
+                            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
+                        }
+                        song.cover?.let {
+                            val artworkUri = Uri.withAppendedPath(CoverProvider.CONTENT_URI, it.id)
+                            builder.putString(
+                                MediaMetadataCompat.METADATA_KEY_ART_URI,
+                                artworkUri.toString(),
+                            )
+                            builder.putString(
+                                MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI,
+                                artworkUri.toString(),
+                            )
+                            builder.putString(
+                                MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI,
+                                artworkUri.toString(),
+                            )
+                        }
+                        val metadata = builder.build()
+                        mediaSession.setMetadata(metadata)
+                        _notification.updateMetadata(metadata)
+                        foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
+                    }
+                },
+                Size(
+                    NotificationBitmapSafety.MAX_ICON_SIZE_PX,
+                    NotificationBitmapSafety.MAX_ICON_SIZE_PX,
+                ),
             )
-                ?: run {
-                    mediaSession.setMetadata(emptyMetadata)
-                    _notification.updateMetadata(emptyMetadata)
-                    return
-                }
-        val builder =
-            MediaMetadataCompat.Builder()
-                .putText(MediaMetadataCompat.METADATA_KEY_TITLE, metadataSnapshot.displayTitle)
-                .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, metadataSnapshot.albumTitle)
-                .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, metadataSnapshot.artist)
-                .putText(
-                    MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST,
-                    metadataSnapshot.albumArtist,
-                )
-                .putText(MediaMetadataCompat.METADATA_KEY_AUTHOR, artist)
-                .putText(MediaMetadataCompat.METADATA_KEY_COMPOSER, artist)
-                .putText(MediaMetadataCompat.METADATA_KEY_WRITER, artist)
-                .putText(MediaMetadataCompat.METADATA_KEY_GENRE, song.genres.resolveNames(context))
-                .putText(
-                    MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE,
-                    metadataSnapshot.displayTitle,
-                )
-                .putText(
-                    MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
-                    metadataSnapshot.displaySubtitle,
-                )
-                .putText(
-                    MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION,
-                    metadataSnapshot.displayDescription,
-                )
-                .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, metadataSnapshot.mediaId)
-                .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, metadataSnapshot.mediaUri)
-                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, metadataSnapshot.durationMs)
-                .putText(
-                    PlaybackNotification.KEY_PARENT,
-                    parent?.name?.resolve(context) ?: context.getString(R.string.lbl_all_songs),
-                )
-                .putText(
-                    MetadataExtras.KEY_SUBTITLE_LINK_MEDIA_ID,
-                    MediaSessionUID.SingleItem(song.artists[0].uid).toString(),
-                )
-                .putText(
-                    MetadataExtras.KEY_DESCRIPTION_LINK_MEDIA_ID,
-                    MediaSessionUID.SingleItem(song.album.uid).toString(),
-                )
-        // These fields are nullable and so we must check first before adding them to the fields.
-        song.track?.let {
-            L.d("Adding track information")
-            builder.putLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER, it.toLong())
         }
-        song.disc?.let {
-            L.d("Adding disc information")
-            builder.putLong(MediaMetadataCompat.METADATA_KEY_DISC_NUMBER, it.number.toLong())
-        }
-        song.date?.let {
-            L.d("Adding date information")
-            builder.putString(MediaMetadataCompat.METADATA_KEY_DATE, it.toString())
-            builder.putLong(MediaMetadataCompat.METADATA_KEY_YEAR, it.year.toLong())
-        }
-
-        // We are normally supposed to use URIs for album art, but that removes some of the
-        // nice things we can do like square cropping or high quality covers. Instead,
-        // we load a full-size bitmap into the media session and take the performance hit.
-        bitmapProvider.load(
-            song,
-            object : BitmapProvider.Target {
-                override fun onCompleted(bitmap: Bitmap?) {
-                    L.d("Bitmap loaded, applying media session and posting notification")
-                    if (bitmap != null) {
-                        builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
-                        builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
-                    }
-                    song.cover?.let {
-                        val artworkUri = Uri.withAppendedPath(CoverProvider.CONTENT_URI, it.id)
-                        builder.putString(
-                            MediaMetadataCompat.METADATA_KEY_ART_URI,
-                            artworkUri.toString(),
-                        )
-                        builder.putString(
-                            MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI,
-                            artworkUri.toString(),
-                        )
-                        builder.putString(
-                            MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI,
-                            artworkUri.toString(),
-                        )
-                    }
-                    val metadata = builder.build()
-                    mediaSession.setMetadata(metadata)
-                    _notification.updateMetadata(metadata)
-                    foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
-                }
-            },
-        )
     }
 
     /**
@@ -351,19 +383,21 @@ private constructor(
      * @param queue The current queue to upload.
      */
     private fun updateQueue(queue: List<Song>) {
-        val queueItems =
-            queue.mapIndexed { i, song ->
-                val description =
-                    song.toMediaDescription(
-                        context,
-                        { putInt(MediaSessionInterface.KEY_QUEUE_POS, i) },
-                    )
-                // Store the item index so we can then use the analogous index in the
-                // playback state.
-                MediaSessionCompat.QueueItem(description, i.toLong())
-            }
-        L.d("Uploading ${queueItems.size} songs to MediaSession queue")
-        mediaSession.setQueue(queueItems)
+        PerfTimer.trace("MediaSessionHolder.updateQueue(${queue.size})") {
+            val queueItems =
+                queue.mapIndexed { i, song ->
+                    val description =
+                        song.toMediaDescription(
+                            context,
+                            { putInt(MediaSessionInterface.KEY_QUEUE_POS, i) },
+                        )
+                    // Store the item index so we can then use the analogous index in the
+                    // playback state.
+                    MediaSessionCompat.QueueItem(description, i.toLong())
+                }
+            L.d("Uploading ${queueItems.size} songs to MediaSession queue")
+            mediaSession.setQueue(queueItems)
+        }
     }
 
     /** Invalidate the current [MediaSessionCompat]'s [PlaybackStateCompat]. */

@@ -35,6 +35,7 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.getSystemServiceCompat
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.fs.FSUpdate
@@ -114,17 +115,19 @@ private constructor(
 
     @Synchronized
     fun start() {
-        if (startupJob?.isActive == true) {
-            L.d("Startup library load already running; ignoring duplicate start")
-            return
-        }
-        startupJob =
-            indexScope.launch {
-                if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                    launch { rootGate.probeSync() }
-                }
-                musicRepository.startup(this@IndexingHolder)
+        PerfTimer.trace("IndexingHolder.start") {
+            if (startupJob?.isActive == true) {
+                L.d("Startup library load already running; ignoring duplicate start")
+                return
             }
+            startupJob =
+                indexScope.launch {
+                    if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                        launch { rootGate.probeSync() }
+                    }
+                    musicRepository.startup(this@IndexingHolder)
+                }
+        }
     }
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {

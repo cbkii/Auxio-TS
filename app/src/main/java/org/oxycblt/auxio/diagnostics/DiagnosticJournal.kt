@@ -99,6 +99,8 @@ class DiagnosticJournal @Inject constructor() {
             )
         )
         while (eventList.size > MAX_EVENT_COUNT) eventList.removeAt(0)
+        // Always update the Flow so that new subscribers (like the UI) receive the latest
+        // event history.
         _events.value = eventList.toList()
     }
 
