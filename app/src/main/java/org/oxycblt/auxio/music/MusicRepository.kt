@@ -23,7 +23,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -526,9 +525,8 @@ constructor(
                 return null
             }
         try {
-            return if (!process.waitFor(500, TimeUnit.MILLISECONDS)) {
-                process.destroy()
-                process.destroyForcibly()
+            return if (!process.waitForCompat(500)) {
+                process.destroyCompat()
                 null
             } else {
                 process.inputStream
@@ -544,6 +542,34 @@ constructor(
             process.errorStream.closeQuietly()
             process.outputStream.closeQuietly()
             process.destroy()
+        }
+    }
+
+    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
+        val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
+        while (true) {
+            try {
+                exitValue()
+                return true
+            } catch (_: IllegalThreadStateException) {}
+
+            if (System.nanoTime() >= deadlineNanos) return false
+
+            try {
+                val remainingMs =
+                    ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+                Thread.sleep(minOf(remainingMs, 25L))
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+    }
+
+    private fun Process.destroyCompat() {
+        destroy()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            destroyForcibly()
         }
     }
 

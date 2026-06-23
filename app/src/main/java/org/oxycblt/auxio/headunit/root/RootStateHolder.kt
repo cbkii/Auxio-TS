@@ -18,7 +18,6 @@
 
 package org.oxycblt.auxio.headunit.root
 
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.BuildConfig
@@ -60,10 +59,9 @@ class RootStateHolder @Inject constructor() : RootGate {
                 return state
             }
         try {
-            val finished = process.waitFor(2000, TimeUnit.MILLISECONDS)
+            val finished = process.waitForCompat(2000)
             if (!finished) {
-                process.destroy()
-                process.destroyForcibly()
+                process.destroyCompat()
                 state = State.TimedOut
             } else {
                 val stdout = process.inputStream.bufferedReader().use { it.readText() }
@@ -86,9 +84,8 @@ class RootStateHolder @Inject constructor() : RootGate {
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             try {
-                if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
-                    process.destroy()
-                    process.destroyForcibly()
+                if (!process.waitForCompat(timeoutMs)) {
+                    process.destroyCompat()
                     null
                 } else {
                     if (process.exitValue() != 0) null
@@ -104,6 +101,34 @@ class RootStateHolder @Inject constructor() : RootGate {
             }
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
+        val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
+        while (true) {
+            try {
+                exitValue()
+                return true
+            } catch (_: IllegalThreadStateException) {}
+
+            if (System.nanoTime() >= deadlineNanos) return false
+
+            try {
+                val remainingMs =
+                    ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+                Thread.sleep(minOf(remainingMs, 25L))
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            }
+        }
+    }
+
+    private fun Process.destroyCompat() {
+        destroy()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            destroyForcibly()
         }
     }
 
