@@ -38,6 +38,7 @@ import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.music.shim.WriteOnlyMutableCache
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.musikr.Config
 import org.oxycblt.musikr.IndexingProgress
 import org.oxycblt.musikr.Interpretation
@@ -361,126 +362,131 @@ constructor(
     }
 
     override suspend fun startup(worker: IndexingWorker) {
-        val start = System.currentTimeMillis()
-        L.i("Music system starting...")
+        PerfTimer.traceSuspend("MusicRepository.startup") {
+            val start = System.currentTimeMillis()
+            L.i("Music system starting...")
 
-        val decision =
-            StartupLibraryStartup.run(
-                hasInMemoryLibrary = synchronized(this) { library != null },
-                revisionKnown = musicSettings.revision != null,
-                priorState = musicSettings.libraryState,
-                lastScanFailed = { musicSettings.lastScanFailed },
-                loadCachedLibrary = { loadCachedLibrary() },
-                cachedSongCount = { it.songs.size },
-                emitCachedLibrary = {
-                    synchronized(this) { this.library = it }
-                    withContext(Dispatchers.Main) {
-                        dispatchLibraryChange(device = true, user = true)
-                    }
-                },
-                emitCachedLoadFailure = { L.w(it, "Cached library load failed during startup") },
-                setLibraryState = { musicSettings.libraryState = it },
-                requestIndex = { withCache -> worker.requestIndex(withCache) },
-            )
-        L.d(
-            "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
-                "[state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
-        )
-    }
-
-    override suspend fun index(worker: IndexingWorker, withCache: Boolean) {
-        yield()
-        if (indexingWorker !== worker) {
-            L.w("Index requested from unregistered worker; ignoring")
-            return
-        }
-
-        // TS18 Health Diagnostics: Log persistent storage switch value during scan
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            val twStorageSwitch = readTwStorageSwitch()
-            if (!twStorageSwitch.isNullOrEmpty()) {
-                L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
-            }
-        }
-
-        val currentRevision = musicSettings.revision
-        val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
-        val config =
-            createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
-
-        // Check accessibility before starting
-        val locations =
-            when (musicSettings.locationMode) {
-                LocationMode.SAF,
-                LocationMode.DIRECT_FS -> musicSettings.safQuery.source
-                LocationMode.MEDIA_STORE ->
-                    emptyList() // MediaStore is always "accessible" as a provider
-            }
-
-        if (locations.any { !it.path.volume.isAccessible() }) {
-            L.w("One or more music sources are inaccessible. Aborting scan to preserve cache.")
-            // Mark last scan failed but keep library state USABLE if it was,
-            // or RECOVERY if it needs a scan.
-            musicSettings.lastScanFailed = true
-            emitIndexingCompletion(Exception("Music source inaccessible"))
-            return
-        }
-
-        L.d("Running index...")
-        val start = System.currentTimeMillis()
-        // When ts18SystemSourceFilter is enabled, the path restriction is now applied at the
-        // SQL level in the MediaStore query (useDefaultSystemFilter). For SAF mode, the
-        // FilteredFS pathKeywords still serve as the filtering mechanism since there is no
-        // SQL query to augment.
-        val pathKeywords =
-            if (
-                musicSettings.ts18SystemSourceFilter &&
-                    musicSettings.locationMode == LocationMode.SAF
-            ) {
-                TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
-            } else {
-                emptyList()
-            }
-        val result =
-            Musikr.new(
-                    context = context,
-                    config = config,
-                    noisyDirs = TopwaySourcePolicy.NOISY_DIRS,
-                    pathKeywords = pathKeywords,
-                    rootGate = rootGate,
+            val decision =
+                StartupLibraryStartup.run(
+                    hasInMemoryLibrary = synchronized(this) { library != null },
+                    revisionKnown = musicSettings.revision != null,
+                    priorState = musicSettings.libraryState,
+                    lastScanFailed = { musicSettings.lastScanFailed },
+                    loadCachedLibrary = { loadCachedLibrary() },
+                    cachedSongCount = { it.songs.size },
+                    emitCachedLibrary = {
+                        synchronized(this) { this.library = it }
+                        withContext(Dispatchers.Main) {
+                            dispatchLibraryChange(device = true, user = true)
+                        }
+                    },
+                    emitCachedLoadFailure = {
+                        L.w(it, "Cached library load failed during startup")
+                    },
+                    setLibraryState = { musicSettings.libraryState = it },
+                    requestIndex = { withCache -> worker.requestIndex(withCache) },
                 )
-                .run(::emitIndexingProgress)
-        L.d("Index finished in ${System.currentTimeMillis() - start}ms")
-
-        // Final accessibility check before committing empty state
-        if (result.library.songs.isEmpty()) {
-            if (locations.any { !it.path.volume.isAccessible() }) {
-                L.w("Scan returned empty but sources became inaccessible. Preserving cache.")
-                musicSettings.lastScanFailed = true
-                emitIndexingCompletion(Exception("Source became inaccessible during scan"))
-                return
-            }
+            L.d(
+                "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
+                    "[state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
+            )
         }
-
-        // Music loading completed, update the revision right now so we re-use this work
-        // later.
-        L.d("Revisioning from $currentRevision -> $newRevision")
-        musicSettings.revision = newRevision
-        // Deliver the library to the rest of the app
-        // This will more or less block until all required item translation and
-        // cleanup finishes.
-        L.d("Emitting new library")
-        emitLibrary(result.library)
-        // Clean up old data that is now impossible for the app to be using.
-        L.d("Cleanup")
-        result.cleanup()
-        // Finish up loading.
-        musicSettings.libraryState =
-            if (result.library.songs.isEmpty()) LibraryState.EMPTY else LibraryState.USABLE
-        musicSettings.lastScanFailed = false
-        L.i("Indexing complete [state=${musicSettings.libraryState}]")
-        emitIndexingCompletion(null)
     }
+
+    override suspend fun index(worker: IndexingWorker, withCache: Boolean) =
+        PerfTimer.traceSuspend("MusicRepository.index(cache=$withCache)") {
+            yield()
+            if (indexingWorker !== worker) {
+                L.w("Index requested from unregistered worker; ignoring")
+                return@traceSuspend
+            }
+
+            // TS18 Health Diagnostics: Log persistent storage switch value during scan
+            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                val twStorageSwitch = readTwStorageSwitch()
+                if (!twStorageSwitch.isNullOrEmpty()) {
+                    L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
+                }
+            }
+
+            val currentRevision = musicSettings.revision
+            val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
+            val config =
+                createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
+
+            // Check accessibility before starting
+            val locations =
+                when (musicSettings.locationMode) {
+                    LocationMode.SAF,
+                    LocationMode.DIRECT_FS -> musicSettings.safQuery.source
+                    LocationMode.MEDIA_STORE ->
+                        emptyList() // MediaStore is always "accessible" as a provider
+                }
+
+            if (locations.any { !it.path.volume.isAccessible() }) {
+                L.w("One or more music sources are inaccessible. Aborting scan to preserve cache.")
+                // Mark last scan failed but keep library state USABLE if it was,
+                // or RECOVERY if it needs a scan.
+                musicSettings.lastScanFailed = true
+                emitIndexingCompletion(Exception("Music source inaccessible"))
+                return@traceSuspend
+            }
+
+            L.d("Running index...")
+            val start = System.currentTimeMillis()
+            // When ts18SystemSourceFilter is enabled, the path restriction is now applied at the
+            // SQL level in the MediaStore query (useDefaultSystemFilter). For SAF mode, the
+            // FilteredFS pathKeywords still serve as the filtering mechanism since there is no
+            // SQL query to augment.
+            val pathKeywords =
+                if (
+                    musicSettings.ts18SystemSourceFilter &&
+                        musicSettings.locationMode == LocationMode.SAF
+                ) {
+                    TopwaySourcePolicy.SYSTEM_SOURCE_PATH_KEYWORDS
+                } else {
+                    emptyList()
+                }
+            val result =
+                Musikr.new(
+                        context = context,
+                        config = config,
+                        noisyDirs = TopwaySourcePolicy.NOISY_DIRS,
+                        pathKeywords = pathKeywords,
+                        rootGate = rootGate,
+                    )
+                    .run(::emitIndexingProgress)
+            L.d("Index finished in ${System.currentTimeMillis() - start}ms")
+
+            // Final accessibility check before committing empty state
+            if (result.library.songs.isEmpty()) {
+                if (locations.any { !it.path.volume.isAccessible() }) {
+                    L.w("Scan returned empty but sources became inaccessible. Preserving cache.")
+                    musicSettings.lastScanFailed = true
+                    emitIndexingCompletion(Exception("Source became inaccessible during scan"))
+                    return@traceSuspend
+                }
+            }
+
+            // Music loading completed, update the revision right now so we re-use this work
+            // later.
+            L.d("Revisioning from $currentRevision -> $newRevision")
+            musicSettings.revision = newRevision
+            // Deliver the library to the rest of the app
+            // This will more or less block until all required item translation and
+            // cleanup finishes.
+            L.d("Emitting new library")
+            emitLibrary(result.library)
+            // Clean up old data that is now impossible for the app to be using.
+            L.d("Cleanup")
+            result.cleanup()
+            // Finish up loading.
+            musicSettings.libraryState =
+                if (result.library.songs.isEmpty()) LibraryState.EMPTY else LibraryState.USABLE
+            musicSettings.lastScanFailed = false
+            L.i("Indexing complete [state=${musicSettings.libraryState}]")
+            emitIndexingCompletion(null)
+        }
 
     private suspend fun loadCachedLibrary(): MutableLibrary {
         val revision = musicSettings.revision ?: UUID.randomUUID()

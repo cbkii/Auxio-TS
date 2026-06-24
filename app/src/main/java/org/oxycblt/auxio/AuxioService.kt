@@ -36,6 +36,7 @@ import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.music.service.MusicServiceFragment
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
+import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber
 
 @AndroidEntryPoint
@@ -51,30 +52,35 @@ open class AuxioService :
 
     @SuppressLint("WrongConstant")
     override fun onCreate() {
-        super.onCreate()
-        playbackFragment = playbackFragmentFactory.create(this, this)
-        musicFragment = musicFragmentFactory.create(this, this, this)
-        sessionToken = playbackFragment.attach()
-        musicFragment.attach()
-        Timber.d("Service Created")
-        journal.log(DiagnosticJournal.CAT_LIFECYCLE, "AuxioService onCreate")
+        PerfTimer.trace("AuxioService.onCreate") {
+            super.onCreate()
+            isForeground = false
+            playbackFragment = playbackFragmentFactory.create(this, this)
+            musicFragment = musicFragmentFactory.create(this, this, this)
+            sessionToken = playbackFragment.attach()
+            musicFragment.attach()
+            Timber.d("Service Created")
+            journal.log(DiagnosticJournal.CAT_LIFECYCLE, "AuxioService onCreate")
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // TODO: Start command occurring from a foreign service basically implies a detached
-        //  service, we might need more handling here.
-        super.onStartCommand(intent, flags, startId)
-        onHandleForeground(intent)
-        journal.log(
-            DiagnosticJournal.CAT_LIFECYCLE,
-            "AuxioService onStartCommand",
-            "Action: ${intent?.action}, StartId: $startId",
-        )
-        // Playback services are expected to survive process churn when possible so that
-        // MediaSession/controller interactions continue to route to the same service endpoint.
-        // Keep this service sticky and let playback/session state restoration decide whether
-        // playback should resume.
-        return START_STICKY
+        PerfTimer.trace("AuxioService.onStartCommand") {
+            // TODO: Start command occurring from a foreign service basically implies a detached
+            //  service, we might need more handling here.
+            super.onStartCommand(intent, flags, startId)
+            onHandleForeground(intent)
+            journal.log(
+                DiagnosticJournal.CAT_LIFECYCLE,
+                "AuxioService onStartCommand",
+                "Action: ${intent?.action}, StartId: $startId",
+            )
+            // Playback services are expected to survive process churn when possible so that
+            // MediaSession/controller interactions continue to route to the same service endpoint.
+            // Keep this service sticky and let playback/session state restoration decide whether
+            // playback should resume.
+            return START_STICKY
+        }
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -94,6 +100,7 @@ open class AuxioService :
     }
 
     override fun onDestroy() {
+        isForeground = false
         super.onDestroy()
         musicFragment.release()
         playbackFragment.release()
@@ -166,6 +173,7 @@ open class AuxioService :
     companion object {
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".service.START"
 
+        @Volatile
         var isForeground = false
             private set
 

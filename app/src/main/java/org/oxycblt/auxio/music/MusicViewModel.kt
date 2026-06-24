@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.util.Event
@@ -58,6 +59,8 @@ constructor(
     private val externalPlaylistManager = ExternalPlaylistManager.from(context)
 
     private val _indexingState = MutableStateFlow<IndexingState?>(null)
+
+    @Volatile private var libraryGeneration = 0L
 
     /** The current music loading state, or null if no loading is going on. */
     val indexingState: StateFlow<IndexingState?> = _indexingState
@@ -94,24 +97,35 @@ constructor(
     override fun onMusicChanges(changes: MusicRepository.Changes) {
         if (!changes.deviceLibrary) return
         val library = musicRepository.library ?: return
-        // Compute both totals in a single pass; this runs on the main thread for every
-        // library change and large libraries make two full iterations needlessly expensive.
-        var totalDurationMs = 0L
-        var totalSize = 0L
-        for (song in library.songs) {
-            totalDurationMs += song.durationMs
-            totalSize += song.size
+        val generation = ++libraryGeneration
+
+        viewModelScope.launch {
+            // Compute both totals in a single pass on a background thread.
+            val stats =
+                withContext(Dispatchers.Default) {
+                    var totalDurationMs = 0L
+                    var totalSize = 0L
+                    for (song in library.songs) {
+                        totalDurationMs += song.durationMs
+                        totalSize += song.size
+                    }
+                    Statistics(
+                        library.songs.size,
+                        library.albums.size,
+                        library.artists.size,
+                        library.genres.size,
+                        totalDurationMs,
+                        totalSize,
+                    )
+                }
+
+            if (libraryGeneration == generation) {
+                _statistics.value = stats
+                L.d("Updated statistics: $stats")
+            } else {
+                L.d("Statistics calculation finished for stale library; ignoring")
+            }
         }
-        _statistics.value =
-            Statistics(
-                library.songs.size,
-                library.albums.size,
-                library.artists.size,
-                library.genres.size,
-                totalDurationMs,
-                totalSize,
-            )
-        L.d("Updated statistics: ${_statistics.value}")
     }
 
     override fun onIndexingStateChanged() {

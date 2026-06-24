@@ -25,6 +25,12 @@ import coil3.request.ImageRequest
 import coil3.request.transformations
 import coil3.size.Size
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
@@ -60,6 +66,8 @@ private constructor(
     private val uiSettings: UISettings,
     private val journal: DiagnosticJournal,
 ) : PlaybackStateManager.Listener, UISettings.Listener, ImageSettings.Listener {
+    private val scopeJob = SupervisorJob()
+    private val scope = CoroutineScope(Dispatchers.Main + scopeJob)
     private var lastRenderedIsPlaying: Boolean? = null
 
     class Factory
@@ -118,10 +126,29 @@ private constructor(
         playbackManager.addListener(this)
         uiSettings.registerListener(this)
         imageSettings.registerListener(this)
+
+        // Start a periodic timer to update Topway progress broadcasts once per second.
+        scope.launch {
+            while (isActive) {
+                if (playbackManager.progression.isPlaying) {
+                    val duration = playbackManager.currentSong?.durationMs ?: 0L
+                    topwayBridge.publishProgress(
+                        playbackManager.progression.calculateElapsedPositionMs(),
+                        duration,
+                    )
+                }
+                delay(1000)
+            }
+        }
     }
 
-    /** Update [WidgetProvider] with the current playback state. */
-    fun update() {
+    /**
+     * Update [WidgetProvider] with the current playback state.
+     *
+     * @param force Forced update for Topway broadcasts regardless of interval or state
+     *   deduplication.
+     */
+    fun update(force: Boolean = false) {
         val song = playbackManager.currentSong
         if (song == null) {
             L.d("No song, resetting widget")
@@ -149,8 +176,8 @@ private constructor(
                 artworkUri = null,
                 hasArtwork = false,
             )
-        topwayBridge.publishMetadata(metadataSnapshot)
-        topwayBridge.publishProgress(elapsedMs, song.durationMs)
+        topwayBridge.publishMetadata(metadataSnapshot, force = force)
+        topwayBridge.publishProgress(elapsedMs, song.durationMs, force = force)
 
         L.d("Updating widget with new playback state")
         bitmapProvider.load(
@@ -205,6 +232,7 @@ private constructor(
         playbackManager.removeListener(this)
         uiSettings.unregisterListener(this)
         topwayBridge.clear()
+        scopeJob.cancel()
         widgetProvider.reset(context, uiSettings)
         updateTopwayWidget(null)
     }
@@ -221,22 +249,23 @@ private constructor(
     // --- CALLBACKS ---
 
     // Respond to all major song or player changes that will affect the widget
-    override fun onIndexMoved(index: Int) = update()
+    override fun onIndexMoved(index: Int) = update(force = true)
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
         if (change.type == QueueChange.Type.SONG) {
-            update()
+            update(force = true)
         }
     }
 
-    override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) = update()
+    override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) =
+        update(force = true)
 
     override fun onNewPlayback(
         parent: MusicParent?,
         queue: List<Song>,
         index: Int,
         isShuffled: Boolean,
-    ) = update()
+    ) = update(force = true)
 
     override fun onProgressionChanged(progression: Progression) {
         val shouldRunFullUpdate =

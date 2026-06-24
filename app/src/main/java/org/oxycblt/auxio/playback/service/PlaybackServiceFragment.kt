@@ -220,7 +220,13 @@ private constructor(
                     }
                 }
 
-                override fun widgetUpdate() = widgetComponent.update()
+                override fun widgetUpdate() {
+                    if (playbackManager.currentSong == null) {
+                        L.i("Topway update received with no current song; requesting state restore")
+                        playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+                    }
+                    widgetComponent.update(force = true)
+                }
 
                 override fun seekTo(positionMs: Long) = playbackManager.seekTo(positionMs)
 

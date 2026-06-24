@@ -40,7 +40,7 @@ Not allowed/expected to work:
 - `am broadcast` test injection as shell;
 - privileged appops/package state changes.
 
-The captured TS18 diagnostics were from this lane. The shell identity was `u0_a177` under `u:r:untrusted_app`.
+Older TermOne diagnostics were from this lane. The shell identity in that older capture was `u0_a177` under `u:r:untrusted_app`. The latest June root diagnostic facts are a separate Lane D capture and must not be described as normal-app UID evidence.
 
 ### Lane B — ADB shell
 
@@ -54,7 +54,7 @@ Use this lane when Shizuku is running and package-manager operations are deliber
 
 ### Lane D — root/system image
 
-Use this lane only for deliberate system package replacement, Magisk/system overlay, or firmware-image changes. Keep stock APK backups and rollback instructions.
+Use this lane only for deliberate system package replacement, Magisk/system overlay, or firmware-image changes. Keep stock APK backups and rollback instructions. Latest exact-device root diagnostics are in this lane: `uid=0(root)`, `u:r:magisk:s0`, SELinux permissive at boot-property level, unlocked/orange device state, verity enforcing, dynamic partitions enabled, and read-only `/` plus `/vendor` dm mounts in the captured state. Root does **not** give Auxio UID 1000, platform signing, vendor signing, signature permissions, or private Topway authority.
 
 ## Pre-install checks
 
@@ -79,8 +79,10 @@ If stock `com.tw.music` is present at `/system/priv-app/...`, a user-signed `top
 
 ```sh
 adb shell cmd package list packages | grep -E "com\.tw\.music|com\.tw\.media|org\.oxycblt\.auxio|com\.dofun\.variety"
-adb shell pm path com.tw.music
-adb shell dumpsys package com.tw.music | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|priv|system|enabled|User 0|installed'
+adb shell sh -c 'for p in com.tw.music com.tw.media; do pm path "$p" 2>/dev/null || true; done'
+adb shell dumpsys package com.tw.music | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|priv|system|enabled|User 0|installed' || true
+adb shell dumpsys package com.tw.media | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|priv|system|enabled|User 0|installed' || true
+adb shell dumpsys package com.dofun.variety | grep -iE 'codePath|versionCode|versionName|userId|enabled|User 0|installed'
 ```
 
 Prefer reversible disable before uninstall-for-user:
@@ -100,6 +102,11 @@ Recovery:
 ```sh
 adb shell cmd package install-existing --user 0 com.tw.music
 adb shell pm enable com.tw.music
+adb shell pm clear com.dofun.variety || true
+adb shell pm clear com.tw.music || true
+adb shell pm clear com.tw.media || true
+adb reboot
+# After cold boot, repeat package resolution, DoFun hotseat, media-session, and broadcast checks.
 ```
 
 ## Install
@@ -132,8 +139,15 @@ adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c 
 adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.APP_MUSIC -p com.tw.media
 
 # Manifest/service/provider detail
-adb shell dumpsys package com.tw.music | grep -iE 'MusicActivity|MAIN|MUSIC_PLAYER|APP_MUSIC|LAUNCHER|MediaBrowserService|CoverProvider|com.tw.music.action|widget_music_progress'
-adb shell dumpsys package com.tw.media | grep -iE 'MusicActivity|MAIN|MUSIC_PLAYER|APP_MUSIC|LAUNCHER|MediaBrowserService|CoverProvider|com.tw.music.action|widget_music_progress'
+adb shell dumpsys package com.tw.music | grep -iE 'MusicActivity|MusicService|MusicWidgetProvider|MAIN|MUSIC_PLAYER|APP_MUSIC|LAUNCHER|MediaBrowserService|CoverProvider|com.tw.music.action|widget_music_progress'
+adb shell dumpsys package com.tw.media | grep -iE 'MusicActivity|MusicService|MusicWidgetProvider|MAIN|MUSIC_PLAYER|APP_MUSIC|LAUNCHER|MediaBrowserService|CoverProvider|com.tw.music.action|widget_music_progress'
+
+# Exact Topway component checks
+adb shell cmd package resolve-activity --brief -n com.tw.music/com.tw.music.MusicActivity
+adb shell cmd package resolve-activity --brief -n com.tw.media/com.tw.music.MusicActivity
+adb shell cmd package query-intent-services -a android.media.browse.MediaBrowserService | grep -E 'com.tw.music/com.tw.music.MusicService|com.tw.media/com.tw.music.MusicService'
+adb shell dumpsys package com.tw.music | grep -F 'com.tw.music.view.MusicWidgetProvider'
+adb shell dumpsys package com.tw.media | grep -F 'com.tw.music.view.MusicWidgetProvider'
 ```
 
 ## Media browser check
@@ -183,7 +197,7 @@ The captured target-device diagnostics showed ZLink as the restored media-button
 
 ```sh
 # Watch Topway broadcasts
-adb shell logcat -v time | grep -iE 'tw.music|tw.media|music_progress|dofun|variety|Auxio|Topway'
+adb shell logcat -v time | grep -iE 'Auxio|Topway|tw.music|tw.media|music_progress|dofun|variety|MediaSession|MediaBrowser'
 
 # Manual control tests
 adb shell am broadcast -a com.tw.music.action.pp
@@ -191,6 +205,7 @@ adb shell am broadcast -a com.tw.music.action.next
 adb shell am broadcast -a com.tw.music.action.prev
 
 # Generic command-action form
+adb shell am broadcast -a com.tw.music.action.cmd --es cmd update
 adb shell am broadcast -a com.tw.music.action.cmd --es cmd pp
 adb shell am broadcast -a com.tw.music.action.cmd --es cmd next
 adb shell am broadcast -a com.tw.music.action.cmd --es cmd prev
@@ -208,6 +223,7 @@ Validate at least:
 ```sh
 adb shell ls -lah /storage | grep -i usbdisk || true
 adb shell find /storage -maxdepth 1 -type d -name 'usbdisk*' -print 2>/dev/null
+adb shell for d in /storage/usbdisk*; do [ -d "$d" ] && ls -lah "$d"; done
 adb shell ls -lah /sdcard/Music 2>/dev/null || true
 ```
 

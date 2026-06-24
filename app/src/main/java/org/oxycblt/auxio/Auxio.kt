@@ -20,6 +20,7 @@ package org.oxycblt.auxio
 
 import android.app.Application
 import android.os.Build
+import android.os.StrictMode
 import androidx.core.content.pm.ShortcutManagerCompat
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
@@ -66,12 +67,31 @@ class Auxio : Application() {
 
     override fun onCreate() {
         installCrashHandler()
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .detectCustomSlowCalls()
+                    .penaltyLog()
+                    .build()
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedSqlLiteObjects()
+                    .detectLeakedClosableObjects()
+                    .penaltyLog()
+                    .build()
+            )
+        }
         super.onCreate()
 
         NotificationBitmapSafety.journal = journal
         @Suppress("KotlinConstantConditions")
         if (
-            BuildConfig.APPLICATION_ID != "org.oxycblt.auxio" &&
+            BuildConfig.DEBUG &&
+                BuildConfig.APPLICATION_ID != "org.oxycblt.auxio" &&
                 BuildConfig.APPLICATION_ID != "org.oxycblt.auxio.debug"
         ) {
             Timber.plant(CopyleftNoticeTree())

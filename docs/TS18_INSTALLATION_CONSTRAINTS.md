@@ -46,7 +46,7 @@ A user-signed APK cannot normally update an existing system APK with the same pa
 | ------------------------ | ------------------- | ----------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `standard`               | `org.oxycblt.auxio` | Normal Auxio activity                     | General development/testing                                       | Does not satisfy fixed DoFun stock music identity.                           |
 | `topwayTwMusic`          | `com.tw.music`      | `com.tw.music/com.tw.music.MusicActivity` | Exact stock `twmusic` replacement target                          | Conflicts with stock `com.tw.music` unless package state is managed.         |
-| proposed `topwayTwMedia` | `com.tw.media`      | `com.tw.media/com.tw.music.MusicActivity` | DoFun alternate-entry candidate for stock-conflict-aware installs | For root/Shizuku/ADB/system-managed setups; not a guaranteed no-root bypass. |
+| `topwayTwMedia`          | `com.tw.media`      | `com.tw.media/com.tw.music.MusicActivity` | DoFun alternate-entry build for stock-conflict-aware installs | Not a guaranteed no-root bypass; may conflict or be ignored depending on firmware/DoFun priority. |
 
 ## Recommended operator flow
 
@@ -96,7 +96,7 @@ DoFun APK evidence includes an alternate fixed entry:
 com.tw.media / com.tw.music.MusicActivity
 ```
 
-Adding a `topwayTwMedia` variant is useful because it lets Auxio-TS satisfy that alternate identity where firmware/launcher state permits it. However:
+`topwayTwMediaRelease` lets Auxio-TS satisfy that alternate identity where firmware/launcher state permits it. However:
 
 - It does not remove or neutralise stock `com.tw.music`.
 - It may conflict if the firmware already has stock `com.tw.media`.

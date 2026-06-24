@@ -84,7 +84,7 @@ constructor(
      * @param target The [Target] to deliver the [Bitmap] to asynchronously.
      */
     @Synchronized
-    fun load(song: Song, target: Target) {
+    fun load(song: Song, target: Target, size: Size = Size.ORIGINAL) {
         // Increment the handle, indicating a newer request has been created
         val handle = ++currentHandle
         currentRequest?.run { disposable.dispose() }
@@ -95,8 +95,8 @@ constructor(
                 .onConfigRequest(
                     ImageRequest.Builder(context)
                         .data(song.cover)
-                        // Use ORIGINAL sizing, as we are not loading into any View-like component.
-                        .size(Size.ORIGINAL)
+                        // Use the provided sizing, defaulting to ORIGINAL.
+                        .size(size)
                 )
                 .target(
                     onSuccess = {
