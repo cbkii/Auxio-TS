@@ -331,7 +331,6 @@ private constructor(
             _notification.updateMetadata(initialMetadata)
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
 
-
             // We are normally supposed to use URIs for album art, but that removes some of the
             // nice things we can do like square cropping or high quality covers. Instead,
             // we load a full-size bitmap into the media session and take the performance hit.
