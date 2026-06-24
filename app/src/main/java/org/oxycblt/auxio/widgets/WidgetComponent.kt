@@ -65,10 +65,7 @@ private constructor(
     private val playbackManager: PlaybackStateManager,
     private val uiSettings: UISettings,
     private val journal: DiagnosticJournal,
-) :
-    PlaybackStateManager.Listener,
-    UISettings.Listener,
-    ImageSettings.Listener {
+) : PlaybackStateManager.Listener, UISettings.Listener, ImageSettings.Listener {
     private val scopeJob = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Main + scopeJob)
     private var lastRenderedIsPlaying: Boolean? = null
