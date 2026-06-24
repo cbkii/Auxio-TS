@@ -80,7 +80,12 @@ object NotificationBitmapSafety {
     fun fallbackBitmap(): Bitmap {
         val cached = cachedFallback?.takeIf { !it.isRecycled } ?: createFallbackBitmap()
         cachedFallback = cached
-        return cached.copy(Bitmap.Config.ARGB_8888, false)
+        return try {
+            cached.copy(Bitmap.Config.ARGB_8888, false) ?: cached
+        } catch (e: RuntimeException) {
+            L.w(e, "Failed to copy notification fallback bitmap")
+            cached
+        }
     }
 
     private fun createFallbackBitmap(): Bitmap =
@@ -90,7 +95,7 @@ object NotificationBitmapSafety {
         if (isRecycled) return null
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && config?.name == "HARDWARE") {
-                copy(Bitmap.Config.ARGB_8888, false)
+                copy(Bitmap.Config.ARGB_8888, false) ?: return null
             } else {
                 this
             }

@@ -359,18 +359,7 @@ constructor(
                 EvidenceClassification.OBSERVED_BY_AUXIO,
             )
         )
-        entries.add(
-            DiagnosticEntry(
-                "Persisted SAF URI Permissions",
-                context.contentResolver.persistedUriPermissions
-                    .joinToString {
-                        "${it.uri} read=${it.isReadPermission} write=${it.isWritePermission}"
-                    }
-                    .ifBlank { "None" },
-                EvidenceClassification.OBSERVED_BY_AUXIO,
-                primaryMethod = "ContentResolver.persistedUriPermissions",
-            )
-        )
+        entries.add(persistedSafUriPermissionsEntry())
         entries.add(
             DiagnosticEntry(
                 "Last Scan Failed",
@@ -430,6 +419,34 @@ constructor(
         return entries
     }
 
+    private fun persistedSafUriPermissionsEntry(): DiagnosticEntry =
+        try {
+            DiagnosticEntry(
+                "Persisted SAF URI Permissions",
+                context.contentResolver.persistedUriPermissions
+                    .joinToString {
+                        "${it.uri} read=${it.isReadPermission} write=${it.isWritePermission}"
+                    }
+                    .ifBlank { "None" },
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+                primaryMethod = "ContentResolver.persistedUriPermissions",
+            )
+        } catch (e: SecurityException) {
+            DiagnosticEntry(
+                "Persisted SAF URI Permissions",
+                "Permission denied: ${e.message ?: "no message"}",
+                EvidenceClassification.PERMISSION_DENIED,
+                primaryMethod = "ContentResolver.persistedUriPermissions",
+            )
+        } catch (e: RuntimeException) {
+            DiagnosticEntry(
+                "Persisted SAF URI Permissions",
+                "Query failed: ${e.javaClass.simpleName}: ${e.message ?: "no message"}",
+                EvidenceClassification.QUERY_FAILED,
+                primaryMethod = "ContentResolver.persistedUriPermissions",
+            )
+        }
+
     private fun listDirectoryChildren(root: File, removableOnly: Boolean): List<String> =
         try {
             root
@@ -472,6 +489,7 @@ constructor(
         )
     }
 
+    // @TargetApi documents SDK-gated API-29 MediaStore helpers; callers guard with SDK_INT >= Q.
     @TargetApi(Build.VERSION_CODES.Q)
     private fun mediaStoreVolumes(entries: MutableList<DiagnosticEntry>): Set<String>? {
         val volumes =

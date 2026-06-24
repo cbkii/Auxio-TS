@@ -123,16 +123,15 @@ Build the standard development APK:
 ./gradlew :app:assembleStandardDebug
 ```
 
-Build the TS18/Topway/DoFun exact compatibility APK:
+Build the TS18/Topway/DoFun release APKs:
 
 ```sh
+# Exact stock package replacement target. This conflicts with stock com.tw.music
+# unless the install lane handles package state/signing constraints.
 ./gradlew :app:assembleTopwayTwMusicRelease
-./gradlew :app:assembleTopwayTwMediaRelease
-```
 
-Build the implemented TS18/Topway/DoFun alternate `com.tw.media` APK:
-
-```sh
+# Alternate DoFun fixed-entry target. This is not a universal no-root bypass and
+# may still conflict on firmware where com.tw.media already exists.
 ./gradlew :app:assembleTopwayTwMediaRelease
 ```
 
