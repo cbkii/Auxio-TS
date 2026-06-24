@@ -55,7 +55,7 @@ Fully wiring the catalogue (adding a `[libraries]` section and migrating build s
 
 ### Dependency update automation
 
-`.github/dependabot.yml` opens weekly patch-only grouped PRs for Gradle dependencies and GitHub Actions. Git submodule version-update PRs are intentionally disabled (`open-pull-requests-limit: 0`) because `media`, nested FFmpeg, and `musikr` taglib pins are release-critical and must be moved manually after preserving the Auxio media patch stack. Every update PR that is opened runs the same `android.yml` / `lint.yml` CI (canonical bootstrap → build → native → tests), so no automated update bypasses full-build-equivalent validation. Android Gradle Plugin, Kotlin, KSP, Gradle wrapper, and pinned UI-runtime dependencies are deliberately ignored by Dependabot because they require coordinated, human-reviewed migration.
+`.github/dependabot.yml` opens weekly grouped minor/patch PRs for Gradle dependencies and GitHub Actions, and monthly git-submodule PRs. Every update PR runs the same `android.yml` / `lint.yml` CI (canonical bootstrap → build → native → tests), so no automated update bypasses full-build-equivalent validation. Android Gradle Plugin **major** upgrades are deliberately ignored by Dependabot because they require coordinated Kotlin/KSP/Gradle-wrapper migration and must be done in a human-reviewed PR; minor/patch AGP updates are still allowed.
 
 ## Key Gradle tasks
 

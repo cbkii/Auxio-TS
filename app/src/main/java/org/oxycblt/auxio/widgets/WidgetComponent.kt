@@ -27,7 +27,7 @@ import coil3.size.Size
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -65,9 +65,11 @@ private constructor(
     private val playbackManager: PlaybackStateManager,
     private val uiSettings: UISettings,
     private val journal: DiagnosticJournal,
-) : PlaybackStateManager.Listener, UISettings.Listener, ImageSettings.Listener {
-    private val scopeJob = SupervisorJob()
-    private val scope = CoroutineScope(Dispatchers.Main + scopeJob)
+) :
+    PlaybackStateManager.Listener,
+    UISettings.Listener,
+    ImageSettings.Listener,
+    CoroutineScope by CoroutineScope(Dispatchers.Main + Job()) {
     private var lastRenderedIsPlaying: Boolean? = null
 
     class Factory
@@ -128,7 +130,7 @@ private constructor(
         imageSettings.registerListener(this)
 
         // Start a periodic timer to update Topway progress broadcasts once per second.
-        scope.launch {
+        launch {
             while (isActive) {
                 if (playbackManager.progression.isPlaying) {
                     val duration = playbackManager.currentSong?.durationMs ?: 0L
@@ -232,7 +234,7 @@ private constructor(
         playbackManager.removeListener(this)
         uiSettings.unregisterListener(this)
         topwayBridge.clear()
-        scopeJob.cancel()
+        (this as CoroutineScope).coroutineContext[Job]?.cancel()
         widgetProvider.reset(context, uiSettings)
         updateTopwayWidget(null)
     }

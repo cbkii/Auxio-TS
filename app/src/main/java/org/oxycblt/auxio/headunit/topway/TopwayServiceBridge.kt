@@ -18,16 +18,27 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.app.Service
 import org.oxycblt.auxio.BuildConfig
 
-/** Isolates Topway-compatible service class resolution from the generic activity flow. */
+/** Bridge for resolving Topway-compatible service components at runtime. */
 object TopwayServiceBridge {
-    fun resolveCompatServiceClass(fallback: Class<*>): Class<*> {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return fallback
-        return try {
-            Class.forName("com.tw.music.MusicService")
-        } catch (_: ClassNotFoundException) {
-            fallback
+    private const val STOCK_MUSIC_SERVICE_CLASS = "com.tw.music.MusicService"
+
+    /**
+     * Resolves the appropriate service class for the current flavor.
+     *
+     * @param defaultClass The standard service class to return if not in Topway flavor.
+     * @return The stock-compatible service class name if in Topway flavor, else defaultClass.
+     */
+    fun <T : Service> resolveCompatServiceClass(defaultClass: Class<T>): Class<*> {
+        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            return try {
+                Class.forName(STOCK_MUSIC_SERVICE_CLASS)
+            } catch (e: ClassNotFoundException) {
+                defaultClass
+            }
         }
+        return defaultClass
     }
 }

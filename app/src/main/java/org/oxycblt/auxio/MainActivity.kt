@@ -48,15 +48,6 @@ import timber.log.Timber as L
  * Auxio's single [AppCompatActivity].
  *
  * @author Alexander Capehart (OxygenCobalt)
- *
- * TODO: Add error screens
- * TODO: Custom language support
- * TODO: Use proper material attributes (Not the weird dimen attributes I currently have)
- * TODO: Migrate to material animation system
- * TODO: Unit testing
- * TODO: Fix UID naming
- * TODO: Leverage FlexibleListAdapter more in dialogs (Disable item anims)
- * TODO: Improve multi-threading support in shared objects
  */
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
@@ -91,14 +82,16 @@ class MainActivity : AppCompatActivity() {
         PerfTimer.trace("MainActivity.onResume") {
             super.onResume()
 
-            val serviceClass =
-                TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
+            if (!AuxioService.isForeground) {
+                val serviceClass =
+                    TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
 
-            startService(
-                Intent(this, serviceClass)
-                    .setAction(AuxioService.ACTION_START)
-                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
-            )
+                startService(
+                    Intent(this, serviceClass)
+                        .setAction(AuxioService.ACTION_START)
+                        .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
+                )
+            }
 
             if (!startIntentAction(intent)) {
                 // No intent action to do, restore the previously saved state.
