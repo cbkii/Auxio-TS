@@ -1,0 +1,22 @@
+### df -h
+# Time: 2026-06-24 21:31:40 +1000
+# Command: df -h
+
+Filesystem            Size  Used Avail Use% Mounted on
+/dev/block/dm-1       2.2G  2.1G  137M  95% /
+tmpfs                 1.8G  824K  1.8G   1% /dev
+tmpfs                 1.8G     0  1.8G   0% /mnt
+/dev/block/mmcblk0p1  5.3M  208K  5.1M   4% /mnt/vendor
+/dev/block/mmcblk0p33  69M   48M   21M  70% /mnt/vendor/socko
+/dev/block/mmcblk0p34  23M   28K   23M   1% /mnt/vendor/odmko
+/data/media            54G   31G   22G  59% /mnt/runtime/default/emulated
+tmpfs                 1.8G     0  1.8G   0% /apex
+/dev/block/mmcblk0p37  11M   72K   11M   1% /metadata
+/dev/block/dm-0       369M  298M   71M  81% /vendor
+magisk                1.8G  3.1M  1.8G   1% /sbin
+/dev/block/mmcblk0p44  54G   31G   22G  59% /data
+/dev/block/mmcblk0p43 196M   15M  181M   8% /twdataconfig
+/dev/block/mmcblk0p32 118M  340K  118M   1% /cache
+magisk                1.8G     0  1.8G   0% /system/bin
+
+# Exit: 0
