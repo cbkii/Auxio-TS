@@ -18,10 +18,12 @@
 
 package org.oxycblt.auxio.diagnostics
 
+import android.annotation.TargetApi
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.Settings
@@ -36,7 +38,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
+import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 
@@ -48,6 +52,8 @@ constructor(
     @ApplicationContext private val context: Context,
     private val journal: DiagnosticJournal,
     private val playbackManager: PlaybackStateManager,
+    private val musicSettings: MusicSettings,
+    private val rootGate: RootStateHolder,
 ) {
     private val _isCaptureActive = MutableStateFlow(false)
     val isCaptureActive: StateFlow<Boolean> = _isCaptureActive.asStateFlow()
@@ -323,54 +329,211 @@ constructor(
 
     private fun checkStorageState(): List<DiagnosticEntry> {
         val entries = mutableListOf<DiagnosticEntry>()
-        val roots = TopwaySourcePolicy.discoverCandidateRoots()
+        val query = musicSettings.safQuery
+
+        entries.add(
+            DiagnosticEntry(
+                "Diagnostic Authority",
+                "normal app context; no ADB, Shizuku, or root shell authority used",
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+            )
+        )
+        entries.add(
+            DiagnosticEntry(
+                "Storage Source Mode",
+                musicSettings.locationMode.name,
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+            )
+        )
+        entries.add(
+            DiagnosticEntry(
+                "Configured Source Locations",
+                query.source.joinToString { it.uri.toString() }.ifBlank { "None" },
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+            )
+        )
+        entries.add(
+            DiagnosticEntry(
+                "Configured Excluded Locations",
+                query.exclude.joinToString { it.uri.toString() }.ifBlank { "None" },
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+            )
+        )
+        entries.add(
+            DiagnosticEntry(
+                "Persisted SAF URI Permissions",
+                context.contentResolver.persistedUriPermissions
+                    .joinToString {
+                        "${it.uri} read=${it.isReadPermission} write=${it.isWritePermission}"
+                    }
+                    .ifBlank { "None" },
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+                primaryMethod = "ContentResolver.persistedUriPermissions",
+            )
+        )
+        entries.add(
+            DiagnosticEntry(
+                "Last Scan Failed",
+                musicSettings.lastScanFailed.toString(),
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+            )
+        )
+        entries.add(
+            DiagnosticEntry(
+                "Root Gate State",
+                rootGate.state.name,
+                EvidenceClassification.OBSERVED_BY_AUXIO,
+                detail =
+                    "Topway compat root gate state only; diagnostics did not execute root commands.",
+            )
+        )
+
+        val storageChildren = listDirectoryChildren(File("/storage"), removableOnly = false)
+        val mediaRwChildren = listDirectoryChildren(File("/mnt/media_rw"), removableOnly = true)
+        val discoveredRoots = TopwaySourcePolicy.discoverCandidateRoots()
+
+        val storageUsbChildren =
+            storageChildren.filter { File(it).name.startsWith("usbdisk", ignoreCase = true) }
+
+        entries.add(storageListEntry("/storage Roots", storageChildren, removableOnly = false))
+        entries.add(
+            storageListEntry("/storage USB Roots", storageUsbChildren, removableOnly = true)
+        )
+        entries.add(
+            storageListEntry("/mnt/media_rw USB Roots", mediaRwChildren, removableOnly = true)
+        )
         entries.add(
             DiagnosticEntry(
                 "Discovered Source Roots",
-                roots.joinToString(),
+                discoveredRoots.joinToString().ifBlank { "None visible/readable" },
                 EvidenceClassification.OBSERVED_BY_AUXIO,
                 primaryMethod = "TopwaySourcePolicy.discoverCandidateRoots",
             )
         )
-
-        val mediaRw = File("/mnt/media_rw")
-        entries.add(
-            DiagnosticEntry(
-                "/mnt/media_rw Accessible",
-                mediaRw.canRead().toString(),
-                EvidenceClassification.OBSERVED_BY_AUXIO,
-                fallbackMethod = "File.canRead()",
-            )
-        )
+        (storageChildren + storageUsbChildren + mediaRwChildren + discoveredRoots)
+            .distinct()
+            .forEach { path -> entries.add(candidatePathEntry(path)) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val volumes =
-                try {
-                    MediaStore.getExternalVolumeNames(context)
-                } catch (e: Exception) {
-                    entries.add(
-                        DiagnosticEntry(
-                            "MediaStore External Volumes",
-                            "Query failed: ${e.javaClass.simpleName}: ${e.message ?: "no message"}",
-                            EvidenceClassification.QUERY_FAILED,
-                            primaryMethod = "MediaStore.getExternalVolumeNames",
-                        )
-                    )
-                    null
-                }
-            if (volumes != null) {
-                entries.add(
-                    DiagnosticEntry(
-                        "MediaStore External Volumes",
-                        volumes.joinToString(),
-                        EvidenceClassification.INFERRED_FROM_PUBLIC_ANDROID_STATE,
-                        primaryMethod = "MediaStore.getExternalVolumeNames",
-                    )
+            val volumes = mediaStoreVolumes(entries)
+            volumes?.forEach { volume -> entries.add(mediaStoreAudioRowCountEntry(volume)) }
+        } else {
+            entries.add(
+                DiagnosticEntry(
+                    "MediaStore External Volumes",
+                    "API ${Build.VERSION.SDK_INT} does not expose getExternalVolumeNames",
+                    EvidenceClassification.API_UNAVAILABLE,
                 )
-            }
+            )
         }
 
         return entries
+    }
+
+    private fun listDirectoryChildren(root: File, removableOnly: Boolean): List<String> =
+        try {
+            root
+                .listFiles()
+                ?.asSequence()
+                ?.filter { it.isDirectory }
+                ?.filter { !removableOnly || it.name.startsWith("usbdisk", ignoreCase = true) }
+                ?.filter { it.name != "self" && it.name != "emulated" }
+                ?.sortedBy { it.absolutePath }
+                ?.map { it.absolutePath }
+                ?.toList()
+                .orEmpty()
+        } catch (e: SecurityException) {
+            emptyList()
+        } catch (e: RuntimeException) {
+            emptyList()
+        }
+
+    private fun storageListEntry(
+        name: String,
+        paths: List<String>,
+        removableOnly: Boolean,
+    ): DiagnosticEntry =
+        DiagnosticEntry(
+            name,
+            paths.joinToString().ifBlank { "None visible" },
+            EvidenceClassification.OBSERVED_BY_AUXIO,
+            detail =
+                if (removableOnly) "Only usbdiskN children are reported from /mnt/media_rw."
+                else "emulated/self pseudo-directories are excluded from removable candidates.",
+        )
+
+    private fun candidatePathEntry(path: String): DiagnosticEntry {
+        val file = File(path)
+        return DiagnosticEntry(
+            "Candidate Path State: $path",
+            "exists=${file.exists()}, isDirectory=${file.isDirectory}, canRead=${file.canRead()}",
+            EvidenceClassification.OBSERVED_BY_AUXIO,
+            primaryMethod = "java.io.File",
+        )
+    }
+
+    @TargetApi(Build.VERSION_CODES.Q)
+    private fun mediaStoreVolumes(entries: MutableList<DiagnosticEntry>): Set<String>? {
+        val volumes =
+            try {
+                MediaStore.getExternalVolumeNames(context)
+            } catch (e: Exception) {
+                entries.add(
+                    DiagnosticEntry(
+                        "MediaStore External Volumes",
+                        "Query failed: ${e.javaClass.simpleName}: ${e.message ?: "no message"}",
+                        EvidenceClassification.QUERY_FAILED,
+                        primaryMethod = "MediaStore.getExternalVolumeNames",
+                    )
+                )
+                return null
+            }
+        entries.add(
+            DiagnosticEntry(
+                "MediaStore External Volumes",
+                volumes.joinToString().ifBlank { "None" },
+                EvidenceClassification.INFERRED_FROM_PUBLIC_ANDROID_STATE,
+                primaryMethod = "MediaStore.getExternalVolumeNames",
+            )
+        )
+        return volumes
+    }
+
+    @TargetApi(Build.VERSION_CODES.Q)
+    private fun mediaStoreAudioRowCountEntry(volume: String): DiagnosticEntry {
+        val uri: Uri = MediaStore.Audio.Media.getContentUri(volume)
+        return try {
+            context.contentResolver
+                .query(uri, arrayOf(MediaStore.Audio.Media._ID), null, null, null)
+                ?.use { cursor ->
+                    DiagnosticEntry(
+                        "MediaStore Audio Rows: $volume",
+                        cursor.count.toString(),
+                        EvidenceClassification.INFERRED_FROM_PUBLIC_ANDROID_STATE,
+                        primaryMethod = "ContentResolver.query(${uri})",
+                    )
+                }
+                ?: DiagnosticEntry(
+                    "MediaStore Audio Rows: $volume",
+                    "Query returned null cursor",
+                    EvidenceClassification.QUERY_FAILED,
+                    primaryMethod = "ContentResolver.query(${uri})",
+                )
+        } catch (e: SecurityException) {
+            DiagnosticEntry(
+                "MediaStore Audio Rows: $volume",
+                "Permission denied: ${e.message ?: "no message"}",
+                EvidenceClassification.PERMISSION_DENIED,
+                primaryMethod = "ContentResolver.query(${uri})",
+            )
+        } catch (e: RuntimeException) {
+            DiagnosticEntry(
+                "MediaStore Audio Rows: $volume",
+                "Query failed: ${e.javaClass.simpleName}: ${e.message ?: "no message"}",
+                EvidenceClassification.QUERY_FAILED,
+                primaryMethod = "ContentResolver.query(${uri})",
+            )
+        }
     }
 
     fun startCapture(

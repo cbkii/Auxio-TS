@@ -37,6 +37,14 @@ class MusicSourcePathNormalizerTest {
     }
 
     @Test
+    fun directFsKeepsManualUsbDiskOnePathAsFileUri() {
+        assertEquals(
+            "file:///storage/usbdisk1/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation("/storage/usbdisk1/Music", true),
+        )
+    }
+
+    @Test
     fun directFsKeepsFileUriWithoutDuplicatingPath() {
         assertEquals(
             "file:///storage/usbdisk0/Music",
@@ -87,6 +95,17 @@ class MusicSourcePathNormalizerTest {
             "file:///storage/usbdisk0/Music",
             MusicSourcePathNormalizer.normalizePersistedLocation(
                 "file:///storage/usbdisk0/storage/usbdisk0/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun duplicatedPersistedUsbDiskOnePathIsRepairedWhenSafe() {
+        assertEquals(
+            "file:///storage/usbdisk1/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "file:///storage/usbdisk1/storage/usbdisk1/Music",
                 true,
             ),
         )

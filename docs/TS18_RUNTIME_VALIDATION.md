@@ -10,7 +10,7 @@ The exact target-device profile is summarised in [`evidence/ts18-device-profile/
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Auxio-TS commit SHA                   |                                                                                                       |
 | APK file                              | `app/build/outputs/apk/topwayTwMusic/release/app-topwayTwMusic-release.apk` or alternate variant path |
-| Expected package                      | `com.tw.music` for exact replacement; `com.tw.media` for alternate DoFun entry once implemented       |
+| Expected package                      | `com.tw.music` for exact replacement; `com.tw.media` for the implemented alternate DoFun entry       |
 | Expected exact launcher component     | `com.tw.music/.MusicActivity`                                                                         |
 | Expected alternate launcher component | `com.tw.media/com.tw.music.MusicActivity`                                                             |
 | Head unit model/firmware              | `s9863a1h10_Natv`, Android 10 / SDK 29, if testing the captured target device                         |
@@ -117,7 +117,7 @@ Exact `com.tw.music` replacement:
 adb install -r app/build/outputs/apk/topwayTwMusic/release/app-topwayTwMusic-release.apk
 ```
 
-Alternate `com.tw.media` DoFun entry once implemented:
+Alternate `com.tw.media` DoFun entry:
 
 ```sh
 adb install -r app/build/outputs/apk/topwayTwMedia/release/app-topwayTwMedia-release.apk

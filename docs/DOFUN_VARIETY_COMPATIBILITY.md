@@ -164,7 +164,7 @@ The exact TS18 diagnostic profile indicates the stock music app is part of a bro
 Auxio-TS implements or should implement the highest-confidence DoFun/Topway fallbacks without copying private vendor APIs:
 
 - the exact release APK installs as `com.tw.music`;
-- the alternate candidate APK installs as `com.tw.media` once implemented;
+- the alternate APK installs as `com.tw.media`;
 - both Topway-compatible variants should expose `com.tw.music.MusicActivity` for DoFun matching;
 - `com.tw.music.MusicService` may be provided in the Topway flavour as a stock-name wrapper over Auxio's real media/browser/playback service;
 - `com.tw.music.view.MusicWidgetProvider` may be provided in the Topway flavour as a stock-name wrapper that forwards safe observed Topway widget/control broadcasts into Auxio's bridge;
@@ -214,7 +214,7 @@ CI should protect:
 
 - standard variant identity remains intact;
 - Topway stock release variant installs as exact `com.tw.music`;
-- Topway alternate release variant installs as exact `com.tw.media` once implemented;
+- Topway alternate release variant installs as exact `com.tw.media`;
 - `com.tw.music.MusicActivity` alias exists in Topway-compatible variants;
 - `MediaBrowserService` remains declared/exported as intended;
 - provider authorities follow the variant application ID;

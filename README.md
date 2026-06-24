@@ -130,7 +130,7 @@ Build the TS18/Topway/DoFun exact compatibility APK:
 ./gradlew :app:assembleTopwayTwMediaRelease
 ```
 
-Build the TS18/Topway/DoFun alternate `com.tw.media` APK once implemented:
+Build the implemented TS18/Topway/DoFun alternate `com.tw.media` APK:
 
 ```sh
 ./gradlew :app:assembleTopwayTwMediaRelease
@@ -196,7 +196,7 @@ Use this repo for Auxio-TS-specific work, especially:
 - TS18/Topway head-unit behaviour
 - DoFun Variety Theme widget/panel integration
 - `com.tw.music` compatibility APK behaviour
-- `com.tw.media` alternate DoFun fixed-entry behaviour once implemented
+- `com.tw.media` alternate DoFun fixed-entry behaviour
 - Topway broadcast/control bridge behaviour
 - release and validation workflows for the TS18 variant
 

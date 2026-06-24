@@ -24,7 +24,9 @@ import timber.log.Timber as L
 /** Policy for identifying and prioritizing TS18-specific candidate music source roots. */
 object TopwaySourcePolicy {
 
-    /** Primary observed USB storage path on Topway TS18. */
+    /**
+     * Primary observed USB storage path on captured Topway TS18 evidence; not a discovery limit.
+     */
     const val USB_DISK_0 = "/storage/usbdisk0"
 
     /** Observed primary shared music directory on TS18. */
@@ -40,13 +42,18 @@ object TopwaySourcePolicy {
     val SAFE_GENERIC_FALLBACKS = listOf(EMULATED_MUSIC, SDCARD_MUSIC)
 
     /**
-     * TS18-specific removable USB candidate. Should only be used on Topway/TS18 builds and after
-     * explicit validation.
+     * Static example USB candidate from captured TS18 evidence. Runtime code must use
+     * [discoverCandidateRoots] so `/storage/usbdisk1`, `/storage/usbdisk2`, and
+     * `/mnt/media_rw/usbdiskN` mounts are not missed.
      */
-    val TS18_USB_CANDIDATES = listOf(USB_DISK_0)
+    val TS18_USB_EXAMPLE_CANDIDATES = listOf(USB_DISK_0)
 
-    /** List of all candidate roots. */
-    val CANDIDATE_ROOTS = SAFE_GENERIC_FALLBACKS + TS18_USB_CANDIDATES
+    /** Backwards-compatible alias for docs/tests; example seeds only, not a complete allowlist. */
+    @Deprecated("Use dynamic discoverCandidateRoots(); this is an observed example seed only")
+    val TS18_USB_CANDIDATES = TS18_USB_EXAMPLE_CANDIDATES
+
+    /** Static example candidate roots. Runtime selection should call [discoverCandidateRoots]. */
+    val CANDIDATE_ROOTS = SAFE_GENERIC_FALLBACKS + TS18_USB_EXAMPLE_CANDIDATES
 
     /** Directories that are known to be noisy or irrelevant on TS18 and should be skipped. */
     val NOISY_DIRS =
