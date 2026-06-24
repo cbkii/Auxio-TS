@@ -82,7 +82,7 @@ if [ -n "${vendor_hits}" ]; then
     case "${path}" in
       ${allowed_topway_main}*|${allowed_topway_test}*|${allowed_topway_flavour}*)
         case "${line}" in
-          *"com.tw.music.action.cmd"*|*"com.tw.music.action.prev"*|*"com.tw.music.action.next"*|*"com.tw.music.action.pp"*|*"com.tw.music.info"*|*"com.tw.launcher.music_progress_duration"*|*"com.android.launcher.widget_music_progress"*|*"com.tw.music.MusicActivity"*|*"com.tw.music.view.MusicWidgetProvider"*) ;;
+          *"com.tw.music.action.cmd"*|*"com.tw.music.action.prev"*|*"com.tw.music.action.next"*|*"com.tw.music.action.pp"*|*"com.tw.music.info"*|*"com.tw.launcher.music_progress_duration"*|*"com.android.launcher.widget_music_progress"*|*"com.tw.music.MusicActivity"*|*"com.tw.music.MusicService"*|*"com.tw.music.view.MusicWidgetProvider"*) ;;
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in isolated Topway bridge/test path" >&2
