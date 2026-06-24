@@ -91,7 +91,8 @@ class MainActivity : AppCompatActivity() {
         PerfTimer.trace("MainActivity.onResume") {
             super.onResume()
 
-            val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
+            val serviceClass =
+                TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
 
             startService(
                 Intent(this, serviceClass)
