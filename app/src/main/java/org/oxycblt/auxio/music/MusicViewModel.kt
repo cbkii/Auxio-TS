@@ -60,7 +60,7 @@ constructor(
 
     private val _indexingState = MutableStateFlow<IndexingState?>(null)
 
-    private var lastLibraryIdentity: Int = 0
+    private var libraryGeneration = 0L
 
     /** The current music loading state, or null if no loading is going on. */
     val indexingState: StateFlow<IndexingState?> = _indexingState
@@ -97,8 +97,7 @@ constructor(
     override fun onMusicChanges(changes: MusicRepository.Changes) {
         if (!changes.deviceLibrary) return
         val library = musicRepository.library ?: return
-        val libraryIdentity = library.hashCode()
-        lastLibraryIdentity = libraryIdentity
+        val generation = ++libraryGeneration
 
         viewModelScope.launch {
             // Compute both totals in a single pass on a background thread.
@@ -120,7 +119,7 @@ constructor(
                     )
                 }
 
-            if (lastLibraryIdentity == libraryIdentity) {
+            if (libraryGeneration == generation) {
                 _statistics.value = stats
                 L.d("Updated statistics: $stats")
             } else {

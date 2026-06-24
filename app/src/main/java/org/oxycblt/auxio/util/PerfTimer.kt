@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.util
 
+import android.os.SystemClock
 import org.oxycblt.auxio.BuildConfig
 import timber.log.Timber
 
@@ -27,36 +28,40 @@ import timber.log.Timber
  */
 object PerfTimer {
     @PublishedApi internal const val TAG = "AuxioPerf"
+    @PublishedApi internal const val NANOS_PER_MS = 1_000_000L
 
     /** Records a timing for a block of code. Only active in debug builds. */
     inline fun <T> trace(label: String, block: () -> T): T {
         if (!BuildConfig.DEBUG) return block()
 
-        val start = System.currentTimeMillis()
+        val start = SystemClock.elapsedRealtimeNanos()
         return try {
             block()
         } finally {
-            val end = System.currentTimeMillis()
-            Timber.tag(TAG).d("$label took ${end - start}ms")
+            val elapsedMs = (SystemClock.elapsedRealtimeNanos() - start) / NANOS_PER_MS
+            Timber.tag(TAG).d("$label took ${elapsedMs}ms")
         }
     }
 
-    /** Records a timing for a suspend block of code. Only active in debug builds. */
+    /**
+     * Records wall elapsed time for a suspend block. The duration includes suspension time,
+     * dispatcher wait, and I/O wait; it is not CPU time. Only active in debug builds.
+     */
     suspend inline fun <T> traceSuspend(label: String, crossinline block: suspend () -> T): T {
         if (!BuildConfig.DEBUG) return block()
 
-        val start = System.currentTimeMillis()
+        val start = SystemClock.elapsedRealtimeNanos()
         return try {
             block()
         } finally {
-            val end = System.currentTimeMillis()
-            Timber.tag(TAG).d("$label took ${end - start}ms")
+            val elapsedMs = (SystemClock.elapsedRealtimeNanos() - start) / NANOS_PER_MS
+            Timber.tag(TAG).d("$label took ${elapsedMs}ms")
         }
     }
 
     /** Records a point in time with a label. */
     fun point(label: String) {
         if (!BuildConfig.DEBUG) return
-        Timber.tag(TAG).d("POINT: $label at ${System.currentTimeMillis()}ms")
+        Timber.tag(TAG).d("POINT: $label at ${SystemClock.elapsedRealtime()}ms")
     }
 }

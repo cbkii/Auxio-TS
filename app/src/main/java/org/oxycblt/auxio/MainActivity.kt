@@ -90,24 +90,22 @@ class MainActivity : AppCompatActivity() {
         PerfTimer.trace("MainActivity.onResume") {
             super.onResume()
 
-            if (!AuxioService.isForeground) {
-                val serviceClass =
-                    if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                        try {
-                            Class.forName("com.tw.music.MusicService")
-                        } catch (e: ClassNotFoundException) {
-                            AuxioService::class.java
-                        }
-                    } else {
+            val serviceClass =
+                if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    try {
+                        Class.forName("com.tw.music.MusicService")
+                    } catch (e: ClassNotFoundException) {
                         AuxioService::class.java
                     }
+                } else {
+                    AuxioService::class.java
+                }
 
-                startService(
-                    Intent(this, serviceClass)
-                        .setAction(AuxioService.ACTION_START)
-                        .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
-                )
-            }
+            startService(
+                Intent(this, serviceClass)
+                    .setAction(AuxioService.ACTION_START)
+                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
+            )
 
             if (!startIntentAction(intent)) {
                 // No intent action to do, restore the previously saved state.
