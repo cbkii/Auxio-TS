@@ -54,7 +54,6 @@ open class AuxioService :
     override fun onCreate() {
         PerfTimer.trace("AuxioService.onCreate") {
             super.onCreate()
-            isForeground = false
             playbackFragment = playbackFragmentFactory.create(this, this)
             musicFragment = musicFragmentFactory.create(this, this, this)
             sessionToken = playbackFragment.attach()
@@ -100,7 +99,6 @@ open class AuxioService :
     }
 
     override fun onDestroy() {
-        isForeground = false
         super.onDestroy()
         musicFragment.release()
         playbackFragment.release()
@@ -173,7 +171,6 @@ open class AuxioService :
     companion object {
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".service.START"
 
-        @Volatile
         var isForeground = false
             private set
 

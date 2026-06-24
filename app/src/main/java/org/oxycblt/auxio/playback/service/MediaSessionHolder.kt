@@ -32,7 +32,6 @@ import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
 import coil3.size.Size
-import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
@@ -98,7 +97,7 @@ private constructor(
     val token: MediaSessionCompat.Token
         get() = mediaSession.sessionToken
 
-    private val artworkRequestToken = AtomicLong()
+    private var artworkRequestToken = 0L
 
     private val _notification = PlaybackNotification(context, mediaSession.sessionToken)
     val notification: ForegroundServiceNotification
@@ -123,7 +122,6 @@ private constructor(
      */
     fun release() {
         // Clear published state before shutdown so external controllers do not keep stale metadata.
-        artworkRequestToken.incrementAndGet()
         mediaSession.setMetadata(emptyMetadata)
         _notification.updateMetadata(emptyMetadata)
         bitmapProvider.release()
@@ -227,13 +225,11 @@ private constructor(
     private fun updateMediaMetadata(song: Song?, parent: MusicParent?) {
         PerfTimer.trace("MediaSessionHolder.updateMediaMetadata") {
             L.d("Updating media metadata to $song with $parent")
-            val requestToken = artworkRequestToken.incrementAndGet()
             if (song == null) {
                 // Nothing playing, reset the MediaSession and close the notification.
                 L.d("Nothing playing, resetting media session")
                 mediaSession.setMetadata(emptyMetadata)
                 _notification.updateMetadata(emptyMetadata)
-                bitmapProvider.release()
                 return
             }
 
@@ -261,7 +257,6 @@ private constructor(
                     ?: run {
                         mediaSession.setMetadata(emptyMetadata)
                         _notification.updateMetadata(emptyMetadata)
-                        bitmapProvider.release()
                         return
                     }
             val builder =
@@ -332,6 +327,9 @@ private constructor(
             _notification.updateMetadata(initialMetadata)
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
 
+            // Increment token to track this specific artwork request.
+            val requestToken = ++artworkRequestToken
+
             // We are normally supposed to use URIs for album art, but that removes some of the
             // nice things we can do like square cropping or high quality covers. Instead,
             // we load a full-size bitmap into the media session and take the performance hit.
@@ -340,7 +338,7 @@ private constructor(
                 song,
                 object : BitmapProvider.Target {
                     override fun onCompleted(bitmap: Bitmap?) {
-                        if (requestToken != artworkRequestToken.get()) {
+                        if (requestToken != artworkRequestToken) {
                             L.d("Artwork loaded for stale request; ignoring")
                             return
                         }
