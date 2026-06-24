@@ -91,8 +91,19 @@ class MainActivity : AppCompatActivity() {
             super.onResume()
 
             if (!AuxioService.isForeground) {
+                val serviceClass =
+                    if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                        try {
+                            Class.forName("com.tw.music.MusicService")
+                        } catch (e: ClassNotFoundException) {
+                            AuxioService::class.java
+                        }
+                    } else {
+                        AuxioService::class.java
+                    }
+
                 startService(
-                    Intent(this, AuxioService::class.java)
+                    Intent(this, serviceClass)
                         .setAction(AuxioService.ACTION_START)
                         .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
                 )

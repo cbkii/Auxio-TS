@@ -37,13 +37,13 @@ class TopwayMusicBroadcastBridge(
     private val bridgeEnabled: Boolean
         get() = BuildConfig.TOPWAY_COMPAT_FLAVOR || uiSettings.headUnitLandscapeMode
 
-    fun publishMetadata(snapshot: HeadUnitMetadataSnapshot?) {
+    fun publishMetadata(snapshot: HeadUnitMetadataSnapshot?, force: Boolean = false) {
         if (!bridgeEnabled) return
         if (snapshot == null) {
             clearMetadata()
             return
         }
-        if (snapshot == lastMetadata) return
+        if (!force && snapshot == lastMetadata) return
         val intent = TopwayMusicIntentFactory.metadataIntent(snapshot)
         context.sendBroadcast(intent)
         journal?.log(
@@ -65,6 +65,7 @@ class TopwayMusicBroadcastBridge(
         progressMs: Long,
         durationMs: Long,
         nowMs: Long = SystemClock.elapsedRealtime(),
+        force: Boolean = false,
     ) {
         if (!bridgeEnabled) return
         val snapshot =
@@ -74,13 +75,14 @@ class TopwayMusicBroadcastBridge(
                     return
                 }
         if (
-            !TopwayProgressStatePolicy.shouldPublish(
-                snapshot,
-                lastProgress,
-                nowMs,
-                lastProgressAtMs,
-                MIN_PROGRESS_INTERVAL_MS,
-            )
+            !force &&
+                !TopwayProgressStatePolicy.shouldPublish(
+                    snapshot,
+                    lastProgress,
+                    nowMs,
+                    lastProgressAtMs,
+                    MIN_PROGRESS_INTERVAL_MS,
+                )
         ) {
             return
         }
@@ -142,6 +144,6 @@ class TopwayMusicBroadcastBridge(
     }
 
     private companion object {
-        const val MIN_PROGRESS_INTERVAL_MS = 2500L
+        const val MIN_PROGRESS_INTERVAL_MS = 1000L
     }
 }

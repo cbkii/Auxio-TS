@@ -90,7 +90,8 @@ class Auxio : Application() {
         NotificationBitmapSafety.journal = journal
         @Suppress("KotlinConstantConditions")
         if (
-            BuildConfig.APPLICATION_ID != "org.oxycblt.auxio" &&
+            BuildConfig.DEBUG &&
+                BuildConfig.APPLICATION_ID != "org.oxycblt.auxio" &&
                 BuildConfig.APPLICATION_ID != "org.oxycblt.auxio.debug"
         ) {
             Timber.plant(CopyleftNoticeTree())

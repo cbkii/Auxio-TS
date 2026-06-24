@@ -1,0 +1,55 @@
+--- a/app/src/main/java/org/oxycblt/auxio/widgets/WidgetComponent.kt
++++ b/app/src/main/java/org/oxycblt/auxio/widgets/WidgetComponent.kt
+@@ -19,6 +19,12 @@
+ import android.os.Build
+ import android.widget.RemoteViews
+ import coil3.request.ImageRequest
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.isActive
++import kotlinx.coroutines.launch
+ import coil3.request.transformations
+ import coil3.size.Size
+ import javax.inject.Inject
+@@ -51,7 +57,11 @@
+     private val playbackManager: PlaybackStateManager,
+     private val uiSettings: UISettings,
+     private val journal: DiagnosticJournal,
+-) : PlaybackStateManager.Listener, UISettings.Listener, ImageSettings.Listener {
++) :
++    PlaybackStateManager.Listener,
++    UISettings.Listener,
++    ImageSettings.Listener,
++    CoroutineScope by CoroutineScope(Dispatchers.Main + Job()) {
+     private var lastRenderedIsPlaying: Boolean? = null
+
+     class Factory
+@@ -113,6 +123,17 @@
+     fun attach() {
+         playbackManager.addListener(this)
+         uiSettings.registerListener(this)
+         imageSettings.registerListener(this)
++
++        // Start a periodic timer to update Topway progress broadcasts once per second.
++        launch {
++            while (isActive) {
++                if (playbackManager.progression.isPlaying) {
++                    val duration = playbackManager.currentSong?.durationMs ?: 0L
++                    topwayBridge.publishProgress(playbackManager.progression.calculateElapsedPositionMs(), duration)
++                }
++                delay(1000)
++            }
++        }
+     }
+
+     /**
+@@ -211,6 +232,7 @@
+         playbackManager.removeListener(this)
+         uiSettings.unregisterListener(this)
+         topwayBridge.clear()
++        (this as CoroutineScope).coroutineContext[Job]?.cancel()
+         widgetProvider.reset(context, uiSettings)
+         updateTopwayWidget(null)
+     }
