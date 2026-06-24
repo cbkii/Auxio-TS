@@ -79,8 +79,8 @@ If stock `com.tw.music` is present at `/system/priv-app/...`, a user-signed `top
 
 ```sh
 adb shell cmd package list packages | grep -E "com\.tw\.music|com\.tw\.media|org\.oxycblt\.auxio|com\.dofun\.variety"
-adb shell pm path com.tw.music
-adb shell dumpsys package com.tw.music | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|priv|system|enabled|User 0|installed'
+adb shell sh -c 'for p in com.tw.music com.tw.media; do pm path "$p" 2>/dev/null || true; done'
+adb shell dumpsys package com.tw.music | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|priv|system|enabled|User 0|installed' || true
 adb shell dumpsys package com.tw.media | grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|priv|system|enabled|User 0|installed' || true
 adb shell dumpsys package com.dofun.variety | grep -iE 'codePath|versionCode|versionName|userId|enabled|User 0|installed'
 ```
@@ -104,6 +104,7 @@ adb shell cmd package install-existing --user 0 com.tw.music
 adb shell pm enable com.tw.music
 adb shell pm clear com.dofun.variety || true
 adb shell pm clear com.tw.music || true
+adb shell pm clear com.tw.media || true
 adb reboot
 # After cold boot, repeat package resolution, DoFun hotseat, media-session, and broadcast checks.
 ```

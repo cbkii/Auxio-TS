@@ -60,7 +60,7 @@ constructor(
 
     private val _indexingState = MutableStateFlow<IndexingState?>(null)
 
-    private var libraryGeneration = 0L
+    @Volatile private var libraryGeneration = 0L
 
     /** The current music loading state, or null if no loading is going on. */
     val indexingState: StateFlow<IndexingState?> = _indexingState

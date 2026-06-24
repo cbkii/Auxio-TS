@@ -33,6 +33,7 @@ import org.oxycblt.auxio.databinding.ActivityMainBinding
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
@@ -90,16 +91,7 @@ class MainActivity : AppCompatActivity() {
         PerfTimer.trace("MainActivity.onResume") {
             super.onResume()
 
-            val serviceClass =
-                if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                    try {
-                        Class.forName("com.tw.music.MusicService")
-                    } catch (e: ClassNotFoundException) {
-                        AuxioService::class.java
-                    }
-                } else {
-                    AuxioService::class.java
-                }
+            val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
 
             startService(
                 Intent(this, serviceClass)
