@@ -20,7 +20,7 @@ The collector is intended to answer these questions:
 2. Does Auxio-TS publish a MediaStyle notification with title, artist, progress, transport actions and artwork?
 3. Does DoFun send standard media commands, Topway private broadcasts, or both?
 4. Does Auxio-TS crash or fail due to RemoteViews/bitmap/artwork, notification, media-session, ExoPlayer, storage, DirectFS, root-gate, overlay, boot, or widget problems?
-5. Are VLC still good baselines for the generic Android MediaSession path?
+5. Is VLC still a useful baseline for the generic Android MediaSession path?
 6. Are current TS18 app/module experiments, such as BTAndroidTS, ts18-intent-bridge, NavRadio+, DocumentsUI, Magisk/Zygisk/LSPosed modules, and Topway stock services interacting with media/audio?
 7. Which SAF / file path / DirectFS / MediaStore source path is actually configured or reachable, and is the app treating inaccessible paths as empty libraries?
 8. How early after boot are storage, package manager, DoFun, Auxio services, overlays, and media sessions ready?
@@ -164,10 +164,9 @@ During the capture window:
 5. Move/use floating controls near the top status bar and right navigation/edge drawer areas. Try status shade, DoFun gestures, and right-edge navigation controls. Note whether Auxio is below SystemUI, loses touch, is displaced, or cannot receive edge-area touches.
 6. Test interruption contexts: pause from DoFun, Auxio UI, notification, headset/BT controller if available, VLC takeover, radio/NavRadio, reverse/camera if safe, phone/telecom if available, ACC sleep/wake if available.
 7. Switch to VLC and play audio for 2-3 minutes.
-8. Switch to  play audio for 2-3 minutes.
-9. Return to Auxio-TS and repeat play/pause/next/previous.
-10. If testing BTAndroidTS or ts18-intent-bridge, trigger their intended user-visible action once.
-11. Stop early if needed.
+8. Return to Auxio-TS and repeat play/pause/next/previous.
+9. If testing BTAndroidTS or ts18-intent-bridge, trigger their intended user-visible action once.
+10. Stop early if needed.
 
 The generated output now includes `00_FEATURE_AUDIT_SCOPE.md`, which maps Auxio-TS PR/release-note feature claims to the runtime evidence files in the capture.
 

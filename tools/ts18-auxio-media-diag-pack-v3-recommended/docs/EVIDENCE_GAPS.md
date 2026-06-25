@@ -2,7 +2,7 @@
 
 ## DoFun generic media integration
 
-Known: VLC work in the DoFun music window/widget. This strongly suggests a generic Android media path, but the exact mechanism on this TS18 build is not yet proven.
+Known: VLC works in the DoFun music window/widget. This strongly suggests a generic Android media path, but the exact mechanism on this TS18 build is not yet proven.
 
 Needed evidence:
 

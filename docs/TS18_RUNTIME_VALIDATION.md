@@ -234,10 +234,9 @@ Manual checks:
 - confirm Auxio-TS can scan or otherwise access `/storage/usbdiskN` where permitted;
 - confirm playback works from the same storage locations stock `twMusic` can access;
 - run the external Magisk/service.d collector under `tools/ts18-auxio-media-diag-pack-v3-recommended/` for TS18 diagnostics; the former in-app TS18 Health Diagnostics / Storage Health screen is abandoned and must not be restored;
-- in the guided DoFun test, verify all instructions are visible before departure, the optional metadata-marker consent checkbox is honoured, the countdown automatically starts capture, the user leaves Auxio once, taps the DoFun Music card last, returns once, and answers numbered questions with numbered choices plus optional free text;
-- in timed capture, verify 2, 5, 10, and 15 minute selections are enforced by the foreground service and the Stop action preserves a partial report;
-- arm one-shot startup capture, then validate true boot capture when Android permits it and first normal Auxio-start fallback when boot foreground-service start is blocked; after successful capture, the armed ID/expiry should be consumed;
-- verify noisy/problem path display, confirmation before exclusion, exact user-selected source preservation, alias/canonical distinction, and report output for SAF grants, MediaStore volumes, dynamic `/storage/usbdiskN` roots, exclusions, and temporarily unavailable sources;
+- during the external collector window, manually exercise Auxio-TS, DoFun, VLC, floating controls, source selection, USB mount/unmount where safe, and playback interruption cases;
+- confirm the collector output includes exactly one top-level session directory, `REPORT.md`, `commands/command-index.tsv`, package dumps, media-session dumps, notification dumps, audio dumps, storage/source evidence, and `auxio/in-app-diagnostics-skipped.txt`;
+- verify exact user-selected source preservation, alias/canonical distinction, SAF grants, MediaStore volumes, dynamic `/storage/usbdiskN` roots, exclusions, and temporarily unavailable sources using external collector output plus app-visible behaviour;
 - verify save/copy/share output: failed saves must not discard the report, successful saves should show the full path, and destination discovery must not create directories until save time;
 - retest after ACC/reboot and after USB disk re-mount.
 

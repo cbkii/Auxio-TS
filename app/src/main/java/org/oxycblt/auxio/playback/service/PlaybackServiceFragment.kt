@@ -90,6 +90,12 @@ private constructor(
             onExitRequested = { playbackManager.endSession() },
         )
 
+    private fun restoreCachedPlaybackStateIfIdle() {
+        if (playbackManager.currentSong != null) return
+        L.i("Requesting cached saved-state restore on playback service attach")
+        playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+    }
+
     private fun scheduleAutoStop() {
         autoStopJob?.cancel()
         autoStopJob =
@@ -123,6 +129,7 @@ private constructor(
         widgetComponent.attach()
         systemReceiver.attach()
         playbackManager.addListener(this)
+        restoreCachedPlaybackStateIfIdle()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token
     }

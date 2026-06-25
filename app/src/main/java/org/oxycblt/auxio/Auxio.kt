@@ -19,6 +19,7 @@
 package org.oxycblt.auxio
 
 import android.app.Application
+import android.content.Context
 import android.os.Build
 import android.os.StrictMode
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -137,6 +138,27 @@ class Auxio : Application() {
                 val companion = hooksClass.getDeclaredField("Companion").get(null)
                 val registerMethod = companionClass.getMethod("register", Application::class.java)
                 registerMethod.invoke(companion, this)
+
+                try {
+                    val serviceClass =
+                        Class.forName(
+                            "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
+                        )
+                    val serviceCompanionClass =
+                        Class.forName(
+                            "org.oxycblt.auxio.car.overlay.CarFloatingControlsService\$Companion"
+                        )
+                    val serviceCompanion = serviceClass.getDeclaredField("Companion").get(null)
+                    val restoreMethod =
+                        serviceCompanionClass.getMethod(
+                            "restoreIfEnabled",
+                            Context::class.java,
+                            String::class.java,
+                        )
+                    restoreMethod.invoke(serviceCompanion, this, "application_on_create")
+                } catch (e: ReflectiveOperationException) {
+                    Timber.w(e, "Car overlay startup restore not available")
+                }
             } catch (e: ReflectiveOperationException) {
                 Timber.w(e, "Car overlay visibility hooks not available")
             }

@@ -178,31 +178,39 @@ class ExoPlaybackStateHolder(
     }
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
+        if (action is DeferredPlayback.RestoreState) {
+            val library = musicRepository.library?.takeIf { !it.empty() }
+            if (library == null) {
+                L.d("Cached library not ready for saved-state restore; keeping restore deferred")
+                return false
+            }
+            L.d("Restoring playback state from cached/loaded library")
+            restoreScope.launch {
+                val state = persistenceRepository.readState()
+                withContext(Dispatchers.Main) {
+                    if (state != null) {
+                        // Apply the saved state on the main thread to prevent code expecting
+                        // state updates on the main thread from crashing.
+                        playbackManager.applySavedState(state, false)
+                        if (action.play) {
+                            playbackManager.playing(true)
+                        }
+                    } else if (action.fallback != null) {
+                        playbackManager.playDeferred(action.fallback)
+                    }
+                }
+            }
+            return true
+        }
+
         val library =
             musicRepository.library?.takeIf { !it.empty() }
                 // No library, cannot do anything.
                 ?: return false
 
         when (action) {
-            // Restore state -> Start a new restoreState job
-            is DeferredPlayback.RestoreState -> {
-                L.d("Restoring playback state")
-                restoreScope.launch {
-                    val state = persistenceRepository.readState()
-                    withContext(Dispatchers.Main) {
-                        if (state != null) {
-                            // Apply the saved state on the main thread to prevent code expecting
-                            // state updates on the main thread from crashing.
-                            playbackManager.applySavedState(state, false)
-                            if (action.play) {
-                                playbackManager.playing(true)
-                            }
-                        } else if (action.fallback != null) {
-                            playbackManager.playDeferred(action.fallback)
-                        }
-                    }
-                }
-            }
+            // Restore state is handled above so it can remain pending until the cached library exists.
+            is DeferredPlayback.RestoreState -> return false
             // Shuffle all -> Start new playback from all songs
             is DeferredPlayback.ShuffleAll -> {
                 L.d("Shuffling all tracks")

@@ -82,8 +82,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 stopSelfCleanly()
                 return START_NOT_STICKY
             }
+            journal.log(DiagnosticJournal.CAT_OVERLAY, "Sticky restart restore", "reason=null_intent")
             startOverlayRuntime()
-            return START_NOT_STICKY
+            return START_STICKY
         }
 
         if (intent.action == ACTION_STOP) {
@@ -105,7 +106,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
 
         when (intent.action) {
-            ACTION_START -> showOverlayIfAllowed()
+            ACTION_START -> {
+                journal.log(
+                    DiagnosticJournal.CAT_OVERLAY,
+                    "Overlay restore requested",
+                    intent.getStringExtra(EXTRA_START_REASON) ?: "unspecified",
+                )
+                startOverlayRuntime()
+            }
             ACTION_SHOW -> showOverlayIfAllowed()
             ACTION_HIDE -> hideOverlay()
             ACTION_TOGGLE -> {
@@ -127,11 +135,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 if (isAuxioForeground && prefs.hideWhileAuxioForeground) {
                     hideOverlay()
                 } else if (!isAuxioForeground && prefs.enabled) {
-                    showOverlayIfAllowed()
-                }
-                if (!isOverlayAttached) {
-                    L.d("Foreground-change signal left no live overlay; stopping idle service")
-                    stopSelfCleanly()
+                    startOverlayRuntime()
                 }
             }
             else -> {
@@ -139,7 +143,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 stopSelfCleanly()
             }
         }
-        return START_NOT_STICKY
+        return restartMode()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -172,7 +176,16 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         removeOverlay()
     }
 
+    private fun restartMode(): Int =
+        if (prefs.enabled && Settings.canDrawOverlays(this)) START_STICKY else START_NOT_STICKY
+
     private fun showOverlayIfAllowed() {
+        if (!prefs.enabled) {
+            L.d("Cannot show overlay: disabled, stopping")
+            removeOverlay()
+            stopSelfCleanly()
+            return
+        }
         if (!Settings.canDrawOverlays(this)) {
             L.w("Cannot show overlay: permission revoked, stopping")
             removeOverlay()
@@ -505,6 +518,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         const val ACTION_AUXIO_FOREGROUND_CHANGED =
             BuildConfig.APPLICATION_ID + ".car.overlay.AUXIO_FG_CHANGED"
         const val EXTRA_AUXIO_FOREGROUND = "extra_auxio_foreground"
+        private const val EXTRA_START_REASON = "extra_start_reason"
 
         /**
          * Returns the appropriate foreground service type for the current API level.
@@ -519,10 +533,34 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             }
         }
 
+        fun restoreIfEnabled(context: Context, reason: String) {
+            val prefs =
+                try {
+                    CarOverlayPrefs.from(context)
+                } catch (e: RuntimeException) {
+                    L.w(e, "Cannot restore overlay: preferences unavailable")
+                    return
+                }
+            if (!prefs.enabled) {
+                L.d("Skipping overlay restore; disabled [$reason]")
+                return
+            }
+            if (!Settings.canDrawOverlays(context)) {
+                L.w("Skipping overlay restore; permission missing [$reason]")
+                return
+            }
+            start(context, reason)
+        }
+
         fun start(context: Context) {
+            start(context, "explicit")
+        }
+
+        fun start(context: Context, reason: String) {
             if (!Settings.canDrawOverlays(context)) return
             val intent = Intent(context, CarFloatingControlsService::class.java)
             intent.action = ACTION_START
+            intent.putExtra(EXTRA_START_REASON, reason)
             try {
                 ContextCompat.startForegroundService(context, intent)
             } catch (e: IllegalStateException) {
