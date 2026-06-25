@@ -141,9 +141,7 @@ class Auxio : Application() {
 
                 try {
                     val serviceClass =
-                        Class.forName(
-                            "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
-                        )
+                        Class.forName("org.oxycblt.auxio.car.overlay.CarFloatingControlsService")
                     val serviceCompanionClass =
                         Class.forName(
                             "org.oxycblt.auxio.car.overlay.CarFloatingControlsService\$Companion"

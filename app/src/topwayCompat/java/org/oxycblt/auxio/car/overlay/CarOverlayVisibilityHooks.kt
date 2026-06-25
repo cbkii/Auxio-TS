@@ -25,8 +25,8 @@ import timber.log.Timber as L
 
 /**
  * Application-level activity lifecycle callbacks that keep the car floating overlay converged with
- * user settings. New starts proactively restore the overlay when enabled, while the optional
- * "hide while Auxio foreground" setting still suppresses the overlay during Auxio UI use.
+ * user settings. New starts proactively restore the overlay when enabled, while the optional "hide
+ * while Auxio foreground" setting still suppresses the overlay during Auxio UI use.
  */
 class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
 
@@ -81,8 +81,11 @@ class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
     }
 
     override fun onActivityResumed(activity: Activity) {}
+
     override fun onActivityPaused(activity: Activity) {}
+
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+
     override fun onActivityDestroyed(activity: Activity) {}
 
     companion object {

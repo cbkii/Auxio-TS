@@ -82,7 +82,11 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 stopSelfCleanly()
                 return START_NOT_STICKY
             }
-            journal.log(DiagnosticJournal.CAT_OVERLAY, "Sticky restart restore", "reason=null_intent")
+            journal.log(
+                DiagnosticJournal.CAT_OVERLAY,
+                "Sticky restart restore",
+                "reason=null_intent",
+            )
             startOverlayRuntime()
             return START_STICKY
         }

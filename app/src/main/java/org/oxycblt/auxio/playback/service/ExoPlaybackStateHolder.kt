@@ -209,7 +209,8 @@ class ExoPlaybackStateHolder(
                 ?: return false
 
         when (action) {
-            // Restore state is handled above so it can remain pending until the cached library exists.
+            // Restore state is handled above so it can remain pending until the cached library
+            // exists.
             is DeferredPlayback.RestoreState -> return false
             // Shuffle all -> Start new playback from all songs
             is DeferredPlayback.ShuffleAll -> {
