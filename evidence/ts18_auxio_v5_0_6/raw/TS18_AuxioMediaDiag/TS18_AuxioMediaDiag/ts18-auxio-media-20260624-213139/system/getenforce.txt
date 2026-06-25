@@ -1,7 +1,0 @@
-### getenforce
-# Time: 2026-06-24 21:31:40 +1000
-# Command: getenforce
-
-Permissive
-
-# Exit: 0
