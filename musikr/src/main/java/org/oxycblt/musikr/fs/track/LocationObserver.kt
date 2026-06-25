@@ -18,11 +18,13 @@
 
 package org.oxycblt.musikr.fs.track
 
+import android.content.ContentResolver
 import android.content.Context
 import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 
 internal class LocationObserver(
     private val context: Context,
@@ -30,14 +32,26 @@ internal class LocationObserver(
     private val onUpdate: () -> Unit,
 ) : ContentObserver(Handler(Looper.getMainLooper())), Runnable {
     private val handler = Handler(Looper.getMainLooper())
+    private var registered = false
 
     init {
-        context.applicationContext.contentResolver.registerContentObserver(uri, true, this)
+        registered = tryRegisterContentObserver(context, uri, this)
     }
 
     fun release() {
         handler.removeCallbacks(this)
-        context.applicationContext.contentResolver.unregisterContentObserver(this)
+        if (registered) {
+            try {
+                context.applicationContext.contentResolver.unregisterContentObserver(this)
+            } catch (e: RuntimeException) {
+                Log.w(
+                    TAG,
+                    "Ignoring content observer unregister failure for ${uri.redactedForLog()}",
+                    e,
+                )
+            }
+            registered = false
+        }
     }
 
     override fun onChange(selfChange: Boolean) {
@@ -50,7 +64,72 @@ internal class LocationObserver(
         onUpdate()
     }
 
-    private companion object {
+    internal companion object {
+        private const val TAG = "LocationObserver"
         const val REINDEX_DELAY_MS = 500L
+
+        fun isObservableContentUri(context: Context, uri: Uri): Boolean =
+            isObservableContentUri(uri) { authority ->
+                context.applicationContext.packageManager.resolveContentProvider(authority, 0) !=
+                    null
+            }
+
+        internal fun isObservableContentUri(
+            uri: Uri,
+            authorityResolver: (String) -> Boolean,
+        ): Boolean {
+            if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false
+            val authority = uri.authority
+            if (authority.isNullOrBlank()) return false
+            return authorityResolver(authority)
+        }
+
+        private fun tryRegisterContentObserver(
+            context: Context,
+            uri: Uri,
+            observer: ContentObserver,
+        ): Boolean {
+            if (!isObservableContentUri(context, uri)) {
+                Log.w(
+                    TAG,
+                    "Skipping content observer for unsupported or unresolved location: ${uri.redactedForLog()}",
+                )
+                return false
+            }
+            return try {
+                context.applicationContext.contentResolver.registerContentObserver(
+                    uri,
+                    true,
+                    observer,
+                )
+                true
+            } catch (e: SecurityException) {
+                Log.w(
+                    TAG,
+                    "Skipping content observer after provider security failure: ${uri.redactedForLog()}",
+                    e,
+                )
+                false
+            } catch (e: IllegalArgumentException) {
+                Log.w(
+                    TAG,
+                    "Skipping content observer after provider argument failure: ${uri.redactedForLog()}",
+                    e,
+                )
+                false
+            } catch (e: RuntimeException) {
+                Log.w(
+                    TAG,
+                    "Skipping content observer after provider runtime failure: ${uri.redactedForLog()}",
+                    e,
+                )
+                false
+            }
+        }
+
+        private fun Uri.redactedForLog(): String {
+            val authorityState = if (authority.isNullOrBlank()) "blank" else "present"
+            return "scheme=${scheme ?: "none"}, authority=$authorityState"
+        }
     }
 }

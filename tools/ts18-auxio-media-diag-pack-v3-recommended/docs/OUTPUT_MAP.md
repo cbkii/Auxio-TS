@@ -27,7 +27,7 @@
 - `storage/`: volume and mount state.
 - `vendor/`: Topway/Unisoc processes and properties.
 - `magisk/`: root/Magisk/module/service.d inventory and safe root probes.
-- `auxio/`: attempts to start Auxio in-app DiagnosticService.
+- `auxio/`: records that Auxio in-app DiagnosticService is skipped/removed.
 - `appdata/`: Auxio data inventory; preferences only copied when enabled.
 
 ## Most important evidence for DoFun widget integration
@@ -39,7 +39,6 @@
 5. `packages/org.oxycblt.../quick-components.txt` or `packages/com.tw.media/quick-components.txt`
 6. `packages/com.dofun.variety/quick-components.txt`
 7. `packages/org.videolan.vlc/quick-components.txt`
-8. `packages/com.spotify.music/quick-components.txt`
 
 ## v3 focus-area outputs
 

@@ -161,35 +161,10 @@ Always distinguish between: product requirement / Android-standard implementatio
 - Do not treat Codex environment build limitations as final CI proof; GitHub Actions/Copilot CI is the final workflow proof point.
 - Never claim tasks/build/test/lint success unless commands actually passed in this environment.
 
-## TS18 Health Diagnostics exception
+## TS18 diagnostics decision (current)
 
-The user-facing TS18 Health Diagnostics feature may perform targeted,
-bounded runtime evidence collection when explicitly started by the user.
-
-Allowed within this feature:
-
-- targeted checks of documented TS18/DoFun/Topway packages and components;
-- app-owned lifecycle, notification, playback, widget, overlay and bridge event logging;
-- observation of documented public Topway broadcasts;
-- dynamic media-mount and known-package change receivers during an active capture;
-- a visible foreground diagnostic capture lasting no more than 15 minutes;
-- automatic stop, bounded storage and explicit report export;
-- an optional one-shot next-boot capture when separately requested and clearly armed.
-
-This exception does not permit:
-
-- permanent or default background monitoring;
-- unrestricted package scanning;
-- private APK-resource loading;
-- READ_LOGS, root, Shizuku or hidden API requirements;
-- TWUtil/TWClient reflection;
-- vendor-service binding;
-- Cardoor protocol emulation;
-- collection of other apps’ private data;
-- network transmission of diagnostics.
-
-Targeted known-package/component checks are not considered a forbidden
-“vendor package scanner”.
+The former user-facing TS18 Health Diagnostics / Storage Health screen is abandoned.
+Do not revive DiagnosticService, DiagnosticsRepository, DiagnosticsViewModel, the diagnostics UI, armed in-app capture, or storage-health navigation/settings entries. TS18 diagnostics are collected by external Magisk/service.d tooling under `tools/`. Lightweight runtime logcat/journal markers are allowed only when they support normal runtime observability for boot, overlay, playback, widgets, and Topway bridge behavior.
 
 ## Baseline checks
 

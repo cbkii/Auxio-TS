@@ -2,11 +2,11 @@
 
 ## DoFun generic media integration
 
-Known: Spotify and VLC work in the DoFun music window/widget. This strongly suggests a generic Android media path, but the exact mechanism on this TS18 build is not yet proven.
+Known: VLC work in the DoFun music window/widget. This strongly suggests a generic Android media path, but the exact mechanism on this TS18 build is not yet proven.
 
 Needed evidence:
 
-- active `dumpsys media_session` state for Spotify, VLC and Auxio while each is playing;
+- active `dumpsys media_session` state for VLC and Auxio while each is playing;
 - relative session priority/order;
 - playback state/action bitmasks;
 - metadata keys and whether title/artist/duration/art URI are present;
@@ -28,7 +28,7 @@ The collector maps runtime evidence for:
 - overlay/floating controls;
 - boot/autostart;
 - playback queue/shuffle/seek/restore;
-- in-app DiagnosticService and journal;
+- external collector report and app logcat markers;
 - external modules/apps in the TS18 project scope.
 
 ## Device/system gaps
@@ -40,7 +40,7 @@ Still requiring capture on the exact TS18 unit:
 - whether stock `com.tw.music` private broadcasts are required only for fixed launcher slots;
 - whether root-gated DirectFS is necessary for all USB volumes or only raw `/mnt/media_rw` paths;
 - whether DocumentsUI module changes SAF source behaviour;
-- whether vendor audio focus/routing differs for Auxio versus Spotify/VLC;
+- whether vendor audio focus/routing differs for Auxio versus VLC;
 - whether overlay and notification bitmap changes survive ACC sleep/wake and reboot.
 
 
@@ -55,7 +55,7 @@ The pack now explicitly captures lower-confidence or unverified areas from the A
 - root gate denial/timeout loops;
 - DirectFS inaccessible-vs-empty source handling;
 - SAF/DocumentsUI resolver availability;
-- app-generated crash reports and DiagnosticService output;
+- app crash reports and external collector output;
 - BTAndroidTS, ts18-intent-bridge, NavRadio+ and other active project modules/apps;
 - vendor service interactions affecting audio focus/routing.
 

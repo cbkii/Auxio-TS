@@ -216,7 +216,7 @@ adb shell am broadcast -a com.android.launcher.widget_music_progress --ei music_
 
 ## Storage/media-library validation
 
-The exact target diagnostics showed USB storage under a `/storage/usbdiskN` style mount. Do not hard-code `usbdisk0`; use the diagnostics screen and shell inspection to record the actual mounted suffix on the device under test.
+The exact target diagnostics showed USB storage under a `/storage/usbdiskN` style mount. Do not hard-code `usbdisk0`; use the external collector and shell inspection to record the actual mounted suffix on the device under test.
 
 Validate at least:
 
@@ -233,7 +233,7 @@ Manual checks:
 - confirm Auxio-TS can scan `/sdcard/Music`;
 - confirm Auxio-TS can scan or otherwise access `/storage/usbdiskN` where permitted;
 - confirm playback works from the same storage locations stock `twMusic` can access;
-- test TS18 Health Diagnostics screen (under Settings > Music > TS18 Health Diagnostics) to verify the separate automated report, guided DoFun integration test, timed activity capture, one-shot startup capture, and event journal;
+- run the external Magisk/service.d collector under `tools/ts18-auxio-media-diag-pack-v3-recommended/` for TS18 diagnostics; the former in-app TS18 Health Diagnostics / Storage Health screen is abandoned and must not be restored;
 - in the guided DoFun test, verify all instructions are visible before departure, the optional metadata-marker consent checkbox is honoured, the countdown automatically starts capture, the user leaves Auxio once, taps the DoFun Music card last, returns once, and answers numbered questions with numbered choices plus optional free text;
 - in timed capture, verify 2, 5, 10, and 15 minute selections are enforced by the foreground service and the Stop action preserves a partial report;
 - arm one-shot startup capture, then validate true boot capture when Android permits it and first normal Auxio-start fallback when boot foreground-service start is blocked; after successful capture, the armed ID/expiry should be consumed;

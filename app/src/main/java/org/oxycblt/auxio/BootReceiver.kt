@@ -25,8 +25,6 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
-import org.oxycblt.auxio.diagnostics.DiagnosticService
-import org.oxycblt.auxio.diagnostics.DiagnosticsSettings
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
@@ -42,7 +40,6 @@ import timber.log.Timber as L
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var journal: DiagnosticJournal
-    @Inject lateinit var diagnosticsSettings: DiagnosticsSettings
     @Inject lateinit var rootGate: RootStateHolder
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -51,33 +48,8 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        val armedCaptureId = diagnosticsSettings.armedBootCaptureId
-        val armedExpiry = diagnosticsSettings.armedExpiryTime
-        if (armedCaptureId != null) {
-            if (System.currentTimeMillis() <= armedExpiry) {
-                try {
-                    DiagnosticService.start(
-                        context,
-                        armedCaptureId,
-                        diagnosticsSettings.armedDurationMs,
-                        DiagnosticService.ORIGIN_BOOT,
-                    )
-                } catch (e: Exception) {
-                    L.w(
-                        e,
-                        "Cannot start armed diagnostic capture from boot; preserving app-start fallback",
-                    )
-                    diagnosticsSettings.armedCaptureOrigin =
-                        DiagnosticService.ORIGIN_APP_START_FALLBACK
-                }
-            } else {
-                diagnosticsSettings.clearArmedCapture()
-                L.d("Expired armed boot capture ignored")
-            }
-        }
-
         if (!playbackSettings.autostartOnBoot) {
-            L.d("Autostart disabled, ignoring boot after armed diagnostics check")
+            L.d("Autostart disabled, ignoring boot")
             return
         }
 

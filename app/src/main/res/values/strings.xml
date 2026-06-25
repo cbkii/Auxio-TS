@@ -331,8 +331,6 @@
     <string name="set_hide_collaborators">Hide collaborators</string>
     <string name="set_hide_collaborators_desc">Only show artists that are directly credited on an album (works best on well-tagged libraries)</string>
 
-    <string name="set_storage_health">TS18 Health Diagnostics</string>
-    <string name="set_storage_health_desc">Run on-demand TS18 storage, notification, and integration diagnostics</string>
 
     <string name="set_images">Images</string>
     <string name="set_cover_mode">Album covers</string>
