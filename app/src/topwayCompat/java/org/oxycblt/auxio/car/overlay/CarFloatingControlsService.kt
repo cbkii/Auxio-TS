@@ -601,7 +601,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 return
             }
             if (prefs.hideWhileAuxioForeground && prefs.suppressedByAuxioForeground) {
-                L.d("Skipping overlay restore while Auxio foreground suppression is active [$reason]")
+                L.d(
+                    "Skipping overlay restore while Auxio foreground suppression is active [$reason]"
+                )
                 return
             }
             start(context, reason)

@@ -71,8 +71,9 @@ internal class LocationObserver(
         /**
          * Only pre-validate the URI shape. Do not use PackageManager provider visibility here:
          * Android 11+ package visibility filtering can hide legitimate SAF/document providers from
-         * package queries even when ContentResolver registration would be allowed. Provider absence,
-         * stale authorities and permission failures are handled by the registration try/catch below.
+         * package queries even when ContentResolver registration would be allowed. Provider
+         * absence, stale authorities and permission failures are handled by the registration
+         * try/catch below.
          */
         fun isObservableContentUri(uri: Uri): Boolean {
             if (uri.scheme != ContentResolver.SCHEME_CONTENT) return false

@@ -101,6 +101,7 @@ class IndexingNotification(private val context: Context) :
             }
         }
     }
+
     private companion object {
         const val MIN_PROGRESS_UPDATE_MS = 3000L
     }
