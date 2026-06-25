@@ -1,7 +1,0 @@
-### id
-# Time: 2026-06-24 21:31:40 +1000
-# Command: id
-
-uid=0(root) gid=0(root) groups=0(root) context=u:r:magisk:s0
-
-# Exit: 0
