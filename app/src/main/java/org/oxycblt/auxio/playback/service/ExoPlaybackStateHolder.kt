@@ -54,6 +54,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.image.ImageSettings
+import org.oxycblt.auxio.music.resolve
+import org.oxycblt.auxio.music.resolveNames
+import org.oxycblt.auxio.playback.persist.FastResumeSnapshot
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.persist.PersistenceRepository
@@ -712,9 +715,63 @@ class ExoPlaybackStateHolder(
             player.repeatMode == Player.REPEAT_MODE_ONE && playbackSettings.pauseOnRepeat
     }
 
+    private suspend fun saveFastResumeSnapshot() {
+        val song = playbackManager.currentSong
+        if (song == null) {
+            if (!persistenceRepository.saveFastResumeSnapshot(null)) {
+                L.w("Unable to clear TS18 fast-resume snapshot")
+            }
+            return
+        }
+
+        val appContext = context.applicationContext
+        val progression = playbackManager.progression
+        val snapshot =
+            FastResumeSnapshot(
+                uri = song.uri.toString(),
+                path =
+                    try {
+                        song.path.resolve(appContext)
+                    } catch (e: Exception) {
+                        L.w(e, "Unable to resolve path for TS18 fast-resume snapshot")
+                        null
+                    },
+                title =
+                    try {
+                        song.name.resolve(appContext)
+                    } catch (e: Exception) {
+                        L.w(e, "Unable to resolve title for TS18 fast-resume snapshot")
+                        null
+                    },
+                artist =
+                    try {
+                        song.artists.resolveNames(appContext)
+                    } catch (e: Exception) {
+                        L.w(e, "Unable to resolve artist for TS18 fast-resume snapshot")
+                        null
+                    },
+                album =
+                    try {
+                        song.album.name.resolve(appContext)
+                    } catch (e: Exception) {
+                        L.w(e, "Unable to resolve album for TS18 fast-resume snapshot")
+                        null
+                    },
+                durationMs = song.durationMs,
+                positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L),
+                playing = progression.isPlaying,
+                savedAtMs = System.currentTimeMillis(),
+            )
+
+        if (!persistenceRepository.saveFastResumeSnapshot(snapshot)) {
+            L.w("Unable to persist TS18 fast-resume snapshot")
+        }
+    }
+
     private fun save(cb: () -> Unit) {
         saveJob {
             if (sessionOngoing) {
+                saveFastResumeSnapshot()
                 persistenceRepository.saveState(playbackManager.toSavedState())
             }
             withContext(Dispatchers.Main) { cb() }
@@ -728,6 +785,7 @@ class ExoPlaybackStateHolder(
             yield()
             L.d("Committing saved state")
             if (sessionOngoing) {
+                saveFastResumeSnapshot()
                 persistenceRepository.saveState(playbackManager.toSavedState())
             }
         }

@@ -163,14 +163,24 @@ internal object FileClassification {
         )
 
     fun isPotentialMusicFile(file: File): Boolean {
-        val mimeType = file.mimeType.lowercase(Locale.US)
-        if (mimeType == M3U.MIME_TYPE) return false
-        if (mimeType.startsWith("audio/")) return true
-        if (mimeType == "application/ogg" || mimeType == "application/x-ogg") return true
-        if (mimeType != "application/octet-stream") return false
+        val name = file.path.name ?: file.uri.lastPathSegment?.substringAfterLast('/')
+        return isPotentialMusicFileNameMime(name, file.mimeType)
+    }
 
-        val name = file.path.name ?: file.uri.lastPathSegment?.substringAfterLast('/') ?: return false
-        val extension = name.substringAfterLast('.', missingDelimiterValue = "").lowercase(Locale.US)
+    fun isPotentialMusicFileNameMime(name: String?, mimeType: String): Boolean {
+        val normalisedMimeType = mimeType.lowercase(Locale.US)
+        if (normalisedMimeType == M3U.MIME_TYPE) return false
+        if (normalisedMimeType.startsWith("audio/")) return true
+        if (normalisedMimeType == "application/ogg" || normalisedMimeType == "application/x-ogg") {
+            return true
+        }
+        if (normalisedMimeType != "application/octet-stream") return false
+
+        val extension =
+            name
+                ?.substringAfterLast('.', missingDelimiterValue = "")
+                ?.lowercase(Locale.US)
+                .orEmpty()
         return extension in supportedAudioExtensions
     }
 }

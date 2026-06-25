@@ -10,58 +10,67 @@
 
 package org.oxycblt.musikr.pipeline
 
-import android.net.Uri
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.oxycblt.musikr.fs.AddedMs
-import org.oxycblt.musikr.fs.Components
-import org.oxycblt.musikr.fs.File
-import org.oxycblt.musikr.fs.Path
-import org.oxycblt.musikr.fs.Volume
 
 class ExploreStepFileClassificationTest {
     @Test
     fun acceptsKnownAudioMimeTypes() {
-        assertTrue(FileClassification.isPotentialMusicFile(testFile("song.mp3", "audio/mpeg")))
-        assertTrue(FileClassification.isPotentialMusicFile(testFile("song.ogg", "application/ogg")))
+        assertTrue(FileClassification.isPotentialMusicFileNameMime("song.mp3", "audio/mpeg"))
+        assertTrue(FileClassification.isPotentialMusicFileNameMime("song.ogg", "application/ogg"))
+        assertTrue(FileClassification.isPotentialMusicFileNameMime("song.oga", "application/x-ogg"))
     }
 
     @Test
     fun acceptsOctetStreamOnlyWhenAudioExtensionIsKnown() {
         assertTrue(
-            FileClassification.isPotentialMusicFile(testFile("usb-track.flac", "application/octet-stream"))
+            FileClassification.isPotentialMusicFileNameMime(
+                "usb-track.flac",
+                "application/octet-stream",
+            )
         )
         assertTrue(
-            FileClassification.isPotentialMusicFile(testFile("usb-track.M4A", "application/octet-stream"))
+            FileClassification.isPotentialMusicFileNameMime(
+                "usb-track.M4A",
+                "application/octet-stream",
+            )
+        )
+        assertTrue(
+            FileClassification.isPotentialMusicFileNameMime(
+                "usb-track.opus",
+                "application/octet-stream",
+            )
         )
         assertFalse(
-            FileClassification.isPotentialMusicFile(testFile("album-art.jpg", "application/octet-stream"))
+            FileClassification.isPotentialMusicFileNameMime(
+                "album-art.jpg",
+                "application/octet-stream",
+            )
         )
         assertFalse(
-            FileClassification.isPotentialMusicFile(testFile("readme", "application/octet-stream"))
+            FileClassification.isPotentialMusicFileNameMime(
+                "readme",
+                "application/octet-stream",
+            )
         )
     }
 
     @Test
     fun rejectsKnownNonAudioMimeTypesAndPlaylists() {
-        assertFalse(FileClassification.isPotentialMusicFile(testFile("cover.jpg", "image/jpeg")))
-        assertFalse(FileClassification.isPotentialMusicFile(testFile("playlist.m3u", "audio/x-mpegurl")))
-    }
-
-    private fun testFile(name: String, mimeType: String): File {
-        val rootUri = Uri.parse("file:///storage/usbdisk0/Music")
-        return File(
-            uri = Uri.parse("$rootUri/$name"),
-            path = Path(Volume.ThirdParty(rootUri), Components.root().child(name)),
-            addedMs =
-                object : AddedMs {
-                    override suspend fun resolve(): Long? = null
-                },
-            modifiedMs = 0L,
-            mimeType = mimeType,
-            size = 1L,
-            parent = null,
+        assertFalse(FileClassification.isPotentialMusicFileNameMime("cover.jpg", "image/jpeg"))
+        assertFalse(
+            FileClassification.isPotentialMusicFileNameMime(
+                "playlist.m3u",
+                "audio/x-mpegurl",
+            )
+        )
+        assertFalse(FileClassification.isPotentialMusicFileNameMime("notes.txt", "text/plain"))
+        assertFalse(
+            FileClassification.isPotentialMusicFileNameMime(
+                "installer.apk",
+                "application/vnd.android.package-archive",
+            )
         )
     }
 }

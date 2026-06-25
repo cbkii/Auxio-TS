@@ -18,11 +18,32 @@
 
 package org.oxycblt.auxio.playback.persist
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.musikr.MusicParent
 import timber.log.Timber as L
+
+/**
+ * Minimal last-raw-item snapshot used as the foundation for the TS18 fast-resume path.
+ *
+ * This deliberately stores primitive public playback metadata only. It does not grant platform
+ * signing, privileged com.tw.music identity, or private Topway access. Direct pre-library playback
+ * remains a follow-up runtime step that requires TS18 device validation.
+ */
+data class FastResumeSnapshot(
+    val uri: String,
+    val path: String?,
+    val title: String?,
+    val artist: String?,
+    val album: String?,
+    val durationMs: Long,
+    val positionMs: Long,
+    val playing: Boolean,
+    val savedAtMs: Long,
+)
 
 /**
  * Manages the persisted playback state in a structured manner.
@@ -39,15 +60,25 @@ interface PersistenceRepository {
      * @param state The [PlaybackStateManager.SavedState] to persist.
      */
     suspend fun saveState(state: PlaybackStateManager.SavedState?): Boolean
+
+    /** Read the last raw playable item snapshot used by the TS18 fast-resume foundation. */
+    suspend fun readFastResumeSnapshot(): FastResumeSnapshot?
+
+    /** Persist the last raw playable item snapshot used by the TS18 fast-resume foundation. */
+    suspend fun saveFastResumeSnapshot(snapshot: FastResumeSnapshot?): Boolean
 }
 
 class PersistenceRepositoryImpl
 @Inject
 constructor(
+    @ApplicationContext private val context: Context,
     private val playbackStateDao: PlaybackStateDao,
     private val queueDao: QueueDao,
     private val musicRepository: MusicRepository,
 ) : PersistenceRepository {
+    private val fastResumePrefs by lazy {
+        context.getSharedPreferences(FAST_RESUME_PREFS, Context.MODE_PRIVATE)
+    }
 
     override suspend fun readState(): PlaybackStateManager.SavedState? {
         val library = musicRepository.library?.takeIf { !it.empty() } ?: return null
@@ -106,8 +137,7 @@ constructor(
                 )
 
             // Convert the remaining queue information do their database-specific counterparts.
-            val heap =
-                state.heap.mapIndexed { i, song -> QueueHeapItem(i, requireNotNull(song).uid) }
+            val heap = state.heap.mapIndexed { i, song -> QueueHeapItem(i, requireNotNull(song).uid) }
 
             val shuffledMapping =
                 state.shuffledMapping.mapIndexed { i, index -> QueueShuffledMappingItem(i, index) }
@@ -126,5 +156,65 @@ constructor(
         }
 
         return true
+    }
+
+    override suspend fun readFastResumeSnapshot(): FastResumeSnapshot? {
+        return try {
+            if (!fastResumePrefs.getBoolean(KEY_FAST_VALID, false)) return null
+            val uri = fastResumePrefs.getString(KEY_FAST_URI, null) ?: return null
+            FastResumeSnapshot(
+                uri = uri,
+                path = fastResumePrefs.getString(KEY_FAST_PATH, null),
+                title = fastResumePrefs.getString(KEY_FAST_TITLE, null),
+                artist = fastResumePrefs.getString(KEY_FAST_ARTIST, null),
+                album = fastResumePrefs.getString(KEY_FAST_ALBUM, null),
+                durationMs = fastResumePrefs.getLong(KEY_FAST_DURATION_MS, 0L),
+                positionMs = fastResumePrefs.getLong(KEY_FAST_POSITION_MS, 0L),
+                playing = fastResumePrefs.getBoolean(KEY_FAST_PLAYING, false),
+                savedAtMs = fastResumePrefs.getLong(KEY_FAST_SAVED_AT_MS, 0L),
+            )
+        } catch (e: Exception) {
+            L.w(e, "Unable to read TS18 fast-resume snapshot")
+            null
+        }
+    }
+
+    override suspend fun saveFastResumeSnapshot(snapshot: FastResumeSnapshot?): Boolean {
+        return try {
+            val editor = fastResumePrefs.edit()
+            if (snapshot == null) {
+                editor.clear().commit()
+            } else {
+                editor
+                    .putBoolean(KEY_FAST_VALID, true)
+                    .putString(KEY_FAST_URI, snapshot.uri)
+                    .putString(KEY_FAST_PATH, snapshot.path)
+                    .putString(KEY_FAST_TITLE, snapshot.title)
+                    .putString(KEY_FAST_ARTIST, snapshot.artist)
+                    .putString(KEY_FAST_ALBUM, snapshot.album)
+                    .putLong(KEY_FAST_DURATION_MS, snapshot.durationMs)
+                    .putLong(KEY_FAST_POSITION_MS, snapshot.positionMs)
+                    .putBoolean(KEY_FAST_PLAYING, snapshot.playing)
+                    .putLong(KEY_FAST_SAVED_AT_MS, snapshot.savedAtMs)
+                    .commit()
+            }
+        } catch (e: Exception) {
+            L.w(e, "Unable to save TS18 fast-resume snapshot")
+            false
+        }
+    }
+
+    private companion object {
+        const val FAST_RESUME_PREFS = "ts18_fast_resume_snapshot"
+        const val KEY_FAST_VALID = "valid"
+        const val KEY_FAST_URI = "uri"
+        const val KEY_FAST_PATH = "path"
+        const val KEY_FAST_TITLE = "title"
+        const val KEY_FAST_ARTIST = "artist"
+        const val KEY_FAST_ALBUM = "album"
+        const val KEY_FAST_DURATION_MS = "duration_ms"
+        const val KEY_FAST_POSITION_MS = "position_ms"
+        const val KEY_FAST_PLAYING = "playing"
+        const val KEY_FAST_SAVED_AT_MS = "saved_at_ms"
     }
 }
