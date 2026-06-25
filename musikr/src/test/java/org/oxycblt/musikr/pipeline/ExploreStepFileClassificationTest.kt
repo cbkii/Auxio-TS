@@ -57,6 +57,14 @@ class ExploreStepFileClassificationTest {
     }
 
     @Test
+    fun acceptsUnknownMimeTypesWhenAudioExtensionIsKnown() {
+        assertTrue(FileClassification.isPotentialMusicFileNameMime("usb-track.mp3", null))
+        assertTrue(FileClassification.isPotentialMusicFileNameMime("usb-track.flac", ""))
+        assertFalse(FileClassification.isPotentialMusicFileNameMime("album-art.jpg", null))
+        assertFalse(FileClassification.isPotentialMusicFileNameMime("readme", ""))
+    }
+
+    @Test
     fun rejectsKnownNonAudioMimeTypesAndPlaylists() {
         assertFalse(FileClassification.isPotentialMusicFileNameMime("cover.jpg", "image/jpeg"))
         assertFalse(

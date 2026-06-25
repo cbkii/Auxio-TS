@@ -137,7 +137,8 @@ constructor(
                 )
 
             // Convert the remaining queue information do their database-specific counterparts.
-            val heap = state.heap.mapIndexed { i, song -> QueueHeapItem(i, requireNotNull(song).uid) }
+            val heap =
+                state.heap.mapIndexed { i, song -> QueueHeapItem(i, requireNotNull(song).uid) }
 
             val shuffledMapping =
                 state.shuffledMapping.mapIndexed { i, index -> QueueShuffledMappingItem(i, index) }

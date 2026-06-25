@@ -18,6 +18,7 @@
 
 package org.oxycblt.musikr.pipeline
 
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,6 @@ import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.RootGate
-import java.util.Locale
 import org.oxycblt.musikr.pipeline.shim.FilteredFS
 import org.oxycblt.musikr.playlist.m3u.M3U
 import org.oxycblt.musikr.util.mapParallel
@@ -167,14 +167,16 @@ internal object FileClassification {
         return isPotentialMusicFileNameMime(name, file.mimeType)
     }
 
-    fun isPotentialMusicFileNameMime(name: String?, mimeType: String): Boolean {
-        val normalisedMimeType = mimeType.lowercase(Locale.US)
+    fun isPotentialMusicFileNameMime(name: String?, mimeType: String?): Boolean {
+        val normalisedMimeType = mimeType?.lowercase(Locale.US).orEmpty()
         if (normalisedMimeType == M3U.MIME_TYPE) return false
         if (normalisedMimeType.startsWith("audio/")) return true
         if (normalisedMimeType == "application/ogg" || normalisedMimeType == "application/x-ogg") {
             return true
         }
-        if (normalisedMimeType != "application/octet-stream") return false
+        if (normalisedMimeType != "application/octet-stream" && normalisedMimeType.isNotEmpty()) {
+            return false
+        }
 
         val extension =
             name

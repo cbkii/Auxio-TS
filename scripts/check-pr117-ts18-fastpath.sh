@@ -73,6 +73,8 @@ need_fixed "$overlay_manifest" "android:exported=\"false\"" "non-exported overla
 need_fixed "$persist" "data class FastResumeSnapshot" "minimal TS18 fast-resume snapshot model"
 need_fixed "$persist" "saveFastResumeSnapshot" "minimal TS18 fast-resume snapshot persistence"
 need_fixed "$explore" "isPotentialMusicFileNameMime" "pure JVM file classifier helper"
+need_fixed "$explore" "mimeType: String?" "nullable MIME fallback for USB/unknown files"
+need_fixed "$explore" "normalisedMimeType.isNotEmpty()" "empty MIME extension fallback"
 need_fixed "$explore" "\"flac\"" "FLAC extension classification"
 need_fixed "$explore" "\"m4a\"" "M4A extension classification"
 need_fixed "$explore" "\"opus\"" "Opus extension classification"
