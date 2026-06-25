@@ -56,8 +56,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
         val action = intent.action
         if (action == AppWidgetManager.ACTION_APPWIDGET_UPDATE) {
-            // AppWidgetProvider.super.onReceive() dispatches this to onUpdate(). Keep forwarding in
-            // exactly one place to avoid duplicate foreground-service starts for the same update.
+            // AppWidgetProvider.super.onReceive() dispatches this to onUpdate().
             super.onReceive(context, intent)
             return
         }
@@ -78,15 +77,73 @@ class MusicWidgetProvider : AppWidgetProvider() {
     ) {
         L.d("onUpdate called for Topway widget with ${appWidgetIds.size} IDs")
         journal.log(DiagnosticJournal.CAT_WIDGET, "onUpdate", "IDs: ${appWidgetIds.joinToString()}")
-        // Request a full state update from WidgetComponent.
-        context.sendBroadcast(
-            Intent(org.oxycblt.auxio.widgets.WidgetProvider.ACTION_WIDGET_UPDATE)
-                .setPackage(context.packageName)
+
+        // Stock com.tw.music immediately gives the DoFun/AppWidget host a control-capable
+        // RemoteViews layout, then asks MusicService for a full update with cmd=update and
+        // appWidgetIds. Mirror that surface instead of relying only on Auxio's normal widget path,
+        // which can be absent during cold launcher/widget binding.
+        renderColdWidgetControls(context, appWidgetManager, appWidgetIds)
+        startTopwayWidgetUpdateService(context, appWidgetIds)
+    }
+
+    private fun renderColdWidgetControls(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetIds: IntArray,
+    ) {
+        val rv = RemoteViews(context.packageName, R.layout.app_widget_topway)
+        val timeline = WidgetTimeline.NO_SESSION
+
+        rv.setTextViewText(R.id.title, "")
+        rv.setTextViewText(R.id.artist, "")
+        rv.setTextViewText(R.id.tv_current_time, timeline.currentText)
+        rv.setTextViewText(R.id.tv_duration, timeline.durationText)
+        rv.setProgressBar(
+            R.id.seek_bar_progress,
+            timeline.maxSeconds,
+            timeline.progressSeconds,
+            false,
         )
+        rv.setImageViewResource(R.id.albumart, R.drawable.ic_remote_default_cover_24)
+        rv.setImageViewResource(R.id.control_play, R.drawable.ic_play_24)
+        bindTopwayControls(context, rv)
+
+        try {
+            if (appWidgetIds.isNotEmpty()) {
+                appWidgetManager.updateAppWidget(appWidgetIds, rv)
+            } else {
+                appWidgetManager.updateAppWidget(
+                    ComponentName(context, MusicWidgetProvider::class.java),
+                    rv,
+                )
+            }
+        } catch (e: Exception) {
+            L.w(e, "Unable to render cold Topway widget controls")
+        }
+    }
+
+    private fun startTopwayWidgetUpdateService(context: Context, appWidgetIds: IntArray) {
+        val serviceIntent =
+            Intent(context, MusicService::class.java)
+                .setAction(TopwayMusicContract.ACTION_CMD)
+                .putExtra(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.CMD_UPDATE)
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TOPWAY)
+
+        if (appWidgetIds.isNotEmpty()) {
+            serviceIntent.putExtra(EXTRA_APP_WIDGET_IDS, appWidgetIds)
+        }
+
+        try {
+            ContextCompat.startForegroundService(context, serviceIntent)
+        } catch (e: IllegalStateException) {
+            L.w(e, "Unable to request Topway widget update due to service state")
+        } catch (e: SecurityException) {
+            L.w(e, "Unable to request Topway widget update due to security policy")
+        }
     }
 
     /**
-     * Update the currently shown layout based on the given [WidgetComponent.PlaybackState]
+     * Update the currently shown layout based on the given [WidgetComponent.PlaybackState].
      *
      * @param context [Context] required to update the widget layout.
      * @param state [WidgetComponent.PlaybackState] to show, or null if no playback is going on.
@@ -103,7 +160,6 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
         val component = ComponentName(context, MusicWidgetProvider::class.java)
 
-        // Only proceed if we are in the Topway flavor or if there are active widget instances.
         if (!TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate(context)) {
             L.d("Skipping Topway widget update: no active instances and not in Topway flavor")
             return
@@ -118,7 +174,10 @@ class MusicWidgetProvider : AppWidgetProvider() {
                 rv.setTextViewText(R.id.title, state.song.name.resolve(context))
                 rv.setTextViewText(R.id.artist, state.song.artists.resolveNames(context))
 
-                if (state.cover != null) {
+                // Stock com.tw.music refuses large RemoteViews album bitmaps using a 3,680,000-byte
+                // cap before falling back to the default album resource. Preserve that launcher-safe
+                // behaviour for DoFun/Topway widget hosts.
+                if (state.cover != null && state.cover.byteCount <= STOCK_WIDGET_ARTWORK_MAX_BYTES) {
                     rv.setImageViewBitmap(R.id.albumart, state.cover)
                 } else {
                     rv.setImageViewResource(R.id.albumart, R.drawable.ic_remote_default_cover_24)
@@ -139,19 +198,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
                     if (state.isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24,
                 )
 
-                rv.setOnClickPendingIntent(
-                    R.id.control_prev,
-                    newServicePendingIntent(context, TopwayMusicContract.ACTION_PREV),
-                )
-                rv.setOnClickPendingIntent(
-                    R.id.control_play,
-                    newServicePendingIntent(context, TopwayMusicContract.ACTION_PLAY_PAUSE),
-                )
-                rv.setOnClickPendingIntent(
-                    R.id.control_next,
-                    newServicePendingIntent(context, TopwayMusicContract.ACTION_NEXT),
-                )
-
+                bindTopwayControls(context, rv)
                 rv
             }
 
@@ -161,6 +208,39 @@ class MusicWidgetProvider : AppWidgetProvider() {
         } catch (e: Exception) {
             L.w(e, "Unable to update Topway widget")
         }
+    }
+
+    private fun bindTopwayControls(context: Context, remoteViews: RemoteViews) {
+        remoteViews.setOnClickPendingIntent(
+            R.id.albumart,
+            newActivityPendingIntent(context),
+        )
+        remoteViews.setOnClickPendingIntent(
+            R.id.control_prev,
+            newServicePendingIntent(context, TopwayMusicContract.ACTION_PREV),
+        )
+        remoteViews.setOnClickPendingIntent(
+            R.id.control_play,
+            newServicePendingIntent(context, TopwayMusicContract.ACTION_PLAY_PAUSE),
+        )
+        remoteViews.setOnClickPendingIntent(
+            R.id.control_next,
+            newServicePendingIntent(context, TopwayMusicContract.ACTION_NEXT),
+        )
+    }
+
+    private fun newActivityPendingIntent(context: Context): PendingIntent {
+        val intent =
+            Intent(Intent.ACTION_MAIN)
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .setComponent(ComponentName(context.packageName, STOCK_MUSIC_ACTIVITY_CLASS))
+
+        return PendingIntent.getActivity(
+            context,
+            PendingIntentRequestCodePolicy.forAction(STOCK_MUSIC_ACTIVITY_CLASS),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     }
 
     private fun newServicePendingIntent(context: Context, action: String): PendingIntent {
@@ -217,5 +297,11 @@ class MusicWidgetProvider : AppWidgetProvider() {
         } catch (e: SecurityException) {
             L.w(e, "Unable to forward Topway widget/provider intent due to security policy")
         }
+    }
+
+    private companion object {
+        const val EXTRA_APP_WIDGET_IDS = "appWidgetIds"
+        const val STOCK_MUSIC_ACTIVITY_CLASS = "com.tw.music.MusicActivity"
+        const val STOCK_WIDGET_ARTWORK_MAX_BYTES = 3_680_000
     }
 }

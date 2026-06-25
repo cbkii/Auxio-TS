@@ -180,6 +180,13 @@ require_file_contains "app/build.gradle" 'buildConfigField "boolean", "TOPWAY_TW
 require_file_contains "app/build.gradle" 'buildConfigField "boolean", "TOPWAY_COMPAT_FLAVOR", "true"' "Topway shared compat build flag"
 require_file_contains "app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayMusicBroadcastBridge.kt" 'BuildConfig.TOPWAY_COMPAT_FLAVOR' "Topway compatible bridge always enabled"
 require_file_contains "app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayWidgetProviderPolicy.kt" "com.tw.music.view.MusicWidgetProvider" "Topway widget provider wrapper policy"
+
+require_file_contains "app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt" "startTopwayWidgetUpdateService" "Topway widget onUpdate starts stock-name service update path"
+require_file_contains "app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt" "renderColdWidgetControls" "Topway widget renders cold control layout before service restore"
+require_file_contains "app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt" "EXTRA_APP_WIDGET_IDS = \"appWidgetIds\"" "Topway widget preserves stock appWidgetIds extra"
+require_file_contains "app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt" "STOCK_MUSIC_ACTIVITY_CLASS = \"com.tw.music.MusicActivity\"" "Topway widget album art opens stock activity alias"
+require_file_contains "app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt" "STOCK_WIDGET_ARTWORK_MAX_BYTES = 3_680_000" "Topway widget enforces stock artwork byte cap"
+require_file_contains "app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt" "PendingIntent.getActivity" "Topway widget album art PendingIntent opens activity"
 require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/SystemPlaybackReceiver.kt" "TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate" "System receiver handles Topway widget updates"
 require_file_contains "app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayMusicBridgeReceiver.kt" "safelyExtractIncomingExtras" "Topway bridge receiver sanitises malformed extras"
 require_file_contains "app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarFloatingControlsService.kt" "Build.VERSION_CODES.UPSIDE_DOWN_CAKE" "overlay special-use API gate"
