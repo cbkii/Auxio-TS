@@ -69,7 +69,7 @@ object NotificationBitmapSafety {
 
         journal?.log(
             DiagnosticJournal.CAT_NOTIFICATION,
-            "Artwork Sanitisied",
+            "Artwork Sanitised",
             "Size: ${working.width}x${working.height}, Config: ${working.config}",
         )
 
@@ -78,21 +78,24 @@ object NotificationBitmapSafety {
 
     @Synchronized
     fun fallbackBitmap(): Bitmap {
-        val cached = cachedFallback
-        if (cached != null && !cached.isRecycled) return cached
-        return Bitmap.createBitmap(
-                FALLBACK_ICON_SIZE_PX,
-                FALLBACK_ICON_SIZE_PX,
-                Bitmap.Config.ARGB_8888,
-            )
-            .also { cachedFallback = it }
+        val cached = cachedFallback?.takeIf { !it.isRecycled } ?: createFallbackBitmap()
+        cachedFallback = cached
+        return try {
+            cached.copy(Bitmap.Config.ARGB_8888, false) ?: cached
+        } catch (e: RuntimeException) {
+            L.w(e, "Failed to copy notification fallback bitmap")
+            cached
+        }
     }
+
+    private fun createFallbackBitmap(): Bitmap =
+        Bitmap.createBitmap(FALLBACK_ICON_SIZE_PX, FALLBACK_ICON_SIZE_PX, Bitmap.Config.ARGB_8888)
 
     private fun Bitmap.toSafeSoftwareBitmap(): Bitmap? {
         if (isRecycled) return null
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && config?.name == "HARDWARE") {
-                copy(Bitmap.Config.ARGB_8888, false)
+                copy(Bitmap.Config.ARGB_8888, false) ?: return null
             } else {
                 this
             }

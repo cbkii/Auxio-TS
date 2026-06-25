@@ -20,8 +20,8 @@ package org.oxycblt.auxio.util
 
 import android.graphics.Bitmap
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,11 +30,14 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class NotificationBitmapSafetyTest {
     @Test
-    fun fallbackBitmapIsTs18SafeSizeAndCached() {
+    fun fallbackBitmapIsTs18SafeSizeAndNotSharedMutableState() {
         val bitmap = NotificationBitmapSafety.fallbackBitmap()
+        val second = NotificationBitmapSafety.fallbackBitmap()
         assertEquals(NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX, bitmap.width)
         assertEquals(NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX, bitmap.height)
-        assertSame(bitmap, NotificationBitmapSafety.fallbackBitmap())
+        assertFalse(bitmap === second)
+        assertFalse(bitmap.isMutable)
+        assertFalse(second.isMutable)
     }
 
     @Test
@@ -67,6 +70,19 @@ class NotificationBitmapSafetyTest {
         assertNotNull(sanitized)
         assertEquals(NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX, sanitized!!.width)
         assertEquals(NotificationBitmapSafety.FALLBACK_ICON_SIZE_PX, sanitized.height)
+    }
+
+    @Test
+    fun normalSoftwareArtworkIsKeptWhenAlreadySafe() {
+        val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+        assertEquals(bitmap, NotificationBitmapSafety.sanitize(bitmap))
+    }
+
+    @Test
+    fun recycledArtworkStaysNull() {
+        val bitmap = Bitmap.createBitmap(128, 128, Bitmap.Config.ARGB_8888)
+        bitmap.recycle()
+        assertEquals(null, NotificationBitmapSafety.sanitize(bitmap))
     }
 
     @Test

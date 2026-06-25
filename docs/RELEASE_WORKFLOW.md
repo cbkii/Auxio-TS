@@ -9,7 +9,7 @@ bash ./scripts/prepare-ci-environment.sh
 # Topway/DoFun exact com.tw.music variant
 ./gradlew :app:assembleTopwayTwMusicRelease
 
-# Topway/DoFun alternate com.tw.media variant, once implemented
+# Topway/DoFun alternate com.tw.media variant
 ./gradlew :app:assembleTopwayTwMediaRelease
 ```
 

@@ -27,9 +27,11 @@ import org.junit.Test
 
 class TopwaySourcePolicyDiscoveryTest {
     @Test
-    fun fixedUsbDiskZeroIsOnlyASeedNotTheDiscoveryLimit() {
+    fun fixedUsbDiskZeroIsOnlyAnExampleSeedNotTheDiscoveryLimit() {
+        @Suppress("DEPRECATION")
         assertTrue(TopwaySourcePolicy.TS18_USB_CANDIDATES.contains("/storage/usbdisk0"))
-        assertFalse(TopwaySourcePolicy.TS18_USB_CANDIDATES.contains("/storage/usbdisk1"))
+        assertTrue(TopwaySourcePolicy.TS18_USB_EXAMPLE_CANDIDATES.contains("/storage/usbdisk0"))
+        assertFalse(TopwaySourcePolicy.TS18_USB_EXAMPLE_CANDIDATES.contains("/storage/usbdisk1"))
     }
 
     @Test
@@ -41,6 +43,7 @@ class TopwaySourcePolicyDiscoveryTest {
             assertTrue(storage.mkdir())
             assertTrue(mediaRw.mkdir())
 
+            File(storage, "usbdisk0").mkdir()
             File(storage, "usbdisk2").mkdir()
             File(storage, "usbdisk1").mkdir()
             File(storage, "emulated").mkdir()
@@ -56,6 +59,7 @@ class TopwaySourcePolicyDiscoveryTest {
 
             assertEquals(
                 listOf(
+                    File(storage, "usbdisk0").absolutePath,
                     File(storage, "usbdisk1").absolutePath,
                     File(storage, "usbdisk2").absolutePath,
                     File(mediaRw, "usbdisk3").absolutePath,
