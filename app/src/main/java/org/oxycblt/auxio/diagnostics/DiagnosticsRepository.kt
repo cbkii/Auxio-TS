@@ -377,8 +377,10 @@ constructor(
             )
         )
 
-        val storageChildren = listDirectoryChildren(File("/storage"), removableOnly = false)
-        val mediaRwChildren = listDirectoryChildren(File("/mnt/media_rw"), removableOnly = true)
+        val storageChildren =
+            listDirectoryChildren(File("/storage"), removableOnly = false, entries = entries)
+        val mediaRwChildren =
+            listDirectoryChildren(File("/mnt/media_rw"), removableOnly = true, entries = entries)
         val discoveredRoots = TopwaySourcePolicy.discoverCandidateRoots()
 
         val storageUsbChildren =
@@ -447,7 +449,11 @@ constructor(
             )
         }
 
-    private fun listDirectoryChildren(root: File, removableOnly: Boolean): List<String> =
+    private fun listDirectoryChildren(
+        root: File,
+        removableOnly: Boolean,
+        entries: MutableList<DiagnosticEntry>,
+    ): List<String> =
         try {
             root
                 .listFiles()
@@ -460,8 +466,24 @@ constructor(
                 ?.toList()
                 .orEmpty()
         } catch (e: SecurityException) {
+            entries.add(
+                DiagnosticEntry(
+                    "${root.absolutePath} Listing",
+                    "Permission denied: ${e.message ?: "no message"}",
+                    EvidenceClassification.PERMISSION_DENIED,
+                    primaryMethod = "java.io.File.listFiles",
+                )
+            )
             emptyList()
         } catch (e: RuntimeException) {
+            entries.add(
+                DiagnosticEntry(
+                    "${root.absolutePath} Listing",
+                    "Query failed: ${e.javaClass.simpleName}: ${e.message ?: "no message"}",
+                    EvidenceClassification.QUERY_FAILED,
+                    primaryMethod = "java.io.File.listFiles",
+                )
+            )
             emptyList()
         }
 
