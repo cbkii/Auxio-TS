@@ -25,8 +25,8 @@ import timber.log.Timber as L
 
 /**
  * Application-level activity lifecycle callbacks that keep the car floating overlay converged with
- * user settings. New starts proactively restore the overlay when enabled, while the optional "hide
- * while Auxio foreground" setting still suppresses the overlay during Auxio UI use.
+ * user settings. New starts proactively restore the overlay when enabled, while the optional
+ * "hide while Auxio foreground" setting suppresses the overlay during Auxio UI use.
  */
 class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
 
@@ -36,13 +36,15 @@ class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
         val previous = startedActivityCount
         startedActivityCount++
         if (previous == 0) {
-            val prefs = CarOverlayPrefs.from(activity)
+            val prefs = readPrefs(activity) ?: return
             if (!prefs.enabled) return
 
             if (prefs.hideWhileAuxioForeground) {
+                prefs.suppressedByAuxioForeground = true
                 L.d("Auxio entered foreground, signalling overlay to hide")
                 CarFloatingControlsService.setAuxioForeground(activity, true)
             } else {
+                prefs.suppressedByAuxioForeground = false
                 L.d("Auxio entered foreground with overlay allowed, restoring overlay")
                 CarFloatingControlsService.restoreIfEnabled(activity, "activity_started")
             }
@@ -55,9 +57,10 @@ class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
         val previous = startedActivityCount
         startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
         if (previous == 1 && startedActivityCount == 0) {
-            val prefs = CarOverlayPrefs.from(activity)
+            val prefs = readPrefs(activity) ?: return
             if (!prefs.enabled) return
 
+            prefs.suppressedByAuxioForeground = false
             L.d("Auxio entered background, restoring overlay")
             if (prefs.hideWhileAuxioForeground) {
                 CarFloatingControlsService.setAuxioForeground(activity, false)
@@ -68,25 +71,25 @@ class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-        val prefs =
-            try {
-                CarOverlayPrefs.from(activity)
-            } catch (e: RuntimeException) {
-                L.w(e, "Unable to read overlay prefs during activity-created restore")
-                return
-            }
+        val prefs = readPrefs(activity) ?: return
         if (prefs.enabled && !prefs.hideWhileAuxioForeground) {
+            prefs.suppressedByAuxioForeground = false
             CarFloatingControlsService.restoreIfEnabled(activity, "activity_created")
         }
     }
 
     override fun onActivityResumed(activity: Activity) {}
-
     override fun onActivityPaused(activity: Activity) {}
-
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-
     override fun onActivityDestroyed(activity: Activity) {}
+
+    private fun readPrefs(activity: Activity): CarOverlayPrefs? =
+        try {
+            CarOverlayPrefs.from(activity)
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to read overlay prefs during lifecycle restore")
+            null
+        }
 
     companion object {
         fun register(application: Application) {

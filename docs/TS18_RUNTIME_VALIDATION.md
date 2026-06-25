@@ -216,7 +216,7 @@ adb shell am broadcast -a com.android.launcher.widget_music_progress --ei music_
 
 ## Storage/media-library validation
 
-The exact target diagnostics showed USB storage under a `/storage/usbdiskN` style mount. Do not hard-code `usbdisk0`; use the external collector and shell inspection to record the actual mounted suffix on the device under test.
+**Evidence confidence: Observed. Porting decision: Reusable validation idea.** The exact target diagnostics showed USB storage under a `/storage/usbdiskN` style mount. Do not hard-code `usbdisk0`; use the external collector and shell inspection to record the actual mounted suffix on the device under test.
 
 Validate at least:
 

@@ -1,15 +1,12 @@
 # Raw TS18 Auxio v5.0.6 evidence
 
-These files are retained as historical capture artifacts. They may contain now-superseded
-wording from the original diagnostic report, including references to Auxio in-app
-diagnostics or Spotify comparison steps.
+This folder is an archival wrapper for raw evidence copied from the TS18 Auxio v5.0.6 support pack. It is not the canonical place for current TS18 product policy.
 
-Current product decision:
+For current navigation and policy, start at:
 
-- TS18 diagnostics are collected externally by the Magisk/service.d tooling under
-  `tools/ts18-auxio-media-diag-pack-v3-recommended/`.
-- Auxio-TS in-app diagnostics, the former TS18 Health Diagnostics / Storage Health
-  screen, armed in-app capture, `DiagnosticService`, `DiagnosticsRepository`, and
-  `DiagnosticsViewModel` are abandoned and must not be restored.
-- Spotify is historical negative-control evidence only. Stock `com.tw.music` and VLC
-  are the active positive references.
+- `docs/README.md`
+- `AGENTS.md`
+- `docs/TS18_RUNTIME_VALIDATION.md`
+- `tools/ts18-auxio-media-diag-pack-v3-recommended/README.md`
+
+Some raw files may retain historical wording from the original diagnostic report, including now-superseded references to the removed in-app diagnostics surface or Spotify comparison steps.

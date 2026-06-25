@@ -31,15 +31,13 @@ import org.robolectric.RobolectricTestRunner
 class LocationObserverTest {
     @Test
     fun rejectsBlankAuthorityContentUri() {
-        assertFalse(LocationObserver.isObservableContentUri(Uri.parse("content:///music")) { true })
+        assertFalse(LocationObserver.isObservableContentUri(Uri.parse("content:///music")))
     }
 
     @Test
     fun rejectsEmptyAndMalformedSourceValues() {
-        assertFalse(LocationObserver.isObservableContentUri(Uri.EMPTY) { true })
-        assertFalse(
-            LocationObserver.isObservableContentUri(Uri.parse("/storage/usbdisk0/Music")) { true }
-        )
+        assertFalse(LocationObserver.isObservableContentUri(Uri.EMPTY))
+        assertFalse(LocationObserver.isObservableContentUri(Uri.parse("/storage/usbdisk0/Music")))
     }
 
     @Test
@@ -47,25 +45,19 @@ class LocationObserverTest {
         assertFalse(
             LocationObserver.isObservableContentUri(
                 Uri.parse("file:///storage/usbdisk1/Music/song.mp3")
-            ) {
-                true
-            }
+            )
         )
         assertFalse(
-            LocationObserver.isObservableContentUri(Uri.parse("/storage/usbdisk1/Music/song.mp3")) {
-                true
-            }
+            LocationObserver.isObservableContentUri(Uri.parse("/storage/usbdisk1/Music/song.mp3"))
         )
     }
 
     @Test
-    fun rejectsMissingOrStaleProvider() {
-        assertFalse(
+    fun acceptsUnknownProviderForRegistrationAttempt() {
+        assertTrue(
             LocationObserver.isObservableContentUri(
                 Uri.parse("content://missing.example.provider/tree/primary%3AMusic")
-            ) {
-                false
-            }
+            )
         )
     }
 
@@ -84,13 +76,11 @@ class LocationObserverTest {
     }
 
     @Test
-    fun acceptsResolvableMediaProviderUri() {
+    fun acceptsMediaProviderUri() {
         assertTrue(
             LocationObserver.isObservableContentUri(
                 Uri.parse("content://media/external/audio/media")
-            ) {
-                it == "media"
-            }
+            )
         )
     }
 }

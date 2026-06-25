@@ -187,6 +187,7 @@ private constructor(
     override fun onProgressionChanged(progression: Progression) {
         invalidateSessionState()
         _notification.updatePlaying(playbackManager.progression.isPlaying)
+        broadcastLegacyPlaybackChanged()
         if (!bitmapProvider.isBusy) {
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
         }
@@ -329,6 +330,12 @@ private constructor(
             val initialMetadata = builder.build()
             mediaSession.setMetadata(initialMetadata)
             _notification.updateMetadata(initialMetadata)
+            broadcastLegacyMetadataChanged(
+                title = metadataSnapshot.displayTitle,
+                artist = metadataSnapshot.artist,
+                album = metadataSnapshot.albumTitle,
+                durationMs = metadataSnapshot.durationMs,
+            )
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
 
             // We are normally supposed to use URIs for album art, but that removes some of the
@@ -443,6 +450,41 @@ private constructor(
     }
 
     /** Invalidate both repeat and shuffle notification actions. */
+    private fun broadcastLegacyMetadataChanged(
+        title: CharSequence?,
+        artist: CharSequence?,
+        album: CharSequence?,
+        durationMs: Long,
+    ) {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        try {
+            context.sendBroadcast(
+                Intent(ACTION_LEGACY_META_CHANGED)
+                    .putExtra("track", title?.toString().orEmpty())
+                    .putExtra("artist", artist?.toString().orEmpty())
+                    .putExtra("album", album?.toString().orEmpty())
+                    .putExtra("duration", durationMs)
+                    .putExtra("playing", playbackManager.progression.isPlaying)
+                    .putExtra("package", context.packageName)
+            )
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to broadcast legacy metadata change")
+        }
+    }
+
+    private fun broadcastLegacyPlaybackChanged() {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        try {
+            context.sendBroadcast(
+                Intent(ACTION_LEGACY_PLAYSTATE_CHANGED)
+                    .putExtra("playing", playbackManager.progression.isPlaying)
+                    .putExtra("package", context.packageName)
+            )
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to broadcast legacy playback state change")
+        }
+    }
+
     private fun invalidateNotificationActions() {
         L.d("Invalidating notification actions")
         invalidateSessionState()
@@ -457,6 +499,8 @@ private constructor(
     }
 
     companion object {
+        private const val ACTION_LEGACY_META_CHANGED = "com.android.music.metachanged"
+        private const val ACTION_LEGACY_PLAYSTATE_CHANGED = "com.android.music.playstatechanged"
         private val emptyMetadata = MediaMetadataCompat.Builder().build()
     }
 }

@@ -282,7 +282,12 @@ if ! mkdir "$LOCK_DIR" >/dev/null 2>&1; then
   OLD_TS="$(cat "$LOCK_DIR/epoch" 2>/dev/null)"
   NOW_EPOCH="$(date +%s)"
   AGE=$(( NOW_EPOCH - ${OLD_TS:-0} ))
-  if [ -z "$OLD_PID" ] || ! kill -0 "$OLD_PID" >/dev/null 2>&1 || [ "$OLD_BOOT" != "$BOOT_ID" ] || [ "$AGE" -gt $(( DURATION_SECONDS + 900 )) ]; then
+  if [ -z "$OLD_PID" ] || [ -z "$OLD_BOOT" ] || [ -z "$OLD_TS" ]; then
+    mkdir -p "$BASE_OUT" 2>/dev/null
+    echo "$(human_ts) Refused: lock initialising $LOCK_DIR" >> "$BASE_OUT/last-run-refused.log"
+    exit 0
+  fi
+  if ! kill -0 "$OLD_PID" >/dev/null 2>&1 || [ "$OLD_BOOT" != "$BOOT_ID" ] || [ "$AGE" -gt $(( DURATION_SECONDS + 900 )) ]; then
     LOCK_STALE=1
     rm -rf "$LOCK_DIR" >/dev/null 2>&1
   fi

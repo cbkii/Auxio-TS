@@ -19,8 +19,10 @@
 package org.oxycblt.auxio.car.overlay
 
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.Point
@@ -64,6 +66,16 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     private var isOverlayAttached = false
     private var isAuxioForeground = false
     private var isForegroundPromoted = false
+    private var screenOnReceiverRegistered = false
+    private val screenOnReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == Intent.ACTION_SCREEN_ON) {
+                    L.d("Dynamic SCREEN_ON received for running overlay service")
+                    restoreIfEnabled(this@CarFloatingControlsService, "dynamic:SCREEN_ON")
+                }
+            }
+        }
 
     override fun onCreate() {
         super.onCreate()
@@ -72,6 +84,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         L.d("CarFloatingControlsService created")
         journal.log(DiagnosticJournal.CAT_OVERLAY, "Service created")
+        registerScreenOnReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -136,7 +149,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             }
             ACTION_AUXIO_FOREGROUND_CHANGED -> {
                 isAuxioForeground = intent.getBooleanExtra(EXTRA_AUXIO_FOREGROUND, false)
-                if (isAuxioForeground && prefs.hideWhileAuxioForeground) {
+                prefs.suppressedByAuxioForeground =
+                    isAuxioForeground && prefs.hideWhileAuxioForeground
+                if (shouldSuppressForForegroundPreference()) {
                     hideOverlay()
                 } else if (!isAuxioForeground && prefs.enabled) {
                     startOverlayRuntime()
@@ -153,6 +168,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        unregisterScreenOnReceiver()
         removeOverlay()
         isServiceCreated = false
         isOverlayRuntimeAttached = false
@@ -180,6 +196,30 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         removeOverlay()
     }
 
+    private fun registerScreenOnReceiver() {
+        if (screenOnReceiverRegistered) return
+        try {
+            registerReceiver(screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+            screenOnReceiverRegistered = true
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to register dynamic SCREEN_ON overlay receiver")
+        }
+    }
+
+    private fun unregisterScreenOnReceiver() {
+        if (!screenOnReceiverRegistered) return
+        try {
+            unregisterReceiver(screenOnReceiver)
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to unregister dynamic SCREEN_ON overlay receiver")
+        } finally {
+            screenOnReceiverRegistered = false
+        }
+    }
+
+    private fun shouldSuppressForForegroundPreference(): Boolean =
+        prefs.hideWhileAuxioForeground && (isAuxioForeground || prefs.suppressedByAuxioForeground)
+
     private fun restartMode(): Int =
         if (prefs.enabled && Settings.canDrawOverlays(this)) START_STICKY else START_NOT_STICKY
 
@@ -197,7 +237,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             return
         }
         if (isOverlayAttached) return
-        if (isAuxioForeground && prefs.hideWhileAuxioForeground) return
+        if (shouldSuppressForForegroundPreference()) return
 
         journal.log(DiagnosticJournal.CAT_OVERLAY, "Attaching overlay")
         val view = CarFloatingControlsView(this, this)
@@ -553,8 +593,24 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 L.w("Skipping overlay restore; permission missing [$reason]")
                 return
             }
+            if (clearsForegroundSuppression(reason)) {
+                prefs.suppressedByAuxioForeground = false
+            }
+            if (reason == "application_on_create" && prefs.hideWhileAuxioForeground) {
+                L.d("Skipping app-start overlay restore while hide-foreground preference is active")
+                return
+            }
+            if (prefs.hideWhileAuxioForeground && prefs.suppressedByAuxioForeground) {
+                L.d("Skipping overlay restore while Auxio foreground suppression is active [$reason]")
+                return
+            }
             start(context, reason)
         }
+
+        private fun clearsForegroundSuppression(reason: String): Boolean =
+            reason.contains("BOOT_COMPLETED") ||
+                reason.contains("USER_UNLOCKED") ||
+                reason.contains("MY_PACKAGE_REPLACED")
 
         fun start(context: Context) {
             start(context, "explicit")

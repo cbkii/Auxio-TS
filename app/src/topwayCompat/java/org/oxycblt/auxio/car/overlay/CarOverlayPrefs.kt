@@ -46,6 +46,14 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getBoolean(KEY_HIDE_WHILE_AUXIO_FG, true)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_WHILE_AUXIO_FG, value) }
 
+    /**
+     * Runtime suppression marker used to avoid sticky service restarts re-showing the overlay over
+     * Auxio's own UI when "hide while Auxio foreground" is enabled.
+     */
+    var suppressedByAuxioForeground: Boolean
+        get() = prefs.getBoolean(KEY_SUPPRESSED_BY_AUXIO_FG, false)
+        set(value) = prefs.edit { putBoolean(KEY_SUPPRESSED_BY_AUXIO_FG, value) }
+
     var positionX: Int
         get() = prefs.getInt(KEY_POSITION_X, DEFAULT_X)
         set(value) = prefs.edit { putInt(KEY_POSITION_X, value) }
@@ -83,6 +91,7 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         const val KEY_ENABLED = "car_overlay_enabled"
         private const val KEY_PENDING_ENABLE = "car_overlay_pending_enable"
         private const val KEY_HIDE_WHILE_AUXIO_FG = "car_overlay_hide_auxio_fg"
+        private const val KEY_SUPPRESSED_BY_AUXIO_FG = "car_overlay_suppressed_auxio_fg"
         private const val KEY_POSITION_X = "car_overlay_x"
         private const val KEY_POSITION_Y = "car_overlay_y"
         private const val KEY_OPACITY = "car_overlay_opacity"

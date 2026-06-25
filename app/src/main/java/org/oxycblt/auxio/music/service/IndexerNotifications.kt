@@ -38,6 +38,8 @@ import timber.log.Timber as L
 class IndexingNotification(private val context: Context) :
     ForegroundServiceNotification(context, indexerChannel) {
     private var lastUpdateTime = -1L
+    private var lastLoaded = -1
+    private var lastExplored = -1
 
     init {
         setSmallIcon(R.drawable.ic_indexer_24)
@@ -74,13 +76,22 @@ class IndexingNotification(private val context: Context) :
             }
             is IndexingProgress.Songs -> {
                 // Determinate state, show an active progress meter. Since these updates arrive
-                // highly rapidly, only update every 1.5 seconds to prevent notification rate
-                // limiting.
+                // highly rapidly, coalesce updates to reduce notification churn on TS18 SystemUI.
                 val now = SystemClock.elapsedRealtime()
-                if (lastUpdateTime > -1 && (now - lastUpdateTime) < 1500) {
+                if (
+                    lastUpdateTime > -1 &&
+                        (now - lastUpdateTime) < MIN_PROGRESS_UPDATE_MS &&
+                        progress.loaded == lastLoaded &&
+                        progress.explored == lastExplored
+                ) {
                     return false
                 }
-                lastUpdateTime = SystemClock.elapsedRealtime()
+                if (lastUpdateTime > -1 && (now - lastUpdateTime) < MIN_PROGRESS_UPDATE_MS) {
+                    return false
+                }
+                lastUpdateTime = now
+                lastLoaded = progress.loaded
+                lastExplored = progress.explored
                 L.d("Updating state to $progress")
                 setContentText(
                     context.getString(R.string.fmt_indexing, progress.loaded, progress.explored)
@@ -89,6 +100,9 @@ class IndexingNotification(private val context: Context) :
                 return true
             }
         }
+    }
+    private companion object {
+        const val MIN_PROGRESS_UPDATE_MS = 3000L
     }
 }
 
