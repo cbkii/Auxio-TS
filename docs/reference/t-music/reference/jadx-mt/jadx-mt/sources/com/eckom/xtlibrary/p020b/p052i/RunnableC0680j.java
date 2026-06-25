@@ -1,0 +1,35 @@
+package com.eckom.xtlibrary.p020b.p052i;
+
+import com.eckom.xtlibrary.p020b.p052i.C0681k;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+
+/* JADX INFO: renamed from: com.eckom.xtlibrary.b.i.j */
+/* JADX INFO: compiled from: ThemeManager.java */
+/* JADX INFO: loaded from: classes3.dex */
+class RunnableC0680j implements Runnable {
+    final /* synthetic */ C0681k this$0;
+    final /* synthetic */ C0683m val$info;
+
+    RunnableC0680j(C0681k c0681k, C0683m c0683m) {
+        this.this$0 = c0681k;
+        this.val$info = c0683m;
+    }
+
+    @Override // java.lang.Runnable
+    public void run() {
+        C0671a.m923a("ThemeManager", "theme switch start. size = %s", Integer.valueOf(this.this$0.f813Xl.size()));
+        List list = this.this$0.f813Xl;
+        Collections.sort(list, new C0681k.c(null));
+        Iterator it = list.iterator();
+        while (it.hasNext()) {
+            ((InterfaceC0673c) it.next()).mo927a(this.val$info);
+        }
+        Collections.sort(list, new C0681k.d(null));
+        boolean zM970a = this.this$0.m970a(list, this.val$info);
+        Collections.sort(list, new C0681k.b(null));
+        this.this$0.m968a((List<InterfaceC0673c>) list, this.val$info, !zM970a);
+        C0671a.m923a("ThemeManager", "theme switch finshed. size = %s", Integer.valueOf(this.this$0.f813Xl.size()));
+    }
+}

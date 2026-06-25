@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center_vertical" android:id="@id/music_widget" android:background="@drawable/music_widget_bg" android:layout_width="@dimen/tw_dp_w490" android:layout_height="@dimen/tw_dp_h225">
+        <ImageView android:id="@id/albumart" android:layout_width="@dimen/tw_dp_w150" android:layout_height="@dimen/tw_dp_w150" android:layout_marginLeft="@dimen/tw_dp_w20" android:src="@drawable/album" android:scaleType="fitCenter" />
+        <LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="match_parent" android:layout_height="match_parent">
+            <TextView android:textSize="@dimen/tw_dp_h18" android:textColor="#ebebeb" android:gravity="center" android:id="@id/title" android:layout_width="match_parent" android:layout_height="@dimen/tw_dp_h24" android:layout_marginBottom="@dimen/tw_dp_h12" android:singleLine="true" />
+            <TextView android:textSize="@dimen/tw_dp_h16" android:textColor="#9c9c9c" android:gravity="center" android:id="@id/artist" android:layout_width="match_parent" android:layout_height="@dimen/tw_dp_h24" android:layout_marginBottom="@dimen/tw_dp_h12" android:singleLine="true" />
+            <LinearLayout android:gravity="center_horizontal" android:layout_width="match_parent" android:layout_height="@dimen/tw_dp_h23">
+                <ImageView android:id="@id/control_prev" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:src="@drawable/widget_prev" android:scaleType="centerInside" android:layout_weight="1.0" />
+                <ImageView android:id="@id/control_play" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:src="@drawable/widget_pp" android:scaleType="centerInside" android:layout_weight="1.0" />
+                <ImageView android:id="@id/control_next" android:clickable="true" android:layout_width="match_parent" android:layout_height="wrap_content" android:src="@drawable/widget_next" android:scaleType="centerInside" android:layout_weight="1.0" />
+            </LinearLayout>
+            <LinearLayout android:gravity="center" android:layout_width="@dimen/tw_dp_w234" android:layout_height="wrap_content" android:layout_marginTop="@dimen/tw_dp_h12">
+                <TextView android:textSize="15.0dp" android:textColor="#ebebeb" android:gravity="left|center" android:id="@id/tv_current_time" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <LinearLayout android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_weight="1.0" />
+                <TextView android:textSize="15.0dp" android:textColor="#ebebeb" android:gravity="right|center" android:id="@id/tv_duration" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            </LinearLayout>
+            <ProgressBar android:id="@id/seek_bar_progress" android:paddingLeft="@dimen/tw_dp_w10" android:paddingRight="@dimen/tw_dp_w10" android:layout_width="@dimen/tw_dp_w254" android:layout_height="@dimen/tw_dp_h20" android:layout_marginTop="@dimen/tw_dp_h12" android:maxHeight="@dimen/tw_dp_h3" android:progressDrawable="@drawable/seek_bar_style" android:minHeight="@dimen/tw_dp_h3" style="?android:progressBarStyleHorizontal" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,109 @@
+name: Setup Apktool + JADX
+description: >
+  Install Java 17 (Temurin), optionally set up Android SDK, then download
+  Apktool and/or JADX into .tools/ depending on tool_profile.
+
+inputs:
+  apktool_ver:
+    description: Apktool version to download; blank resolves latest release tag dynamically
+    default: ""
+  jadx_ver:
+    description: JADX version to download; blank resolves latest release tag dynamically
+    default: ""
+  tool_profile:
+    description: "Tool setup profile: full | build | jadx"
+    default: "full"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Java 17 (Temurin)
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    - name: Validate tool profile
+      shell: bash
+      env:
+        TOOL_PROFILE: ${{ inputs.tool_profile }}
+      run: |
+        set -euo pipefail
+        case "$TOOL_PROFILE" in
+          full|build|jadx) ;;
+          *)
+            echo "Invalid tool_profile: $TOOL_PROFILE" >&2
+            exit 1
+            ;;
+        esac
+
+
+    - name: Resolve Apktool version
+      if: inputs.tool_profile == 'full' || inputs.tool_profile == 'build'
+      shell: bash
+      env:
+        APKTOOL_INPUT: ${{ inputs.apktool_ver }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        if [[ -n "$APKTOOL_INPUT" ]]; then
+          v="${APKTOOL_INPUT#v}"
+        else
+          v=$(gh api repos/iBotPeaches/Apktool/releases/latest --jq '.tag_name' | sed 's/^v//')
+          [[ -n "$v" ]] || { echo "Failed to resolve latest Apktool version" >&2; exit 1; }
+        fi
+        echo "APKTOOL_VER=$v" >> "$GITHUB_ENV"
+
+    - name: Resolve JADX version
+      if: inputs.tool_profile == 'full' || inputs.tool_profile == 'jadx'
+      shell: bash
+      env:
+        JADX_INPUT: ${{ inputs.jadx_ver }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        if [[ -n "$JADX_INPUT" ]]; then
+          v="${JADX_INPUT#v}"
+        else
+          v=$(gh api repos/skylot/jadx/releases/latest --jq '.tag_name' | sed 's/^v//')
+          [[ -n "$v" ]] || { echo "Failed to resolve latest JADX version" >&2; exit 1; }
+        fi
+        echo "JADX_VER=$v" >> "$GITHUB_ENV"
+
+    - name: Set up Android SDK
+      if: inputs.tool_profile == 'full' || inputs.tool_profile == 'build'
+      uses: android-actions/setup-android@v3
+
+    - name: Download Apktool
+      if: inputs.tool_profile == 'full' || inputs.tool_profile == 'build'
+      shell: bash
+      run: |
+        set -euo pipefail
+        jar=".tools/apktool.jar"
+        if [[ -f "$jar" ]]; then
+          echo "Apktool already present at $jar"
+        else
+          mkdir -p .tools
+          curl -sSL --fail --connect-timeout 30 \
+            -o "$jar" \
+            "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VER}/apktool_${APKTOOL_VER}.jar"
+        fi
+
+    - name: Download and extract JADX
+      if: inputs.tool_profile == 'full' || inputs.tool_profile == 'jadx'
+      shell: bash
+      run: |
+        set -euo pipefail
+        bin=".tools/jadx/bin/jadx"
+        if [[ -x "$bin" ]]; then
+          echo "JADX already present at $bin"
+        else
+          mkdir -p .tools
+          curl -sSL --fail --connect-timeout 30 \
+            -o .tools/jadx.zip \
+            "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
+          rm -rf .tools/jadx
+          unzip -q -o .tools/jadx.zip -d .tools/jadx
+          chmod +x .tools/jadx/bin/jadx
+          rm -f .tools/jadx.zip
+        fi

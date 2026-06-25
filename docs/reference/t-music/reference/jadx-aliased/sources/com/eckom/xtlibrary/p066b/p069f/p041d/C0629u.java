@@ -1,0 +1,20 @@
+package com.eckom.xtlibrary.p066b.p069f.p041d;
+
+import java.io.File;
+import java.io.FileFilter;
+
+/* compiled from: MusicIjkID3Model.java */
+/* renamed from: com.eckom.xtlibrary.b.f.d.u */
+/* loaded from: classes3.dex */
+class C0629u implements FileFilter {
+    final /* synthetic */ C0593L this$0;
+
+    C0629u(C0593L c0593l) {
+        this.this$0 = c0593l;
+    }
+
+    @Override // java.io.FileFilter
+    public boolean accept(File file) {
+        return file.canRead() && file.isDirectory() && file.getName().startsWith("extsd");
+    }
+}

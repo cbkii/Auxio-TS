@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/drag_layer"
+    android:background="@drawable/bg"
+    android:fitsSystemWindows="true"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <include
+        android:id="@+id/layout_music_play"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        layout="@layout/layout_music_player"/>
+    <include
+        android:id="@+id/layout_split_screen"
+        android:visibility="gone"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        layout="@layout/layout_music_split_screen"/>
+</RelativeLayout>

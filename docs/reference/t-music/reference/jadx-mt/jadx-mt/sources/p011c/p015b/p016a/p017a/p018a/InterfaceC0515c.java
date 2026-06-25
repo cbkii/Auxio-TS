@@ -1,0 +1,102 @@
+package p011c.p015b.p016a.p017a.p018a;
+
+import android.os.Binder;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.IInterface;
+import android.os.Parcel;
+
+/* JADX INFO: renamed from: c.b.a.a.a.c */
+/* JADX INFO: compiled from: IRadioCallBack.java */
+/* JADX INFO: loaded from: classes4.dex */
+public interface InterfaceC0515c extends IInterface {
+
+    /* JADX INFO: renamed from: c.b.a.a.a.c$a */
+    /* JADX INFO: compiled from: IRadioCallBack.java */
+    public static abstract class a extends Binder implements InterfaceC0515c {
+        public a() {
+            attachInterface(this, "com.tw.service.xt.aidl.IRadioCallBack");
+        }
+
+        @Override // android.os.IInterface
+        public IBinder asBinder() {
+            return this;
+        }
+
+        @Override // android.os.Binder
+        public boolean onTransact(int i, Parcel parcel, Parcel parcel2, int i2) {
+            if (i == 1598968902) {
+                parcel2.writeString("com.tw.service.xt.aidl.IRadioCallBack");
+                return true;
+            }
+            switch (i) {
+                case 1:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo140oa();
+                    parcel2.writeNoException();
+                    return true;
+                case 2:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo133K();
+                    parcel2.writeNoException();
+                    return true;
+                case 3:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo134R();
+                    parcel2.writeNoException();
+                    return true;
+                case 4:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo135U();
+                    parcel2.writeNoException();
+                    return true;
+                case 5:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo137aa(parcel.readString());
+                    parcel2.writeNoException();
+                    return true;
+                case 6:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo139o(parcel.readInt());
+                    parcel2.writeNoException();
+                    return true;
+                case 7:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo138ka();
+                    parcel2.writeNoException();
+                    return true;
+                case 8:
+                    parcel.enforceInterface("com.tw.service.xt.aidl.IRadioCallBack");
+                    mo136a(parcel.readInt() != 0 ? (Bundle) Bundle.CREATOR.createFromParcel(parcel) : null);
+                    parcel2.writeNoException();
+                    return true;
+                default:
+                    return super.onTransact(i, parcel, parcel2, i2);
+            }
+        }
+    }
+
+    /* JADX INFO: renamed from: K */
+    void mo133K();
+
+    /* JADX INFO: renamed from: R */
+    void mo134R();
+
+    /* JADX INFO: renamed from: U */
+    void mo135U();
+
+    /* JADX INFO: renamed from: a */
+    void mo136a(Bundle bundle);
+
+    /* JADX INFO: renamed from: aa */
+    void mo137aa(String str);
+
+    /* JADX INFO: renamed from: ka */
+    void mo138ka();
+
+    /* JADX INFO: renamed from: o */
+    void mo139o(int i);
+
+    /* JADX INFO: renamed from: oa */
+    void mo140oa();
+}

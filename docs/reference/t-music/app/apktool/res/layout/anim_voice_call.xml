@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:layout_gravity="center_horizontal" android:orientation="vertical" android:id="@id/ll_anim_all" android:background="@drawable/anim_list_bg" android:layout_width="@dimen/tw_dp_w220" android:layout_height="@dimen/tw_dp_h60"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <LinearLayout android:gravity="center_horizontal" android:orientation="horizontal" android:id="@id/ll_anim_list" android:background="@drawable/anim_list" android:layout_width="match_parent" android:layout_height="match_parent">
+        <ImageView android:id="@id/iv_voice_call" android:layout_width="@dimen/tw_dp_w80" android:layout_height="match_parent" android:src="@drawable/anim_ic_phone" android:scaleType="centerInside" />
+    </LinearLayout>
+</LinearLayout>

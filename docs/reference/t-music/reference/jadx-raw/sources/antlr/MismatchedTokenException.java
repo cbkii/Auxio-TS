@@ -1,0 +1,176 @@
+package antlr;
+
+import antlr.collections.AST;
+import antlr.collections.impl.BitSet;
+import p000a.p001a.p002a.p003a.C0000a;
+
+/* loaded from: classes3.dex */
+public class MismatchedTokenException extends RecognitionException {
+    public static final int NOT_RANGE = 4;
+    public static final int NOT_SET = 6;
+    public static final int NOT_TOKEN = 2;
+    public static final int RANGE = 3;
+    public static final int SET = 5;
+    public static final int TOKEN = 1;
+    public int expecting;
+    public int mismatchType;
+    public AST node;
+    public BitSet set;
+    public Token token;
+    public String[] tokenNames;
+    public String tokenText;
+    public int upper;
+
+    public MismatchedTokenException() {
+        super("Mismatched Token: expecting any AST node", "<AST>", -1, -1);
+        this.tokenText = null;
+    }
+
+    public MismatchedTokenException(String[] strArr, Token token, int i, int i2, boolean z, String str) {
+        super("Mismatched Token", str, token.getLine(), token.getColumn());
+        this.tokenText = null;
+        this.tokenNames = strArr;
+        this.token = token;
+        this.tokenText = token.getText();
+        this.mismatchType = z ? 4 : 3;
+        this.expecting = i;
+        this.upper = i2;
+    }
+
+    public MismatchedTokenException(String[] strArr, Token token, int i, boolean z, String str) {
+        super("Mismatched Token", str, token.getLine(), token.getColumn());
+        this.tokenText = null;
+        this.tokenNames = strArr;
+        this.token = token;
+        this.tokenText = token.getText();
+        this.mismatchType = z ? 2 : 1;
+        this.expecting = i;
+    }
+
+    public MismatchedTokenException(String[] strArr, Token token, BitSet bitSet, boolean z, String str) {
+        super("Mismatched Token", str, token.getLine(), token.getColumn());
+        this.tokenText = null;
+        this.tokenNames = strArr;
+        this.token = token;
+        this.tokenText = token.getText();
+        this.mismatchType = z ? 6 : 5;
+        this.set = bitSet;
+    }
+
+    public MismatchedTokenException(String[] strArr, AST ast, int i, int i2, boolean z) {
+        super("Mismatched Token", "<AST>", ast == null ? -1 : ast.getLine(), ast != null ? ast.getColumn() : -1);
+        this.tokenText = null;
+        this.tokenNames = strArr;
+        this.node = ast;
+        this.tokenText = ast == null ? "<empty tree>" : ast.toString();
+        this.mismatchType = z ? 4 : 3;
+        this.expecting = i;
+        this.upper = i2;
+    }
+
+    public MismatchedTokenException(String[] strArr, AST ast, int i, boolean z) {
+        super("Mismatched Token", "<AST>", ast == null ? -1 : ast.getLine(), ast != null ? ast.getColumn() : -1);
+        this.tokenText = null;
+        this.tokenNames = strArr;
+        this.node = ast;
+        this.tokenText = ast == null ? "<empty tree>" : ast.toString();
+        this.mismatchType = z ? 2 : 1;
+        this.expecting = i;
+    }
+
+    public MismatchedTokenException(String[] strArr, AST ast, BitSet bitSet, boolean z) {
+        super("Mismatched Token", "<AST>", ast == null ? -1 : ast.getLine(), ast != null ? ast.getColumn() : -1);
+        this.tokenText = null;
+        this.tokenNames = strArr;
+        this.node = ast;
+        this.tokenText = ast == null ? "<empty tree>" : ast.toString();
+        this.mismatchType = z ? 6 : 5;
+        this.set = bitSet;
+    }
+
+    private String tokenName(int i) {
+        if (i == 0) {
+            return "<Set of tokens>";
+        }
+        if (i >= 0) {
+            String[] strArr = this.tokenNames;
+            if (i < strArr.length) {
+                return strArr[i];
+            }
+        }
+        StringBuilder m5a = C0000a.m5a("<");
+        m5a.append(String.valueOf(i));
+        m5a.append(">");
+        return m5a.toString();
+    }
+
+    @Override // java.lang.Throwable
+    public String getMessage() {
+        StringBuilder m5a;
+        int i;
+        String str;
+        String sb;
+        StringBuffer stringBuffer = new StringBuffer();
+        switch (this.mismatchType) {
+            case 1:
+                m5a = C0000a.m5a("expecting ");
+                i = this.expecting;
+                m5a.append(tokenName(i));
+                m5a.append(", found '");
+                m5a.append(this.tokenText);
+                m5a.append("'");
+                sb = m5a.toString();
+                break;
+            case 2:
+                m5a = C0000a.m5a("expecting anything but ");
+                m5a.append(tokenName(this.expecting));
+                m5a.append("; got it anyway");
+                sb = m5a.toString();
+                break;
+            case 3:
+                str = "expecting token in range: ";
+                m5a = C0000a.m5a(str);
+                m5a.append(tokenName(this.expecting));
+                m5a.append("..");
+                i = this.upper;
+                m5a.append(tokenName(i));
+                m5a.append(", found '");
+                m5a.append(this.tokenText);
+                m5a.append("'");
+                sb = m5a.toString();
+                break;
+            case 4:
+                str = "expecting token NOT in range: ";
+                m5a = C0000a.m5a(str);
+                m5a.append(tokenName(this.expecting));
+                m5a.append("..");
+                i = this.upper;
+                m5a.append(tokenName(i));
+                m5a.append(", found '");
+                m5a.append(this.tokenText);
+                m5a.append("'");
+                sb = m5a.toString();
+                break;
+            case 5:
+            case 6:
+                StringBuilder m5a2 = C0000a.m5a("expecting ");
+                m5a2.append(this.mismatchType == 6 ? "NOT " : "");
+                m5a2.append("one of (");
+                stringBuffer.append(m5a2.toString());
+                for (int i2 : this.set.toArray()) {
+                    stringBuffer.append(" ");
+                    stringBuffer.append(tokenName(i2));
+                }
+                m5a = C0000a.m5a("), found '");
+                m5a.append(this.tokenText);
+                m5a.append("'");
+                sb = m5a.toString();
+                break;
+            default:
+                sb = super.getMessage();
+                break;
+        }
+        stringBuffer.append(sb);
+        return stringBuffer.toString();
+    }
+}

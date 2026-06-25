@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="warning_driving_height">@dimen/tw_dp_w173</dimen>
+    <dimen name="warning_driving_text_padding_left">@dimen/tw_dp_w154</dimen>
+    <dimen name="warning_driving_text_padding_right">@dimen/tw_dp_w14</dimen>
+    <dimen name="warning_driving_text_size">@dimen/tw_dp_w26</dimen>
+    <dimen name="warning_driving_width">@dimen/tw_dp_w456</dimen>
+</resources>

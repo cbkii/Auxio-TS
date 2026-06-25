@@ -1,0 +1,52 @@
+package android.support.v4.app;
+
+import android.app.Activity;
+import android.arch.lifecycle.C0018g;
+import android.arch.lifecycle.InterfaceC0016e;
+import android.arch.lifecycle.Lifecycle;
+import android.arch.lifecycle.ReportFragment;
+import android.os.Bundle;
+import android.support.annotation.CallSuper;
+import android.support.annotation.Nullable;
+import android.support.annotation.RestrictTo;
+import android.support.v4.util.SimpleArrayMap;
+
+/* JADX INFO: compiled from: ComponentActivity.java */
+/* JADX INFO: loaded from: classes3.dex */
+@RestrictTo({RestrictTo.Scope.LIBRARY_GROUP})
+public class SupportActivity extends Activity implements InterfaceC0016e {
+    private SimpleArrayMap<Class<? extends ExtraData>, ExtraData> mExtraDataMap = new SimpleArrayMap<>();
+    private C0018g mLifecycleRegistry = new C0018g(this);
+
+    /* JADX INFO: compiled from: ComponentActivity.java */
+    @RestrictTo({RestrictTo.Scope.LIBRARY_GROUP})
+    public static class ExtraData {
+    }
+
+    @RestrictTo({RestrictTo.Scope.LIBRARY_GROUP})
+    public <T extends ExtraData> T getExtraData(Class<T> cls) {
+        return (T) this.mExtraDataMap.get(cls);
+    }
+
+    public Lifecycle getLifecycle() {
+        return this.mLifecycleRegistry;
+    }
+
+    @Override // android.app.Activity
+    protected void onCreate(@Nullable Bundle bundle) {
+        super.onCreate(bundle);
+        ReportFragment.m34a(this);
+    }
+
+    @Override // android.app.Activity
+    @CallSuper
+    protected void onSaveInstanceState(Bundle bundle) {
+        this.mLifecycleRegistry.m59a(Lifecycle.State.CREATED);
+        super.onSaveInstanceState(bundle);
+    }
+
+    @RestrictTo({RestrictTo.Scope.LIBRARY_GROUP})
+    public void putExtraData(ExtraData extraData) {
+        this.mExtraDataMap.put((Class<? extends ExtraData>) extraData.getClass(), extraData);
+    }
+}
