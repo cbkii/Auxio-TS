@@ -52,7 +52,7 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
      */
     var suppressedByAuxioForeground: Boolean
         get() = prefs.getBoolean(KEY_SUPPRESSED_BY_AUXIO_FG, false)
-        set(value) = prefs.edit { putBoolean(KEY_SUPPRESSED_BY_AUXIO_FG, value) }
+        set(value) = prefs.edit(commit = true) { putBoolean(KEY_SUPPRESSED_BY_AUXIO_FG, value) }
 
     var positionX: Int
         get() = prefs.getInt(KEY_POSITION_X, DEFAULT_X)

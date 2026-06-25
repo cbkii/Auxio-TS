@@ -86,9 +86,6 @@ class IndexingNotification(private val context: Context) :
                 ) {
                     return false
                 }
-                if (lastUpdateTime > -1 && (now - lastUpdateTime) < MIN_PROGRESS_UPDATE_MS) {
-                    return false
-                }
                 lastUpdateTime = now
                 lastLoaded = progress.loaded
                 lastExplored = progress.explored

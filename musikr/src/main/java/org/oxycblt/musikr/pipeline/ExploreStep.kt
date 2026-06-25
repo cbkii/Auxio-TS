@@ -30,6 +30,7 @@ import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.RootGate
+import java.util.Locale
 import org.oxycblt.musikr.pipeline.shim.FilteredFS
 import org.oxycblt.musikr.playlist.m3u.M3U
 import org.oxycblt.musikr.util.mapParallel
@@ -71,13 +72,7 @@ private class ExploreStepImpl(
         val classified = Channel<Classified>(Channel.UNLIMITED)
         val classifiedTask =
             scope.mapParallel(PARALLELISM, files, classified, Dispatchers.IO) { file ->
-                if (
-                    file.mimeType == M3U.MIME_TYPE ||
-                        (!file.mimeType.startsWith("audio/") &&
-                            file.mimeType != "application/ogg" &&
-                            file.mimeType != "application/x-ogg" &&
-                            file.mimeType != "application/octet-stream")
-                ) {
+                if (!FileClassification.isPotentialMusicFile(file)) {
                     return@mapParallel Finalized(NotAudio)
                 }
                 when (val cacheResult = storage.cache.read(file)) {
@@ -146,5 +141,36 @@ private class ExploreStepImpl(
 
     private companion object {
         const val PARALLELISM = 8
+    }
+}
+
+internal object FileClassification {
+    private val supportedAudioExtensions =
+        setOf(
+            "3gp",
+            "aac",
+            "alac",
+            "flac",
+            "m4a",
+            "m4b",
+            "m4p",
+            "mp3",
+            "mp4",
+            "oga",
+            "ogg",
+            "opus",
+            "wav",
+        )
+
+    fun isPotentialMusicFile(file: File): Boolean {
+        val mimeType = file.mimeType.lowercase(Locale.US)
+        if (mimeType == M3U.MIME_TYPE) return false
+        if (mimeType.startsWith("audio/")) return true
+        if (mimeType == "application/ogg" || mimeType == "application/x-ogg") return true
+        if (mimeType != "application/octet-stream") return false
+
+        val name = file.path.name ?: file.uri.lastPathSegment?.substringAfterLast('/') ?: return false
+        val extension = name.substringAfterLast('.', missingDelimiterValue = "").lowercase(Locale.US)
+        return extension in supportedAudioExtensions
     }
 }

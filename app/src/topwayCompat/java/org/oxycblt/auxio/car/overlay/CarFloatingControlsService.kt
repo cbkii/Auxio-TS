@@ -100,6 +100,10 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 "Sticky restart restore",
                 "reason=null_intent",
             )
+            if (shouldSuppressForForegroundPreference()) {
+                L.d("Skipping sticky overlay restore while Auxio foreground suppression is active")
+                return START_STICKY
+            }
             startOverlayRuntime()
             return START_STICKY
         }
@@ -611,6 +615,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
 
         private fun clearsForegroundSuppression(reason: String): Boolean =
             reason.contains("BOOT_COMPLETED") ||
+                reason.contains("QUICKBOOT_POWERON") ||
                 reason.contains("USER_UNLOCKED") ||
                 reason.contains("MY_PACKAGE_REPLACED")
 

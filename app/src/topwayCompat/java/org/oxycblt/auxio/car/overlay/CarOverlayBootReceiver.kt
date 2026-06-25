@@ -25,7 +25,7 @@ import timber.log.Timber as L
 
 /**
  * Restores the car floating controls overlay after public Android lifecycle broadcasts that are
- * commonly observed around TS18 boot, user unlock, package replacement, screen wake, and user
+ * commonly observed around TS18 boot, user unlock, package replacement, quick boot, and user
  * return. This remains Topway-compatible flavour only and uses the normal foreground-service path.
  *
  * Requires TS18 device validation: ACC sleep/wake may be exposed as screen/user-present only on
@@ -46,7 +46,6 @@ class CarOverlayBootReceiver : BroadcastReceiver() {
                 Intent.ACTION_BOOT_COMPLETED,
                 Intent.ACTION_USER_UNLOCKED,
                 Intent.ACTION_MY_PACKAGE_REPLACED,
-                Intent.ACTION_SCREEN_ON,
                 Intent.ACTION_USER_PRESENT,
                 ACTION_QUICKBOOT_POWERON,
                 ACTION_HTC_QUICKBOOT_POWERON,
