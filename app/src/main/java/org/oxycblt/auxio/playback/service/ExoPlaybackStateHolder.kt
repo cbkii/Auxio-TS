@@ -53,6 +53,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.oxycblt.auxio.headunit.ts18.RawFastResumeItem
+import org.oxycblt.auxio.headunit.ts18.RawFastResumeValidator
+import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.resolve
@@ -66,6 +69,7 @@ import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateHolder
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RawQueue
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
@@ -102,6 +106,9 @@ class ExoPlaybackStateHolder(
     private var audioFocusState = AudioFocusPolicy.State()
     private var hasAudioFocus = false
     private var pauseFromAudioFocus = false
+    private var rawFastResumeItem: RawFastResumeItem? = null
+    private var pendingLibraryRestoreAfterRawFailure: DeferredPlayback.RestoreState? = null
+    private var markedFirstPlaying = false
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener(::onAudioFocusChanged)
     private val focusRequest: AudioFocusRequestCompat =
         AudioFocusRequestCompat.Builder(AudioManagerCompat.AUDIOFOCUS_GAIN)
@@ -117,6 +124,12 @@ class ExoPlaybackStateHolder(
 
     var sessionOngoing = false
         private set
+
+    val hasRawFastResume: Boolean
+        get() = rawFastResumeItem != null
+
+    val rawFastResumeDurationMs: Long?
+        get() = rawFastResumeItem?.durationMs?.takeIf { it > 0L }
 
     override val isAudioFocusHeld: Boolean
         get() = hasAudioFocus
@@ -165,6 +178,13 @@ class ExoPlaybackStateHolder(
     override val audioSessionId: Int
         get() = player.audioSessionId
 
+    override val rawPlaybackMetadata: RawPlaybackMetadata?
+        get() =
+            rawFastResumeItem?.toRawPlaybackMetadata(
+                positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L),
+                playing = progression.isPlaying,
+            )
+
     override fun resolveQueue(): RawQueue {
         val library =
             musicRepository.library
@@ -182,10 +202,16 @@ class ExoPlaybackStateHolder(
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
         if (action is DeferredPlayback.RestoreState) {
+            Ts18FirstAudioLatency.mark("restore_request_received")
             val library = musicRepository.library?.takeIf { !it.empty() }
             if (library == null) {
-                L.d("Cached library not ready for saved-state restore; keeping restore deferred")
-                return false
+                L.d("Cached library not ready; attempting TS18 raw fast-resume snapshot")
+                return tryStartRawFastResume(action)
+            }
+            rawFastResumeItem?.let {
+                L.d("Library available after raw fast resume; attempting reconciliation")
+                reconcileRawFastResume(library)
+                return true
             }
             L.d("Restoring playback state from cached/loaded library")
             restoreScope.launch {
@@ -321,6 +347,8 @@ class ExoPlaybackStateHolder(
     }
 
     override fun newPlayback(command: PlaybackCommand) {
+        rawFastResumeItem = null
+        pendingLibraryRestoreAfterRawFailure = null
         parent = command.parent
         player.shuffleModeEnabled = command.shuffled
         player.setMediaItems(command.queue.map { it.buildMediaItem() })
@@ -352,6 +380,13 @@ class ExoPlaybackStateHolder(
     }
 
     override fun next() {
+        if (rawFastResumeItem != null) {
+            L.i("Ignoring next on single-item TS18 raw fast-resume playback")
+            player.pause()
+            playbackManager.ack(this, StateAck.ProgressionChanged)
+            deferSave()
+            return
+        }
         // Replicate the old pseudo-circular queue behavior when no repeat option is implemented.
         // Basically, you can't skip back and wrap around the queue, but you can skip forward and
         // wrap around the queue, albeit playback will be paused.
@@ -376,6 +411,15 @@ class ExoPlaybackStateHolder(
     }
 
     override fun prev() {
+        if (rawFastResumeItem != null) {
+            player.seekTo(0)
+            if (!playbackSettings.rememberPause) {
+                player.play()
+            }
+            playbackManager.ack(this, StateAck.ProgressionChanged)
+            deferSave()
+            return
+        }
         if (playbackSettings.rewindWithPrev) {
             player.seekToPrevious()
         } else if (player.hasPreviousMediaItem()) {
@@ -483,6 +527,8 @@ class ExoPlaybackStateHolder(
         repeatMode: RepeatMode,
         ack: StateAck.NewPlayback?,
     ) {
+        rawFastResumeItem = null
+        pendingLibraryRestoreAfterRawFailure = null
         var sendNewPlaybackEvent = false
         var shouldSeek = false
         if (this.parent != parent) {
@@ -541,6 +587,8 @@ class ExoPlaybackStateHolder(
     }
 
     override fun reset(ack: StateAck.NewPlayback) {
+        rawFastResumeItem = null
+        pendingLibraryRestoreAfterRawFailure = null
         player.setMediaItems(listOf())
         abandonAudioFocus()
         playbackManager.ack(this, ack)
@@ -610,6 +658,10 @@ class ExoPlaybackStateHolder(
 
         // So many actions trigger progression changes that it becomes easier just to handle it
         // in an ExoPlayer callback anyway. This doesn't really cause issues anywhere.
+        if (player.isPlaying && !markedFirstPlaying) {
+            markedFirstPlaying = true
+            Ts18FirstAudioLatency.mark("first_playing_state")
+        }
         if (
             events.containsAny(
                 Player.EVENT_PLAY_WHEN_READY_CHANGED,
@@ -623,10 +675,19 @@ class ExoPlaybackStateHolder(
     }
 
     override fun onPlayerError(error: PlaybackException) {
-        // TODO: Replace with no skipping and a notification instead
-        // If there's any issue, just go to the next song.
         L.e("Player error occurred")
         L.e(error.stackTraceToString())
+        if (rawFastResumeItem != null) {
+            L.w("TS18 raw fast-resume item failed; clearing raw playback without unsafe next()")
+            rawFastResumeItem = null
+            player.setMediaItems(emptyList())
+            player.pause()
+            saveScope.launch { persistenceRepository.saveFastResumeSnapshot(null) }
+            playbackManager.ack(this, StateAck.ProgressionChanged)
+            return
+        }
+        // TODO: Replace with no skipping and a notification instead
+        // If there's any issue in normal library playback, keep the existing next-song behaviour.
         player.prepare()
         playbackManager.next()
     }
@@ -696,7 +757,19 @@ class ExoPlaybackStateHolder(
     // --- MUSICREPOSITORY METHODS ---
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
-        if (changes.deviceLibrary && musicRepository.library?.takeIf { !it.empty() } != null) {
+        val library = musicRepository.library?.takeIf { !it.empty() }
+        if (changes.deviceLibrary && library != null) {
+            rawFastResumeItem?.let {
+                L.d("Library obtained while raw fast-resume is active; reconciling")
+                reconcileRawFastResume(library)
+                return
+            }
+            pendingLibraryRestoreAfterRawFailure?.let { pending ->
+                L.d("Library obtained after raw fast-resume miss; replaying saved-state restore")
+                pendingLibraryRestoreAfterRawFailure = null
+                playbackManager.playDeferred(pending)
+                return
+            }
             // We now have a library, see if we have anything we need to do.
             L.d("Library obtained, requesting action")
             playbackManager.requestAction(this)
@@ -704,6 +777,143 @@ class ExoPlaybackStateHolder(
     }
 
     // --- PLAYBACKSETTINGS OVERRIDES ---
+    private fun tryStartRawFastResume(action: DeferredPlayback.RestoreState): Boolean {
+        pendingLibraryRestoreAfterRawFailure = action
+        restoreScope.launch {
+            Ts18FirstAudioLatency.mark("snapshot_read_start")
+            val snapshot = persistenceRepository.readFastResumeSnapshot()
+            Ts18FirstAudioLatency.mark("snapshot_read_end")
+            if (snapshot == null) {
+                L.d("No TS18 fast-resume snapshot available")
+                return@launch
+            }
+            Ts18FirstAudioLatency.mark("raw_media_validation_start")
+            val validation = RawFastResumeValidator.validate(context, snapshot)
+            Ts18FirstAudioLatency.mark("raw_media_validation_end")
+            withContext(Dispatchers.Main) {
+                when (validation) {
+                    is RawFastResumeValidator.Result.Valid -> {
+                        if (pendingLibraryRestoreAfterRawFailure !== action) {
+                            L.d(
+                                "Skipping late TS18 raw fast-resume result; restore was already consumed"
+                            )
+                            return@withContext
+                        }
+                        pendingLibraryRestoreAfterRawFailure = null
+                        startRawFastResume(validation.item, action.play)
+                    }
+                    is RawFastResumeValidator.Result.Invalid -> {
+                        L.w(
+                            "Ignoring invalid TS18 fast-resume snapshot: " +
+                                validation.reason +
+                                " " +
+                                validation.detail
+                        )
+                    }
+                }
+            }
+        }
+        return true
+    }
+
+    private fun startRawFastResume(item: RawFastResumeItem, play: Boolean) {
+        Ts18FirstAudioLatency.mark("raw_media_item_set")
+        rawFastResumeItem = item
+        parent = null
+        player.shuffleModeEnabled = false
+        player.setMediaItems(listOf(item.buildMediaItem()))
+        player.seekTo(0, item.positionMs)
+        Ts18FirstAudioLatency.mark("raw_seek")
+        player.prepare()
+        Ts18FirstAudioLatency.mark("raw_prepare")
+        sessionOngoing = true
+        if (play) {
+            playing(true)
+        } else {
+            player.playWhenReady = false
+        }
+        playbackManager.ack(this, StateAck.NewPlayback)
+        playbackManager.ack(this, StateAck.ProgressionChanged)
+        deferSave()
+    }
+
+    private fun reconcileRawFastResume(library: Library) {
+        val raw = rawFastResumeItem ?: return
+        Ts18FirstAudioLatency.mark("reconciliation_start")
+        restoreScope.launch {
+            val song = findSongForRawFastResume(raw, library)
+            withContext(Dispatchers.Main) {
+                if (rawFastResumeItem !== raw) {
+                    L.d("Skipping stale TS18 raw reconciliation result")
+                    return@withContext
+                }
+                if (song == null) {
+                    L.i(
+                        "Unable to reconcile raw TS18 fast-resume item yet; leaving raw playback active"
+                    )
+                    Ts18FirstAudioLatency.mark("reconciliation_end_unmatched")
+                    return@withContext
+                }
+                val command = commandFactory.songFromAll(song, ShuffleMode.IMPLICIT)
+                if (command == null) {
+                    L.w(
+                        "Unable to build reconciliation command for ${song.uri}; leaving raw playback active"
+                    )
+                    Ts18FirstAudioLatency.mark("reconciliation_end_no_command")
+                    return@withContext
+                }
+                val wasPlaying = player.playWhenReady || player.isPlaying
+                val positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L)
+                rawFastResumeItem = null
+                pendingLibraryRestoreAfterRawFailure = null
+                playbackManager.play(command)
+                playbackManager.seekTo(positionMs.coerceAtMost(song.durationMs.coerceAtLeast(0L)))
+                playbackManager.playing(wasPlaying)
+                Ts18FirstAudioLatency.mark("reconciliation_end_matched")
+            }
+        }
+    }
+
+    private fun findSongForRawFastResume(raw: RawFastResumeItem, library: Library): Song? {
+        library.songs
+            .firstOrNull { it.uri.toString() == raw.uriString }
+            ?.let {
+                return it
+            }
+        val rawPath = raw.path?.takeIf { it.isNotBlank() }
+        if (rawPath != null) {
+            val appContext = context.applicationContext
+            library.songs
+                .firstOrNull { song ->
+                    try {
+                        song.path.resolve(appContext) == rawPath
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+                ?.let {
+                    return it
+                }
+        }
+        val rawTitle = raw.title?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        if (rawTitle != null && raw.durationMs > 0L) {
+            val appContext = context.applicationContext
+            library.songs
+                .firstOrNull { song ->
+                    val title =
+                        try {
+                            song.name.resolve(appContext).trim().lowercase()
+                        } catch (e: Exception) {
+                            ""
+                        }
+                    title == rawTitle && kotlin.math.abs(song.durationMs - raw.durationMs) <= 1000L
+                }
+                ?.let {
+                    return it
+                }
+        }
+        return null
+    }
 
     override fun onPauseOnRepeatChanged() {
         super.onPauseOnRepeatChanged()
@@ -718,7 +928,18 @@ class ExoPlaybackStateHolder(
     private suspend fun saveFastResumeSnapshot() {
         val song = playbackManager.currentSong
         if (song == null) {
-            if (!persistenceRepository.saveFastResumeSnapshot(null)) {
+            val raw = rawFastResumeItem
+            if (raw != null) {
+                val progression = playbackManager.progression
+                val rawSnapshot =
+                    raw.toSnapshot(
+                        positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L),
+                        playing = progression.isPlaying,
+                    )
+                if (!persistenceRepository.saveFastResumeSnapshot(rawSnapshot)) {
+                    L.w("Unable to persist raw TS18 fast-resume snapshot")
+                }
+            } else if (!persistenceRepository.saveFastResumeSnapshot(null)) {
                 L.w("Unable to clear TS18 fast-resume snapshot")
             }
             return

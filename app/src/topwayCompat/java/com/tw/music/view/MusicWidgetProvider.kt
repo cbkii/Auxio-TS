@@ -33,8 +33,6 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.topway.TopwayBridgeExtrasPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayMusicContract
 import org.oxycblt.auxio.headunit.topway.TopwayWidgetProviderPolicy
-import org.oxycblt.auxio.music.resolve
-import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.service.PendingIntentRequestCodePolicy
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.widgets.WidgetComponent
@@ -163,8 +161,8 @@ class MusicWidgetProvider : AppWidgetProvider() {
             } else {
                 val rv = RemoteViews(context.packageName, R.layout.app_widget_topway)
 
-                rv.setTextViewText(R.id.title, state.song.name.resolve(context))
-                rv.setTextViewText(R.id.artist, state.song.artists.resolveNames(context))
+                rv.setTextViewText(R.id.title, state.title)
+                rv.setTextViewText(R.id.artist, state.artist)
 
                 // Stock com.tw.music refuses large RemoteViews album bitmaps using a 3,680,000-byte
                 // cap before falling back to the default album resource. Preserve that
@@ -178,7 +176,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
                     rv.setImageViewResource(R.id.albumart, R.drawable.ic_remote_default_cover_24)
                 }
 
-                val timeline = WidgetTimeline.state(state.positionMs, state.song.durationMs)
+                val timeline = WidgetTimeline.state(state.positionMs, state.durationMs)
                 rv.setTextViewText(R.id.tv_current_time, timeline.currentText)
                 rv.setTextViewText(R.id.tv_duration, timeline.durationText)
                 rv.setProgressBar(

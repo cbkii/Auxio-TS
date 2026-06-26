@@ -54,6 +54,11 @@ interface PlaybackStateHolder {
     /** The current audio session ID of the audio player. */
     val audioSessionId: Int
 
+    /**
+     * Raw non-library playback metadata, used only during TS18 fast resume before a Song exists.
+     */
+    val rawPlaybackMetadata: RawPlaybackMetadata?
+
     /** Applies a completely new playback state to the holder. */
     fun newPlayback(command: PlaybackCommand)
 
@@ -209,6 +214,31 @@ sealed interface StateAck {
     data object RepeatModeChanged : StateAck
 
     data object SessionEnded : StateAck
+}
+
+/**
+ * Lightweight raw playback metadata for pre-library TS18 fast resume.
+ *
+ * This deliberately carries primitive public media fields only. It is not a Song, must not be
+ * persisted into the normal Auxio queue, and exists solely so MediaSession/widget/Topway surfaces
+ * can publish useful state while the Musikr library is still unavailable.
+ */
+data class RawPlaybackMetadata(
+    val title: String?,
+    val artist: String?,
+    val album: String?,
+    val uriString: String,
+    val path: String?,
+    val durationMs: Long,
+    val positionMs: Long,
+    val isPlaying: Boolean,
+    val savedAtMs: Long,
+) {
+    val displayTitle: String
+        get() = title?.takeIf { it.isNotBlank() } ?: path?.substringAfterLast('/') ?: uriString
+
+    val displayArtist: String
+        get() = artist?.takeIf { it.isNotBlank() } ?: "USB audio"
 }
 
 /**
