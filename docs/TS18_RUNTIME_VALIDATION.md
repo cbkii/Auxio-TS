@@ -231,12 +231,12 @@ Manual checks:
 
 - grant Android 10 storage permission when prompted;
 - confirm Auxio-TS can scan `/sdcard/Music`;
-- confirm Auxio-TS can scan or otherwise access `/storage/usbdiskN` where permitted;
+- **Observed / exact-device; Porting decision: use app-facing public storage path:** confirm Auxio-TS can scan or otherwise access `/storage/usbdiskN` where permitted;
 - confirm playback works from the same storage locations stock `twMusic` can access;
 - run the external Magisk/service.d collector under `tools/ts18-auxio-media-diag-pack-v3-recommended/` for TS18 diagnostics; the former in-app TS18 Health Diagnostics / Storage Health screen is abandoned and must not be restored;
 - during the external collector window, manually exercise Auxio-TS, DoFun, VLC, floating controls, source selection, USB mount/unmount where safe, and playback interruption cases;
 - confirm the collector output includes exactly one top-level session directory, `REPORT.md`, `commands/command-index.tsv`, package dumps, media-session dumps, notification dumps, audio dumps, storage/source evidence, and `auxio/in-app-diagnostics-skipped.txt`;
-- verify exact user-selected source preservation, alias/canonical distinction, SAF grants, MediaStore volumes, dynamic `/storage/usbdiskN` roots, exclusions, and temporarily unavailable sources using external collector output plus app-visible behaviour;
+- **Observed / exact-device; Porting decision: use app-facing public storage path:** verify exact user-selected source preservation, alias/canonical distinction, SAF grants, MediaStore volumes, dynamic `/storage/usbdiskN` roots, exclusions, and temporarily unavailable sources using external collector output plus app-visible behaviour;
 - verify save/copy/share output: failed saves must not discard the report, successful saves should show the full path, and destination discovery must not create directories until save time;
 - retest after ACC/reboot and after USB disk re-mount.
 
@@ -354,10 +354,10 @@ Expected for release variants: `com.tw.music/com.tw.music.MusicService` for `top
 ```sh
 adb shell cmd media_session list-sessions 2>/dev/null || true
 adb shell content query --uri content://media/external/audio/media --projection _id:_display_name:relative_path:volume_name --where "is_music=1" | head -50
-adb shell find /sdcard/Music /storage/emulated/0/Music /storage/usbdiskN -maxdepth 2 -type f 2>/dev/null | head -50
+**Observed / exact-device; Porting decision: use app-facing public storage path:** adb shell find /sdcard/Music /storage/emulated/0/Music /storage/usbdiskN -maxdepth 2 -type f 2>/dev/null | head -50
 ```
 
-Expected: songs copied to local `/sdcard/Music` and to the discovered `/storage/usbdiskN` root appear either in MediaStore query output or in the filesystem probe. Failure interpretation: if discovered USB files exist but do not appear in MediaStore after a media rescan/reboot, use the diagnostics report to compare source accessibility, aliases, SAF grants, exclusions, and temporary-unavailable state before proposing any broader storage permission change.
+**Observed / exact-device; Porting decision: use app-facing public storage path:** Expected: songs copied to local `/sdcard/Music` and to the discovered `/storage/usbdiskN` root appear either in MediaStore query output or in the filesystem probe. Failure interpretation: if discovered USB files exist but do not appear in MediaStore after a media rescan/reboot, use the diagnostics report to compare source accessibility, aliases, SAF grants, exclusions, and temporary-unavailable state before proposing any broader storage permission change.
 
 ### Runtime checks that require the real TS18 unit
 
@@ -366,5 +366,5 @@ Expected: songs copied to local `/sdcard/Music` and to the discovered `/storage/
 - DoFun hotseat/widget launch for both `com.tw.music/com.tw.music.MusicActivity` and `com.tw.media/com.tw.music.MusicActivity`.
 - Duplicate media-session/service behaviour: inspect `adb shell dumpsys media_session`, start playback from DoFun/widget, and verify only one active Auxio playback session controls audio. Expected: the Topway-compatible APK exposes `com.tw.music.MusicService` as the external browse component; `org.oxycblt.auxio.AuxioService` should not appear as an additional external browse-service resolution in Topway variants.
 - Duplicate service lifecycle/notification behaviour: inspect `adb shell dumpsys activity services | grep -E 'AuxioService|MusicService'` and `adb shell dumpsys notification | grep -E 'Auxio|com.tw.music|com.tw.media'` before and after DoFun/widget actions. Failure interpretation: two simultaneous foreground playback services or duplicate media notifications means the wrapper/base-service routing needs another implementation pass.
-- Music-library visibility for `/sdcard/Music`, `/storage/usbdiskN`, and USB/UDisk scanning on Android 10.
+- **Observed / exact-device; Porting decision: use app-facing public storage path:** Music-library visibility for `/sdcard/Music`, `/storage/usbdiskN`, and USB/UDisk scanning on Android 10.
 - Overlay permission grant/revoke, 1280x720 bounds with about 55px top/right system bars, background-start behaviour, boot completed, and ACC wake/restore.

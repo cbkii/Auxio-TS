@@ -3,7 +3,7 @@
 ## Internet / official documentation used
 
 - Android `dumpsys` documentation: confirms `dumpsys` is the correct command-line tool for system-service state capture and supports service-specific output.
-- Android `MediaSessionManager` API reference: active sessions are exposed through media session controllers to callers with the required privilege/notification-listener access; this is the likely generic path DoFun uses for VLC.
+- Android `MediaSessionManager` API reference: active sessions are exposed through media session controllers to callers with the required privilege/notification-listener access; this is the hypothesised DoFun/VLC path, confidence: medium, porting decision: evidence-only in this PR.
 - Android Media3 background playback documentation: current Android media apps should expose a media session service and a media-style notification for external/system controllers.
 - Magisk developer guide: `service.d` is the appropriate late-start boot script location for non-blocking post-boot diagnostics; `post-fs-data` should not be used for long-running capture.
 

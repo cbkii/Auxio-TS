@@ -57,6 +57,8 @@ need_fixed "$widget" "EXTRA_APP_WIDGET_IDS = \"appWidgetIds\"" "stock-style appW
 need_fixed "$widget" "STOCK_MUSIC_ACTIVITY_CLASS = \"com.tw.music.MusicActivity\"" "stock launcher activity component"
 need_fixed "$widget" "STOCK_WIDGET_ARTWORK_MAX_BYTES = 3_680_000" "stock RemoteViews artwork byte cap"
 need_fixed "$widget" "bindTopwayControls" "Topway control PendingIntent binding"
+need_absent "$widget" "@AndroidEntryPoint" "non-essential Hilt widget receiver injection"
+need_absent "$widget" "DiagnosticJournal" "non-essential widget diagnostics dependency"
 
 need_fixed "$legacy" "ACTION_LEGACY_META_CHANGED = \"com.android.music.metachanged\"" "legacy metadata broadcast action"
 need_fixed "$legacy" "ACTION_LEGACY_PLAYSTATE_CHANGED = \"com.android.music.playstatechanged\"" "legacy playstate broadcast action"

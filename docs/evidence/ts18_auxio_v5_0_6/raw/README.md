@@ -1,12 +1,8 @@
 # Raw TS18 Auxio v5.0.6 evidence
 
-This folder is an archival wrapper for raw evidence copied from the TS18 Auxio v5.0.6 support pack. It is not the canonical place for current TS18 product policy.
+Archival evidence wrapper only. Do not treat this folder as live TS18 policy or
+current implementation guidance. Start from `docs/README.md`, then follow the
+current TS18 runtime validation and Magisk/helper decision documents for active
+requirements, confidence labels, and porting decisions.
 
-For current navigation and policy, start at:
-
-- `docs/README.md`
-- `AGENTS.md`
-- `docs/TS18_RUNTIME_VALIDATION.md`
-- `tools/ts18-auxio-media-diag-pack-v3-recommended/README.md`
-
-Some raw files may retain historical wording from the original diagnostic report, including now-superseded references to the removed in-app diagnostics surface or Spotify comparison steps.
+Preserve the raw evidence filenames and grouping when adding captures.
