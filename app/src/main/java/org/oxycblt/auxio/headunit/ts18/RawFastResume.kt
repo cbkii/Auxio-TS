@@ -32,7 +32,6 @@ import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 
 /** Normal-app-safe TS18 raw fast-resume validation and MediaItem construction. */
 object RawFastResumeValidator {
-    @SuppressLint("SdCardPath")
     private val allowedDirectRoots =
         listOf("/storage/usbdisk0/", "/storage/usbdisk1/", "/storage/emulated/0/", "/sdcard/")
 
