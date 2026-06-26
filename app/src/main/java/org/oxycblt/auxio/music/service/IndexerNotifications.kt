@@ -78,12 +78,10 @@ class IndexingNotification(private val context: Context) :
                 // Determinate state, show an active progress meter. Since these updates arrive
                 // highly rapidly, coalesce updates to reduce notification churn on TS18 SystemUI.
                 val now = SystemClock.elapsedRealtime()
-                if (
-                    lastUpdateTime > -1 &&
-                        (now - lastUpdateTime) < MIN_PROGRESS_UPDATE_MS &&
-                        progress.loaded == lastLoaded &&
-                        progress.explored == lastExplored
-                ) {
+                if (progress.loaded == lastLoaded && progress.explored == lastExplored) {
+                    return false
+                }
+                if (lastUpdateTime > -1 && (now - lastUpdateTime) < MIN_PROGRESS_UPDATE_MS) {
                     return false
                 }
                 lastUpdateTime = now
