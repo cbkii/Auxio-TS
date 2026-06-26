@@ -354,7 +354,8 @@ Expected for release variants: `com.tw.music/com.tw.music.MusicService` for `top
 ```sh
 adb shell cmd media_session list-sessions 2>/dev/null || true
 adb shell content query --uri content://media/external/audio/media --projection _id:_display_name:relative_path:volume_name --where "is_music=1" | head -50
-**Observed / exact-device; Porting decision: use app-facing public storage path:** adb shell find /sdcard/Music /storage/emulated/0/Music /storage/usbdiskN -maxdepth 2 -type f 2>/dev/null | head -50
+# Observed / exact-device; Porting decision: use app-facing public storage path.
+adb shell find /sdcard/Music /storage/emulated/0/Music /storage/usbdiskN -maxdepth 2 -type f 2>/dev/null | head -50
 ```
 
 **Observed / exact-device; Porting decision: use app-facing public storage path:** Expected: songs copied to local `/sdcard/Music` and to the discovered `/storage/usbdiskN` root appear either in MediaStore query output or in the filesystem probe. Failure interpretation: if discovered USB files exist but do not appear in MediaStore after a media rescan/reboot, use the diagnostics report to compare source accessibility, aliases, SAF grants, exclusions, and temporary-unavailable state before proposing any broader storage permission change.

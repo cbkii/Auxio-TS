@@ -2,7 +2,7 @@
 # Central Gradle entrypoint for GitHub Actions CI.
 #
 # This wrapper intentionally preserves workflow task scope. It only centralises
-# execution flags, plain console output, build-cache enablement, parallel mode,
+# execution flags, plain console output, build-cache enablement,
 # and heartbeat progress for silent Gradle phases. Do not replace explicit
 # module/variant tasks with generic aggregate tasks here.
 
@@ -39,8 +39,15 @@ args=(
   --stacktrace
   --console=plain
   --build-cache
-  --parallel
 )
+
+# Android variant builds that involve AGP, Kotlin/KSP, Hilt and generated sources are more reliable
+# when isolated. Parallel execution remains available as an explicit opt-in for a dedicated
+# compatibility pass, but PR CI defaults to sequential execution so Topway/standard variants do not
+# race through shared generated-source/report directories.
+if [[ "${AUXIO_TS_CI_GRADLE_PARALLEL:-0}" == "1" ]]; then
+  args+=(--parallel)
+fi
 
 has_warning_mode=0
 for arg in "$@"; do

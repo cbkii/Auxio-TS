@@ -101,10 +101,18 @@ jobs:
       shell: bash
       run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
     - name: Build debug APKs with Gradle
-      run: bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug :app:assembleTopwayTwMusicDebug :app:assembleTopwayTwMediaDebug
+      shell: bash
+      run: |
+        bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug
+        bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicDebug
+        bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaDebug
     - name: Build release APKs with Gradle
       if: github.event_name != 'pull_request'
-      run: bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardRelease :app:assembleTopwayTwMusicRelease :app:assembleTopwayTwMediaRelease
+      shell: bash
+      run: |
+        bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardRelease
+        bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicRelease
+        bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaRelease
     - name: Validate TS18 APK reference contracts
       run: bash ./scripts/check-ts18-apk-reference-contracts.sh
     - name: Validate DoFun/Topway compatibility sources
