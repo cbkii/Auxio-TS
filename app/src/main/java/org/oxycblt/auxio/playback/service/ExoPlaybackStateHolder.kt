@@ -167,8 +167,19 @@ class ExoPlaybackStateHolder(
         }
 
     private fun activeDurationLimitMs(): Long {
-        rawFastResumeItem?.durationMs?.takeIf { it > 0L }?.let { return it }
-        player.currentMediaItem?.song?.durationMs?.takeIf { it > 0L }?.let { return it }
+        rawFastResumeItem
+            ?.durationMs
+            ?.takeIf { it > 0L }
+            ?.let {
+                return it
+            }
+        player.currentMediaItem
+            ?.song
+            ?.durationMs
+            ?.takeIf { it > 0L }
+            ?.let {
+                return it
+            }
         return Long.MAX_VALUE
     }
 

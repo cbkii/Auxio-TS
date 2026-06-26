@@ -122,5 +122,4 @@ class Ts18RawFastResumePolicyTest {
 
         assertEquals("example.mp3", item.toRawPlaybackMetadata(1000L, true).displayTitle)
     }
-
 }
