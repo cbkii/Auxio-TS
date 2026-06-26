@@ -106,7 +106,7 @@ object Ts18SourceRepairStatePolicy {
     }
 
     private fun classifyReadableDirectory(path: String, directory: File): SourceState {
-        val entries =
+        val rootEntries =
             directory.listFiles()?.take(BOUNDED_ENTRY_LIMIT)
                 ?: return SourceState(
                     path,
@@ -114,7 +114,7 @@ object Ts18SourceRepairStatePolicy {
                     "listFiles returned null",
                     Action.RESCAN,
                 )
-        if (entries.isEmpty()) {
+        if (rootEntries.isEmpty()) {
             return SourceState(
                 path,
                 Kind.SOURCE_EMPTY,
@@ -122,15 +122,13 @@ object Ts18SourceRepairStatePolicy {
                 Action.RESCAN,
             )
         }
-        val hasAudioLike =
-            entries.any { entry ->
-                entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name)
-            }
+
+        val hasAudioLike = hasAudioLikeWithinBoundedProbe(directory)
         return if (hasAudioLike) {
             SourceState(
                 path,
                 Kind.ALL_SOURCES_READY,
-                "found at least one audio-like file",
+                "found at least one audio-like file within bounded recursive probe",
                 Action.NONE,
             )
         } else {
@@ -141,6 +139,27 @@ object Ts18SourceRepairStatePolicy {
                 Action.CHOOSE_SOURCE,
             )
         }
+    }
+
+    internal fun hasAudioLikeWithinBoundedProbe(directory: File): Boolean {
+        val pending = ArrayDeque<File>()
+        pending.add(directory)
+        var visited = 0
+
+        while (pending.isNotEmpty() && visited < BOUNDED_ENTRY_LIMIT) {
+            val current = pending.removeFirst()
+            val entries = current.listFiles()?.asList() ?: continue
+            for (entry in entries) {
+                if (visited >= BOUNDED_ENTRY_LIMIT) break
+                visited += 1
+                when {
+                    entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name) -> return true
+                    entry.isDirectory && entry.canRead() -> pending.add(entry)
+                }
+            }
+        }
+
+        return false
     }
 
     private const val BOUNDED_ENTRY_LIMIT = 64

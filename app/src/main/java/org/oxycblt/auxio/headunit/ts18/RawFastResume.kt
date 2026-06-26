@@ -124,7 +124,7 @@ object RawFastResumeValidator {
             null
         } catch (e: SecurityException) {
             invalid(Reason.SECURITY_FAILURE, e.message.orEmpty())
-        } catch (e: RuntimeException) {
+        } catch (e: Exception) {
             invalid(Reason.PROVIDER_FAILURE, e.message.orEmpty())
         }
     }

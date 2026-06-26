@@ -18,6 +18,10 @@
 
 package org.oxycblt.auxio.settings.categories
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.lifecycleScope
 import android.content.Context
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
@@ -113,40 +117,55 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
     }
 
     private fun setupTs18SourceRepairStatus(preference: Preference) {
-        val states = Ts18SourceRepairStatePolicy.classifyDirectPaths()
-        val summaryKind = Ts18SourceRepairStatePolicy.summarise(states)
-        val stateText =
-            when (summaryKind) {
-                Ts18SourceRepairStatePolicy.Kind.ALL_SOURCES_READY ->
-                    getString(R.string.set_ts18_source_repair_ready)
-                Ts18SourceRepairStatePolicy.Kind.MOUNT_MISSING ->
-                    getString(R.string.set_ts18_source_repair_mount_missing)
-                Ts18SourceRepairStatePolicy.Kind.DIRECT_PATH_INACCESSIBLE ->
-                    getString(R.string.set_ts18_source_repair_direct_inaccessible)
-                Ts18SourceRepairStatePolicy.Kind.SAF_PERMISSION_MISSING ->
-                    getString(R.string.set_ts18_source_repair_saf_permission_missing)
-                Ts18SourceRepairStatePolicy.Kind.SAF_PROVIDER_FAILURE ->
-                    getString(R.string.set_ts18_source_repair_saf_provider_failure)
-                Ts18SourceRepairStatePolicy.Kind.SOURCE_EMPTY ->
-                    getString(R.string.set_ts18_source_repair_source_empty)
-                Ts18SourceRepairStatePolicy.Kind.SOURCE_CONTAINS_NO_SUPPORTED_AUDIO ->
-                    getString(R.string.set_ts18_source_repair_no_audio)
-                Ts18SourceRepairStatePolicy.Kind.MIXED_MULTIPLE_VOLUME_STATE ->
-                    getString(R.string.set_ts18_source_repair_mixed)
-                Ts18SourceRepairStatePolicy.Kind.UNKNOWN_FAILURE ->
-                    getString(R.string.set_ts18_source_repair_unknown)
-            }
-        val details =
-            states.joinToString(separator = "\n") { state ->
-                "${state.path}: ${state.kind.name.lowercase().replace('_', ' ')}"
-            }
         preference.summary =
-            getString(R.string.set_ts18_source_repair_status_summary, stateText, details)
+            getString(
+                R.string.set_ts18_source_repair_status_summary,
+                getString(R.string.set_ts18_source_repair_checking),
+                "",
+            )
+        refreshTs18SourceRepairStatus(preference)
         preference.setOnPreferenceClickListener {
-            setupTs18SourceRepairStatus(preference)
+            refreshTs18SourceRepairStatus(preference)
             true
         }
     }
+
+    private fun refreshTs18SourceRepairStatus(preference: Preference) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val states =
+                withContext(Dispatchers.IO) { Ts18SourceRepairStatePolicy.classifyDirectPaths() }
+            val summaryKind = Ts18SourceRepairStatePolicy.summarise(states)
+            val stateText = sourceRepairKindText(summaryKind)
+            val details =
+                states.joinToString(separator = "\n") { state ->
+                    "${state.path}: ${sourceRepairKindText(state.kind)}"
+                }
+            preference.summary =
+                getString(R.string.set_ts18_source_repair_status_summary, stateText, details)
+        }
+    }
+
+    private fun sourceRepairKindText(kind: Ts18SourceRepairStatePolicy.Kind): String =
+        when (kind) {
+            Ts18SourceRepairStatePolicy.Kind.ALL_SOURCES_READY ->
+                getString(R.string.set_ts18_source_repair_ready)
+            Ts18SourceRepairStatePolicy.Kind.MOUNT_MISSING ->
+                getString(R.string.set_ts18_source_repair_mount_missing)
+            Ts18SourceRepairStatePolicy.Kind.DIRECT_PATH_INACCESSIBLE ->
+                getString(R.string.set_ts18_source_repair_direct_inaccessible)
+            Ts18SourceRepairStatePolicy.Kind.SAF_PERMISSION_MISSING ->
+                getString(R.string.set_ts18_source_repair_saf_permission_missing)
+            Ts18SourceRepairStatePolicy.Kind.SAF_PROVIDER_FAILURE ->
+                getString(R.string.set_ts18_source_repair_saf_provider_failure)
+            Ts18SourceRepairStatePolicy.Kind.SOURCE_EMPTY ->
+                getString(R.string.set_ts18_source_repair_source_empty)
+            Ts18SourceRepairStatePolicy.Kind.SOURCE_CONTAINS_NO_SUPPORTED_AUDIO ->
+                getString(R.string.set_ts18_source_repair_no_audio)
+            Ts18SourceRepairStatePolicy.Kind.MIXED_MULTIPLE_VOLUME_STATE ->
+                getString(R.string.set_ts18_source_repair_mixed)
+            Ts18SourceRepairStatePolicy.Kind.UNKNOWN_FAILURE ->
+                getString(R.string.set_ts18_source_repair_unknown)
+        }
 
     /**
      * Called when the car overlay enabled preference is found. Uses reflection to wire the overlay

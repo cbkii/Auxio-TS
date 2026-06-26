@@ -278,6 +278,7 @@
     <string name="set_head_unit_compat_native_not_enabled_requires_validation">Not enabled (requires TS18 validation)</string>
     <string name="set_ts18_source_repair_status">TS18 USB source status</string>
     <string name="set_ts18_source_repair_status_desc">Check /storage/usbdisk0 and /storage/usbdisk1 source readiness</string>
+    <string name="set_ts18_source_repair_checking">Checking USB source status…</string>
     <string name="set_ts18_source_repair_status_summary">%1$s\n%2$s</string>
     <string name="set_ts18_source_repair_ready">All checked USB sources are ready</string>
     <string name="set_ts18_source_repair_mount_missing">USB mount missing; reinsert USB and keep cached library</string>

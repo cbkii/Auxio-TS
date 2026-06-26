@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.headunit.ts18
 
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -88,4 +89,20 @@ class Ts18RawFastResumePolicyTest {
         assertEquals("example.mp3", metadata.displayTitle)
         assertEquals("USB audio", metadata.displayArtist)
     }
+
+    @Test
+    fun nestedAudioProbeFindsMusicInSubdirectories() {
+        val root = Files.createTempDirectory("ts18-source-probe").toFile()
+        try {
+            val nested = root.resolve("Music/Artist")
+            assertTrue(nested.mkdirs())
+            val audio = nested.resolve("track.flac")
+            assertTrue(audio.createNewFile())
+
+            assertTrue(Ts18SourceRepairStatePolicy.hasAudioLikeWithinBoundedProbe(root))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }

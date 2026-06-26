@@ -108,6 +108,7 @@ class ExoPlaybackStateHolder(
     private var pauseFromAudioFocus = false
     private var rawFastResumeItem: RawFastResumeItem? = null
     private var pendingLibraryRestoreAfterRawFailure: DeferredPlayback.RestoreState? = null
+    private var markedFirstPlaying = false
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener(::onAudioFocusChanged)
     private val focusRequest: AudioFocusRequestCompat =
         AudioFocusRequestCompat.Builder(AudioManagerCompat.AUDIOFOCUS_GAIN)
@@ -657,7 +658,8 @@ class ExoPlaybackStateHolder(
 
         // So many actions trigger progression changes that it becomes easier just to handle it
         // in an ExoPlayer callback anyway. This doesn't really cause issues anywhere.
-        if (player.isPlaying) {
+        if (player.isPlaying && !markedFirstPlaying) {
+            markedFirstPlaying = true
             Ts18FirstAudioLatency.mark("first_playing_state")
         }
         if (
@@ -791,6 +793,10 @@ class ExoPlaybackStateHolder(
             withContext(Dispatchers.Main) {
                 when (validation) {
                     is RawFastResumeValidator.Result.Valid -> {
+                        if (pendingLibraryRestoreAfterRawFailure !== action) {
+                            L.d("Skipping late TS18 raw fast-resume result; restore was already consumed")
+                            return@withContext
+                        }
                         pendingLibraryRestoreAfterRawFailure = null
                         startRawFastResume(validation.item, action.play)
                     }
@@ -832,28 +838,36 @@ class ExoPlaybackStateHolder(
     private fun reconcileRawFastResume(library: Library) {
         val raw = rawFastResumeItem ?: return
         Ts18FirstAudioLatency.mark("reconciliation_start")
-        val song = findSongForRawFastResume(raw, library)
-        if (song == null) {
-            L.i("Unable to reconcile raw TS18 fast-resume item yet; leaving raw playback active")
-            Ts18FirstAudioLatency.mark("reconciliation_end_unmatched")
-            return
+        restoreScope.launch {
+            val song = findSongForRawFastResume(raw, library)
+            withContext(Dispatchers.Main) {
+                if (rawFastResumeItem !== raw) {
+                    L.d("Skipping stale TS18 raw reconciliation result")
+                    return@withContext
+                }
+                if (song == null) {
+                    L.i("Unable to reconcile raw TS18 fast-resume item yet; leaving raw playback active")
+                    Ts18FirstAudioLatency.mark("reconciliation_end_unmatched")
+                    return@withContext
+                }
+                val command = commandFactory.songFromAll(song, ShuffleMode.IMPLICIT)
+                if (command == null) {
+                    L.w(
+                        "Unable to build reconciliation command for ${song.uri}; leaving raw playback active"
+                    )
+                    Ts18FirstAudioLatency.mark("reconciliation_end_no_command")
+                    return@withContext
+                }
+                val wasPlaying = player.playWhenReady || player.isPlaying
+                val positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L)
+                rawFastResumeItem = null
+                pendingLibraryRestoreAfterRawFailure = null
+                playbackManager.play(command)
+                playbackManager.seekTo(positionMs.coerceAtMost(song.durationMs.coerceAtLeast(0L)))
+                playbackManager.playing(wasPlaying)
+                Ts18FirstAudioLatency.mark("reconciliation_end_matched")
+            }
         }
-        val wasPlaying = player.playWhenReady || player.isPlaying
-        val positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L)
-        val command = commandFactory.songFromAll(song, ShuffleMode.IMPLICIT)
-        if (command == null) {
-            L.w(
-                "Unable to build reconciliation command for ${song.uri}; leaving raw playback active"
-            )
-            Ts18FirstAudioLatency.mark("reconciliation_end_no_command")
-            return
-        }
-        rawFastResumeItem = null
-        pendingLibraryRestoreAfterRawFailure = null
-        playbackManager.play(command)
-        playbackManager.seekTo(positionMs.coerceAtMost(song.durationMs.coerceAtLeast(0L)))
-        playbackManager.playing(wasPlaying)
-        Ts18FirstAudioLatency.mark("reconciliation_end_matched")
     }
 
     private fun findSongForRawFastResume(raw: RawFastResumeItem, library: Library): Song? {
@@ -912,6 +926,7 @@ class ExoPlaybackStateHolder(
         if (song == null) {
             val raw = rawFastResumeItem
             if (raw != null) {
+                val progression = playbackManager.progression
                 val rawSnapshot =
                     raw.toSnapshot(
                         positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L),
