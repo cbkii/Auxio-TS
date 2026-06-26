@@ -1,6 +1,6 @@
 # TS18 raw fast-resume and source repair runtime notes
 
-Status: Batch 1 implementation notes for PR#118.
+Status: Final PR#118 implementation notes; runtime scope is code-complete pending CI and exact-device validation.
 
 ## Evidence classification
 
@@ -115,3 +115,23 @@ Requires device validation:
 - Confirm first-audio marker timing on TS18 after ACC sleep/wake and process death.
 - Confirm nested USB layouts such as `/storage/usbdisk0/Music/Artist/track.flac` report as ready on-device.
 - Confirm DoFun widget cold-start renders raw metadata before the Musikr library becomes available.
+
+## Final merge gate
+
+Observed: PR#117 provides the external diagnostics/content-observer/Topway compatibility foundation, while PR#118 completes the selected normal-app-safe TS18 runtime path on top of that stacked base.
+
+Implemented in code:
+
+- raw `FastResumeSnapshot` validation and public ExoPlayer `MediaItem` restore before the Musikr library is available;
+- fail-closed URI/path validation for unsupported schemes, missing direct paths, unsafe paths, non-audio-like paths, security failures, and provider failures;
+- library reconciliation by exact URI, direct path, then conservative title/duration match;
+- raw playback failure handling that avoids falling into unsafe empty-library `next()` behaviour;
+- manager-owned raw metadata projection into MediaSession, notification, standard widget, Topway widget, and legacy topwayCompat broadcasts;
+- source repair-state classification and asynchronous settings display for direct `/storage/usbdisk0` and `/storage/usbdisk1` checks;
+- bounded first-audio latency markers without a persistent diagnostics service.
+
+Release boundary:
+
+- CI must pass after PR#118 is merged into PR#117.
+- The exact-device checklist in this file remains mandatory TS18 validation, not proof already obtained by this PR.
+- Further TS18 feature work should branch from `dev` after PR#117 is merged, to keep this foundation reviewable.
