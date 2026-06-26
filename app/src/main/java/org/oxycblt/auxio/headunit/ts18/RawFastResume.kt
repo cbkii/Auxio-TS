@@ -16,9 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+@file:android.annotation.SuppressLint("SdCardPath")
+
 package org.oxycblt.auxio.headunit.ts18
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
