@@ -104,4 +104,23 @@ class Ts18RawFastResumePolicyTest {
             root.deleteRecursively()
         }
     }
+
+    @Test
+    fun fileUriPathUsesPathTitleFallback() {
+        val item =
+            RawFastResumeItem(
+                uri = android.net.Uri.parse("file:///storage/usbdisk0/Music/example.mp3"),
+                uriString = "file:///storage/usbdisk0/Music/example.mp3",
+                path = "/storage/usbdisk0/Music/example.mp3",
+                title = null,
+                artist = null,
+                album = null,
+                durationMs = 120000L,
+                positionMs = 1000L,
+                savedAtMs = 1L,
+            )
+
+        assertEquals("example.mp3", item.toRawPlaybackMetadata(1000L, true).displayTitle)
+    }
+
 }

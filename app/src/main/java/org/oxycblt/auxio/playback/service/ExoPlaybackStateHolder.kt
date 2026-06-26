@@ -160,11 +160,17 @@ class ExoPlaybackStateHolder(
 
     override val progression: Progression
         get() {
-            val mediaItem = player.currentMediaItem ?: return Progression.nil()
-            val duration = mediaItem.mediaMetadata.extras?.getLong("durationMs") ?: Long.MAX_VALUE
+            if (player.currentMediaItem == null) return Progression.nil()
+            val duration = activeDurationLimitMs()
             val clampedPosition = player.currentPosition.coerceAtLeast(0).coerceAtMost(duration)
             return Progression.from(player.playWhenReady, player.isPlaying, clampedPosition)
         }
+
+    private fun activeDurationLimitMs(): Long {
+        rawFastResumeItem?.durationMs?.takeIf { it > 0L }?.let { return it }
+        player.currentMediaItem?.song?.durationMs?.takeIf { it > 0L }?.let { return it }
+        return Long.MAX_VALUE
+    }
 
     override val repeatMode
         get() =

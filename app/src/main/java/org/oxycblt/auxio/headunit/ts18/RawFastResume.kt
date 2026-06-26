@@ -18,9 +18,9 @@
 
 package org.oxycblt.auxio.headunit.ts18
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
-import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -30,6 +30,7 @@ import org.oxycblt.auxio.playback.persist.FastResumeSnapshot
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 
 /** Normal-app-safe TS18 raw fast-resume validation and MediaItem construction. */
+@SuppressLint("SdCardPath")
 object RawFastResumeValidator {
     private val allowedDirectRoots =
         listOf("/storage/usbdisk0/", "/storage/usbdisk1/", "/storage/emulated/0/", "/sdcard/")
@@ -172,7 +173,6 @@ data class RawFastResumeItem(
 ) {
     @OptIn(UnstableApi::class)
     fun buildMediaItem(): MediaItem {
-        val extras = Bundle().apply { putLong(EXTRA_DURATION_MS, durationMs) }
         val metadata =
             MediaMetadata.Builder()
                 .setTitle(
@@ -180,7 +180,6 @@ data class RawFastResumeItem(
                 )
                 .setArtist(artist)
                 .setAlbumTitle(album)
-                .setExtras(extras)
                 .build()
         return MediaItem.Builder().setUri(uri).setMediaMetadata(metadata).setTag(this).build()
     }
@@ -226,5 +225,3 @@ fun MediaItem.rawFastResumeItemOrNull(): RawFastResumeItem? =
     this.localConfiguration?.tag as? RawFastResumeItem
 
 fun MediaItem.isRawFastResumeMediaItem(): Boolean = rawFastResumeItemOrNull() != null
-
-private const val EXTRA_DURATION_MS = "durationMs"
