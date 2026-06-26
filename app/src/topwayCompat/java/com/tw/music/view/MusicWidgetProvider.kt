@@ -167,9 +167,12 @@ class MusicWidgetProvider : AppWidgetProvider() {
                 rv.setTextViewText(R.id.artist, state.song.artists.resolveNames(context))
 
                 // Stock com.tw.music refuses large RemoteViews album bitmaps using a 3,680,000-byte
-                // cap before falling back to the default album resource. Preserve that launcher-safe
+                // cap before falling back to the default album resource. Preserve that
+                // launcher-safe
                 // behaviour for DoFun/Topway widget hosts.
-                if (state.cover != null && state.cover.byteCount <= STOCK_WIDGET_ARTWORK_MAX_BYTES) {
+                if (
+                    state.cover != null && state.cover.byteCount <= STOCK_WIDGET_ARTWORK_MAX_BYTES
+                ) {
                     rv.setImageViewBitmap(R.id.albumart, state.cover)
                 } else {
                     rv.setImageViewResource(R.id.albumart, R.drawable.ic_remote_default_cover_24)
@@ -203,10 +206,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
     }
 
     private fun bindTopwayControls(context: Context, remoteViews: RemoteViews) {
-        remoteViews.setOnClickPendingIntent(
-            R.id.albumart,
-            newActivityPendingIntent(context),
-        )
+        remoteViews.setOnClickPendingIntent(R.id.albumart, newActivityPendingIntent(context))
         remoteViews.setOnClickPendingIntent(
             R.id.control_prev,
             newServicePendingIntent(context, TopwayMusicContract.ACTION_PREV),
