@@ -16,10 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-@file:android.annotation.SuppressLint("SdCardPath")
-
 package org.oxycblt.auxio.headunit.ts18
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.OptIn
@@ -31,6 +30,7 @@ import org.oxycblt.auxio.playback.persist.FastResumeSnapshot
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 
 /** Normal-app-safe TS18 raw fast-resume validation and MediaItem construction. */
+@SuppressLint("SdCardPath")
 object RawFastResumeValidator {
     private val allowedDirectRoots =
         listOf("/storage/usbdisk0/", "/storage/usbdisk1/", "/storage/emulated/0/", "/sdcard/")
