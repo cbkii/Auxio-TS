@@ -1,11 +1,19 @@
 /*
- * Copyright (c) 2026 Auxio-TS Project
- * RawFastResume.kt is part of Auxio-TS.
+ * Copyright (c) 2026 Auxio Project
+ * RawFastResume.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.ts18
@@ -17,17 +25,12 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import java.io.File
 import org.oxycblt.auxio.playback.persist.FastResumeSnapshot
-import timber.log.Timber as L
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 
 /** Normal-app-safe TS18 raw fast-resume validation and MediaItem construction. */
 object RawFastResumeValidator {
     private val allowedDirectRoots =
-        listOf(
-            "/storage/usbdisk0/",
-            "/storage/usbdisk1/",
-            "/storage/emulated/0/",
-            "/sdcard/",
-        )
+        listOf("/storage/usbdisk0/", "/storage/usbdisk1/", "/storage/emulated/0/", "/sdcard/")
 
     private val audioExtensions =
         setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav", "ape", "wma")
@@ -78,7 +81,8 @@ object RawFastResumeValidator {
                     if (fileCheck != null) return fileCheck
                     Uri.fromFile(File(path!!))
                 }
-                null, "" -> {
+                null,
+                "" -> {
                     val path = pathText ?: uriText
                     val fileCheck = validateDirectPath(path)
                     if (fileCheck != null) return fileCheck
@@ -111,7 +115,8 @@ object RawFastResumeValidator {
 
     private fun validateContentUri(context: Context, uri: Uri): Result.Invalid? {
         return try {
-            context.applicationContext.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+            context.applicationContext.contentResolver.openFileDescriptor(uri, "r")?.use {
+                descriptor ->
                 if (!descriptor.fileDescriptor.valid()) {
                     return invalid(Reason.PROVIDER_FAILURE, "provider returned invalid descriptor")
                 }
@@ -167,7 +172,9 @@ data class RawFastResumeItem(
         val extras = Bundle().apply { putLong(EXTRA_DURATION_MS, durationMs) }
         val metadata =
             MediaMetadata.Builder()
-                .setTitle(title ?: path?.substringAfterLast('/') ?: uri.lastPathSegment ?: "USB audio")
+                .setTitle(
+                    title ?: path?.substringAfterLast('/') ?: uri.lastPathSegment ?: "USB audio"
+                )
                 .setArtist(artist)
                 .setAlbumTitle(album)
                 .setExtras(extras)
@@ -183,11 +190,30 @@ data class RawFastResumeItem(
             artist = artist,
             album = album,
             durationMs = durationMs,
-            positionMs = positionMs.coerceAtLeast(0L).let { p ->
-                if (durationMs > 0L) p.coerceAtMost(durationMs) else p
-            },
+            positionMs =
+                positionMs.coerceAtLeast(0L).let { p ->
+                    if (durationMs > 0L) p.coerceAtMost(durationMs) else p
+                },
             playing = playing,
             savedAtMs = System.currentTimeMillis(),
+        )
+    }
+
+    fun toRawPlaybackMetadata(positionMs: Long, playing: Boolean): RawPlaybackMetadata {
+        val clampedPosition =
+            positionMs.coerceAtLeast(0L).let { p ->
+                if (durationMs > 0L) p.coerceAtMost(durationMs) else p
+            }
+        return RawPlaybackMetadata(
+            title = title,
+            artist = artist,
+            album = album,
+            uriString = uriString,
+            path = path,
+            durationMs = durationMs.coerceAtLeast(0L),
+            positionMs = clampedPosition,
+            isPlaying = playing,
+            savedAtMs = savedAtMs,
         )
     }
 }

@@ -57,6 +57,9 @@ interface PlaybackStateManager {
     /** The current [Song] being played. Null if nothing is playing. */
     val currentSong: Song?
 
+    /** Raw pre-library playback metadata, non-null only during TS18 raw fast resume. */
+    val rawPlaybackMetadata: RawPlaybackMetadata?
+
     /** The current queue of [Song]s. */
     val queue: List<Song>
 
@@ -320,6 +323,9 @@ interface PlaybackStateManager {
          */
         fun onProgressionChanged(progression: Progression) {}
 
+        /** Called when raw pre-library playback metadata changes. */
+        fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {}
+
         /**
          * Called when the [RepeatMode] changes.
          *
@@ -359,6 +365,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         val isShuffled: Boolean,
         val shuffleScope: ShuffleScope,
         val rawQueue: RawQueue,
+        val rawPlaybackMetadata: RawPlaybackMetadata?,
     )
 
     private val listeners = mutableListOf<Listener>()
@@ -374,6 +381,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             isShuffled = false,
             shuffleScope = ShuffleScope.OFF,
             rawQueue = RawQueue.nil(),
+            rawPlaybackMetadata = null,
         )
     @Volatile private var stateHolder: PlaybackStateHolder? = null
     @Volatile private var pendingDeferredPlayback: DeferredPlayback? = null
@@ -390,6 +398,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     override val currentSong
         get() = stateMirror.queue.getOrNull(stateMirror.index)
+
+    override val rawPlaybackMetadata
+        get() = stateMirror.rawPlaybackMetadata
 
     override val queue
         get() = stateMirror.queue
@@ -424,6 +435,8 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             )
             listener.onProgressionChanged(stateMirror.progression)
             listener.onRepeatModeChanged(stateMirror.repeatMode)
+
+            listener.onRawPlaybackMetadataChanged(stateMirror.rawPlaybackMetadata)
         }
     }
 
@@ -619,6 +632,12 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             return
         }
 
+        val nextRawPlaybackMetadata = stateHolder.rawPlaybackMetadata
+        val rawPlaybackMetadataChanged = nextRawPlaybackMetadata != stateMirror.rawPlaybackMetadata
+        if (rawPlaybackMetadataChanged) {
+            stateMirror = stateMirror.copy(rawPlaybackMetadata = nextRawPlaybackMetadata)
+        }
+
         when (ack) {
             is StateAck.IndexMoved -> {
                 val rawQueue = stateHolder.resolveQueue()
@@ -708,6 +727,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                 }
             }
             is StateAck.NewPlayback -> {
+                isInitialized = true
                 val rawQueue = stateHolder.resolveQueue()
                 stateMirror =
                     stateMirror.copy(
@@ -739,6 +759,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             is StateAck.SessionEnded -> {
                 listeners.forEach { it.onSessionEnded() }
             }
+        }
+
+        if (rawPlaybackMetadataChanged) {
+            listeners.forEach { it.onRawPlaybackMetadataChanged(stateMirror.rawPlaybackMetadata) }
         }
     }
 

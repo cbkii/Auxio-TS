@@ -1,6 +1,19 @@
 /*
- * Copyright (c) 2026 Auxio-TS Project
- * Ts18SourceRepairState.kt is part of Auxio-TS.
+ * Copyright (c) 2026 Auxio Project
+ * Ts18SourceRepairState.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.ts18
@@ -65,7 +78,12 @@ object Ts18SourceRepairStatePolicy {
         return try {
             when {
                 !file.exists() ->
-                    SourceState(path, Kind.MOUNT_MISSING, "mount path does not exist", Action.REINSERT_USB)
+                    SourceState(
+                        path,
+                        Kind.MOUNT_MISSING,
+                        "mount path does not exist",
+                        Action.REINSERT_USB,
+                    )
                 !file.isDirectory || !file.canRead() ->
                     SourceState(
                         path,
@@ -76,23 +94,45 @@ object Ts18SourceRepairStatePolicy {
                 else -> classifyReadableDirectory(path, file)
             }
         } catch (e: SecurityException) {
-            SourceState(path, Kind.DIRECT_PATH_INACCESSIBLE, e.message.orEmpty(), Action.KEEP_CACHED_LIBRARY)
+            SourceState(
+                path,
+                Kind.DIRECT_PATH_INACCESSIBLE,
+                e.message.orEmpty(),
+                Action.KEEP_CACHED_LIBRARY,
+            )
         } catch (e: RuntimeException) {
             SourceState(path, Kind.UNKNOWN_FAILURE, e.message.orEmpty(), Action.KEEP_CACHED_LIBRARY)
         }
     }
 
     private fun classifyReadableDirectory(path: String, directory: File): SourceState {
-        val entries = directory.listFiles()?.take(BOUNDED_ENTRY_LIMIT)
-            ?: return SourceState(path, Kind.UNKNOWN_FAILURE, "listFiles returned null", Action.RESCAN)
+        val entries =
+            directory.listFiles()?.take(BOUNDED_ENTRY_LIMIT)
+                ?: return SourceState(
+                    path,
+                    Kind.UNKNOWN_FAILURE,
+                    "listFiles returned null",
+                    Action.RESCAN,
+                )
         if (entries.isEmpty()) {
-            return SourceState(path, Kind.SOURCE_EMPTY, "directory has no visible entries", Action.RESCAN)
+            return SourceState(
+                path,
+                Kind.SOURCE_EMPTY,
+                "directory has no visible entries",
+                Action.RESCAN,
+            )
         }
-        val hasAudioLike = entries.any { entry ->
-            entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name)
-        }
+        val hasAudioLike =
+            entries.any { entry ->
+                entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name)
+            }
         return if (hasAudioLike) {
-            SourceState(path, Kind.ALL_SOURCES_READY, "found at least one audio-like file", Action.NONE)
+            SourceState(
+                path,
+                Kind.ALL_SOURCES_READY,
+                "found at least one audio-like file",
+                Action.NONE,
+            )
         } else {
             SourceState(
                 path,

@@ -53,11 +53,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
-import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.headunit.ts18.RawFastResumeItem
 import org.oxycblt.auxio.headunit.ts18.RawFastResumeValidator
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
-import org.oxycblt.auxio.headunit.ts18.rawFastResumeItemOrNull
+import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
@@ -70,6 +69,7 @@ import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateHolder
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RawQueue
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
@@ -176,6 +176,13 @@ class ExoPlaybackStateHolder(
 
     override val audioSessionId: Int
         get() = player.audioSessionId
+
+    override val rawPlaybackMetadata: RawPlaybackMetadata?
+        get() =
+            rawFastResumeItem?.toRawPlaybackMetadata(
+                positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L),
+                playing = progression.isPlaying,
+            )
 
     override fun resolveQueue(): RawQueue {
         val library =
@@ -790,7 +797,9 @@ class ExoPlaybackStateHolder(
                     is RawFastResumeValidator.Result.Invalid -> {
                         L.w(
                             "Ignoring invalid TS18 fast-resume snapshot: " +
-                                validation.reason + " " + validation.detail
+                                validation.reason +
+                                " " +
+                                validation.detail
                         )
                     }
                 }
@@ -833,7 +842,9 @@ class ExoPlaybackStateHolder(
         val positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L)
         val command = commandFactory.songFromAll(song, ShuffleMode.IMPLICIT)
         if (command == null) {
-            L.w("Unable to build reconciliation command for ${song.uri}; leaving raw playback active")
+            L.w(
+                "Unable to build reconciliation command for ${song.uri}; leaving raw playback active"
+            )
             Ts18FirstAudioLatency.mark("reconciliation_end_no_command")
             return
         }
@@ -846,34 +857,45 @@ class ExoPlaybackStateHolder(
     }
 
     private fun findSongForRawFastResume(raw: RawFastResumeItem, library: Library): Song? {
-        library.songs.firstOrNull { it.uri.toString() == raw.uriString }?.let { return it }
+        library.songs
+            .firstOrNull { it.uri.toString() == raw.uriString }
+            ?.let {
+                return it
+            }
         val rawPath = raw.path?.takeIf { it.isNotBlank() }
         if (rawPath != null) {
             val appContext = context.applicationContext
-            library.songs.firstOrNull { song ->
-                try {
-                    song.path.resolve(appContext) == rawPath
-                } catch (e: Exception) {
-                    false
+            library.songs
+                .firstOrNull { song ->
+                    try {
+                        song.path.resolve(appContext) == rawPath
+                    } catch (e: Exception) {
+                        false
+                    }
                 }
-            }?.let { return it }
+                ?.let {
+                    return it
+                }
         }
         val rawTitle = raw.title?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         if (rawTitle != null && raw.durationMs > 0L) {
             val appContext = context.applicationContext
-            library.songs.firstOrNull { song ->
-                val title =
-                    try {
-                        song.name.resolve(appContext).trim().lowercase()
-                    } catch (e: Exception) {
-                        ""
-                    }
-                title == rawTitle && kotlin.math.abs(song.durationMs - raw.durationMs) <= 1000L
-            }?.let { return it }
+            library.songs
+                .firstOrNull { song ->
+                    val title =
+                        try {
+                            song.name.resolve(appContext).trim().lowercase()
+                        } catch (e: Exception) {
+                            ""
+                        }
+                    title == rawTitle && kotlin.math.abs(song.durationMs - raw.durationMs) <= 1000L
+                }
+                ?.let {
+                    return it
+                }
         }
         return null
     }
-
 
     override fun onPauseOnRepeatChanged() {
         super.onPauseOnRepeatChanged()

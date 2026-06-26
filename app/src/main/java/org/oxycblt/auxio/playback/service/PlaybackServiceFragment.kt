@@ -207,7 +207,8 @@ private constructor(
                     get() = playbackManager.currentSong != null || exoHolder.hasRawFastResume
 
                 override val currentDurationMs: Long?
-                    get() = playbackManager.currentSong?.durationMs ?: exoHolder.rawFastResumeDurationMs
+                    get() =
+                        playbackManager.currentSong?.durationMs ?: exoHolder.rawFastResumeDurationMs
 
                 override fun previous() = playbackManager.prev()
 

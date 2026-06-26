@@ -74,3 +74,24 @@ Run on TS18 target hardware:
 - standard variant regression check on normal Android device.
 
 Label all results as Observed, Inferred, Hypothesis, Requires device validation, or Unsupported.
+
+
+## Batch 2 implementation shape
+
+Observed: Batch 1 keeps raw fast-resume playback inside `ExoPlaybackStateHolder` so the normal `Song` queue is not poisoned.
+
+Inferred: session, notification, standard widget, and Topway/DoFun widget surfaces still need a way to publish useful metadata while `PlaybackStateManager.currentSong == null`.
+
+Implementation:
+
+- `PlaybackStateHolder.rawPlaybackMetadata` exposes a primitive raw metadata mirror.
+- `PlaybackStateManager` now owns and publishes `RawPlaybackMetadata` through the same listener model as queue/progression state.
+- `MediaSessionHolder` publishes raw metadata to `MediaSessionCompat`, notification metadata, and Topway-compatible legacy metadata broadcasts while no normal `Song` is available.
+- `WidgetComponent`, `WidgetProvider`, and the Topway widget provider render raw metadata using the same public RemoteViews/control path as normal playback.
+- The standard widget can show raw title/artist/progress with default artwork; no fake `Song` is created.
+- Source repair-state is surfaced in the existing Head unit settings category with bounded `/storage/usbdisk0` and `/storage/usbdisk1` checks.
+
+Requires device validation:
+
+- Whether DoFun launcher polls the standard AppWidget provider, Topway alias provider, legacy broadcasts, or all three during cold process start.
+- Exact behaviour when `/storage/usbdiskN` disappears while ExoPlayer still holds an FD.
