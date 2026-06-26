@@ -34,6 +34,7 @@ import androidx.media.utils.MediaConstants
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.service.MusicServiceFragment
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
 import org.oxycblt.auxio.util.PerfTimer
@@ -53,6 +54,7 @@ open class AuxioService :
     @SuppressLint("WrongConstant")
     override fun onCreate() {
         PerfTimer.trace("AuxioService.onCreate") {
+            Ts18FirstAudioLatency.mark("service_on_create")
             super.onCreate()
             isForeground = false
             playbackFragment = playbackFragmentFactory.create(this, this)
@@ -66,6 +68,7 @@ open class AuxioService :
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         PerfTimer.trace("AuxioService.onStartCommand") {
+            Ts18FirstAudioLatency.mark("service_on_start_command")
             // TODO: Start command occurring from a foreign service basically implies a detached
             //  service, we might need more handling here.
             super.onStartCommand(intent, flags, startId)
@@ -90,8 +93,10 @@ open class AuxioService :
     }
 
     private fun onHandleForeground(intent: Intent?) {
-        musicFragment.start()
+        // TS18 fast-resume priority: handle playback/launcher commands before any heavy
+        // music indexing path. This keeps raw snapshot restore independent from library readiness.
         playbackFragment.start(intent)
+        musicFragment.start()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {

@@ -1,0 +1,107 @@
+/*
+ * Copyright (c) 2026 Auxio-TS Project
+ * Ts18SourceRepairState.kt is part of Auxio-TS.
+ */
+
+package org.oxycblt.auxio.headunit.ts18
+
+import java.io.File
+
+/** Minimal bounded source-state model for TS18 USB/removable storage. */
+object Ts18SourceRepairStatePolicy {
+    val defaultUsbRoots = listOf("/storage/usbdisk0", "/storage/usbdisk1")
+
+    enum class Kind {
+        ALL_SOURCES_READY,
+        MOUNT_MISSING,
+        DIRECT_PATH_INACCESSIBLE,
+        SAF_PERMISSION_MISSING,
+        SAF_PROVIDER_FAILURE,
+        SOURCE_EMPTY,
+        SOURCE_CONTAINS_NO_SUPPORTED_AUDIO,
+        MIXED_MULTIPLE_VOLUME_STATE,
+        UNKNOWN_FAILURE,
+    }
+
+    data class SourceState(
+        val path: String,
+        val kind: Kind,
+        val evidence: String,
+        val recommendedAction: Action,
+    )
+
+    enum class Action {
+        NONE,
+        REINSERT_USB,
+        RESCAN,
+        CHOOSE_SOURCE,
+        SWITCH_TO_DIRECT_PATH_MODE,
+        CLEAR_INACCESSIBLE_SOURCE,
+        KEEP_CACHED_LIBRARY,
+    }
+
+    fun classifyDirectPaths(paths: List<String> = defaultUsbRoots): List<SourceState> {
+        return paths.map(::classifyDirectPath)
+    }
+
+    fun summarise(states: List<SourceState>): Kind {
+        if (states.isEmpty()) return Kind.UNKNOWN_FAILURE
+        if (states.all { it.kind == Kind.ALL_SOURCES_READY }) return Kind.ALL_SOURCES_READY
+        if (states.map { it.kind }.distinct().size > 1) return Kind.MIXED_MULTIPLE_VOLUME_STATE
+        return states.first().kind
+    }
+
+    fun classifyDirectPath(path: String): SourceState {
+        if (!RawFastResumeValidator.isAllowedDirectPath(path.trimEnd('/') + "/probe.mp3")) {
+            return SourceState(
+                path,
+                Kind.DIRECT_PATH_INACCESSIBLE,
+                "path is outside the accepted normal-app-readable TS18 media roots",
+                Action.CHOOSE_SOURCE,
+            )
+        }
+
+        val file = File(path)
+        return try {
+            when {
+                !file.exists() ->
+                    SourceState(path, Kind.MOUNT_MISSING, "mount path does not exist", Action.REINSERT_USB)
+                !file.isDirectory || !file.canRead() ->
+                    SourceState(
+                        path,
+                        Kind.DIRECT_PATH_INACCESSIBLE,
+                        "mount path exists but is not readable as a directory",
+                        Action.KEEP_CACHED_LIBRARY,
+                    )
+                else -> classifyReadableDirectory(path, file)
+            }
+        } catch (e: SecurityException) {
+            SourceState(path, Kind.DIRECT_PATH_INACCESSIBLE, e.message.orEmpty(), Action.KEEP_CACHED_LIBRARY)
+        } catch (e: RuntimeException) {
+            SourceState(path, Kind.UNKNOWN_FAILURE, e.message.orEmpty(), Action.KEEP_CACHED_LIBRARY)
+        }
+    }
+
+    private fun classifyReadableDirectory(path: String, directory: File): SourceState {
+        val entries = directory.listFiles()?.take(BOUNDED_ENTRY_LIMIT)
+            ?: return SourceState(path, Kind.UNKNOWN_FAILURE, "listFiles returned null", Action.RESCAN)
+        if (entries.isEmpty()) {
+            return SourceState(path, Kind.SOURCE_EMPTY, "directory has no visible entries", Action.RESCAN)
+        }
+        val hasAudioLike = entries.any { entry ->
+            entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name)
+        }
+        return if (hasAudioLike) {
+            SourceState(path, Kind.ALL_SOURCES_READY, "found at least one audio-like file", Action.NONE)
+        } else {
+            SourceState(
+                path,
+                Kind.SOURCE_CONTAINS_NO_SUPPORTED_AUDIO,
+                "first $BOUNDED_ENTRY_LIMIT entries contain no supported audio-like files",
+                Action.CHOOSE_SOURCE,
+            )
+        }
+    }
+
+    private const val BOUNDED_ENTRY_LIMIT = 64
+}
