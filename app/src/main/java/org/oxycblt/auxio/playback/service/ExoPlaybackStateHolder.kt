@@ -794,7 +794,9 @@ class ExoPlaybackStateHolder(
                 when (validation) {
                     is RawFastResumeValidator.Result.Valid -> {
                         if (pendingLibraryRestoreAfterRawFailure !== action) {
-                            L.d("Skipping late TS18 raw fast-resume result; restore was already consumed")
+                            L.d(
+                                "Skipping late TS18 raw fast-resume result; restore was already consumed"
+                            )
                             return@withContext
                         }
                         pendingLibraryRestoreAfterRawFailure = null
@@ -846,7 +848,9 @@ class ExoPlaybackStateHolder(
                     return@withContext
                 }
                 if (song == null) {
-                    L.i("Unable to reconcile raw TS18 fast-resume item yet; leaving raw playback active")
+                    L.i(
+                        "Unable to reconcile raw TS18 fast-resume item yet; leaving raw playback active"
+                    )
                     Ts18FirstAudioLatency.mark("reconciliation_end_unmatched")
                     return@withContext
                 }

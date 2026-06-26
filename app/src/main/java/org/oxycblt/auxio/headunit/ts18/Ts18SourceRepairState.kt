@@ -153,7 +153,8 @@ object Ts18SourceRepairStatePolicy {
                 if (visited >= BOUNDED_ENTRY_LIMIT) break
                 visited += 1
                 when {
-                    entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name) -> return true
+                    entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name) ->
+                        return true
                     entry.isDirectory && entry.canRead() -> pending.add(entry)
                 }
             }
