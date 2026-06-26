@@ -21,8 +21,10 @@ package org.oxycblt.auxio.headunit.ts18
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.util.UnstableApi
 import java.io.File
 import org.oxycblt.auxio.playback.persist.FastResumeSnapshot
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
@@ -168,6 +170,7 @@ data class RawFastResumeItem(
     val positionMs: Long,
     val savedAtMs: Long,
 ) {
+    @OptIn(UnstableApi::class)
     fun buildMediaItem(): MediaItem {
         val extras = Bundle().apply { putLong(EXTRA_DURATION_MS, durationMs) }
         val metadata =
@@ -218,6 +221,7 @@ data class RawFastResumeItem(
     }
 }
 
+@OptIn(UnstableApi::class)
 fun MediaItem.rawFastResumeItemOrNull(): RawFastResumeItem? =
     this.localConfiguration?.tag as? RawFastResumeItem
 
