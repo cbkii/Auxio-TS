@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="enable_phone_call_record_version">
+        <item>KED15-Xtrail-0195-GT-X</item>
+        <item>TW1-GT-V2-KED-0195</item>
+        <item>ZST8</item>
+        <item>TS10S</item>
+    </array>
+    <array name="music_supported_formats">
+        <item>.MP3</item>
+        <item>.DFF</item>
+        <item>.AAC</item>
+        <item>.OGG</item>
+        <item>.PCM</item>
+        <item>.M4A</item>
+        <item>.M4R</item>
+        <item>.EC3</item>
+        <item>.DTSHD</item>
+        <item>.MKA</item>
+        <item>.RA</item>
+        <item>.WAV</item>
+        <item>.CD</item>
+        <item>.AMR</item>
+        <item>.MP2</item>
+        <item>.APE</item>
+        <item>.DTS</item>
+        <item>.FLAC</item>
+        <item>.MIDI</item>
+        <item>.MID</item>
+        <item>.MPC</item>
+        <item>.TTA</item>
+        <item>.ASX</item>
+        <item>.AIFF</item>
+        <item>.AU</item>
+    </array>
+    <array name="video_supported_formats">
+        <item>.AVI</item>
+        <item>.ASF</item>
+        <item>.WMV</item>
+        <item>.M2T</item>
+        <item>.MTS</item>
+        <item>.TS</item>
+        <item>.MPG</item>
+        <item>.M2P</item>
+        <item>.MP4</item>
+        <item>.FLV</item>
+        <item>.SWF</item>
+        <item>.VOB</item>
+        <item>.MKV</item>
+        <item>.DIVX</item>
+        <item>.XVID</item>
+        <item>.MOV</item>
+        <item>.RMVB</item>
+        <item>.RV</item>
+        <item>.3GP</item>
+        <item>.PMP</item>
+        <item>.TP</item>
+        <item>.TRP</item>
+        <item>.RM</item>
+        <item>.WEBM</item>
+        <item>.M2TS</item>
+        <item>.SSIF</item>
+        <item>.MPEG</item>
+        <item>.MPE</item>
+        <item>.M3U</item>
+        <item>.M4V</item>
+        <item>.3G2</item>
+        <item>.F4V</item>
+        <item>.3GPP</item>
+    </array>
+    <array name="video_supported_formats_bqhd">
+        <item>.AVI</item>
+        <item>.MPG</item>
+        <item>.MP4</item>
+        <item>.FLV</item>
+        <item>.MKV</item>
+        <item>.3GP</item>
+    </array>
+</resources>

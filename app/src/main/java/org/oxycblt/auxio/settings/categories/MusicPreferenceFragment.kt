@@ -48,14 +48,6 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
         }
     }
 
-    override fun onPreferenceTreeClick(preference: Preference): Boolean {
-        if (preference.key == getString(R.string.set_key_storage_health)) {
-            findNavController().navigateSafe(MusicPreferenceFragmentDirections.storageHealth())
-            return true
-        }
-        return super.onPreferenceTreeClick(preference)
-    }
-
     override fun onSetupPreference(preference: Preference) {
         if (preference.key == getString(R.string.set_key_cover_mode)) {
             L.d("Configuring cover mode setting")

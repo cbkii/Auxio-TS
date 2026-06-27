@@ -1,6 +1,6 @@
 # TS18 Auxio Media Diagnostics Pack v3
 
-This pack installs a Magisk `service.d` diagnostics collector for the TS18 / Topway / DoFun head unit while testing Auxio-TS, VLC and Spotify media integration.
+This pack installs a Magisk `service.d` diagnostics collector for the TS18 / Topway / DoFun head unit while testing Auxio-TS and VLC media integration.
 
 It is designed for the current TS18 project baseline:
 
@@ -16,11 +16,11 @@ It is read-only except for its own output directory and its stop/trigger files. 
 
 The collector is intended to answer these questions:
 
-1. Does Auxio-TS publish a DoFun-visible media session like VLC and Spotify?
+1. Does Auxio-TS publish a DoFun-visible media session like VLC?
 2. Does Auxio-TS publish a MediaStyle notification with title, artist, progress, transport actions and artwork?
 3. Does DoFun send standard media commands, Topway private broadcasts, or both?
 4. Does Auxio-TS crash or fail due to RemoteViews/bitmap/artwork, notification, media-session, ExoPlayer, storage, DirectFS, root-gate, overlay, boot, or widget problems?
-5. Are Spotify and VLC still good baselines for the generic Android MediaSession path?
+5. Is VLC still a useful baseline for the generic Android MediaSession path?
 6. Are current TS18 app/module experiments, such as BTAndroidTS, ts18-intent-bridge, NavRadio+, DocumentsUI, Magisk/Zygisk/LSPosed modules, and Topway stock services interacting with media/audio?
 7. Which SAF / file path / DirectFS / MediaStore source path is actually configured or reachable, and is the app treating inaccessible paths as empty libraries?
 8. How early after boot are storage, package manager, DoFun, Auxio services, overlays, and media sessions ready?
@@ -29,7 +29,7 @@ The collector is intended to answer these questions:
 
 ## Why these data points matter
 
-DoFun successfully handling Spotify and VLC implies that the generic Android media path is relevant. The important Android surfaces are:
+DoFun successfully handling VLC implies that the generic Android media path is relevant. The important Android surfaces are:
 
 - active media sessions via `MediaSessionManager`;
 - `MediaBrowserService` / `MediaBrowserServiceCompat` / Media3 service compatibility;
@@ -162,12 +162,11 @@ During the capture window:
 3. Test Auxio-TS source handling and note the exact mode/path used: MediaStore/System, SAF/DocumentsUI, DirectFS/manual path, `/storage/usbdisk0`, `/storage/usbdisk1`, `/storage/usbdiskN/Music`, `/storage/usbdiskN/Download`, USB unplug/replug if safe.
 4. After a reboot capture, note whether Auxio autostarts, restores queue, restores overlay, and publishes a media session before/after DoFun becomes responsive.
 5. Move/use floating controls near the top status bar and right navigation/edge drawer areas. Try status shade, DoFun gestures, and right-edge navigation controls. Note whether Auxio is below SystemUI, loses touch, is displaced, or cannot receive edge-area touches.
-6. Test interruption contexts: pause from DoFun, Auxio UI, notification, headset/BT controller if available, VLC/Spotify takeover, radio/NavRadio, reverse/camera if safe, phone/telecom if available, ACC sleep/wake if available.
+6. Test interruption contexts: pause from DoFun, Auxio UI, notification, headset/BT controller if available, VLC takeover, radio/NavRadio, reverse/camera if safe, phone/telecom if available, ACC sleep/wake if available.
 7. Switch to VLC and play audio for 2-3 minutes.
-8. Switch to Spotify and play audio for 2-3 minutes.
-9. Return to Auxio-TS and repeat play/pause/next/previous.
-10. If testing BTAndroidTS or ts18-intent-bridge, trigger their intended user-visible action once.
-11. Stop early if needed.
+8. Return to Auxio-TS and repeat play/pause/next/previous.
+9. If testing BTAndroidTS or ts18-intent-bridge, trigger their intended user-visible action once.
+10. Stop early if needed.
 
 The generated output now includes `00_FEATURE_AUDIT_SCOPE.md`, which maps Auxio-TS PR/release-note feature claims to the runtime evidence files in the capture.
 

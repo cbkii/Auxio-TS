@@ -1,0 +1,22 @@
+package com.eckom.xtlibrary.p066b.p069f.p041d;
+
+import com.eckom.xtlibrary.p066b.p069f.p043f.C0654s;
+
+/* compiled from: MusicModel.java */
+/* renamed from: com.eckom.xtlibrary.b.f.d.X */
+/* loaded from: classes3.dex */
+class RunnableC0604X implements Runnable {
+    final /* synthetic */ C0610ba this$0;
+
+    RunnableC0604X(C0610ba c0610ba) {
+        this.this$0 = c0610ba;
+    }
+
+    @Override // java.lang.Runnable
+    public void run() {
+        C0654s c0654s;
+        C0610ba c0610ba = this.this$0;
+        c0654s = C0610ba.f616jd;
+        c0610ba.m608b(2, c0654s.f722pd);
+    }
+}

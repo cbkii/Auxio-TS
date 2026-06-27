@@ -19,6 +19,7 @@
 package org.oxycblt.auxio
 
 import android.app.Application
+import android.content.Context
 import android.os.Build
 import android.os.StrictMode
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -31,8 +32,6 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
-import org.oxycblt.auxio.diagnostics.DiagnosticService
-import org.oxycblt.auxio.diagnostics.DiagnosticsSettings
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
@@ -59,7 +58,6 @@ internal object CrashReportStorage {
 @HiltAndroidApp
 class Auxio : Application() {
     @Inject lateinit var journal: DiagnosticJournal
-    @Inject lateinit var diagnosticsSettings: DiagnosticsSettings
     @Inject lateinit var imageSettings: ImageSettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var uiSettings: UISettings
@@ -128,8 +126,6 @@ class Auxio : Application() {
             )
             .start()
 
-        startArmedDiagnosticCaptureIfNeeded()
-
         // Register car floating controls visibility hooks for the Topway/TS18 variant.
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             try {
@@ -142,26 +138,28 @@ class Auxio : Application() {
                 val companion = hooksClass.getDeclaredField("Companion").get(null)
                 val registerMethod = companionClass.getMethod("register", Application::class.java)
                 registerMethod.invoke(companion, this)
+
+                try {
+                    val serviceClass =
+                        Class.forName("org.oxycblt.auxio.car.overlay.CarFloatingControlsService")
+                    val serviceCompanionClass =
+                        Class.forName(
+                            "org.oxycblt.auxio.car.overlay.CarFloatingControlsService\$Companion"
+                        )
+                    val serviceCompanion = serviceClass.getDeclaredField("Companion").get(null)
+                    val restoreMethod =
+                        serviceCompanionClass.getMethod(
+                            "restoreIfEnabled",
+                            Context::class.java,
+                            String::class.java,
+                        )
+                    restoreMethod.invoke(serviceCompanion, this, "application_on_create")
+                } catch (e: ReflectiveOperationException) {
+                    Timber.w(e, "Car overlay startup restore not available")
+                }
             } catch (e: ReflectiveOperationException) {
                 Timber.w(e, "Car overlay visibility hooks not available")
             }
-        }
-    }
-
-    private fun startArmedDiagnosticCaptureIfNeeded() {
-        val id = diagnosticsSettings.armedBootCaptureId ?: return
-        val expiry = diagnosticsSettings.armedExpiryTime
-        if (System.currentTimeMillis() > expiry) {
-            diagnosticsSettings.clearArmedCapture()
-            return
-        }
-        val origin =
-            diagnosticsSettings.armedCaptureOrigin ?: DiagnosticService.ORIGIN_APP_START_FALLBACK
-        if (origin != DiagnosticService.ORIGIN_APP_START_FALLBACK) return
-        try {
-            DiagnosticService.start(this, id, diagnosticsSettings.armedDurationMs, origin)
-        } catch (e: Exception) {
-            Timber.w(e, "Unable to start armed diagnostic capture on app start")
         }
     }
 

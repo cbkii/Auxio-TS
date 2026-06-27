@@ -1,0 +1,29 @@
+package com.p060tw.music;
+
+import android.widget.SeekBar;
+import com.eckom.xtlibrary.p020b.p037f.p042e.C0635a;
+
+/* JADX INFO: renamed from: com.tw.music.g */
+/* JADX INFO: compiled from: MusicActivity.java */
+/* JADX INFO: loaded from: classes3.dex */
+class C0777g implements SeekBar.OnSeekBarChangeListener {
+    final /* synthetic */ MusicActivity this$0;
+
+    C0777g(MusicActivity musicActivity) {
+        this.this$0 = musicActivity;
+    }
+
+    @Override // android.widget.SeekBar.OnSeekBarChangeListener
+    public void onProgressChanged(SeekBar seekBar, int i, boolean z) {
+        this.this$0.m1335J(z);
+    }
+
+    @Override // android.widget.SeekBar.OnSeekBarChangeListener
+    public void onStartTrackingTouch(SeekBar seekBar) {
+    }
+
+    @Override // android.widget.SeekBar.OnSeekBarChangeListener
+    public void onStopTrackingTouch(SeekBar seekBar) {
+        ((C0635a) this.this$0.mPresenter).seekTo(seekBar.getProgress());
+    }
+}

@@ -137,7 +137,7 @@ jobs:
       - name: Run Roborazzi
         id: run_roborazzi
         # Scoped to :app to keep execution fast; Roborazzi plugin registers tasks on :app.
-        run: ./gradlew --no-daemon --stacktrace :app:${{ steps.map_task.outputs.task }}
+        run: bash ./scripts/ci-gradle.sh :app:${{ steps.map_task.outputs.task }}
 
       - name: Upload Roborazzi reports
         id: upload_reports

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center" android:orientation="vertical" android:background="@drawable/dikuang_bg" android:layout_width="wrap_content" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ImageView android:id="@id/im_icon" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_brigh0" />
+    <FrameLayout android:layout_width="wrap_content" android:layout_height="@dimen/tw_dp_h200">
+        <SeekBar android:layout_gravity="center" android:id="@id/sb_progress" android:padding="10.0dp" android:layout_width="@dimen/tw_dp_h200" android:layout_height="wrap_content" android:thumb="@null" android:rotation="-90.0" />
+    </FrameLayout>
+    <TextView android:textSize="@dimen/tw_dp_h28" android:textColor="@android:color/white" android:id="@id/tv_info" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="0" />
+</LinearLayout>

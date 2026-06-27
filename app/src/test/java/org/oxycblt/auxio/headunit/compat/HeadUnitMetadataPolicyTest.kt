@@ -68,4 +68,23 @@ class HeadUnitMetadataPolicyTest {
         assertEquals("Artist", s.displayDescription)
         assertTrue(!s.hasArtwork)
     }
+
+    @Test
+    fun fromRaw_accepts_char_sequence_widget_metadata() {
+        val s =
+            HeadUnitMetadataPolicy.fromRaw(
+                StringBuilder(" Track "),
+                StringBuilder(" Artist "),
+                StringBuilder(" Artist "),
+                StringBuilder(" Album "),
+                1000L,
+                "1",
+                "u",
+                null,
+                false,
+            )!!
+        assertEquals("Track", s.displayTitle)
+        assertEquals("Artist", s.displaySubtitle)
+        assertEquals("Album", s.displayDescription)
+    }
 }

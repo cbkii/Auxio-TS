@@ -34,21 +34,21 @@ data class HeadUnitMetadataSnapshot(
 
 object HeadUnitMetadataPolicy {
     fun fromRaw(
-        title: String?,
-        artist: String?,
-        albumArtist: String?,
-        albumTitle: String?,
+        title: CharSequence?,
+        artist: CharSequence?,
+        albumArtist: CharSequence?,
+        albumTitle: CharSequence?,
         durationMs: Long?,
         mediaId: String?,
         mediaUri: String?,
         artworkUri: String?,
         hasArtwork: Boolean,
     ): HeadUnitMetadataSnapshot? {
-        val safeTitle = title?.trim().orEmpty()
+        val safeTitle = title?.toString()?.trim().orEmpty()
         if (safeTitle.isBlank()) return null
-        val safeArtist = artist?.trim().orEmpty()
-        val safeAlbumArtist = albumArtist?.trim().orEmpty()
-        val safeAlbum = albumTitle?.trim().orEmpty()
+        val safeArtist = artist?.toString()?.trim().orEmpty()
+        val safeAlbumArtist = albumArtist?.toString()?.trim().orEmpty()
+        val safeAlbum = albumTitle?.toString()?.trim().orEmpty()
         val subtitle =
             if (safeArtist.isNotBlank()) {
                 if (safeAlbumArtist.isNotBlank() && safeArtist != safeAlbumArtist) {

@@ -44,6 +44,7 @@ import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.getDimenPixels
@@ -131,7 +132,10 @@ private constructor(
         scope.launch {
             while (isActive) {
                 if (playbackManager.progression.isPlaying) {
-                    val duration = playbackManager.currentSong?.durationMs ?: 0L
+                    val duration =
+                        playbackManager.currentSong?.durationMs
+                            ?: playbackManager.rawPlaybackMetadata?.durationMs
+                            ?: 0L
                     topwayBridge.publishProgress(
                         playbackManager.progression.calculateElapsedPositionMs(),
                         duration,
@@ -151,10 +155,16 @@ private constructor(
     fun update(force: Boolean = false) {
         val song = playbackManager.currentSong
         if (song == null) {
+            val rawMetadata = playbackManager.rawPlaybackMetadata
+            if (rawMetadata != null) {
+                updateRawPlayback(rawMetadata, force)
+                return
+            }
             L.d("No song, resetting widget")
             lastRenderedIsPlaying = null
             topwayBridge.clear()
             widgetProvider.update(context, uiSettings, null)
+            updateTopwayWidget(null)
             return
         }
 
@@ -216,13 +226,54 @@ private constructor(
 
                 override fun onCompleted(bitmap: Bitmap?) {
                     val state =
-                        PlaybackState(song, bitmap, isPlaying, repeatMode, isShuffled, elapsedMs)
+                        PlaybackState.fromSong(
+                            context = context,
+                            song = song,
+                            cover = bitmap,
+                            isPlaying = isPlaying,
+                            repeatMode = repeatMode,
+                            isShuffled = isShuffled,
+                            positionMs = elapsedMs,
+                        )
                     L.d("Bitmap loaded, uploading state $state")
                     widgetProvider.update(context, uiSettings, state)
                     updateTopwayWidget(state)
                 }
             },
         )
+    }
+
+    private fun updateRawPlayback(metadata: RawPlaybackMetadata, force: Boolean) {
+        val isPlaying = playbackManager.progression.isPlaying
+        lastRenderedIsPlaying = isPlaying
+        val elapsedMs = playbackManager.progression.calculateElapsedPositionMs()
+        val repeatMode = playbackManager.repeatMode
+        val isShuffled = playbackManager.isShuffled
+        val metadataSnapshot =
+            HeadUnitMetadataPolicy.fromRaw(
+                title = metadata.displayTitle,
+                artist = metadata.displayArtist,
+                albumArtist = metadata.displayArtist,
+                albumTitle = metadata.album,
+                durationMs = metadata.durationMs,
+                mediaId = metadata.uriString,
+                mediaUri = metadata.uriString,
+                artworkUri = null,
+                hasArtwork = false,
+            )
+        topwayBridge.publishMetadata(metadataSnapshot, force = force)
+        topwayBridge.publishProgress(elapsedMs, metadata.durationMs, force = force)
+
+        val state =
+            PlaybackState.fromRaw(
+                metadata = metadata,
+                isPlaying = isPlaying,
+                repeatMode = repeatMode,
+                isShuffled = isShuffled,
+                positionMs = elapsedMs,
+            )
+        widgetProvider.update(context, uiSettings, state)
+        updateTopwayWidget(state)
     }
 
     /** Release this instance, preventing any further events from updating the widget instances. */
@@ -276,11 +327,16 @@ private constructor(
         } else {
             lastRenderedIsPlaying = progression.isPlaying
         }
-        val duration = playbackManager.currentSong?.durationMs ?: 0L
+        val duration =
+            playbackManager.currentSong?.durationMs
+                ?: playbackManager.rawPlaybackMetadata?.durationMs
+                ?: 0L
         topwayBridge.publishProgress(progression.calculateElapsedPositionMs(), duration)
     }
 
     override fun onRepeatModeChanged(repeatMode: RepeatMode) = update()
+
+    override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) = update(force = true)
 
     // Respond to settings changes that will affect the widget
     override fun onRoundModeChanged() = update()
@@ -298,11 +354,70 @@ private constructor(
      * @param isShuffled [PlaybackStateManager.isShuffled]
      */
     data class PlaybackState(
-        val song: Song,
+        val song: Song?,
+        val title: CharSequence,
+        val artist: CharSequence,
+        val albumTitle: CharSequence?,
+        val mediaId: String,
+        val mediaUri: String,
+        val durationMs: Long,
         val cover: Bitmap?,
         val isPlaying: Boolean,
         val repeatMode: RepeatMode,
         val isShuffled: Boolean,
         val positionMs: Long,
-    )
+    ) {
+        companion object {
+            fun fromSong(
+                context: Context,
+                song: Song,
+                cover: Bitmap?,
+                isPlaying: Boolean,
+                repeatMode: RepeatMode,
+                isShuffled: Boolean,
+                positionMs: Long,
+            ): PlaybackState {
+                val title = song.name.resolve(context)
+                val artist = song.artists.resolveNames(context)
+                val albumTitle = song.album.name.resolve(context)
+                return PlaybackState(
+                    song = song,
+                    title = title,
+                    artist = artist,
+                    albumTitle = albumTitle,
+                    mediaId = song.uid.toString(),
+                    mediaUri = song.uri.toString(),
+                    durationMs = song.durationMs,
+                    cover = cover,
+                    isPlaying = isPlaying,
+                    repeatMode = repeatMode,
+                    isShuffled = isShuffled,
+                    positionMs = positionMs,
+                )
+            }
+
+            fun fromRaw(
+                metadata: RawPlaybackMetadata,
+                isPlaying: Boolean,
+                repeatMode: RepeatMode,
+                isShuffled: Boolean,
+                positionMs: Long,
+            ): PlaybackState {
+                return PlaybackState(
+                    song = null,
+                    title = metadata.displayTitle,
+                    artist = metadata.displayArtist,
+                    albumTitle = metadata.album,
+                    mediaId = metadata.uriString,
+                    mediaUri = metadata.uriString,
+                    durationMs = metadata.durationMs,
+                    cover = null,
+                    isPlaying = isPlaying,
+                    repeatMode = repeatMode,
+                    isShuffled = isShuffled,
+                    positionMs = positionMs,
+                )
+            }
+        }
+    }
 }

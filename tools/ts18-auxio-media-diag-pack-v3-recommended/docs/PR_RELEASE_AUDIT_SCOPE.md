@@ -12,7 +12,7 @@ The requested audit baseline is “since v5.3.0”. The accessible repository me
 |---|---|---|
 | APK identity and variants | standard, `com.tw.media`, `com.tw.music`, release/debug suffixes, package conflict risk | `package_table.tsv`, package dumps, APK paths/hashes, UID/sharedUserId flags |
 | DoFun/Topway fixed slots | Topway aliases, stock activity/service/widget wrappers, DoFun launcher slot assumptions | `packages/*/quick-components.txt`, resolver dumps, DoFun package dump |
-| Generic media integration | Spotify/VLC comparison, Android MediaSession, MediaBrowserService, MediaStyle notification | `media_session_all.txt`, `notification_all.txt`, per-snapshot package filters |
+| Generic media integration | VLC comparison, Android MediaSession, MediaBrowserService, MediaStyle notification | `media_session_all.txt`, `notification_all.txt`, per-snapshot package filters |
 | Metadata/artwork timing | immediate metadata vs delayed bitmap, RemoteViews/SystemUI crash fixes, large-icon fallbacks | filtered logcat, notification dumps, crash/dropbox logs, Auxio crash reports |
 | Playback stability | autoplay, restore, play/pause retention, shuffle/current item, queue bounds, seek/next/previous | MediaSession state/actions, ExoPlayer log markers, audio focus/policy dumps |
 | Library startup | cached startup, no forced scan, startup policy, preserving inaccessible sources | logcat indexing markers, Auxio diagnostics, storage/appdata inventories |
@@ -20,7 +20,7 @@ The requested audit baseline is “since v5.3.0”. The accessible repository me
 | DirectFS/root gating | RootStateHolder, bounded `su`, timeout/denial, protected root rejection | Magisk module state, safe root probes, DirectFS/RootGate logs |
 | Widgets | DoFun widget card, zero-ID fallback, Android AppWidget IDs, progress broadcasts | appwidget dumps, widget/Topway log filters |
 | Overlay/floating controls | overlay permission, boot restore, bounds/insets, WindowManager behaviour | appops, window/display/input dumps, overlay log filters |
-| TS18 diagnostics | automated/guided/timed/boot captures, DiagnosticService, DiagnosticJournal | DiagnosticService start attempt, journal/logcat markers, copied reports |
+| TS18 diagnostics | external Magisk/service.d captures | external collector report/logcat markers; app DiagnosticService not started |
 | Home UI/pills/chips | clickable head-unit shortcuts and z-order | window/focus/input dumps, UI exception logs |
 | BTAndroidTS | Android Bluetooth vs Topway BT, privileged/module experiments, audio focus impacts | package dumps, appops, bluetooth_manager, audio dumps, log filters |
 | ts18-intent-bridge | LSPosed/Zygisk/intent redirect module app | package dumps, Magisk module list, Zygisk/LSPosed/intent logs |
@@ -34,7 +34,7 @@ The feature buckets reflect the accessible descriptions for recent Auxio-TS work
 - #85 home pills/dashboard chip clickability.
 - #87/#88 slow startup/source-selection crash attempts.
 - #93 TS18 notification/source-discovery/diagnostics hardening.
-- #95/#97/#98/#99/#100 TS18 Health Diagnostics consolidation.
+- #95/#97/#98/#99/#100 former TS18 Health Diagnostics consolidation (superseded by external collector decision).
 - #96 workflow summary diagnostics, represented by better script output/reporting.
 - #102 root-assisted filesystem, DirectFS, album-art modes, autoplay/shuffle stability.
 - #103 RootStateHolder/DirectFS hardening.
@@ -46,6 +46,6 @@ The feature buckets reflect the accessible descriptions for recent Auxio-TS work
 ## How to use the output
 
 1. Start the capture.
-2. Exercise Auxio-TS, VLC and Spotify while DoFun is visible.
+2. Exercise Auxio-TS and VLC while DoFun is visible.
 3. Share the generated `.tar.gz`.
 4. Review `REPORT.md` first, then `00_FEATURE_AUDIT_SCOPE.md` and the listed evidence files for any `UNKNOWN/FAIL` row.

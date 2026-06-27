@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# TS18 Auxio/VLC/Spotify media diagnostics collector
+# TS18 Auxio/VLC media diagnostics collector
 # Intended path on device: /data/adb/service.d/60-ts18-auxio-media-diag.sh
 # Read-only except for its own output folder and optional stop/trigger files.
 
@@ -16,7 +16,6 @@ DURATION_SECONDS="${DURATION_SECONDS:-2400}"
 INTERVAL_SECONDS="${INTERVAL_SECONDS:-15}"
 BOOT_WAIT_SECONDS="${BOOT_WAIT_SECONDS:-90}"
 SETTLE_WAIT_SECONDS="${SETTLE_WAIT_SECONDS:-10}"
-AUXIO_DIAG_DURATION_MS="${AUXIO_DIAG_DURATION_MS:-900000}"
 LOGCAT_ALL="${LOGCAT_ALL:-0}"
 COPY_AUXIO_PREFS="${COPY_AUXIO_PREFS:-0}"
 CAPTURE_BUGREPORT="${CAPTURE_BUGREPORT:-0}"
@@ -41,7 +40,6 @@ org.oxycblt.auxio.debug
 com.tw.media
 com.tw.music
 org.videolan.vlc
-com.spotify.music
 com.dofun.variety
 com.cbkii.btandroidts
 com.cbkii.btandroidts.debug
@@ -72,7 +70,7 @@ com.abupdate.fota_demo_iot
 }"
 
 # Focused logcat. The output still may contain personal data: inspect before public sharing.
-LOG_FILTER="${LOG_FILTER:-Auxio|org\\.oxycblt|com\\.tw\\.media|com\\.tw\\.music|Topway|DoFun|dofun|TWTHEME|VLC|videolan|Spotify|spotify|NavRadio|navimods|BTAndroidTS|ts18intent|DocumentsUI|documentsui|MediaSession|MediaBrowser|MediaController|MediaButton|PlaybackState|AudioFocus|AUDIOFOCUS|focus loss|onAudioFocusChange|becoming noisy|ACTION_AUDIO_BECOMING_NOISY|AudioTrack|AudioFlinger|AudioPolicy|ExoPlayer|Notification|RemoteViews|Bitmap|AppWidget|Widget|DirectFS|FilteredFS|LocationMode|LocationsDialog|RootState|RootGate|SAF|DocumentsProvider|OPEN_DOCUMENT|OPEN_DOCUMENT_TREE|PersistableUriPermission|Storage|usbdisk|media_rw|Overlay|WindowManager|Zygisk|LSPosed|Magisk|ANR|FATAL EXCEPTION|AndroidRuntime|SecurityException|IllegalArgumentException|IllegalStateException|NullPointerException|IndexOutOfBoundsException|RemoteServiceException|TransactionTooLargeException|DeadObjectException|Bad notification|denied|timeout|failed}"
+LOG_FILTER="${LOG_FILTER:-Auxio|org\\.oxycblt|com\\.tw\\.media|com\\.tw\\.music|Topway|DoFun|dofun|TWTHEME|VLC|videolan|NavRadio|navimods|BTAndroidTS|ts18intent|DocumentsUI|documentsui|MediaSession|MediaBrowser|MediaController|MediaButton|PlaybackState|AudioFocus|AUDIOFOCUS|focus loss|onAudioFocusChange|becoming noisy|ACTION_AUDIO_BECOMING_NOISY|AudioTrack|AudioFlinger|AudioPolicy|ExoPlayer|Notification|RemoteViews|Bitmap|AppWidget|Widget|DirectFS|FilteredFS|LocationMode|LocationsDialog|RootState|RootGate|SAF|DocumentsProvider|OPEN_DOCUMENT|OPEN_DOCUMENT_TREE|PersistableUriPermission|Storage|usbdisk|media_rw|Overlay|WindowManager|Zygisk|LSPosed|Magisk|ANR|FATAL EXCEPTION|AndroidRuntime|SecurityException|IllegalArgumentException|IllegalStateException|NullPointerException|IndexOutOfBoundsException|RemoteServiceException|TransactionTooLargeException|DeadObjectException|Bad notification|denied|timeout|failed}"
 
 PATH="/system/bin:/system/xbin:/vendor/bin:/sbin:/data/adb/magisk:/data/adb/ksu/bin:$PATH"
 export PATH
@@ -102,7 +100,7 @@ case "$1" in
       mount 2>/dev/null | grep -Ei 'storage|media_rw|vold|fuse|emulated|usb|fat|exfat|ntfs' || true
       echo
       echo "## package manager/service readiness"
-      pm list packages 2>/dev/null | grep -Ei 'auxio|oxycblt|tw|dofun|spotify|videolan|documents' || true
+      pm list packages 2>/dev/null | grep -Ei 'auxio|oxycblt|tw|dofun|videolan|documents' || true
       echo
       echo "## quick dumpsys readiness"
       dumpsys -t 5 activity broadcasts 2>&1 | grep -Ei 'BOOT_COMPLETED|LOCKED_BOOT_COMPLETED|USER_UNLOCKED|QUICKBOOT|auxio|tw|dofun' | head -n 200 || true
@@ -120,6 +118,20 @@ case "$1" in
   trigger)
     mkdir -p "$(dirname "$TRIGGER_FILE")" 2>/dev/null
     touch "$TRIGGER_FILE"
+    exit 0
+    ;;
+  smoke|dry-run)
+    _base="${BASE_OUT:-/tmp/TS18_AuxioMediaDiag}"
+    mkdir -p "$_base/ts18-auxio-media-smoke/logs" "$_base/ts18-auxio-media-smoke/commands" 2>/dev/null || exit 2
+    {
+      echo "# TS18 Auxio/VLC diagnostics report"
+      echo
+      echo "- Status: smoke"
+      echo "- Time: $(date '+%Y-%m-%d %H:%M:%S %z')"
+      echo "- Purpose: off-device syntax/output-layout check; no Android device evidence collected."
+    } > "$_base/ts18-auxio-media-smoke/REPORT.md"
+    printf "time\tlabel\texit_code\ttimeout_s\toutput\n" > "$_base/ts18-auxio-media-smoke/commands/command-index.tsv"
+    echo "SMOKE_OK $_base/ts18-auxio-media-smoke"
     exit 0
     ;;
   now)
@@ -185,11 +197,16 @@ cmd_to_file() {
   _rc=$?
   echo "" >> "$_out"
   echo "# Exit: $_rc" >> "$_out"
+  if [ -n "$COMMAND_INDEX" ]; then
+    printf "%s\t%s\t%s\t%s\t%s\n" "$(human_ts)" "$_label" "$_rc" "$_timeout" "$_out" >> "$COMMAND_INDEX"
+  fi
   return "$_rc"
 }
 
 dumpsys_file() {
   _service="$1"; _out="$2"; shift 2
+  _label="dumpsys $_service $*"
+  _timeout="10"
   {
     echo "### dumpsys $_service $*"
     echo "# Time: $(human_ts)"
@@ -199,6 +216,9 @@ dumpsys_file() {
   _rc=$?
   echo "" >> "$_out"
   echo "# Exit: $_rc" >> "$_out"
+  if [ -n "$COMMAND_INDEX" ]; then
+    printf "%s\t%s\t%s\t%s\t%s\n" "$(human_ts)" "$_label" "$_rc" "$_timeout" "$_out" >> "$COMMAND_INDEX"
+  fi
   return "$_rc"
 }
 
@@ -254,16 +274,40 @@ if [ ! -w "$BASE_OUT" ]; then
 fi
 
 LOCK_DIR="/data/local/tmp/ts18_auxio_media_diag.lock"
+BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown)"
+LOCK_STALE=0
 if ! mkdir "$LOCK_DIR" >/dev/null 2>&1; then
-  mkdir -p "$BASE_OUT" 2>/dev/null
-  echo "$(human_ts) Refused: existing lock $LOCK_DIR" >> "$BASE_OUT/last-run-refused.log"
-  exit 0
+  OLD_PID="$(cat "$LOCK_DIR/pid" 2>/dev/null)"
+  OLD_BOOT="$(cat "$LOCK_DIR/boot_id" 2>/dev/null)"
+  OLD_TS="$(cat "$LOCK_DIR/epoch" 2>/dev/null)"
+  NOW_EPOCH="$(date +%s)"
+  AGE=$(( NOW_EPOCH - ${OLD_TS:-0} ))
+  if [ -z "$OLD_PID" ] || [ -z "$OLD_BOOT" ] || [ -z "$OLD_TS" ]; then
+    mkdir -p "$BASE_OUT" 2>/dev/null
+    echo "$(human_ts) Refused: lock initialising $LOCK_DIR" >> "$BASE_OUT/last-run-refused.log"
+    exit 0
+  fi
+  if ! kill -0 "$OLD_PID" >/dev/null 2>&1 || [ "$OLD_BOOT" != "$BOOT_ID" ] || [ "$AGE" -gt $(( DURATION_SECONDS + 900 )) ]; then
+    LOCK_STALE=1
+    rm -rf "$LOCK_DIR" >/dev/null 2>&1
+  fi
+  if [ "$LOCK_STALE" != "1" ] || ! mkdir "$LOCK_DIR" >/dev/null 2>&1; then
+    mkdir -p "$BASE_OUT" 2>/dev/null
+    echo "$(human_ts) Refused: active lock $LOCK_DIR pid=$OLD_PID boot=$OLD_BOOT age=$AGE" >> "$BASE_OUT/last-run-refused.log"
+    exit 0
+  fi
+  echo "$(human_ts) Recovered stale lock $LOCK_DIR pid=$OLD_PID boot=$OLD_BOOT age=$AGE" >> "$BASE_OUT/last-run-refused.log"
 fi
+echo "$$" > "$LOCK_DIR/pid"
+echo "$BOOT_ID" > "$LOCK_DIR/boot_id"
+date +%s > "$LOCK_DIR/epoch"
 
 SESSION_ID="ts18-auxio-media-$(ts)"
 OUT="$BASE_OUT/$SESSION_ID"
 mkdir -p "$OUT" "$OUT/packages" "$OUT/snapshots" "$OUT/system" "$OUT/storage" "$OUT/logs" "$OUT/appdata" "$OUT/auxio" "$OUT/vendor" "$OUT/magisk" "$OUT/summary" "$OUT/commands" "$OUT/source_paths" "$OUT/autostart" "$OUT/overlay" "$OUT/interruptions" 2>/dev/null
 RUN_LOG="$OUT/run.log"
+COMMAND_INDEX="$OUT/commands/command-index.tsv"
+printf "time\tlabel\texit_code\ttimeout_s\toutput\n" > "$COMMAND_INDEX"
 REPORT="$OUT/REPORT.md"
 SUMMARY="$OUT/00_SUMMARY.txt"
 STEPS="$OUT/00_TEST_STEPS.md"
@@ -281,6 +325,9 @@ END_EPOCH=$(( START_EPOCH + DURATION_SECONDS ))
 rm -f "$STOP_FILE" 2>/dev/null
 
 cleanup() {
+  if [ -n "$REPORT" ] && [ -d "$OUT" ] && [ ! -s "$REPORT" ]; then
+    { echo "# TS18 Auxio/VLC diagnostics report"; echo; echo "- Status: partial/aborted"; echo "- Session: ${SESSION_ID:-unknown}"; echo "- Ended: $(human_ts)"; echo "- See: run.log and commands/command-index.tsv"; } > "$REPORT" 2>/dev/null || true
+  fi
   log "cleanup start"
   [ -n "$LOGCAT_PID" ] && kill "$LOGCAT_PID" >/dev/null 2>&1
   [ -n "$LOGCAT_ALL_PID" ] && kill "$LOGCAT_ALL_PID" >/dev/null 2>&1
@@ -323,13 +370,12 @@ During the capture window:
    - try status shade, right-edge navigation/gesture drawer, DoFun home gestures;
    - note whether the overlay is hidden, loses touch, is under SystemUI, or is displaced.
 6. Test interruption contexts:
-   - pause from DoFun, Auxio, notification, headset/BT controller if available, VLC/Spotify takeover, radio/NavRadio, reverse/camera if safe, and ACC sleep/wake if available;
+   - pause from DoFun, Auxio, notification, headset/BT controller if available, VLC takeover, radio/NavRadio, reverse/camera if safe, and ACC sleep/wake if available;
    - note any unexpected pause/resume.
 7. Switch to VLC and play audio for 2-3 minutes.
-8. Switch to Spotify and play audio for 2-3 minutes.
-9. Return to Auxio-TS and repeat play/pause/next/previous.
-10. If testing BTAndroidTS or ts18-intent-bridge, trigger their intended user-visible action once during the capture.
-11. Stop early with:
+8. Return to Auxio-TS and repeat play/pause/next/previous.
+9. If testing BTAndroidTS or ts18-intent-bridge, trigger their intended user-visible action once during the capture.
+10. Stop early with:
    touch $STOP_FILE
 
 Share the final .tar.gz if possible, or these files:
@@ -357,10 +403,10 @@ The requested baseline is "since v5.3.0". The accessible `dev` branch currently 
 | Area | Relevant PRs / release-note themes | Runtime evidence captured |
 |---|---|---|
 | DoFun/Topway launcher compatibility | DoFun fixed slots, `com.tw.media`, `com.tw.music`, Topway activity/service/widget aliases, Topway bridge | package dumps, quick-components, activity/service/broadcast resolver dumps, DoFun package state, logcat Topway/DoFun filters |
-| Generic Android media integration | MediaSession, MediaBrowserServiceCompat, MediaStyle notification, Spotify/VLC comparison | `media_session_all.txt`, `notification_all.txt`, per-snapshot filtered dumps, audio focus/policy dumps |
+| Generic Android media integration | MediaSession, MediaBrowserServiceCompat, MediaStyle notification, VLC comparison | `media_session_all.txt`, `notification_all.txt`, per-snapshot filtered dumps, audio focus/policy dumps |
 | Notification crash hardening | RemoteViews/bitmap/fallback icon/large-icon safety, minimized notifications | filtered logcat, notification dumps, crash/dropbox logs, Auxio crash reports |
 | Playback stability | autoplay, restore state, play/pause retention, shuffle/current-track retention, queue bounds, seek/next/prev | MediaSession playback state/actions, logcat ExoPlayer/PlaybackState/queue/shuffle markers, audio dumps |
-| Slow startup and cached library | cached startup, first-run scan gating, avoiding always-scan, startup library policy | logcat startup/indexing markers, Auxio in-app diagnostics, storage and appdata inventories |
+| Slow startup and cached library | cached startup, first-run scan gating, avoiding always-scan, startup library policy | logcat startup/indexing markers, external collector evidence, storage and appdata inventories |
 | Storage/source handling | MediaStore, SAF, DocumentsUI, manual path, DirectFS, FilteredFS, USB roots, inaccessible vs empty | storage dumps, `/storage` + `/mnt/media_rw` listings, DocumentsUI package dump, logcat DirectFS/SAF/MediaStore/root markers |
 | Root gate and DirectFS | RootStateHolder, bounded `su`, timeout/denied handling, shell quoting, protected-root rejection | Magisk/root probes, module inventory, logcat RootGate/RootState/DirectFS markers, safe root listing probes |
 | Widget and zero-ID fallback | DoFun fixed cards, Android AppWidget IDs, widget broadcasts, progress broadcasts | appwidget dumps, logcat widget/Topway broadcast markers, package receiver summaries |
@@ -391,7 +437,7 @@ EOF_FEATURE
 # Package discovery
 ###############################################################################
 
-DISCOVERED="$(pm list packages 2>/dev/null | sed 's/^package://' | grep -Ei 'auxio|oxycblt|spotify|videolan|vlc|dofun|com\.tw\.|navimods|navradio|btandroidts|intentbridge|documents|lsposed|zygisk|magisk|zlink|gearhead|media|bluetooth|radio|gocsdk|slink|s-link|z-link|fota|sprd|unisoc' | sort -u)"
+DISCOVERED="$(pm list packages 2>/dev/null | sed 's/^package://' | grep -Ei 'auxio|oxycblt|videolan|vlc|dofun|com\.tw\.|navimods|navradio|btandroidts|intentbridge|documents|lsposed|zygisk|magisk|zlink|gearhead|media|bluetooth|radio|gocsdk|slink|s-link|z-link|fota|sprd|unisoc' | sort -u)"
 PKGS="$(printf '%s\n%s\n' "$BASE_PACKAGES" "$DISCOVERED" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ')"
 
 ###############################################################################
@@ -475,7 +521,7 @@ cmd_to_file "service list" "$OUT/system/service-list.txt" 10 service list
   echo "### Topway/Unisoc/vendor processes and init services"
   echo "# Time: $(human_ts)"
   echo
-  ps -A -o USER,PID,PPID,VSZ,RSS,STAT,NAME,ARGS 2>/dev/null | grep -Ei 'com\.tw|com\.dofun|zlink|tlink|sprd|unisoc|fota|radio|bluetooth|audio|car|mcu|can|goc|slink|navimods|auxio|spotify|vlc|videolan' || true
+  ps -A -o USER,PID,PPID,VSZ,RSS,STAT,NAME,ARGS 2>/dev/null | grep -Ei 'com\.tw|com\.dofun|zlink|tlink|sprd|unisoc|fota|radio|bluetooth|audio|car|mcu|can|goc|slink|navimods|auxio|vlc|videolan' || true
   echo
   echo "===== init services ====="
   getprop 2>/dev/null | grep -Ei '^\[init\.svc\..*(tw|sprd|unisoc|fota|radio|bluetooth|audio|car|mcu|can|ylog|debug|zlink|goc)' | sort || true
@@ -544,7 +590,7 @@ fi
 
 if [ "$CAPTURE_CRASH_LOGS" = "1" ]; then
   cmd_to_file "logcat crash buffer snapshot" "$OUT/logs/logcat_crash_buffer.txt" 15 logcat -b crash -d -v threadtime
-  cmd_to_file "logcat events crash/anr snapshot" "$OUT/logs/logcat_events_crash_anr.txt" 15 sh -c "logcat -b events -d -v threadtime | grep -i -E 'am_crash|am_anr|wm_|media|audio|auxio|tw|dofun|spotify|vlc|videolan' | tail -n 2000 || true"
+  cmd_to_file "logcat events crash/anr snapshot" "$OUT/logs/logcat_events_crash_anr.txt" 15 sh -c "logcat -b events -d -v threadtime | grep -i -E 'am_crash|am_anr|wm_|media|audio|auxio|tw|dofun|vlc|videolan' | tail -n 2000 || true"
   cmd_to_file "tombstones listing" "$OUT/system/tombstones-listing.txt" 10 sh -c "ls -laZ /data/tombstones 2>&1 || ls -la /data/tombstones 2>&1 || true"
   cmd_to_file "anr traces listing" "$OUT/system/anr-listing.txt" 10 sh -c "ls -laZ /data/anr 2>&1 || ls -la /data/anr 2>&1 || true"
 fi
@@ -815,7 +861,7 @@ take_snapshot() {
   dumpsys_file "appwidget" "$sdir/appwidget.txt" appwidget
   dumpsys_file "power" "$sdir/power.txt" power
   if [ "$CAPTURE_PLAYBACK_INTERRUPT_DIAGS" = "1" ]; then
-    cmd_to_file "snapshot playback interruption context" "$sdir/playback-interruption-context.txt" 15 sh -c "echo '### audio focus'; dumpsys audio | grep -Ei -A60 -B20 'Focus|AudioFocus|focus stack|MediaFocusControl|duck|loss|gain|client|uid|player|playback|route|device' || true; echo; echo '### media session focused packages'; dumpsys media_session | grep -Ei -A90 -B25 'auxio|oxycblt|com.tw.media|com.tw.music|spotify|videolan|vlc|NavRadio|radio|PlaybackState|state=|metadata|actions' || true; echo; echo '### telecom'; dumpsys telecom 2>&1 | grep -Ei -A30 -B10 'call|audio|route|state' || true"
+    cmd_to_file "snapshot playback interruption context" "$sdir/playback-interruption-context.txt" 15 sh -c "echo '### audio focus'; dumpsys audio | grep -Ei -A60 -B20 'Focus|AudioFocus|focus stack|MediaFocusControl|duck|loss|gain|client|uid|player|playback|route|device' || true; echo; echo '### media session focused packages'; dumpsys media_session | grep -Ei -A90 -B25 'auxio|oxycblt|com.tw.media|com.tw.music|videolan|vlc|NavRadio|radio|PlaybackState|state=|metadata|actions' || true; echo; echo '### telecom'; dumpsys telecom 2>&1 | grep -Ei -A30 -B10 'call|audio|route|state' || true"
   fi
   if [ "$CAPTURE_OVERLAY_EDGE_DIAGS" = "1" ]; then
     cmd_to_file "snapshot overlay/window context" "$sdir/overlay-window-context.txt" 15 sh -c "dumpsys window windows | grep -Ei -A25 -B10 'Application Overlay|TYPE_APPLICATION_OVERLAY|CarFloating|Floating|Overlay|StatusBar|NavigationBar|Gesture|Edge|Drawer|auxio|oxycblt|com.tw.media|com.tw.music|mCurrentFocus|Touchable|touchableRegion|frame=' || true"
@@ -887,7 +933,7 @@ feature_status() {
 }
 
 {
-  echo "# TS18 Auxio/VLC/Spotify diagnostics report"
+  echo "# TS18 Auxio/VLC diagnostics report"
   echo
   echo "- Session: $SESSION_ID"
   echo "- Started: $(date -d "@$START_EPOCH" '+%Y-%m-%d %H:%M:%S %z' 2>/dev/null || echo "$START_EPOCH")"

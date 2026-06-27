@@ -78,7 +78,7 @@ jobs:
     - name: Check formatting
       id: spotless_check
       continue-on-error: true
-      run: ./gradlew --no-daemon --stacktrace spotlessCheck
+      run: bash ./scripts/ci-gradle.sh spotlessCheck
 
     - name: Stop when formatting is already clean
       if: steps.spotless_check.outcome == 'success'
@@ -86,11 +86,11 @@ jobs:
 
     - name: Apply formatting
       if: steps.spotless_check.outcome == 'failure'
-      run: ./gradlew --no-daemon --stacktrace spotlessApply
+      run: bash ./scripts/ci-gradle.sh spotlessApply
 
     - name: Verify formatting after apply
       if: steps.spotless_check.outcome == 'failure'
-      run: ./gradlew --no-daemon --stacktrace spotlessCheck
+      run: bash ./scripts/ci-gradle.sh spotlessCheck
 
     - name: Ensure submodules stayed clean
       if: steps.spotless_check.outcome == 'failure'

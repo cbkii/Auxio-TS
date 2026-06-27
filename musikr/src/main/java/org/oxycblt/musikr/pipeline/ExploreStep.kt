@@ -18,6 +18,7 @@
 
 package org.oxycblt.musikr.pipeline
 
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -71,13 +72,7 @@ private class ExploreStepImpl(
         val classified = Channel<Classified>(Channel.UNLIMITED)
         val classifiedTask =
             scope.mapParallel(PARALLELISM, files, classified, Dispatchers.IO) { file ->
-                if (
-                    file.mimeType == M3U.MIME_TYPE ||
-                        (!file.mimeType.startsWith("audio/") &&
-                            file.mimeType != "application/ogg" &&
-                            file.mimeType != "application/x-ogg" &&
-                            file.mimeType != "application/octet-stream")
-                ) {
+                if (!FileClassification.isPotentialMusicFile(file)) {
                     return@mapParallel Finalized(NotAudio)
                 }
                 when (val cacheResult = storage.cache.read(file)) {
@@ -146,5 +141,48 @@ private class ExploreStepImpl(
 
     private companion object {
         const val PARALLELISM = 8
+    }
+}
+
+internal object FileClassification {
+    private val supportedAudioExtensions =
+        setOf(
+            "3gp",
+            "aac",
+            "alac",
+            "flac",
+            "m4a",
+            "m4b",
+            "m4p",
+            "mp3",
+            "mp4",
+            "oga",
+            "ogg",
+            "opus",
+            "wav",
+        )
+
+    fun isPotentialMusicFile(file: File): Boolean {
+        val name = file.path.name ?: file.uri.lastPathSegment?.substringAfterLast('/')
+        return isPotentialMusicFileNameMime(name, file.mimeType)
+    }
+
+    fun isPotentialMusicFileNameMime(name: String?, mimeType: String?): Boolean {
+        val normalisedMimeType = mimeType?.lowercase(Locale.US).orEmpty()
+        if (normalisedMimeType == M3U.MIME_TYPE) return false
+        if (normalisedMimeType.startsWith("audio/")) return true
+        if (normalisedMimeType == "application/ogg" || normalisedMimeType == "application/x-ogg") {
+            return true
+        }
+        if (normalisedMimeType != "application/octet-stream" && normalisedMimeType.isNotEmpty()) {
+            return false
+        }
+
+        val extension =
+            name
+                ?.substringAfterLast('.', missingDelimiterValue = "")
+                ?.lowercase(Locale.US)
+                .orEmpty()
+        return extension in supportedAudioExtensions
     }
 }

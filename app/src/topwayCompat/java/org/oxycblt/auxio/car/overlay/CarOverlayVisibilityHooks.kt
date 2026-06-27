@@ -24,10 +24,9 @@ import android.os.Bundle
 import timber.log.Timber as L
 
 /**
- * Application-level activity lifecycle callbacks that automatically hide/show the car floating
- * overlay when Auxio's activities transition between foreground/background. Uses a started-activity
- * counter to detect app-level foreground/background transitions (0→1 and 1→0) rather than
- * individual activity pauses/resumes, avoiding brief overlay flickers during in-app navigation.
+ * Application-level activity lifecycle callbacks that keep the car floating overlay converged with
+ * user settings. New starts proactively restore the overlay when enabled, while the optional "hide
+ * while Auxio foreground" setting suppresses the overlay during Auxio UI use.
  */
 class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
 
@@ -37,33 +36,47 @@ class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
         val previous = startedActivityCount
         startedActivityCount++
         if (previous == 0) {
-            // App entered foreground (0→1 transition).
-            val prefs = CarOverlayPrefs.from(activity)
-            if (prefs.enabled) {
+            val prefs = readPrefs(activity) ?: return
+            if (!prefs.enabled) return
+
+            if (prefs.hideWhileAuxioForeground) {
+                prefs.suppressedByAuxioForeground = true
                 L.d("Auxio entered foreground, signalling overlay to hide")
                 CarFloatingControlsService.setAuxioForeground(activity, true)
+            } else {
+                prefs.suppressedByAuxioForeground = false
+                L.d("Auxio entered foreground with overlay allowed, restoring overlay")
+                CarFloatingControlsService.restoreIfEnabled(activity, "activity_started")
             }
         }
     }
 
     override fun onActivityStopped(activity: Activity) {
-        // Ignore stops caused by configuration changes (rotation, locale change, etc.)
-        // to avoid briefly signalling background during activity recreation.
         if (activity.isChangingConfigurations) return
 
         val previous = startedActivityCount
         startedActivityCount = (startedActivityCount - 1).coerceAtLeast(0)
         if (previous == 1 && startedActivityCount == 0) {
-            // App entered background (true 1→0 transition).
-            val prefs = CarOverlayPrefs.from(activity)
-            if (prefs.enabled) {
-                L.d("Auxio entered background, signalling overlay to show")
+            val prefs = readPrefs(activity) ?: return
+            if (!prefs.enabled) return
+
+            prefs.suppressedByAuxioForeground = false
+            L.d("Auxio entered background, restoring overlay")
+            if (prefs.hideWhileAuxioForeground) {
                 CarFloatingControlsService.setAuxioForeground(activity, false)
+            } else {
+                CarFloatingControlsService.restoreIfEnabled(activity, "activity_stopped")
             }
         }
     }
 
-    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+        val prefs = readPrefs(activity) ?: return
+        if (prefs.enabled && !prefs.hideWhileAuxioForeground) {
+            prefs.suppressedByAuxioForeground = false
+            CarFloatingControlsService.restoreIfEnabled(activity, "activity_created")
+        }
+    }
 
     override fun onActivityResumed(activity: Activity) {}
 
@@ -73,11 +86,15 @@ class CarOverlayVisibilityHooks : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityDestroyed(activity: Activity) {}
 
+    private fun readPrefs(activity: Activity): CarOverlayPrefs? =
+        try {
+            CarOverlayPrefs.from(activity)
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to read overlay prefs during lifecycle restore")
+            null
+        }
+
     companion object {
-        /**
-         * Registers the visibility hooks on the given application. Should be called once from the
-         * Application's onCreate or from a variant-specific initializer.
-         */
         fun register(application: Application) {
             application.registerActivityLifecycleCallbacks(CarOverlayVisibilityHooks())
             L.d("Car overlay visibility hooks registered")

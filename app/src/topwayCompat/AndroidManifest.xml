@@ -138,14 +138,18 @@
             android:name="org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity"
             android:exported="false"
             android:theme="@style/Theme.Auxio.App" />
-
-        <!-- Boot receiver to restore overlay after ACTION_BOOT_COMPLETED only. ACC wake requires
-             separate TS18 runtime evidence before additional quickboot/vendor actions are declared. -->
+        <!-- Restore floating controls after public boot/user/package/quickboot broadcasts.
+             ACTION_SCREEN_ON is handled dynamically while the overlay service is running. -->
         <receiver
             android:name="org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
         </receiver>
     </application>

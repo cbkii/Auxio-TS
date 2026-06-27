@@ -1,0 +1,47 @@
+# Tools (downloaded on demand)
+.tools/
+# Intermediate input copies
+.input/
+# Build output
+#dist/
+#*.apk
+#*.apks
+*.aab
+*.idsig
+# Signing — NEVER commit keystores
+secrets/
+*.keystore
+*.jks
+*.p12
+*.env
+# Python
+.venv/
+__pycache__/
+*.pyc
+# macOS / Windows junk
+.DS_Store
+Thumbs.db
+/secrets/
+
+# Local-only bootstrap entrypoint
+local/bootstrap_readability_accelerator.sh
+# Readability / reverse-engineering scratch outputs
+tmp/readability/
+tmp/jadx/
+out/jadx/
+out/readability/
+jadx-output/
+jadx-export/
+*.jobf
+*.jadx.kts.cache
+# Android/decompiler artifacts that must not enter readability PRs
+*.apk
+*.apks
+*.dex
+*.jar
+*.zip
+*.tar
+*.tar.gz
+
+# Local generated shim build outputs
+.local/

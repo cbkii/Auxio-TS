@@ -325,7 +325,7 @@ Because required dumps are missing, this run cannot prove:
 - whether overlay is visible/touchable after boot or ACC wake;
 - whether SAF exposes full internal storage beyond Downloads;
 - whether `/storage/usbdisk0` or `/storage/usbdisk1` were mounted or scanned;
-- whether VLC/Spotify/Radio/NavRadio audio focus interactions behaved correctly;
+- whether VLC/Radio/NavRadio audio focus interactions behaved correctly; Spotify is retained only as historical negative-control evidence if present in old dumps;
 - whether BTAndroidTS or ts18-intent-bridge interfered with media focus/routing.
 
 ## Recommended next validation run
@@ -339,6 +339,6 @@ After fixing the crash and diagnostics harness, rerun with these minimum asserti
 5. Confirm overlay permission, foreground service, and visible window state.
 6. Test SAF cancel, SAF valid selection, DirectFS/manual path, and USB mount/unmount.
 7. Capture DoFun home/widget state before, during, and after playback.
-8. Capture VLC/Spotify takeover and return to Auxio.
+8. Capture VLC takeover and return to Auxio; treat Spotify only as a negative control if it appears in old dumps.
 9. Export package dumps, audio dumps, notification dumps, media session dumps, window/layer dumps, appops, storage roots, and persisted URI grants.
 

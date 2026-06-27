@@ -21,43 +21,37 @@ package org.oxycblt.auxio.car.overlay
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import timber.log.Timber as L
 
 /**
- * Restores the car floating controls overlay after system boot (`ACTION_BOOT_COMPLETED`) if the
- * feature is enabled and overlay permission is still granted.
+ * Restores the car floating controls overlay after public Android lifecycle broadcasts that are
+ * commonly observed around TS18 boot, user unlock, package replacement, quick boot, and user
+ * return. This remains Topway-compatible flavour only and uses the normal foreground-service path.
  *
- * Note: This receiver only handles standard Android boot. ACC sleep/wake events on TS18/Topway
- * devices are handled by Android's standard lifecycle (the service uses `START_NOT_STICKY` and the
- * boot receiver restores state on full system boot).
+ * Requires TS18 device validation: ACC sleep/wake may be exposed as screen/user-present only on
+ * some firmware builds; vendor-private wake actions are intentionally not declared here.
  */
 class CarOverlayBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        val action = intent.action ?: return
+        if (action !in RESTORE_ACTIONS) return
 
-        if (!Settings.canDrawOverlays(context)) {
-            L.w("Overlay permission not granted, skipping boot restore")
-            return
-        }
+        L.d("Car overlay restore broadcast: $action")
+        CarFloatingControlsService.restoreIfEnabled(context, "receiver:$action")
+    }
 
-        val prefs =
-            try {
-                CarOverlayPrefs.from(context)
-            } catch (e: RuntimeException) {
-                if (e !is SecurityException && e !is IllegalStateException) {
-                    throw e
-                }
-                L.w(e, "Unable to read car overlay preferences during boot restore")
-                return
-            }
+    companion object {
+        val RESTORE_ACTIONS =
+            setOf(
+                Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_USER_UNLOCKED,
+                Intent.ACTION_MY_PACKAGE_REPLACED,
+                Intent.ACTION_USER_PRESENT,
+                ACTION_QUICKBOOT_POWERON,
+                ACTION_HTC_QUICKBOOT_POWERON,
+            )
 
-        if (!prefs.enabled) {
-            L.d("Car overlay disabled, skipping boot restore")
-            return
-        }
-
-        L.d("Restoring car overlay after boot")
-        CarFloatingControlsService.start(context)
+        private const val ACTION_QUICKBOOT_POWERON = "android.intent.action.QUICKBOOT_POWERON"
+        private const val ACTION_HTC_QUICKBOOT_POWERON = "com.htc.intent.action.QUICKBOOT_POWERON"
     }
 }

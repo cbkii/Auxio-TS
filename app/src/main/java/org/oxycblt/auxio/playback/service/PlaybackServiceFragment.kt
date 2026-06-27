@@ -33,6 +33,7 @@ import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.headunit.topway.TopwayStartCallbacks
 import org.oxycblt.auxio.headunit.topway.TopwayStartIntentHandler
+import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
@@ -90,6 +91,12 @@ private constructor(
             onExitRequested = { playbackManager.endSession() },
         )
 
+    private fun restoreCachedPlaybackStateIfIdle() {
+        if (playbackManager.currentSong != null) return
+        L.i("Requesting cached saved-state restore on playback service attach")
+        playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+    }
+
     private fun scheduleAutoStop() {
         autoStopJob?.cancel()
         autoStopJob =
@@ -118,11 +125,13 @@ private constructor(
     // --- MEDIASESSION CALLBACKS ---
 
     fun attach(): MediaSessionCompat.Token {
+        Ts18FirstAudioLatency.mark("playback_fragment_attach")
         exoHolder.attach()
         sessionHolder.attach()
         widgetComponent.attach()
         systemReceiver.attach()
         playbackManager.addListener(this)
+        restoreCachedPlaybackStateIfIdle()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token
     }
@@ -134,6 +143,7 @@ private constructor(
     }
 
     fun start(intent: Intent?) {
+        Ts18FirstAudioLatency.mark("playback_fragment_start")
         // Handle Topway intents regardless of startId for better robustness with external
         // launcher/widget commands. Intent can be null on service restart.
         if (intent != null && handleTopwayStartIntent(intent)) {
@@ -194,10 +204,11 @@ private constructor(
             intent,
             object : TopwayStartCallbacks {
                 override val hasCurrentSong: Boolean
-                    get() = playbackManager.currentSong != null
+                    get() = playbackManager.currentSong != null || exoHolder.hasRawFastResume
 
                 override val currentDurationMs: Long?
-                    get() = playbackManager.currentSong?.durationMs
+                    get() =
+                        playbackManager.currentSong?.durationMs ?: exoHolder.rawFastResumeDurationMs
 
                 override fun previous() = playbackManager.prev()
 
@@ -205,7 +216,7 @@ private constructor(
 
                 override fun playPause() {
                     val currentSong = playbackManager.currentSong
-                    if (currentSong != null) {
+                    if (currentSong != null || exoHolder.hasRawFastResume) {
                         playbackManager.playing(!playbackManager.progression.isPlaying)
                     } else {
                         L.i(

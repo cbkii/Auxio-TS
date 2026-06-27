@@ -26,8 +26,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Singleton journal for recording and retrieving diagnostic events. It is concurrency-safe and
- * automatically prunes old events.
+ * Lightweight runtime event journal for boot, playback, widget, overlay, and Topway bridge
+ * observability. This is not the abandoned in-app TS18 diagnostics UI/service/capture path;
+ * external Magisk/service.d tooling reads logcat and app-visible runtime markers instead.
  */
 @Singleton
 class DiagnosticJournal @Inject constructor() {

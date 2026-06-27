@@ -50,6 +50,7 @@ import org.oxycblt.auxio.music.service.toMediaDescription
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.util.NotificationBitmapSafety
 import org.oxycblt.auxio.util.PerfTimer
@@ -179,17 +180,36 @@ private constructor(
         index: Int,
         isShuffled: Boolean,
     ) {
-        updateMediaMetadata(playbackManager.currentSong, parent)
+        val rawMetadata = playbackManager.rawPlaybackMetadata
+        if (queue.isEmpty() && rawMetadata != null) {
+            updateRawMediaMetadata(rawMetadata)
+        } else {
+            updateMediaMetadata(playbackManager.currentSong, parent)
+        }
         updateQueue(queue)
         invalidateSessionState()
     }
 
     override fun onProgressionChanged(progression: Progression) {
+        if (playbackManager.currentSong == null) {
+            playbackManager.rawPlaybackMetadata?.let(::updateRawMediaMetadata)
+        }
         invalidateSessionState()
         _notification.updatePlaying(playbackManager.progression.isPlaying)
+        broadcastLegacyPlaybackChanged()
         if (!bitmapProvider.isBusy) {
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
         }
+    }
+
+    override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {
+        if (playbackManager.currentSong == null && metadata != null) {
+            updateRawMediaMetadata(metadata)
+        } else if (playbackManager.currentSong == null) {
+            updateMediaMetadata(null, null)
+        }
+        invalidateSessionState()
+        foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
     }
 
     override fun onRepeatModeChanged(repeatMode: RepeatMode) {
@@ -329,6 +349,12 @@ private constructor(
             val initialMetadata = builder.build()
             mediaSession.setMetadata(initialMetadata)
             _notification.updateMetadata(initialMetadata)
+            broadcastLegacyMetadataChanged(
+                title = metadataSnapshot.displayTitle,
+                artist = metadataSnapshot.artist,
+                album = metadataSnapshot.albumTitle,
+                durationMs = metadataSnapshot.durationMs,
+            )
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
 
             // We are normally supposed to use URIs for album art, but that removes some of the
@@ -374,6 +400,71 @@ private constructor(
                     NotificationBitmapSafety.MAX_ICON_SIZE_PX,
                     NotificationBitmapSafety.MAX_ICON_SIZE_PX,
                 ),
+            )
+        }
+    }
+
+    private fun updateRawMediaMetadata(metadata: RawPlaybackMetadata) {
+        PerfTimer.trace("MediaSessionHolder.updateRawMediaMetadata") {
+            L.d("Updating raw TS18 media metadata to $metadata")
+            artworkRequestToken.incrementAndGet()
+            val metadataSnapshot =
+                HeadUnitMetadataPolicy.fromRaw(
+                    title = metadata.displayTitle,
+                    artist = metadata.displayArtist,
+                    albumArtist = metadata.displayArtist,
+                    albumTitle = metadata.album,
+                    durationMs = metadata.durationMs,
+                    mediaId = metadata.uriString,
+                    mediaUri = metadata.uriString,
+                    artworkUri = null,
+                    hasArtwork = false,
+                )
+                    ?: run {
+                        mediaSession.setMetadata(emptyMetadata)
+                        _notification.updateMetadata(emptyMetadata)
+                        return
+                    }
+            val rawSessionMetadata =
+                MediaMetadataCompat.Builder()
+                    .putText(MediaMetadataCompat.METADATA_KEY_TITLE, metadataSnapshot.displayTitle)
+                    .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, metadataSnapshot.albumTitle)
+                    .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, metadataSnapshot.artist)
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST,
+                        metadataSnapshot.albumArtist,
+                    )
+                    .putText(MediaMetadataCompat.METADATA_KEY_AUTHOR, metadataSnapshot.artist)
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE,
+                        metadataSnapshot.displayTitle,
+                    )
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
+                        metadataSnapshot.displaySubtitle,
+                    )
+                    .putText(
+                        MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION,
+                        metadataSnapshot.displayDescription,
+                    )
+                    .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, metadataSnapshot.mediaId)
+                    .putString(
+                        MediaMetadataCompat.METADATA_KEY_MEDIA_URI,
+                        metadataSnapshot.mediaUri,
+                    )
+                    .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, metadataSnapshot.durationMs)
+                    .putText(
+                        PlaybackNotification.KEY_PARENT,
+                        context.getString(R.string.lbl_all_songs),
+                    )
+                    .build()
+            mediaSession.setMetadata(rawSessionMetadata)
+            _notification.updateMetadata(rawSessionMetadata)
+            broadcastLegacyMetadataChanged(
+                title = metadataSnapshot.displayTitle,
+                artist = metadataSnapshot.artist,
+                album = metadataSnapshot.albumTitle,
+                durationMs = metadataSnapshot.durationMs,
             )
         }
     }
@@ -443,6 +534,41 @@ private constructor(
     }
 
     /** Invalidate both repeat and shuffle notification actions. */
+    private fun broadcastLegacyMetadataChanged(
+        title: CharSequence?,
+        artist: CharSequence?,
+        album: CharSequence?,
+        durationMs: Long,
+    ) {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        try {
+            context.sendBroadcast(
+                Intent(ACTION_LEGACY_META_CHANGED)
+                    .putExtra("track", title?.toString().orEmpty())
+                    .putExtra("artist", artist?.toString().orEmpty())
+                    .putExtra("album", album?.toString().orEmpty())
+                    .putExtra("duration", durationMs)
+                    .putExtra("playing", playbackManager.progression.isPlaying)
+                    .putExtra("package", context.packageName)
+            )
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to broadcast legacy metadata change")
+        }
+    }
+
+    private fun broadcastLegacyPlaybackChanged() {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        try {
+            context.sendBroadcast(
+                Intent(ACTION_LEGACY_PLAYSTATE_CHANGED)
+                    .putExtra("playing", playbackManager.progression.isPlaying)
+                    .putExtra("package", context.packageName)
+            )
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to broadcast legacy playback state change")
+        }
+    }
+
     private fun invalidateNotificationActions() {
         L.d("Invalidating notification actions")
         invalidateSessionState()
@@ -457,6 +583,8 @@ private constructor(
     }
 
     companion object {
+        private const val ACTION_LEGACY_META_CHANGED = "com.android.music.metachanged"
+        private const val ACTION_LEGACY_PLAYSTATE_CHANGED = "com.android.music.playstatechanged"
         private val emptyMetadata = MediaMetadataCompat.Builder().build()
     }
 }

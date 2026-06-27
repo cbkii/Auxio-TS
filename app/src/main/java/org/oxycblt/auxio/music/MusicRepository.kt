@@ -401,7 +401,7 @@ constructor(
                 return@traceSuspend
             }
 
-            // TS18 Health Diagnostics: Log persistent storage switch value during scan
+            // TS18 runtime observability: log persistent storage switch value during scan
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 val twStorageSwitch = readTwStorageSwitch()
                 if (!twStorageSwitch.isNullOrEmpty()) {

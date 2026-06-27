@@ -69,13 +69,13 @@ jobs:
         shell: bash
         run: |
           mkdir -p build/reports/dependency-health
-          ./gradlew --no-daemon --stacktrace \
+          bash ./scripts/ci-gradle.sh \
             :app:dependencies \
             :musikr:dependencies \
             > build/reports/dependency-health/gradle-dependencies.txt
 
       - name: Build standard debug APK
-        run: ./gradlew --no-daemon --stacktrace :app:assembleStandardDebug
+        run: bash ./scripts/ci-gradle.sh :app:assembleStandardDebug
 
       - name: Upload dependency health reports
         if: always()

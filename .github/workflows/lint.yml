@@ -22,7 +22,6 @@ on:
       - 'scripts/**'
       - 'AGENTS.md'
       - 'README.md'
-      - 'docs/**'
   pull_request:
     branches:
       - dev
@@ -43,8 +42,6 @@ on:
       - 'scripts/**'
       - 'AGENTS.md'
       - 'README.md'
-      - 'docs/**'
-
 permissions:
   contents: read
   issues: write
@@ -128,7 +125,7 @@ jobs:
       shell: bash
       run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
     - name: Check formatting
-      run: ./gradlew --no-daemon --stacktrace spotlessCheck
+      run: bash ./scripts/ci-gradle.sh spotlessCheck
     - name: Upload formatting reports
       if: failure()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -255,7 +252,7 @@ jobs:
       # The media library test files have missing test-utility dependencies
       # (after upstream "trim down module tree") and will not compile with the
       # bare testDebugUnitTest task.
-      run: ./gradlew --no-daemon --stacktrace :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+      run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
     - name: Upload unit test reports
       if: failure()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -319,7 +316,7 @@ jobs:
       # errors are not aggregated into the app report.
       # app/lint.xml suppresses lint for vendored Google Material sources.
       # :musikr lintDebug can be added once musikr lint issues are baselined.
-      run: ./gradlew --no-daemon --stacktrace :app:lintStandardDebug
+      run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
     - name: Upload Android lint reports
       if: failure()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
