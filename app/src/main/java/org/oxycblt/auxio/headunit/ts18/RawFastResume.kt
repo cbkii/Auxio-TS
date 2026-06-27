@@ -71,6 +71,7 @@ object RawFastResumeValidator {
             }
 
         val scheme = parsedUri.scheme?.lowercase()
+        var resolvedPath: String? = pathText
         val usableUri =
             when (scheme) {
                 "content" -> {
@@ -82,6 +83,7 @@ object RawFastResumeValidator {
                     val path = parsedUri.path ?: pathText
                     val fileCheck = validateDirectPath(path)
                     if (fileCheck != null) return fileCheck
+                    resolvedPath = path
                     Uri.fromFile(File(path!!))
                 }
                 null,
@@ -89,12 +91,14 @@ object RawFastResumeValidator {
                     val path = pathText ?: uriText
                     val fileCheck = validateDirectPath(path)
                     if (fileCheck != null) return fileCheck
+                    resolvedPath = path
                     Uri.fromFile(File(path))
                 }
                 else -> return invalid(Reason.UNSUPPORTED_SCHEME, scheme)
             }
 
-        val title = snapshot.title?.takeIf { it.isNotBlank() } ?: pathText?.substringAfterLast('/')
+        val title =
+            snapshot.title?.takeIf { it.isNotBlank() } ?: resolvedPath?.substringAfterLast('/')
         val durationMs = snapshot.durationMs.coerceAtLeast(0L)
         val positionMs =
             snapshot.positionMs.coerceAtLeast(0L).let { position ->
@@ -105,7 +109,7 @@ object RawFastResumeValidator {
             RawFastResumeItem(
                 uri = usableUri,
                 uriString = usableUri.toString(),
-                path = pathText,
+                path = resolvedPath,
                 title = title,
                 artist = snapshot.artist?.takeIf { it.isNotBlank() },
                 album = snapshot.album?.takeIf { it.isNotBlank() },

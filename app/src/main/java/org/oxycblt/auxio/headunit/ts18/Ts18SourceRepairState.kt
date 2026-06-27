@@ -21,6 +21,7 @@ package org.oxycblt.auxio.headunit.ts18
 import java.io.File
 
 /** Minimal bounded source-state model for TS18 USB/removable storage. */
+@Suppress("SwallowedException")
 object Ts18SourceRepairStatePolicy {
     val defaultUsbRoots = listOf("/storage/usbdisk0", "/storage/usbdisk1")
 
@@ -110,8 +111,8 @@ object Ts18SourceRepairStatePolicy {
             try {
                 directory
                     .listFiles()
-                    ?.filterNot { it.name.startsWith(".") }
                     ?.take(BOUNDED_ENTRY_LIMIT)
+                    ?.filterNot { it.name.startsWith(".") }
             } catch (e: SecurityException) {
                 null
             } catch (e: RuntimeException) {
@@ -166,9 +167,9 @@ object Ts18SourceRepairStatePolicy {
                     null
                 } ?: continue
             for (entry in entries) {
-                if (entry.name.startsWith(".")) continue
                 if (visited >= BOUNDED_ENTRY_LIMIT) break
                 visited += 1
+                if (entry.name.startsWith(".")) continue
                 try {
                     when {
                         entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name) ->
