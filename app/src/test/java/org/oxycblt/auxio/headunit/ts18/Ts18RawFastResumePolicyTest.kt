@@ -133,9 +133,9 @@ class Ts18RawFastResumePolicyTest {
         fakeDirectory(name, children.asList())
 
     private fun fakeDirectory(name: String, children: List<File> = emptyList()): File =
-        FakeFile(name = name, directory = true, children = children)
+        FakeFile(nameValue = name, directory = true, children = children)
 
-    private fun fakeFile(name: String): File = FakeFile(name = name, file = true)
+    private fun fakeFile(name: String): File = FakeFile(nameValue = name, file = true)
 
     private class FakeFile(
         private val nameValue: String,
