@@ -1,0 +1,11 @@
+--- ExoPlaybackStateHolder.kt
++++ ExoPlaybackStateHolder.kt
+@@ -948,7 +948,7 @@
+                 val wasPlaying = player.playWhenReady || player.isPlaying
+                 val positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L)
+                 rawFastResumeItem = null
+                 pendingLibraryRestoreAfterRawFailure = null
+                 playbackManager.play(command)
+                 playbackManager.seekTo(positionMs.coerceAtMost(song.durationMs.coerceAtLeast(0L)))
+-                playbackManager.playing(wasPlaying)
++                if (wasPlaying) {

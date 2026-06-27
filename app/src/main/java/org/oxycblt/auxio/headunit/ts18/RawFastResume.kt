@@ -76,8 +76,17 @@ object RawFastResumeValidator {
             when (scheme) {
                 "content" -> {
                     val contentCheck = validateContentUri(context, parsedUri)
-                    if (contentCheck != null) return contentCheck
-                    parsedUri
+                    if (contentCheck != null) {
+                        val fallbackCheck = validateDirectPath(pathText)
+                        if (pathText != null && fallbackCheck == null) {
+                            resolvedPath = pathText
+                            Uri.fromFile(File(pathText))
+                        } else {
+                            return contentCheck
+                        }
+                    } else {
+                        parsedUri
+                    }
                 }
                 "file" -> {
                     val path = parsedUri.path ?: pathText

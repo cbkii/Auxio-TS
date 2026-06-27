@@ -675,10 +675,8 @@ constructor(
                 else -> commandFactory.songFromAll(currentSong, shuffle)
             } ?: commandFactory.all(shuffle)
 
-        val wasPlaying = playbackManager.progression.isPlaying
         playImpl(command, shuffleScope)
         playbackManager.seekTo(currentPositionMs)
-        playbackManager.playing(wasPlaying)
     }
 
     private fun applyGenreShuffle() {
@@ -716,10 +714,8 @@ constructor(
                     return@launch
                 }
                 val positionMs = playbackManager.progression.calculateElapsedPositionMs()
-                val wasPlaying = playbackManager.progression.isPlaying
                 playImpl(commandFactory.songs(selection.queue, ShuffleMode.ON), ShuffleScope.GENRE)
                 playbackManager.seekTo(positionMs)
-                playbackManager.playing(wasPlaying)
             }
     }
 
