@@ -109,9 +109,7 @@ class Ts18RawFastResumePolicyTest {
     fun hiddenUsbSystemEntriesDoNotExhaustBoundedProbe() {
         val root = Files.createTempDirectory("ts18-hidden-source-probe").toFile()
         try {
-            repeat(96) { index ->
-                assertTrue(root.resolve(".Spotlight-V100-$index").mkdirs())
-            }
+            repeat(96) { index -> assertTrue(root.resolve(".Spotlight-V100-$index").mkdirs()) }
             val nested = root.resolve("Music/Artist")
             assertTrue(nested.mkdirs())
             assertTrue(nested.resolve("track.mp3").createNewFile())
