@@ -106,17 +106,51 @@ class Ts18RawFastResumePolicyTest {
     }
 
     @Test
-    fun hiddenUsbSystemEntriesDoNotExhaustBoundedProbe() {
-        val root = Files.createTempDirectory("ts18-hidden-source-probe").toFile()
-        try {
-            repeat(96) { index -> assertTrue(root.resolve(".Spotlight-V100-$index").mkdirs()) }
-            val nested = root.resolve("Music/Artist")
-            assertTrue(nested.mkdirs())
-            assertTrue(nested.resolve("track.mp3").createNewFile())
+    fun moderateHiddenUsbSystemEntriesDoNotHideNestedAudio() {
+        val root =
+            fakeDirectory(
+                "root",
+                (0 until 16).map { fakeDirectory(".Spotlight-V100-$it") } +
+                    fakeDirectory("Music", fakeDirectory("Artist", fakeFile("track.mp3"))),
+            )
 
-            assertTrue(Ts18SourceRepairStatePolicy.hasAudioLikeWithinBoundedProbe(root))
-        } finally {
-            root.deleteRecursively()
-        }
+        assertTrue(Ts18SourceRepairStatePolicy.hasAudioLikeWithinBoundedProbe(root))
+    }
+
+    @Test
+    fun excessiveHiddenUsbSystemEntriesRemainBounded() {
+        val root =
+            fakeDirectory(
+                "root",
+                (0 until 96).map { fakeDirectory(".Spotlight-V100-$it") } +
+                    fakeDirectory("Music", fakeDirectory("Artist", fakeFile("track.mp3"))),
+            )
+
+        assertFalse(Ts18SourceRepairStatePolicy.hasAudioLikeWithinBoundedProbe(root))
+    }
+
+    private fun fakeDirectory(name: String, vararg children: File): File =
+        fakeDirectory(name, children.asList())
+
+    private fun fakeDirectory(name: String, children: List<File> = emptyList()): File =
+        FakeFile(name = name, directory = true, children = children)
+
+    private fun fakeFile(name: String): File = FakeFile(name = name, file = true)
+
+    private class FakeFile(
+        private val nameValue: String,
+        private val file: Boolean = false,
+        private val directory: Boolean = false,
+        private val children: List<File> = emptyList(),
+    ) : File("/fake/$nameValue") {
+        override fun getName(): String = nameValue
+
+        override fun isFile(): Boolean = file
+
+        override fun isDirectory(): Boolean = directory
+
+        override fun canRead(): Boolean = true
+
+        override fun listFiles(): Array<File> = children.toTypedArray()
     }
 }

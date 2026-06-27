@@ -109,10 +109,9 @@ object Ts18SourceRepairStatePolicy {
     private fun classifyReadableDirectory(path: String, directory: File): SourceState {
         val rootEntries =
             try {
-                directory
-                    .listFiles()
-                    ?.take(BOUNDED_ENTRY_LIMIT)
-                    ?.filterNot { it.name.startsWith(".") }
+                directory.listFiles()?.take(BOUNDED_ENTRY_LIMIT)?.filterNot {
+                    it.name.startsWith(".")
+                }
             } catch (e: SecurityException) {
                 null
             } catch (e: RuntimeException) {
