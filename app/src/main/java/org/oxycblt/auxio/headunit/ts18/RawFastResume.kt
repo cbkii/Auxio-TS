@@ -141,10 +141,18 @@ object RawFastResumeValidator {
         if (!hasAudioExtension(normalized)) {
             return invalid(Reason.NON_AUDIO_LIKE, normalized)
         }
-        val file = File(normalized)
-        if (!file.exists()) return invalid(Reason.MISSING_FILE, normalized)
-        if (!file.isFile || !file.canRead()) return invalid(Reason.UNREADABLE_FILE, normalized)
-        return null
+        return try {
+            val file = File(normalized)
+            when {
+                !file.exists() -> invalid(Reason.MISSING_FILE, normalized)
+                !file.isFile || !file.canRead() -> invalid(Reason.UNREADABLE_FILE, normalized)
+                else -> null
+            }
+        } catch (e: SecurityException) {
+            invalid(Reason.SECURITY_FAILURE, e.message.orEmpty())
+        } catch (e: Exception) {
+            invalid(Reason.PROVIDER_FAILURE, e.message.orEmpty())
+        }
     }
 
     fun isAllowedDirectPath(path: String): Boolean {

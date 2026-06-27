@@ -943,11 +943,13 @@ class ExoPlaybackStateHolder(
     }
 
     private suspend fun saveFastResumeSnapshot() {
-        val song = playbackManager.currentSong
+        val (song, progression, raw) =
+            withContext(Dispatchers.Main) {
+                Triple(playbackManager.currentSong, playbackManager.progression, rawFastResumeItem)
+            }
+
         if (song == null) {
-            val raw = rawFastResumeItem
             if (raw != null) {
-                val progression = playbackManager.progression
                 val rawSnapshot =
                     raw.toSnapshot(
                         positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L),
@@ -963,7 +965,6 @@ class ExoPlaybackStateHolder(
         }
 
         val appContext = context.applicationContext
-        val progression = playbackManager.progression
         val snapshot =
             FastResumeSnapshot(
                 uri = song.uri.toString(),

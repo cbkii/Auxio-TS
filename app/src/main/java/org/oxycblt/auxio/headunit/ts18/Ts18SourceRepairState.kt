@@ -107,18 +107,24 @@ object Ts18SourceRepairStatePolicy {
 
     private fun classifyReadableDirectory(path: String, directory: File): SourceState {
         val rootEntries =
-            directory.listFiles()?.take(BOUNDED_ENTRY_LIMIT)
+            try {
+                directory.listFiles()?.filterNot { it.name.startsWith(".") }?.take(BOUNDED_ENTRY_LIMIT)
+            } catch (e: SecurityException) {
+                null
+            } catch (e: RuntimeException) {
+                null
+            }
                 ?: return SourceState(
                     path,
                     Kind.UNKNOWN_FAILURE,
-                    "listFiles returned null",
+                    "listFiles failed or returned null",
                     Action.RESCAN,
                 )
         if (rootEntries.isEmpty()) {
             return SourceState(
                 path,
                 Kind.SOURCE_EMPTY,
-                "directory has no visible entries",
+                "directory has no visible non-hidden entries",
                 Action.RESCAN,
             )
         }
@@ -148,14 +154,28 @@ object Ts18SourceRepairStatePolicy {
 
         while (pending.isNotEmpty() && visited < BOUNDED_ENTRY_LIMIT) {
             val current = pending.removeFirst()
-            val entries = current.listFiles()?.asList() ?: continue
+            val entries =
+                try {
+                    current.listFiles()?.asList()
+                } catch (e: SecurityException) {
+                    null
+                } catch (e: RuntimeException) {
+                    null
+                } ?: continue
             for (entry in entries) {
+                if (entry.name.startsWith(".")) continue
                 if (visited >= BOUNDED_ENTRY_LIMIT) break
                 visited += 1
-                when {
-                    entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name) ->
-                        return true
-                    entry.isDirectory && entry.canRead() -> pending.add(entry)
+                try {
+                    when {
+                        entry.isFile && RawFastResumeValidator.hasAudioExtension(entry.name) ->
+                            return true
+                        entry.isDirectory && entry.canRead() -> pending.add(entry)
+                    }
+                } catch (e: SecurityException) {
+                    // Skip restricted USB/system entries and keep probing other readable paths.
+                } catch (e: RuntimeException) {
+                    // Skip unstable/removing USB entries and keep the bounded probe alive.
                 }
             }
         }
