@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.headunit.ts18
 
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -107,10 +108,13 @@ class Ts18RawFastResumePolicyTest {
 
     @Test
     fun moderateHiddenUsbSystemEntriesDoNotHideNestedAudio() {
+        val hiddenEntryCount =
+            Ts18SourceRepairStatePolicy.BOUNDED_ENTRY_LIMIT - NESTED_AUDIO_ENTRY_VISITS
+        assertTrue(hiddenEntryCount >= 0)
         val root =
             fakeDirectory(
                 "root",
-                (0 until 16).map { fakeDirectory(".Spotlight-V100-$it") } +
+                (0 until hiddenEntryCount).map { fakeDirectory(".Spotlight-V100-$it") } +
                     fakeDirectory("Music", fakeDirectory("Artist", fakeFile("track.mp3"))),
             )
 
@@ -119,14 +123,21 @@ class Ts18RawFastResumePolicyTest {
 
     @Test
     fun excessiveHiddenUsbSystemEntriesRemainBounded() {
+        val hiddenEntryCount = Ts18SourceRepairStatePolicy.BOUNDED_ENTRY_LIMIT
         val root =
             fakeDirectory(
                 "root",
-                (0 until 96).map { fakeDirectory(".Spotlight-V100-$it") } +
+                (0 until hiddenEntryCount).map { fakeDirectory(".Spotlight-V100-$it") } +
                     fakeDirectory("Music", fakeDirectory("Artist", fakeFile("track.mp3"))),
             )
 
         assertFalse(Ts18SourceRepairStatePolicy.hasAudioLikeWithinBoundedProbe(root))
+    }
+
+    private companion object {
+        // root -> Music, Music -> Artist, Artist -> track.mp3 must all fit inside the bounded visit
+        // budget.
+        private const val NESTED_AUDIO_ENTRY_VISITS = 3
     }
 
     private fun fakeDirectory(name: String, vararg children: File): File =

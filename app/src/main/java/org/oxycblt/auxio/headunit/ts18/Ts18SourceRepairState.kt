@@ -186,5 +186,5 @@ object Ts18SourceRepairStatePolicy {
         return false
     }
 
-    private const val BOUNDED_ENTRY_LIMIT = 64
+    internal const val BOUNDED_ENTRY_LIMIT = 64
 }
