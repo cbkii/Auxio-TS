@@ -209,7 +209,6 @@
     <string name="set_exclude_non_music">Vyloučit nehudební obsah</string>
     <string name="set_exclude_non_music_desc">Ignorovat zvukové soubory, které nejsou hudbou, například podcasty</string>
     <string name="set_cover_mode">Obaly alb</string>
-    <string name="set_cover_mode_high_quality">Vysoká kvalita</string>
     <string name="set_cover_mode_off">Vypnuté</string>
     <string name="set_cover_mode_balanced">Rychlé</string>
     <string name="set_hide_collaborators">Skrýt spoluautory</string>
@@ -310,7 +309,6 @@
     <string name="cnt_mp4">MPEG-4 obsahující %s</string>
     <string name="cdc_alac">Apple Lossless Audio Codec (ALAC)</string>
     <string name="cdc_unknown">Neznámý</string>
-    <string name="set_cover_mode_save_space">Úspora místa</string>
     <string name="lng_empty_songs">Vaše skladby se zobrazí zde.</string>
     <string name="lng_empty_albums">Vaše alba se zobrazí zde.</string>
     <string name="lng_empty_artists">Vaši umělci se zobrazí zde.</string>

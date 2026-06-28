@@ -202,7 +202,6 @@
     <string name="set_separators_warning">警告：使用此设置可能会导致某些标签被错误地阐释为具有多个值。要解决这个问题，你可以在不想要的分隔符前加上反斜杠 (\\)。</string>
     <string name="set_exclude_non_music_desc">忽略不是音乐的音频文件，例如播客</string>
     <string name="set_exclude_non_music">排除非音乐</string>
-    <string name="set_cover_mode_high_quality">高质量</string>
     <string name="set_cover_mode">专辑封面</string>
     <string name="set_cover_mode_off">关</string>
     <string name="set_cover_mode_balanced">快速</string>
@@ -301,7 +300,6 @@
     <string name="cnt_mp4">含 %s 的 MPEG-4</string>
     <string name="cdc_alac">Apple 无损音频编解码器（ALAC）</string>
     <string name="cdc_unknown">未知</string>
-    <string name="set_cover_mode_save_space">节省空间</string>
     <string name="lng_empty_songs">歌曲会出现在此处。</string>
     <string name="lng_empty_artists">艺术家会出现在此处。</string>
     <string name="lng_empty_genres">流派会出现在此处。</string>

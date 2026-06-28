@@ -210,7 +210,6 @@
     <string name="set_cover_mode">Okładki albumów</string>
     <string name="set_cover_mode_off">Wyłączone</string>
     <string name="set_cover_mode_balanced">Niska jakość</string>
-    <string name="set_cover_mode_high_quality">Wysoka jakość</string>
     <string name="set_separators_warning">Ostrzeżenie: Użycie tego ustawienia może spowodować nieprawidłową interpretację niektórych tagów jako posiadających wiele wartości. Można to rozwiązać, poprzedzając niepożądane znaki separatora znakiem odwrotnego ukośnika (\\).</string>
     <string name="set_ui_desc">Dostosuj motyw i kolory aplikacji</string>
     <string name="set_hide_collaborators">Ukryj wykonawców uczestniczących</string>
@@ -310,7 +309,6 @@
     <string name="cdc_unknown">Nieznany</string>
     <string name="def_album">Nieznany album</string>
     <string name="cdc_alac">Apple Lossless Audio Codec (ALAC)</string>
-    <string name="set_cover_mode_save_space">Oszczędzanie miejsca</string>
     <string name="lng_empty_songs">Tutaj pojawią się dodane utwory.</string>
     <string name="lng_empty_albums">Tutaj pojawią się dodane albumy.</string>
     <string name="lng_empty_artists">Tutaj pojawią się dodani artyści.</string>

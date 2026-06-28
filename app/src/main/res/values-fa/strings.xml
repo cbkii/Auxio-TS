@@ -209,9 +209,7 @@
         <item quantity="one">%d هنرمند</item>
         <item quantity="other">%d هنرمندان</item>
     </plurals>
-    <string name="set_cover_mode_save_space">حفظ فضا</string>
     <string name="set_cover_mode_balanced">متعادل</string>
-    <string name="set_cover_mode_high_quality">کیفیت بالا</string>
     <string name="set_cover_mode_as_is">همان‌طور که هست</string>
     <string name="set_square_covers">جلد آلبوم مربعی</string>
     <string name="set_square_covers_desc">برش همه جلدهای آلبوم‌ها به نسبت ابعادی ۱:۱</string>

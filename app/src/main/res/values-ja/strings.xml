@@ -23,7 +23,6 @@
     <string name="set_repeat_pause_desc">曲の繰り返し時にポーズ</string>
     <string name="desc_clear_search">検索クエリを解除</string>
     <string name="lbl_date">日付け</string>
-    <string name="set_cover_mode_high_quality">高クオリティ</string>
     <string name="set_round_mode">ラウンドモード</string>
     <string name="err_index_failed">音楽の読み込みに失敗</string>
     <string name="cdc_ogg">Ogg オーディオ</string>
@@ -303,7 +302,6 @@
     <string name="set_remember_pause">再開時に一時停止を記憶</string>
     <string name="set_remember_pause_desc">キューをスキップまたは編集しても、再生/一時停止を維持する</string>
     <string name="cdc_unknown">不明</string>
-    <string name="set_cover_mode_save_space">スペースの節約</string>
     <string name="cdc_alac">アップルロスレスオーディオコーデック（ALAC）</string>
     <string name="lbl_more">さらに</string>
     <string name="lng_tasker_start">事前に保存した状態でAuxioを起動します。保存状態がない場合は、すべての曲がシャッフルされます。再生はすぐに開始されます\n\n警告: このサービスの操作には注意してください。このサービスを終了してから再度使用しようとすると、アプリがクラッシュする可能性があります</string>

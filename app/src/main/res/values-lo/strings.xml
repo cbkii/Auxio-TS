@@ -202,9 +202,7 @@
     <string name="set_images">ຮູບພາບ</string>
     <string name="set_cover_mode">ໜ້າປົກອາລະບໍາ</string>
     <string name="set_cover_mode_off">ປິດ</string>
-    <string name="set_cover_mode_save_space">ປະຢັດພື້ນທີ່</string>
     <string name="set_cover_mode_balanced">ສົມດຸນ</string>
-    <string name="set_cover_mode_high_quality">ຄຸນນະພາບສູງ</string>
     <string name="set_cover_mode_as_is">ຕາມຕົ້ນສະບັບ</string>
     <string name="set_square_covers">ບັງຄັບໃຫ້ໜ້າປົກອາລະບໍາເປັນຮູບຈະຕຸລັດ</string>
     <string name="set_square_covers_desc">ຕັດຮູບໜ້າປົກອາລະບໍາທັງໝົດໃຫ້ເປັນອັດຕາສ່ວນ 1:1</string>

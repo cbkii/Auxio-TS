@@ -207,7 +207,6 @@
     <string name="set_pre_amp_without">Koreguoti be žymių</string>
     <string name="set_separators_warning">Įspėjimas: naudojant šį nustatymą, kai kurios žymes gali būti neteisingai interpretuojamos kaip turinčios kelias reikšmes. Tai galima išspręsti prieš nepageidaujamus skiriamuosius ženklus su agalinių brūkšniu (\\).</string>
     <string name="set_separators_semicolon">Kabliataškis (;)</string>
-    <string name="set_cover_mode_high_quality">Aukštos kokybės</string>
     <string name="set_exclude_non_music">Neįtraukti nemuzikinių</string>
     <string name="set_exclude_non_music_desc">Nepaisyti garso įrašų failus, kurie nėra muzika, tokius kaip tinklalaides.</string>
     <string name="set_pre_amp_desc">Išankstinis stiprintuvas taikomas esamam koregavimui įrašo perklausos metu.</string>
@@ -315,7 +314,6 @@
     <string name="lbl_email">Siųsti el. laišką</string>
     <string name="cdc_alac">„Apple“ nenuostolingas garso kodekas (ALAC)</string>
     <string name="cdc_unknown">Nežinomas</string>
-    <string name="set_cover_mode_save_space">Išsaugoti vietos</string>
     <string name="set_cover_mode_as_is">Kaip yra</string>
     <string name="set_with_hidden">Įtraukti paslėptus failus</string>
     <string name="set_with_hidden_desc">Įtraukti garso įrašų failus, kurie paslėpti (pvz., .cache).</string>

@@ -237,7 +237,6 @@
     <string name="set_hide_collaborators">Közreműködők elrejtése</string>
     <string name="set_hide_collaborators_desc">Csak az albumon közvetlenül feltüntetett előadók megjelenítése (a jól címkézett könyvtárakban működik a legjobban)</string>
     <string name="set_cover_mode_off">Ki</string>
-    <string name="set_cover_mode_high_quality">Magas minőség</string>
     <string name="set_audio_desc">Hang és lejátszási viselkedés konfigurálása</string>
     <string name="set_playback">Lejátszás</string>
     <string name="set_headset_autoplay">Fejhallgató auto. lejátszás</string>
@@ -315,7 +314,6 @@
     <string name="lbl_start_playback">Indítsd el a lejátszást</string>
     <string name="lng_tasker_start">Elindítja az Auxio-t a korábban mentett állapot használatával. Ha nincs mentett állapot, akkor minden szám véletlenszerűen lejátszásra kerül. A lejátszás azonnal elindul.\n\nFIGYELEM: Légy óvatos a szolgáltatás vezérlésével, mert ha bezárod, majd újra próbálod használni, valószínűleg összeomlik az alkalmazás.</string>
     <string name="lng_empty_playlists">Itt fognak megjelenni a lejátszási listáid.</string>
-    <string name="set_cover_mode_save_space">Helytakarékos</string>
     <string name="cdc_alac">Apple veszteségmentes audió kodek (ALAC)</string>
     <string name="cdc_unknown">Ismeretlen</string>
     <string name="lbl_feedback">Visszajelzés</string>
