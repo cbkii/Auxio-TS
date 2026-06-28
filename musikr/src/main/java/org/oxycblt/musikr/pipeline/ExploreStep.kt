@@ -188,7 +188,7 @@ internal object FileClassification {
         )
 
     fun isPotentialMusicFile(file: File): Boolean {
-        if (file.size != null && file.size > 888 * 1024 * 1024) return false
+        // strictly large unparsable files only via extensions
         val name = file.path.name ?: file.uri.lastPathSegment?.substringAfterLast('/')
         return isPotentialMusicFileNameMime(name, file.mimeType)
     }
@@ -202,7 +202,13 @@ internal object FileClassification {
                 .orEmpty()
 
         if (extension in rejectedAudioExtensions) return false
-        if (extension.isEmpty() && !normalisedMimeType.startsWith("audio/")) return false
+        if (
+            extension.isEmpty() &&
+                !normalisedMimeType.startsWith("audio/") &&
+                normalisedMimeType != "application/ogg" &&
+                normalisedMimeType != "application/x-ogg"
+        )
+            return false
 
         if (normalisedMimeType == M3U.MIME_TYPE) return false
         if (normalisedMimeType.startsWith("audio/")) return true

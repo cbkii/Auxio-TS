@@ -243,6 +243,10 @@ private constructor(
                 }
 
                 override fun onCompleted(bitmap: Bitmap?) {
+                    if (playbackManager.currentSong?.uid != song.uid) {
+                        L.d("Ignoring stale widget artwork for $song")
+                        return
+                    }
                     val state =
                         PlaybackState.fromSong(
                             context = context,

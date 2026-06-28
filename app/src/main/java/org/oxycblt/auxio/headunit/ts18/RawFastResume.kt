@@ -131,8 +131,40 @@ object RawFastResumeValidator {
 
     private fun validateContentUri(context: Context, uri: Uri): Result.Invalid? {
         return try {
-            context.applicationContext.contentResolver.openFileDescriptor(uri, "r")?.use {
-                descriptor ->
+            val contentResolver = context.applicationContext.contentResolver
+            val mimeType = contentResolver.getType(uri)?.lowercase()
+            var isAudioLike = false
+
+            if (
+                mimeType != null &&
+                    (mimeType.startsWith("audio/") ||
+                        mimeType == "application/ogg" ||
+                        mimeType == "application/x-ogg")
+            ) {
+                isAudioLike = true
+            } else {
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex =
+                            cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex >= 0) {
+                            val displayName = cursor.getString(nameIndex)
+                            if (displayName != null && hasAudioExtension(displayName)) {
+                                isAudioLike = true
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!isAudioLike) {
+                return invalid(
+                    Reason.NON_AUDIO_LIKE,
+                    "content uri failed cheap audio-likeness check",
+                )
+            }
+
+            contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
                 if (!descriptor.fileDescriptor.valid()) {
                     return invalid(Reason.PROVIDER_FAILURE, "provider returned invalid descriptor")
                 }

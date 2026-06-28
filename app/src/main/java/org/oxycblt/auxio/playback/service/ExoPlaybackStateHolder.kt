@@ -391,9 +391,13 @@ class ExoPlaybackStateHolder(
         player.setShuffleModeEnabled(shuffled)
         if (player.shuffleModeEnabled) {
             // Have to manually refresh the shuffle seed and anchor it to the new current songs
-            player.setShuffleOrder(BetterShuffleOrder(player.mediaItemCount, currentIdx))
+            val safeIdx =
+                if (currentIdx >= 0 && currentIdx < player.mediaItemCount) currentIdx else 0
+            player.setShuffleOrder(BetterShuffleOrder(player.mediaItemCount, safeIdx))
         }
-        player.seekTo(currentIdx, currentPos)
+        if (currentIdx >= 0 && currentIdx < player.mediaItemCount) {
+            player.seekTo(currentIdx, currentPos)
+        }
         if (wasPlaying && !player.playWhenReady) {
             player.play()
         } else if (!wasPlaying && player.playWhenReady) {
@@ -892,11 +896,7 @@ class ExoPlaybackStateHolder(
                 pendingLibraryRestoreAfterRawFailure = null
                 playbackManager.play(command)
                 playbackManager.seekTo(positionMs.coerceAtMost(song.durationMs.coerceAtLeast(0L)))
-                if (!wasPlaying) {
-                    player.playWhenReady = false
-                } else {
-                    playbackManager.playing(true)
-                }
+                playbackManager.playing(wasPlaying)
                 Ts18FirstAudioLatency.mark("reconciliation_end_matched")
             }
         }
