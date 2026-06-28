@@ -46,12 +46,12 @@ class RootStateHolder @Inject constructor() : RootGate {
     fun probeSync(): State {
         // Timeouts are intentionally retryable: TS18 su prompts can be transient, and a
         // process-wide permanent timeout would disable root-assisted DirectFS until restart.
-        if (state != State.Unknown && state != State.TimedOut) return state
-        if (!isRootEnabledByUser) return State.Denied
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant
             return state
         }
+        if (!isRootEnabledByUser) return State.Denied
+        if (state != State.Unknown && state != State.TimedOut) return state
         val process =
             try {
                 Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))

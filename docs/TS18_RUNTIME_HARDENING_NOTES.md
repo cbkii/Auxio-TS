@@ -4,10 +4,6 @@ Status: TS18/head-unit feature completion and robustness pass complete.
 
 ## Implemented Behaviors
 
-### Floating Controls True Persistence
-- `CarFloatingControlsService` correctly attaches and restores the overlay upon screen unlocking, sticky service restarts, boot completed broadcasts, and quick boot actions.
-- The `CarOverlayVisibilityHooks` suppress the overlay correctly when the user enters the main Auxio-TS app, avoiding duplicate windows and rendering issues.
-
 ### /storage/emulated/0/Download Fallback
 - `/storage/emulated/0/Download` is now considered a fully-fledged safe Direct FS candidate root for the TS18 variant.
 - It is accepted generically as a fallback option when standard USB options are unavailable or inaccessible.
@@ -21,20 +17,24 @@ Status: TS18/head-unit feature completion and robustness pass complete.
 
 ### Scan Eligibility & Speed
 - Non-audio extension files (e.g., images, text, configs, apks) are completely ignored during `ExploreStep` using simple, zero-metadata string filters.
-- Files strictly larger than 888MB are also ignored, guaranteeing parsing speed.
+- Extensionless `application/ogg` and `application/x-ogg` files are correctly handled before the allow-list logic.
+- Exclusion is purely extension and MIME-type based now to ensure valid large audio files aren't arbitrarily dropped.
 
 ### Raw Fast-Resume & MediaReconciliation
-- `RawFastResumeValidator` verifies `content://` fallbacks gracefully to direct-paths if necessary.
-- During raw play, Auxio properly respects `isPlaying` preservation without suddenly triggering playback if stopped.
-
-### Optional Root-First Source/File Backend
-- `RootStateHolder` provides the interface `isRootEnabledByUser`. If true, we opportunistically attempt `su` listing of direct FS sources to bypass MediaStore latency or false negative responses from the system provider.
+- `RawFastResumeValidator` verifies `content://` with a cheap audio-likeness check, and gracefully falls back to direct-paths if necessary.
+- During raw play, Auxio properly respects `isPlaying` preservation without suddenly triggering playback if stopped via the correct `playbackManager` flow.
 
 ### Shuffle Mode Current-Song Preservation
-- We now track the exact playing song and `currentMediaItemIndex` across `PlaybackViewModel` and `ExoPlaybackStateHolder` when shuffling. Playback remains perfectly on the same media item, position, and `isPlaying` state.
+- We now track the exact playing song and `currentMediaItemIndex` across `PlaybackViewModel` and `ExoPlaybackStateHolder` when shuffling. Playback remains perfectly on the same media item, position, and `isPlaying` state, guarding against invalid media index seeks.
 
 ### Metadata Delivery Speed
 - Text metadata populates MediaSession, Notifications, and Topway/DoFun Widgets synchronously before waiting for Coils/Bitmaps to fetch, resolving widget pop-in lag.
+- `WidgetComponent` validates that async artwork callbacks don't accidentally push stale song state on completion.
+
+## Partially Implemented / Follow-Up Work
+- **Floating Controls True Persistence**: The system uses lifecycle and receiver hooks to restore appropriately, but a full central supervisor/watchdog process was deferred as out of scope for this pass.
+- **Root-First Source Access**: `RootStateHolder` correctly gates according to user choices (`isRootEnabledByUser`), but `DirectFS` still executes normal `listFiles()` before attempting `runRootCommandSync`. True root-first logic is deferred.
+- **Source Repair Semantics**: Repair logic is currently direct-root/default-USB based rather than configured-source based. Further refinement of SAF repair states is needed.
 
 ## Requires Device Validation
 - Run DoFun launcher widget checks from cold start.
