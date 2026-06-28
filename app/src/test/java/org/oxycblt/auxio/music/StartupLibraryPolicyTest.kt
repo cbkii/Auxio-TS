@@ -311,6 +311,7 @@ class StartupLibraryPolicyTest {
                 revisionKnown = revisionKnown,
                 priorState = priorState,
                 lastScanFailed = { lastScanFailed },
+                isTopwayCompat = false, // Testing standard behavior by default
                 loadCachedLibrary = {
                     cachedLoadAttempts++
                     loadFailure?.let { throw it }

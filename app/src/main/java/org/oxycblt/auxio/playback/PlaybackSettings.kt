@@ -62,8 +62,12 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
     val exitOnTaskRemoval: Boolean
     /** Whether to launch Auxio-TS automatically on device boot. */
     val autostartOnBoot: Boolean
+    /** Whether to only launch the floating controls when autostarting. */
+    val autostartFloatingOnly: Boolean
     /** Whether to start playback automatically when Auxio-TS launches. */
     val autoplayOnLaunch: Boolean
+    /** Whether to force immediate playback on startup/resume when Autoplay is enabled. */
+    val alwaysPlayImmediately: Boolean
 
     interface Listener {
         /** Called when one of the ReplayGain configurations have changed. */
@@ -144,8 +148,16 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
     override val autostartOnBoot: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_autostart_on_boot), false)
 
+    override val autostartFloatingOnly: Boolean
+        get() =
+            sharedPreferences.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
+
     override val autoplayOnLaunch: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_autoplay_on_launch), false)
+
+    override val alwaysPlayImmediately: Boolean
+        get() =
+            sharedPreferences.getBoolean(getString(R.string.set_key_always_play_immediately), false)
 
     override fun migrate() {
         // MusicMode was converted to PlaySong in 3.2.0
