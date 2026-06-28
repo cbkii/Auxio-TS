@@ -129,42 +129,79 @@ object RawFastResumeValidator {
         )
     }
 
-    private fun validateContentUri(context: Context, uri: Uri): Result.Invalid? {
-        return try {
-            val contentResolver = context.applicationContext.contentResolver
-            val mimeType = contentResolver.getType(uri)?.lowercase()
-            var isAudioLike = false
+    private enum class Likeness {
+        AUDIO_LIKE,
+        NOT_AUDIO,
+        UNKNOWN,
+    }
 
+    private fun checkAudioLikeness(context: Context, uri: Uri): Likeness {
+        val contentResolver = context.applicationContext.contentResolver
+        val mimeType = contentResolver.getType(uri)?.lowercase()
+
+        if (mimeType != null) {
             if (
-                mimeType != null &&
-                    (mimeType.startsWith("audio/") ||
-                        mimeType == "application/ogg" ||
-                        mimeType == "application/x-ogg")
+                mimeType.startsWith("audio/") ||
+                    mimeType == "application/ogg" ||
+                    mimeType == "application/x-ogg"
             ) {
-                isAudioLike = true
-            } else {
-                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val nameIndex =
-                            cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                        if (nameIndex >= 0) {
-                            val displayName = cursor.getString(nameIndex)
-                            if (displayName != null && hasAudioExtension(displayName)) {
-                                isAudioLike = true
+                return Likeness.AUDIO_LIKE
+            }
+            if (
+                mimeType.startsWith("image/") ||
+                    mimeType.startsWith("video/") ||
+                    mimeType.startsWith("text/") ||
+                    mimeType == "application/pdf" ||
+                    mimeType == "application/zip" ||
+                    mimeType == "application/vnd.android.package-archive" ||
+                    mimeType == "application/json" ||
+                    mimeType == "application/xml" ||
+                    mimeType == "application/x-tar"
+            ) {
+                return Likeness.NOT_AUDIO
+            }
+        }
+
+        var nameLikeness = Likeness.UNKNOWN
+        try {
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex =
+                        cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        val displayName = cursor.getString(nameIndex)
+                        if (displayName != null) {
+                            if (hasAudioExtension(displayName)) {
+                                nameLikeness = Likeness.AUDIO_LIKE
+                            } else if (
+                                displayName.contains(".") && !hasAudioExtension(displayName)
+                            ) {
+                                // If it has an extension but not an audio one, we can reject it
+                                nameLikeness = Likeness.NOT_AUDIO
                             }
                         }
                     }
                 }
             }
+        } catch (e: Exception) {
+            // Ignore query failures, fallback to unknown
+        }
 
-            if (!isAudioLike) {
+        return nameLikeness
+    }
+
+    private fun validateContentUri(context: Context, uri: Uri): Result.Invalid? {
+        return try {
+            val likeness = checkAudioLikeness(context, uri)
+            if (likeness == Likeness.NOT_AUDIO) {
                 return invalid(
                     Reason.NON_AUDIO_LIKE,
                     "content uri failed cheap audio-likeness check",
                 )
             }
 
-            contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+            context.applicationContext.contentResolver.openFileDescriptor(uri, "r")?.use {
+                descriptor ->
                 if (!descriptor.fileDescriptor.valid()) {
                     return invalid(Reason.PROVIDER_FAILURE, "provider returned invalid descriptor")
                 }

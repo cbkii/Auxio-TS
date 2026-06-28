@@ -1,42 +1,36 @@
 # TS18 Runtime Hardening Notes
 
-Status: TS18/head-unit feature completion and robustness pass complete.
+Status: PR#119 host-side hardening pass. Some behaviours remain partial or require exact TS18 validation.
 
-## Implemented Behaviors
+## Implemented in PR#119
 
-### /storage/emulated/0/Download Fallback
-- `/storage/emulated/0/Download` is now considered a fully-fledged safe Direct FS candidate root for the TS18 variant.
-- It is accepted generically as a fallback option when standard USB options are unavailable or inaccessible.
+- Raw fast-resume content URI/direct-path fallback improvements, including descriptor fallback for inconclusive content URI metadata.
+- Raw reconciliation play/pause preservation through playback manager.
+- Shuffle valid-index guard and current state preservation.
+- Widget text-first update and stale artwork callback guard.
+- Scan filtering for non-audio extensions and Ogg MIME handling (arbitrary 888 MiB exclusion removed).
+- Root gate user-disable ordering.
+- `/storage/emulated/0/Download` is accepted by direct/raw path policy because `/storage/emulated/0/` is an allowed root.
 
-### Source Path Selection & Scan Backend Reliability
-- Transiently missing USB mounts or unreadable volumes no longer cause Auxio-TS to wipe out existing validated cache indexes (`KEEP_CACHED_LIBRARY`).
-- Re-scans correctly maintain index readiness, failing closed without deleting everything when physical drives are temporarily unreadable.
+## Partially implemented / follow-up
 
-### Autostart Mode: Floating Controls Only
-- `BootReceiver` now checks `autostartControlsOnly` in preferences and selectively launches `CarFloatingControlsService` dynamically without opening the main UI.
+- Floating Controls restoration via existing lifecycle/broadcast hooks, but no central watchdog/supervisor true persistence yet.
+- Source repair remains default/direct-root oriented rather than configured-source aware.
+- Root-assisted DirectFS exists, but true root-first listing is not implemented.
+- `/storage/emulated/0/Download` is not yet a single shared default fallback across every source-selection feature.
 
-### Scan Eligibility & Speed
-- Non-audio extension files (e.g., images, text, configs, apks) are completely ignored during `ExploreStep` using simple, zero-metadata string filters.
-- Extensionless `application/ogg` and `application/x-ogg` files are correctly handled before the allow-list logic.
-- Exclusion is purely extension and MIME-type based now to ensure valid large audio files aren't arbitrarily dropped.
+## Not implemented in PR#119
 
-### Raw Fast-Resume & MediaReconciliation
-- `RawFastResumeValidator` verifies `content://` with a cheap audio-likeness check, and gracefully falls back to direct-paths if necessary.
-- During raw play, Auxio properly respects `isPlaying` preservation without suddenly triggering playback if stopped via the correct `playbackManager` flow.
+- Autostart Floating Controls only mode.
+- Full SAF repair-state semantics.
+- Full configured-source-aware repair.
+- Exact-device TS18 validation.
 
-### Shuffle Mode Current-Song Preservation
-- We now track the exact playing song and `currentMediaItemIndex` across `PlaybackViewModel` and `ExoPlaybackStateHolder` when shuffling. Playback remains perfectly on the same media item, position, and `isPlaying` state, guarding against invalid media index seeks.
+## Requires device validation
 
-### Metadata Delivery Speed
-- Text metadata populates MediaSession, Notifications, and Topway/DoFun Widgets synchronously before waiting for Coils/Bitmaps to fetch, resolving widget pop-in lag.
-- `WidgetComponent` validates that async artwork callbacks don't accidentally push stale song state on completion.
-
-## Partially Implemented / Follow-Up Work
-- **Floating Controls True Persistence**: The system uses lifecycle and receiver hooks to restore appropriately, but a full central supervisor/watchdog process was deferred as out of scope for this pass.
-- **Root-First Source Access**: `RootStateHolder` correctly gates according to user choices (`isRootEnabledByUser`), but `DirectFS` still executes normal `listFiles()` before attempting `runRootCommandSync`. True root-first logic is deferred.
-- **Source Repair Semantics**: Repair logic is currently direct-root/default-USB based rather than configured-source based. Further refinement of SAF repair states is needed.
-
-## Requires Device Validation
-- Run DoFun launcher widget checks from cold start.
-- Confirm USB mount / unmount timing logic matches standard expected TS18 behavior.
-- Validate `autostartControlsOnly` works seamlessly without triggering background-service kills from Android 10+.
+- DoFun launcher widget cold start.
+- Floating overlay persistence after ACC/reboot/process death.
+- USB mount/unmount timing.
+- `/storage/emulated/0/Download`, `/storage/usbdisk0`, `/storage/usbdisk1` real scans.
+- Root granted/denied behaviour on TS18.
+- Raw fast resume against TS18 storage providers.
