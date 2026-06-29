@@ -1,0 +1,638 @@
+> Task :clean
+> Task :app:clean
+> Task :media-lib-common:clean
+> Task :media-lib-common-ktx:clean UP-TO-DATE
+> Task :media-lib-container:clean
+> Task :media-lib-database:clean
+> Task :media-lib-datasource:clean
+> Task :media-lib-decoder:clean
+> Task :media-lib-decoder-ffmpeg:externalNativeBuildCleanDebug
+> Task :media-lib-decoder-ffmpeg:externalNativeBuildCleanRelease
+> Task :media-lib-decoder-ffmpeg:clean
+> Task :media-lib-exoplayer:clean
+> Task :media-lib-extractor:clean
+> Task :musikr:externalNativeBuildCleanDebug
+> Task :musikr:externalNativeBuildCleanRelease
+> Task :musikr:clean
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preStandardDebugBuild UP-TO-DATE
+> Task :app:generateStandardDebugResources
+> Task :media-lib-common:preBuild UP-TO-DATE
+> Task :media-lib-common:preDebugBuild UP-TO-DATE
+> Task :app:dataBindingMergeDependencyArtifactsStandardDebug
+> Task :media-lib-common:generateDebugResources
+> Task :media-lib-common:packageDebugResources
+> Task :media-lib-container:preBuild UP-TO-DATE
+> Task :media-lib-container:preDebugBuild UP-TO-DATE
+> Task :media-lib-container:generateDebugResources
+> Task :media-lib-container:packageDebugResources
+> Task :media-lib-database:preBuild UP-TO-DATE
+> Task :media-lib-database:preDebugBuild UP-TO-DATE
+> Task :media-lib-database:generateDebugResources
+> Task :media-lib-database:packageDebugResources
+> Task :media-lib-datasource:preBuild UP-TO-DATE
+> Task :media-lib-datasource:preDebugBuild UP-TO-DATE
+> Task :media-lib-datasource:generateDebugResources
+> Task :media-lib-datasource:packageDebugResources
+> Task :media-lib-decoder:preBuild UP-TO-DATE
+> Task :media-lib-decoder:preDebugBuild UP-TO-DATE
+> Task :media-lib-decoder:generateDebugResources
+> Task :media-lib-decoder:packageDebugResources
+> Task :media-lib-decoder-ffmpeg:assembleFfmpeg
+> Task :media-lib-decoder-ffmpeg:preBuild UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:preDebugBuild
+> Task :media-lib-decoder-ffmpeg:generateDebugResources
+> Task :media-lib-decoder-ffmpeg:packageDebugResources
+> Task :media-lib-exoplayer:preBuild UP-TO-DATE
+> Task :media-lib-exoplayer:preDebugBuild UP-TO-DATE
+> Task :media-lib-exoplayer:generateDebugResources
+> Task :media-lib-exoplayer:packageDebugResources
+> Task :media-lib-extractor:preBuild UP-TO-DATE
+> Task :media-lib-extractor:preDebugBuild UP-TO-DATE
+> Task :media-lib-extractor:generateDebugResources
+> Task :media-lib-extractor:packageDebugResources
+> Task :musikr:assembleTaglib
+> Task :musikr:preBuild UP-TO-DATE
+> Task :musikr:preDebugBuild
+> Task :musikr:generateDebugResources
+> Task :musikr:packageDebugResources
+> Task :app:packageStandardDebugResources
+> Task :media-lib-common:processDebugNavigationResources
+> Task :media-lib-container:processDebugNavigationResources
+> Task :media-lib-database:processDebugNavigationResources
+> Task :media-lib-datasource:processDebugNavigationResources
+> Task :media-lib-decoder:processDebugNavigationResources
+> Task :media-lib-decoder-ffmpeg:processDebugNavigationResources
+> Task :media-lib-exoplayer:processDebugNavigationResources
+> Task :media-lib-extractor:processDebugNavigationResources
+> Task :musikr:processDebugNavigationResources
+> Task :app:processStandardDebugNavigationResources
+> Task :app:mergeStandardDebugResources
+> Task :media-lib-common:parseDebugLocalResources
+> Task :media-lib-common:generateDebugRFile
+> Task :media-lib-container:parseDebugLocalResources
+> Task :media-lib-container:generateDebugRFile
+> Task :app:parseStandardDebugLocalResources
+> Task :media-lib-database:parseDebugLocalResources
+> Task :media-lib-database:generateDebugRFile
+> Task :media-lib-datasource:parseDebugLocalResources
+> Task :media-lib-decoder:parseDebugLocalResources
+> Task :media-lib-datasource:generateDebugRFile
+> Task :media-lib-decoder:generateDebugRFile
+> Task :media-lib-decoder-ffmpeg:parseDebugLocalResources
+> Task :media-lib-decoder-ffmpeg:generateDebugRFile
+> Task :media-lib-exoplayer:parseDebugLocalResources
+> Task :media-lib-extractor:parseDebugLocalResources
+> Task :media-lib-exoplayer:generateDebugRFile
+> Task :media-lib-extractor:generateDebugRFile
+> Task :musikr:parseDebugLocalResources
+> Task :app:generateSafeArgsStandardDebug
+> Task :musikr:generateDebugRFile
+> Task :app:generateStandardDebugBuildConfig
+> Task :app:dataBindingGenBaseClassesStandardDebug
+> Task :media-lib-common:compileDebugKotlin NO-SOURCE
+> Task :media-lib-common:javaPreCompileDebug
+> Task :app:generateStandardDebugRFile
+
+> Task :media-lib-common:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+warning: unknown enum constant Level.FULL
+  reason: class file for com.google.j2objc.annotations.ReflectionSupport$Level not found
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+4 warnings
+
+> Task :media-lib-container:javaPreCompileDebug
+> Task :media-lib-database:javaPreCompileDebug
+> Task :media-lib-datasource:javaPreCompileDebug
+> Task :media-lib-decoder:javaPreCompileDebug
+> Task :media-lib-extractor:javaPreCompileDebug
+> Task :media-lib-exoplayer:javaPreCompileDebug
+> Task :media-lib-decoder-ffmpeg:javaPreCompileDebug
+> Task :musikr:generateDebugBuildConfig
+> Task :media-lib-common:bundleLibCompileToJarDebug
+> Task :media-lib-container:compileDebugKotlin NO-SOURCE
+
+> Task :media-lib-container:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+warning: unknown enum constant MigrationStatus.STRICT
+  reason: class file for kotlin.annotations.jvm.MigrationStatus not found
+4 warnings
+
+> Task :media-lib-container:bundleLibCompileToJarDebug
+> Task :media-lib-database:compileDebugKotlin NO-SOURCE
+
+> Task :media-lib-database:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :media-lib-database:bundleLibCompileToJarDebug
+> Task :media-lib-datasource:compileDebugKotlin NO-SOURCE
+
+> Task :media-lib-datasource:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+3 warnings
+
+> Task :media-lib-datasource:bundleLibCompileToJarDebug
+> Task :media-lib-decoder:compileDebugKotlin NO-SOURCE
+
+> Task :media-lib-decoder:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+warning: unknown enum constant MigrationStatus.STRICT
+  reason: class file for kotlin.annotations.jvm.MigrationStatus not found
+4 warnings
+
+> Task :media-lib-decoder:bundleLibCompileToJarDebug
+> Task :media-lib-extractor:compileDebugKotlin NO-SOURCE
+
+> Task :media-lib-extractor:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+warning: unknown enum constant When.MAYBE
+  reason: class file for javax.annotation.meta.When not found
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+4 warnings
+
+> Task :media-lib-extractor:bundleLibCompileToJarDebug
+> Task :media-lib-exoplayer:compileDebugKotlin NO-SOURCE
+
+> Task :media-lib-exoplayer:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+
+> Task :musikr:kspDebugKotlin
+
+> Task :media-lib-exoplayer:compileDebugJavaWithJavac
+warning: unknown enum constant Level.FULL
+  reason: class file for com.google.j2objc.annotations.ReflectionSupport$Level not found
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+4 warnings
+
+> Task :media-lib-exoplayer:bundleLibCompileToJarDebug
+> Task :media-lib-decoder-ffmpeg:compileDebugKotlin NO-SOURCE
+
+> Task :media-lib-decoder-ffmpeg:compileDebugJavaWithJavac
+Java compiler version 21 has deprecated support for compiling with source/target version 8.
+Try one of the following options:
+    1. [Recommended] Use Java toolchain with a lower language version
+    2. Set a higher source/target version
+    3. Use a lower version of the JDK running the build (if you're not using Java toolchain)
+For more details on how to configure these settings, see https://developer.android.com/build/jdks.
+To suppress this warning, set android.javaCompile.suppressSourceTargetDeprecationWarning=true in gradle.properties.
+warning: [options] source value 8 is obsolete and will be removed in a future release
+warning: [options] target value 8 is obsolete and will be removed in a future release
+warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
+Note: /app/media/libraries/decoder_ffmpeg/src/main/java/androidx/media3/decoder/ffmpeg/FfmpegAudioRenderer.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+3 warnings
+
+> Task :media-lib-decoder-ffmpeg:bundleLibCompileToJarDebug
+> Task :musikr:javaPreCompileDebug
+> Task :app:javaPreCompileStandardDebug
+> Task :media-lib-decoder-ffmpeg:bundleLibRuntimeToJarDebug
+> Task :media-lib-extractor:bundleLibRuntimeToJarDebug
+> Task :media-lib-container:bundleLibRuntimeToJarDebug
+> Task :media-lib-datasource:bundleLibRuntimeToJarDebug
+> Task :media-lib-decoder:bundleLibRuntimeToJarDebug
+> Task :media-lib-database:bundleLibRuntimeToJarDebug
+> Task :media-lib-common:bundleLibRuntimeToJarDebug
+> Task :media-lib-exoplayer:bundleLibRuntimeToJarDebug
+> Task :media-lib-common:writeDebugAarMetadata
+> Task :media-lib-container:writeDebugAarMetadata
+> Task :media-lib-database:writeDebugAarMetadata
+> Task :media-lib-datasource:writeDebugAarMetadata
+> Task :media-lib-decoder:writeDebugAarMetadata
+> Task :media-lib-decoder-ffmpeg:writeDebugAarMetadata
+> Task :media-lib-exoplayer:writeDebugAarMetadata
+> Task :media-lib-extractor:writeDebugAarMetadata
+> Task :musikr:writeDebugAarMetadata
+> Task :app:checkStandardDebugAarMetadata
+> Task :app:mapStandardDebugSourceSetPaths
+> Task :app:compileStandardDebugNavigationResources
+> Task :app:createStandardDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksStandardDebug
+> Task :media-lib-common:extractDeepLinksDebug
+
+> Task :media-lib-common:processDebugManifest
+package="androidx.media3.common" found in source AndroidManifest.xml: /app/media/libraries/common/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.common" from the source AndroidManifest.xml: /app/media/libraries/common/src/main/AndroidManifest.xml.
+
+> Task :media-lib-container:extractDeepLinksDebug
+
+> Task :media-lib-container:processDebugManifest
+package="androidx.media3.container" found in source AndroidManifest.xml: /app/media/libraries/container/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.container" from the source AndroidManifest.xml: /app/media/libraries/container/src/main/AndroidManifest.xml.
+
+> Task :media-lib-database:extractDeepLinksDebug
+
+> Task :media-lib-database:processDebugManifest
+package="androidx.media3.database" found in source AndroidManifest.xml: /app/media/libraries/database/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.database" from the source AndroidManifest.xml: /app/media/libraries/database/src/main/AndroidManifest.xml.
+
+> Task :media-lib-datasource:extractDeepLinksDebug
+
+> Task :media-lib-datasource:processDebugManifest
+package="androidx.media3.datasource" found in source AndroidManifest.xml: /app/media/libraries/datasource/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.datasource" from the source AndroidManifest.xml: /app/media/libraries/datasource/src/main/AndroidManifest.xml.
+
+> Task :media-lib-decoder:extractDeepLinksDebug
+
+> Task :media-lib-decoder:processDebugManifest
+package="androidx.media3.decoder" found in source AndroidManifest.xml: /app/media/libraries/decoder/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.decoder" from the source AndroidManifest.xml: /app/media/libraries/decoder/src/main/AndroidManifest.xml.
+
+> Task :media-lib-decoder-ffmpeg:extractDeepLinksDebug
+
+> Task :media-lib-decoder-ffmpeg:processDebugManifest
+package="androidx.media3.decoder.ffmpeg" found in source AndroidManifest.xml: /app/media/libraries/decoder_ffmpeg/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.decoder.ffmpeg" from the source AndroidManifest.xml: /app/media/libraries/decoder_ffmpeg/src/main/AndroidManifest.xml.
+
+> Task :media-lib-exoplayer:extractDeepLinksDebug
+
+> Task :media-lib-exoplayer:processDebugManifest
+package="androidx.media3.exoplayer" found in source AndroidManifest.xml: /app/media/libraries/exoplayer/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.exoplayer" from the source AndroidManifest.xml: /app/media/libraries/exoplayer/src/main/AndroidManifest.xml.
+
+> Task :media-lib-extractor:extractDeepLinksDebug
+
+> Task :media-lib-extractor:processDebugManifest
+package="androidx.media3.extractor" found in source AndroidManifest.xml: /app/media/libraries/extractor/src/main/AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="androidx.media3.extractor" from the source AndroidManifest.xml: /app/media/libraries/extractor/src/main/AndroidManifest.xml.
+
+> Task :musikr:extractDeepLinksDebug
+> Task :musikr:processDebugManifest
+> Task :app:processStandardDebugMainManifest
+> Task :app:processStandardDebugManifest
+> Task :app:processStandardDebugManifestForPackage
+> Task :media-lib-common:mapDebugSourceSetPaths
+> Task :media-lib-common:compileDebugLibraryResources
+> Task :media-lib-container:mapDebugSourceSetPaths
+> Task :media-lib-container:compileDebugLibraryResources
+> Task :media-lib-database:mapDebugSourceSetPaths
+> Task :media-lib-database:compileDebugLibraryResources
+> Task :media-lib-datasource:mapDebugSourceSetPaths
+> Task :media-lib-datasource:compileDebugLibraryResources
+> Task :media-lib-decoder:mapDebugSourceSetPaths
+> Task :media-lib-decoder:compileDebugLibraryResources
+> Task :media-lib-decoder-ffmpeg:mapDebugSourceSetPaths
+> Task :media-lib-decoder-ffmpeg:compileDebugLibraryResources
+> Task :media-lib-exoplayer:mapDebugSourceSetPaths
+> Task :media-lib-exoplayer:compileDebugLibraryResources
+> Task :media-lib-extractor:mapDebugSourceSetPaths
+> Task :media-lib-extractor:compileDebugLibraryResources
+> Task :musikr:mapDebugSourceSetPaths
+> Task :musikr:compileDebugLibraryResources
+> Task :app:processStandardDebugResources
+> Task :app:generateStandardDebugAssets UP-TO-DATE
+> Task :media-lib-common:generateDebugAssets UP-TO-DATE
+> Task :media-lib-common:mergeDebugAssets
+> Task :media-lib-container:generateDebugAssets UP-TO-DATE
+> Task :media-lib-container:mergeDebugAssets
+> Task :media-lib-database:generateDebugAssets UP-TO-DATE
+> Task :media-lib-database:mergeDebugAssets
+> Task :media-lib-datasource:generateDebugAssets UP-TO-DATE
+> Task :media-lib-datasource:mergeDebugAssets
+> Task :media-lib-decoder:generateDebugAssets UP-TO-DATE
+> Task :media-lib-decoder:mergeDebugAssets
+> Task :media-lib-decoder-ffmpeg:generateDebugAssets UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:mergeDebugAssets
+> Task :media-lib-exoplayer:generateDebugAssets UP-TO-DATE
+> Task :media-lib-exoplayer:mergeDebugAssets
+> Task :media-lib-extractor:generateDebugAssets UP-TO-DATE
+> Task :media-lib-extractor:mergeDebugAssets
+> Task :musikr:generateDebugAssets UP-TO-DATE
+> Task :musikr:mergeDebugAssets
+> Task :app:mergeStandardDebugAssets
+> Task :app:preStandardDebugUnitTestBuild UP-TO-DATE
+> Task :app:packageStandardDebugUnitTestForUnitTest
+
+> Task :app:processStandardDebugUnitTestManifest
+/app/app/src/main/AndroidManifest.xml:23:5-25:31 Warning:
+	uses-permission#android.permission.ACCESS_NETWORK_STATE was tagged at AndroidManifest.xml:23 to remove other declarations but no other declaration present
+
+> Task :app:generateStandardDebugUnitTestConfig
+> Task :app:javaPreCompileStandardDebugUnitTest
+> Task :media-lib-common:processDebugJavaRes NO-SOURCE
+> Task :media-lib-container:processDebugJavaRes NO-SOURCE
+> Task :media-lib-database:processDebugJavaRes NO-SOURCE
+> Task :media-lib-datasource:processDebugJavaRes NO-SOURCE
+> Task :media-lib-decoder:processDebugJavaRes NO-SOURCE
+> Task :media-lib-decoder-ffmpeg:processDebugJavaRes NO-SOURCE
+> Task :media-lib-exoplayer:processDebugJavaRes NO-SOURCE
+> Task :media-lib-extractor:processDebugJavaRes NO-SOURCE
+
+> Task :musikr:compileDebugKotlin
+w: file:///app/musikr/src/main/java/org/oxycblt/musikr/graph/MusicGraph.kt:63:49 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+
+> Task :musikr:compileDebugJavaWithJavac
+> Task :musikr:bundleLibCompileToJarDebug
+> Task :musikr:bundleLibRuntimeToJarDebug
+> Task :musikr:processDebugJavaRes
+> Task :app:kspStandardDebugKotlin
+> Task :app:compileStandardDebugKotlin
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:26:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:32:8 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:33:8 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:45:5 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:119:8 'class BrowserRoot : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:123:53 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:123:60 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:127:59 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:127:78 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:134:17 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:134:36 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:141:67 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:141:86 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:147:13 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayBridgeExtrasPolicy.kt:68:77 'fun get(p0: String!): Any?' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/home/ThemedSpeedDialView.kt:434:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/image/CoverView.kt:636:22 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/image/coil/RoundedRectTransformation.kt:79:29 'fun computeSizeMultiplier(srcWidth: Int, srcHeight: Int, dstWidth: Int, dstHeight: Int, scale: Scale): Double' is deprecated. Migrate to the variant that accepts a 'maxSize'.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/image/coil/RoundedRectTransformation.kt:121:25 'fun computeSizeMultiplier(srcWidth: Int, srcHeight: Int, dstWidth: Int, dstHeight: Int, scale: Scale): Double' is deprecated. Migrate to the variant that accepts a 'maxSize'.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:25:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:26:8 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:28:8 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:90:9 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:96:15 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:104:12 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:111:44 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:115:19 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:119:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:119:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:127:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:127:43 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:130:69 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:133:12 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:133:35 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:144:62 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:145:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:145:59 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:148:63 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:153:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:153:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:165:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:165:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:168:64 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:186:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:186:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:198:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:198:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:201:63 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:211:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:211:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:222:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:222:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:225:66 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:235:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:235:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:247:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:247:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:22:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:23:8 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:116:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:134:59 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:143:52 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:159:64 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:160:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:179:66 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:275:58 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:303:56 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:305:49 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:306:9 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:307:13 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:307:36 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:311:13 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:23:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:24:8 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:25:8 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:97:21 'constructor(p0: String, p1: Bundle?): MediaBrowserServiceCompat.BrowserRoot' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:99:42 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:99:49 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:102:60 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:102:79 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:105:39 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:105:58 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:108:21 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:121:21 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt:122:30 Unnecessary safe call on a non-null receiver of type 'ViewPager2'.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt:172:34 Unnecessary safe call on a non-null receiver of type 'ViewPager2'.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt:272:30 Unnecessary safe call on a non-null receiver of type 'ViewPager2'.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/replaygain/ReplayGainAudioProcessor.kt:57:13 'fun flush(): Unit' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:29:8 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:30:8 'class AudioFocusRequestCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:31:8 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:113:31 'class AudioFocusRequestCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:114:9 'class AudioFocusRequestCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:114:33 'constructor(p0: Int): AudioFocusRequestCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:114:41 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:116:17 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:116:39 'constructor(): AudioAttributesCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:117:31 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:118:37 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:725:22 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:732:9 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:26:8 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:27:8 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:28:8 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:32:8 'class NotificationCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:33:8 'class MediaButtonReceiver : BroadcastReceiver' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:98:32 'constructor(p0: Context, p1: String): MediaSessionCompat' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:99:35 'class Token : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:119:9 'class MediaButtonReceiver : BroadcastReceiver' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:169:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:171:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:218:36 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:219:37 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:220:35 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:287:17 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:287:37 'constructor(): MediaMetadataCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:288:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:289:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:290:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:292:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:295:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:296:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:297:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:299:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:303:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:307:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:311:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:314:32 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:316:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:319:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:336:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:340:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:344:35 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:345:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:375:47 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:376:47 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:381:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:385:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:389:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:429:17 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:429:37 'constructor(): MediaMetadataCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:430:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:431:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:432:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:434:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:437:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:439:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:443:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:447:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:450:32 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:452:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:455:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:488:21 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:488:40 'constructor(p0: MediaDescriptionCompat!, p1: Long): MediaSessionCompat.QueueItem' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:502:36 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:502:56 'constructor(): PlaybackStateCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:511:13 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:511:33 'class CustomAction : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:521:13 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:521:33 'class CustomAction : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:588:37 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:588:57 'constructor(): MediaMetadataCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:601:38 'class Token : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:632:13 'constructor(p0: NotificationCompat.Builder!): NotificationCompat.MediaStyle' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:646:34 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:650:36 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:660:32 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:665:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:670:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:25:8 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:26:8 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:27:8 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:57:24 'class Callback : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:98:46 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:111:49 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:167:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:168:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:169:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:177:28 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:178:32 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:303:13 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:304:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:305:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:306:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:307:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:308:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:309:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:310:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:311:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:312:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:313:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:314:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:315:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackServiceFragment.kt:23:8 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackServiceFragment.kt:127:38 'class Token : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:23:8 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:363:56 'class Builder : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:363:86 'class Builder : Any' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:368:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:370:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///app/app/src/main/java/org/oxycblt/auxio/ui/SquareMaskableFrameLayout.kt:57:23 'fun getPathForSize(p0: Int, p1: Int, p2: Path): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileStandardDebugJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:hiltSyncStandardDebug
+> Task :app:hiltAggregateDepsStandardDebug
+> Task :app:processStandardDebugJavaRes
+> Task :app:hiltJavaCompileStandardDebug
+> Task :app:bundleStandardDebugClassesToCompileJar
+> Task :app:kspStandardDebugUnitTestKotlin UP-TO-DATE
+> Task :app:transformStandardDebugClassesWithAsm
+> Task :app:bundleStandardDebugClassesToRuntimeJar
+> Task :app:compileStandardDebugUnitTestKotlin
+> Task :app:compileStandardDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processStandardDebugUnitTestJavaRes
+> Task :app:hiltSyncStandardDebugUnitTest
+> Task :app:hiltAggregateDepsStandardDebugUnitTest
+> Task :app:hiltJavaCompileStandardDebugUnitTest NO-SOURCE
+> Task :app:transformStandardDebugUnitTestClassesWithAsm
+> Task :app:testStandardDebugUnitTest
+> Task :app:finalizeTestRoborazziStandardDebug SKIPPED
+
+[Incubating] Problems report is available at: file:///app/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 1m 59s
+197 actionable tasks: 195 executed, 2 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.1/userguide/configuration_cache_enabling.html
