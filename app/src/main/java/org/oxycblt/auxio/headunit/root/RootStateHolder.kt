@@ -77,10 +77,46 @@ class RootStateHolder @Inject constructor() : RootGate {
         return state
     }
 
+    // Prevent free-form shell execution. Only accept known-safe deterministic commands.
     @Synchronized
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
         if (state == State.Unknown || state == State.TimedOut) probeSync()
         if (state != State.Available) return null
+
+        // Validation: extract the path from the command and ensure the command matches exactly what
+        // we'd build for that path.
+        val prefix = "for p in '"
+        if (!command.startsWith(prefix)) return null
+
+        val pathEndIndex = command.indexOf("'", prefix.length)
+        if (pathEndIndex == -1) return null
+
+        val extractedPath = command.substring(prefix.length, pathEndIndex)
+
+        // Disallow path injection characters
+        if (
+            extractedPath.contains("\n") ||
+                extractedPath.contains(";") ||
+                extractedPath.contains("`") ||
+                extractedPath.contains("\$")
+        ) {
+            return null
+        }
+
+        val expectedCommand =
+            "for p in '${extractedPath}'/* '${extractedPath}'/.*; do " +
+                "[ -e \"\$p\" ] || continue; " +
+                "b=\${p##*/}; [ \"\$b\" = . ] && continue; [ \"\$b\" = .. ] && continue; " +
+                "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
+                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
+                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
+                "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
+                "done"
+
+        if (command != expectedCommand) {
+            return null
+        }
+
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             try {

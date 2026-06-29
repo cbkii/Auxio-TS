@@ -57,20 +57,30 @@ internal class FilteredFS(
             scope.tryAsync(Dispatchers.Default) {
                 try {
                     for (file in delegateChannel) {
+                        val componentsLower = file.path.components.components.map { it.lowercase() }
                         val fullPathStr = file.path.toString().lowercase()
 
-                        // Hard-deny protected roots/segments first
-                        if (
-                            file.path.components.components.any {
-                                it.lowercase() in
-                                    setOf("android", "data", "system", "vendor", "proc", "dev")
+                        // Hard-deny protected roots (only if they appear at the root level, not
+                        // arbitrary children)
+                        val isProtected =
+                            componentsLower.withIndex().any { (idx, comp) ->
+                                val isProtectedName =
+                                    comp in
+                                        setOf("android", "data", "system", "vendor", "proc", "dev")
+                                val isSafeRuntime =
+                                    fullPathStr.contains("org.oxycblt.auxio") ||
+                                        fullPathStr.contains("com.tw.music") ||
+                                        fullPathStr.contains("com.tw.media") ||
+                                        fullPathStr.contains("com.dofun.variety")
+                                isProtectedName && idx <= 3 && !isSafeRuntime
                             }
-                        ) {
+
+                        if (isProtected) {
                             continue
                         }
 
                         // Check for music keyword to bypass noisy directory filtering
-                        val isMusicPath = fullPathStr.contains("music")
+                        val isMusicPath = componentsLower.dropLast(1).any { it.contains("music") }
 
                         // Then apply noisy-directory filtering. Bypass if it contains music
                         val isNoisy =

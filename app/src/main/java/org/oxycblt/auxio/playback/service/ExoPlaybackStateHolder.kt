@@ -238,10 +238,7 @@ class ExoPlaybackStateHolder(
                         // Apply the saved state on the main thread to prevent code expecting
                         // state updates on the main thread from crashing.
                         playbackManager.applySavedState(state, false)
-                        val shouldPlay =
-                            action.play ||
-                                (playbackSettings.autoplayOnLaunch &&
-                                    playbackSettings.alwaysPlayImmediately)
+                        val shouldPlay = shouldPlayImmediately(action.play)
                         if (shouldPlay) {
                             playbackManager.playing(true)
                         }
@@ -821,10 +818,7 @@ class ExoPlaybackStateHolder(
                             return@withContext
                         }
                         pendingLibraryRestoreAfterRawFailure = null
-                        val shouldPlay =
-                            action.play ||
-                                (playbackSettings.autoplayOnLaunch &&
-                                    playbackSettings.alwaysPlayImmediately)
+                        val shouldPlay = shouldPlayImmediately(action.play)
                         startRawFastResume(validation.item, shouldPlay)
                     }
                     is RawFastResumeValidator.Result.Invalid -> {
@@ -1096,6 +1090,11 @@ class ExoPlaybackStateHolder(
         }
 
         return queue
+    }
+
+    private fun shouldPlayImmediately(playActionRequested: Boolean): Boolean {
+        return playActionRequested ||
+            (playbackSettings.autoplayOnLaunch && playbackSettings.alwaysPlayImmediately)
     }
 
     class Factory

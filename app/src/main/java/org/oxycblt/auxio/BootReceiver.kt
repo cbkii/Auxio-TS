@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.headunit.overlay.TopwayOverlayRestoreBridge
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
@@ -97,14 +98,12 @@ class BootReceiver : BroadcastReceiver() {
 
         // If floating controls only is enabled, start the overlay and skip the main activity
         if (playbackSettings.autostartFloatingOnly) {
-            L.d("Launch Floating Controls only is enabled, skipping MainActivity")
-            // The intent to start the overlay service is sent by the boot receiver but we
-            // will just let CarOverlayBootReceiver or explicit service call handle it here.
-            // Since this runs in the main variant, we can delegate to the companion object by
-            // reflection
-            // or if we have access to it directly we can start it. We'll send a broadcast that
-            // CarOverlayBootReceiver listens to, or if we can't we'll just not start MainActivity.
-            return
+            if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
+                L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
+                return
+            } else {
+                L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")
+            }
         }
 
         // Attempt to show the activity UI for head-unit use. Background activity starts may be

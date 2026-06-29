@@ -233,7 +233,7 @@
     <string name="lng_empty_albums">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_artists">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_genres">Source empty or not scanned. Select a path and tap Refresh.</string>
-    <string name="lng_empty_playlists">Source empty or not scanned. Select a path and tap Refresh.</string>
+    <string name="lng_empty_playlists">No playlists yet. Create or import one to see it here.</string>
     <string name="lng_file_picker">Load music from the folders that you select. Slower, but more reliable. Requires the vanilla file manager app to be installed.</string>
     <string name="lng_system_database">Load music that the Android OS automatically detects. Faster, but less reliable. No support for filesystem-dependent features like cover.jpg.</string>
     <string name="lng_direct_fs">Load music directly from specific filesystem paths. Faster and more reliable for head units. Can use root if available.</string>
@@ -426,6 +426,8 @@
     <string name="desc_track_number">Track %d</string>
 
     <string name="desc_play_pause">Play or pause</string>
+    <string name="desc_playback_previous">Previous</string>
+    <string name="desc_playback_next">Next</string>
     <string name="desc_skip_next">Skip to next song</string>
     <string name="desc_skip_prev">Skip to last song</string>
     <string name="desc_change_repeat">Change repeat mode</string>

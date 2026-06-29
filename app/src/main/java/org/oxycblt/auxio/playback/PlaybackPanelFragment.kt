@@ -201,13 +201,19 @@ class PlaybackPanelFragment :
         applyDriverSideLayout(binding)
 
         // Set up actions
-        // TODO: Add better playback button accessibility
-        binding.playbackRepeat.setOnClickListener { playbackModel.toggleRepeatMode() }
-        binding.playbackSkipPrev.setOnClickListener {
-            playbackModel.prev()
-            requireContext().showToast(R.string.msg_playback_previous)
+        binding.playbackRepeat.apply {
+            contentDescription = getString(R.string.desc_change_repeat)
+            setOnClickListener { playbackModel.toggleRepeatMode() }
+        }
+        binding.playbackSkipPrev.apply {
+            contentDescription = getString(R.string.desc_playback_previous)
+            setOnClickListener {
+                playbackModel.prev()
+                requireContext().showToast(R.string.msg_playback_previous)
+            }
         }
         binding.playbackPlayPause.apply {
+            contentDescription = getString(R.string.desc_play_pause)
             @SuppressLint("RestrictedApi")
             setCornerSpringForce(
                 SpringForce().apply {
@@ -217,11 +223,17 @@ class PlaybackPanelFragment :
             )
             setOnClickListener { playbackModel.togglePlaying() }
         }
-        binding.playbackSkipNext.setOnClickListener {
-            playbackModel.next()
-            requireContext().showToast(R.string.msg_playback_next)
+        binding.playbackSkipNext.apply {
+            contentDescription = getString(R.string.desc_playback_next)
+            setOnClickListener {
+                playbackModel.next()
+                requireContext().showToast(R.string.msg_playback_next)
+            }
         }
-        binding.playbackShuffle.setOnClickListener { playbackModel.cycleShuffleScope() }
+        binding.playbackShuffle.apply {
+            contentDescription = getString(R.string.desc_shuffle)
+            setOnClickListener { playbackModel.cycleShuffleScope() }
+        }
         binding.playbackMore?.setOnClickListener {
             val song = playbackModel.song.value
             if (song == null) {
