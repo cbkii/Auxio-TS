@@ -242,10 +242,14 @@ class StartupLibraryPolicyTest {
             assertEquals(emptyList<Boolean>(), harness.scanRequests)
         }
 
-
     @Test
     fun `topway startup suppresses automatic scan on first launch`() = runBlocking {
-        val harness = StartupHarness(priorState = LibraryState.NEVER, revisionKnown = false, isTopwayCompat = true)
+        val harness =
+            StartupHarness(
+                priorState = LibraryState.NEVER,
+                revisionKnown = false,
+                isTopwayCompat = true,
+            )
 
         val decision = harness.run()
 

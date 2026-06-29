@@ -1092,9 +1092,9 @@ class ExoPlaybackStateHolder(
         return queue
     }
 
-
     private fun shouldPlayImmediately(playActionRequested: Boolean): Boolean {
-        return playActionRequested || (playbackSettings.autoplayOnLaunch && playbackSettings.alwaysPlayImmediately)
+        return playActionRequested ||
+            (playbackSettings.autoplayOnLaunch && playbackSettings.alwaysPlayImmediately)
     }
 
     class Factory

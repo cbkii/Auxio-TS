@@ -75,11 +75,12 @@ class BetterShuffleOrder(private val shuffled: IntArray) : ShuffleOrder {
         // Find where in the shuffled array we should insert.
         // If insertionIndex > 0, we insert right after the element at insertionIndex - 1.
         // Otherwise, we insert at the very beginning.
-        val pivot = if (insertionIndex > 0) {
-            indexInShuffled[insertionIndex - 1]
-        } else {
-            -1
-        }
+        val pivot =
+            if (insertionIndex > 0) {
+                indexInShuffled[insertionIndex - 1]
+            } else {
+                -1
+            }
 
         var newIdx = 0
         for (i in shuffled.indices) {

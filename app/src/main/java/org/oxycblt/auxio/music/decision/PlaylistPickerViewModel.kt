@@ -153,7 +153,12 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
         template: String?,
         reason: PlaylistDecision.New.Reason,
     ) {
-        if (_currentPendingNewPlaylist.value != null && _currentPendingNewPlaylist.value?.songs?.map { it.uid } == songUids.toList() && _currentPendingNewPlaylist.value?.reason == reason) return
+        if (
+            _currentPendingNewPlaylist.value != null &&
+                _currentPendingNewPlaylist.value?.songs?.map { it.uid } == songUids.toList() &&
+                _currentPendingNewPlaylist.value?.reason == reason
+        )
+            return
         L.d("Opening ${songUids.size} songs to create a playlist from")
         val library = musicRepository.library ?: return
         val songs =

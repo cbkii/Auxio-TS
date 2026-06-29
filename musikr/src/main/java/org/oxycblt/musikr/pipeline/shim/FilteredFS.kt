@@ -60,12 +60,20 @@ internal class FilteredFS(
                         val componentsLower = file.path.components.components.map { it.lowercase() }
                         val fullPathStr = file.path.toString().lowercase()
 
-                        // Hard-deny protected roots (only if they appear at the root level, not arbitrary children)
-                        val isProtected = componentsLower.withIndex().any { (idx, comp) ->
-                            val isProtectedName = comp in setOf("android", "data", "system", "vendor", "proc", "dev")
-                            val isSafeRuntime = fullPathStr.contains("org.oxycblt.auxio") || fullPathStr.contains("com.tw.music") || fullPathStr.contains("com.tw.media") || fullPathStr.contains("com.dofun.variety")
-                            isProtectedName && idx <= 3 && !isSafeRuntime
-                        }
+                        // Hard-deny protected roots (only if they appear at the root level, not
+                        // arbitrary children)
+                        val isProtected =
+                            componentsLower.withIndex().any { (idx, comp) ->
+                                val isProtectedName =
+                                    comp in
+                                        setOf("android", "data", "system", "vendor", "proc", "dev")
+                                val isSafeRuntime =
+                                    fullPathStr.contains("org.oxycblt.auxio") ||
+                                        fullPathStr.contains("com.tw.music") ||
+                                        fullPathStr.contains("com.tw.media") ||
+                                        fullPathStr.contains("com.dofun.variety")
+                                isProtectedName && idx <= 3 && !isSafeRuntime
+                            }
 
                         if (isProtected) {
                             continue

@@ -77,7 +77,7 @@ class RootStateHolder @Inject constructor() : RootGate {
         return state
     }
 
-// Prevent free-form shell execution. Only accept known-safe deterministic commands.
+    // Prevent free-form shell execution. Only accept known-safe deterministic commands.
     @Synchronized
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
         if (state == State.Unknown || state == State.TimedOut) probeSync()
