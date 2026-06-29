@@ -73,34 +73,43 @@ class BetterShuffleOrder(private val shuffled: IntArray) : ShuffleOrder {
         val newShuffled = IntArray(shuffled.size + insertionCount)
 
         // Find where in the shuffled array we should insert.
-        // If insertionIndex > 0, we insert right after the element at insertionIndex - 1.
-        // Otherwise, we insert at the very beginning.
+        val isAppend = insertionIndex >= shuffled.size
+        val safeInsertionIndex = if (isAppend) shuffled.size else insertionIndex
+
         val pivot =
-            if (insertionIndex > 0) {
-                indexInShuffled[insertionIndex - 1]
+            if (isAppend) {
+                // If it's an append, we insert at the very end of the shuffled array.
+                shuffled.size - 1
+            } else if (safeInsertionIndex > 0) {
+                indexInShuffled[safeInsertionIndex - 1]
             } else {
                 -1
             }
 
         var newIdx = 0
         for (i in shuffled.indices) {
-            if (i == pivot + 1) {
-                // Insert the new elements
-                for (j in 0 until insertionCount) {
-                    newShuffled[newIdx++] = insertionIndex + j
-                }
-            }
             var currentIndex = shuffled[i]
-            if (currentIndex >= insertionIndex) {
+            if (currentIndex >= safeInsertionIndex) {
                 currentIndex += insertionCount
             }
             newShuffled[newIdx++] = currentIndex
+
+            if (i == pivot) {
+                // Insert the new elements directly after the pivot
+                for (j in 0 until insertionCount) {
+                    newShuffled[newIdx++] = safeInsertionIndex + j
+                }
+            }
         }
 
-        // If pivot was the last element, insert at the end
-        if (pivot == shuffled.size - 1) {
+        // If pivot was -1, insert at the beginning before any elements
+        if (pivot == -1) {
+            // Need to shift everything up by insertionCount and put them at the beginning
+            for (i in shuffled.indices.reversed()) {
+                newShuffled[i + insertionCount] = newShuffled[i]
+            }
             for (j in 0 until insertionCount) {
-                newShuffled[newIdx++] = insertionIndex + j
+                newShuffled[j] = safeInsertionIndex + j
             }
         }
 

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * PlaybackViewModelTest.kt is part of Auxio.
+ * TopwayOverlayRestoreBridge.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,10 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.oxycblt.auxio.playback
+package org.oxycblt.auxio.headunit.overlay
 
-import org.junit.Test
+import android.content.Context
+import android.content.Intent
+import org.oxycblt.auxio.BuildConfig
 
-class PlaybackViewModelTest {
-    @Test fun `test dummy`() {}
+object TopwayOverlayRestoreBridge {
+    fun requestOverlayRestore(context: Context): Boolean {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return false
+        val overlayIntent = Intent("org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY")
+        overlayIntent.setPackage(context.packageName)
+        context.sendBroadcast(overlayIntent)
+        return true
+    }
 }

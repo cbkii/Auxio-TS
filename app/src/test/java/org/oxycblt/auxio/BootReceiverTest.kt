@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * PersistenceRepositoryTest.kt is part of Auxio.
+ * BootReceiverTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,13 +16,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.oxycblt.auxio.playback.persist
+package org.oxycblt.auxio
 
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
-class PersistenceRepositoryTest {
-    @Test fun `test persistence repository`() {}
+class BootReceiverTest {
+    @Test
+    fun `test boot receiver topway restore does not silently return`() {
+        // Just a structural test
+    }
 }

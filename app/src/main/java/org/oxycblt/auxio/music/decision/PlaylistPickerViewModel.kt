@@ -156,7 +156,8 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
         if (
             _currentPendingNewPlaylist.value != null &&
                 _currentPendingNewPlaylist.value?.songs?.map { it.uid } == songUids.toList() &&
-                _currentPendingNewPlaylist.value?.reason == reason
+                _currentPendingNewPlaylist.value?.reason == reason &&
+                _currentPendingNewPlaylist.value?.template == template
         )
             return
         L.d("Opening ${songUids.size} songs to create a playlist from")
@@ -200,7 +201,14 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
         template: String?,
         reason: PlaylistDecision.Rename.Reason,
     ) {
-        if (_currentPendingRenamePlaylist.value?.playlist?.uid == playlistUid) return
+        if (
+            _currentPendingRenamePlaylist.value?.playlist?.uid == playlistUid &&
+                _currentPendingRenamePlaylist.value?.applySongs?.map { it.uid } ==
+                    applySongUids.toList() &&
+                _currentPendingRenamePlaylist.value?.template == template &&
+                _currentPendingRenamePlaylist.value?.reason == reason
+        )
+            return
         L.d("Opening playlist $playlistUid to rename")
         val playlist = musicRepository.library?.findPlaylist(playlistUid)
         val applySongs = musicRepository.library?.let { applySongUids.mapNotNull(it::findSong) }

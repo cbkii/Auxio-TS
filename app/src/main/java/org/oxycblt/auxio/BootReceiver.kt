@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.headunit.overlay.TopwayOverlayRestoreBridge
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
@@ -97,11 +98,8 @@ class BootReceiver : BroadcastReceiver() {
 
         // If floating controls only is enabled, start the overlay and skip the main activity
         if (playbackSettings.autostartFloatingOnly) {
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
                 L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
-                val overlayIntent = Intent("org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY")
-                overlayIntent.setPackage(context.packageName)
-                context.sendBroadcast(overlayIntent)
                 return
             } else {
                 L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")

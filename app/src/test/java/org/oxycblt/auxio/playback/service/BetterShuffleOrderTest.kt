@@ -28,13 +28,13 @@ class BetterShuffleOrderTest {
         val order = BetterShuffleOrder(intArrayOf(0, 2, 1))
         val newOrder = order.cloneAndInsert(1, 2)
         assertEquals(5, newOrder.length)
-        val indices = mutableSetOf<Int>()
+        val indices = mutableListOf<Int>()
         var current = newOrder.firstIndex
         while (current != C.INDEX_UNSET) {
             indices.add(current)
             current = newOrder.getNextIndex(current)
         }
-        assertEquals(setOf(0, 1, 2, 3, 4), indices)
+        assertEquals(listOf(0, 1, 2, 4, 3), indices)
     }
 
     @Test
@@ -42,12 +42,26 @@ class BetterShuffleOrderTest {
         val order = BetterShuffleOrder(intArrayOf(0, 2, 1))
         val newOrder = order.cloneAndRemove(1, 2) // remove index 1
         assertEquals(2, newOrder.length)
-        val indices = mutableSetOf<Int>()
+        val indices = mutableListOf<Int>()
         var current = newOrder.firstIndex
         while (current != C.INDEX_UNSET) {
             indices.add(current)
             current = newOrder.getNextIndex(current)
         }
-        assertEquals(setOf(0, 1), indices)
+        assertEquals(listOf(0, 1), indices)
+    }
+
+    @Test
+    fun `test cloneAndInsert beyond tail acts as append`() {
+        val order = BetterShuffleOrder(intArrayOf(0, 2, 1))
+        val newOrder = order.cloneAndInsert(3, 2)
+        assertEquals(5, newOrder.length)
+        val indices = mutableListOf<Int>()
+        var current = newOrder.firstIndex
+        while (current != C.INDEX_UNSET) {
+            indices.add(current)
+            current = newOrder.getNextIndex(current)
+        }
+        assertEquals(listOf(0, 2, 1, 3, 4), indices)
     }
 }
