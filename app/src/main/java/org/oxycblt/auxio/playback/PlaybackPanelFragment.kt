@@ -206,7 +206,7 @@ class PlaybackPanelFragment :
             setOnClickListener { playbackModel.toggleRepeatMode() }
         }
         binding.playbackSkipPrev.apply {
-            contentDescription = getString(R.string.msg_playback_previous)
+            contentDescription = getString(R.string.desc_playback_previous)
             setOnClickListener {
                 playbackModel.prev()
                 requireContext().showToast(R.string.msg_playback_previous)
@@ -224,7 +224,7 @@ class PlaybackPanelFragment :
             setOnClickListener { playbackModel.togglePlaying() }
         }
         binding.playbackSkipNext.apply {
-            contentDescription = getString(R.string.msg_playback_next)
+            contentDescription = getString(R.string.desc_playback_next)
             setOnClickListener {
                 playbackModel.next()
                 requireContext().showToast(R.string.msg_playback_next)

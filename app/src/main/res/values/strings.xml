@@ -426,6 +426,8 @@
     <string name="desc_track_number">Track %d</string>
 
     <string name="desc_play_pause">Play or pause</string>
+    <string name="desc_playback_previous">Previous</string>
+    <string name="desc_playback_next">Next</string>
     <string name="desc_skip_next">Skip to next song</string>
     <string name="desc_skip_prev">Skip to last song</string>
     <string name="desc_change_repeat">Change repeat mode</string>

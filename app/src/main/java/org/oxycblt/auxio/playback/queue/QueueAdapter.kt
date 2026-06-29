@@ -91,7 +91,13 @@ class QueueAdapter(private val listener: EditClickListListener<Song>) :
         val lastIndex = currentIndex
         currentIndex = index
 
-        if (currentIndex < lastIndex) {
+        if (currentIndex < 0 && lastIndex < 0) {
+            // Both invalid, do nothing except update isPlaying
+        } else if (lastIndex < 0 && currentIndex >= 0) {
+            notifyItemChanged(currentIndex, PAYLOAD_UPDATE_POSITION)
+        } else if (currentIndex < 0 && lastIndex >= 0) {
+            notifyItemChanged(lastIndex, PAYLOAD_UPDATE_POSITION)
+        } else if (currentIndex < lastIndex) {
             L.d("Moved backwards, must update items above last index")
             notifyItemRangeChanged(
                 currentIndex,
