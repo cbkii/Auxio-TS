@@ -71,19 +71,23 @@ class BetterShuffleOrder(private val shuffled: IntArray) : ShuffleOrder {
         }
 
         val newShuffled = IntArray(shuffled.size + insertionCount)
-        val safeInsertionIndex = if (insertionIndex >= shuffled.size) shuffled.size else insertionIndex
+        val safeInsertionIndex =
+            if (insertionIndex >= shuffled.size) shuffled.size else insertionIndex
 
-        val insertPoint = if (safeInsertionIndex == 0) {
-            0
-        } else if (safeInsertionIndex == shuffled.size) {
-            shuffled.size
-        } else {
-            indexInShuffled[safeInsertionIndex - 1] + 1
-        }
+        val insertPoint =
+            if (safeInsertionIndex == 0) {
+                0
+            } else if (safeInsertionIndex == shuffled.size) {
+                shuffled.size
+            } else {
+                indexInShuffled[safeInsertionIndex - 1] + 1
+            }
 
         for (i in 0 until insertPoint) {
             val unshuffledIdx = shuffled[i]
-            newShuffled[i] = if (unshuffledIdx >= safeInsertionIndex) unshuffledIdx + insertionCount else unshuffledIdx
+            newShuffled[i] =
+                if (unshuffledIdx >= safeInsertionIndex) unshuffledIdx + insertionCount
+                else unshuffledIdx
         }
 
         for (i in 0 until insertionCount) {
@@ -92,7 +96,9 @@ class BetterShuffleOrder(private val shuffled: IntArray) : ShuffleOrder {
 
         for (i in insertPoint until shuffled.size) {
             val unshuffledIdx = shuffled[i]
-            newShuffled[i + insertionCount] = if (unshuffledIdx >= safeInsertionIndex) unshuffledIdx + insertionCount else unshuffledIdx
+            newShuffled[i + insertionCount] =
+                if (unshuffledIdx >= safeInsertionIndex) unshuffledIdx + insertionCount
+                else unshuffledIdx
         }
 
         return BetterShuffleOrder(newShuffled)
