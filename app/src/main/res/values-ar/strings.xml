@@ -209,7 +209,6 @@
     <string name="set_separators_slash">شرطة مائلة (/)</string>
     <string name="set_cover_mode">أغطية الألبومات</string>
     <string name="set_cover_mode_balanced">سريع</string>
-    <string name="set_cover_mode_high_quality">عالية الجودة</string>
     <string name="set_square_covers">فرض أغطية ألبومات مربعة</string>
     <string name="set_square_covers_desc">قص جميع أغطية الألبومات إلى نسبة جانب 1:1</string>
     <string name="set_audio">صوت</string>
@@ -311,7 +310,6 @@
     <string name="lbl_report">إبلاغ</string>
     <string name="lng_tasker_start">يبدأ Auxio باستخدام الحالة المحفوظة مسبقًا. إذا لم تتوفر حالة محفوظة، فسيتم خلط جميع الأغاني. سيبدأ التشغيل على الفور. \n\nتحذير: احرص على التحكم في هذه الخدمة، إذا قمت بإغلاقها ثم حاول استخدامها مرة أخرى، فمن المحتمل أن ينهار التطبيق.</string>
     <string name="lbl_windows_paths">استخدم مسارات متوافقة مع Windows</string>
-    <string name="set_cover_mode_save_space">وفر المساحة</string>
     <plurals name="fmt_album_count">
         <item quantity="zero">لا ألبوم</item>
         <item quantity="one">ألبوم</item>

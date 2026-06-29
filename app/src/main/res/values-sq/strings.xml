@@ -197,7 +197,6 @@
     <string name="set_intelligent_sorting_desc">Renditni saktë emrat që fillojnë me numra ose fjalë si \"the\" (funksionon më së miri me muzikën në anglisht).</string>
     <string name="set_cover_mode">Kopertinat e albumeve</string>
     <string name="set_hide_collaborators_desc">Shfaq vetëm artistë që vlerësohen drejtpërdrejt në një album (funksionon më mirë në bibliotekat e etiketuara mirë)</string>
-    <string name="set_cover_mode_high_quality">Cilësi e lartë</string>
     <string name="set_replay_gain">Normalizimi i volumit</string>
     <string name="set_remember_pause_desc">Mbajeni duke luajtur/ndërprerë kur kaloni ose redaktoni radhën</string>
     <string name="set_replay_gain_mode">Strategjia ReplayGain</string>
@@ -308,7 +307,6 @@
     <string name="lng_empty_genres">Zhanret tuaja do të shfaqen këtu.</string>
     <string name="cdc_alac">Apple Lossless Audio Codec (ALAC)</string>
     <string name="cdc_unknown">E panjohur</string>
-    <string name="set_cover_mode_save_space">Kurseni hapësirë</string>
     <string name="cnt_mp4">MPEG-4 që përmban %s</string>
     <string name="lng_play_next">Kënga do të luhet më pas</string>
     <string name="lng_file_picker">Ngarko muzikë nga dosjet që zgjidhni. Më ngadalë, por më e besueshme. Kërkon që aplikacioni standard i menaxhimit të skedarëve të jetë i instaluar.</string>

@@ -207,7 +207,6 @@
     <string name="set_cover_mode">Capas de álbuns</string>
     <string name="set_cover_mode_off">Desativado</string>
     <string name="set_cover_mode_balanced">Equilibrado</string>
-    <string name="set_cover_mode_high_quality">Alta qualidade</string>
     <string name="lbl_mixes">Mixagens de DJ</string>
     <string name="lbl_mix">Mixagem de DJ</string>
     <plurals name="fmt_artist_count">
@@ -312,7 +311,6 @@
     <string name="lng_empty_artists">Os seus artistas aparecerão aqui.</string>
     <string name="lng_empty_playlists">As suas playlists aparecerão aqui.</string>
     <string name="lng_empty_genres">Os seus gêneros aparecerão aqui.</string>
-    <string name="set_cover_mode_save_space">Economizar espaço</string>
     <string name="set_cover_mode_as_is">Qualidade original</string>
     <string name="set_with_hidden_desc">Incluir arquivos de áudio que estão ocultos (ex: .cache)</string>
     <string name="set_with_hidden">Incluir arquivos ocultos</string>

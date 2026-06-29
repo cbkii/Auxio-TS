@@ -209,7 +209,6 @@
     <string name="lbl_compilation_remix">Compilation remix</string>
     <string name="lbl_mixes">Mix DJ</string>
     <string name="lbl_mix">Mix DJ</string>
-    <string name="set_cover_mode_high_quality">Alta qualità</string>
     <string name="set_separators_comma">Virgola (,)</string>
     <string name="set_separators_semicolon">Punto e virgola (;)</string>
     <string name="set_separators_plus">Più (+)</string>
@@ -310,7 +309,6 @@
     <string name="lng_empty_albums">I tuoi album appariranno qui.</string>
     <string name="lng_empty_playlists">Le tue playlist appariranno qui.</string>
     <string name="lbl_more">Espandi</string>
-    <string name="set_cover_mode_save_space">Bassa qualità</string>
     <string name="cnt_mp4">MPEG-4 contenente %s</string>
     <string name="cdc_alac">Apple Lossless Audio Codec (ALAC)</string>
     <string name="cdc_unknown">Sconosciuto</string>

@@ -160,7 +160,6 @@
     <string name="set_images">Bilete</string>
     <string name="set_cover_mode">Albumomslag</string>
     <string name="set_cover_mode_off">Av</string>
-    <string name="set_cover_mode_high_quality">Høg kvalitet</string>
     <string name="set_cover_mode_balanced">Raskt</string>
     <string name="set_square_covers">Påtvinga firkanta albumomslag</string>
     <string name="set_square_covers_desc">Avskjer alle albumomslag til 1:1-sidehøve</string>
@@ -314,7 +313,6 @@
     <string name="lng_exclude_folders">Musikk innanfor dei valde mappene skal ignorerast.</string>
     <string name="set_with_hidden">Tak med løynde filer</string>
     <string name="set_with_hidden_desc">Tak med ljodfiler som er løynde (t.d. .cache)</string>
-    <string name="set_cover_mode_save_space">Spar lagringsplass</string>
     <string name="set_cover_mode_as_is">Ubrigdt</string>
     <string name="set_load_from">Lad inn frå</string>
     <string name="set_file_picker">Filveljar</string>

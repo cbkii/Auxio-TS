@@ -196,9 +196,7 @@
     <string name="set_images">Şəkillər</string>
     <string name="set_cover_mode">Albom qapağı</string>
     <string name="set_cover_mode_off">Söndür</string>
-    <string name="set_cover_mode_save_space">Yaddaş saxla</string>
     <string name="set_cover_mode_balanced">Balanslaşdırılmış</string>
-    <string name="set_cover_mode_high_quality">Yüksək keyfiyyətli</string>
     <string name="set_cover_mode_as_is">Olduğu kimi</string>
     <string name="set_square_covers">Albom qapaqlarını kvadrata məcbur et</string>
     <string name="set_square_covers_desc">Bütün albom qapaqlarını 1:1 aspekt nisbətinə kəs</string>

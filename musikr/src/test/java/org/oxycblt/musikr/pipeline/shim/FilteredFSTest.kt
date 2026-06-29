@@ -56,6 +56,35 @@ class FilteredFSTest {
     }
 
     @Test
+    fun exploreAllowsNoisyDirectoryIfPathContainsMusicKeyword() = runTest {
+        val fs =
+            FilteredFS(
+                EmittingFS(
+                    this,
+                    file(
+                        "Android/data/org.oxycblt.auxio/files/song.mp3"
+                    ), // true noise (Android/data)
+                    file(
+                        "Download/_Music/song.mp3"
+                    ), // has noise (Download) but should pass because of _Music
+                    file(
+                        "Download/music/song2.mp3"
+                    ), // has noise (Download) but should pass because of music
+                ),
+                this,
+                setOf("Download", "Android"),
+            )
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Download/_Music/song.mp3", output.receive().path.components.toString())
+        assertEquals("Download/music/song2.mp3", output.receive().path.components.toString())
+        assertTrue(output.receiveCatching().isClosed)
+    }
+
+    @Test
     fun exploreDropsNoisyFilesByPathComponent() = runTest {
         val fs =
             FilteredFS(

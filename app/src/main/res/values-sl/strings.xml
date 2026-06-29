@@ -118,7 +118,6 @@
     <string name="err_index_failed">Nalaganje glasbe ni uspelo</string>
     <string name="lbl_album">Album</string>
     <string name="set_play_in_list_with">Ko se predvaja iz knjižnice</string>
-    <string name="set_cover_mode_high_quality">Visoka kvaliteta</string>
     <string name="set_pre_amp_without">Prilagoditev brez oznak</string>
     <string name="lbl_playlist_add">Dodaj na seznam predvajanja</string>
     <string name="lbl_date_added">Datum vnosa</string>

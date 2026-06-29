@@ -141,7 +141,6 @@
     <string name="set_separators_desc">התאמת תווים המציינים ערכי תגית מרובים</string>
     <string name="set_separators_slash">קו נטוי (/)</string>
     <string name="set_separators_warning">אזהרה: השימוש בהגדרה זו עלול לגרום לחלק מהתגיות להיות מפורשות באופן שגוי כבעלות מספר ערכים. ניתן לפתור זאת על ידי הכנסת קו נטוי אחורי (\\) לפני תווים מפרידים לא רצויים.</string>
-    <string name="set_cover_mode_high_quality">איכות גבוהה</string>
     <string name="set_intelligent_sorting_desc">התעלמות ממספרים או מילים כמו \"The\" (\"ה׳ היידוע\") בעת סידור על פי שם (עובד באופן מיטבי עם מוזיקה בשפה האנגלית)</string>
     <string name="set_images">תמונות</string>
     <string name="set_audio_desc">הגדרת הצליל והניגון</string>
@@ -315,5 +314,4 @@
     <string name="lng_empty_genres">הז\'אנרים שלך יופיעו כאן.</string>
     <string name="set_with_hidden_desc">כלול קובצי אודיו מוסתרים (לדוגמה .cache)</string>
     <string name="set_cover_mode_as_is">כפי שהוא</string>
-    <string name="set_cover_mode_save_space">חיסכון מקום</string>
 </resources>

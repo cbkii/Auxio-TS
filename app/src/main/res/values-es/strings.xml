@@ -206,7 +206,6 @@
     <string name="desc_exit">Detener la reproducción</string>
     <string name="set_exclude_non_music_desc">Ignorar archivos de audio que no sean música, como podcasts</string>
     <string name="set_separators_warning">Advertencia: El uso de esta configuración puede dar lugar a que algunas etiquetas se interpreten incorrectamente como si tuvieran varios valores. Puede resolverlo anteponiendo a los caracteres separadores no deseados una barra invertida (\\).</string>
-    <string name="set_cover_mode_high_quality">Alta calidad</string>
     <string name="set_cover_mode_balanced">Equilibrado</string>
     <string name="set_bar_action">Acción personalizada de la barra de reproducción</string>
     <string name="set_action_mode_next">Saltar al siguiente</string>
@@ -312,7 +311,6 @@
     <string name="lng_empty_genres">Los géneros aparecerán aquí.</string>
     <string name="lng_empty_playlists">Sus listas de reproducción aparecerán aquí.</string>
     <string name="lng_empty_songs">Sus canciones aparecerán aquí.</string>
-    <string name="set_cover_mode_save_space">Ahorra espacio</string>
     <string name="set_cover_mode_as_is">Original</string>
     <string name="set_with_hidden_desc">Incluir ficheros de audio ocultos (ej. .cache)</string>
     <string name="set_with_hidden">Incluir ficheros ocultos</string>

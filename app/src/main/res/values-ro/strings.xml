@@ -166,7 +166,6 @@
     <string name="set_intelligent_sorting_desc">Sortează corect numele care încep cu numere sau cuvinte precum \"The\" (funcționează cel mai bine pentru muzica în limba engleză)</string>
     <string name="set_square_covers">Forțează coperți de album pătrate</string>
     <string name="set_cover_mode_balanced">Rapid</string>
-    <string name="set_cover_mode_high_quality">Calitate mare</string>
     <string name="set_separators_semicolon">Punct și virgulă (;)</string>
     <string name="lbl_edit">Editează</string>
     <string name="set_exclude_non_music">Exclude non-muzică</string>

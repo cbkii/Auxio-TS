@@ -91,7 +91,6 @@
     <string name="lbl_save">Захаваць</string>
     <string name="lbl_version">Версія</string>
     <string name="set_black_mode_desc">Выкарыстоўвайце чыста чорную цёмную тэму</string>
-    <string name="set_cover_mode_high_quality">Падвышанай якасці (павольная загрузка)</string>
     <string name="set_replay_gain_mode_dynamic">Аддайце перавагу альбому, калі ён гучыць</string>
     <string name="set_pre_amp_without">Карэкціроўка без тэгаў</string>
     <string name="set_locations">Тэчкі з музыкай</string>
@@ -314,6 +313,5 @@
     <string name="lng_empty_songs">Вашыя песні будуць адлюстроўвацца тут.</string>
     <string name="lng_empty_artists">Тут з\'явяцца вашыя выканаўцы.</string>
     <string name="lng_empty_playlists">Тут будуць адлюстроўвацца вашыя плэйлісты.</string>
-    <string name="set_cover_mode_save_space">Эканомія месца</string>
     <string name="lbl_github">Паведаміць аб праблеме на GitHub</string>
 </resources>

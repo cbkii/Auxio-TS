@@ -12,9 +12,23 @@
 
         <SwitchPreferenceCompat
             app:defaultValue="false"
+            app:key="@string/set_key_autostart_floating_only"
+            app:summary="@string/set_autostart_floating_only_desc"
+            app:title="@string/set_autostart_floating_only"
+            app:dependency="@string/set_key_autostart_on_boot" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
             app:key="@string/set_key_autoplay_on_launch"
             app:summary="@string/set_autoplay_on_launch_desc"
             app:title="@string/set_autoplay_on_launch" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="@string/set_key_always_play_immediately"
+            app:summary="@string/set_always_play_immediately_desc"
+            app:title="@string/set_always_play_immediately"
+            app:dependency="@string/set_key_autoplay_on_launch" />
 
         <SwitchPreferenceCompat
             app:key="@string/set_key_headset_autoplay"
