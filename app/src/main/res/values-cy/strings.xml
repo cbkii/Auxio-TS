@@ -78,7 +78,6 @@
     <string name="set_cover_mode">Cloriau albwm</string>
     <string name="set_cover_mode_off">I ffwrdd</string>
     <string name="set_cover_mode_balanced">Cytbwys</string>
-    <string name="set_cover_mode_high_quality">Ansawdd uwch</string>
     <string name="set_square_covers">Gorfodi cloriau albwm sgwâr</string>
     <string name="set_audio">Sain</string>
     <string name="set_replay_gain_mode_off">I ffwrdd</string>
@@ -326,7 +325,6 @@
     <string name="lng_empty_genres">Bydd eich genres yn ymddangos yma.</string>
     <string name="set_cover_mode_as_is">Paid â newid</string>
     <string name="set_with_hidden_desc">Cynnwys ffeiliau sain cudd (e.e. .cache)</string>
-    <string name="set_cover_mode_save_space">Cadw lle storfa</string>
     <string name="set_fs_cache">Defnyddio cof dros dro y system</string>
     <string name="set_fs_cache_desc">Yn gwella amseroedd llwytho, ond gall atal cerddoriaeth newydd rhag cael ei hychwanegu</string>
     <string name="lng_play_next">Bydd y cân yn chwarae nesaf</string>

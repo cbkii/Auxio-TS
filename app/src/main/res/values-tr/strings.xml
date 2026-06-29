@@ -192,7 +192,6 @@
     <string name="lbl_remix_group">Remiksler</string>
     <string name="lbl_soundtracks">Film Müzikleri</string>
     <string name="lbl_soundtrack">Film Müziği</string>
-    <string name="set_cover_mode_high_quality">Yüksek kalite</string>
     <string name="set_hide_collaborators">Katılımcaları gizleyin</string>
     <string name="set_hide_collaborators_desc">Yalnızca bir albümde doğrudan adı geçen sanatçıları gösterin (iyi etiketlenmiş kütüphanelerde en iyi sonucu verir)</string>
     <string name="set_cover_mode">Albüm kapakları</string>
@@ -309,7 +308,6 @@
     <string name="lbl_start_playback">Çalmayı başlat</string>
     <string name="lbl_windows_paths">Windows uyumlu yollar kullan</string>
     <string name="lng_tasker_start">Auxio\'yu önceden kaydedilen durumla başlatır. Eğer kayıtlı bir durum yoksa bütün şarkılar hemen karışık olarak çalmaya başlanacak.\n\nUYARI: Bu servisi kullanırken dikkatli olun. Kapatırsanız ve sonra tekrar kullanmaya çalışırsanız muhtemelen uygulamayı çökertirsiniz.</string>
-    <string name="set_cover_mode_save_space">Az alan kullan</string>
     <string name="cnt_mp4">MPEG-4 %s içeriyor</string>
     <string name="cdc_alac">Apple Kayıpsız Ses Kodeği (ALAC)</string>
     <string name="lbl_feedback">Geri bildirim</string>

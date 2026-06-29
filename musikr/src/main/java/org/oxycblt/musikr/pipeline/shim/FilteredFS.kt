@@ -57,15 +57,33 @@ internal class FilteredFS(
             scope.tryAsync(Dispatchers.Default) {
                 try {
                     for (file in delegateChannel) {
-                        val isNoisy = file.path.components.components.any { it in noisyDirs }
+                        val fullPathStr = file.path.toString().lowercase()
+
+                        // Hard-deny protected roots/segments first
+                        if (
+                            file.path.components.components.any {
+                                it.lowercase() in
+                                    setOf("android", "data", "system", "vendor", "proc", "dev")
+                            }
+                        ) {
+                            continue
+                        }
+
+                        // Check for music keyword to bypass noisy directory filtering
+                        val isMusicPath = fullPathStr.contains("music")
+
+                        // Then apply noisy-directory filtering. Bypass if it contains music
+                        val isNoisy =
+                            !isMusicPath && file.path.components.components.any { it in noisyDirs }
                         if (isNoisy) continue
+
                         // If pathKeywords are configured, require the full path to contain
                         // at least one keyword (case-insensitive). This prevents scanning
                         // huge irrelevant directory trees on TS18.
                         if (lowercaseKeywords.isNotEmpty()) {
-                            val fullPath = file.path.toString().lowercase()
-                            if (lowercaseKeywords.none { fullPath.contains(it) }) continue
+                            if (lowercaseKeywords.none { fullPathStr.contains(it) }) continue
                         }
+
                         files.send(file)
                     }
                     files.close()

@@ -232,7 +232,6 @@
     <string name="fmt_lib_album_count">Inlästa album: %d</string>
     <string name="fmt_lib_genre_count">Inlästa genrer: %d</string>
     <string name="set_play_song_by_itself">Spela endast vald låt</string>
-    <string name="set_cover_mode_high_quality">Hög kvalitet</string>
     <string name="set_square_covers">Tvinga fyrkantiga skivomslag</string>
     <string name="set_square_covers_desc">Beskär alla albumomslag till ett 1:1 sidförhållande</string>
     <string name="set_rewind_prev_desc">Spola tillbaka innan att hoppa till föregående låt</string>
@@ -307,7 +306,6 @@
     <string name="lng_empty_genres">Dina genrer kommer visas här.</string>
     <string name="cdc_alac">Apples förlustfria ljudkodek (ALAC)</string>
     <string name="lbl_start_playback">Påbörja uppspelning</string>
-    <string name="set_cover_mode_save_space">Spara utrymme</string>
     <string name="cnt_mp4">MPEG-4 innehållande %s</string>
     <string name="lng_tasker_start">Påbörjar Auxio med det tidigare sparade tillståndet. Om inget sparad tillstånd är tillgängligt kommer alla låtar blandas. Uppspelning börjar omedelbart. \n\nOBS: Var försiktig vid användning av denna tjänst, om du stänger ner den och sedan försöker använda den igen kommer du troligen få appen att krascha.</string>
 </resources>

@@ -82,7 +82,6 @@
     <string name="set_images">Bilder</string>
     <string name="set_cover_mode">Albumomslag</string>
     <string name="set_cover_mode_balanced">Raskt</string>
-    <string name="set_cover_mode_high_quality">Høy kvalitet</string>
     <string name="set_headset_autoplay_desc">Alltid start avspilling når hodetelefoner kobles til (virker kanskje ikke på alle enheter)</string>
     <string name="set_audio_desc">Sett opp lyd- og avspillingsadferd</string>
     <string name="set_audio">Lyd</string>

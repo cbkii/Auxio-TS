@@ -175,7 +175,6 @@
     <string name="set_images">Pildid</string>
     <string name="set_cover_mode">Kaanepildid</string>
     <string name="set_cover_mode_off">Pole kasutusel</string>
-    <string name="set_cover_mode_high_quality">Kuva kõrgekvaliteedilisena</string>
     <string name="set_cover_mode_balanced">Kuva kiirelt</string>
     <string name="set_square_covers">Näita kaanepildid teravate nurkadega</string>
     <string name="set_audio">Heli</string>
@@ -304,7 +303,6 @@
     <string name="cnt_mp4">MPEG-4 %s koodekiga</string>
     <string name="cdc_alac">Apple Lossless Audio Codec (ALAC)</string>
     <string name="cdc_unknown">Teadmata</string>
-    <string name="set_cover_mode_save_space">Säästa ruumi</string>
     <string name="lng_empty_songs">Sinu muusikapalad saavad olema nähtavad siin.</string>
     <string name="lng_empty_artists">Sinu esitajad saavad olema nähtavad siin.</string>
     <string name="lng_empty_genres">Sinu žanrid saavad olema nähtavad siin.</string>

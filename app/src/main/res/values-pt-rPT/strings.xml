@@ -88,7 +88,6 @@
     <string name="desc_no_cover">Capa do álbum</string>
     <string name="lbl_date">Data</string>
     <string name="set_cover_mode_balanced">Rápido</string>
-    <string name="set_cover_mode_high_quality">Qualidade alta</string>
     <string name="set_bar_action">Personalizar a barra de reprodução</string>
     <string name="set_action_mode_repeat">Modo de repetição</string>
     <string name="set_play_song_from_artist">Reproduzir do artista</string>
@@ -310,7 +309,6 @@
     <string name="lbl_feedback">Opinião</string>
     <string name="set_with_hidden">Ignorar ficheiros ocultos</string>
     <string name="cdc_alac">Apple Lossless Audio Codec (ALAC)</string>
-    <string name="set_cover_mode_save_space">Gravar espaço</string>
     <string name="cnt_mp4">MPEG-4 contendo %s</string>
     <string name="cdc_unknown">Desconhecido</string>
     <string name="lbl_more">Mais</string>

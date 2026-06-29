@@ -372,6 +372,7 @@ constructor(
                     revisionKnown = musicSettings.revision != null,
                     priorState = musicSettings.libraryState,
                     lastScanFailed = { musicSettings.lastScanFailed },
+                    isTopwayCompat = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     loadCachedLibrary = { loadCachedLibrary() },
                     cachedSongCount = { it.songs.size },
                     emitCachedLibrary = {

@@ -149,7 +149,6 @@
     <string name="set_music">音樂</string>
     <string name="set_personalize_desc">自訂介面控制與動作</string>
     <string name="set_lib_tabs_desc">變更媒體頁面顯示與排序</string>
-    <string name="set_cover_mode_save_space">節省空間</string>
     <string name="set_remember_pause">記憶暫停</string>
     <string name="set_lib_tabs">管理分頁</string>
     <string name="set_ui_desc">變更主題與色彩</string>
@@ -267,7 +266,6 @@
     <string name="set_rewind_prev">返回前倒帶</string>
     <string name="set_repeat_pause">重播暫停</string>
     <string name="set_cover_mode_balanced">平衡</string>
-    <string name="set_cover_mode_high_quality">高畫質</string>
     <string name="desc_shuffle">啟用 / 停用隨機播放</string>
     <string name="def_date">無日期</string>
     <string name="desc_selection_image">選取影像</string>

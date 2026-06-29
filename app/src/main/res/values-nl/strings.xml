@@ -213,7 +213,6 @@
     <string name="desc_queue_bar">Open de wachtrij</string>
     <string name="fmt_deletion_info">%s verwijderen? Dit kan niet ongedaan worden gemaakt.</string>
     <string name="set_cover_mode_off">Uit</string>
-    <string name="set_cover_mode_high_quality">Hoge kwaliteit</string>
     <string name="lbl_genre">Genre</string>
     <string name="set_separators_and">Ampersand (&amp;)</string>
     <string name="lbl_edit">Bewerk</string>
@@ -318,7 +317,6 @@
     <string name="lng_empty_genres">Je genres zullen hier worden weergegeven.</string>
     <string name="def_album">Onbekend album</string>
     <string name="cnt_mp4">MPEG-4 bevat %s</string>
-    <string name="set_cover_mode_save_space">Ruimte besparen</string>
     <string name="lbl_feedback">Feedback</string>
     <string name="lbl_start_playback">Afspelen</string>
     <string name="set_with_hidden_desc">Inclusief audiobestanden die verborgen zijn (excl. .cache)</string>

@@ -293,8 +293,6 @@
     <string name="err_import_failed">لا يمكن استيراد قائمة التشغيل من الملف</string>
     <string name="def_disc">لا يوجد قرص</string>
     <string name="def_track">لا يوجد مسار</string>
-    <string name="set_cover_mode_high_quality">جودة عالية</string>
-    <string name="set_cover_mode_save_space">توفير مساحه</string>
     <string name="set_cover_mode_balanced">متوازن</string>
     <string name="set_locations">مجلد موسيقى</string>
     <string name="set_remember_pause_desc">استمر بالتشغيل/الايقاف عند تخطي او تعديل الطابور</string>

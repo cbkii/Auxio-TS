@@ -156,7 +156,6 @@
     <string name="set_content_desc">Contrôler le chargement de la musique et des images</string>
     <string name="set_music">Musique</string>
     <string name="set_images">Images</string>
-    <string name="set_cover_mode_high_quality">Haute qualité</string>
     <string name="set_separators_desc">Configurer les caractères qui indiquent plusieurs valeurs de balise</string>
     <string name="set_cover_mode">Pochettes d\'albums</string>
     <string name="set_hide_collaborators">Masquer les collaborateurs</string>
@@ -312,7 +311,6 @@
     <string name="lng_empty_albums">Vos albums s\'afficheront ici.</string>
     <string name="lng_empty_artists">Vos artistes s\'afficheront ici.</string>
     <string name="set_with_hidden">Inclure les fichiers cachés</string>
-    <string name="set_cover_mode_save_space">Économie d\'espace</string>
     <string name="def_album">Album inconnu</string>
     <string name="cdc_alac">Codec audio sans perte Apple (ALAC)</string>
     <string name="set_cover_mode_as_is">Tel quel</string>

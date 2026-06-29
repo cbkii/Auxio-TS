@@ -18,19 +18,31 @@
 
 package org.oxycblt.auxio.settings.categories
 
+/**
+ * Audio settings interface.
+ *
+ * @author Alexander Capehart (OxygenCobalt)
+ */
 import androidx.navigation.fragment.findNavController
+import androidx.preference.Preference
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.util.navigateSafe
 import timber.log.Timber as L
 
-/**
- * Audio settings interface.
- *
- * @author Alexander Capehart (OxygenCobalt)
- */
 class AudioPreferenceFragment : BasePreferenceFragment(R.xml.preferences_audio) {
+
+    override fun onSetupPreference(preference: Preference) {
+        when (preference.key) {
+            getString(R.string.set_key_autostart_floating_only) -> {
+                if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    preference.isVisible = false
+                }
+            }
+        }
+    }
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
         if (preference.key == getString(R.string.set_key_pre_amp)) {

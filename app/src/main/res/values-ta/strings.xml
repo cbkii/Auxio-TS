@@ -209,7 +209,6 @@
     <string name="set_cover_mode">ஆல்பம் கவர்கள்</string>
     <string name="set_cover_mode_off">அணை</string>
     <string name="set_cover_mode_balanced">வேகமாக</string>
-    <string name="set_cover_mode_high_quality">உயர் தகுதி</string>
     <string name="set_square_covers">படை சதுர ஆல்பம் கவர்கள்</string>
     <string name="set_square_covers_desc">அனைத்து ஆல்பத்தையும் 1: 1 விகித விகிதத்திற்கு பயிர்</string>
     <string name="set_audio_desc">ஒலி மற்றும் பின்னணி நடத்தை உள்ளமைக்கவும்</string>
@@ -310,7 +309,6 @@
     <string name="cdc_unknown">தெரியாதவை</string>
     <string name="set_with_hidden">மறைக்கப்பட்ட கோப்புகளை உட்படுத்து</string>
     <string name="set_with_hidden_desc">மறைக்கப்பட்ட ஒலி கோப்புகளை உட்படுத்தவும் (உதா. .cache)</string>
-    <string name="set_cover_mode_save_space">இடத்தை சேமிக்கவும்</string>
     <string name="lng_empty_songs">உங்களுடைய பாடல்கள் இங்கே காணப்படும்.</string>
     <string name="lng_empty_genres">உங்களுடைய இசை வகைகள் இங்கே காணப்படும்.</string>
     <string name="lng_empty_artists">உங்களுடைய கலைஞர்கள் இங்கே காணப்படும்.</string>

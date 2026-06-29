@@ -229,11 +229,11 @@
         Starts Auxio using the previously saved state. If no saved state is available, all songs will be shuffled. Playback will start immediately.
         \n\nWARNING: Be careful controlling this service, if you close it and then try to use it again, you will probably crash the app.
     </string>
-    <string name="lng_empty_songs">Your songs will show up here.</string>
-    <string name="lng_empty_albums">Your albums will show up here.</string>
-    <string name="lng_empty_artists">Your artists will show up here.</string>
-    <string name="lng_empty_genres">Your genres will show up here.</string>
-    <string name="lng_empty_playlists">Your playlists will show up here.</string>
+    <string name="lng_empty_songs">Source empty or not scanned. Select a path and tap Refresh.</string>
+    <string name="lng_empty_albums">Source empty or not scanned. Select a path and tap Refresh.</string>
+    <string name="lng_empty_artists">Source empty or not scanned. Select a path and tap Refresh.</string>
+    <string name="lng_empty_genres">Source empty or not scanned. Select a path and tap Refresh.</string>
+    <string name="lng_empty_playlists">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_file_picker">Load music from the folders that you select. Slower, but more reliable. Requires the vanilla file manager app to be installed.</string>
     <string name="lng_system_database">Load music that the Android OS automatically detects. Faster, but less reliable. No support for filesystem-dependent features like cover.jpg.</string>
     <string name="lng_direct_fs">Load music directly from specific filesystem paths. Faster and more reliable for head units. Can use root if available.</string>
@@ -348,9 +348,7 @@
     <string name="set_images">Images</string>
     <string name="set_cover_mode">Album covers</string>
     <string name="set_cover_mode_off">Off</string>
-    <string name="set_cover_mode_save_space">Save space</string>
-    <string name="set_cover_mode_balanced">Balanced</string>
-    <string name="set_cover_mode_high_quality">High quality</string>
+    <string name="set_cover_mode_balanced">Balanced / save-space</string>
     <string name="set_cover_mode_as_is">As is</string>
     <string name="set_square_covers">Force square album covers</string>
     <string name="set_square_covers_desc">Crop all album covers to a 1:1 aspect ratio</string>
@@ -360,8 +358,12 @@
     <string name="set_playback">Playback</string>
     <string name="set_autostart_on_boot">Autostart</string>
     <string name="set_autostart_on_boot_desc">Launch Auxio-TS when the device boots</string>
+    <string name="set_autostart_floating_only">Launch Floating Controls only</string>
+    <string name="set_autostart_floating_only_desc">Restores the floating playback controls without launching the main application</string>
     <string name="set_autoplay_on_launch">Autoplay</string>
     <string name="set_autoplay_on_launch_desc">Start playback when Auxio-TS launches</string>
+    <string name="set_always_play_immediately">Always play immediately</string>
+    <string name="set_always_play_immediately_desc">Always start playback on startup/resume, overriding the previous pause state</string>
     <string name="set_headset_autoplay">Headset autoplay</string>
     <string name="set_headset_autoplay_desc">Always start playing when a headset is connected (may not work on all devices)</string>
     <string name="set_rewind_prev">Rewind before skipping back</string>

@@ -170,7 +170,6 @@
     <string name="set_separators_comma">Koma (,)</string>
     <string name="set_separators_plus">Tambah (+)</string>
     <string name="lbl_date_added">Tanggal ditambahkan</string>
-    <string name="set_cover_mode_high_quality">Kualitas tinggi</string>
     <string name="set_separators_semicolon">Titik koma (;)</string>
     <string name="lbl_wiki">Wiki</string>
     <string name="set_play_song_from_genre">Putar dari aliran</string>
@@ -317,7 +316,6 @@
     <string name="lng_exclude_folders">Musik di dalam folder yang dipilih akan diabaikan.</string>
     <string name="set_with_hidden">Sertakan berkas tersembunyi</string>
     <string name="set_with_hidden_desc">Sertakan berkas audio yang tersembunyi (misalnya .cache)</string>
-    <string name="set_cover_mode_save_space">Hemat ruang</string>
     <string name="set_cover_mode_as_is">Seperti yang ada</string>
     <string name="set_load_from">Muat dari</string>
     <string name="set_file_picker">Pemilih berkas</string>

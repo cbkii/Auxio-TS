@@ -150,6 +150,7 @@ object StartupLibraryStartup {
         revisionKnown: Boolean,
         priorState: LibraryState,
         lastScanFailed: () -> Boolean,
+        isTopwayCompat: Boolean,
         loadCachedLibrary: suspend () -> T,
         cachedSongCount: (T) -> Int,
         emitCachedLibrary: suspend (T) -> Unit,
@@ -157,7 +158,7 @@ object StartupLibraryStartup {
         setLibraryState: (LibraryState) -> Unit,
         requestIndex: (withCache: Boolean) -> Unit,
     ): StartupLibraryPolicy.Decision {
-        val decision =
+        var decision =
             if (
                 StartupLibraryPolicy.shouldAttemptCachedLoad(
                     hasInMemoryLibrary,
@@ -191,6 +192,11 @@ object StartupLibraryStartup {
                     reason = "library-already-in-memory",
                 )
             }
+
+        // On TS18/Topway builds, scanning/rescan/refresh must only be user-triggered
+        if (isTopwayCompat) {
+            decision = decision.copy(requestScan = false)
+        }
 
         setLibraryState(decision.libraryState)
         if (decision.requestScan) {

@@ -207,7 +207,6 @@
     <string name="set_cover_mode">Album-Cover</string>
     <string name="set_cover_mode_off">Aus</string>
     <string name="set_cover_mode_balanced">Schnell</string>
-    <string name="set_cover_mode_high_quality">Hohe Qualität</string>
     <string name="set_hide_collaborators">Mitarbeitende ausblenden</string>
     <string name="set_hide_collaborators_desc">Nur Künstler anzeigen, die direkt auf einem Album erwähnt werden (funktioniert am besten mit gut getaggten Bibliotheken)</string>
     <plurals name="fmt_artist_count">
@@ -304,7 +303,6 @@
     <string name="cdc_alac">Apple Lossless Audio Codec (ALAC)</string>
     <string name="cdc_unknown">Unbekannt</string>
     <string name="def_album">Unbekanntes Album</string>
-    <string name="set_cover_mode_save_space">Speicherplatz sparen</string>
     <string name="lng_empty_albums">Deine Alben werden hier angezeigt.</string>
     <string name="lng_empty_playlists">Deine Wiedergabelisten werden hier angezeigt.</string>
     <string name="lng_empty_songs">Deine Lieder werden hier angezeigt.</string>

@@ -1,0 +1,163 @@
+[
+  {
+    "id": "android-provider-element",
+    "title": "Android Developers: <provider> manifest element",
+    "url": "https://developer.android.com/guide/topics/manifest/provider-element",
+    "why": "Supports CoverProvider exported/permission/grantUriPermissions decision-making.",
+    "key_points": [
+      "android:exported controls whether other apps can use the provider.",
+      "exported=false limits access to same UID or temporary URI grants.",
+      "android:permission/readPermission/writePermission can restrict provider access."
+    ]
+  },
+  {
+    "id": "android-fgs-launch",
+    "title": "Android Developers: Launch a foreground service",
+    "url": "https://developer.android.com/develop/background-work/services/fgs/launch",
+    "why": "Supports PlaybackServiceFragment, BootReceiver, Bluetooth receiver, and foreground-service handling.",
+    "key_points": [
+      "Call startForegroundService/startService first, then ServiceCompat.startForeground() inside the service.",
+      "Android 12+ has background foreground-service launch restrictions.",
+      "Android 14+ checks foreground-service type permissions and throws SecurityException for missing prerequisites."
+    ]
+  },
+  {
+    "id": "android-fgs-service-types",
+    "title": "Android Developers: Foreground service types",
+    "url": "https://developer.android.com/develop/background-work/services/fgs/service-types",
+    "why": "Supports mediaPlayback foreground service decisions and boot restrictions.",
+    "key_points": [
+      "mediaPlayback FGS type requires FOREGROUND_SERVICE_MEDIA_PLAYBACK in the manifest.",
+      "mediaPlayback type has no runtime prerequisites listed.",
+      "Android 15+ target apps cannot launch a media playback FGS from BOOT_COMPLETED."
+    ]
+  },
+  {
+    "id": "android-bluetooth-permissions",
+    "title": "Android Developers: Bluetooth permissions",
+    "url": "https://developer.android.com/develop/connectivity/bluetooth/bt-permissions",
+    "why": "Supports BluetoothHeadsetReceiver permission/background-start research.",
+    "key_points": [
+      "Android 12+ introduces BLUETOOTH_SCAN, BLUETOOTH_ADVERTISE, and BLUETOOTH_CONNECT runtime permissions.",
+      "Legacy BLUETOOTH and BLUETOOTH_ADMIN should generally be maxSdkVersion=30 when targeting newer devices.",
+      "Any Bluetooth connect/state behaviour must account for runtime permission gates."
+    ]
+  },
+  {
+    "id": "media3-media-session-callback",
+    "title": "Media3: MediaSession.Callback",
+    "url": "https://developer.android.com/reference/androidx/media3/session/MediaSession.Callback",
+    "why": "Supports media-button and session callback behaviour.",
+    "key_points": [
+      "Media3 handles media button events internally by default.",
+      "Apps normally do not need to override onMediaButtonEvent.",
+      "Returning true means the app handled the event and propagation stops."
+    ]
+  },
+  {
+    "id": "media3-session-result",
+    "title": "Media3: SessionResult",
+    "url": "https://developer.android.com/reference/androidx/media3/session/SessionResult",
+    "why": "Supports MediaSession query-resolution error/no-op handling.",
+    "key_points": [
+      "Provides result codes such as RESULT_ERROR_BAD_VALUE and RESULT_ERROR_INVALID_STATE.",
+      "Useful when replacing unsafe 'play all' fallback with structured failure/no-op behaviour."
+    ]
+  },
+  {
+    "id": "media3-shuffle-order",
+    "title": "Media3: ShuffleOrder",
+    "url": "https://developer.android.com/reference/androidx/media3/exoplayer/source/ShuffleOrder",
+    "why": "Supports BetterShuffleOrder tests and correctness work.",
+    "key_points": [
+      "cloneAndInsert inserts item indices in [insertionIndex, insertionIndex + insertionCount).",
+      "cloneAndRemove removes item indices in [indexFrom, indexTo).",
+      "getFirstIndex/getLastIndex/getNextIndex/getPreviousIndex return C.INDEX_UNSET when absent."
+    ]
+  },
+  {
+    "id": "media3-audio-processor",
+    "title": "Media3: AudioProcessor",
+    "url": "https://developer.android.com/reference/androidx/media3/common/audio/AudioProcessor",
+    "why": "Supports ReplayGainAudioProcessor deferral/research notes.",
+    "key_points": [
+      "AudioProcessor exposes configure/flush/queueInput/getOutput contracts.",
+      "Unsupported formats are reported with UnhandledAudioFormatException.",
+      "queueInput implementations must consume the input ByteBuffer and output direct native-order buffers."
+    ]
+  },
+  {
+    "id": "android-recyclerview-adapter",
+    "title": "AndroidX: RecyclerView.Adapter",
+    "url": "https://developer.android.com/reference/androidx/recyclerview/widget/RecyclerView.Adapter",
+    "why": "Supports QueueAdapter range update optimization.",
+    "key_points": [
+      "Specific change events are more efficient than broad data-set changes.",
+      "notifyItemRangeChanged marks a positional range as changed and keeps identities unchanged.",
+      "Payloads may be dropped when views are not attached."
+    ]
+  },
+  {
+    "id": "android-accessibility-principles",
+    "title": "Android Developers: Accessibility principles",
+    "url": "https://developer.android.com/guide/topics/ui/accessibility/principles",
+    "why": "Supports playback-button accessibility work.",
+    "key_points": [
+      "Every UI element should have a useful, descriptive label.",
+      "Screen readers announce labels, so labels must describe action/state clearly."
+    ]
+  },
+  {
+    "id": "android-documents-provider-open-tree",
+    "title": "Android Developers: Open files using storage access framework",
+    "url": "https://developer.android.com/training/data-storage/shared/documents-files",
+    "why": "Supports LocationsDialog, SAF fallback/manual path, and source-selection research.",
+    "key_points": [
+      "ACTION_OPEN_DOCUMENT_TREE grants access to selected directory and child files.",
+      "Traversing large directory trees can hurt performance.",
+      "Android 11+ restricts some tree selections."
+    ]
+  },
+  {
+    "id": "android-intent-open-document-tree",
+    "title": "Android Intent: ACTION_OPEN_DOCUMENT_TREE",
+    "url": "https://developer.android.com/reference/android/content/Intent#ACTION_OPEN_DOCUMENT_TREE",
+    "why": "Supports picker behaviour and EXTRA_LOCAL_ONLY handling.",
+    "key_points": [
+      "Allows user to pick a directory subtree from DocumentsProviders.",
+      "EXTRA_LOCAL_ONLY requests local-file data only, when providers honour it."
+    ]
+  },
+  {
+    "id": "android-overlay-permission",
+    "title": "Android Settings: ACTION_MANAGE_OVERLAY_PERMISSION",
+    "url": "https://developer.android.com/reference/android/provider/Settings#ACTION_MANAGE_OVERLAY_PERMISSION",
+    "why": "Supports floating-controls overlay permission notes.",
+    "key_points": [
+      "Apps need SYSTEM_ALERT_WINDOW and user grant via overlay settings to draw over other apps.",
+      "The settings activity may not exist on some devices, so code must safeguard the intent."
+    ]
+  },
+  {
+    "id": "android-local-unit-tests",
+    "title": "Android Developers: Build local unit tests",
+    "url": "https://developer.android.com/training/testing/local-tests",
+    "why": "Supports tests for pure helpers, ViewModels, repositories, receivers, and algorithmic code.",
+    "key_points": [
+      "Local unit tests run on the JVM and are fast, but have limited access to Android framework APIs.",
+      "Prefer testing public APIs and using fakes/test doubles for dependencies.",
+      "Place tests under src/test and run them with Gradle test tasks."
+    ]
+  },
+  {
+    "id": "cwe-78-command-injection",
+    "title": "CWE-78: Improper Neutralization of Special Elements used in an OS Command",
+    "url": "https://cwe.mitre.org/data/definitions/78.html",
+    "why": "Supports RootStateHolder/root command API hardening.",
+    "key_points": [
+      "Building an OS command from external input can allow arbitrary command execution.",
+      "Prefer library calls or structured APIs over shell command strings.",
+      "If inputs are unavoidable, use accept-known-good validation and least privilege."
+    ]
+  }
+]
