@@ -49,9 +49,11 @@ class CarOverlayBootReceiver : BroadcastReceiver() {
                 Intent.ACTION_USER_PRESENT,
                 ACTION_QUICKBOOT_POWERON,
                 ACTION_HTC_QUICKBOOT_POWERON,
+                ACTION_RESTORE_OVERLAY,
             )
 
         private const val ACTION_QUICKBOOT_POWERON = "android.intent.action.QUICKBOOT_POWERON"
         private const val ACTION_HTC_QUICKBOOT_POWERON = "com.htc.intent.action.QUICKBOOT_POWERON"
+        private const val ACTION_RESTORE_OVERLAY = "org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY"
     }
 }

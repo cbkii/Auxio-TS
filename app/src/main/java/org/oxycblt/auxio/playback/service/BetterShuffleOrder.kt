@@ -64,43 +64,45 @@ class BetterShuffleOrder(private val shuffled: IntArray) : ShuffleOrder {
         return if (shuffled.isNotEmpty()) shuffled[0] else C.INDEX_UNSET
     }
 
-    @Suppress("KotlinConstantConditions") // Bugged for this function
+    @Suppress("KotlinConstantConditions")
     override fun cloneAndInsert(insertionIndex: Int, insertionCount: Int): ShuffleOrder {
         if (shuffled.isEmpty()) {
             return BetterShuffleOrder(insertionCount, -1)
         }
 
-        // TODO: Fix this scuffed hacky logic
-        // TODO: Play next ordering needs to persist in unshuffle
-
         val newShuffled = IntArray(shuffled.size + insertionCount)
-        val pivot: Int =
-            if (insertionIndex < shuffled.size) {
-                indexInShuffled[insertionIndex]
-            } else {
-                indexInShuffled.size
-            }
+
+        // Find where in the shuffled array we should insert.
+        // If insertionIndex > 0, we insert right after the element at insertionIndex - 1.
+        // Otherwise, we insert at the very beginning.
+        val pivot = if (insertionIndex > 0) {
+            indexInShuffled[insertionIndex - 1]
+        } else {
+            -1
+        }
+
+        var newIdx = 0
         for (i in shuffled.indices) {
+            if (i == pivot + 1) {
+                // Insert the new elements
+                for (j in 0 until insertionCount) {
+                    newShuffled[newIdx++] = insertionIndex + j
+                }
+            }
             var currentIndex = shuffled[i]
-            if (currentIndex > insertionIndex) {
+            if (currentIndex >= insertionIndex) {
                 currentIndex += insertionCount
             }
+            newShuffled[newIdx++] = currentIndex
+        }
 
-            if (i <= pivot) {
-                newShuffled[i] = currentIndex
-            } else if (i > pivot) {
-                newShuffled[i + insertionCount] = currentIndex
+        // If pivot was the last element, insert at the end
+        if (pivot == shuffled.size - 1) {
+            for (j in 0 until insertionCount) {
+                newShuffled[newIdx++] = insertionIndex + j
             }
         }
-        if (insertionIndex < shuffled.size) {
-            for (i in 0 until insertionCount) {
-                newShuffled[pivot + i + 1] = insertionIndex + i + 1
-            }
-        } else {
-            for (i in 0 until insertionCount) {
-                newShuffled[pivot + i] = insertionIndex + i
-            }
-        }
+
         return BetterShuffleOrder(newShuffled)
     }
 

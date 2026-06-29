@@ -242,6 +242,37 @@ class StartupLibraryPolicyTest {
             assertEquals(emptyList<Boolean>(), harness.scanRequests)
         }
 
+
+    @Test
+    fun `topway startup suppresses automatic scan on first launch`() = runBlocking {
+        val harness = StartupHarness(priorState = LibraryState.NEVER, revisionKnown = false, isTopwayCompat = true)
+
+        val decision = harness.run()
+
+        assertEquals(LibraryState.NEVER, decision.libraryState)
+        assertEquals(emptyList<Boolean>(), harness.scanRequests)
+    }
+
+    @Test
+    fun `topway startup suppresses automatic scan on cached failure`() = runBlocking {
+        val harness = StartupHarness(priorState = LibraryState.USABLE, isTopwayCompat = true)
+
+        val decision = harness.run(loadFailure = IllegalStateException("bad cache"))
+
+        assertEquals(LibraryState.RECOVERY, decision.libraryState)
+        assertEquals(emptyList<Boolean>(), harness.scanRequests)
+    }
+
+    @Test
+    fun `topway startup suppresses automatic scan on unexpected empty cache`() = runBlocking {
+        val harness = StartupHarness(priorState = LibraryState.USABLE, isTopwayCompat = true)
+
+        val decision = harness.run(cachedSongCount = 0)
+
+        assertEquals(LibraryState.RECOVERY, decision.libraryState)
+        assertEquals(emptyList<Boolean>(), harness.scanRequests)
+    }
+
     // --- Runner edge cases: missing revision ---
 
     @Test
@@ -295,6 +326,7 @@ class StartupLibraryPolicyTest {
         private val revisionKnown: Boolean = true,
         private val hasInMemoryLibrary: Boolean = false,
         private val lastScanFailed: Boolean = false,
+        private val isTopwayCompat: Boolean = false,
     ) {
         var persistedState: LibraryState? = null
         var emittedSongCount: Int? = null
@@ -311,7 +343,7 @@ class StartupLibraryPolicyTest {
                 revisionKnown = revisionKnown,
                 priorState = priorState,
                 lastScanFailed = { lastScanFailed },
-                isTopwayCompat = false, // Testing standard behavior by default
+                isTopwayCompat = isTopwayCompat,
                 loadCachedLibrary = {
                     cachedLoadAttempts++
                     loadFailure?.let { throw it }

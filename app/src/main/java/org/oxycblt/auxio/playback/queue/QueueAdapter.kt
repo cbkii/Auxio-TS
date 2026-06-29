@@ -82,20 +82,23 @@ class QueueAdapter(private val listener: EditClickListListener<Song>) :
      * @param isPlaying Whether playback is ongoing or paused.
      */
     fun setPosition(index: Int, isPlaying: Boolean) {
+        if (currentIndex == index && this.isPlaying == isPlaying) {
+            return
+        }
+
         L.d("Updating index")
+
         val lastIndex = currentIndex
         currentIndex = index
 
-        // Have to update not only the currently playing item, but also all items marked
-        // as playing.
-        // TODO: Optimize this by only updating the range between old and new indices?
-        // TODO: Don't update when the index has not moved.
         if (currentIndex < lastIndex) {
             L.d("Moved backwards, must update items above last index")
-            notifyItemRangeChanged(0, lastIndex + 1, PAYLOAD_UPDATE_POSITION)
-        } else {
+            notifyItemRangeChanged(currentIndex, lastIndex - currentIndex + 1, PAYLOAD_UPDATE_POSITION)
+        } else if (currentIndex > lastIndex) {
             L.d("Moved forwards, update items after index")
-            notifyItemRangeChanged(0, currentIndex + 1, PAYLOAD_UPDATE_POSITION)
+            notifyItemRangeChanged(lastIndex, currentIndex - lastIndex + 1, PAYLOAD_UPDATE_POSITION)
+        } else {
+            notifyItemChanged(currentIndex, PAYLOAD_UPDATE_POSITION)
         }
 
         this.isPlaying = isPlaying

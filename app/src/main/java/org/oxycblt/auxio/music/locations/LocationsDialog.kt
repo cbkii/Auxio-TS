@@ -116,7 +116,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 addDocumentTreeUriToDirs(uri, false)
             }
 
-        // TODO: Add failure mode for introduction of third-party filters in system loader
         localOnlyOpenDocumentTreeLauncher =
             registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
                 addDocumentTreeUriToDirs(uri, true)

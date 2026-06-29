@@ -77,10 +77,20 @@ class RootStateHolder @Inject constructor() : RootGate {
         return state
     }
 
+// Prevent free-form shell execution. Only accept known-safe deterministic commands.
     @Synchronized
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
         if (state == State.Unknown || state == State.TimedOut) probeSync()
         if (state != State.Available) return null
+
+        // Validation: command must be one of the known safe operations.
+        // DirectFS listing starts with "for p in" and handles listing.
+        val isDirectFSList = command.startsWith("for p in ") && command.endsWith("done")
+
+        if (!isDirectFSList) {
+            return null
+        }
+
         return try {
             val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
             try {

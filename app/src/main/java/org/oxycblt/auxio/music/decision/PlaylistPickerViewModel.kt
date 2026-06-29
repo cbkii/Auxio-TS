@@ -153,6 +153,7 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
         template: String?,
         reason: PlaylistDecision.New.Reason,
     ) {
+        if (_currentPendingNewPlaylist.value != null && _currentPendingNewPlaylist.value?.songs?.map { it.uid } == songUids.toList() && _currentPendingNewPlaylist.value?.reason == reason) return
         L.d("Opening ${songUids.size} songs to create a playlist from")
         val library = musicRepository.library ?: return
         val songs =
@@ -194,6 +195,7 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
         template: String?,
         reason: PlaylistDecision.Rename.Reason,
     ) {
+        if (_currentPendingRenamePlaylist.value?.playlist?.uid == playlistUid) return
         L.d("Opening playlist $playlistUid to rename")
         val playlist = musicRepository.library?.findPlaylist(playlistUid)
         val applySongs = musicRepository.library?.let { applySongUids.mapNotNull(it::findSong) }
@@ -214,7 +216,6 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
      */
     fun setPlaylistToExport(playlistUid: Music.UID) {
         L.d("Opening playlist $playlistUid to export")
-        // TODO: Add this guard to the rest of the methods here
         if (_currentPlaylistToExport.value?.uid == playlistUid) return
         _currentPlaylistToExport.value = musicRepository.library?.findPlaylist(playlistUid)
         if (_currentPlaylistToExport.value == null) {
@@ -240,6 +241,7 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
      * @param playlistUid The [Music.UID] of the [Playlist] to delete.
      */
     fun setPlaylistToDelete(playlistUid: Music.UID) {
+        if (_currentPlaylistToDelete.value?.uid == playlistUid) return
         L.d("Opening playlist $playlistUid to delete")
         _currentPlaylistToDelete.value = musicRepository.library?.findPlaylist(playlistUid)
         if (_currentPlaylistToDelete.value == null) {
@@ -284,6 +286,7 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
      * @param songUids The [Music.UID]s of songs to add to a playlist.
      */
     fun setSongsToAdd(songUids: Array<Music.UID>) {
+        if (_currentSongsToAdd.value?.map { it.uid } == songUids.toList()) return
         L.d("Opening ${songUids.size} songs to add to a playlist")
         _currentSongsToAdd.value =
             musicRepository.library

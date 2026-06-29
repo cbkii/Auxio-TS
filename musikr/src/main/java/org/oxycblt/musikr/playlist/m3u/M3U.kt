@@ -263,29 +263,14 @@ private class M3UImpl(private val volumeManager: VolumeManager) : M3U() {
 
         var relativeComponents = Components.parseUnix(".")
 
-        // TODO: Simplify this logic
-        when {
-            commonIndex == components.size && commonIndex == workingDirectory.components.size -> {
-                // The paths are the same. This shouldn't occur.
-            }
-            commonIndex == components.size -> {
-                // The working directory is deeper in the path, backtrack.
-                for (i in 0..<workingDirectory.components.size - commonIndex) {
-                    relativeComponents = relativeComponents.child("..")
-                }
-            }
-            commonIndex == workingDirectory.components.size -> {
-                // Working directory is shallower than the path, can just append the
-                // non-common remainder of the path
-                relativeComponents = relativeComponents.child(depth(commonIndex))
-            }
-            else -> {
-                // The paths are siblings. Backtrack and append as needed.
-                for (i in 0..<workingDirectory.components.size - commonIndex) {
-                    relativeComponents = relativeComponents.child("..")
-                }
-                relativeComponents = relativeComponents.child(depth(commonIndex))
-            }
+        // Always backtrack up from the working directory to the common prefix
+        for (i in 0 until workingDirectory.components.size - commonIndex) {
+            relativeComponents = relativeComponents.child("..")
+        }
+
+        // Then append the remainder of the target path from the common prefix downwards
+        if (commonIndex < components.size) {
+            relativeComponents = relativeComponents.child(depth(commonIndex))
         }
 
         return relativeComponents
