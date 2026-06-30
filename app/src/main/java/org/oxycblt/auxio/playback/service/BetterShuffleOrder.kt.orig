@@ -71,7 +71,8 @@ class BetterShuffleOrder(private val shuffled: IntArray) : ShuffleOrder {
         }
 
         val newShuffled = IntArray(shuffled.size + insertionCount)
-        val safeInsertionIndex = insertionIndex.coerceIn(0, shuffled.size)
+        val safeInsertionIndex =
+            if (insertionIndex >= shuffled.size) shuffled.size else insertionIndex
 
         val insertPoint =
             if (safeInsertionIndex == 0) {

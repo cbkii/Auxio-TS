@@ -1,0 +1,12 @@
+--- app/src/main/java/org/oxycblt/auxio/playback/service/BetterShuffleOrder.kt
++++ app/src/main/java/org/oxycblt/auxio/playback/service/BetterShuffleOrder.kt
+@@ -71,8 +71,8 @@
+         }
+
+         val newShuffled = IntArray(shuffled.size + insertionCount)
+         val safeInsertionIndex =
+-            if (insertionIndex >= shuffled.size) shuffled.size else insertionIndex
++            insertionIndex.coerceIn(0, shuffled.size)
+
+         val insertPoint =
+             if (safeInsertionIndex == 0) {
