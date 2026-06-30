@@ -20,8 +20,13 @@ package org.oxycblt.auxio.playback.service
 
 import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
+import org.oxycblt.auxio.AuxioService
+import org.oxycblt.auxio.IntegerTable
+import timber.log.Timber as L
 
 /**
  * A [BroadcastReceiver] that starts music playback when a bluetooth headset is connected.
@@ -37,8 +42,11 @@ class BluetoothHeadsetReceiver : BroadcastReceiver() {
                     BluetoothProfile.STATE_DISCONNECTED,
                 )
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                // TODO: Initialize the service (Permission workflow must be figured out)
-                //  Perhaps move this to the internal receivers?
+                L.d("Bluetooth headset connected, initializing service")
+                val serviceIntent = Intent(context, AuxioService::class.java)
+                serviceIntent.action = AuxioService.ACTION_START
+                serviceIntent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BLUETOOTH)
+                ContextCompat.startForegroundService(context, serviceIntent)
             }
         }
     }
