@@ -41,14 +41,21 @@ class BluetoothHeadsetReceiver : BroadcastReceiver() {
                     BluetoothProfile.STATE_DISCONNECTED,
                 )
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                L.d("Bluetooth headset connected, initializing service")
-                val serviceIntent = Intent(context, AuxioService::class.java)
-                serviceIntent.action = AuxioService.ACTION_START
-                serviceIntent.putExtra(
-                    AuxioService.INTENT_KEY_START_ID,
-                    IntegerTable.START_ID_BLUETOOTH,
-                )
-                ContextCompat.startForegroundService(context, serviceIntent)
+                val sharedPreferences =
+                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+                val autoplayKey =
+                    context.getString(org.oxycblt.auxio.R.string.set_key_headset_autoplay)
+                val headsetAutoplay = sharedPreferences.getBoolean(autoplayKey, false)
+                if (headsetAutoplay) {
+                    L.d("Bluetooth headset connected, initializing service")
+                    val serviceIntent = Intent(context, AuxioService::class.java)
+                    serviceIntent.action = AuxioService.ACTION_START
+                    serviceIntent.putExtra(
+                        AuxioService.INTENT_KEY_START_ID,
+                        IntegerTable.START_ID_BLUETOOTH,
+                    )
+                    ContextCompat.startForegroundService(context, serviceIntent)
+                }
             }
         }
     }
