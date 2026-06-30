@@ -39,7 +39,6 @@ import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.inflater
 import org.oxycblt.musikr.Song
-import timber.log.Timber as L
 
 /**
  * A [RecyclerView.Adapter] that shows an editable list of queue items.
