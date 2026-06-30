@@ -157,10 +157,6 @@ jobs:
             sudo apt-get install -y ninja-build
           fi
 
-      - name: Prepare CI environment
-        shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile release
-
       - name: Compute release version and selected asset names
         id: version
         shell: bash
@@ -214,9 +210,19 @@ jobs:
             exit 1
           fi
           EXISTING_RELEASE="${RELEASE_EXISTS}"
+          TAG_COMMIT_SHA=""
+          if [[ "${EXISTING_RELEASE}" == "true" && "${TAG_EXISTS}" != "true" ]]; then
+            echo "::error::Release '${RELEASE_TAG}' exists but the matching git tag is missing."
+            exit 1
+          fi
           if [[ "${EXISTING_RELEASE}" == "true" ]]; then
-            RELEASE_VERSION_NAME="${CURRENT_VERSION_NAME}"
-            RELEASE_VERSION_CODE="${CURRENT_VERSION_CODE}"
+            TAG_COMMIT_SHA="$(git rev-list -n 1 "${RELEASE_TAG}")"
+            RELEASE_VERSION_NAME="${RELEASE_TAG#v}"
+            RELEASE_VERSION_CODE="$(git show "${RELEASE_TAG}:app/build.gradle" | sed -n -E 's/^[[:space:]]*versionCode ([0-9]+).*/\1/p' | head -n1)"
+            if [[ -z "${RELEASE_VERSION_CODE}" ]]; then
+              echo "::error::Unable to find versionCode in ${RELEASE_TAG}:app/build.gradle."
+              exit 1
+            fi
           else
             RELEASE_VERSION_NAME="${RELEASE_TAG#v}"
             RELEASE_VERSION_CODE="$((CURRENT_VERSION_CODE + 1))"
@@ -237,6 +243,7 @@ jobs:
             echo "release_version_code=${RELEASE_VERSION_CODE}"
             echo "previous_tag=${PREVIOUS_TAG}"
             echo "existing_release=${EXISTING_RELEASE}"
+            echo "tag_commit_sha=${TAG_COMMIT_SHA}"
             printf 'asset_names<<EOF\n'
             printf '%s\n' "${asset_names[@]}"
             printf 'EOF\n'
@@ -260,14 +267,51 @@ jobs:
             [[ -z "${asset}" ]] && continue
             if grep -Fx -- "${asset}" <<< "${existing}" >/dev/null; then
               if [[ "${REPLACE_EXISTING_ASSETS}" == "true" ]]; then
-                echo "Replacing existing selected asset: ${asset}"
-                gh release delete-asset "${RELEASE_TAG}" "${asset}" --yes
+                echo "Selected asset will be replaced after rebuilt assets are staged: ${asset}"
               else
                 echo "::error::Selected asset already exists on ${RELEASE_TAG}: ${asset}. Re-run with replace_existing_assets=true to replace it."
                 exit 1
               fi
             fi
           done <<< "${ASSET_NAMES}"
+
+      - name: Preserve release packaging helper
+        id: release_tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          packager_script="${RUNNER_TEMP}/package-topway-twmusic-magisk-module.sh"
+          cp scripts/package-topway-twmusic-magisk-module.sh "${packager_script}"
+          chmod +x "${packager_script}"
+          echo "packager_script=${packager_script}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout existing release tag for append
+        if: ${{ steps.version.outputs.existing_release == 'true' }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          TAG_COMMIT_SHA: ${{ steps.version.outputs.tag_commit_sha }}
+          RELEASE_VERSION_NAME: ${{ steps.version.outputs.release_version_name }}
+          RELEASE_VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
+        run: |
+          set -euo pipefail
+          git checkout --detach "${TAG_COMMIT_SHA}"
+          CHECKOUT_SHA="$(git rev-parse HEAD)"
+          if [[ "${CHECKOUT_SHA}" != "${TAG_COMMIT_SHA}" ]]; then
+            echo "::error::Existing release append must build from ${RELEASE_TAG} (${TAG_COMMIT_SHA}), not ${CHECKOUT_SHA}."
+            exit 1
+          fi
+          CHECKOUT_VERSION_NAME="$(sed -n -E 's/^[[:space:]]*versionName "([^"]+)".*/\1/p' app/build.gradle | head -n1)"
+          CHECKOUT_VERSION_CODE="$(sed -n -E 's/^[[:space:]]*versionCode ([0-9]+).*/\1/p' app/build.gradle | head -n1)"
+          if [[ "${CHECKOUT_VERSION_NAME}" != "${RELEASE_VERSION_NAME}" || "${CHECKOUT_VERSION_CODE}" != "${RELEASE_VERSION_CODE}" ]]; then
+            echo "::error::Checked-out tag version metadata does not match ${RELEASE_TAG}."
+            echo "::error::Expected ${RELEASE_VERSION_NAME}/${RELEASE_VERSION_CODE}; got ${CHECKOUT_VERSION_NAME}/${CHECKOUT_VERSION_CODE}."
+            exit 1
+          fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile release
 
       - name: Validate signing secrets and decode keystore
         id: signing
@@ -334,6 +378,7 @@ jobs:
           RELEASE_VERSION_NAME: ${{ steps.version.outputs.release_version_name }}
           RELEASE_VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
           SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
+          PACKAGER_SCRIPT: ${{ steps.release_tooling.outputs.packager_script }}
         run: |
           set -euo pipefail
           BUILD_TOOLS_DIR="$(find "${ANDROID_HOME}"/build-tools -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
@@ -387,7 +432,7 @@ jobs:
                 "${APKSIGNER}" verify --verbose "${apk_path}"
                 asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmusic-magisk.zip"
                 asset_path="${RUNNER_TEMP}/${asset_name}"
-                bash ./scripts/package-topway-twmusic-magisk-module.sh \
+                bash "${PACKAGER_SCRIPT}" \
                   --apk "${apk_path}" \
                   --output "${asset_path}" \
                   --version "${RELEASE_VERSION_NAME}" \
@@ -496,9 +541,9 @@ jobs:
             while IFS= read -r asset; do
               [[ -z "${asset}" ]] && continue
               case "${asset}" in
-                *standard-release.apk) printf -- '- `%s` keeps the normal Auxio-TS package identity (`org.oxycblt.auxio`).\n' "${asset}" ;;
-                *topway-twmedia-release.apk) printf -- '- `%s` targets DoFun/Topway alternate entry (`com.tw.media`) while exposing `com.tw.music.MusicActivity`; TS18 validation is still required.\n' "${asset}" ;;
-                *topway-twmusic-magisk.zip) printf -- '- `%s` is a Magisk module that systemlessly overlays the signed `com.tw.music` APK at `/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk`; no raw topwayTwMusic APK asset is published.\n' "${asset}" ;;
+                *standard-release.apk) printf -- "- \`%s\` keeps the normal Auxio-TS package identity (\`org.oxycblt.auxio\`).\n" "${asset}" ;;
+                *topway-twmedia-release.apk) printf -- "- \`%s\` targets DoFun/Topway alternate entry (\`com.tw.media\`) while exposing \`com.tw.music.MusicActivity\`; TS18 validation is still required.\n" "${asset}" ;;
+                *topway-twmusic-magisk.zip) printf -- "- \`%s\` is a Magisk module that systemlessly overlays the signed \`com.tw.music\` APK at \`/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk\`; no raw topwayTwMusic APK asset is published.\n" "${asset}" ;;
               esac
             done <<< "${ASSET_NAMES}"
           } > "${NOTES_FILE}"
@@ -520,6 +565,7 @@ jobs:
           IS_DRAFT: ${{ inputs.draft }}
           IS_PRERELEASE: ${{ inputs.prerelease }}
           EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
+          REPLACE_EXISTING_ASSETS: ${{ inputs.replace_existing_assets }}
         run: |
           set -euo pipefail
           mapfile -t asset_paths <<< "${ASSET_PATHS}"
@@ -529,6 +575,15 @@ jobs:
             release_assets+=("${asset_paths[$i]}#${asset_names[$i]}")
           done
           if [[ "${EXISTING_RELEASE}" == "true" ]]; then
+            if [[ "${REPLACE_EXISTING_ASSETS}" == "true" ]]; then
+              existing_assets="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
+              for asset in "${asset_names[@]}"; do
+                [[ -z "${asset}" ]] && continue
+                if grep -Fx -- "${asset}" <<< "${existing_assets}" >/dev/null; then
+                  gh release delete-asset "${RELEASE_TAG}" "${asset}" --yes
+                fi
+              done
+            fi
             gh release upload "${RELEASE_TAG}" "${release_assets[@]}"
           else
             release_args=()

@@ -70,6 +70,9 @@ jobs:
     - name: Validate shell script syntax
       shell: bash
       run: find scripts -type f -name '*.sh' -print -exec bash -n {} \;
+    - name: Check manual release workflow
+      shell: bash
+      run: bash ./scripts/check-manual-release-workflow.sh
     - name: Validate dependabot config YAML
       shell: bash
       run: |

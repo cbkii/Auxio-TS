@@ -16,7 +16,7 @@ Auxio-TS-${RELEASE_TAG}-topway-twmusic-release.apk
 
 ## Module behavior
 
-The module uses the official Magisk module layout with `module.prop`, `customize.sh`, optional lifecycle shell scripts, and a `system/` payload tree. Its payload is the signed Auxio-TS `topwayTwMusic` APK staged only at:
+The module uses the official Magisk module layout with `module.prop`, `customize.sh`, and a `system/` payload tree. Its payload is the signed Auxio-TS `topwayTwMusic` APK staged only at:
 
 ```text
 $MODPATH/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
@@ -28,7 +28,7 @@ That maps systemlessly to the observed TS18 stock path:
 /system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
 ```
 
-The packaging script does not write directly to `/system`, uninstall packages, disable packages, clear app data, delete stock apps, disable Topway services, or claim platform signing / `android.uid.system` / UID1000 privileges.
+The packaging script does not add `install.sh`, `post-fs-data.sh`, or `service.sh`; the module is a static systemless overlay. It does not write directly to `/system`, uninstall packages, disable packages, clear app data, delete stock apps, disable Topway services, or claim platform signing / `android.uid.system` / UID1000 privileges.
 
 ## Scope and validation
 
