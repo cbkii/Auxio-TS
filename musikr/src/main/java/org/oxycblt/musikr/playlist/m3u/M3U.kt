@@ -261,19 +261,21 @@ private class M3UImpl(private val volumeManager: VolumeManager) : M3U() {
             ++commonIndex
         }
 
-        var relativeComponents = Components.parseUnix(".")
+        val backtracks = workingDirectory.components.size - commonIndex
+        val remainders = components.size - commonIndex
 
-        // Always backtrack up from the working directory to the common prefix
-        for (i in 0 until workingDirectory.components.size - commonIndex) {
-            relativeComponents = relativeComponents.child("..")
+        val relativeList = ArrayList<String>(1 + backtracks + remainders)
+        relativeList.add(".")
+
+        for (i in 0 until backtracks) {
+            relativeList.add("..")
         }
 
-        // Then append the remainder of the target path from the common prefix downwards
-        if (commonIndex < components.size) {
-            relativeComponents = relativeComponents.child(depth(commonIndex))
+        for (i in commonIndex until components.size) {
+            relativeList.add(components[i])
         }
 
-        return relativeComponents
+        return Components.create(relativeList)
     }
 
     private companion object {
