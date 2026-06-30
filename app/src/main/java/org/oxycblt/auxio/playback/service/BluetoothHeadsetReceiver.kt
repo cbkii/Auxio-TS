@@ -20,7 +20,6 @@ package org.oxycblt.auxio.playback.service
 
 import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
@@ -45,7 +44,10 @@ class BluetoothHeadsetReceiver : BroadcastReceiver() {
                 L.d("Bluetooth headset connected, initializing service")
                 val serviceIntent = Intent(context, AuxioService::class.java)
                 serviceIntent.action = AuxioService.ACTION_START
-                serviceIntent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BLUETOOTH)
+                serviceIntent.putExtra(
+                    AuxioService.INTENT_KEY_START_ID,
+                    IntegerTable.START_ID_BLUETOOTH,
+                )
                 ContextCompat.startForegroundService(context, serviceIntent)
             }
         }
