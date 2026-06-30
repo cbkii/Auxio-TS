@@ -193,6 +193,21 @@ class TagFieldsTest {
         metadata = createTestMetadata(id3v2Tags = mapOf("TDRC" to listOf("invalid-date")))
         assertNull(metadata.date())
 
+        // Case 7: Multiple/duplicate dates in a single field are properly parsed to select the
+        // earliest valid date.
+        metadata =
+            createTestMetadata(
+                xiphTags = mapOf("DATE" to listOf("2020-05-10", "2010-01-01", "2015-06-15"))
+            )
+        assertEquals("2010-01-01", metadata.date().toString())
+
+        // Case 8: Repeated invalid dates with a valid date.
+        metadata =
+            createTestMetadata(
+                id3v2Tags = mapOf("TDRC" to listOf("not-a-date", "2008", "still-not-a-date"))
+            )
+        assertEquals("2008", metadata.date().toString())
+
         metadata = createTestMetadata()
         assertNull(metadata.date())
     }
@@ -200,7 +215,7 @@ class TagFieldsTest {
     @Test
     fun metadata_id3v23Date() {
         // Test ID3v2.3 date components
-        val metadata =
+        var metadata =
             createTestMetadata(
                 id3v2Tags =
                     mapOf(
@@ -209,12 +224,20 @@ class TagFieldsTest {
                         "TIME" to listOf("2145"), // 21:45
                     )
             )
-        val date = metadata.date()
+        var date = metadata.date()
         assertEquals(2019, date?.year)
         assertEquals(5, date?.month)
         assertEquals(23, date?.day)
         assertEquals(21, date?.hour)
         assertEquals(45, date?.minute)
+
+        // Test gracefully handling empty lists in ID3v2.3 frames
+        metadata =
+            createTestMetadata(
+                id3v2Tags =
+                    mapOf("TYER" to emptyList(), "TDAT" to emptyList(), "TIME" to emptyList())
+            )
+        assertNull(metadata.date())
     }
 
     @Test

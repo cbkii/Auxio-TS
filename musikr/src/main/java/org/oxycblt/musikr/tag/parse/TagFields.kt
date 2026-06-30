@@ -67,17 +67,19 @@ internal fun Metadata.date(): Date? {
     // priority hierarchies.
     // TODO: Handle dates that are in "January" because the actual specific release date
     //  isn't known?
-    return listOfNotNull(
-            xiph["ORIGINALDATE"]?.firstOrNull()?.let { Date.from(it) },
-            xiph["DATE"]?.firstOrNull()?.let { Date.from(it) },
-            xiph["YEAR"]?.firstOrNull()?.let { Date.from(it) },
-            mp4["©day"]?.firstOrNull()?.let { Date.from(it) },
-            id3v2["TDOR"]?.firstOrNull()?.let { Date.from(it) },
-            id3v2["TDRC"]?.firstOrNull()?.let { Date.from(it) },
-            id3v2["TDRL"]?.firstOrNull()?.let { Date.from(it) },
-            parseId3v23Date(),
-        )
-        .minOrNull()
+    val candidates =
+        listOfNotNull(
+                xiph["ORIGINALDATE"],
+                xiph["DATE"],
+                xiph["YEAR"],
+                mp4["©day"],
+                id3v2["TDOR"],
+                id3v2["TDRC"],
+                id3v2["TDRL"],
+            )
+            .flatten()
+
+    return candidates.mapNotNull { Date.from(it) }.minOrNull() ?: parseId3v23Date()
 }
 
 // Album
@@ -282,24 +284,24 @@ private fun Metadata.parseId3v23Date(): Date? {
     // Assume that TDAT/TIME can refer to TYER or TORY depending on if TORY
     // is present.
     val year =
-        id3v2["TORY"]?.run { first().toIntOrNull() }
-            ?: id3v2["TYER"]?.run { first().toIntOrNull() }
+        id3v2["TORY"]?.firstOrNull()?.toIntOrNull()
+            ?: id3v2["TYER"]?.firstOrNull()?.toIntOrNull()
             ?: return null
 
-    val tdat = id3v2["TDAT"]
-    return if (tdat != null && tdat.first().length == 4 && tdat.first().isDigitsOnly()) {
+    val tdat = id3v2["TDAT"]?.firstOrNull()
+    return if (tdat != null && tdat.length == 4 && tdat.isDigitsOnly()) {
         // TDAT frames consist of a 4-digit string where the first two digits are
         // the month and the last two digits are the day.
-        val mm = tdat.first().substring(0..1).toInt()
-        val dd = tdat.first().substring(2..3).toInt()
+        val mm = tdat.substring(0..1).toInt()
+        val dd = tdat.substring(2..3).toInt()
 
-        val time = id3v2["TIME"]
-        if (time != null && time.first().length == 4 && time.first().isDigitsOnly()) {
+        val time = id3v2["TIME"]?.firstOrNull()
+        if (time != null && time.length == 4 && time.isDigitsOnly()) {
             // TIME frames consist of a 4-digit string where the first two digits are
             // the hour and the last two digits are the minutes. No second value is
             // possible.
-            val hh = time.first().substring(0..1).toInt()
-            val mi = time.first().substring(2..3).toInt()
+            val hh = time.substring(0..1).toInt()
+            val mi = time.substring(2..3).toInt()
             // Able to return a full date.
             Date.from(year, mm, dd, hh, mi)
         } else {
