@@ -130,7 +130,7 @@ sealed interface Volume {
  * @param components The components of the path.
  */
 @JvmInline
-value class Components private constructor(val components: List<String>) {
+value class Components internal constructor(val components: List<String>) {
     /** The name of the file/directory. */
     val name: String?
         get() = components.lastOrNull()
