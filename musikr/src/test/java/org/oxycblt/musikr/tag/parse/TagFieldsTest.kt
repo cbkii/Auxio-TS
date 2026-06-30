@@ -146,23 +146,76 @@ class TagFieldsTest {
         metadata = createTestMetadata(xiphTags = mapOf("DATE" to listOf("2021-12-25")))
         assertEquals("2021-12-25", metadata.date().toString())
 
-        // Test date priority (ORIGINALDATE > DATE)
+        // Test date priority (earliest valid date)
+        // Case 1: Xiph has both ORIGINALDATE=1999 and DATE=2020; selected date is 1999.
         metadata =
             createTestMetadata(
-                xiphTags =
-                    mapOf("DATE" to listOf("2023-01-01"), "ORIGINALDATE" to listOf("2021-01-01"))
+                xiphTags = mapOf("DATE" to listOf("2020"), "ORIGINALDATE" to listOf("1999"))
             )
-        assertEquals("2021-01-01", metadata.date().toString())
+        assertEquals("1999", metadata.date().toString())
 
-        // Test MP4 date
+        // Case 2: ID3v2.4 has TDOR=2001 and TDRC=2015; selected date is 2001.
+        metadata =
+            createTestMetadata(
+                id3v2Tags = mapOf("TDRC" to listOf("2015"), "TDOR" to listOf("2001"))
+            )
+        assertEquals("2001", metadata.date().toString())
+
+        // Case 3: MP4 ©day=2018 and Xiph YEAR=2005; selected date is 2005.
+        metadata =
+            createTestMetadata(
+                mp4Tags = mapOf("©day" to listOf("2018")),
+                xiphTags = mapOf("YEAR" to listOf("2005")),
+            )
+        assertEquals("2005", metadata.date().toString())
+
+        // Case 4: Multiple fields exist but one is malformed; malformed candidate is ignored and
+        // valid oldest used.
+        metadata =
+            createTestMetadata(
+                id3v2Tags = mapOf("TDOR" to listOf("not-a-date"), "TDRC" to listOf("2010"))
+            )
+        assertEquals("2010", metadata.date().toString())
+
+        // Multiple valid, one malformed, oldest is valid
+        metadata =
+            createTestMetadata(
+                id3v2Tags = mapOf("TDOR" to listOf("invalid"), "TDRC" to listOf("2012")),
+                xiphTags = mapOf("ORIGINALDATE" to listOf("1995")),
+            )
+        assertEquals("1995", metadata.date().toString())
+
+        // Case 5: Only one valid date exists; behaviour matches existing behaviour.
         metadata = createTestMetadata(mp4Tags = mapOf("©day" to listOf("2020-11-30")))
         assertEquals("2020-11-30", metadata.date().toString())
+
+        // Case 6: No valid date exists; fallback to null
+        metadata = createTestMetadata(id3v2Tags = mapOf("TDRC" to listOf("invalid-date")))
+        assertNull(metadata.date())
+
+        // Case 7: Multiple/duplicate dates in a single field are properly parsed to select the
+        // earliest valid date.
+        metadata =
+            createTestMetadata(
+                xiphTags = mapOf("DATE" to listOf("2020-05-10", "2010-01-01", "2015-06-15"))
+            )
+        assertEquals("2010-01-01", metadata.date().toString())
+
+        // Case 8: Repeated invalid dates with a valid date.
+        metadata =
+            createTestMetadata(
+                id3v2Tags = mapOf("TDRC" to listOf("not-a-date", "2008", "still-not-a-date"))
+            )
+        assertEquals("2008", metadata.date().toString())
+
+        metadata = createTestMetadata()
+        assertNull(metadata.date())
     }
 
     @Test
     fun metadata_id3v23Date() {
         // Test ID3v2.3 date components
-        val metadata =
+        var metadata =
             createTestMetadata(
                 id3v2Tags =
                     mapOf(
@@ -171,12 +224,20 @@ class TagFieldsTest {
                         "TIME" to listOf("2145"), // 21:45
                     )
             )
-        val date = metadata.date()
+        var date = metadata.date()
         assertEquals(2019, date?.year)
         assertEquals(5, date?.month)
         assertEquals(23, date?.day)
         assertEquals(21, date?.hour)
         assertEquals(45, date?.minute)
+
+        // Test gracefully handling empty lists in ID3v2.3 frames
+        metadata =
+            createTestMetadata(
+                id3v2Tags =
+                    mapOf("TYER" to emptyList(), "TDAT" to emptyList(), "TIME" to emptyList())
+            )
+        assertNull(metadata.date())
     }
 
     @Test
