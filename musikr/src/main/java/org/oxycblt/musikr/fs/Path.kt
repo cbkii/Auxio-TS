@@ -130,7 +130,7 @@ sealed interface Volume {
  * @param components The components of the path.
  */
 @JvmInline
-value class Components internal constructor(val components: List<String>) {
+value class Components private constructor(val components: List<String>) {
     /** The name of the file/directory. */
     val name: String?
         get() = components.lastOrNull()
@@ -198,6 +198,8 @@ value class Components internal constructor(val components: List<String>) {
     fun containing(other: Components) = Components(other.components.drop(components.size))
 
     companion object {
+        internal fun create(components: List<String>) = Components(components)
+
         /**
          * Parses a path string into a [Components] instance by the unix path separator (/).
          *

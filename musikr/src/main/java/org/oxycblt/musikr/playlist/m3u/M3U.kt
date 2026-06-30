@@ -275,7 +275,7 @@ private class M3UImpl(private val volumeManager: VolumeManager) : M3U() {
             relativeList.add(components[i])
         }
 
-        return Components(relativeList)
+        return Components.create(relativeList)
     }
 
     private companion object {
