@@ -150,16 +150,14 @@ class TagFieldsTest {
         // Case 1: Xiph has both ORIGINALDATE=1999 and DATE=2020; selected date is 1999.
         metadata =
             createTestMetadata(
-                xiphTags =
-                    mapOf("DATE" to listOf("2020"), "ORIGINALDATE" to listOf("1999"))
+                xiphTags = mapOf("DATE" to listOf("2020"), "ORIGINALDATE" to listOf("1999"))
             )
         assertEquals("1999", metadata.date().toString())
 
         // Case 2: ID3v2.4 has TDOR=2001 and TDRC=2015; selected date is 2001.
         metadata =
             createTestMetadata(
-                id3v2Tags =
-                    mapOf("TDRC" to listOf("2015"), "TDOR" to listOf("2001"))
+                id3v2Tags = mapOf("TDRC" to listOf("2015"), "TDOR" to listOf("2001"))
             )
         assertEquals("2001", metadata.date().toString())
 
@@ -167,11 +165,12 @@ class TagFieldsTest {
         metadata =
             createTestMetadata(
                 mp4Tags = mapOf("©day" to listOf("2018")),
-                xiphTags = mapOf("YEAR" to listOf("2005"))
+                xiphTags = mapOf("YEAR" to listOf("2005")),
             )
         assertEquals("2005", metadata.date().toString())
 
-        // Case 4: Multiple fields exist but one is malformed; malformed candidate is ignored and valid oldest used.
+        // Case 4: Multiple fields exist but one is malformed; malformed candidate is ignored and
+        // valid oldest used.
         metadata =
             createTestMetadata(
                 id3v2Tags = mapOf("TDOR" to listOf("not-a-date"), "TDRC" to listOf("2010"))
@@ -182,7 +181,7 @@ class TagFieldsTest {
         metadata =
             createTestMetadata(
                 id3v2Tags = mapOf("TDOR" to listOf("invalid"), "TDRC" to listOf("2012")),
-                xiphTags = mapOf("ORIGINALDATE" to listOf("1995"))
+                xiphTags = mapOf("ORIGINALDATE" to listOf("1995")),
             )
         assertEquals("1995", metadata.date().toString())
 

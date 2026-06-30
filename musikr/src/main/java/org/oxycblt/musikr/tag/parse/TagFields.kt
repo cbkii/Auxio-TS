@@ -68,15 +68,16 @@ internal fun Metadata.date(): Date? {
     // TODO: Handle dates that are in "January" because the actual specific release date
     //  isn't known?
     return listOfNotNull(
-        xiph["ORIGINALDATE"]?.firstOrNull()?.let { Date.from(it) },
-        xiph["DATE"]?.firstOrNull()?.let { Date.from(it) },
-        xiph["YEAR"]?.firstOrNull()?.let { Date.from(it) },
-        mp4["©day"]?.firstOrNull()?.let { Date.from(it) },
-        id3v2["TDOR"]?.firstOrNull()?.let { Date.from(it) },
-        id3v2["TDRC"]?.firstOrNull()?.let { Date.from(it) },
-        id3v2["TDRL"]?.firstOrNull()?.let { Date.from(it) },
-        parseId3v23Date()
-    ).minOrNull()
+            xiph["ORIGINALDATE"]?.firstOrNull()?.let { Date.from(it) },
+            xiph["DATE"]?.firstOrNull()?.let { Date.from(it) },
+            xiph["YEAR"]?.firstOrNull()?.let { Date.from(it) },
+            mp4["©day"]?.firstOrNull()?.let { Date.from(it) },
+            id3v2["TDOR"]?.firstOrNull()?.let { Date.from(it) },
+            id3v2["TDRC"]?.firstOrNull()?.let { Date.from(it) },
+            id3v2["TDRL"]?.firstOrNull()?.let { Date.from(it) },
+            parseId3v23Date(),
+        )
+        .minOrNull()
 }
 
 // Album
