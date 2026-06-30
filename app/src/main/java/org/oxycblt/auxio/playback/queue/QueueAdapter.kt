@@ -39,7 +39,6 @@ import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.inflater
 import org.oxycblt.musikr.Song
-import timber.log.Timber as L
 
 /**
  * A [RecyclerView.Adapter] that shows an editable list of queue items.
@@ -82,36 +81,43 @@ class QueueAdapter(private val listener: EditClickListListener<Song>) :
      * @param isPlaying Whether playback is ongoing or paused.
      */
     fun setPosition(index: Int, isPlaying: Boolean) {
-        if (currentIndex == index && this.isPlaying == isPlaying) {
+        val lastIndex = currentIndex
+        val lastIsPlaying = this.isPlaying
+
+        if (lastIndex == index && lastIsPlaying == isPlaying) {
             return
         }
 
-        L.d("Updating index")
-
-        val lastIndex = currentIndex
         currentIndex = index
-
-        if (currentIndex < 0 && lastIndex < 0) {
-            // Both invalid, do nothing except update isPlaying
-        } else if (lastIndex < 0 && currentIndex >= 0) {
-            notifyItemChanged(currentIndex, PAYLOAD_UPDATE_POSITION)
-        } else if (currentIndex < 0 && lastIndex >= 0) {
-            notifyItemChanged(lastIndex, PAYLOAD_UPDATE_POSITION)
-        } else if (currentIndex < lastIndex) {
-            L.d("Moved backwards, must update items above last index")
-            notifyItemRangeChanged(
-                currentIndex,
-                lastIndex - currentIndex + 1,
-                PAYLOAD_UPDATE_POSITION,
-            )
-        } else if (currentIndex > lastIndex) {
-            L.d("Moved forwards, update items after index")
-            notifyItemRangeChanged(lastIndex, currentIndex - lastIndex + 1, PAYLOAD_UPDATE_POSITION)
-        } else {
-            notifyItemChanged(currentIndex, PAYLOAD_UPDATE_POSITION)
-        }
-
         this.isPlaying = isPlaying
+
+        val validPositions = currentList.indices
+        val lastIndexValid = lastIndex in validPositions
+        val currentIndexValid = index in validPositions
+
+        when {
+            !lastIndexValid && !currentIndexValid -> {
+                // State changed, but there is no valid queue row to refresh.
+            }
+
+            !lastIndexValid -> {
+                notifyItemChanged(index, PAYLOAD_UPDATE_POSITION)
+            }
+
+            !currentIndexValid -> {
+                notifyItemChanged(lastIndex, PAYLOAD_UPDATE_POSITION)
+            }
+
+            lastIndex == index -> {
+                notifyItemChanged(index, PAYLOAD_UPDATE_POSITION)
+            }
+
+            else -> {
+                val start = minOf(lastIndex, index)
+                val end = maxOf(lastIndex, index)
+                notifyItemRangeChanged(start, end - start + 1, PAYLOAD_UPDATE_POSITION)
+            }
+        }
     }
 
     private companion object {
