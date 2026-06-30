@@ -402,6 +402,9 @@ jobs:
             fi
             printf '%s\n' "${apks[0]}"
           }
+          artifact_dir="${RUNNER_TEMP}/selected-release-assets"
+          rm -rf -- "${artifact_dir}"
+          mkdir -p -- "${artifact_dir}"
           asset_paths=()
           asset_names=()
           while IFS= read -r variant; do
@@ -444,6 +447,8 @@ jobs:
                 exit 1
                 ;;
             esac
+            artifact_path="${artifact_dir}/${asset_name}"
+            cp "${asset_path}" "${artifact_path}"
             asset_paths+=("${asset_path}")
             asset_names+=("${asset_name}")
           done <<< "${SELECTED_VARIANTS}"
@@ -454,6 +459,7 @@ jobs:
             printf 'asset_names<<EOF\n'
             printf '%s\n' "${asset_names[@]}"
             printf 'EOF\n'
+            printf 'artifact_dir=%s\n' "${artifact_dir}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Validate TS18 APK reference contracts
@@ -469,10 +475,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: Auxio-TS-${{ steps.version.outputs.release_tag }}-selected-release-assets
-          path: |
-            ${{ runner.temp }}/Auxio-TS-${{ steps.version.outputs.release_tag }}-standard-release.apk
-            ${{ runner.temp }}/Auxio-TS-${{ steps.version.outputs.release_tag }}-topway-twmedia-release.apk
-            ${{ runner.temp }}/Auxio-TS-${{ steps.version.outputs.release_tag }}-topway-twmusic-magisk.zip
+          path: ${{ steps.assets.outputs.artifact_dir }}/*
           if-no-files-found: error
           retention-days: 14
 

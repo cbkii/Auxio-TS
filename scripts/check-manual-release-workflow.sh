@@ -58,10 +58,12 @@ if 'gh release delete-asset' not in text or 'gh release upload' not in text:
     raise SystemExit('Missing release replacement/upload flow')
 if text.find('gh release delete-asset') < text.find('Build, verify, and stage selected release assets'):
     raise SystemExit('Release asset deletion appears before rebuilt assets are staged')
+if 'path: ${{ steps.assets.outputs.artifact_dir }}/*' not in text:
+    raise SystemExit('Upload artifact step must use the selected-asset artifact directory, not all possible asset names')
 print('OK manual-release selectable asset invariants')
 PY
 
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/auxio-release-check.XXXXXX")"
+tmpdir="$(mktemp -d)"
 cleanup() {
   rm -rf -- "${tmpdir}"
 }
@@ -79,21 +81,37 @@ unzip -l "${zip_path}" "module.prop" >/dev/null 2>&1 || fail "ZIP missing module
 unzip -l "${zip_path}" "customize.sh" >/dev/null 2>&1 || fail "ZIP missing customize.sh"
 unzip -l "${zip_path}" "system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk" >/dev/null 2>&1 || fail "ZIP missing Topway APK payload"
 
-mapfile -t zip_entries < <(zipinfo -1 "${zip_path}")
-for entry in "${zip_entries[@]}"; do
+has_updater_script=false
+has_unnecessary_script=false
+while IFS= read -r entry; do
+  [[ -n "${entry}" ]] || continue
   [[ "${entry}" != ./* ]] || fail "ZIP entry has ./ prefix: ${entry}"
   [[ "${entry}" != /* ]] || fail "ZIP entry is absolute: ${entry}"
   [[ "${entry}" != *'../'* && "${entry}" != ../* ]] || fail "ZIP entry escapes module root: ${entry}"
-  [[ "${entry}" != auxio-ts-magisk.* ]] || fail "ZIP entry includes temporary parent prefix: ${entry}"
-done
+  [[ "${entry}" != *auxio-ts-magisk* ]] || fail "ZIP entry includes temporary parent prefix: ${entry}"
+  [[ "${entry}" != 'META-INF/com/google/android/updater-script' ]] || has_updater_script=true
+  if [[ "${entry}" =~ (^|/)install\.sh$|(^|/)post-fs-data\.sh$|(^|/)service\.sh$ ]]; then
+    has_unnecessary_script=true
+  fi
+done < <(unzip -Z -1 "${zip_path}")
 
-if zipinfo -1 "${zip_path}" | grep -Fx 'META-INF/com/google/android/updater-script' >/dev/null; then
+if [[ "${has_updater_script}" == "true" ]]; then
   updater_contents="$(unzip -p "${zip_path}" 'META-INF/com/google/android/updater-script')"
   [[ "${updater_contents}" == '#MAGISK' ]] || fail "updater-script must contain exactly #MAGISK"
 fi
 
-if zipinfo -1 "${zip_path}" | grep -E '(^|/)install\.sh$|(^|/)post-fs-data\.sh$|(^|/)service\.sh$' >/dev/null; then
+if [[ "${has_unnecessary_script}" == "true" ]]; then
   fail "Static overlay module ZIP contains unnecessary installer/boot scripts"
+fi
+
+customize_contents="$(unzip -p "${zip_path}" customize.sh)"
+for forbidden in '/tmp' 'mktemp' 'mapfile' 'readarray' 'exit'; do
+  if grep -F -- "${forbidden}" <<< "${customize_contents}" >/dev/null; then
+    fail "Generated customize.sh contains forbidden device-side token: ${forbidden}"
+  fi
+done
+if grep -E '(^|[^[:alnum:]_])([[:alnum:]_]+)=\(' <<< "${customize_contents}" >/dev/null; then
+  fail "Generated customize.sh appears to contain a Bash array assignment"
 fi
 
 log "manual release workflow and Magisk packager checks passed"

@@ -72,7 +72,7 @@ case "${version_code}" in
   ''|*[!0-9]*) fail "--version-code must be an integer" ;;
 esac
 
-module_root="$(mktemp -d "${TMPDIR:-/tmp}/auxio-ts-magisk.XXXXXX")"
+module_root="$(mktemp -d)"
 cleanup() {
   rm -rf -- "${module_root}"
 }
@@ -119,5 +119,12 @@ unzip -t "${output_path}" >/dev/null
 unzip -l "${output_path}" "module.prop" >/dev/null 2>&1 || fail "Missing module.prop in ZIP"
 unzip -l "${output_path}" "customize.sh" >/dev/null 2>&1 || fail "Missing customize.sh in ZIP"
 unzip -l "${output_path}" "system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk" >/dev/null 2>&1 || fail "Missing Topway APK payload in ZIP"
+while IFS= read -r entry; do
+  [[ -n "${entry}" ]] || continue
+  [[ "${entry}" != ./* ]] || fail "ZIP entry has ./ prefix: ${entry}"
+  [[ "${entry}" != /* ]] || fail "ZIP entry is absolute: ${entry}"
+  [[ "${entry}" != *'../'* && "${entry}" != ../* ]] || fail "ZIP entry escapes module root: ${entry}"
+  [[ "${entry}" != *auxio-ts-magisk* ]] || fail "ZIP entry includes temporary parent prefix: ${entry}"
+done < <(unzip -Z -1 "${output_path}")
 
 printf 'Created Magisk module ZIP: %s\n' "${output_path}"
