@@ -60,33 +60,24 @@ internal fun Metadata.disc() =
 
 internal fun Metadata.subtitle() = (xiph["DISCSUBTITLE"] ?: id3v2["TSST"])?.first()
 
-internal fun Metadata.date() =
-    // For ID3v 2, are somewhat complicated, as not only did their semantics change from a flat
-    // year value in ID3v2.3 to a full ISO-8601 date in ID3v2.4, but there are also a variety of
-    // date types.
-    // Our hierarchy for dates is as such:
-    // 1. ID3v2.4 Original Date, as it resolves the "Released in X, Remastered in Y" issue
-    // 2. ID3v2.4 Recording Date, as it is the most common date type
-    // 3. ID3v2.4 Release Date, as it is the second most common date type
-    // 4. ID3v2.3 Original Date, as it is like #1
-    // 5. ID3v2.3 Release Year, as it is the most common date type
-    // xiph dates aren't complicated, but there are still several types
-    // Our hierarchy for dates is as such:
-    // 1. Original Date, as it solves the "Released in X, Remastered in Y" issue
-    // 2. Date, as it is the most common date type
-    // 3. Year, as old xiph tags tended to use this (I know this because it's the only
-    // date tag that android supports, so it must be 15 years old or more!)
-    // TODO: Show original and normal dates side-by-side
+internal fun Metadata.date(): Date? {
+    // Collect all available candidate dates, preferring the earliest valid date found.
+    // This resolves the "Released in X, Remastered in Y" issue where multiple dates
+    // might be present, allowing us to find the oldest original date without complex
+    // priority hierarchies.
     // TODO: Handle dates that are in "January" because the actual specific release date
     //  isn't known?
-    ((xiph["ORIGINALDATE"]
-            ?: xiph["DATE"]
-            ?: xiph["YEAR"]
-            ?: mp4["©day"]
-            ?: id3v2["TDOR"]
-            ?: id3v2["TDRC"]
-            ?: id3v2["TDRL"])
-        ?.run { Date.from(first()) } ?: parseId3v23Date())
+    return listOfNotNull(
+        xiph["ORIGINALDATE"]?.firstOrNull()?.let { Date.from(it) },
+        xiph["DATE"]?.firstOrNull()?.let { Date.from(it) },
+        xiph["YEAR"]?.firstOrNull()?.let { Date.from(it) },
+        mp4["©day"]?.firstOrNull()?.let { Date.from(it) },
+        id3v2["TDOR"]?.firstOrNull()?.let { Date.from(it) },
+        id3v2["TDRC"]?.firstOrNull()?.let { Date.from(it) },
+        id3v2["TDRL"]?.firstOrNull()?.let { Date.from(it) },
+        parseId3v23Date()
+    ).minOrNull()
+}
 
 // Album
 internal fun Metadata.albumMusicBrainzId() =
