@@ -267,7 +267,7 @@ constructor(
         val bestMusic =
             (library.songs + library.albums + library.artists + library.genres + library.playlists)
                 .maxByOrNull { fuzzy(it.name, query) }
-        // TODO: Error out when we can't correctly resolve the query
+        // Fallback to all songs when we can't correctly resolve the query, dont error.
         return bestMusic?.let { expandMusicIntoCommand(it, null) }
             ?: commandFactory.all(ShuffleMode.ON)
     }
