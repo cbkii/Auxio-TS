@@ -228,8 +228,8 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
      * @param playlistUid The [Music.UID] of the [Playlist] to export.
      */
     fun setPlaylistToExport(playlistUid: Music.UID) {
-        L.d("Opening playlist $playlistUid to export")
         if (_currentPlaylistToExport.value?.uid == playlistUid) return
+        L.d("Opening playlist $playlistUid to export")
         _currentPlaylistToExport.value = musicRepository.library?.findPlaylist(playlistUid)
         if (_currentPlaylistToExport.value == null) {
             L.w("Given playlist UID to export was invalid")
@@ -244,6 +244,7 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
      * @param exportConfig The new [ExportConfig] to use.
      */
     fun setExportConfig(exportConfig: ExportConfig) {
+        if (_currentExportConfig.value == exportConfig) return
         L.d("Setting export config to $exportConfig")
         _currentExportConfig.value = exportConfig
     }
