@@ -39,6 +39,7 @@ import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.inflater
 import org.oxycblt.musikr.Song
+import timber.log.Timber as L
 
 /**
  * A [RecyclerView.Adapter] that shows an editable list of queue items.
@@ -51,7 +52,7 @@ class QueueAdapter(private val listener: EditClickListListener<Song>) :
     // Since PlayingIndicator adapter relies on an item value, we cannot use it for this
     // adapter, as one item can appear at several points in the UI. Use a similar implementation
     // with an index value instead.
-    private var currentIndex = 0
+    private var currentIndex = RecyclerView.NO_POSITION
     private var isPlaying = false
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
@@ -91,32 +92,29 @@ class QueueAdapter(private val listener: EditClickListListener<Song>) :
         currentIndex = index
         this.isPlaying = isPlaying
 
-        val validPositions = currentList.indices
-        val lastIndexValid = lastIndex in validPositions
-        val currentIndexValid = index in validPositions
+        notifyPlaybackPositionChanged(lastIndex, index)
+    }
 
-        when {
-            !lastIndexValid && !currentIndexValid -> {
-                // State changed, but there is no valid queue row to refresh.
-            }
+    private fun notifyPlaybackPositionChanged(lastIndex: Int, index: Int) {
+        val itemCount = currentList.size
+        if (itemCount == 0) {
+            return
+        }
 
-            !lastIndexValid -> {
-                notifyItemChanged(index, PAYLOAD_UPDATE_POSITION)
-            }
+        val clampedLast = lastIndex.coerceIn(-1, itemCount - 1)
+        val clampedNew = index.coerceIn(-1, itemCount - 1)
 
-            !currentIndexValid -> {
-                notifyItemChanged(lastIndex, PAYLOAD_UPDATE_POSITION)
-            }
+        val start = minOf(clampedLast, clampedNew).coerceAtLeast(0)
+        val end = maxOf(clampedLast, clampedNew).coerceAtMost(itemCount - 1)
 
-            lastIndex == index -> {
-                notifyItemChanged(index, PAYLOAD_UPDATE_POSITION)
-            }
+        if (start > end) {
+            return
+        }
 
-            else -> {
-                val start = minOf(lastIndex, index)
-                val end = maxOf(lastIndex, index)
-                notifyItemRangeChanged(start, end - start + 1, PAYLOAD_UPDATE_POSITION)
-            }
+        if (start == end) {
+            notifyItemChanged(start, PAYLOAD_UPDATE_POSITION)
+        } else {
+            notifyItemRangeChanged(start, end - start + 1, PAYLOAD_UPDATE_POSITION)
         }
     }
 
