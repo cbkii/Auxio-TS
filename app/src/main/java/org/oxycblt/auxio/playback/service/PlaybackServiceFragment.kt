@@ -183,6 +183,12 @@ private constructor(
                     // Respect the autoplay setting for the restore action.
                     StartupPlaybackPolicy.restoreActionForBoot(playbackSettings.autoplayOnLaunch)
                 }
+                IntegerTable.START_ID_BLUETOOTH -> {
+                    DeferredPlayback.RestoreState(
+                        play = playbackSettings.headsetAutoplay,
+                        fallback = DeferredPlayback.ShuffleAll,
+                    )
+                }
                 else -> {
                     L.d("Handling non-native start.")
                     if (intent != null && sessionHolder.tryMediaButtonIntent(intent)) {
