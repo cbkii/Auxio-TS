@@ -19,3 +19,4 @@ captures/
 /secrets/
 __pycache__/
 *.pyc
+*.orig
