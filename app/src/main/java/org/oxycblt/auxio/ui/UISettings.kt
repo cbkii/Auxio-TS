@@ -54,8 +54,24 @@ interface UISettings : Settings<UISettings.Listener> {
     /** Whether home dashboard quick access chips should be shown. */
     val showHeadUnitDashboardQuickAccess: Boolean
 
+    /**
+     * Whether album art should use the BlobVisualizer as a fallback, always, or never in the Now
+     * Playing panel.
+     */
+    val visualizerMode: VisualizerMode
+
     /** Read-only concise summary of Tier-1 head-unit compatibility posture. */
     val headUnitCompatStatusSummary: String
+
+    enum class VisualizerMode {
+        OFF,
+        FALLBACK,
+        ALWAYS;
+
+        companion object {
+            fun from(value: Int): VisualizerMode = entries.getOrNull(value) ?: OFF
+        }
+    }
 
     enum class DriverSide {
         RIGHT,
@@ -140,6 +156,18 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
             sharedPreferences.getBoolean(
                 getString(R.string.set_key_head_unit_dashboard_quick_access),
                 true,
+            )
+
+    override val visualizerMode: UISettings.VisualizerMode
+        get() =
+            UISettings.VisualizerMode.from(
+                try {
+                    sharedPreferences
+                        .getString(getString(R.string.set_key_visualizer_mode), "1")
+                        ?.toInt() ?: 1
+                } catch (e: Exception) {
+                    1
+                }
             )
 
     override val headUnitCompatStatusSummary: String

@@ -100,6 +100,9 @@ class MainActivity : AppCompatActivity() {
                         playbackSettings.autoplayOnLaunch && isFirstResume
                     )
                 playbackModel.playDeferred(action)
+                if (isFirstResume) {
+                    playbackModel.openPlayback()
+                }
             }
             isFirstResume = false
         }
@@ -167,7 +170,7 @@ class MainActivity : AppCompatActivity() {
             when {
                 intent.action == Intent.ACTION_VIEW ->
                     DeferredPlayback.Open(intent.data ?: return false)
-                route == HeadUnitRoute.SHUFFLE_ALL -> DeferredPlayback.ShuffleAll
+                route == HeadUnitRoute.SHUFFLE_ALL -> DeferredPlayback.ShuffleAll()
                 else -> null
             }
         if (action != null) {

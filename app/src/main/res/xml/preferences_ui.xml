@@ -28,6 +28,14 @@
         app:summary="@string/set_round_mode_desc"
         app:title="@string/set_round_mode" />
 
+    <ListPreference
+        app:defaultValue="1"
+        app:entries="@array/entries_visualizer_mode"
+        app:entryValues="@array/values_visualizer_mode"
+        app:key="@string/set_key_visualizer_mode"
+        app:title="@string/set_visualizer_mode"
+        app:useSimpleSummaryProvider="true" />
+
 
     <PreferenceCategory
         app:title="@string/set_head_unit">

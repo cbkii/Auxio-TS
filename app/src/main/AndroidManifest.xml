@@ -4,6 +4,8 @@
 
     <!-- Android 13 uses READ_MEDIA_AUDIO instead of READ_EXTERNAL_STORAGE -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Needed for Visualizer in Now Playing -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Android 10 / TS18 legacy external-storage compatibility for file-path media sources. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />

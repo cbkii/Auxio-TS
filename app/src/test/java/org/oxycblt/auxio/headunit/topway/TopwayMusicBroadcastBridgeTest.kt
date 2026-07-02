@@ -111,6 +111,7 @@ class TopwayMusicBroadcastBridgeTest {
         override val largeHeadUnitControls: Boolean = true
         override val showHeadUnitAlbumArt: Boolean = true
         override val showHeadUnitDashboardQuickAccess: Boolean = true
+        override val visualizerMode: UISettings.VisualizerMode = UISettings.VisualizerMode.OFF
         override val headUnitCompatStatusSummary: String = "test"
 
         override fun registerListener(listener: UISettings.Listener) = Unit

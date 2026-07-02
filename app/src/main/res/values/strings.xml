@@ -250,6 +250,18 @@
     <string name="set_ui">Look and feel</string>
     <string name="set_ui_desc">Change the theme and colors of the app</string>
     <string name="set_theme">Theme</string>
+    <string name="set_visualizer_mode">Now Playing Visualizer</string>
+    <string name="set_key_visualizer_mode" translatable="false">ui_visualizer_mode</string>
+    <string-array name="entries_visualizer_mode">
+        <item>Off</item>
+        <item>When cover is unavailable</item>
+        <item>Always</item>
+    </string-array>
+    <string-array name="values_visualizer_mode">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+    </string-array>
     <string name="set_theme_auto">Automatic</string>
     <string name="set_theme_day">Light</string>
     <string name="set_theme_night">Dark</string>

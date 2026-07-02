@@ -89,6 +89,7 @@ class PlaybackPanelFragment :
     @Inject lateinit var uiSettings: UISettings
     private val queueModel: QueueViewModel by viewModels()
     private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
+    private lateinit var recordAudioPermissionLauncher: ActivityResultLauncher<String>
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
 
     override fun onCreateBinding(inflater: LayoutInflater) =
@@ -105,6 +106,16 @@ class PlaybackPanelFragment :
         equalizerLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
                 // Nothing to do
+            }
+
+        recordAudioPermissionLauncher =
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                if (isGranted) {
+                    updateVisualizerState()
+                } else {
+                    L.w("RECORD_AUDIO permission denied; visualizer will fallback to static")
+                    coverPagerAdapter.visualizerMode = UISettings.VisualizerMode.OFF
+                }
             }
 
         // --- UI SETUP ---
@@ -259,6 +270,35 @@ class PlaybackPanelFragment :
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.shuffleScope, ::updateShuffleScope)
         collectImmediately(playbackModel.pagerQueue, ::updatePager)
+
+        requestVisualizerPermissionIfNeeded()
+        updateVisualizerState()
+
+        collectImmediately(playbackModel.song) {
+            // Update audio session dynamically
+            updateVisualizerState()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        coverPagerAdapter.isVisualizerActive = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        coverPagerAdapter.isVisualizerActive = false
+    }
+
+    private fun requestVisualizerPermissionIfNeeded() {
+        if (uiSettings.visualizerMode != UISettings.VisualizerMode.OFF) {
+            recordAudioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun updateVisualizerState() {
+        coverPagerAdapter.visualizerMode = uiSettings.visualizerMode
+        coverPagerAdapter.audioSessionId = playbackModel.currentAudioSessionId
     }
 
     override fun onDestroyBinding(binding: FragmentPlaybackPanelBinding) {

@@ -18,12 +18,14 @@
 
 package org.oxycblt.auxio.playback.ui.swiper
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
+import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
 import org.oxycblt.musikr.Song
 
@@ -37,10 +39,49 @@ import org.oxycblt.musikr.Song
 class CoverPagerAdapter(private val listener: StepperOverlay.Listener) :
     FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
 
+    var visualizerMode: UISettings.VisualizerMode = UISettings.VisualizerMode.OFF
+        set(value) {
+            val old = field
+            field = value
+            if (old != value) {
+                notifyDataSetChanged()
+            }
+        }
+
+    var audioSessionId: Int? = null
+        set(value) {
+            val old = field
+            field = value
+            if (old != value) {
+                notifyDataSetChanged()
+            }
+        }
+
+    var isVisualizerActive: Boolean = true
+        set(value) {
+            // We just update the children directly if possible, or trigger a rebind.
+            val old = field
+            field = value
+            if (old != value) {
+                notifyDataSetChanged()
+            }
+        }
+
     override fun onCreateViewHolder(parent: ViewGroup, pos: Int) = CoverViewHolder.from(parent)
 
     override fun onBindViewHolder(viewHolder: CoverViewHolder, pos: Int) {
-        viewHolder.bind(currentList[pos], listener)
+        viewHolder.bind(
+            currentList[pos],
+            listener,
+            visualizerMode,
+            audioSessionId,
+            isVisualizerActive,
+        )
+    }
+
+    override fun onViewRecycled(holder: CoverViewHolder) {
+        super.onViewRecycled(holder)
+        holder.releaseVisualizer()
     }
 }
 
@@ -57,9 +98,37 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
      * @param song The new [Song] to bind.
      * @param listener An [StepperOverlay.Listener] to bind fast seek interactions to.
      */
-    fun bind(song: Song, listener: StepperOverlay.Listener) {
-        binding.cover.bind(song)
+    fun bind(
+        song: Song,
+        listener: StepperOverlay.Listener,
+        visualizerMode: UISettings.VisualizerMode,
+        audioSessionId: Int?,
+        isVisualizerActive: Boolean,
+    ) {
         binding.coverFastSeekOverlay.listener = listener
+
+        val showVisualizer =
+            when (visualizerMode) {
+                UISettings.VisualizerMode.OFF -> false
+                UISettings.VisualizerMode.ALWAYS -> true
+                UISettings.VisualizerMode.FALLBACK -> song.cover == null
+            }
+
+        if (showVisualizer) {
+            binding.cover.visibility = View.GONE
+            binding.visualizer.visibility = View.VISIBLE
+            binding.visualizer.setAudioSessionId(audioSessionId ?: 0)
+            binding.visualizer.enableVisualizer(isVisualizerActive)
+        } else {
+            binding.cover.visibility = View.VISIBLE
+            binding.visualizer.visibility = View.GONE
+            binding.visualizer.enableVisualizer(false)
+            binding.cover.bind(song)
+        }
+    }
+
+    fun releaseVisualizer() {
+        binding.visualizer.release()
     }
 
     companion object {
