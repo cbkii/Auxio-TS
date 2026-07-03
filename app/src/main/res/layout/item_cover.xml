@@ -10,6 +10,17 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
+        <org.oxycblt.auxio.playback.ui.visualizer.BlobVisualizer
+            android:id="@+id/cover_visualizer"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:visibility="gone"
+            app:layout_constraintDimensionRatio="1"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"/>
+
         <org.oxycblt.auxio.image.CoverView
             android:id="@+id/cover"
             style="@style/Widget.Auxio.Image.Full"

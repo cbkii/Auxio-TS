@@ -34,6 +34,7 @@ import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
+import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     private val playbackModel: PlaybackViewModel by viewModels()
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
+    @Inject lateinit var musicRepository: MusicRepository
     private var isFirstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,6 +102,9 @@ class MainActivity : AppCompatActivity() {
                         playbackSettings.autoplayOnLaunch && isFirstResume
                     )
                 playbackModel.playDeferred(action)
+                if (isFirstResume && musicRepository.library?.empty() == false) {
+                    playbackModel.openPlayback()
+                }
             }
             isFirstResume = false
         }
@@ -167,7 +172,7 @@ class MainActivity : AppCompatActivity() {
             when {
                 intent.action == Intent.ACTION_VIEW ->
                     DeferredPlayback.Open(intent.data ?: return false)
-                route == HeadUnitRoute.SHUFFLE_ALL -> DeferredPlayback.ShuffleAll
+                route == HeadUnitRoute.SHUFFLE_ALL -> DeferredPlayback.ShuffleAll()
                 else -> null
             }
         if (action != null) {

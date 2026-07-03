@@ -267,6 +267,9 @@ class ExoPlaybackStateHolder(
                         "Invalid playback parameters"
                     }
                 )
+                if (!shouldPlayImmediately(action.play)) {
+                    playbackManager.playing(false)
+                }
             }
             // Open -> Try to find the Song for the given file and then play it from all songs
             is DeferredPlayback.Open -> {

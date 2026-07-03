@@ -317,7 +317,7 @@ sealed interface DeferredPlayback {
     /**
      * Start shuffled playback of the entire music library. Analogous to the "Shuffle All" shortcut.
      */
-    data object ShuffleAll : DeferredPlayback
+    data class ShuffleAll(val play: Boolean = true) : DeferredPlayback
 
     /**
      * Start playing an audio file at the given [Uri].

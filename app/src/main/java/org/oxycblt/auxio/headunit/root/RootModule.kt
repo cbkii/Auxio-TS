@@ -18,14 +18,16 @@
 
 package org.oxycblt.auxio.headunit.root
 
+import android.content.Context
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object RootModule {
-    @Provides @Singleton fun provideRootStateHolder(): RootStateHolder = RootStateHolder()
+    @Provides @Singleton fun provideRootStateHolder(@ApplicationContext context: Context): RootStateHolder = RootStateHolder(context)
 }

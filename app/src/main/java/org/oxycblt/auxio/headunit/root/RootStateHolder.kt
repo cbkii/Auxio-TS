@@ -18,13 +18,18 @@
 
 package org.oxycblt.auxio.headunit.root
 
+import android.content.Context
+import androidx.preference.PreferenceManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.musikr.fs.RootGate
 
 @Singleton
-class RootStateHolder @Inject constructor() : RootGate {
+class RootStateHolder @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : RootGate {
     enum class State {
         Unknown,
         Available,
@@ -32,6 +37,7 @@ class RootStateHolder @Inject constructor() : RootGate {
         Denied,
         TimedOut,
         UnsupportedForVariant,
+        DisabledByUser,
     }
 
     @Volatile
@@ -42,15 +48,38 @@ class RootStateHolder @Inject constructor() : RootGate {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) state = State.UnsupportedForVariant
     }
 
+    private val prefs
+        get() = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+
+    private fun userEnabled(): Boolean =
+        BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+            prefs.getBoolean(KEY_USE_ROOT_FS, false)
+
+    @Synchronized
+    fun stateSnapshot(): State =
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            State.UnsupportedForVariant
+        } else if (!userEnabled()) {
+            State.DisabledByUser
+        } else {
+            state
+        }
+
     @Synchronized
     fun probeSync(): State {
-        // Timeouts are intentionally retryable: TS18 su prompts can be transient, and a
-        // process-wide permanent timeout would disable root-assisted DirectFS until restart.
-        if (state != State.Unknown && state != State.TimedOut) return state
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant
             return state
         }
+
+        if (!userEnabled()) {
+            state = State.DisabledByUser
+            return state
+        }
+
+        // Timeouts are intentionally retryable: TS18 su prompts can be transient, and a
+        // process-wide permanent timeout would disable root-assisted DirectFS until restart.
+        if (state != State.Unknown && state != State.TimedOut) return state
         val process =
             try {
                 Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
@@ -80,6 +109,11 @@ class RootStateHolder @Inject constructor() : RootGate {
     // Prevent free-form shell execution. Only accept known-safe deterministic commands.
     @Synchronized
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !userEnabled()) {
+            state = State.DisabledByUser
+            return null
+        }
+
         if (state == State.Unknown || state == State.TimedOut) probeSync()
         if (state != State.Available) return null
 
@@ -172,6 +206,10 @@ class RootStateHolder @Inject constructor() : RootGate {
         try {
             close()
         } catch (_: Exception) {}
+    }
+
+    private companion object {
+        const val KEY_USE_ROOT_FS = "auxio_use_root_fs"
     }
 }
 
