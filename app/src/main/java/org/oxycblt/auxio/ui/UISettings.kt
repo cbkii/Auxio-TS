@@ -160,9 +160,10 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
             )
 
     override val visualizerMode: UISettings.VisualizerMode
-        get() = UISettings.VisualizerMode.from(
-            sharedPreferences.getString(getString(R.string.set_key_visualizer_mode), "0")
-        )
+        get() =
+            UISettings.VisualizerMode.from(
+                sharedPreferences.getString(getString(R.string.set_key_visualizer_mode), "0")
+            )
 
     override val headUnitCompatStatusSummary: String
         get() = "Tier 1 · Android-standard integration"

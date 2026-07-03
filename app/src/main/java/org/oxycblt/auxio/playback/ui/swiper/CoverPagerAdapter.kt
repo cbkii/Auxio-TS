@@ -92,11 +92,12 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
             if (shouldShowVisualizer) {
                 binding.coverVisualizer.visibility = View.VISIBLE
                 binding.cover.visibility = View.INVISIBLE
-                fftJob = lifecycleOwner.lifecycleScope.launch {
-                    playbackModel.visualizerFft.collect { bytes ->
-                        binding.coverVisualizer.updateFft(bytes)
+                fftJob =
+                    lifecycleOwner.lifecycleScope.launch {
+                        playbackModel.visualizerFft.collect { bytes ->
+                            binding.coverVisualizer.updateFft(bytes)
+                        }
                     }
-                }
             } else {
                 binding.coverVisualizer.visibility = View.GONE
                 binding.cover.visibility = View.VISIBLE
