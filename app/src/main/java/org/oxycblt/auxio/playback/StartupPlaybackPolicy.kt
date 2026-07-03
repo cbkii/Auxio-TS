@@ -36,7 +36,7 @@ object StartupPlaybackPolicy {
     fun restoreActionForLaunch(autoplayOnLaunch: Boolean): DeferredPlayback.RestoreState =
         DeferredPlayback.RestoreState(
             play = autoplayOnLaunch,
-            fallback = if (autoplayOnLaunch) DeferredPlayback.ShuffleAll else null,
+            fallback = DeferredPlayback.ShuffleAll(play = autoplayOnLaunch),
         )
 
     /**
@@ -49,6 +49,6 @@ object StartupPlaybackPolicy {
     fun restoreActionForBoot(autoplayOnLaunch: Boolean): DeferredPlayback.RestoreState =
         DeferredPlayback.RestoreState(
             play = autoplayOnLaunch,
-            fallback = if (autoplayOnLaunch) DeferredPlayback.ShuffleAll else null,
+            fallback = DeferredPlayback.ShuffleAll(play = autoplayOnLaunch),
         )
 }

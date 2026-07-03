@@ -118,6 +118,14 @@ constructor(
     /** The current queue in a special bundled format suitable for the cover ViewPager2. */
     val pagerQueue: StateFlow<PagerQueue> = _pagerQueue
 
+    private val _visualizerFft = MutableStateFlow<ByteArray?>(null)
+    /** The current FFT data to be dispatched to visualizer UI components. */
+    val visualizerFft: StateFlow<ByteArray?> = _visualizerFft
+
+    fun updateVisualizerFft(bytes: ByteArray?) {
+        _visualizerFft.value = bytes?.copyOf()
+    }
+
     private val _pagerCommand = MutableEvent<PagerCommand>()
     /** Specialized ViewPager2-friendly queue commands */
     val pagerCommand: Event<PagerCommand>

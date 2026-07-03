@@ -31,27 +31,27 @@ class StartupPlaybackPolicyTest {
     fun `restoreActionForLaunch with autoplay disabled returns play false and no fallback`() {
         val action = StartupPlaybackPolicy.restoreActionForLaunch(autoplayOnLaunch = false)
         assertFalse(action.play)
-        assertNull(action.fallback)
+        assertEquals(DeferredPlayback.ShuffleAll(play = false), action.fallback)
     }
 
     @Test
     fun `restoreActionForLaunch with autoplay enabled returns play true with ShuffleAll fallback`() {
         val action = StartupPlaybackPolicy.restoreActionForLaunch(autoplayOnLaunch = true)
         assertTrue(action.play)
-        assertEquals(DeferredPlayback.ShuffleAll, action.fallback)
+        assertEquals(DeferredPlayback.ShuffleAll(play = true), action.fallback)
     }
 
     @Test
     fun `restoreActionForBoot with autoplay disabled returns play false and no fallback`() {
         val action = StartupPlaybackPolicy.restoreActionForBoot(autoplayOnLaunch = false)
         assertFalse(action.play)
-        assertNull(action.fallback)
+        assertEquals(DeferredPlayback.ShuffleAll(play = false), action.fallback)
     }
 
     @Test
     fun `restoreActionForBoot with autoplay enabled returns play true with ShuffleAll fallback`() {
         val action = StartupPlaybackPolicy.restoreActionForBoot(autoplayOnLaunch = true)
         assertTrue(action.play)
-        assertEquals(DeferredPlayback.ShuffleAll, action.fallback)
+        assertEquals(DeferredPlayback.ShuffleAll(play = true), action.fallback)
     }
 }
