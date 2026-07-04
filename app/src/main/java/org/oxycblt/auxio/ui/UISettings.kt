@@ -57,6 +57,23 @@ interface UISettings : Settings<UISettings.Listener> {
     /** Read-only concise summary of Tier-1 head-unit compatibility posture. */
     val headUnitCompatStatusSummary: String
 
+    enum class VisualizerMode {
+        OFF,
+        FALLBACK,
+        ALWAYS;
+
+        companion object {
+            fun from(value: String?): VisualizerMode =
+                when (value) {
+                    "1" -> FALLBACK
+                    "2" -> ALWAYS
+                    else -> OFF
+                }
+        }
+    }
+
+    val visualizerMode: VisualizerMode
+
     enum class DriverSide {
         RIGHT,
         LEFT;
@@ -140,6 +157,12 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
             sharedPreferences.getBoolean(
                 getString(R.string.set_key_head_unit_dashboard_quick_access),
                 true,
+            )
+
+    override val visualizerMode: UISettings.VisualizerMode
+        get() =
+            UISettings.VisualizerMode.from(
+                sharedPreferences.getString(getString(R.string.set_key_visualizer_mode), "0")
             )
 
     override val headUnitCompatStatusSummary: String

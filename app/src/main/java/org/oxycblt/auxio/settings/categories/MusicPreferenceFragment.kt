@@ -76,5 +76,14 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     true
                 }
         }
+        if (preference.key == getString(R.string.set_key_ts18_system_source_filter)) {
+            L.d("Configuring ts18 system source filter setting")
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, _ ->
+                    L.d("TS18 system source filter changed, reloading music")
+                    musicModel.refresh()
+                    true
+                }
+        }
     }
 }

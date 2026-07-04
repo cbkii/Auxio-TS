@@ -39,7 +39,21 @@ class AudioPreferenceFragment : BasePreferenceFragment(R.xml.preferences_audio) 
             getString(R.string.set_key_autostart_floating_only) -> {
                 if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                     preference.isVisible = false
+                    return
                 }
+
+                val prefs =
+                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(
+                        requireContext()
+                    )
+                val overlayEnabled = prefs.getBoolean("car_overlay_enabled", false)
+
+                preference.summary =
+                    if (overlayEnabled) {
+                        getString(R.string.set_autostart_floating_only_desc)
+                    } else {
+                        getString(R.string.set_autostart_floating_only_desc_requires_overlay)
+                    }
             }
         }
     }

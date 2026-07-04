@@ -18,11 +18,14 @@
 
 package org.oxycblt.auxio.playback
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.media.audiofx.AudioEffect
+import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -31,6 +34,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
 import androidx.constraintlayout.widget.ConstraintSet
+import androidx.core.content.ContextCompat
 import androidx.core.view.updatePadding
 import androidx.core.view.updatePaddingRelative
 import androidx.dynamicanimation.animation.SpringForce
@@ -83,13 +87,18 @@ class PlaybackPanelFragment :
     Toolbar.OnMenuItemClickListener,
     StyledSeekBar.Listener,
     StepperOverlay.Listener {
-    private val coverPagerAdapter = CoverPagerAdapter(this)
+    private val coverPagerAdapter by lazy {
+        CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
+    }
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
     @Inject lateinit var uiSettings: UISettings
     private val queueModel: QueueViewModel by viewModels()
     private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
+    private var visualizer: Visualizer? = null
+    private var visualizerSessionId: Int? = null
+    private var visualizerPermissionLauncher: ActivityResultLauncher<String>? = null
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -105,6 +114,16 @@ class PlaybackPanelFragment :
         equalizerLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
                 // Nothing to do
+            }
+
+        visualizerPermissionLauncher =
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                if (isGranted) {
+                    updateVisualizerState()
+                    if (coverPagerAdapter.itemCount > 0) {
+                        coverPagerAdapter.notifyItemRangeChanged(0, coverPagerAdapter.itemCount)
+                    }
+                }
             }
 
         // --- UI SETUP ---
@@ -263,6 +282,8 @@ class PlaybackPanelFragment :
 
     override fun onDestroyBinding(binding: FragmentPlaybackPanelBinding) {
         equalizerLauncher = null
+        visualizerPermissionLauncher = null
+        releaseVisualizer()
         binding.playbackRepeat.clearPendingIcon()
         binding.playbackSong.isSelected = false
         binding.playbackArtist.isSelected = false
@@ -316,6 +337,8 @@ class PlaybackPanelFragment :
         binding.playbackArtist.text = song.artists.resolveNames(context)
         binding.playbackAlbum?.text = song.album.name.resolve(context)
         binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
+        updateVisualizerState()
+        notifyCoverVisualizerStateChanged()
     }
 
     private fun updateParent(parent: MusicParent?) {
@@ -335,9 +358,118 @@ class PlaybackPanelFragment :
         repeatButton.setIconResource(repeatMode.icon)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (!shouldUseVisualizerForCurrentState()) {
+            releaseVisualizer()
+            return
+        }
+        val hasPermission =
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        if (!hasPermission) {
+            visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            updateVisualizerState()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        releaseVisualizer()
+    }
+
+    private fun releaseVisualizer() {
+        try {
+            visualizer?.release()
+        } catch (e: Exception) {
+            // Ignore any issues during release
+        }
+        visualizer = null
+        visualizerSessionId = null
+        playbackModel.updateVisualizerFft(null)
+    }
+
+    private fun shouldUseVisualizerForCurrentState(): Boolean {
+        val sessionId = playbackModel.currentAudioSessionId ?: return false
+        if (sessionId == 0 || !playbackModel.isPlaying.value) return false
+
+        return when (uiSettings.visualizerMode) {
+            UISettings.VisualizerMode.OFF -> false
+            UISettings.VisualizerMode.ALWAYS -> true
+            UISettings.VisualizerMode.FALLBACK -> playbackModel.song.value?.cover == null
+        }
+    }
+
+    private fun updateVisualizerState() {
+        if (!shouldUseVisualizerForCurrentState()) {
+            releaseVisualizer()
+            notifyCoverVisualizerStateChanged()
+            return
+        }
+        val sessionId = playbackModel.currentAudioSessionId?.takeIf { it != 0 } ?: return
+
+        val hasPermission =
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+
+        if (!hasPermission) {
+            notifyCoverVisualizerStateChanged()
+            return // Will be requested in onResume if needed
+        }
+
+        if (visualizer != null && visualizerSessionId != sessionId) {
+            releaseVisualizer()
+        }
+
+        if (visualizer == null) {
+            try {
+                visualizer =
+                    Visualizer(sessionId).apply {
+                        visualizerSessionId = sessionId
+                        captureSize = Visualizer.getCaptureSizeRange()[1]
+                        setDataCaptureListener(
+                            object : Visualizer.OnDataCaptureListener {
+                                override fun onWaveFormDataCapture(
+                                    visualizer: Visualizer,
+                                    waveform: ByteArray,
+                                    samplingRate: Int,
+                                ) {}
+
+                                override fun onFftDataCapture(
+                                    visualizer: Visualizer,
+                                    fft: ByteArray,
+                                    samplingRate: Int,
+                                ) {
+                                    playbackModel.updateVisualizerFft(fft)
+                                }
+                            },
+                            Visualizer.getMaxCaptureRate() / 2,
+                            false,
+                            true,
+                        )
+                        enabled = true
+                    }
+            } catch (e: Exception) {
+                L.w("Failed to initialize visualizer: ${e.message}")
+                visualizer = null
+                visualizerSessionId = null
+            }
+        }
+        notifyCoverVisualizerStateChanged()
+    }
+
     private fun updatePlaying(isPlaying: Boolean) {
         requireBinding().playbackPlayPause.isChecked = isPlaying
         requireBinding().playbackSeekBar?.setWaveEnabled(isPlaying)
+        updateVisualizerState()
+        notifyCoverVisualizerStateChanged()
+    }
+
+    private fun notifyCoverVisualizerStateChanged() {
+        if (coverPagerAdapter.itemCount > 0) {
+            coverPagerAdapter.notifyItemRangeChanged(0, coverPagerAdapter.itemCount)
+        }
     }
 
     private fun updateShuffleScope(scope: ShuffleScope) {

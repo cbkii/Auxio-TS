@@ -265,7 +265,8 @@ class ExoPlaybackStateHolder(
                 playbackManager.play(
                     requireNotNull(commandFactory.all(ShuffleMode.ON)) {
                         "Invalid playback parameters"
-                    }
+                    },
+                    shouldPlayImmediately(action.play),
                 )
             }
             // Open -> Try to find the Song for the given file and then play it from all songs
@@ -364,7 +365,7 @@ class ExoPlaybackStateHolder(
         deferSave()
     }
 
-    override fun newPlayback(command: PlaybackCommand) {
+    override fun newPlayback(command: PlaybackCommand, play: Boolean) {
         rawFastResumeItem = null
         pendingLibraryRestoreAfterRawFailure = null
         parent = command.parent
@@ -380,7 +381,11 @@ class ExoPlaybackStateHolder(
         val target = startIndex ?: player.currentTimeline.getFirstWindowIndex(command.shuffled)
         player.seekTo(target, C.TIME_UNSET)
         player.prepare()
-        player.play()
+        if (play) {
+            player.play()
+        } else {
+            player.pause()
+        }
         playbackManager.ack(this, StateAck.NewPlayback)
         deferSave()
     }

@@ -60,7 +60,7 @@ interface PlaybackStateHolder {
     val rawPlaybackMetadata: RawPlaybackMetadata?
 
     /** Applies a completely new playback state to the holder. */
-    fun newPlayback(command: PlaybackCommand)
+    fun newPlayback(command: PlaybackCommand, play: Boolean = true)
 
     /**
      * Update the playing state of the audio player.
@@ -317,7 +317,7 @@ sealed interface DeferredPlayback {
     /**
      * Start shuffled playback of the entire music library. Analogous to the "Shuffle All" shortcut.
      */
-    data object ShuffleAll : DeferredPlayback
+    data class ShuffleAll(val play: Boolean = true) : DeferredPlayback
 
     /**
      * Start playing an audio file at the given [Uri].

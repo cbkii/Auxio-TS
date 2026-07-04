@@ -159,14 +159,14 @@ private constructor(
                 IntegerTable.START_ID_TASKER ->
                     DeferredPlayback.RestoreState(
                         play = true,
-                        fallback = DeferredPlayback.ShuffleAll,
+                        fallback = DeferredPlayback.ShuffleAll(),
                     )
                 IntegerTable.START_ID_MEDIA_BUTTON -> {
                     if (!sessionHolder.tryMediaButtonIntent(intent)) {
                         // Malformed intent, need to restore state immediately
                         DeferredPlayback.RestoreState(
                             play = true,
-                            fallback = DeferredPlayback.ShuffleAll,
+                            fallback = DeferredPlayback.ShuffleAll(),
                         )
                     } else {
                         null
@@ -186,7 +186,7 @@ private constructor(
                 IntegerTable.START_ID_BLUETOOTH -> {
                     DeferredPlayback.RestoreState(
                         play = playbackSettings.headsetAutoplay,
-                        fallback = DeferredPlayback.ShuffleAll,
+                        fallback = DeferredPlayback.ShuffleAll(),
                     )
                 }
                 else -> {
@@ -231,7 +231,7 @@ private constructor(
                         playbackManager.playDeferred(
                             DeferredPlayback.RestoreState(
                                 play = true,
-                                fallback = DeferredPlayback.ShuffleAll,
+                                fallback = DeferredPlayback.ShuffleAll(),
                             )
                         )
                     }

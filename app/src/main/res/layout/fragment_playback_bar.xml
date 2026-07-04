@@ -63,7 +63,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:orientation="horizontal"
-            android:spacing="@dimen/spacing_tiny"
+            android:spacing="@dimen/spacing_small"
             app:buttonSizeChange="@xml/safe_button_group_size_change">
 
             <org.oxycblt.auxio.ui.WidthFixMaterialButton

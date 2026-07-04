@@ -148,10 +148,10 @@
 
     <!-- Limit to 10 characters -->
     <string name="set_auto_detect_usb">Auto-detect USB</string>
-    <string name="set_picker_unavailable_fallback">System picker unavailable. Select from available music sources?</string>
+    <string name="set_picker_unavailable_fallback">System picker unavailable. Use Auto-detect USB or enter a direct path?</string>
     <string name="set_select_source">Select music source</string>
     <string name="set_enter_path_manually">Enter path manually…</string>
-    <string name="set_enter_path_hint">e.g. /storage/usbdisk1/My Music</string>
+    <string name="set_enter_path_hint">e.g. /storage/usbdisk0/Music or /storage/usbdisk1/Music</string>
     <string name="set_path_whitespace_invalid">Path has leading or trailing spaces. Please correct it and try again.</string>
     <string name="set_path_inaccessible">Path is not accessible or does not exist</string>
     <string name="lbl_shuffle_shortcut_short">Shuffle</string>
@@ -234,9 +234,9 @@
     <string name="lng_empty_artists">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_genres">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_playlists">No playlists yet. Create or import one to see it here.</string>
-    <string name="lng_file_picker">Load music from the folders that you select. Slower, but more reliable. Requires the vanilla file manager app to be installed.</string>
+    <string name="lng_file_picker">Use Android\'s folder picker when available. On TS18, DocumentsUI may be absent; use Auto-detect USB or Direct FS if the picker cannot open.</string>
     <string name="lng_system_database">Load music that the Android OS automatically detects. Faster, but less reliable. No support for filesystem-dependent features like cover.jpg.</string>
-    <string name="lng_direct_fs">Load music directly from specific filesystem paths. Faster and more reliable for head units. Can use root if available.</string>
+    <string name="lng_direct_fs">Load music directly from filesystem paths such as /storage/usbdisk0 or /storage/usbdisk1. Best for TS18 USB storage; can use bounded root-assisted listing when enabled.</string>
     <string name="lng_grant_storage_anyway">Granting external storage permissions can fix issues on some devices.</string>
     <string name="lng_grant_storage_required">Grant external storage permissions to enable this option.</string>
     <string name="lng_include_folders">Music outside of the selected folders will be ignored.</string>
@@ -278,6 +278,25 @@
     <string name="set_head_unit_compat_native_not_enabled_requires_validation">Not enabled (requires TS18 validation)</string>
     <string name="set_ts18_source_repair_status">TS18 USB source status</string>
     <string name="set_ts18_source_repair_status_desc">Check /storage/usbdisk0 and /storage/usbdisk1 source readiness</string>
+
+    <string name="set_visualizer_mode">Now Playing Visualizer</string>
+    <string name="set_visualizer_mode_desc">Shows an on-device visualizer for the current playback audio session. Android labels this as audio recording permission, but Auxio-TS does not record microphone audio.</string>
+    <string name="set_key_visualizer_mode" translatable="false">ui_visualizer_mode</string>
+
+    <string name="visualizer_mode_off" translatable="false">0</string>
+    <string name="visualizer_mode_fallback" translatable="false">1</string>
+    <string name="visualizer_mode_always" translatable="false">2</string>
+
+    <string-array name="entries_visualizer_mode">
+        <item>Off</item>
+        <item>Fallback (When no artwork)</item>
+        <item>Always</item>
+    </string-array>
+    <string-array name="values_visualizer_mode" translatable="false">
+        <item>@string/visualizer_mode_off</item>
+        <item>@string/visualizer_mode_fallback</item>
+        <item>@string/visualizer_mode_always</item>
+    </string-array>
     <string name="set_ts18_source_repair_checking">Checking USB source status…</string>
     <string name="set_ts18_source_repair_status_summary">%1$s\n%2$s</string>
     <string name="set_ts18_source_repair_ready">All checked USB sources are ready</string>
@@ -568,4 +587,43 @@
         <item quantity="one">%d second</item>
         <item quantity="other">%d seconds</item>
     </plurals>
+
+    <!-- TS18 Settings Additions -->
+    <string name="set_key_use_root_fs" translatable="false">auxio_use_root_fs</string>
+    <string name="set_use_root_fs">Use root-assisted file access</string>
+    <string name="set_use_root_fs_desc">Allows Direct source browsing to use root for bounded directory listing only. Does not modify system files.</string>
+
+    <string name="set_key_root_fs_status" translatable="false">auxio_root_fs_status</string>
+    <string name="set_root_fs_status">Root file access status</string>
+    <string name="set_root_fs_status_desc">Check current root-assisted DirectFS availability</string>
+    <string name="set_root_fs_status_disabled">Disabled by user</string>
+    <string name="set_root_fs_status_unsupported">Unsupported in this build</string>
+    <string name="set_root_fs_status_unknown">Not checked</string>
+    <string name="set_root_fs_status_available">Available</string>
+    <string name="set_root_fs_status_denied">Denied</string>
+    <string name="set_root_fs_status_timed_out">Timed out</string>
+    <string name="set_root_fs_status_unavailable">Unavailable</string>
+
+    <string name="set_key_ts18_fast_resume_status" translatable="false">ts18_fast_resume_status</string>
+    <string name="set_ts18_fast_resume_status">Fast resume status</string>
+    <string name="set_ts18_fast_resume_status_desc">Fast resume uses a previous playback snapshot when available. Requires TS18 device validation.</string>
+    <string name="set_ts18_fast_resume_ready">Ready: previous playback snapshot available</string>
+    <string name="set_ts18_fast_resume_no_snapshot">No previous playback snapshot</string>
+    <string name="set_ts18_fast_resume_unavailable">Unavailable: source path not ready or snapshot missing</string>
+
+    <string name="set_key_ts18_startup_scanning_policy" translatable="false">ts18_startup_scanning_policy</string>
+    <string name="set_ts18_startup_scanning_policy">Startup scanning</string>
+    <string name="set_ts18_startup_scanning_policy_desc">Manual/cache-first on this build. Use Refresh music or Rescan music after changing USB contents.</string>
+
+    <string name="set_key_ts18_system_source_filter" translatable="false">auxio_ts18_system_source_filter</string>
+    <string name="set_ts18_system_source_filter">Limit system library to music folders</string>
+    <string name="set_ts18_system_source_filter_desc">Filters System Database results to likely music/download/media paths on TS18 to avoid noisy system audio. Turn off if expected tracks are missing.</string>
+
+    <string name="car_overlay_hide_auxio_fg">Hide while Auxio is open</string>
+    <string name="car_overlay_hide_auxio_fg_desc">Automatically hide the floating controls when the main app is visible</string>
+    <string name="car_overlay_opacity">Floating controls opacity</string>
+    <string name="car_overlay_opacity_desc">Adjust the transparency of the floating controls when they are next shown</string>
+
+    <string name="set_key_ts18_source_repair_status" translatable="false">ts18_source_repair_status</string>
+    <string name="set_autostart_floating_only_desc_requires_overlay">Requires Autostart, Car Floating Controls, and Display over other apps permission</string>
 </resources>

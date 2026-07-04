@@ -32,6 +32,14 @@
     <PreferenceCategory
         app:title="@string/set_head_unit">
 
+        <androidx.preference.ListPreference
+            app:defaultValue="@string/visualizer_mode_off"
+            app:entries="@array/entries_visualizer_mode"
+            app:entryValues="@array/values_visualizer_mode"
+            app:key="@string/set_key_visualizer_mode"
+            app:title="@string/set_visualizer_mode"
+            app:summary="@string/set_visualizer_mode_desc" />
+
         <SwitchPreferenceCompat
             app:defaultValue="false"
             app:key="@string/set_key_driver_side"
@@ -62,7 +70,7 @@
             app:title="@string/set_head_unit_compat_status" />
 
         <Preference
-            app:key="@string/set_ts18_source_repair_status"
+            app:key="@string/set_key_ts18_source_repair_status"
             app:summary="@string/set_ts18_source_repair_status_desc"
             app:title="@string/set_ts18_source_repair_status" />
     </PreferenceCategory>
