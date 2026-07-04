@@ -622,8 +622,8 @@
     <string name="car_overlay_hide_auxio_fg">Hide while Auxio is open</string>
     <string name="car_overlay_hide_auxio_fg_desc">Automatically hide the floating controls when the main app is visible</string>
     <string name="car_overlay_opacity">Floating controls opacity</string>
-    <string name="car_overlay_opacity_desc">Adjust the transparency of the floating controls</string>
+    <string name="car_overlay_opacity_desc">Adjust the transparency of the floating controls when they are next shown</string>
 
-    <string name="set_key_ts18_source_repair_status" translatable="false">set_ts18_source_repair_status</string>
+    <string name="set_key_ts18_source_repair_status" translatable="false">ts18_source_repair_status</string>
     <string name="set_autostart_floating_only_desc_requires_overlay">Requires Autostart, Car Floating Controls, and Display over other apps permission</string>
 </resources>

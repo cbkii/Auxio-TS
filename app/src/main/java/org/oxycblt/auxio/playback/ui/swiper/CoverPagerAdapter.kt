@@ -20,7 +20,7 @@ package org.oxycblt.auxio.playback.ui.swiper
 
 import android.view.View
 import android.view.ViewGroup
-import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
@@ -45,12 +45,13 @@ class CoverPagerAdapter(
     private val listener: StepperOverlay.Listener,
     private val playbackModel: PlaybackViewModel,
     private val uiSettings: UISettings,
+    private val lifecycleOwner: LifecycleOwner,
 ) : FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
 
     override fun onCreateViewHolder(parent: ViewGroup, pos: Int) = CoverViewHolder.from(parent)
 
     override fun onBindViewHolder(viewHolder: CoverViewHolder, pos: Int) {
-        viewHolder.bind(currentList[pos], listener, playbackModel, uiSettings)
+        viewHolder.bind(currentList[pos], listener, playbackModel, uiSettings, lifecycleOwner)
     }
 
     override fun onViewRecycled(viewHolder: CoverViewHolder) {
@@ -88,6 +89,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
         listener: StepperOverlay.Listener,
         playbackModel: PlaybackViewModel,
         uiSettings: UISettings,
+        lifecycleOwner: LifecycleOwner,
     ) {
         binding.cover.bind(song)
         binding.coverFastSeekOverlay.listener = listener
@@ -98,34 +100,35 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
         binding.coverVisualizer.visibility = View.GONE
         binding.cover.visibility = View.VISIBLE
 
-        val lifecycleOwner = itemView.findViewTreeLifecycleOwner()
-        if (lifecycleOwner != null) {
-            val visualizerMode = uiSettings.visualizerMode
-            val hasArtwork = song.cover != null
-            val hasPermission =
-                androidx.core.content.ContextCompat.checkSelfPermission(
-                    binding.root.context,
-                    android.Manifest.permission.RECORD_AUDIO,
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            val shouldShowVisualizer =
-                hasPermission &&
-                    (visualizerMode == UISettings.VisualizerMode.ALWAYS ||
-                        (visualizerMode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
+        val visualizerMode = uiSettings.visualizerMode
+        val hasArtwork = song.cover != null
+        val hasPermission =
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                binding.root.context,
+                android.Manifest.permission.RECORD_AUDIO,
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val sessionId = playbackModel.currentAudioSessionId
+        val shouldShowVisualizer =
+            hasPermission &&
+                playbackModel.isPlaying.value &&
+                sessionId != null &&
+                sessionId != 0 &&
+                (visualizerMode == UISettings.VisualizerMode.ALWAYS ||
+                    (visualizerMode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
 
-            if (shouldShowVisualizer) {
-                binding.coverVisualizer.visibility = View.VISIBLE
-                binding.cover.visibility = View.INVISIBLE
-                fftJob =
-                    lifecycleOwner.lifecycleScope.launch {
-                        playbackModel.visualizerFft.collect { bytes ->
-                            binding.coverVisualizer.updateFft(bytes)
-                        }
+        if (shouldShowVisualizer) {
+            binding.coverVisualizer.visibility = View.VISIBLE
+            binding.cover.visibility = View.INVISIBLE
+            fftJob =
+                lifecycleOwner.lifecycleScope.launch {
+                    playbackModel.visualizerFft.collect { bytes ->
+                        binding.coverVisualizer.updateFft(bytes)
                     }
-            } else {
-                binding.coverVisualizer.updateFft(null)
-                binding.coverVisualizer.visibility = View.GONE
-                binding.cover.visibility = View.VISIBLE
-            }
+                }
+        } else {
+            binding.coverVisualizer.updateFft(null)
+            binding.coverVisualizer.visibility = View.GONE
+            binding.cover.visibility = View.VISIBLE
         }
     }
 

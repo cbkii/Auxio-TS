@@ -27,7 +27,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 class StartupPlaybackPolicyTest {
 
     @Test
-    fun `restoreActionForLaunch with autoplay disabled returns play false and no fallback`() {
+    fun `restoreActionForLaunch with autoplay disabled returns play false with paused ShuffleAll fallback`() {
         val action = StartupPlaybackPolicy.restoreActionForLaunch(autoplayOnLaunch = false)
         assertFalse(action.play)
         assertEquals(DeferredPlayback.ShuffleAll(play = false), action.fallback)
@@ -41,7 +41,7 @@ class StartupPlaybackPolicyTest {
     }
 
     @Test
-    fun `restoreActionForBoot with autoplay disabled returns play false and no fallback`() {
+    fun `restoreActionForBoot with autoplay disabled returns play false with paused ShuffleAll fallback`() {
         val action = StartupPlaybackPolicy.restoreActionForBoot(autoplayOnLaunch = false)
         assertFalse(action.play)
         assertEquals(DeferredPlayback.ShuffleAll(play = false), action.fallback)

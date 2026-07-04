@@ -87,7 +87,9 @@ class PlaybackPanelFragment :
     Toolbar.OnMenuItemClickListener,
     StyledSeekBar.Listener,
     StepperOverlay.Listener {
-    private val coverPagerAdapter by lazy { CoverPagerAdapter(this, playbackModel, uiSettings) }
+    private val coverPagerAdapter by lazy {
+        CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
+    }
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
     @Inject lateinit var uiSettings: UISettings
@@ -95,6 +97,7 @@ class PlaybackPanelFragment :
     private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
     private var visualizer: Visualizer? = null
+    private var visualizerSessionId: Int? = null
     private var visualizerPermissionLauncher: ActivityResultLauncher<String>? = null
 
     override fun onCreateBinding(inflater: LayoutInflater) =
@@ -334,6 +337,8 @@ class PlaybackPanelFragment :
         binding.playbackArtist.text = song.artists.resolveNames(context)
         binding.playbackAlbum?.text = song.album.name.resolve(context)
         binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
+        updateVisualizerState()
+        notifyCoverVisualizerStateChanged()
     }
 
     private fun updateParent(parent: MusicParent?) {
@@ -381,6 +386,7 @@ class PlaybackPanelFragment :
             // Ignore any issues during release
         }
         visualizer = null
+        visualizerSessionId = null
         playbackModel.updateVisualizerFft(null)
     }
 
@@ -395,32 +401,33 @@ class PlaybackPanelFragment :
         }
     }
 
-    private fun shouldShowVisualizerForSong(song: org.oxycblt.musikr.Song?): Boolean =
-        when (uiSettings.visualizerMode) {
-            UISettings.VisualizerMode.OFF -> false
-            UISettings.VisualizerMode.FALLBACK -> song?.cover == null
-            UISettings.VisualizerMode.ALWAYS -> true
-        }
 
     private fun updateVisualizerState() {
         if (!shouldUseVisualizerForCurrentState()) {
             releaseVisualizer()
+            notifyCoverVisualizerStateChanged()
             return
         }
-        val sessionId = playbackModel.currentAudioSessionId ?: return
+        val sessionId = playbackModel.currentAudioSessionId?.takeIf { it != 0 } ?: return
 
         val hasPermission =
             ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
 
         if (!hasPermission) {
+            notifyCoverVisualizerStateChanged()
             return // Will be requested in onResume if needed
+        }
+
+        if (visualizer != null && visualizerSessionId != sessionId) {
+            releaseVisualizer()
         }
 
         if (visualizer == null) {
             try {
                 visualizer =
                     Visualizer(sessionId).apply {
+                        visualizerSessionId = sessionId
                         captureSize = Visualizer.getCaptureSizeRange()[1]
                         setDataCaptureListener(
                             object : Visualizer.OnDataCaptureListener {
@@ -447,14 +454,23 @@ class PlaybackPanelFragment :
             } catch (e: Exception) {
                 L.w("Failed to initialize visualizer: ${e.message}")
                 visualizer = null
+                visualizerSessionId = null
             }
         }
+        notifyCoverVisualizerStateChanged()
     }
 
     private fun updatePlaying(isPlaying: Boolean) {
         requireBinding().playbackPlayPause.isChecked = isPlaying
         requireBinding().playbackSeekBar?.setWaveEnabled(isPlaying)
         updateVisualizerState()
+        notifyCoverVisualizerStateChanged()
+    }
+
+    private fun notifyCoverVisualizerStateChanged() {
+        if (coverPagerAdapter.itemCount > 0) {
+            coverPagerAdapter.notifyItemRangeChanged(0, coverPagerAdapter.itemCount)
+        }
     }
 
     private fun updateShuffleScope(scope: ShuffleScope) {

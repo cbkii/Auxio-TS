@@ -32,7 +32,7 @@
     <PreferenceCategory
         app:title="@string/set_head_unit">
 
-        <org.oxycblt.auxio.settings.ui.StringListPreference
+        <androidx.preference.ListPreference
             app:defaultValue="@string/visualizer_mode_off"
             app:entries="@array/entries_visualizer_mode"
             app:entryValues="@array/values_visualizer_mode"

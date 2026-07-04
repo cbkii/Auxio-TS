@@ -52,7 +52,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     fun updateFft(bytes: ByteArray?) {
         if (bytes != null) {
             // Defensive copy so that modifications from the visualizer thread do not break our data
-            fftBytes = bytes.copyOf()
+            val current = fftBytes
+            if (current == null || current.size != bytes.size) {
+                fftBytes = bytes.copyOf()
+            } else {
+                System.arraycopy(bytes, 0, current, 0, bytes.size)
+            }
         } else {
             fftBytes = null
         }

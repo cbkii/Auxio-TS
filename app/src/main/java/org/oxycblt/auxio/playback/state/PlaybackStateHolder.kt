@@ -60,7 +60,7 @@ interface PlaybackStateHolder {
     val rawPlaybackMetadata: RawPlaybackMetadata?
 
     /** Applies a completely new playback state to the holder. */
-    fun newPlayback(command: PlaybackCommand)
+    fun newPlayback(command: PlaybackCommand, play: Boolean = true)
 
     /**
      * Update the playing state of the audio player.

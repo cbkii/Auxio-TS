@@ -47,8 +47,9 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) state = State.UnsupportedForVariant
     }
 
-    private val prefs
-        get() = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+    private val prefs by lazy {
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+    }
 
     private fun userEnabled(): Boolean =
         BuildConfig.TOPWAY_COMPAT_FLAVOR && prefs.getBoolean(KEY_USE_ROOT_FS, false)

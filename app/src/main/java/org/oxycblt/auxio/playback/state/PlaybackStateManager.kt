@@ -125,6 +125,14 @@ interface PlaybackStateManager {
     fun play(command: PlaybackCommand)
 
     /**
+     * Start new playback with control over the initial playing state.
+     *
+     * @param command The parameters to start playback with.
+     * @param play Whether playback should start immediately after preparation.
+     */
+    fun play(command: PlaybackCommand, play: Boolean)
+
+    /**
      * Start new playback with an explicit app-level [ShuffleScope].
      *
      * @param command The parameters to start playback with.
@@ -484,18 +492,27 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun play(command: PlaybackCommand) {
-        play(command, defaultShuffleScope(command.shuffled))
+        play(command, defaultShuffleScope(command.shuffled), play = true)
+    }
+
+    @Synchronized
+    override fun play(command: PlaybackCommand, play: Boolean) {
+        play(command, defaultShuffleScope(command.shuffled), play)
     }
 
     @Synchronized
     override fun play(command: PlaybackCommand, shuffleScope: ShuffleScope) {
+        play(command, shuffleScope, play = true)
+    }
+
+    private fun play(command: PlaybackCommand, shuffleScope: ShuffleScope, play: Boolean) {
         val stateHolder = stateHolder ?: return
         L.d("Playing $command")
         // Played something, so we are initialized now
         isInitialized = true
         stateMirror =
             stateMirror.copy(shuffleScope = normalizedShuffleScope(command.shuffled, shuffleScope))
-        stateHolder.newPlayback(command)
+        stateHolder.newPlayback(command, play)
     }
 
     // --- QUEUE FUNCTIONS ---

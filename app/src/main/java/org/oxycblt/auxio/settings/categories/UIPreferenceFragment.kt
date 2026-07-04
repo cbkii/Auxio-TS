@@ -123,11 +123,7 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
 
     private fun setupTs18FastResumeStatus(preference: Preference) {
         preference.summary = getString(R.string.set_ts18_fast_resume_status_desc)
-
-        preference.setOnPreferenceClickListener {
-            preference.summary = getString(R.string.set_ts18_fast_resume_status_desc)
-            true
-        }
+        preference.setOnPreferenceClickListener(null)
     }
 
     private fun setupRootFsStatus(preference: Preference) {
