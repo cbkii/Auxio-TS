@@ -32,9 +32,8 @@ import kotlin.math.sin
  * Lightweight radial visualizer adapted from BlobVisualizer in
  * https://github.com/gauravk95/audio-visualizer-android.
  *
- * Original visualizer project copyright: Copyright 2018 Gaurav Kumar.
- * Original visualizer project license: Apache License, Version 2.0.
- * https://www.apache.org/licenses/LICENSE-2.0
+ * Original visualizer project copyright: Copyright 2018 Gaurav Kumar. Original visualizer project
+ * license: Apache License, Version 2.0. https://www.apache.org/licenses/LICENSE-2.0
  */
 class BlobVisualizer
 @JvmOverloads
