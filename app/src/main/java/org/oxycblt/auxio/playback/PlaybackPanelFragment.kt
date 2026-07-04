@@ -401,7 +401,6 @@ class PlaybackPanelFragment :
         }
     }
 
-
     private fun updateVisualizerState() {
         if (!shouldUseVisualizerForCurrentState()) {
             releaseVisualizer()
