@@ -31,8 +31,8 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
-import org.oxycblt.auxio.headunit.ts18.Ts18SourceRepairStatePolicy
 import org.oxycblt.auxio.headunit.root.RootStateHolder
+import org.oxycblt.auxio.headunit.ts18.Ts18SourceRepairStatePolicy
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.ui.UISettings
@@ -112,10 +112,12 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
                     ) + "\n" + uiSettings.headUnitCompatStatusSummary
             }
             KEY_CAR_OVERLAY_ENABLED -> setupCarOverlayEnabled(preference)
-            getString(R.string.set_key_ts18_source_repair_status) -> setupTs18SourceRepairStatus(preference)
+            getString(R.string.set_key_ts18_source_repair_status) ->
+                setupTs18SourceRepairStatus(preference)
             KEY_CAR_OVERLAY_RESET_POSITION -> setupCarOverlayReset(preference)
             getString(R.string.set_key_root_fs_status) -> setupRootFsStatus(preference)
-            getString(R.string.set_key_ts18_fast_resume_status) -> setupTs18FastResumeStatus(preference)
+            getString(R.string.set_key_ts18_fast_resume_status) ->
+                setupTs18FastResumeStatus(preference)
         }
     }
 
@@ -133,7 +135,8 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
         preference.summary = rootStatusSummary(status)
 
         preference.setOnPreferenceClickListener {
-            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            val prefs =
+                androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
             val enabled = prefs.getBoolean(getString(R.string.set_key_use_root_fs), false)
             if (!enabled) {
                 preference.summary = getString(R.string.set_root_fs_status_disabled)
@@ -151,7 +154,8 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
     private fun rootStatusSummary(state: RootStateHolder.State): String =
         when (state) {
             RootStateHolder.State.DisabledByUser -> getString(R.string.set_root_fs_status_disabled)
-            RootStateHolder.State.UnsupportedForVariant -> getString(R.string.set_root_fs_status_unsupported)
+            RootStateHolder.State.UnsupportedForVariant ->
+                getString(R.string.set_root_fs_status_unsupported)
             RootStateHolder.State.Unknown -> getString(R.string.set_root_fs_status_unknown)
             RootStateHolder.State.Available -> getString(R.string.set_root_fs_status_available)
             RootStateHolder.State.Denied -> getString(R.string.set_root_fs_status_denied)

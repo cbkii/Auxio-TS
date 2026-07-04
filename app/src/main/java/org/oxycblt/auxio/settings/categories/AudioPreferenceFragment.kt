@@ -42,7 +42,10 @@ class AudioPreferenceFragment : BasePreferenceFragment(R.xml.preferences_audio) 
                     return
                 }
 
-                val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                val prefs =
+                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(
+                        requireContext()
+                    )
                 val overlayEnabled = prefs.getBoolean("car_overlay_enabled", false)
 
                 preference.summary =

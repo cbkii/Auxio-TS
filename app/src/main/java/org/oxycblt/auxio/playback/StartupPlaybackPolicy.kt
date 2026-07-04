@@ -54,9 +54,9 @@ object StartupPlaybackPolicy {
         )
 
     /**
-     * Determine whether the Now Playing panel should be opened on cold launch.
-     * We don't want to open the panel if this is a first/setup launch where the library is missing/empty,
-     * as the setup screen or library loader is more appropriate.
+     * Determine whether the Now Playing panel should be opened on cold launch. We don't want to
+     * open the panel if this is a first/setup launch where the library is missing/empty, as the
+     * setup screen or library loader is more appropriate.
      */
     fun shouldOpenPanelOnLaunch(library: Library?): Boolean {
         return library != null && !library.empty()

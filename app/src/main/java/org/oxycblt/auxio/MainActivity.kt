@@ -102,7 +102,10 @@ class MainActivity : AppCompatActivity() {
                         playbackSettings.autoplayOnLaunch && isFirstResume
                     )
                 playbackModel.playDeferred(action)
-                if (isFirstResume && StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)) {
+                if (
+                    isFirstResume &&
+                        StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)
+                ) {
                     playbackModel.openPlayback()
                 }
             }

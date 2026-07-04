@@ -360,10 +360,8 @@ class PlaybackPanelFragment :
             return
         }
         val hasPermission =
-            ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.RECORD_AUDIO,
-            ) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
         if (!hasPermission) {
             visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
         } else {

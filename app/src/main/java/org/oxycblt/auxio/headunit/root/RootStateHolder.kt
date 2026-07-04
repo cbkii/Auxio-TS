@@ -27,9 +27,8 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.musikr.fs.RootGate
 
 @Singleton
-class RootStateHolder @Inject constructor(
-    @ApplicationContext private val context: Context,
-) : RootGate {
+class RootStateHolder @Inject constructor(@ApplicationContext private val context: Context) :
+    RootGate {
     enum class State {
         Unknown,
         Available,
@@ -52,8 +51,7 @@ class RootStateHolder @Inject constructor(
         get() = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
 
     private fun userEnabled(): Boolean =
-        BuildConfig.TOPWAY_COMPAT_FLAVOR &&
-            prefs.getBoolean(KEY_USE_ROOT_FS, false)
+        BuildConfig.TOPWAY_COMPAT_FLAVOR && prefs.getBoolean(KEY_USE_ROOT_FS, false)
 
     @Synchronized
     fun stateSnapshot(): State {

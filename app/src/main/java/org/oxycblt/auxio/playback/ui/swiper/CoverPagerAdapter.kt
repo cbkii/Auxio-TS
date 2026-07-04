@@ -102,10 +102,15 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
         if (lifecycleOwner != null) {
             val visualizerMode = uiSettings.visualizerMode
             val hasArtwork = song.cover != null
-            val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(binding.root.context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            val shouldShowVisualizer = hasPermission && (
-                visualizerMode == UISettings.VisualizerMode.ALWAYS ||
-                    (visualizerMode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
+            val hasPermission =
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    binding.root.context,
+                    android.Manifest.permission.RECORD_AUDIO,
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val shouldShowVisualizer =
+                hasPermission &&
+                    (visualizerMode == UISettings.VisualizerMode.ALWAYS ||
+                        (visualizerMode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
 
             if (shouldShowVisualizer) {
                 binding.coverVisualizer.visibility = View.VISIBLE

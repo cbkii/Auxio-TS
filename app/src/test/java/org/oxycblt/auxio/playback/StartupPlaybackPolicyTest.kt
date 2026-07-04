@@ -62,21 +62,30 @@ class StartupPlaybackPolicyTest {
 
     @Test
     fun shouldOpenPanelOnLaunch_falseWhenLibraryEmpty() {
-        val emptyLibrary = object : org.oxycblt.musikr.Library {
-            override val songs = emptyList<org.oxycblt.musikr.Song>()
-            override val albums = emptyList<org.oxycblt.musikr.Album>()
-            override val artists = emptyList<org.oxycblt.musikr.Artist>()
-            override val genres = emptyList<org.oxycblt.musikr.Genre>()
-            override val playlists = emptyList<org.oxycblt.musikr.Playlist>()
-            override fun empty() = true
-            override fun findSong(uid: org.oxycblt.musikr.Music.UID) = null
-            override fun findSongByPath(path: org.oxycblt.musikr.fs.Path) = null
-            override fun findAlbum(uid: org.oxycblt.musikr.Music.UID) = null
-            override fun findArtist(uid: org.oxycblt.musikr.Music.UID) = null
-            override fun findGenre(uid: org.oxycblt.musikr.Music.UID) = null
-            override fun findPlaylist(uid: org.oxycblt.musikr.Music.UID) = null
-            override fun findPlaylistByName(name: String) = null
-        }
+        val emptyLibrary =
+            object : org.oxycblt.musikr.Library {
+                override val songs = emptyList<org.oxycblt.musikr.Song>()
+                override val albums = emptyList<org.oxycblt.musikr.Album>()
+                override val artists = emptyList<org.oxycblt.musikr.Artist>()
+                override val genres = emptyList<org.oxycblt.musikr.Genre>()
+                override val playlists = emptyList<org.oxycblt.musikr.Playlist>()
+
+                override fun empty() = true
+
+                override fun findSong(uid: org.oxycblt.musikr.Music.UID) = null
+
+                override fun findSongByPath(path: org.oxycblt.musikr.fs.Path) = null
+
+                override fun findAlbum(uid: org.oxycblt.musikr.Music.UID) = null
+
+                override fun findArtist(uid: org.oxycblt.musikr.Music.UID) = null
+
+                override fun findGenre(uid: org.oxycblt.musikr.Music.UID) = null
+
+                override fun findPlaylist(uid: org.oxycblt.musikr.Music.UID) = null
+
+                override fun findPlaylistByName(name: String) = null
+            }
         val result = StartupPlaybackPolicy.shouldOpenPanelOnLaunch(emptyLibrary)
         assertFalse(result)
     }
