@@ -386,10 +386,21 @@ class PlaybackPanelFragment :
 
     private fun shouldUseVisualizerForCurrentState(): Boolean {
         val sessionId = playbackModel.currentAudioSessionId ?: return false
-        return sessionId != 0 &&
-            playbackModel.isPlaying.value &&
-            uiSettings.visualizerMode != UISettings.VisualizerMode.OFF
+        if (sessionId == 0 || !playbackModel.isPlaying.value) return false
+
+        return when (uiSettings.visualizerMode) {
+            UISettings.VisualizerMode.OFF -> false
+            UISettings.VisualizerMode.ALWAYS -> true
+            UISettings.VisualizerMode.FALLBACK -> playbackModel.song.value?.cover == null
+        }
     }
+
+    private fun shouldShowVisualizerForSong(song: org.oxycblt.musikr.Song?): Boolean =
+        when (uiSettings.visualizerMode) {
+            UISettings.VisualizerMode.OFF -> false
+            UISettings.VisualizerMode.FALLBACK -> song?.cover == null
+            UISettings.VisualizerMode.ALWAYS -> true
+        }
 
     private fun updateVisualizerState() {
         if (!shouldUseVisualizerForCurrentState()) {

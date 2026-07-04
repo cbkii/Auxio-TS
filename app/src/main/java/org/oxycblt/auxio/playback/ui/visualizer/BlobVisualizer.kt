@@ -28,7 +28,14 @@ import android.view.View
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** A lightweight BlobVisualizer adapted from gauravk95/audio-visualizer-android. */
+/**
+ * Lightweight radial visualizer adapted from BlobVisualizer in
+ * https://github.com/gauravk95/audio-visualizer-android.
+ *
+ * Original visualizer project copyright: Copyright 2018 Gaurav Kumar.
+ * Original visualizer project license: Apache License, Version 2.0.
+ * https://www.apache.org/licenses/LICENSE-2.0
+ */
 class BlobVisualizer
 @JvmOverloads
 constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) :
