@@ -280,7 +280,7 @@
     <string name="set_ts18_source_repair_status_desc">Check /storage/usbdisk0 and /storage/usbdisk1 source readiness</string>
 
     <string name="set_visualizer_mode">Now Playing Visualizer</string>
-    <string name="set_visualizer_mode_desc">A lightweight audio visualizer shown in the Now Playing screen.</string>
+    <string name="set_visualizer_mode_desc">Shows an on-device visualizer for the current playback audio session. Android labels this as audio recording permission, but Auxio-TS does not record microphone audio.</string>
     <string name="set_key_visualizer_mode" translatable="false">ui_visualizer_mode</string>
 
     <string name="visualizer_mode_off" translatable="false">0</string>
