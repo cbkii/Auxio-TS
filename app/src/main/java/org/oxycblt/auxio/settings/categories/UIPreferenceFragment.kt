@@ -32,6 +32,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.ts18.Ts18SourceRepairStatePolicy
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.ui.UISettings
@@ -47,6 +48,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
     @Inject lateinit var uiSettings: UISettings
+    @Inject lateinit var rootStateHolder: RootStateHolder
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
         if (preference.key == getString(R.string.set_key_accent)) {
@@ -110,11 +112,52 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
                     ) + "\n" + uiSettings.headUnitCompatStatusSummary
             }
             KEY_CAR_OVERLAY_ENABLED -> setupCarOverlayEnabled(preference)
-            getString(R.string.set_ts18_source_repair_status) ->
-                setupTs18SourceRepairStatus(preference)
+            getString(R.string.set_key_ts18_source_repair_status) -> setupTs18SourceRepairStatus(preference)
             KEY_CAR_OVERLAY_RESET_POSITION -> setupCarOverlayReset(preference)
+            getString(R.string.set_key_root_fs_status) -> setupRootFsStatus(preference)
+            getString(R.string.set_key_ts18_fast_resume_status) -> setupTs18FastResumeStatus(preference)
         }
     }
+
+    private fun setupTs18FastResumeStatus(preference: Preference) {
+        preference.summary = getString(R.string.set_ts18_fast_resume_status_desc)
+
+        preference.setOnPreferenceClickListener {
+            preference.summary = getString(R.string.set_ts18_fast_resume_status_desc)
+            true
+        }
+    }
+
+    private fun setupRootFsStatus(preference: Preference) {
+        val status = rootStateHolder.stateSnapshot()
+        preference.summary = rootStatusSummary(status)
+
+        preference.setOnPreferenceClickListener {
+            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            val enabled = prefs.getBoolean(getString(R.string.set_key_use_root_fs), false)
+            if (!enabled) {
+                preference.summary = getString(R.string.set_root_fs_status_disabled)
+                return@setOnPreferenceClickListener true
+            }
+
+            viewLifecycleOwner.lifecycleScope.launch {
+                val probed = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
+                preference.summary = rootStatusSummary(probed)
+            }
+            true
+        }
+    }
+
+    private fun rootStatusSummary(state: RootStateHolder.State): String =
+        when (state) {
+            RootStateHolder.State.DisabledByUser -> getString(R.string.set_root_fs_status_disabled)
+            RootStateHolder.State.UnsupportedForVariant -> getString(R.string.set_root_fs_status_unsupported)
+            RootStateHolder.State.Unknown -> getString(R.string.set_root_fs_status_unknown)
+            RootStateHolder.State.Available -> getString(R.string.set_root_fs_status_available)
+            RootStateHolder.State.Denied -> getString(R.string.set_root_fs_status_denied)
+            RootStateHolder.State.TimedOut -> getString(R.string.set_root_fs_status_timed_out)
+            RootStateHolder.State.Unavailable -> getString(R.string.set_root_fs_status_unavailable)
+        }
 
     private fun setupTs18SourceRepairStatus(preference: Preference) {
         preference.summary =

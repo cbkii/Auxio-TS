@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.playback
 
 import org.oxycblt.auxio.playback.state.DeferredPlayback
+import org.oxycblt.musikr.Library
 
 /**
  * Pure policy functions for determining startup playback behavior based on user settings.
@@ -36,7 +37,7 @@ object StartupPlaybackPolicy {
     fun restoreActionForLaunch(autoplayOnLaunch: Boolean): DeferredPlayback.RestoreState =
         DeferredPlayback.RestoreState(
             play = autoplayOnLaunch,
-            fallback = if (autoplayOnLaunch) DeferredPlayback.ShuffleAll else null,
+            fallback = DeferredPlayback.ShuffleAll(play = autoplayOnLaunch),
         )
 
     /**
@@ -49,6 +50,15 @@ object StartupPlaybackPolicy {
     fun restoreActionForBoot(autoplayOnLaunch: Boolean): DeferredPlayback.RestoreState =
         DeferredPlayback.RestoreState(
             play = autoplayOnLaunch,
-            fallback = if (autoplayOnLaunch) DeferredPlayback.ShuffleAll else null,
+            fallback = DeferredPlayback.ShuffleAll(play = autoplayOnLaunch),
         )
+
+    /**
+     * Determine whether the Now Playing panel should be opened on cold launch.
+     * We don't want to open the panel if this is a first/setup launch where the library is missing/empty,
+     * as the setup screen or library loader is more appropriate.
+     */
+    fun shouldOpenPanelOnLaunch(library: Library?): Boolean {
+        return library != null && !library.empty()
+    }
 }

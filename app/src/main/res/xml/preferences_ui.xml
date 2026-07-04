@@ -32,6 +32,14 @@
     <PreferenceCategory
         app:title="@string/set_head_unit">
 
+        <org.oxycblt.auxio.settings.ui.StringListPreference
+            app:defaultValue="@string/visualizer_mode_off"
+            app:entries="@array/entries_visualizer_mode"
+            app:entryValues="@array/values_visualizer_mode"
+            app:key="@string/set_key_visualizer_mode"
+            app:title="@string/set_visualizer_mode"
+            app:summary="@string/set_visualizer_mode_desc" />
+
         <SwitchPreferenceCompat
             app:defaultValue="false"
             app:key="@string/set_key_driver_side"
