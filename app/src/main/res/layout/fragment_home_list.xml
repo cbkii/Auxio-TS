@@ -38,6 +38,15 @@
                 android:backgroundTint="?attr/colorSurfaceVariant"
                 app:tint="?attr/colorOnSurfaceVariant" />
 
+            <ProgressBar
+                android:id="@+id/home_no_music_progress"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="@dimen/spacing_small"
+                android:visibility="gone"
+                android:indeterminate="true"
+                android:indeterminateTint="?attr/colorPrimary" />
+
             <TextView
                 android:id="@+id/home_no_music_msg"
                 android:layout_width="256dp"

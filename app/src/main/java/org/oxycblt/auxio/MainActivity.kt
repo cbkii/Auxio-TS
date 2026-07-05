@@ -103,10 +103,11 @@ class MainActivity : AppCompatActivity() {
                     )
                 playbackModel.playDeferred(action)
                 if (
-                    isFirstResume &&
+                    !isFirstResume ||
                         StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)
                 ) {
-                    playbackModel.openPlayback()
+                    if (uiSettings.headUnitLandscapeMode) playbackModel.openQueue()
+                    else playbackModel.openPlayback()
                 }
             }
             isFirstResume = false

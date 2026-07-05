@@ -230,6 +230,7 @@
         \n\nWARNING: Be careful controlling this service, if you close it and then try to use it again, you will probably crash the app.
     </string>
     <string name="lng_empty_songs">Source empty or not scanned. Select a path and tap Refresh.</string>
+    <string name="lng_loading_songs">Loading your music library…</string>
     <string name="lng_empty_albums">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_artists">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_genres">Source empty or not scanned. Select a path and tap Refresh.</string>
@@ -436,6 +437,7 @@
     <string name="err_share_too_large">This is too large to share</string>
     <string name="err_share_failed">Unable to share this</string>
     <string name="err_no_app">No app found that can handle this task</string>
+    <string name="err_no_perms">Missing storage permission to access this path.</string>
     <!-- No folders in the "Music Folders" setting -->
     <string name="err_bad_location">This folder is not supported</string>
     <string name="lbl_no_folders">No folders</string>

@@ -129,6 +129,7 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     private val squareishShapeAppearance: ShapeAppearanceModel
     private val circularShapeAppearance: ShapeAppearanceModel
     private var currentShapeAppearance: ShapeAppearanceModel
+    private var currentImageRequest: ImageRequest? = null
 
     init {
         // Obtain some StyledImageView attributes to use later when theming the custom view.
@@ -286,6 +287,12 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
         invalidateRootAlpha()
         invalidatePlaybackIndicatorAlpha(playbackIndicator ?: return)
         invalidateSelectionIndicatorAlpha(selectionBadge ?: return)
+
+        // Re-enqueue the image request if it exists, since Coil may have disposed it when detached.
+        currentImageRequest?.let { req ->
+            CoilUtils.dispose(image)
+            imageLoader.enqueue(req)
+        }
     }
 
     override fun setEnabled(enabled: Boolean) {
@@ -542,7 +549,8 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
 
         // Dispose of any previous image request and load a new image.
         CoilUtils.dispose(image)
-        imageLoader.enqueue(request.build())
+        currentImageRequest = request.build()
+        imageLoader.enqueue(currentImageRequest!!)
         contentDescription = desc
     }
 

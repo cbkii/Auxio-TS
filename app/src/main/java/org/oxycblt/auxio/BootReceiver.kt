@@ -98,11 +98,15 @@ class BootReceiver : BroadcastReceiver() {
 
         // If floating controls only is enabled, start the overlay and skip the main activity
         if (playbackSettings.autostartFloatingOnly) {
-            if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
-                L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
-                return
-            } else {
-                L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")
+            try {
+                if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
+                    L.d("Launch Floating Controls only is enabled, requested Topway overlay restore")
+                    return
+                } else {
+                    L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")
+                }
+            } catch (e: Exception) {
+                L.w(e, "Launch Floating Controls only failed overlay start")
             }
         }
 

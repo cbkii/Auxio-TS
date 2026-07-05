@@ -18,13 +18,26 @@
 
 package org.oxycblt.auxio.headunit.overlay
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.BuildConfig
+import timber.log.Timber as L
 
 object TopwayOverlayRestoreBridge {
     fun requestOverlayRestore(context: Context): Boolean {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return false
+
+        try {
+            val intent = Intent().setComponent(ComponentName(context, "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"))
+            intent.putExtra("reason", "boot_autostart")
+            ContextCompat.startForegroundService(context, intent)
+            return true
+        } catch (e: Exception) {
+            L.w(e, "Cannot start CarFloatingControlsService directly")
+        }
+
         val overlayIntent = Intent("org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY")
         overlayIntent.setPackage(context.packageName)
         context.sendBroadcast(overlayIntent)

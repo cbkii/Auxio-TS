@@ -65,6 +65,8 @@ interface PlaybackCommand {
 
         fun songs(songs: List<Song>, shuffle: ShuffleMode): PlaybackCommand?
 
+        fun songInQueue(song: Song, queue: List<Song>, shuffle: ShuffleMode): PlaybackCommand?
+
         fun album(album: Album, shuffle: ShuffleMode): PlaybackCommand?
 
         fun artist(artist: Artist, shuffle: ShuffleMode): PlaybackCommand?
@@ -121,6 +123,9 @@ constructor(
 
     override fun songs(songs: List<Song>, shuffle: ShuffleMode) =
         newCommand(null, null, songs, shuffle)
+
+    override fun songInQueue(song: Song, queue: List<Song>, shuffle: ShuffleMode) =
+        newCommand(song, null, queue, shuffle)
 
     override fun album(album: Album, shuffle: ShuffleMode) =
         newCommand(null, album, listSettings.albumSongSort, shuffle)

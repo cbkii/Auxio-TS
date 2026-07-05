@@ -217,6 +217,20 @@ class PlaybackPanelFragment :
         if (useLargeControls) {
             binding.playbackControlsWrapper?.updatePaddingRelative(start = 0, end = 0)
         }
+        if (useLargeControls) {
+            val extraPadding = resources.getDimensionPixelSize(R.dimen.spacing_small)
+            binding.playbackMore?.let { btn ->
+                val lp = btn.layoutParams
+                lp.width += extraPadding * 2
+                lp.height += extraPadding * 2
+                btn.layoutParams = lp
+            }
+            binding.playbackToolbar.let { toolbar ->
+                val lp = toolbar.layoutParams
+                lp.height = resources.getDimensionPixelSize(R.dimen.size_touchable_head_unit_media)
+                toolbar.layoutParams = lp
+            }
+        }
         applyDriverSideLayout(binding)
 
         // Set up actions
@@ -297,6 +311,25 @@ class PlaybackPanelFragment :
         if (item.itemId == R.id.action_open_equalizer) {
             // Launch the system equalizer app, if possible.
             L.d("Launching equalizer")
+            if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                val knownVendorPackages = listOf(
+                    "com.tw.eq",
+                    "com.syu.eq",
+                    "com.zjinnova.eq"
+                )
+                val pm = requireContext().packageManager
+                for (pkg in knownVendorPackages) {
+                    val intent = pm.getLaunchIntentForPackage(pkg)
+                    if (intent != null) {
+                        try {
+                            startActivity(intent)
+                            return true
+                        } catch (e: Exception) {
+                            L.w(e, "Failed to launch vendor EQ package: $pkg")
+                        }
+                    }
+                }
+            }
             val equalizerIntent =
                 Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
                     // Provide audio session ID so the equalizer can show options for this app

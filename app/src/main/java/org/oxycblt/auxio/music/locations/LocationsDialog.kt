@@ -438,7 +438,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         withContext(Dispatchers.IO) {
                             try {
                                 val file = File(pathText)
-                                file.exists() && file.isDirectory && file.canRead()
+                                file.exists() && file.isDirectory && (file.canRead() || !hasStoragePermission || musicSettings.locationMode == LocationMode.DIRECT_FS)
                             } catch (e: Exception) {
                                 false
                             }
@@ -449,7 +449,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         return@launch
                     }
                     if (!accessible) {
-                        currentContext.showToast(R.string.set_path_inaccessible)
+                        if (!hasStoragePermission) {
+                            currentContext.showToast(R.string.err_no_perms)
+                        } else {
+                            currentContext.showToast(R.string.set_path_inaccessible)
+                        }
                         clearPendingLocationCallback(callback)
                         return@launch
                     }

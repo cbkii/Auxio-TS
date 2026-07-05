@@ -100,29 +100,84 @@ object TopwaySourcePolicy {
      * Discovers currently existing, readable source roots without recursively traversing them.
      * Preserves each returned path exactly as discovered so UI selection can persist it unchanged.
      */
-    fun discoverCandidateRoots(): List<String> =
+    fun discoverCandidateRoots(findAudioDirs: Boolean = true): List<String> =
         discoverCandidateRoots(
             File("/storage"),
             File("/mnt/media_rw"),
             includeGenericFallbacks = true,
+            findAudioDirs = findAudioDirs
         )
 
     internal fun discoverCandidateRoots(
         storageRoot: File,
         mediaRwRoot: File,
         includeGenericFallbacks: Boolean = false,
+        findAudioDirs: Boolean = true,
     ): List<String> {
         val out = linkedSetOf<String>()
+        val baseRoots = mutableListOf<String>()
+
         if (includeGenericFallbacks) {
-            SAFE_GENERIC_FALLBACKS.filterTo(out) { isAccessibleCandidate(it) }
+            SAFE_GENERIC_FALLBACKS.filterTo(baseRoots) { isAccessibleCandidate(it) }
         }
-        discoverChildren(storageRoot, removableOnly = false).filterTo(out) {
+        discoverChildren(storageRoot, removableOnly = false).filterTo(baseRoots) {
             isAccessibleCandidate(it)
         }
-        discoverChildren(mediaRwRoot, removableOnly = true).filterTo(out) {
+        discoverChildren(mediaRwRoot, removableOnly = true).filterTo(baseRoots) {
             isAccessibleCandidate(it)
         }
-        return out.toList()
+
+        if (!findAudioDirs) {
+            return baseRoots
+        }
+
+        // Look for audio files in base roots (up to a small depth)
+        for (root in baseRoots) {
+            val audioDirs = discoverAudioDirectories(File(root), maxDepth = 3, maxScans = 100)
+            out.addAll(audioDirs)
+            // Add the root itself as a fallback if it's safe
+            out.add(root)
+        }
+
+        return out.toList().sortedByDescending { it.lowercase().contains("music") }
+    }
+
+    private fun discoverAudioDirectories(root: File, maxDepth: Int, maxScans: Int): List<String> {
+        val audioExtensions = setOf("mp3", "flac", "m4a", "wav", "ogg", "opus", "aac")
+        val foundDirs = mutableSetOf<String>()
+        var scans = 0
+
+        fun scan(dir: File, currentDepth: Int) {
+            if (currentDepth > maxDepth || scans >= maxScans) return
+            if (NOISY_DIRS.contains(dir.name)) return
+
+            val files = try {
+                dir.listFiles()
+            } catch (e: Exception) {
+                null
+            } ?: return
+
+            scans++
+            var hasAudio = false
+
+            for (file in files) {
+                if (file.isDirectory) {
+                    scan(file, currentDepth + 1)
+                } else if (file.isFile) {
+                    val ext = file.extension.lowercase()
+                    if (audioExtensions.contains(ext)) {
+                        hasAudio = true
+                    }
+                }
+            }
+
+            if (hasAudio) {
+                foundDirs.add(dir.absolutePath)
+            }
+        }
+
+        scan(root, 0)
+        return foundDirs.toList()
     }
 
     private fun discoverChildren(root: File, removableOnly: Boolean): List<String> {
