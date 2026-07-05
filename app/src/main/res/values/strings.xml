@@ -229,6 +229,7 @@
         Starts Auxio using the previously saved state. If no saved state is available, all songs will be shuffled. Playback will start immediately.
         \n\nWARNING: Be careful controlling this service, if you close it and then try to use it again, you will probably crash the app.
     </string>
+    <string name="lng_loading_music_library">Loading your music library…</string>
     <string name="lng_empty_songs">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_albums">Source empty or not scanned. Select a path and tap Refresh.</string>
     <string name="lng_empty_artists">Source empty or not scanned. Select a path and tap Refresh.</string>

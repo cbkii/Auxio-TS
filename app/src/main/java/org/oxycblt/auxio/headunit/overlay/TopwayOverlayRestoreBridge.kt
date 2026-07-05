@@ -20,6 +20,7 @@ package org.oxycblt.auxio.headunit.overlay
 
 import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.BuildConfig
 
 object TopwayOverlayRestoreBridge {
@@ -28,6 +29,16 @@ object TopwayOverlayRestoreBridge {
         val overlayIntent = Intent("org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY")
         overlayIntent.setPackage(context.packageName)
         context.sendBroadcast(overlayIntent)
+        runCatching {
+            val serviceClass =
+                Class.forName("org.oxycblt.auxio.car.overlay.CarFloatingControlsService")
+            val serviceIntent =
+                Intent(context, serviceClass)
+                    .setAction("${BuildConfig.APPLICATION_ID}.car.overlay.START")
+            ContextCompat.startForegroundService(context, serviceIntent)
+        }.onFailure {
+            timber.log.Timber.w(it, "Direct Topway overlay foreground-service restore failed")
+        }
         return true
     }
 }

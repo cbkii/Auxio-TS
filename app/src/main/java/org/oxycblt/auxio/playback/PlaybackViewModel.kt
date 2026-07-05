@@ -722,9 +722,23 @@ constructor(
                     return@launch
                 }
                 val positionMs = playbackManager.progression.calculateElapsedPositionMs()
-                playImpl(commandFactory.songs(selection.queue, ShuffleMode.ON), ShuffleScope.GENRE)
-                playbackManager.seekTo(positionMs)
+                val queue = selection.queue.preserveCurrentFirst(currentSongUid)
+                playImpl(commandFactory.songs(queue, ShuffleMode.ON), ShuffleScope.GENRE)
+                if (playbackManager.currentSong?.uid == currentSongUid) {
+                    playbackManager.seekTo(positionMs)
+                } else {
+                    L.w(
+                        "Genre shuffle did not preserve current song; " +
+                            "current=${playbackManager.currentSong?.uid}, expected=$currentSongUid"
+                    )
+                }
             }
+    }
+
+    private fun List<Song>.preserveCurrentFirst(currentUid: Any): List<Song> {
+        val index = indexOfFirst { it.uid == currentUid }
+        if (index <= 0) return this
+        return drop(index) + take(index)
     }
 
     /**

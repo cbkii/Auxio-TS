@@ -345,7 +345,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         val callback = pendingLocationCallback ?: return
         lifecycleScope.launch {
             val accessibleCandidates =
-                withContext(Dispatchers.IO) { TopwaySourcePolicy.discoverCandidateRoots() }
+                withContext(Dispatchers.IO) {
+                    TopwaySourcePolicy.discoverMusicSourceCandidates(
+                        includeLocationAdapter.locations.map { it.uri.toString() }
+                    )
+                }
             val ctx =
                 context
                     ?: run {
@@ -437,9 +441,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     val accessible =
                         withContext(Dispatchers.IO) {
                             try {
-                                val file = File(pathText)
-                                file.exists() && file.isDirectory && file.canRead()
+                                TopwaySourcePolicy.isAllowedSourceCandidate(pathText) &&
+                                    File(pathText).let {
+                                        it.exists() && it.isDirectory && it.canRead()
+                                    }
                             } catch (e: Exception) {
+                                L.w(e, "Manual music source validation failed for $pathText")
                                 false
                             }
                         }
@@ -449,6 +456,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         return@launch
                     }
                     if (!accessible) {
+                        L.w(
+                            "Rejecting manual music source $pathText: unsafe, missing, or unreadable"
+                        )
                         currentContext.showToast(R.string.set_path_inaccessible)
                         clearPendingLocationCallback(callback)
                         return@launch

@@ -72,6 +72,25 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
+    fun allowsSharedStorageAndUsbSourceCandidatesButRejectsProtectedPaths() {
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/emulated/0"))
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/emulated/0/Music"))
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/sdcard"))
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/sdcard/Music"))
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/usbdisk1/Music"))
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/mnt/media_rw/usbdisk2/Music"))
+
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/system"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/vendor"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/data"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/proc"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/sys"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/dev"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/emulated/0/../data"))
+    }
+
+    @Test
     fun systemSourceFilterStillAcceptsUsbDiskOneMusicPaths() {
         assertTrue(
             TopwaySourcePolicy.matchesSystemSourceFilter("/storage/usbdisk1/My Music/song.flac")

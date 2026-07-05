@@ -24,7 +24,6 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.media.audiofx.AudioEffect
 import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -32,6 +31,7 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.content.ContextCompat
@@ -48,6 +48,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.headunit.HeadUnitUiAdapter
+import org.oxycblt.auxio.headunit.topway.TopwayEqualizerLauncher
 import org.oxycblt.auxio.home.HomeFragmentDirections
 import org.oxycblt.auxio.list.menu.Menu
 import org.oxycblt.auxio.music.resolve
@@ -216,6 +217,13 @@ class PlaybackPanelFragment :
         )
         if (useLargeControls) {
             binding.playbackControlsWrapper?.updatePaddingRelative(start = 0, end = 0)
+            HeadUnitUiAdapter.applyUniformMediaControls(
+                resources,
+                largeControls = true,
+                buttons = listOfNotNull(binding.playbackMore),
+                compact = true,
+            )
+            applyLargeToolbarTargets(binding.playbackToolbar)
         }
         applyDriverSideLayout(binding)
 
@@ -280,6 +288,24 @@ class PlaybackPanelFragment :
         collectImmediately(playbackModel.pagerQueue, ::updatePager)
     }
 
+    private fun applyLargeToolbarTargets(toolbar: Toolbar) {
+        val size = resources.getDimensionPixelSize(R.dimen.size_touchable_head_unit)
+        toolbar.minimumHeight = size
+        toolbar.post {
+            for (i in 0 until toolbar.childCount) {
+                val child = toolbar.getChildAt(i)
+                if (child is ActionMenuView || child.contentDescription != null) {
+                    child.minimumWidth = size
+                    child.minimumHeight = size
+                    child.updateLayoutParams {
+                        width = maxOf(width, size)
+                        height = maxOf(height, size)
+                    }
+                }
+            }
+        }
+    }
+
     override fun onDestroyBinding(binding: FragmentPlaybackPanelBinding) {
         equalizerLauncher = null
         visualizerPermissionLauncher = null
@@ -295,20 +321,17 @@ class PlaybackPanelFragment :
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
         if (item.itemId == R.id.action_open_equalizer) {
-            // Launch the system equalizer app, if possible.
-            L.d("Launching equalizer")
+            L.d("Launching TS18/native equalizer with Android fallback")
             val equalizerIntent =
-                Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
-                    // Provide audio session ID so the equalizer can show options for this app
-                    // in particular.
-                    .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, playbackModel.currentAudioSessionId)
-                    // Signal music type so that the equalizer settings are appropriate for
-                    // music playback.
-                    .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+                TopwayEqualizerLauncher.resolveIntent(
+                    requireContext(),
+                    playbackModel.currentAudioSessionId,
+                )
             try {
                 requireNotNull(equalizerLauncher) { "Equalizer panel launcher was not available" }
                     .launch(equalizerIntent)
             } catch (e: ActivityNotFoundException) {
+                L.w(e, "No native TS18 EQ/DSP or Android AudioEffect panel found")
                 requireContext().showToast(R.string.err_no_app)
             }
             return true
