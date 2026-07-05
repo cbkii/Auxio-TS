@@ -66,7 +66,12 @@ class BootReceiver : BroadcastReceiver() {
                 Thread(
                     {
                         try {
-                            rootGate.probeSync()
+                            val state = rootGate.probeSync()
+                            journal.log(
+                                DiagnosticJournal.CAT_BOOT,
+                                "Root probe completed",
+                                state.name,
+                            )
                         } finally {
                             pendingResult.finish()
                         }
@@ -83,26 +88,53 @@ class BootReceiver : BroadcastReceiver() {
         // therefore never posts a media notification) would be killed by the system. On Android
         // 14+ a mediaPlayback foreground service started from BOOT_COMPLETED is rejected, so the
         // start is wrapped to degrade gracefully instead of crashing the receiver.
-        if (playbackSettings.autoplayOnLaunch) {
+        val shouldStartPlaybackService = playbackSettings.autoplayOnLaunch
+        journal.log(
+            DiagnosticJournal.CAT_BOOT,
+            "Playback restore path",
+            "service=$shouldStartPlaybackService autoplay=${playbackSettings.autoplayOnLaunch} floatingOnly=${playbackSettings.autostartFloatingOnly}",
+        )
+        if (playbackSettings.autostartFloatingOnly && !playbackSettings.autoplayOnLaunch) {
+            journal.log(
+                DiagnosticJournal.CAT_BOOT,
+                "Playback restore skipped",
+                "floating_only_without_autoplay",
+            )
+        }
+        if (shouldStartPlaybackService) {
             try {
                 val serviceIntent =
                     Intent(context, AuxioService::class.java)
                         .setAction(AuxioService.ACTION_START)
                         .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
                 ContextCompat.startForegroundService(context, serviceIntent)
-                L.d("Started AuxioService from boot")
+                L.d(
+                    "Started AuxioService from boot [autoplay=${playbackSettings.autoplayOnLaunch}, floatingOnly=${playbackSettings.autostartFloatingOnly}]"
+                )
             } catch (e: Exception) {
                 L.w("Cannot start AuxioService from boot: $e")
+                journal.log(DiagnosticJournal.CAT_BOOT, "Playback restore failed", e.toString())
             }
         }
 
         // If floating controls only is enabled, start the overlay and skip the main activity
         if (playbackSettings.autostartFloatingOnly) {
+            journal.log(
+                DiagnosticJournal.CAT_BOOT,
+                "Floating-only autostart",
+                "requesting overlay restore",
+            )
             if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
                 L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
+                journal.log(
+                    DiagnosticJournal.CAT_BOOT,
+                    "Overlay restore requested",
+                    "topway_bridge",
+                )
                 return
             } else {
                 L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")
+                journal.log(DiagnosticJournal.CAT_BOOT, "Floating-only skipped", "non-Topway build")
             }
         }
 

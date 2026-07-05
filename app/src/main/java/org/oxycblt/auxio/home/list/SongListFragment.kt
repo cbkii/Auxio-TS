@@ -166,10 +166,19 @@ class SongListFragment :
 
     private fun updateNoMusicIndicator(empty: Boolean, indexingState: IndexingState?) {
         val binding = requireBinding()
+        val loading = indexingState is IndexingState.Indexing
+        val showPlaceholder = empty
+        val showLoadingPlaceholder = empty && loading
         binding.homeRecycler.isInvisible = empty
-        binding.homeNoMusic.isInvisible = !empty
+        binding.homeNoMusic.isInvisible = !showPlaceholder
+        binding.homeNoMusicProgress.isVisible = showLoadingPlaceholder
+        binding.homeNoMusicPlaceholder.isVisible = !showLoadingPlaceholder
+        binding.homeNoMusicMsg.setText(
+            if (showLoadingPlaceholder) R.string.lng_loading_music_library
+            else R.string.lng_empty_songs
+        )
         binding.homeNoMusicAction.isVisible =
-            indexingState == null || (empty && indexingState is IndexingState.Completed)
+            empty && !loading && (indexingState == null || indexingState is IndexingState.Completed)
     }
 
     private fun updateSelection(selection: List<Music>) {

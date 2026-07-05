@@ -187,8 +187,11 @@ private constructor(
         if (trackingJob == null) {
             startTracking()
         }
-        // Wipe possibly-invalidated outdated covers
-        imageLoader.memoryCache?.clear()
+        // Only wipe covers when the underlying device library changed. Cached startup emissions
+        // and playback-state repair should not blank visible artwork after relaunch.
+        if (changes.deviceLibrary) {
+            imageLoader.memoryCache?.clear()
+        }
         // Clear invalid models from PlaybackStateManager. This is not connected
         // to a listener as it is bad practice for a shared object to attach to
         // the listener system of another.

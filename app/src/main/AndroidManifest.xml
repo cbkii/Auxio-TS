@@ -30,6 +30,13 @@
         <package android:name="com.dofun.variety" />
         <package android:name="com.tw.music" />
         <package android:name="com.tw.media" />
+        <package android:name="com.tw.eq" />
+        <package android:name="com.tw.dsp" />
+        <package android:name="com.syu.eq" />
+        <package android:name="com.syu.dsp" />
+        <package android:name="com.ts.MainUI" />
+        <package android:name="com.ts.mainui" />
+        <package android:name="com.zjinnova.eq" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />
