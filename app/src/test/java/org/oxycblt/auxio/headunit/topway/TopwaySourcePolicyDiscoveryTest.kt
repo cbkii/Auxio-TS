@@ -104,6 +104,45 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
+    fun allowsUuidStyleRemovableStorageRootsButRejectsStorageAliases() {
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/1234-ABCD"))
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/1234-abcd/Music"))
+
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/self"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/emulated"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/123-ABCD"))
+        assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/1234-ABCD/../data"))
+    }
+
+    @Test
+    fun rootBackedEntriesPreserveTypesForAudioParentDiscovery() {
+        val root = File("/storage/usbdisk9/Music")
+        val out = linkedSetOf<String>()
+        val gate =
+            object : org.oxycblt.musikr.fs.RootGate {
+                override fun runRootCommandSync(command: String, timeoutMs: Long) =
+                    listOf("f\tf\t0\t4\ttrack.flac")
+            }
+
+        TopwaySourcePolicy.discoverAudioParents(root, out, rootGate = gate)
+
+        assertTrue(out.contains(root.absolutePath))
+    }
+
+    @Test
+    fun rootEntryParserPreservesDirectoryAndFileTypes() {
+        val parent = File("/storage/usbdisk9")
+        val dir = TopwaySourcePolicy.parseRootEntry(parent, "d\td\t0\t0\tMusic")
+        val file = TopwaySourcePolicy.parseRootEntry(parent, "f\tf\t0\t4\ttrack.mp3")
+
+        assertTrue(dir?.isDirectory == true)
+        assertFalse(dir?.isFile == true)
+        assertTrue(file?.isFile == true)
+        assertFalse(file?.isDirectory == true)
+        assertEquals(File(parent, "Music"), dir?.file)
+    }
+
+    @Test
     fun appFacingUsbRootsRankBeforeRawMediaRwRoots() {
         val candidates =
             TopwaySourcePolicy.discoverMusicSourceCandidates(

@@ -60,6 +60,7 @@ object TopwaySourcePolicy {
         Regex("^/storage/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
     private val MEDIA_RW_USB_SOURCE_REGEX =
         Regex("^/mnt/media_rw/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
+    private val STORAGE_UUID_SOURCE_REGEX = Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
     private val AUDIO_EXTENSIONS =
         setOf("mp3", "flac", "m4a", "mp4", "wav", "ogg", "opus", "aac", "3gp", "amr", "wma")
 
@@ -67,6 +68,8 @@ object TopwaySourcePolicy {
     private const val MAX_VISITED_FILES = 2500
     private const val MAX_CANDIDATES = 48
     private const val MAX_SCAN_ELAPSED_MS = 1200L
+
+    internal data class FileEntry(val file: File, val isDirectory: Boolean, val isFile: Boolean)
 
     fun matchesSystemSourceFilter(fullPath: String): Boolean {
         val lower = fullPath.lowercase()
@@ -144,11 +147,11 @@ object TopwaySourcePolicy {
             preferAppFacingRoots(SAFE_GENERIC_FALLBACKS + storageRoots + discoverCandidateRoots())
                 .filter(::isAllowedSourceCandidate)
         val audioParents = linkedSetOf<String>()
-        val started = System.currentTimeMillis()
+        val deadline = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS
         for (root in roots) {
             if (audioParents.size >= MAX_CANDIDATES) break
-            discoverAudioParents(File(root), audioParents, rootGate)
-            if (System.currentTimeMillis() - started > MAX_SCAN_ELAPSED_MS) break
+            if (System.currentTimeMillis() > deadline) break
+            discoverAudioParents(File(root), audioParents, rootGate, deadline = deadline)
         }
         val musicFolders =
             roots.mapNotNull {
@@ -169,15 +172,15 @@ object TopwaySourcePolicy {
         out: LinkedHashSet<String>,
         rootGate: RootGate? = null,
         enforceSafeRoot: Boolean = true,
+        deadline: Long = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS,
     ) {
         if (enforceSafeRoot && !isAllowedSourceCandidate(root.absolutePath)) return
-        val started = System.currentTimeMillis()
         var visited = 0
         val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(root to 0)
         while (queue.isNotEmpty()) {
             if (out.size >= MAX_CANDIDATES || visited >= MAX_VISITED_FILES) return
-            if (System.currentTimeMillis() - started > MAX_SCAN_ELAPSED_MS) return
+            if (System.currentTimeMillis() > deadline) return
             val (dir, depth) = queue.removeFirst()
             val children = listFilesSafe(dir, rootGate) ?: continue
             var containsAudio = false
@@ -185,11 +188,12 @@ object TopwaySourcePolicy {
                 visited++
                 if (visited >= MAX_VISITED_FILES) break
                 when {
-                    child.isFile && child.extension.lowercase() in AUDIO_EXTENSIONS ->
+                    child.isFile && child.file.extension.lowercase() in AUDIO_EXTENSIONS ->
                         containsAudio = true
                     child.isDirectory &&
                         depth < MAX_SCAN_DEPTH &&
-                        shouldDescend(child, enforceSafeRoot) -> queue.add(child to depth + 1)
+                        shouldDescend(child.file, enforceSafeRoot) ->
+                        queue.add(child.file to depth + 1)
                 }
             }
             if (containsAudio && (!enforceSafeRoot || isAllowedSourceCandidate(dir.absolutePath))) {
@@ -198,7 +202,7 @@ object TopwaySourcePolicy {
         }
     }
 
-    private fun listFilesSafe(dir: File, rootGate: RootGate?): Array<File>? {
+    private fun listFilesSafe(dir: File, rootGate: RootGate?): List<FileEntry>? {
         val direct =
             try {
                 dir.listFiles()
@@ -206,15 +210,19 @@ object TopwaySourcePolicy {
                 L.w(e, "Cannot list music candidate directory ${dir.absolutePath}")
                 null
             }
-        if (direct != null) return direct
+        if (direct != null) {
+            return direct.map { FileEntry(it, isDirectory = it.isDirectory, isFile = it.isFile) }
+        }
         return rootGate
             ?.runRootCommandSync(buildRootListCommand(dir.absolutePath), 1200)
             ?.mapNotNull { parseRootEntry(dir, it) }
-            ?.toTypedArray()
     }
 
+    fun canListRootBackedDirectory(path: String, rootGate: RootGate): Boolean =
+        isAllowedSourceCandidate(path) && listFilesSafe(File(path), rootGate) != null
+
     private fun buildRootListCommand(directory: String): String {
-        val escaped = directory.replace("'", "'\"'\"'")
+        val escaped = directory.replace("'", "'\\''")
         return "for p in '$escaped'/* '$escaped'/.*; do " +
             "[ -e \"\$p\" ] || continue; " +
             "b=\${p##*/}; [ \"\$b\" = . ] && continue; [ \"\$b\" = .. ] && continue; " +
@@ -225,13 +233,18 @@ object TopwaySourcePolicy {
             "done"
     }
 
-    private fun parseRootEntry(parent: File, line: String): File? {
+    internal fun parseRootEntry(parent: File, line: String): FileEntry? {
         val parts = line.split('\t')
         if (parts.size < 5) return null
         val type = parts[0]
         val name = parts[4]
         if (name == "." || name == ".." || name.contains('/')) return null
-        return if (type == "d" || type == "f") File(parent, name) else null
+        val file = File(parent, name)
+        return when (type) {
+            "d" -> FileEntry(file, isDirectory = true, isFile = false)
+            "f" -> FileEntry(file, isDirectory = false, isFile = true)
+            else -> null
+        }
     }
 
     private fun shouldDescend(dir: File, enforceSafeRoot: Boolean): Boolean {
@@ -281,7 +294,8 @@ object TopwaySourcePolicy {
                 clean == EMULATED_ROOT ||
                 clean.startsWith("$EMULATED_ROOT/") ||
                 USB_DISK_SOURCE_REGEX.matches(clean) ||
-                MEDIA_RW_USB_SOURCE_REGEX.matches(clean)
+                MEDIA_RW_USB_SOURCE_REGEX.matches(clean) ||
+                STORAGE_UUID_SOURCE_REGEX.matches(clean)
         if (!syntacticallyAllowed) return false
         val canonical =
             runCatching { File(clean).canonicalPath.replace('\\', '/').trimEnd('/') }.getOrNull()
@@ -291,13 +305,16 @@ object TopwaySourcePolicy {
                 canonical == EMULATED_ROOT ||
                 canonical.startsWith("$EMULATED_ROOT/") ||
                 USB_DISK_SOURCE_REGEX.matches(canonical) ||
-                MEDIA_RW_USB_SOURCE_REGEX.matches(canonical)
+                MEDIA_RW_USB_SOURCE_REGEX.matches(canonical) ||
+                STORAGE_UUID_SOURCE_REGEX.matches(canonical)
         }
         return true
     }
 
     private fun isUsbCandidate(path: String): Boolean =
-        USB_DISK_SOURCE_REGEX.matches(path) || MEDIA_RW_USB_SOURCE_REGEX.matches(path)
+        USB_DISK_SOURCE_REGEX.matches(path) ||
+            MEDIA_RW_USB_SOURCE_REGEX.matches(path) ||
+            STORAGE_UUID_SOURCE_REGEX.matches(path)
 
     private fun preferAppFacingRoots(paths: Collection<String>): List<String> {
         val candidates = linkedSetOf<String>()

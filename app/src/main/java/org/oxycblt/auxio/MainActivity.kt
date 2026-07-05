@@ -129,8 +129,7 @@ class MainActivity : AppCompatActivity() {
         L.i(
             "Routing TS18 cold launch to playback/queue [libraryState=${musicSettings.libraryState}]"
         )
-        playbackModel.openPlayback()
-        playbackModel.openQueue()
+        playbackModel.openPlaybackQueue()
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -693,7 +693,7 @@ constructor(
         }
 
         val currentUid = currentSong?.uid
-        if (currentSong != null && currentSong !in command.queue) {
+        if (currentSong != null && command.queue.none { it.uid == currentSong.uid }) {
             L.w("Skipping shuffle transition; current song is not in target queue")
             return
         }
@@ -785,6 +785,9 @@ constructor(
     /** Open the playback panel, closing the queue panel if needed. */
     fun openPlayback() = openImpl(OpenPanel.PLAYBACK)
 
+    /** Open the playback panel and queue together where the current layout supports it. */
+    fun openPlaybackQueue() = openImpl(OpenPanel.PLAYBACK_QUEUE)
+
     /**
      * Open the queue panel, assuming that it exists in the current layout, is collapsed, and with
      * the playback panel already being expanded.
@@ -819,6 +822,8 @@ enum class OpenPanel {
     MAIN,
     /** Open the playback panel, collapsing the queue panel if applicable. */
     PLAYBACK,
+    /** Open the playback panel and queue panel in one consumed UI route. */
+    PLAYBACK_QUEUE,
     /**
      * Open the queue panel, assuming that it exists in the current layout, is collapsed, and with
      * the playback panel already being expanded. Do nothing if these conditions are not met.
