@@ -50,7 +50,15 @@ spotless {
 
     cpp {
         target("*/src/**/cpp/*.cpp", "*/src/**/cpp/*.h", "*/src/**/cpp/*.hpp")
-        eclipseCdt().configFile("eclipse-cdt.xml")
+        // The Eclipse CDT formatter provisions Eclipse Platform/CDT P2 repositories.
+        // Use Eclipse archive mirrors so CI auto-formatting is not broken by transient
+        // 5xx responses from the live download.eclipse.org update site.
+        def cdtFormatter = eclipseCdt()
+        cdtFormatter.withP2Mirrors([
+            "https://download.eclipse.org/eclipse/updates/"   : "https://archive.eclipse.org/eclipse/updates/",
+            "https://download.eclipse.org/tools/cdt/releases/" : "https://archive.eclipse.org/tools/cdt/releases/",
+        ])
+        cdtFormatter.configFile("eclipse-cdt.xml")
         licenseHeaderFile("NOTICE")
     }
 }
