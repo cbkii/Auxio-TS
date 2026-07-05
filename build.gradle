@@ -51,12 +51,12 @@ spotless {
     cpp {
         target("*/src/**/cpp/*.cpp", "*/src/**/cpp/*.h", "*/src/**/cpp/*.hpp")
         // The Eclipse CDT formatter provisions both Eclipse Platform and CDT P2 repositories.
-        // Mirror only the exact Eclipse Platform 4.26 update site. Keep CDT 11.6 mapped to
-        // the live cdt-11.6.0 P2 repository because archive.eclipse.org has no match.
+        // Mirror only the exact Eclipse Platform 4.26 update site. Keep CDT 11.6 on the
+        // canonical live composite repository; archive.eclipse.org has no CDT 11.6 match.
         def cdtFormatter = eclipseCdt()
         cdtFormatter.withP2Mirrors([
             "https://download.eclipse.org/eclipse/updates/4.26/" : "https://archive.eclipse.org/eclipse/updates/4.26/",
-            "https://download.eclipse.org/tools/cdt/releases/11.6/" : "https://download.eclipse.org/tools/cdt/releases/11.6/cdt-11.6.0/",
+            "https://download.eclipse.org/tools/cdt/releases/11.6/" : "https://download.eclipse.org/tools/cdt/releases/11.6/",
         ])
         cdtFormatter.configFile("eclipse-cdt.xml")
         licenseHeaderFile("NOTICE")
