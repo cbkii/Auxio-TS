@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var musicRepository: MusicRepository
     private var isFirstResume = true
+    private var pendingHeadUnitLaunchRoute = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         PerfTimer.trace("MainActivity.onCreate") {
@@ -65,6 +66,7 @@ class MainActivity : AppCompatActivity() {
             // recreation (e.g. configuration changes or restoration after process death) does not
             // re-trigger autoplay.
             isFirstResume = savedInstanceState == null
+            pendingHeadUnitLaunchRoute = savedInstanceState == null
             setupTheme()
             if (uiSettings.headUnitLandscapeMode) {
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -103,9 +105,10 @@ class MainActivity : AppCompatActivity() {
                     )
                 playbackModel.playDeferred(action)
                 if (
-                    !isFirstResume ||
+                    pendingHeadUnitLaunchRoute &&
                         StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)
                 ) {
+                    pendingHeadUnitLaunchRoute = false
                     if (uiSettings.headUnitLandscapeMode) playbackModel.openQueue()
                     else playbackModel.openPlayback()
                 }

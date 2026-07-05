@@ -285,8 +285,8 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         invalidateRootAlpha()
-        invalidatePlaybackIndicatorAlpha(playbackIndicator ?: return)
-        invalidateSelectionIndicatorAlpha(selectionBadge ?: return)
+        playbackIndicator?.let { invalidatePlaybackIndicatorAlpha(it) }
+        selectionBadge?.let { invalidateSelectionIndicatorAlpha(it) }
 
         // Re-enqueue the image request if it exists, since Coil may have disposed it when detached.
         currentImageRequest?.let { req ->
@@ -303,12 +303,12 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     override fun setSelected(selected: Boolean) {
         super.setSelected(selected)
         invalidateRootAlpha()
-        invalidatePlaybackIndicatorAlpha(playbackIndicator ?: return)
+        playbackIndicator?.let { invalidatePlaybackIndicatorAlpha(it) }
     }
 
     override fun setActivated(activated: Boolean) {
         super.setActivated(activated)
-        invalidateSelectionIndicatorAlpha(selectionBadge ?: return)
+        selectionBadge?.let { invalidateSelectionIndicatorAlpha(it) }
     }
 
     /**
