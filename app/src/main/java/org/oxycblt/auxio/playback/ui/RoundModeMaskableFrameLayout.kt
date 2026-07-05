@@ -41,8 +41,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleRes: Int = -1
 
     private val uiSettings: UISettings by lazy {
         EntryPointAccessors.fromApplication<RoundModeMaskableFrameLayoutEntryPoint>(
-            context.applicationContext
-        )
+                context.applicationContext
+            )
             .uiSettings()
     }
 
