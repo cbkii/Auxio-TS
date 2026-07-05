@@ -105,7 +105,7 @@ object TopwaySourcePolicy {
             File("/storage"),
             File("/mnt/media_rw"),
             includeGenericFallbacks = true,
-            findAudioDirs = findAudioDirs
+            findAudioDirs = findAudioDirs,
         )
 
     internal fun discoverCandidateRoots(
@@ -151,11 +151,12 @@ object TopwaySourcePolicy {
             if (currentDepth > maxDepth || scans >= maxScans) return
             if (NOISY_DIRS.contains(dir.name)) return
 
-            val files = try {
-                dir.listFiles()
-            } catch (e: Exception) {
-                null
-            } ?: return
+            val files =
+                try {
+                    dir.listFiles()
+                } catch (e: Exception) {
+                    null
+                } ?: return
 
             scans++
             var hasAudio = false

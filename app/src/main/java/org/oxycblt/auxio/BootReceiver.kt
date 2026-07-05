@@ -100,7 +100,9 @@ class BootReceiver : BroadcastReceiver() {
         if (playbackSettings.autostartFloatingOnly) {
             try {
                 if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
-                    L.d("Launch Floating Controls only is enabled, requested Topway overlay restore")
+                    L.d(
+                        "Launch Floating Controls only is enabled, requested Topway overlay restore"
+                    )
                     return
                 } else {
                     L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")

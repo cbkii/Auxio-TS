@@ -312,11 +312,7 @@ class PlaybackPanelFragment :
             // Launch the system equalizer app, if possible.
             L.d("Launching equalizer")
             if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                val knownVendorPackages = listOf(
-                    "com.tw.eq",
-                    "com.syu.eq",
-                    "com.zjinnova.eq"
-                )
+                val knownVendorPackages = listOf("com.tw.eq", "com.syu.eq", "com.zjinnova.eq")
                 val pm = requireContext().packageManager
                 for (pkg in knownVendorPackages) {
                     val intent = pm.getLaunchIntentForPackage(pkg)

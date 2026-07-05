@@ -438,7 +438,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         withContext(Dispatchers.IO) {
                             try {
                                 val file = File(pathText)
-                                file.exists() && file.isDirectory && (file.canRead() || !hasStoragePermission || musicSettings.locationMode == LocationMode.DIRECT_FS)
+                                file.exists() &&
+                                    file.isDirectory &&
+                                    (file.canRead() ||
+                                        !hasStoragePermission ||
+                                        musicSettings.locationMode == LocationMode.DIRECT_FS)
                             } catch (e: Exception) {
                                 false
                             }

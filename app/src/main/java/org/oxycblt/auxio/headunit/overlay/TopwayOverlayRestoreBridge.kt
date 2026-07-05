@@ -30,7 +30,14 @@ object TopwayOverlayRestoreBridge {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return false
 
         try {
-            val intent = Intent().setComponent(ComponentName(context, "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"))
+            val intent =
+                Intent()
+                    .setComponent(
+                        ComponentName(
+                            context,
+                            "org.oxycblt.auxio.car.overlay.CarFloatingControlsService",
+                        )
+                    )
             intent.putExtra("reason", "boot_autostart")
             ContextCompat.startForegroundService(context, intent)
             return true

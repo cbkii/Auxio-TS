@@ -722,7 +722,10 @@ constructor(
                     return@launch
                 }
                 val positionMs = playbackManager.progression.calculateElapsedPositionMs()
-                playImpl(commandFactory.songInQueue(currentSong, selection.queue, ShuffleMode.ON), ShuffleScope.GENRE)
+                playImpl(
+                    commandFactory.songInQueue(currentSong, selection.queue, ShuffleMode.ON),
+                    ShuffleScope.GENRE,
+                )
                 playbackManager.seekTo(positionMs)
             }
     }
