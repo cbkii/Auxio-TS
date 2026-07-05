@@ -430,7 +430,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             }
             val uri = Uri.fromFile(File(path))
             val location = Location.Unopened.from(currentContext, uri)
-            if (disableThirdParty && location.path.volume is Volume.ThirdParty) {
+            // uri.scheme is always "file" here (Uri.fromFile produces file:// URIs), so
+            // Volume.ThirdParty for file paths means "not known to StorageManager" (a TS18
+            // limitation), NOT a SAF third-party provider. Skip the guard for file URIs;
+            // path safety is already enforced by validateManualPath / TopwaySourcePolicy above.
+            if (disableThirdParty && location.path.volume is Volume.ThirdParty && uri.scheme != "file") {
                 L.w("Rejecting music source $path: third-party volume disabled")
                 currentContext.showToast(R.string.err_bad_location)
                 clearPendingLocationCallback(callback)
