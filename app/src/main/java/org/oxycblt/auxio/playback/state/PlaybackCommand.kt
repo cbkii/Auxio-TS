@@ -125,7 +125,7 @@ constructor(
         newCommand(null, null, songs, shuffle)
 
     override fun songsFrom(song: Song, songs: List<Song>, shuffle: ShuffleMode) =
-        newCommand(song, null, songs, shuffle).takeIf { song in songs }
+        newCommand(song, null, songs, shuffle).takeIf { songs.any { it.uid == song.uid } }
 
     override fun album(album: Album, shuffle: ShuffleMode) =
         newCommand(null, album, listSettings.albumSongSort, shuffle)

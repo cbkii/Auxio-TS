@@ -336,7 +336,10 @@ class PlaybackPanelFragment :
                 requireNotNull(equalizerLauncher) { "Equalizer panel launcher was not available" }
                     .launch(equalizerIntent)
             } catch (e: ActivityNotFoundException) {
-                L.w(e, "Resolved EQ/DSP intent could not be launched")
+                L.w(e, "Resolved EQ/DSP intent could not be launched: $equalizerIntent")
+                requireContext().showToast(R.string.err_no_equalizer_app)
+            } catch (e: SecurityException) {
+                L.w(e, "Resolved EQ/DSP intent was denied: $equalizerIntent")
                 requireContext().showToast(R.string.err_no_equalizer_app)
             }
             return true

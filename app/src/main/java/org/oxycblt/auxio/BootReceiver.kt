@@ -66,7 +66,12 @@ class BootReceiver : BroadcastReceiver() {
                 Thread(
                     {
                         try {
-                            rootGate.probeSync()
+                            val state = rootGate.probeSync()
+                            journal.log(
+                                DiagnosticJournal.CAT_BOOT,
+                                "Root probe completed",
+                                state.name,
+                            )
                         } finally {
                             pendingResult.finish()
                         }
@@ -83,13 +88,19 @@ class BootReceiver : BroadcastReceiver() {
         // therefore never posts a media notification) would be killed by the system. On Android
         // 14+ a mediaPlayback foreground service started from BOOT_COMPLETED is rejected, so the
         // start is wrapped to degrade gracefully instead of crashing the receiver.
-        val shouldStartPlaybackService =
-            playbackSettings.autoplayOnLaunch || playbackSettings.autostartFloatingOnly
+        val shouldStartPlaybackService = playbackSettings.autoplayOnLaunch
         journal.log(
             DiagnosticJournal.CAT_BOOT,
             "Playback restore path",
             "service=$shouldStartPlaybackService autoplay=${playbackSettings.autoplayOnLaunch} floatingOnly=${playbackSettings.autostartFloatingOnly}",
         )
+        if (playbackSettings.autostartFloatingOnly && !playbackSettings.autoplayOnLaunch) {
+            journal.log(
+                DiagnosticJournal.CAT_BOOT,
+                "Playback restore skipped",
+                "floating_only_without_autoplay",
+            )
+        }
         if (shouldStartPlaybackService) {
             try {
                 val serviceIntent =
@@ -115,6 +126,11 @@ class BootReceiver : BroadcastReceiver() {
             )
             if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
                 L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
+                journal.log(
+                    DiagnosticJournal.CAT_BOOT,
+                    "Overlay restore requested",
+                    "topway_bridge",
+                )
                 return
             } else {
                 L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")

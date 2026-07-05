@@ -129,6 +129,7 @@ if [ -f "${topway_flavour_manifest}" ]; then
   require_topway_identity 'org.oxycblt.auxio.MainActivity' 'Auxio alias target'
   require_topway_identity 'com.tw.music.MusicService' 'Topway MusicService fallback'
   require_topway_identity 'org.oxycblt.auxio.AuxioService' 'Topway base service override'
+  require_topway_identity 'org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY' 'Topway overlay restore action'
   require_topway_identity 'tools:node="remove"' 'Topway base service browse-filter removal'
   # Manifest MUST declare modern specialUse compatibility for the overlay service (required by
   # Android 14+; safely ignored on Android 10). Runtime code API-gates the constant to API 34+.
@@ -146,6 +147,13 @@ if [ -f "${topway_flavour_manifest}" ]; then
   require_topway_identity 'android.intent.category.LAUNCHER' 'LAUNCHER category'
   require_topway_identity 'android.intent.category.DEFAULT' 'DEFAULT category'
   require_topway_identity 'android.intent.category.APP_MUSIC' 'APP_MUSIC category'
+fi
+
+if [ -f app/src/main/java/org/oxycblt/auxio/headunit/overlay/CarOverlayContract.kt ] && [ -f "${topway_flavour_manifest}" ]; then
+  if ! grep -Fq 'const val RESTORE_ACTION = "org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY"' app/src/main/java/org/oxycblt/auxio/headunit/overlay/CarOverlayContract.kt; then
+    echo "CarOverlayContract RESTORE_ACTION must match the Topway manifest restore action" >&2
+    exit 1
+  fi
 fi
 
 echo "headunit compat safety checks passed"
