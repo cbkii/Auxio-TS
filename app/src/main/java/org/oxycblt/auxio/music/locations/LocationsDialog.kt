@@ -24,7 +24,10 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
+import android.provider.MediaStore.Audio.Media as AndroidAudioMedia
 import android.view.LayoutInflater
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,8 +42,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.DialogMusicLocationsBinding
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.ui.ViewBindingMaterialDialogFragment
@@ -89,6 +94,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private var localOnlyOpenDocumentTreeLauncher: ActivityResultLauncher<Uri?>? = null
     private var storagePermissionLauncher: ActivityResultLauncher<String>? = null
     @Inject lateinit var musicSettings: MusicSettings
+    @Inject lateinit var rootGate: RootStateHolder
 
     private var locationMode = LocationMode.SAF
     private var isIncludeMode = true
@@ -343,13 +349,39 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun showCandidatePathPicker(disableThirdParty: Boolean) {
         val callback = pendingLocationCallback ?: return
+        val loadingDialog =
+            context?.let {
+                AlertDialog.Builder(it)
+                    .setTitle(R.string.set_select_source)
+                    .setMessage(R.string.lng_loading_music_library)
+                    .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
+                        showManualPathEntry(disableThirdParty, callback)
+                    }
+                    .setNegativeButton(R.string.lbl_cancel) { _, _ ->
+                        clearPendingLocationCallback(callback)
+                    }
+                    .create()
+                    .also { dialog ->
+                        dialog.setOnCancelListener { clearPendingLocationCallback(callback) }
+                    }
+            }
+        loadingDialog?.show()
         lifecycleScope.launch {
             val accessibleCandidates =
                 withContext(Dispatchers.IO) {
                     TopwaySourcePolicy.discoverMusicSourceCandidates(
-                        includeLocationAdapter.locations.map { it.uri.toString() }
+                        savedPaths = includeLocationAdapter.locations.map { it.uri.toString() },
+                        mediaStoreParents = discoverMediaStoreAudioParents(),
+                        storageRoots = discoverStorageRoots(),
+                        rootGate =
+                            rootGate.takeIf {
+                                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                                    locationMode == LocationMode.DIRECT_FS &&
+                                    rootGate.stateSnapshot() == RootStateHolder.State.Available
+                            },
                     )
                 }
+            if (loadingDialog?.isShowing == true) loadingDialog.dismiss()
             val ctx =
                 context
                     ?: run {
@@ -358,7 +390,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     }
 
             if (accessibleCandidates.isEmpty()) {
-                // No auto-detected candidates; offer manual path entry directly.
                 showManualPathEntry(disableThirdParty, callback)
                 return@launch
             }
@@ -366,27 +397,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             AlertDialog.Builder(ctx)
                 .setTitle(R.string.set_select_source)
                 .setItems(accessibleCandidates.toTypedArray()) { _, which ->
-                    val currentContext = context
-                    if (currentContext == null) {
-                        clearPendingLocationCallback(callback)
-                    } else {
-                        val path = accessibleCandidates[which]
-                        val uri = Uri.fromFile(File(path))
-                        val location = Location.Unopened.from(currentContext, uri)
-                        // For file:// URIs from validated accessible candidates, allow
-                        // ThirdParty volumes. These are proven-accessible TS18 paths that
-                        // StorageManager may not report but that work with direct file I/O.
-                        if (
-                            disableThirdParty &&
-                                location.path.volume is Volume.ThirdParty &&
-                                uri.scheme != "file"
-                        ) {
-                            currentContext.showToast(R.string.err_bad_location)
-                        } else {
-                            callback(location)
-                        }
-                        clearPendingLocationCallback(callback)
-                    }
+                    validateAndAcceptPath(accessibleCandidates[which], disableThirdParty, callback)
                 }
                 .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
                     showManualPathEntry(disableThirdParty, callback)
@@ -397,6 +408,129 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 .setOnCancelListener { clearPendingLocationCallback(callback) }
                 .show()
         }
+    }
+
+    private fun validateAndAcceptPath(
+        path: String,
+        disableThirdParty: Boolean,
+        callback: (Location.Unopened) -> Unit,
+    ) {
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { validateManualPath(path) }
+            val currentContext = context
+            if (currentContext == null) {
+                clearPendingLocationCallback(callback)
+                return@launch
+            }
+            if (result != ManualPathValidation.OK) {
+                L.w("Rejecting music source $path: $result")
+                currentContext.showToast(result.toastRes)
+                clearPendingLocationCallback(callback)
+                return@launch
+            }
+            val uri = Uri.fromFile(File(path))
+            val location = Location.Unopened.from(currentContext, uri)
+            if (
+                disableThirdParty &&
+                    location.path.volume is Volume.ThirdParty &&
+                    uri.scheme != "file"
+            ) {
+                currentContext.showToast(R.string.err_bad_location)
+            } else if (location.open(currentContext) == null) {
+                L.w("Rejecting music source $path: Location.open returned null")
+                currentContext.showToast(R.string.set_path_open_failed)
+            } else {
+                callback(location)
+            }
+            clearPendingLocationCallback(callback)
+        }
+    }
+
+    private enum class ManualPathValidation(val toastRes: Int) {
+        OK(R.string.lbl_ok),
+        UNSAFE(R.string.set_path_unsafe),
+        MISSING(R.string.set_path_missing),
+        UNREADABLE(R.string.set_path_unreadable),
+        PERMISSION_MISSING(R.string.set_path_permission_missing),
+    }
+
+    private fun validateManualPath(path: String): ManualPathValidation {
+        if (
+            BuildConfig.TOPWAY_COMPAT_FLAVOR && !TopwaySourcePolicy.isAllowedSourceCandidate(path)
+        ) {
+            return ManualPathValidation.UNSAFE
+        }
+        if (!hasStoragePermission && locationMode != LocationMode.SAF) {
+            return ManualPathValidation.PERMISSION_MISSING
+        }
+        return try {
+            val file = File(path)
+            when {
+                !file.exists() || !file.isDirectory -> ManualPathValidation.MISSING
+                !file.canRead() -> ManualPathValidation.UNREADABLE
+                else -> ManualPathValidation.OK
+            }
+        } catch (e: SecurityException) {
+            L.w(e, "Security exception while validating manual path $path")
+            ManualPathValidation.PERMISSION_MISSING
+        } catch (e: RuntimeException) {
+            L.w(e, "Runtime exception while validating manual path $path")
+            ManualPathValidation.UNREADABLE
+        }
+    }
+
+    private fun discoverMediaStoreAudioParents(): List<String> {
+        if (!hasStoragePermission) return emptyList()
+        val resolver = context?.contentResolver ?: return emptyList()
+        val out = linkedSetOf<String>()
+        return try {
+            resolver
+                .query(
+                    AndroidAudioMedia.EXTERNAL_CONTENT_URI,
+                    arrayOf(AndroidAudioMedia.DATA),
+                    null,
+                    null,
+                    null,
+                )
+                ?.use { cursor ->
+                    val dataColumn = cursor.getColumnIndex(AndroidAudioMedia.DATA)
+                    while (dataColumn >= 0 && cursor.moveToNext() && out.size < 48) {
+                        cursor.getString(dataColumn)?.let { data ->
+                            File(data).parent?.let(out::add)
+                        }
+                    }
+                }
+            out.toList()
+        } catch (e: Exception) {
+            L.w(e, "Failed to query MediaStore audio parents for source candidates")
+            emptyList()
+        }
+    }
+
+    private fun discoverStorageRoots(): List<String> {
+        val ctx = context ?: return emptyList()
+        val out = linkedSetOf<String>()
+        out.add(Environment.getExternalStorageDirectory().absolutePath)
+        out.add(TopwaySourcePolicy.EMULATED_ROOT)
+        out.add(TopwaySourcePolicy.SDCARD_ROOT)
+        try {
+            val storageManager = ctx.getSystemService(StorageManager::class.java)
+            storageManager.storageVolumes.forEach { volume ->
+                val dir =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        volume.directory
+                    } else {
+                        runCatching {
+                                volume.javaClass.getMethod("getPathFile").invoke(volume) as? File
+                            }
+                            .getOrNull()
+                    }
+                dir?.absolutePath?.let(out::add)
+            }
+        } catch (e: Exception) {
+            L.w(e, "Failed to query StorageManager volumes for source candidates")
+        }
+        return out.toList()
     }
 
     private fun showManualPathEntry(
@@ -427,47 +561,18 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setTitle(R.string.set_select_source)
             .setView(container)
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
-                val pathText = input.text?.toString()?.trim().orEmpty()
+                val rawPathText = input.text?.toString().orEmpty()
+                val pathText = rawPathText.trim()
                 if (pathText.isEmpty()) {
                     clearPendingLocationCallback(callback)
                     return@setPositiveButton
                 }
-                if (pathText != pathText.trim()) {
+                if (rawPathText != pathText) {
                     ctx.showToast(R.string.set_path_whitespace_invalid)
                     clearPendingLocationCallback(callback)
                     return@setPositiveButton
                 }
-                lifecycleScope.launch {
-                    val accessible =
-                        withContext(Dispatchers.IO) {
-                            try {
-                                TopwaySourcePolicy.isAllowedSourceCandidate(pathText) &&
-                                    File(pathText).let {
-                                        it.exists() && it.isDirectory && it.canRead()
-                                    }
-                            } catch (e: Exception) {
-                                L.w(e, "Manual music source validation failed for $pathText")
-                                false
-                            }
-                        }
-                    val currentContext = context
-                    if (currentContext == null) {
-                        clearPendingLocationCallback(callback)
-                        return@launch
-                    }
-                    if (!accessible) {
-                        L.w(
-                            "Rejecting manual music source $pathText: unsafe, missing, or unreadable"
-                        )
-                        currentContext.showToast(R.string.set_path_inaccessible)
-                        clearPendingLocationCallback(callback)
-                        return@launch
-                    }
-                    val uri = Uri.fromFile(File(pathText))
-                    val location = Location.Unopened.from(currentContext, uri)
-                    callback(location)
-                    clearPendingLocationCallback(callback)
-                }
+                validateAndAcceptPath(pathText, disableThirdParty, callback)
             }
             .setNegativeButton(R.string.lbl_cancel) { _, _ ->
                 clearPendingLocationCallback(callback)

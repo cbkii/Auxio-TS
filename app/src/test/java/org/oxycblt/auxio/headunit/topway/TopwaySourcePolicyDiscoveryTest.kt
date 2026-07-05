@@ -91,6 +91,46 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
+    fun savedPathsRankBeforeMediaAndFallbackCandidates() {
+        val candidates =
+            TopwaySourcePolicy.discoverMusicSourceCandidates(
+                savedPaths = listOf("/sdcard/Custom"),
+                mediaStoreParents = listOf("/storage/emulated/0/Music/Albums"),
+                storageRoots = listOf("/storage/emulated/0", "/storage/usbdisk1"),
+            )
+
+        assertEquals("/sdcard/Custom", candidates.first())
+        assertTrue(candidates.indexOf("/storage/emulated/0/Music/Albums") > 0)
+    }
+
+    @Test
+    fun discoversAudioParentFoldersUnderInjectedRootForTests() {
+        val tempRoot = Files.createTempDirectory("topway-audio-parent").toFile()
+        try {
+            val music = File(tempRoot, "Music").apply { mkdirs() }
+            File(music, "track.flac").writeText("fake")
+            val noisy = File(tempRoot, "ANDROID").apply { mkdirs() }
+            File(noisy, "ignored.mp3").writeText("fake")
+            val out = linkedSetOf<String>()
+
+            TopwaySourcePolicy.discoverAudioParents(tempRoot, out, enforceSafeRoot = false)
+
+            assertTrue(out.contains(music.absolutePath))
+            assertFalse(out.contains(noisy.absolutePath))
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun noisyDirectoriesAreSkippedCaseInsensitively() {
+        assertTrue(TopwaySourcePolicy.isNoisyDir("Download"))
+        assertTrue(TopwaySourcePolicy.isNoisyDir("download"))
+        assertTrue(TopwaySourcePolicy.isNoisyDir("ANDROID"))
+        assertTrue(TopwaySourcePolicy.isNoisyDir("pictures"))
+    }
+
+    @Test
     fun systemSourceFilterStillAcceptsUsbDiskOneMusicPaths() {
         assertTrue(
             TopwaySourcePolicy.matchesSystemSourceFilter("/storage/usbdisk1/My Music/song.flac")

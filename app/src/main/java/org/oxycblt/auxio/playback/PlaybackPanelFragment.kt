@@ -29,12 +29,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.ActionMenuView
 import androidx.appcompat.widget.Toolbar
 import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.content.ContextCompat
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.core.view.updatePaddingRelative
 import androidx.dynamicanimation.animation.SpringForce
@@ -288,13 +289,13 @@ class PlaybackPanelFragment :
         collectImmediately(playbackModel.pagerQueue, ::updatePager)
     }
 
-    private fun applyLargeToolbarTargets(toolbar: Toolbar) {
+    private fun applyLargeToolbarTargets(toolbar: ViewGroup) {
         val size = resources.getDimensionPixelSize(R.dimen.size_touchable_head_unit)
         toolbar.minimumHeight = size
         toolbar.post {
             for (i in 0 until toolbar.childCount) {
                 val child = toolbar.getChildAt(i)
-                if (child is ActionMenuView || child.contentDescription != null) {
+                if (child.contentDescription != null) {
                     child.minimumWidth = size
                     child.minimumHeight = size
                     child.updateLayoutParams {
@@ -327,12 +328,16 @@ class PlaybackPanelFragment :
                     requireContext(),
                     playbackModel.currentAudioSessionId,
                 )
+            if (equalizerIntent == null) {
+                requireContext().showToast(R.string.err_no_equalizer_app)
+                return true
+            }
             try {
                 requireNotNull(equalizerLauncher) { "Equalizer panel launcher was not available" }
                     .launch(equalizerIntent)
             } catch (e: ActivityNotFoundException) {
-                L.w(e, "No native TS18 EQ/DSP or Android AudioEffect panel found")
-                requireContext().showToast(R.string.err_no_app)
+                L.w(e, "Resolved EQ/DSP intent could not be launched")
+                requireContext().showToast(R.string.err_no_equalizer_app)
             }
             return true
         }

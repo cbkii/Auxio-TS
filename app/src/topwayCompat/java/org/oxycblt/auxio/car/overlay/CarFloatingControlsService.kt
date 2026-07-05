@@ -33,6 +33,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import androidx.annotation.Keep
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -56,6 +57,7 @@ import timber.log.Timber as L
  * notifications and widgets -- not generic media key dispatch.
  */
 @AndroidEntryPoint
+@Keep
 class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks {
 
     @Inject lateinit var journal: DiagnosticJournal
@@ -566,7 +568,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         const val ACTION_AUXIO_FOREGROUND_CHANGED =
             BuildConfig.APPLICATION_ID + ".car.overlay.AUXIO_FG_CHANGED"
         const val EXTRA_AUXIO_FOREGROUND = "extra_auxio_foreground"
-        private const val EXTRA_START_REASON = "extra_start_reason"
+        const val EXTRA_START_REASON = "extra_start_reason"
 
         /**
          * Returns the appropriate foreground service type for the current API level.

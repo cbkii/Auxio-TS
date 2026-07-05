@@ -76,6 +76,7 @@ import org.oxycblt.musikr.Genre
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.covers.CoverCollection
+import timber.log.Timber as L
 
 /**
  * Auxio's extension of [ImageView] that enables cover art loading and playing indicator and
@@ -122,6 +123,7 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     private val checkScaleSpring = Spatial.FAST
     private val checkAlphaSpring = Effect.FAST
     private var fadeAnimators: List<SpringAnimation>? = null
+    private var currentImageRequest: ImageRequest? = null
     private val indicatorMatrix = Matrix()
     private val indicatorMatrixSrc = RectF()
     private val indicatorMatrixDst = RectF()
@@ -284,8 +286,13 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         invalidateRootAlpha()
-        invalidatePlaybackIndicatorAlpha(playbackIndicator ?: return)
-        invalidateSelectionIndicatorAlpha(selectionBadge ?: return)
+        playbackIndicator?.let(::invalidatePlaybackIndicatorAlpha)
+        selectionBadge?.let(::invalidateSelectionIndicatorAlpha)
+        currentImageRequest?.let { request ->
+            CoilUtils.dispose(image)
+            L.v("Re-enqueueing cover request after attach")
+            imageLoader.enqueue(request)
+        }
     }
 
     override fun setEnabled(enabled: Boolean) {
@@ -296,12 +303,12 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     override fun setSelected(selected: Boolean) {
         super.setSelected(selected)
         invalidateRootAlpha()
-        invalidatePlaybackIndicatorAlpha(playbackIndicator ?: return)
+        playbackIndicator?.let(::invalidatePlaybackIndicatorAlpha)
     }
 
     override fun setActivated(activated: Boolean) {
         super.setActivated(activated)
-        invalidateSelectionIndicatorAlpha(selectionBadge ?: return)
+        selectionBadge?.let(::invalidateSelectionIndicatorAlpha)
     }
 
     /**
@@ -541,8 +548,11 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
         }
 
         // Dispose of any previous image request and load a new image.
+        val builtRequest = request.build()
+        currentImageRequest = builtRequest
         CoilUtils.dispose(image)
-        imageLoader.enqueue(request.build())
+        L.v("Enqueueing cover request [desc=$desc size=${size.width}x${size.height}]")
+        imageLoader.enqueue(builtRequest)
         contentDescription = desc
     }
 

@@ -18,27 +18,46 @@
 
 package org.oxycblt.auxio.headunit.overlay
 
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.BuildConfig
+import timber.log.Timber as L
 
 object TopwayOverlayRestoreBridge {
+    private const val RESTORE_ACTION = "org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY"
+    private const val SERVICE_CLASS = "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
+    private const val ACTION_START_SUFFIX = ".car.overlay.START"
+    private const val EXTRA_START_REASON = "extra_start_reason"
+
     fun requestOverlayRestore(context: Context): Boolean {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return false
-        val overlayIntent = Intent("org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY")
-        overlayIntent.setPackage(context.packageName)
-        context.sendBroadcast(overlayIntent)
-        runCatching {
-            val serviceClass =
-                Class.forName("org.oxycblt.auxio.car.overlay.CarFloatingControlsService")
+        val reason = "boot_autostart"
+        context.sendBroadcast(Intent(RESTORE_ACTION).setPackage(context.packageName))
+        tryStartOverlayService(context, reason)
+        return true
+    }
+
+    private fun tryStartOverlayService(context: Context, reason: String) {
+        try {
+            val serviceClass = Class.forName(SERVICE_CLASS).asSubclass(Service::class.java)
             val serviceIntent =
                 Intent(context, serviceClass)
-                    .setAction("${BuildConfig.APPLICATION_ID}.car.overlay.START")
+                    .setAction(BuildConfig.APPLICATION_ID + ACTION_START_SUFFIX)
+                    .putExtra(EXTRA_START_REASON, reason)
             ContextCompat.startForegroundService(context, serviceIntent)
-        }.onFailure {
-            timber.log.Timber.w(it, "Direct Topway overlay foreground-service restore failed")
+            L.i("Requested direct Topway overlay foreground-service restore [$reason]")
+        } catch (e: ClassNotFoundException) {
+            L.w(e, "Topway overlay service class is not present in this source set")
+        } catch (e: ClassCastException) {
+            L.w(e, "Topway overlay service class did not extend Service")
+        } catch (e: SecurityException) {
+            L.w(e, "Direct Topway overlay foreground-service restore was denied")
+        } catch (e: IllegalStateException) {
+            L.w(e, "Direct Topway overlay foreground-service restore was rejected")
+        } catch (e: RuntimeException) {
+            L.w(e, "Direct Topway overlay foreground-service restore failed unexpectedly")
         }
-        return true
     }
 }

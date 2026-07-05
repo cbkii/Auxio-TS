@@ -34,7 +34,9 @@ import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
+import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
@@ -56,7 +58,9 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var musicRepository: MusicRepository
+    @Inject lateinit var musicSettings: MusicSettings
     private var isFirstResume = true
+    private var pendingHeadUnitLaunchRoute = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         PerfTimer.trace("MainActivity.onCreate") {
@@ -66,6 +70,8 @@ class MainActivity : AppCompatActivity() {
             // re-trigger autoplay.
             isFirstResume = savedInstanceState == null
             setupTheme()
+            pendingHeadUnitLaunchRoute =
+                savedInstanceState == null && uiSettings.headUnitLandscapeMode
             if (uiSettings.headUnitLandscapeMode) {
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             } else {
@@ -102,15 +108,29 @@ class MainActivity : AppCompatActivity() {
                         playbackSettings.autoplayOnLaunch && isFirstResume
                     )
                 playbackModel.playDeferred(action)
-                if (
-                    isFirstResume &&
-                        StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)
-                ) {
-                    playbackModel.openPlayback()
-                }
+                maybeRouteToPlaybackOnColdHeadUnitLaunch()
             }
             isFirstResume = false
         }
+    }
+
+    private fun maybeRouteToPlaybackOnColdHeadUnitLaunch() {
+        if (!isFirstResume) return
+        if (StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)) {
+            playbackModel.openPlayback()
+            return
+        }
+        if (!pendingHeadUnitLaunchRoute || !BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (musicSettings.libraryState == LibraryState.NEVER) {
+            L.d("Keeping first setup launch on library/setup flow")
+            return
+        }
+        pendingHeadUnitLaunchRoute = false
+        L.i(
+            "Routing TS18 cold launch to playback/queue [libraryState=${musicSettings.libraryState}]"
+        )
+        playbackModel.openPlayback()
+        playbackModel.openQueue()
     }
 
     override fun onNewIntent(intent: Intent) {
