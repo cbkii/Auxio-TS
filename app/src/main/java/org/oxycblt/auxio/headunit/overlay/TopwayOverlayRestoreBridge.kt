@@ -23,13 +23,13 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract.ACTION_START
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract.EXTRA_START_REASON
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract.RESTORE_ACTION
 import timber.log.Timber as L
 
 object TopwayOverlayRestoreBridge {
-    private const val RESTORE_ACTION = "org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY"
     private const val SERVICE_CLASS = "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
-    private const val ACTION_START_SUFFIX = ".car.overlay.START"
-    private const val EXTRA_START_REASON = "extra_start_reason"
 
     fun requestOverlayRestore(context: Context): Boolean {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return false
@@ -44,7 +44,7 @@ object TopwayOverlayRestoreBridge {
             val serviceClass = Class.forName(SERVICE_CLASS).asSubclass(Service::class.java)
             val serviceIntent =
                 Intent(context, serviceClass)
-                    .setAction(BuildConfig.APPLICATION_ID + ACTION_START_SUFFIX)
+                    .setAction(ACTION_START)
                     .putExtra(EXTRA_START_REASON, reason)
             ContextCompat.startForegroundService(context, serviceIntent)
             L.i("Requested direct Topway overlay foreground-service restore [$reason]")

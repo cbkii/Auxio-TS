@@ -156,8 +156,10 @@
     <string name="set_path_inaccessible">Path is not accessible or does not exist</string>
     <string name="set_path_unsafe">This path is protected or unsafe for TS18 direct file access</string>
     <string name="set_path_missing">Path does not exist or is not a folder</string>
+    <string name="set_path_not_directory">The source path is not a folder</string>
     <string name="set_path_unreadable">Path exists but Auxio-TS cannot read it</string>
     <string name="set_path_permission_missing">Storage permission is required before this path can be used</string>
+    <string name="set_path_root_unavailable">Root-assisted DirectFS is not available for this raw storage path</string>
     <string name="set_path_open_failed">The source path was found but could not be opened on this volume</string>
     <string name="lng_loading_music_library">Loading your music library…</string>
     <string name="err_no_equalizer_app">No TS18 EQ/DSP or Android equalizer app is available</string>

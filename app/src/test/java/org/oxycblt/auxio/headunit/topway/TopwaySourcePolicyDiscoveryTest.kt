@@ -104,6 +104,20 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
+    fun appFacingUsbRootsRankBeforeRawMediaRwRoots() {
+        val candidates =
+            TopwaySourcePolicy.discoverMusicSourceCandidates(
+                storageRoots = listOf("/mnt/media_rw/usbdisk1", "/storage/usbdisk1")
+            )
+
+        assertTrue(candidates.contains("/storage/usbdisk1"))
+        assertTrue(candidates.contains("/mnt/media_rw/usbdisk1"))
+        assertTrue(
+            candidates.indexOf("/storage/usbdisk1") < candidates.indexOf("/mnt/media_rw/usbdisk1")
+        )
+    }
+
+    @Test
     fun discoversAudioParentFoldersUnderInjectedRootForTests() {
         val tempRoot = Files.createTempDirectory("topway-audio-parent").toFile()
         try {

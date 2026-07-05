@@ -209,25 +209,29 @@ object TopwaySourcePolicy {
         if (direct != null) return direct
         return rootGate
             ?.runRootCommandSync(buildRootListCommand(dir.absolutePath), 1200)
-            ?.mapNotNull(::parseRootEntry)
+            ?.mapNotNull { parseRootEntry(dir, it) }
             ?.toTypedArray()
     }
 
     private fun buildRootListCommand(directory: String): String {
-        val quoted = "'${directory.replace("'", "'\"'\"'")}'"
-        return "for p in $quoted/* $quoted/.*; do " +
+        val escaped = directory.replace("'", "'\"'\"'")
+        return "for p in '$escaped'/* '$escaped'/.*; do " +
             "[ -e \"\$p\" ] || continue; " +
             "b=\${p##*/}; [ \"\$b\" = . ] && continue; [ \"\$b\" = .. ] && continue; " +
-            "if [ -d \"\$p\" ]; then t=d; elif [ -f \"\$p\" ]; then t=f; else t=o; fi; " +
-            "printf '%s\\t%s\\n' \"\$t\" \"\$p\"; done"
+            "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
+            "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
+            "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
+            "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
+            "done"
     }
 
-    private fun parseRootEntry(line: String): File? {
-        val tab = line.indexOf('\t')
-        if (tab <= 0) return null
-        val type = line.substring(0, tab)
-        val path = line.substring(tab + 1)
-        return if (type == "d" || type == "f") File(path) else null
+    private fun parseRootEntry(parent: File, line: String): File? {
+        val parts = line.split('\t')
+        if (parts.size < 5) return null
+        val type = parts[0]
+        val name = parts[4]
+        if (name == "." || name == ".." || name.contains('/')) return null
+        return if (type == "d" || type == "f") File(parent, name) else null
     }
 
     private fun shouldDescend(dir: File, enforceSafeRoot: Boolean): Boolean {
@@ -296,14 +300,22 @@ object TopwaySourcePolicy {
         USB_DISK_SOURCE_REGEX.matches(path) || MEDIA_RW_USB_SOURCE_REGEX.matches(path)
 
     private fun preferAppFacingRoots(paths: Collection<String>): List<String> {
-        val seen = linkedSetOf<String>()
+        val candidates = linkedSetOf<String>()
+        val raw = mutableListOf<String>()
         for (path in paths) {
-            val appFacing = path.replace("/mnt/media_rw/usbdisk", "/storage/usbdisk")
-            if (isAllowedSourceCandidate(appFacing) && isAccessibleCandidate(appFacing))
-                seen.add(appFacing)
-            seen.add(path)
+            val clean = path.replace('\\', '/').trimEnd('/')
+            if (MEDIA_RW_USB_SOURCE_REGEX.matches(clean)) {
+                val appFacing = clean.replace("/mnt/media_rw/usbdisk", "/storage/usbdisk")
+                if (isAllowedSourceCandidate(appFacing) && isAccessibleCandidate(appFacing)) {
+                    candidates.add(appFacing)
+                }
+                raw.add(clean)
+            } else {
+                candidates.add(clean)
+            }
         }
-        return seen.toList()
+        raw.forEach(candidates::add)
+        return candidates.toList()
     }
 
     fun findFirstAccessibleCandidate(): String? = discoverCandidateRoots().firstOrNull()

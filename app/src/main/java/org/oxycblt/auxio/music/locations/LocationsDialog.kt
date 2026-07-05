@@ -430,18 +430,19 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             }
             val uri = Uri.fromFile(File(path))
             val location = Location.Unopened.from(currentContext, uri)
-            if (
-                disableThirdParty &&
-                    location.path.volume is Volume.ThirdParty &&
-                    uri.scheme != "file"
-            ) {
+            if (disableThirdParty && location.path.volume is Volume.ThirdParty) {
+                L.w("Rejecting music source $path: third-party volume disabled")
                 currentContext.showToast(R.string.err_bad_location)
-            } else if (location.open(currentContext) == null) {
-                L.w("Rejecting music source $path: Location.open returned null")
-                currentContext.showToast(R.string.set_path_open_failed)
-            } else {
-                callback(location)
+                clearPendingLocationCallback(callback)
+                return@launch
             }
+            if (location.open(currentContext) == null) {
+                L.w("Rejecting music source $path: Location.open returned null")
+                currentContext.showToast(ManualPathValidation.OPEN_FAILED.toastRes)
+                clearPendingLocationCallback(callback)
+                return@launch
+            }
+            callback(location)
             clearPendingLocationCallback(callback)
         }
     }
@@ -450,14 +451,17 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         OK(R.string.lbl_ok),
         UNSAFE(R.string.set_path_unsafe),
         MISSING(R.string.set_path_missing),
+        NOT_DIRECTORY(R.string.set_path_not_directory),
         UNREADABLE(R.string.set_path_unreadable),
         PERMISSION_MISSING(R.string.set_path_permission_missing),
+        ROOT_UNAVAILABLE(R.string.set_path_root_unavailable),
+        OPEN_FAILED(R.string.set_path_open_failed),
     }
 
     private fun validateManualPath(path: String): ManualPathValidation {
-        if (
-            BuildConfig.TOPWAY_COMPAT_FLAVOR && !TopwaySourcePolicy.isAllowedSourceCandidate(path)
-        ) {
+        val directTs18Path =
+            BuildConfig.TOPWAY_COMPAT_FLAVOR && locationMode == LocationMode.DIRECT_FS
+        if (directTs18Path && !TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
             return ManualPathValidation.UNSAFE
         }
         if (!hasStoragePermission && locationMode != LocationMode.SAF) {
@@ -466,7 +470,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         return try {
             val file = File(path)
             when {
-                !file.exists() || !file.isDirectory -> ManualPathValidation.MISSING
+                !file.exists() -> ManualPathValidation.MISSING
+                !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
+                !file.canRead() && directTs18Path && path.startsWith("/mnt/media_rw/") ->
+                    ManualPathValidation.ROOT_UNAVAILABLE
                 !file.canRead() -> ManualPathValidation.UNREADABLE
                 else -> ManualPathValidation.OK
             }

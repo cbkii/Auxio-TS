@@ -21,6 +21,7 @@ package org.oxycblt.auxio.car.overlay
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
 import timber.log.Timber as L
 
 /**
@@ -54,7 +55,6 @@ class CarOverlayBootReceiver : BroadcastReceiver() {
 
         private const val ACTION_QUICKBOOT_POWERON = "android.intent.action.QUICKBOOT_POWERON"
         private const val ACTION_HTC_QUICKBOOT_POWERON = "com.htc.intent.action.QUICKBOOT_POWERON"
-        private const val ACTION_RESTORE_OVERLAY =
-            "org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY"
+        private const val ACTION_RESTORE_OVERLAY = CarOverlayContract.RESTORE_ACTION
     }
 }

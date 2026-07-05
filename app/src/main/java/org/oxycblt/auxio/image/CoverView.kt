@@ -123,7 +123,6 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     private val checkScaleSpring = Spatial.FAST
     private val checkAlphaSpring = Effect.FAST
     private var fadeAnimators: List<SpringAnimation>? = null
-    private var currentImageRequest: ImageRequest? = null
     private val indicatorMatrix = Matrix()
     private val indicatorMatrixSrc = RectF()
     private val indicatorMatrixDst = RectF()
@@ -288,11 +287,8 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
         invalidateRootAlpha()
         playbackIndicator?.let(::invalidatePlaybackIndicatorAlpha)
         selectionBadge?.let(::invalidateSelectionIndicatorAlpha)
-        currentImageRequest?.let { request ->
-            CoilUtils.dispose(image)
-            L.v("Re-enqueueing cover request after attach")
-            imageLoader.enqueue(request)
-        }
+        // Coil owns ViewTarget detach/attach lifecycle. Do not blindly re-enqueue the last
+        // target-bound request here; every bind below builds a fresh request for this view.
     }
 
     override fun setEnabled(enabled: Boolean) {
@@ -549,7 +545,6 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
 
         // Dispose of any previous image request and load a new image.
         val builtRequest = request.build()
-        currentImageRequest = builtRequest
         CoilUtils.dispose(image)
         L.v("Enqueueing cover request [desc=$desc size=${size.width}x${size.height}]")
         imageLoader.enqueue(builtRequest)
