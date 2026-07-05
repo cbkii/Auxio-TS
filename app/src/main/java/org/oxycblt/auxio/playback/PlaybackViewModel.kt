@@ -693,7 +693,7 @@ constructor(
         }
 
         val currentUid = currentSong?.uid
-        if (currentSong != null && command.queue.none { it.uid == currentSong.uid }) {
+        if (currentUid != null && command.queue.none { it.uid == currentUid }) {
             L.w("Skipping shuffle transition; current song is not in target queue")
             return
         }
