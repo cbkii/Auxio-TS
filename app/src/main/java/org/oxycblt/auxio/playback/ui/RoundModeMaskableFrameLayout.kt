@@ -28,6 +28,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import org.oxycblt.auxio.ui.UISettings
 
+/** Applies sharp masking at inflate-time when Auxio round mode is disabled. */
 class RoundModeMaskableFrameLayout
 @JvmOverloads
 constructor(context: Context, attrs: AttributeSet? = null, defStyleRes: Int = -1) :
@@ -48,6 +49,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleRes: Int = -1
     init {
         if (!uiSettings.roundMode) {
             shapeAppearanceModel = ShapeAppearanceModel.builder().build()
+        } else {
+            // Keep the XML-provided shapeAppearance when round mode is enabled.
         }
     }
 }
