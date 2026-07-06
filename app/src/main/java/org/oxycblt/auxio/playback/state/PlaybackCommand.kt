@@ -65,6 +65,8 @@ interface PlaybackCommand {
 
         fun songs(songs: List<Song>, shuffle: ShuffleMode): PlaybackCommand?
 
+        fun songsFrom(song: Song, songs: List<Song>, shuffle: ShuffleMode): PlaybackCommand?
+
         fun album(album: Album, shuffle: ShuffleMode): PlaybackCommand?
 
         fun artist(artist: Artist, shuffle: ShuffleMode): PlaybackCommand?
@@ -121,6 +123,9 @@ constructor(
 
     override fun songs(songs: List<Song>, shuffle: ShuffleMode) =
         newCommand(null, null, songs, shuffle)
+
+    override fun songsFrom(song: Song, songs: List<Song>, shuffle: ShuffleMode) =
+        newCommand(song, null, songs, shuffle).takeIf { songs.any { it.uid == song.uid } }
 
     override fun album(album: Album, shuffle: ShuffleMode) =
         newCommand(null, album, listSettings.albumSongSort, shuffle)

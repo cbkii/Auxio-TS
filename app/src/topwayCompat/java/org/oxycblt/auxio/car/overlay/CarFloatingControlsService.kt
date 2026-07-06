@@ -33,6 +33,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import androidx.annotation.Keep
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -43,6 +44,7 @@ import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
 import org.oxycblt.auxio.playback.service.PlaybackActions
 import timber.log.Timber as L
 
@@ -56,6 +58,7 @@ import timber.log.Timber as L
  * notifications and widgets -- not generic media key dispatch.
  */
 @AndroidEntryPoint
+@Keep
 class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks {
 
     @Inject lateinit var journal: DiagnosticJournal
@@ -557,7 +560,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         @Volatile private var isServiceCreated = false
         @Volatile private var isOverlayRuntimeAttached = false
 
-        const val ACTION_START = BuildConfig.APPLICATION_ID + ".car.overlay.START"
+        val ACTION_START: String = CarOverlayContract.ACTION_START
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".car.overlay.STOP"
         const val ACTION_SHOW = BuildConfig.APPLICATION_ID + ".car.overlay.SHOW"
         const val ACTION_HIDE = BuildConfig.APPLICATION_ID + ".car.overlay.HIDE"
@@ -566,7 +569,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         const val ACTION_AUXIO_FOREGROUND_CHANGED =
             BuildConfig.APPLICATION_ID + ".car.overlay.AUXIO_FG_CHANGED"
         const val EXTRA_AUXIO_FOREGROUND = "extra_auxio_foreground"
-        private const val EXTRA_START_REASON = "extra_start_reason"
+        const val EXTRA_START_REASON = CarOverlayContract.EXTRA_START_REASON
 
         /**
          * Returns the appropriate foreground service type for the current API level.

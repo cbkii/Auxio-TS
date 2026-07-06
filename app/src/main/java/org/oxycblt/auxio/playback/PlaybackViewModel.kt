@@ -452,12 +452,16 @@ constructor(
         playImpl(commandFactory.songs(songs, ShuffleMode.ON))
     }
 
-    private fun playImpl(command: PlaybackCommand?, shuffleScope: ShuffleScope? = null) {
+    private fun playImpl(
+        command: PlaybackCommand?,
+        shuffleScope: ShuffleScope? = null,
+        play: Boolean = true,
+    ) {
         val playbackCommand = requireNotNull(command) { "Invalid playback parameters" }
         if (shuffleScope != null) {
-            playbackManager.play(playbackCommand, shuffleScope)
+            playbackManager.play(playbackCommand, shuffleScope, play)
         } else {
-            playbackManager.play(playbackCommand)
+            playbackManager.play(playbackCommand, play)
         }
     }
 
@@ -672,6 +676,7 @@ constructor(
     private fun rebuildQueueFromPlaybackContext(shuffle: ShuffleMode, shuffleScope: ShuffleScope) {
         val currentSong = playbackManager.currentSong
         val currentPositionMs = playbackManager.progression.calculateElapsedPositionMs()
+        val wasPlaying = playbackManager.progression.isPlaying
         val parent = _parent.value
         val command =
             when {
@@ -682,9 +687,24 @@ constructor(
                 parent is Playlist -> commandFactory.songFromPlaylist(currentSong, parent, shuffle)
                 else -> commandFactory.songFromAll(currentSong, shuffle)
             } ?: commandFactory.all(shuffle)
+        if (command == null) {
+            L.w("Skipping shuffle transition; no target queue is available")
+            return
+        }
 
-        playImpl(command, shuffleScope)
-        playbackManager.seekTo(currentPositionMs)
+        val currentUid = currentSong?.uid
+        if (currentUid != null && command.queue.none { it.uid == currentUid }) {
+            L.w("Skipping shuffle transition; current song is not in target queue")
+            return
+        }
+        playImpl(command, shuffleScope, play = wasPlaying)
+        if (currentUid == null || playbackManager.currentSong?.uid == currentUid) {
+            playbackManager.seekTo(currentPositionMs)
+        } else {
+            L.w(
+                "Shuffle transition did not preserve current song; current=${playbackManager.currentSong?.uid}, expected=$currentUid"
+            )
+        }
     }
 
     private fun applyGenreShuffle() {
@@ -722,9 +742,29 @@ constructor(
                     return@launch
                 }
                 val positionMs = playbackManager.progression.calculateElapsedPositionMs()
-                playImpl(commandFactory.songs(selection.queue, ShuffleMode.ON), ShuffleScope.GENRE)
-                playbackManager.seekTo(positionMs)
+                val wasPlaying = playbackManager.progression.isPlaying
+                val queue = selection.queue.preserveCurrentFirst(currentSongUid)
+                val command = commandFactory.songsFrom(currentSong, queue, ShuffleMode.ON)
+                if (command == null) {
+                    L.w("Skipping genre shuffle; current song is not in target queue")
+                    return@launch
+                }
+                playImpl(command, ShuffleScope.GENRE, play = wasPlaying)
+                if (playbackManager.currentSong?.uid == currentSongUid) {
+                    playbackManager.seekTo(positionMs)
+                } else {
+                    L.w(
+                        "Genre shuffle did not preserve current song; " +
+                            "current=${playbackManager.currentSong?.uid}, expected=$currentSongUid"
+                    )
+                }
             }
+    }
+
+    private fun List<Song>.preserveCurrentFirst(currentUid: Any): List<Song> {
+        val index = indexOfFirst { it.uid == currentUid }
+        if (index <= 0) return this
+        return drop(index) + take(index)
     }
 
     /**
@@ -744,6 +784,9 @@ constructor(
 
     /** Open the playback panel, closing the queue panel if needed. */
     fun openPlayback() = openImpl(OpenPanel.PLAYBACK)
+
+    /** Open the playback panel and queue together where the current layout supports it. */
+    fun openPlaybackQueue() = openImpl(OpenPanel.PLAYBACK_QUEUE)
 
     /**
      * Open the queue panel, assuming that it exists in the current layout, is collapsed, and with
@@ -779,6 +822,8 @@ enum class OpenPanel {
     MAIN,
     /** Open the playback panel, collapsing the queue panel if applicable. */
     PLAYBACK,
+    /** Open the playback panel and queue panel in one consumed UI route. */
+    PLAYBACK_QUEUE,
     /**
      * Open the queue panel, assuming that it exists in the current layout, is collapsed, and with
      * the playback panel already being expanded. Do nothing if these conditions are not met.

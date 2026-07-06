@@ -140,6 +140,9 @@ interface PlaybackStateManager {
      */
     fun play(command: PlaybackCommand, shuffleScope: ShuffleScope)
 
+    /** Start new playback with an explicit app-level [ShuffleScope] and playing state. */
+    fun play(command: PlaybackCommand, shuffleScope: ShuffleScope, play: Boolean)
+
     /**
      * Go to the next [Song] in the queue. Will go to the first [Song] in the queue if there is no
      * [Song] ahead to skip to.
@@ -505,7 +508,8 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         play(command, shuffleScope, play = true)
     }
 
-    private fun play(command: PlaybackCommand, shuffleScope: ShuffleScope, play: Boolean) {
+    @Synchronized
+    override fun play(command: PlaybackCommand, shuffleScope: ShuffleScope, play: Boolean) {
         val stateHolder = stateHolder ?: return
         L.d("Playing $command")
         // Played something, so we are initialized now

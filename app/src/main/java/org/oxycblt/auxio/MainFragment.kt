@@ -643,6 +643,15 @@ class MainFragment :
         when (panel) {
             OpenPanel.MAIN -> tryClosePlaybackPanel()
             OpenPanel.PLAYBACK -> tryOpenPlaybackPanel()
+            OpenPanel.PLAYBACK_QUEUE -> {
+                tryOpenPlaybackPanel()
+                val root = requireBinding().root
+                root.post {
+                    if (isAdded && view != null) {
+                        tryOpenQueuePanel()
+                    }
+                }
+            }
             OpenPanel.QUEUE -> tryOpenQueuePanel()
         }
         playbackModel.openPanel.consume()

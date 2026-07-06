@@ -76,6 +76,7 @@ import org.oxycblt.musikr.Genre
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.covers.CoverCollection
+import timber.log.Timber as L
 
 /**
  * Auxio's extension of [ImageView] that enables cover art loading and playing indicator and
@@ -284,8 +285,10 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         invalidateRootAlpha()
-        invalidatePlaybackIndicatorAlpha(playbackIndicator ?: return)
-        invalidateSelectionIndicatorAlpha(selectionBadge ?: return)
+        playbackIndicator?.let(::invalidatePlaybackIndicatorAlpha)
+        selectionBadge?.let(::invalidateSelectionIndicatorAlpha)
+        // Coil owns ViewTarget detach/attach lifecycle. Do not blindly re-enqueue the last
+        // target-bound request here; every bind below builds a fresh request for this view.
     }
 
     override fun setEnabled(enabled: Boolean) {
@@ -296,12 +299,12 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     override fun setSelected(selected: Boolean) {
         super.setSelected(selected)
         invalidateRootAlpha()
-        invalidatePlaybackIndicatorAlpha(playbackIndicator ?: return)
+        playbackIndicator?.let(::invalidatePlaybackIndicatorAlpha)
     }
 
     override fun setActivated(activated: Boolean) {
         super.setActivated(activated)
-        invalidateSelectionIndicatorAlpha(selectionBadge ?: return)
+        selectionBadge?.let(::invalidateSelectionIndicatorAlpha)
     }
 
     /**
@@ -541,8 +544,10 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
         }
 
         // Dispose of any previous image request and load a new image.
+        val builtRequest = request.build()
         CoilUtils.dispose(image)
-        imageLoader.enqueue(request.build())
+        L.v("Enqueueing cover request [desc=$desc size=${size.width}x${size.height}]")
+        imageLoader.enqueue(builtRequest)
         contentDescription = desc
     }
 
