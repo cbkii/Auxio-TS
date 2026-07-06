@@ -216,6 +216,8 @@ require_file_contains "$seek_policy_file" "value <= 1000L -> TopwaySeekUnitPolic
 require_file_contains "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwaySeekPolicyConverterTest.kt" "TopwaySeekUnitPolicy.Auto" "Topway seek auto unit tests"
 require_file_contains "app/src/test/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationModeTest.kt" "AutoAllSafePaths" "Topway launcher mode gating tests"
 require_file_contains "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwayLauncherIntegrationCoordinatorTest.kt" "countDofunTargeted" "Topway coordinator tests assert DoFun-targeted broadcasts"
+require_file_contains "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwayLauncherIntegrationCoordinatorTest.kt" "private fun List<Intent>.countImplicit" "Topway coordinator tests define implicit broadcast counter"
+require_file_contains "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwayLauncherIntegrationCoordinatorTest.kt" "private fun List<Intent>.countDofunTargeted" "Topway coordinator tests define DoFun-targeted broadcast counter"
 require_file_contains "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwayLauncherIntegrationCoordinatorTest.kt" "cmd update republishes without toggling playback" "Topway cmd=update republish test"
 require_file_contains "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwayStartRoutingPolicyTest.kt" "assertNull(negative.seekTargetMs)" "Topway ignored negative seek has null target assertion"
 require_file_contains "$playback_fragment" "private var topwayProgressTickerJob: Job? = null" "playback service tracks Topway progress ticker job"

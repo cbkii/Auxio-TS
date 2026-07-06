@@ -237,6 +237,13 @@ class TopwayLauncherIntegrationCoordinatorTest {
         }
     }
 
+
+    private fun List<Intent>.countImplicit(action: String): Int =
+        count { it.action == action && it.`package` == null }
+
+    private fun List<Intent>.countDofunTargeted(action: String): Int =
+        count { it.action == action && it.`package` == DOFUN_PACKAGE }
+
     private companion object {
         private const val DOFUN_PACKAGE = "com.dofun.variety"
     }
