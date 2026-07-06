@@ -102,8 +102,3 @@ The DoFun targeted-broadcast package check is cached per process to avoid Packag
 `PR #142` supersedes older WidgetComponent-only Topway broadcast assertions. Head-unit safety checks should now verify `TopwayLauncherIntegrationCoordinator`, `PlaybackServiceFragment` service-driven publishing, mode gates, cached DoFun package detection, seek policy conversion, and forced update/clear paths. `WidgetComponent` is not the canonical launcher media publisher.
 
 Future LSposed/runtime DoFun discovery remains outside this in-app PR. If the matrix still fails after these safe paths are proven in logs/dumpsys/screenshots, classify the failure first (source selection, display mapping, control routing, notification listener, or layout) before proposing any later diagnostics-only hook work.
-
-- `TopwayLauncherIntegrationCoordinator` is canonical for in-app public Topway/DoFun launcher media bridge.
-- `PlaybackServiceFragment` is canonical runtime call-site for launcher publishing.
-- `WidgetComponent` may render Auxio's AppWidget / wrapper widget but is not the sole DoFun launcher integration surface.
-- `TopwayMusicBroadcastBridge` is legacy/supporting helper; prefer coordinator for new guardrails/work.
