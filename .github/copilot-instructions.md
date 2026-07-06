@@ -133,6 +133,15 @@ Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 - Existing broad prohibitions against `com.tw.music.action.*` are refined: these strings are forbidden generally, but allowed as constants inside the isolated Topway bridge, tests, and docs.
 - Runtime APK must stay clean and must not include evidence/probe/capture tooling.
 
+
+## PR #142 Topway launcher coordinator authority
+
+- `TopwayLauncherIntegrationCoordinator` is the canonical in-app public Topway/DoFun launcher media bridge for the PR #142 path. It owns mode-gated outgoing Topway metadata/progress broadcasts, incoming Topway command/seek handling, DoFun-targeted broadcasts, rate limiting, and bridge diagnostics.
+- `PlaybackServiceFragment` is the canonical runtime call-site for launcher media publishing. Launcher metadata/progress must be driven by playback/service state, not solely by Auxio's Android AppWidget rendering path.
+- `WidgetComponent` may continue to render Auxio's own Android AppWidget and update stock-name wrapper widgets, but it must not be treated as the sole DoFun launcher media integration surface.
+- `TopwayMusicBroadcastBridge` is legacy/supporting bridge code. New launcher integration work and guardrails should prefer the coordinator unless deliberately preserving older helper behaviour.
+- Head-unit safety checks must assert coordinator wiring, mode gates, seek policy, cached DoFun package checks, and service-level publish/clear/update paths instead of stale `topwayBridge.publishMetadata` / `topwayBridge.publishProgress` checks in `WidgetComponent`.
+
 ## Evidence labeling (required)
 
 For each TS18/TW/TWTHEME claim, include:

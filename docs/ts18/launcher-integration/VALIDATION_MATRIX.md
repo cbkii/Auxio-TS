@@ -96,4 +96,9 @@ Auto seek policy is deterministic but still requires TS18 validation. It treats 
 
 The DoFun targeted-broadcast package check is cached per process to avoid PackageManager queries on each progress tick. That is acceptable for the embedded head-unit context where launcher package state is effectively stable during an Auxio process lifetime; a process restart refreshes the cache.
 
+
+### Head-unit safety guardrail note
+
+`PR #142` supersedes older WidgetComponent-only Topway broadcast assertions. Head-unit safety checks should now verify `TopwayLauncherIntegrationCoordinator`, `PlaybackServiceFragment` service-driven publishing, mode gates, cached DoFun package detection, seek policy conversion, and forced update/clear paths. `WidgetComponent` is not the canonical launcher media publisher.
+
 Future LSposed/runtime DoFun discovery remains outside this in-app PR. If the matrix still fails after these safe paths are proven in logs/dumpsys/screenshots, classify the failure first (source selection, display mapping, control routing, notification listener, or layout) before proposing any later diagnostics-only hook work.
