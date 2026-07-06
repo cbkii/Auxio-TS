@@ -448,6 +448,41 @@ if ! bash ./scripts/check-topway-manifest-components.sh; then
 fi
 
 printf '\nChecking built APK presence when present...\n'
+
+mode="full"
+req_standard_release=1
+req_topway_music_release=1
+req_topway_media_release=1
+
+if [[ -n "${SELECTED_VARIANTS:-}" ]]; then
+  mode="selective"
+  req_standard_release=0
+  req_topway_music_release=0
+  req_topway_media_release=0
+
+  printf 'Running in selective release mode. Expected release APK variants based on SELECTED_VARIANTS:\n'
+
+  while IFS= read -r variant; do
+    [[ -z "$variant" ]] && continue
+    case "$variant" in
+      standard)
+        req_standard_release=1
+        printf -- '- standard\n'
+        ;;
+      topway_twmedia)
+        req_topway_media_release=1
+        printf -- '- topwayTwMedia\n'
+        ;;
+      topway_twmusic_magisk)
+        req_topway_music_release=1
+        printf -- '- topwayTwMusic (internal for Magisk packaging)\n'
+        ;;
+    esac
+  done <<< "${SELECTED_VARIANTS}"
+else
+  printf 'Running in full compatibility mode. All release APK variants are expected if any are built.\n'
+fi
+
 standard_debug_apk="$(find_apk standard debug || true)"
 standard_release_apk="$(find_apk standard release || true)"
 topway_debug_apk="$(find_apk topwayTwMusic debug || true)"
@@ -491,20 +526,32 @@ fi
 if (( release_outputs_present )); then
   if [[ -n "$standard_release_apk" ]]; then
     pass "found standard release APK: ${standard_release_apk}"
-  else
-    fail "standard release APK missing while release APK outputs are present"
+  elif (( req_standard_release )); then
+    if [[ "$mode" == "full" ]]; then
+      fail "standard release APK missing while release APK outputs are present"
+    else
+      fail "standard release APK missing but required by selected variants"
+    fi
   fi
 
   if [[ -n "$topway_release_apk" ]]; then
-    pass "found Topway music release APK: ${topway_release_apk}"
-  else
-    fail "Topway music release APK missing while release APK outputs are present"
+    pass "found internal Topway music release APK: ${topway_release_apk}"
+  elif (( req_topway_music_release )); then
+    if [[ "$mode" == "full" ]]; then
+      fail "internal Topway music release APK missing while release APK outputs are present"
+    else
+      fail "internal Topway music release APK missing but required by selected variants"
+    fi
   fi
 
   if [[ -n "$topway_media_release_apk" ]]; then
     pass "found Topway media release APK: ${topway_media_release_apk}"
-  else
-    fail "Topway media release APK missing while release APK outputs are present"
+  elif (( req_topway_media_release )); then
+    if [[ "$mode" == "full" ]]; then
+      fail "Topway media release APK missing while release APK outputs are present"
+    else
+      fail "Topway media release APK missing but required by selected variants"
+    fi
   fi
 else
   if (( ! debug_outputs_present )); then

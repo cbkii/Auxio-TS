@@ -468,6 +468,8 @@ jobs:
 
       - name: Validate release APK compatibility contracts
         shell: bash
+        env:
+          SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
         run: bash ./scripts/check-dofun-topway-compat.sh
 
       - name: Upload selected release workflow artifacts
