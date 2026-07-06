@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
-import org.oxycblt.auxio.headunit.topway.TopwayMusicBroadcastBridge
+import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.image.coil.RoundedRectTransformation
@@ -66,6 +66,7 @@ private constructor(
     private val playbackManager: PlaybackStateManager,
     private val uiSettings: UISettings,
     private val journal: DiagnosticJournal,
+    private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
 ) : PlaybackStateManager.Listener, UISettings.Listener, ImageSettings.Listener {
     private val scopeJob = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Main + scopeJob)
@@ -79,6 +80,7 @@ private constructor(
         private val playbackManager: PlaybackStateManager,
         private val uiSettings: UISettings,
         private val journal: DiagnosticJournal,
+        private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
     ) {
         fun create(context: Context) =
             WidgetComponent(
@@ -88,6 +90,7 @@ private constructor(
                 playbackManager,
                 uiSettings,
                 journal,
+                topwayCoordinator,
             )
     }
 
@@ -121,7 +124,6 @@ private constructor(
             }
         }
 
-    private val topwayBridge = TopwayMusicBroadcastBridge(context, uiSettings, journal)
 
     fun attach() {
         playbackManager.addListener(this)
@@ -136,9 +138,10 @@ private constructor(
                         playbackManager.currentSong?.durationMs
                             ?: playbackManager.rawPlaybackMetadata?.durationMs
                             ?: 0L
-                    topwayBridge.publishProgress(
+                    topwayCoordinator.publishProgress(
                         playbackManager.progression.calculateElapsedPositionMs(),
                         duration,
+                        reason = "periodic",
                     )
                 }
                 delay(1000)
@@ -162,7 +165,7 @@ private constructor(
             }
             L.d("No song, resetting widget")
             lastRenderedIsPlaying = null
-            topwayBridge.clear()
+            topwayCoordinator.clear("widget-empty")
             widgetProvider.update(context, uiSettings, null)
             updateTopwayWidget(null)
             return
@@ -186,8 +189,17 @@ private constructor(
                 artworkUri = null,
                 hasArtwork = false,
             )
-        topwayBridge.publishMetadata(metadataSnapshot, force = force)
-        topwayBridge.publishProgress(elapsedMs, song.durationMs, force = force)
+        topwayCoordinator.publishMetadata(
+            metadataSnapshot,
+            reason = "widget-song",
+            force = force,
+        )
+        topwayCoordinator.publishProgress(
+            elapsedMs,
+            song.durationMs,
+            reason = "widget-song",
+            force = force,
+        )
 
         L.d("Updating widget with new playback state")
         bitmapProvider.load(
@@ -261,8 +273,17 @@ private constructor(
                 artworkUri = null,
                 hasArtwork = false,
             )
-        topwayBridge.publishMetadata(metadataSnapshot, force = force)
-        topwayBridge.publishProgress(elapsedMs, metadata.durationMs, force = force)
+        topwayCoordinator.publishMetadata(
+            metadataSnapshot,
+            reason = "widget-raw",
+            force = force,
+        )
+        topwayCoordinator.publishProgress(
+            elapsedMs,
+            metadata.durationMs,
+            reason = "widget-raw",
+            force = force,
+        )
 
         val state =
             PlaybackState.fromRaw(
@@ -282,7 +303,7 @@ private constructor(
         imageSettings.unregisterListener(this)
         playbackManager.removeListener(this)
         uiSettings.unregisterListener(this)
-        topwayBridge.clear()
+        topwayCoordinator.clear("widget-release")
         scopeJob.cancel()
         widgetProvider.reset(context, uiSettings)
         updateTopwayWidget(null)
@@ -319,11 +340,11 @@ private constructor(
     ) = update(force = true)
 
     override fun onProgressionChanged(progression: Progression) {
+        val playStateChanged = lastRenderedIsPlaying != progression.isPlaying
         val shouldRunFullUpdate =
-            lastRenderedIsPlaying != progression.isPlaying ||
-                widgetProvider.hasProgressAwareWidgets(context)
+            playStateChanged || widgetProvider.hasProgressAwareWidgets(context)
         if (shouldRunFullUpdate) {
-            update()
+            update(force = playStateChanged)
         } else {
             lastRenderedIsPlaying = progression.isPlaying
         }
@@ -331,7 +352,11 @@ private constructor(
             playbackManager.currentSong?.durationMs
                 ?: playbackManager.rawPlaybackMetadata?.durationMs
                 ?: 0L
-        topwayBridge.publishProgress(progression.calculateElapsedPositionMs(), duration)
+        topwayCoordinator.publishProgress(
+            progression.calculateElapsedPositionMs(),
+            duration,
+            reason = "progression",
+        )
     }
 
     override fun onRepeatModeChanged(repeatMode: RepeatMode) = update()

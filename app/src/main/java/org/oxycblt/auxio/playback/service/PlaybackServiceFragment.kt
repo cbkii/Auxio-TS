@@ -31,8 +31,8 @@ import org.oxycblt.auxio.AuxioService.Companion.INTENT_KEY_START_ID
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayStartCallbacks
-import org.oxycblt.auxio.headunit.topway.TopwayStartIntentHandler
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
@@ -54,6 +54,7 @@ private constructor(
     sessionHolderFactory: MediaSessionHolder.Factory,
     widgetComponentFactory: WidgetComponent.Factory,
     systemReceiverFactory: SystemPlaybackReceiver.Factory,
+    private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
 ) : PlaybackStateManager.Listener {
     class Factory
     @Inject
@@ -64,6 +65,7 @@ private constructor(
         private val sessionHolderFactory: MediaSessionHolder.Factory,
         private val widgetComponentFactory: WidgetComponent.Factory,
         private val systemReceiverFactory: SystemPlaybackReceiver.Factory,
+        private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             PlaybackServiceFragment(
@@ -75,6 +77,7 @@ private constructor(
                 sessionHolderFactory,
                 widgetComponentFactory,
                 systemReceiverFactory,
+                topwayCoordinator,
             )
     }
 
@@ -206,7 +209,7 @@ private constructor(
     }
 
     private fun handleTopwayStartIntent(intent: Intent?): Boolean {
-        return TopwayStartIntentHandler.handle(
+        return topwayCoordinator.handle(
             intent,
             object : TopwayStartCallbacks {
                 override val hasCurrentSong: Boolean

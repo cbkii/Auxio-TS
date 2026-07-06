@@ -66,3 +66,14 @@ If widget still fails after Auxio proves all outgoing/incoming paths:
 - **Layout failure**: active DoFun theme/page does not render `soft_type=medias` media module.
 
 Only after classifying failure should LSposed diagnostics or compatibility hooks be considered.
+
+## Auxio-TS implementation note (2026-07-06)
+
+The in-app implementation is wired through `TopwayLauncherIntegrationCoordinator` in the isolated Topway bridge package. It keeps the Android MediaSession/MediaBrowser/MediaStyle path intact, publishes the stock Topway metadata/progress broadcasts when the selected mode allows outgoing bridge traffic, routes the observed Topway command/update/seek broadcasts when the selected mode allows incoming command traffic, and retains the existing `topwayCompat` / `com.tw.media` wrapper path where that build variant is selected.
+
+Implemented settings keys for rollback/device validation:
+
+- `auxio_ts18_launcher_integration_mode` stores `Ts18LauncherIntegrationMode` by enum name. Topway-compatible builds default to `AutoAllSafePaths`; generic builds default to `AndroidMediaSessionOnly`.
+- `auxio_ts18_launcher_seek_unit_policy` stores `TopwaySeekUnitPolicy` by enum name and defaults to `Auto`.
+
+TS18 runtime validation is still required against the matrix above. This implementation does not include LSposed hooks, package replacement, root requirements, UID 1000 assumptions, platform signing, `/system` writes, or vendor-service changes.
