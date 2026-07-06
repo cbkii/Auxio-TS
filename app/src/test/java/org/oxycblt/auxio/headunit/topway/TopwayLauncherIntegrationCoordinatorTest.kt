@@ -75,10 +75,7 @@ class TopwayLauncherIntegrationCoordinatorTest {
         coordinator.publishMetadata(snapshot("One"), reason = "duplicate")
         coordinator.publishMetadata(snapshot("Two"), reason = "changed")
 
-        assertEquals(
-            2,
-            context.broadcasts.countImplicit(TopwayMusicContract.ACTION_MUSIC_INFO),
-        )
+        assertEquals(2, context.broadcasts.countImplicit(TopwayMusicContract.ACTION_MUSIC_INFO))
         assertEquals(
             2,
             context.broadcasts.countDofunTargeted(TopwayMusicContract.ACTION_MUSIC_INFO),
@@ -91,7 +88,11 @@ class TopwayLauncherIntegrationCoordinatorTest {
         val coordinator = coordinator(context, Ts18LauncherIntegrationMode.AutoAllSafePaths)
         val callbacks =
             RecordingCallbacks(hasCurrentSong = true) {
-                coordinator.publishMetadata(snapshot("Current"), reason = "cmd-update", force = true)
+                coordinator.publishMetadata(
+                    snapshot("Current"),
+                    reason = "cmd-update",
+                    force = true,
+                )
                 coordinator.publishProgress(1_000L, 10_000L, reason = "cmd-update", force = true)
             }
 
@@ -103,7 +104,10 @@ class TopwayLauncherIntegrationCoordinatorTest {
 
         assertEquals(listOf("update"), callbacks.events)
         assertEquals(1, context.broadcasts.countImplicit(TopwayMusicContract.ACTION_MUSIC_INFO))
-        assertEquals(1, context.broadcasts.countDofunTargeted(TopwayMusicContract.ACTION_MUSIC_INFO))
+        assertEquals(
+            1,
+            context.broadcasts.countDofunTargeted(TopwayMusicContract.ACTION_MUSIC_INFO),
+        )
         assertEquals(
             1,
             context.broadcasts.countImplicit(TopwayMusicContract.ACTION_PROGRESS_DURATION),
