@@ -92,6 +92,7 @@ class TopwayStartRoutingPolicyTest {
                 hasSong = true,
             )
         assertEquals(TopwayServiceAction.IGNORE, negative.action)
+        assertNull(negative.seekTargetMs)
 
         val beyond =
             decide(

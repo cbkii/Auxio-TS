@@ -94,11 +94,11 @@ Mode selection is user-visible in the Topway-compatible UI settings screen:
 
 Auto seek policy is deterministic but still requires TS18 validation. It treats values `0..100` as percent, `101..1000` as permille, larger values as seconds only when seconds fit within the known duration, and otherwise clamps as milliseconds. Negative values and unknown durations are ignored. If device validation proves the launcher uses another seekbar unit, switch the visible **Topway widget seek unit** setting to `Milliseconds`, `Seconds`, `Percent 0–100`, or `Permille 0–1000`.
 
-The DoFun targeted-broadcast package check is cached per process to avoid PackageManager queries on each progress tick. That is acceptable for the embedded head-unit context where launcher package state is effectively stable during an Auxio process lifetime; a process restart refreshes the cache.
+The DoFun targeted broadcast is always attempted with `setPackage("com.dofun.variety")` when outgoing Topway broadcasts are enabled. This avoids per-progress PackageManager IPC and avoids Android 11+ package-visibility false negatives; sending a package-targeted broadcast is safe even when the package is absent.
 
 
 ### Head-unit safety guardrail note
 
-`PR #142` supersedes older WidgetComponent-only Topway broadcast assertions. Head-unit safety checks should now verify `TopwayLauncherIntegrationCoordinator`, `PlaybackServiceFragment` service-driven publishing, mode gates, cached DoFun package detection, seek policy conversion, and forced update/clear paths. `WidgetComponent` is not the canonical launcher media publisher.
+`PR #142` supersedes older WidgetComponent-only Topway broadcast assertions. Head-unit safety checks should now verify `TopwayLauncherIntegrationCoordinator`, `PlaybackServiceFragment` service-driven publishing, mode gates, unconditional DoFun-targeted broadcast sending without PackageManager gating, seek policy conversion, and forced update/clear paths. `WidgetComponent` is not the canonical launcher media publisher.
 
 Future LSposed/runtime DoFun discovery remains outside this in-app PR. If the matrix still fails after these safe paths are proven in logs/dumpsys/screenshots, classify the failure first (source selection, display mapping, control routing, notification listener, or layout) before proposing any later diagnostics-only hook work.

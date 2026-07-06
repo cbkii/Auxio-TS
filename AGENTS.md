@@ -141,7 +141,7 @@ Canonical source corpus: `docs/TS18_SOURCE_LED_INTEGRATION_STRATEGY.md`
 - `PlaybackServiceFragment` is the canonical runtime call-site for launcher media publishing. Launcher metadata/progress must be driven by playback/service state, not solely by Auxio's Android AppWidget rendering path.
 - `WidgetComponent` may continue to render Auxio's own Android AppWidget and update stock-name wrapper widgets, but it must not be treated as the sole DoFun launcher media integration surface.
 - `TopwayMusicBroadcastBridge` is legacy/supporting bridge code. New launcher integration work and guardrails should prefer the coordinator unless deliberately preserving older helper behaviour.
-- Head-unit safety checks must assert coordinator wiring, mode gates, seek policy, cached DoFun package checks, and service-level publish/clear/update paths instead of stale `topwayBridge.publishMetadata` / `topwayBridge.publishProgress` checks in `WidgetComponent`.
+- Head-unit safety checks must assert coordinator wiring, mode gates, seek policy, unconditional DoFun-targeted broadcast sending without PackageManager gating, and service-level publish/clear/update paths instead of stale `topwayBridge.publishMetadata` / `topwayBridge.publishProgress` checks in `WidgetComponent`.
 
 ## TS18 claim labeling (required)
 

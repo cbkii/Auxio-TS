@@ -89,6 +89,7 @@ private constructor(
     private val scope = CoroutineScope(Dispatchers.Main + waitJob)
     private var autoStopJob: Job? = null
     private var lastTopwayIsPlaying: Boolean? = null
+    private var topwayProgressTickerJob: Job? = null
     private val exoHolder = exoHolderFactory.create()
     private val sessionHolder = sessionHolderFactory.create(context, foregroundListener)
     private val widgetComponent = widgetComponentFactory.create(context)
@@ -271,6 +272,8 @@ private constructor(
 
     fun release() {
         autoStopJob?.cancel()
+        topwayProgressTickerJob?.cancel()
+        topwayProgressTickerJob = null
         waitJob.cancel()
         playbackManager.removeListener(this)
         systemReceiver.release()
@@ -318,14 +321,16 @@ private constructor(
     }
 
     private fun startTopwayProgressTicker() {
-        scope.launch {
-            while (true) {
-                if (playbackManager.progression.isPlaying) {
-                    publishTopwayProgress("periodic", force = false)
+        topwayProgressTickerJob?.cancel()
+        topwayProgressTickerJob =
+            scope.launch {
+                while (true) {
+                    if (playbackManager.progression.isPlaying) {
+                        publishTopwayProgress("periodic", force = false)
+                    }
+                    delay(TOPWAY_PROGRESS_TICK_MS)
                 }
-                delay(TOPWAY_PROGRESS_TICK_MS)
             }
-        }
     }
 
     private fun publishTopwayState(reason: String, force: Boolean) {

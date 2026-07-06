@@ -41,14 +41,6 @@ constructor(
     private var lastMetadata: HeadUnitMetadataSnapshot? = null
     private var lastProgress: TopwayProgressSnapshot? = null
     private var lastProgressAtMs = 0L
-    private val isDoFunInstalled: Boolean by lazy {
-        try {
-            context.packageManager.getLaunchIntentForPackage(DOFUN_PACKAGE) != null
-        } catch (e: RuntimeException) {
-            L.w(e, "Unable to query DoFun launcher package state")
-            false
-        }
-    }
 
     var mode: Ts18LauncherIntegrationMode
         get() =
@@ -216,14 +208,12 @@ constructor(
                 e.javaClass.simpleName,
             )
         }
-        if (isDoFunInstalled) {
-            try {
-                context.sendBroadcast(Intent(intent).setPackage(DOFUN_PACKAGE))
-            } catch (e: SecurityException) {
-                L.w(e, "Unable to send DoFun-targeted broadcast due to security policy")
-            } catch (e: RuntimeException) {
-                L.w(e, "Unable to send DoFun-targeted broadcast")
-            }
+        try {
+            context.sendBroadcast(Intent(intent).setPackage(DOFUN_PACKAGE))
+        } catch (e: SecurityException) {
+            L.w(e, "Unable to send DoFun-targeted broadcast due to security policy")
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to send DoFun-targeted broadcast")
         }
     }
 
