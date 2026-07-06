@@ -75,37 +75,27 @@ jobs:
           sudo apt-get install -y ninja-build
         fi
 
-    - name: Check formatting
-      id: spotless_check
-      continue-on-error: true
-      run: bash ./scripts/ci-gradle.sh spotlessCheck
-
-    - name: Stop when formatting is already clean
-      if: steps.spotless_check.outcome == 'success'
-      run: echo "Formatting already clean; no changes needed."
-
-    - name: Apply formatting
-      if: steps.spotless_check.outcome == 'failure'
-      run: bash ./scripts/ci-gradle.sh spotlessApply
-
-    - name: Verify formatting after apply
-      if: steps.spotless_check.outcome == 'failure'
-      run: bash ./scripts/ci-gradle.sh spotlessCheck
+    - name: Check/apply formatting safely
+      id: spotless_auto
+      shell: bash
+      env:
+        AUXIO_TS_CI_GRADLE_TIMEOUT: 20m
+      run: bash ./scripts/spotless-pr-branch-autofix.sh
 
     - name: Ensure submodules stayed clean
-      if: steps.spotless_check.outcome == 'failure'
+      if: steps.spotless_auto.outputs.changed == 'true'
       shell: bash
       run: bash ./scripts/check-submodules.sh --profile full-build
 
     - name: Commit and push formatting changes
-      if: steps.spotless_check.outcome == 'failure'
+      if: steps.spotless_auto.outputs.changed == 'true'
       shell: bash
       run: |
         set -euo pipefail
 
         if git diff --quiet; then
-          echo "::error::spotlessApply was expected to change files, but git diff is empty."
-          exit 1
+          echo "No formatting changes to commit."
+          exit 0
         fi
 
         git config user.name "github-actions[bot]"
