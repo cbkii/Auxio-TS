@@ -645,7 +645,12 @@ class MainFragment :
             OpenPanel.PLAYBACK -> tryOpenPlaybackPanel()
             OpenPanel.PLAYBACK_QUEUE -> {
                 tryOpenPlaybackPanel()
-                requireBinding().root.post { tryOpenQueuePanel() }
+                val root = requireBinding().root
+                root.post {
+                    if (isAdded && view != null) {
+                        tryOpenQueuePanel()
+                    }
+                }
             }
             OpenPanel.QUEUE -> tryOpenQueuePanel()
         }
