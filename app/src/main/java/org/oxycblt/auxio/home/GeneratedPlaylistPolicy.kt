@@ -60,6 +60,29 @@ object GeneratedPlaylistPolicy {
         return year >= decade && year < decade + 10
     }
 
+    /** Return the decade representing [song]'s album release-year, or null if unknown. */
+    fun decadeOf(song: Song): Int? {
+        val year = song.album.dates?.min?.year ?: return null
+        return (year / 10) * 10
+    }
+
+    /**
+     * Groups [songs] by decade, sorting each generated queue using [decadePlaybackSort] to ensure
+     * identical ordering semantics as [songsForDecade]. Unknown years are excluded.
+     */
+    fun songsByDecade(songs: Collection<Song>): Map<Int, List<Song>> {
+        val grouped = mutableMapOf<Int, MutableList<Song>>()
+        for (song in songs) {
+            val decade = decadeOf(song) ?: continue
+            grouped.getOrPut(decade) { mutableListOf() }.add(song)
+        }
+        val result = mutableMapOf<Int, List<Song>>()
+        for ((decade, bucket) in grouped) {
+            result[decade] = decadePlaybackSort.songs(bucket)
+        }
+        return result
+    }
+
     /**
      * Return all songs whose album release-year metadata falls inside [decade], sorted
      * newest-first.
