@@ -562,8 +562,7 @@ constructor(
 
             if (System.nanoTime() >= deadlineNanos) return false
 
-            val remainingMs =
-                ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+            val remainingMs = ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
             kotlinx.coroutines.delay(minOf(remainingMs, 25L))
         }
     }
