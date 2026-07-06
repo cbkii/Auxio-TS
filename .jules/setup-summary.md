@@ -1,10 +1,10 @@
 # Jules setup summary
 
-- Readiness: `FULL_BUILD_READY`
+- Readiness: `STATIC_REVIEW_ONLY`
 - Android SDK ready: `true`
-- Submodules ready: `true`
-- Gradle smoke ready: `true`
-- Notes: Jules snapshot has SDK, submodules, and Gradle smoke readiness.
+- Submodules ready: `false`
+- Gradle smoke ready: `false`
+- Notes: Snapshot usable for source/static work; agents must run and report strict validation before claiming build/APK readiness.
 
 Agents must read `.jules/setup-status.env` before claiming build/test/APK validation.
 
