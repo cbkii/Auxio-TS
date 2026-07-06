@@ -523,7 +523,7 @@ constructor(
         )
     }
 
-    private fun readTwStorageSwitch(): String? {
+    private suspend fun readTwStorageSwitch(): String? {
         val process =
             try {
                 ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
@@ -552,7 +552,7 @@ constructor(
         }
     }
 
-    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
+    private suspend fun Process.waitForCompat(timeoutMs: Long): Boolean {
         val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
         while (true) {
             try {
@@ -562,14 +562,9 @@ constructor(
 
             if (System.nanoTime() >= deadlineNanos) return false
 
-            try {
-                val remainingMs =
-                    ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
-                Thread.sleep(minOf(remainingMs, 25L))
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
+            val remainingMs =
+                ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+            kotlinx.coroutines.delay(minOf(remainingMs, 25L))
         }
     }
 
