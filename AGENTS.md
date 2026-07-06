@@ -437,3 +437,8 @@ Direct dependencies on external/vendor `com.tw.*` APIs remain forbidden in produ
 - Root operations must be narrow, bounded (2s timeout for probes, 5s for ops), and safely degraded.
 - Playback Stability: All shuffle modes must preserve the currently playing track. Autoplay must not be interrupted by background state refreshes.
 - Album-Art Modes: Reduced to `off`, `as-is`, and `optimised`.
+
+- `TopwayLauncherIntegrationCoordinator` is canonical for in-app public Topway/DoFun launcher media bridge.
+- `PlaybackServiceFragment` is canonical runtime call-site for launcher publishing.
+- `WidgetComponent` may render Auxio's AppWidget / wrapper widget but is not the sole DoFun launcher integration surface.
+- `TopwayMusicBroadcastBridge` is legacy/supporting helper; prefer coordinator for new guardrails/work.

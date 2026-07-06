@@ -295,3 +295,8 @@ Read these concise, redacted context files before exact-device TS18 install/runt
 - `docs/evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md`
 
 Thin compatibility wrapper classes under approved Topway/DoFun source sets such as `app/src/topwayCompat/java/com/tw/music/**` are allowed only to expose stock-compatible package/class/component names and delegate into Auxio-owned code. `com.tw.media` is an alternate DoFun fixed-entry variant, not a general no-root bypass.
+
+- `TopwayLauncherIntegrationCoordinator` is canonical for in-app public Topway/DoFun launcher media bridge.
+- `PlaybackServiceFragment` is canonical runtime call-site for launcher publishing.
+- `WidgetComponent` may render Auxio's AppWidget / wrapper widget but is not the sole DoFun launcher integration surface.
+- `TopwayMusicBroadcastBridge` is legacy/supporting helper; prefer coordinator for new guardrails/work.
