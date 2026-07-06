@@ -18,6 +18,7 @@
 
 package com.tw.music.view
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -39,6 +40,7 @@ import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.auxio.widgets.WidgetTimeline
 import timber.log.Timber as L
 
+@SuppressLint("RemoteViewLayout")
 class MusicWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent == null) {

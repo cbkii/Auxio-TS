@@ -31,14 +31,18 @@ import org.oxycblt.auxio.AuxioService.Companion.INTENT_KEY_START_ID
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayStartCallbacks
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
+import org.oxycblt.auxio.music.resolve
+import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
+import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
@@ -46,7 +50,7 @@ import timber.log.Timber as L
 
 class PlaybackServiceFragment
 private constructor(
-    context: Context,
+    private val context: Context,
     private val foregroundListener: ForegroundListener,
     private val playbackManager: PlaybackStateManager,
     private val playbackSettings: PlaybackSettings,
@@ -84,6 +88,7 @@ private constructor(
     private val waitJob = Job()
     private val scope = CoroutineScope(Dispatchers.Main + waitJob)
     private var autoStopJob: Job? = null
+    private var lastTopwayIsPlaying: Boolean? = null
     private val exoHolder = exoHolderFactory.create()
     private val sessionHolder = sessionHolderFactory.create(context, foregroundListener)
     private val widgetComponent = widgetComponentFactory.create(context)
@@ -134,6 +139,8 @@ private constructor(
         widgetComponent.attach()
         systemReceiver.attach()
         playbackManager.addListener(this)
+        publishTopwayState("service-attach", force = true)
+        startTopwayProgressTicker()
         restoreCachedPlaybackStateIfIdle()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token
@@ -245,10 +252,14 @@ private constructor(
                         L.i("Topway update received with no current song; requesting state restore")
                         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
                     }
+                    publishTopwayState("cmd-update", force = true)
                     widgetComponent.update(force = true)
                 }
 
-                override fun seekTo(positionMs: Long) = playbackManager.seekTo(positionMs)
+                override fun seekTo(positionMs: Long) {
+                    playbackManager.seekTo(positionMs)
+                    publishTopwayProgress("launcher-seek", force = true)
+                }
 
                 override fun ignore() = L.d("Ignoring unsupported or unsafe Topway start intent")
             },
@@ -263,9 +274,20 @@ private constructor(
         waitJob.cancel()
         playbackManager.removeListener(this)
         systemReceiver.release()
+        topwayCoordinator.clear("service-release")
         widgetComponent.release()
         sessionHolder.release()
         exoHolder.release()
+    }
+
+    override fun onIndexMoved(index: Int) = publishTopwayState("index-moved", force = true)
+
+    override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
+        when {
+            queue.isEmpty() -> topwayCoordinator.clear("queue-empty")
+            change.type == QueueChange.Type.SONG || change.type == QueueChange.Type.INDEX ->
+                publishTopwayState("queue-${change.type.name.lowercase()}", force = true)
+        }
     }
 
     override fun onNewPlayback(
@@ -275,18 +297,102 @@ private constructor(
         isShuffled: Boolean,
     ) {
         cancelAutoStop()
+        publishTopwayState("new-playback", force = true)
     }
 
     override fun onProgressionChanged(progression: Progression) {
         // Update timer whenever play/pause state changes
         updateAutoStopTimer(progression.isPlaying)
+        val playStateChanged = lastTopwayIsPlaying != progression.isPlaying
+        lastTopwayIsPlaying = progression.isPlaying
+        publishTopwayProgress("progression", force = playStateChanged)
     }
 
+    override fun onRawPlaybackMetadataChanged(
+        metadata: org.oxycblt.auxio.playback.state.RawPlaybackMetadata?
+    ) = publishTopwayState("raw-metadata", force = true)
+
     override fun onSessionEnded() {
+        topwayCoordinator.clear("session-ended")
         foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
+    }
+
+    private fun startTopwayProgressTicker() {
+        scope.launch {
+            while (true) {
+                if (playbackManager.progression.isPlaying) {
+                    publishTopwayProgress("periodic", force = false)
+                }
+                delay(TOPWAY_PROGRESS_TICK_MS)
+            }
+        }
+    }
+
+    private fun publishTopwayState(reason: String, force: Boolean) {
+        val song = playbackManager.currentSong
+        if (song != null) {
+            val snapshot =
+                HeadUnitMetadataPolicy.fromRaw(
+                    title = song.name.resolve(context),
+                    artist = song.artists.resolveNames(context),
+                    albumArtist = song.album.artists.resolveNames(context),
+                    albumTitle = song.album.name.resolve(context),
+                    durationMs = song.durationMs,
+                    mediaId = song.uid.toString(),
+                    mediaUri = song.uri.toString(),
+                    artworkUri = null,
+                    hasArtwork = false,
+                )
+            topwayCoordinator.publishMetadata(snapshot, reason = reason, force = force)
+            topwayCoordinator.publishProgress(
+                playbackManager.progression.calculateElapsedPositionMs(),
+                song.durationMs,
+                reason = reason,
+                force = force,
+            )
+            return
+        }
+        val rawMetadata = playbackManager.rawPlaybackMetadata
+        if (rawMetadata != null) {
+            val snapshot =
+                HeadUnitMetadataPolicy.fromRaw(
+                    title = rawMetadata.displayTitle,
+                    artist = rawMetadata.displayArtist,
+                    albumArtist = rawMetadata.displayArtist,
+                    albumTitle = rawMetadata.album,
+                    durationMs = rawMetadata.durationMs,
+                    mediaId = rawMetadata.uriString,
+                    mediaUri = rawMetadata.uriString,
+                    artworkUri = null,
+                    hasArtwork = false,
+                )
+            topwayCoordinator.publishMetadata(snapshot, reason = reason, force = force)
+            topwayCoordinator.publishProgress(
+                playbackManager.progression.calculateElapsedPositionMs(),
+                rawMetadata.durationMs,
+                reason = reason,
+                force = force,
+            )
+            return
+        }
+        topwayCoordinator.clear(reason)
+    }
+
+    private fun publishTopwayProgress(reason: String, force: Boolean) {
+        val duration =
+            playbackManager.currentSong?.durationMs
+                ?: playbackManager.rawPlaybackMetadata?.durationMs
+                ?: 0L
+        topwayCoordinator.publishProgress(
+            playbackManager.progression.calculateElapsedPositionMs(),
+            duration,
+            reason = reason,
+            force = force,
+        )
     }
 
     private companion object {
         private const val AUTO_STOP_DELAY_MS = 30L * 60L * 1000L
+        private const val TOPWAY_PROGRESS_TICK_MS = 1000L
     }
 }

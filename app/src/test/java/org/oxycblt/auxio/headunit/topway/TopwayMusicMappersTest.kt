@@ -76,9 +76,9 @@ class TopwayMusicMappersTest {
     }
 
     @Test
-    fun `seek mapper clamps and rejects invalid inputs`() {
-        assertEquals(1000L, TopwayMusicSeekMapper.mapSeekTargetMs(1000, 5000L))
-        assertEquals(0L, TopwayMusicSeekMapper.mapSeekTargetMs(-1, 5000L))
+    fun `seek mapper uses auto policy and rejects invalid inputs`() {
+        assertEquals(5000L, TopwayMusicSeekMapper.mapSeekTargetMs(1000, 5000L))
+        assertNull(TopwayMusicSeekMapper.mapSeekTargetMs(-1, 5000L))
         assertEquals(5000L, TopwayMusicSeekMapper.mapSeekTargetMs(8000, 5000L))
         assertEquals(2000L, TopwayMusicSeekMapper.mapSeekTargetMs(2000L, 5000L))
         assertEquals(3000L, TopwayMusicSeekMapper.mapSeekTargetMs("3000", 5000L))

@@ -57,6 +57,8 @@
     <string name="set_key_head_unit_album_art" translatable="false">auxio_head_unit_album_art</string>
     <string name="set_key_head_unit_dashboard_quick_access" translatable="false">auxio_head_unit_dashboard_quick_access</string>
     <string name="set_key_head_unit_large_controls" translatable="false">auxio_head_unit_large_controls</string>
+    <string name="set_key_ts18_launcher_integration_mode" translatable="false">auxio_ts18_launcher_integration_mode</string>
+    <string name="set_key_topway_seek_unit_policy" translatable="false">auxio_ts18_launcher_seek_unit_policy</string>
 
     <string name="set_key_search_filters" translatable="false">auxio_search_filters</string>
 
@@ -95,6 +97,40 @@
         <item>@integer/theme_light</item>
         <item>@integer/theme_dark</item>
     </integer-array>
+
+
+    <string-array name="entries_ts18_launcher_integration_mode">
+        <item>@string/set_ts18_launcher_integration_mode_auto_all_safe_paths</item>
+        <item>@string/set_ts18_launcher_integration_mode_android_media_session_only</item>
+        <item>@string/set_ts18_launcher_integration_mode_topway_broadcast_only</item>
+        <item>@string/set_ts18_launcher_integration_mode_topway_command_only</item>
+        <item>@string/set_ts18_launcher_integration_mode_topway_broadcast_and_command</item>
+        <item>@string/set_ts18_launcher_integration_mode_diagnostics_only</item>
+        <item>@string/set_ts18_launcher_integration_mode_disabled</item>
+    </string-array>
+    <string-array name="values_ts18_launcher_integration_mode" translatable="false">
+        <item>AutoAllSafePaths</item>
+        <item>AndroidMediaSessionOnly</item>
+        <item>TopwayBroadcastOnly</item>
+        <item>TopwayCommandOnly</item>
+        <item>TopwayBroadcastAndCommand</item>
+        <item>DiagnosticsOnly</item>
+        <item>Disabled</item>
+    </string-array>
+    <string-array name="entries_topway_seek_unit_policy">
+        <item>@string/set_topway_seek_unit_policy_auto</item>
+        <item>@string/set_topway_seek_unit_policy_milliseconds</item>
+        <item>@string/set_topway_seek_unit_policy_seconds</item>
+        <item>@string/set_topway_seek_unit_policy_percent</item>
+        <item>@string/set_topway_seek_unit_policy_permille</item>
+    </string-array>
+    <string-array name="values_topway_seek_unit_policy" translatable="false">
+        <item>Auto</item>
+        <item>Milliseconds</item>
+        <item>Seconds</item>
+        <item>Percent0To100</item>
+        <item>Permille0To1000</item>
+    </string-array>
 
     <string-array name="entries_cover_mode">
         <item>@string/set_cover_mode_off</item>

@@ -25,16 +25,7 @@ import coil3.request.ImageRequest
 import coil3.request.transformations
 import coil3.size.Size
 import javax.inject.Inject
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
-import org.oxycblt.auxio.diagnostics.DiagnosticJournal
-import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
-import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.image.coil.RoundedRectTransformation
@@ -65,11 +56,7 @@ private constructor(
     private val bitmapProvider: BitmapProvider,
     private val playbackManager: PlaybackStateManager,
     private val uiSettings: UISettings,
-    private val journal: DiagnosticJournal,
-    private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
 ) : PlaybackStateManager.Listener, UISettings.Listener, ImageSettings.Listener {
-    private val scopeJob = SupervisorJob()
-    private val scope = CoroutineScope(Dispatchers.Main + scopeJob)
     private var lastRenderedIsPlaying: Boolean? = null
 
     class Factory
@@ -79,19 +66,9 @@ private constructor(
         private val bitmapProvider: BitmapProvider,
         private val playbackManager: PlaybackStateManager,
         private val uiSettings: UISettings,
-        private val journal: DiagnosticJournal,
-        private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
     ) {
         fun create(context: Context) =
-            WidgetComponent(
-                context,
-                imageSettings,
-                bitmapProvider,
-                playbackManager,
-                uiSettings,
-                journal,
-                topwayCoordinator,
-            )
+            WidgetComponent(context, imageSettings, bitmapProvider, playbackManager, uiSettings)
     }
 
     private val widgetProvider = WidgetProvider()
@@ -124,29 +101,10 @@ private constructor(
             }
         }
 
-
     fun attach() {
         playbackManager.addListener(this)
         uiSettings.registerListener(this)
         imageSettings.registerListener(this)
-
-        // Start a periodic timer to update Topway progress broadcasts once per second.
-        scope.launch {
-            while (isActive) {
-                if (playbackManager.progression.isPlaying) {
-                    val duration =
-                        playbackManager.currentSong?.durationMs
-                            ?: playbackManager.rawPlaybackMetadata?.durationMs
-                            ?: 0L
-                    topwayCoordinator.publishProgress(
-                        playbackManager.progression.calculateElapsedPositionMs(),
-                        duration,
-                        reason = "periodic",
-                    )
-                }
-                delay(1000)
-            }
-        }
     }
 
     /**
@@ -165,7 +123,6 @@ private constructor(
             }
             L.d("No song, resetting widget")
             lastRenderedIsPlaying = null
-            topwayCoordinator.clear("widget-empty")
             widgetProvider.update(context, uiSettings, null)
             updateTopwayWidget(null)
             return
@@ -177,30 +134,6 @@ private constructor(
         val elapsedMs = playbackManager.progression.calculateElapsedPositionMs()
         val repeatMode = playbackManager.repeatMode
         val isShuffled = playbackManager.isShuffled
-        val metadataSnapshot =
-            HeadUnitMetadataPolicy.fromRaw(
-                title = song.name.resolve(context),
-                artist = song.artists.resolveNames(context),
-                albumArtist = song.album.artists.resolveNames(context),
-                albumTitle = song.album.name.resolve(context),
-                durationMs = song.durationMs,
-                mediaId = song.uid.toString(),
-                mediaUri = song.uri.toString(),
-                artworkUri = null,
-                hasArtwork = false,
-            )
-        topwayCoordinator.publishMetadata(
-            metadataSnapshot,
-            reason = "widget-song",
-            force = force,
-        )
-        topwayCoordinator.publishProgress(
-            elapsedMs,
-            song.durationMs,
-            reason = "widget-song",
-            force = force,
-        )
-
         L.d("Updating widget with new playback state")
         bitmapProvider.load(
             song,
@@ -261,30 +194,6 @@ private constructor(
         val elapsedMs = playbackManager.progression.calculateElapsedPositionMs()
         val repeatMode = playbackManager.repeatMode
         val isShuffled = playbackManager.isShuffled
-        val metadataSnapshot =
-            HeadUnitMetadataPolicy.fromRaw(
-                title = metadata.displayTitle,
-                artist = metadata.displayArtist,
-                albumArtist = metadata.displayArtist,
-                albumTitle = metadata.album,
-                durationMs = metadata.durationMs,
-                mediaId = metadata.uriString,
-                mediaUri = metadata.uriString,
-                artworkUri = null,
-                hasArtwork = false,
-            )
-        topwayCoordinator.publishMetadata(
-            metadataSnapshot,
-            reason = "widget-raw",
-            force = force,
-        )
-        topwayCoordinator.publishProgress(
-            elapsedMs,
-            metadata.durationMs,
-            reason = "widget-raw",
-            force = force,
-        )
-
         val state =
             PlaybackState.fromRaw(
                 metadata = metadata,
@@ -303,8 +212,6 @@ private constructor(
         imageSettings.unregisterListener(this)
         playbackManager.removeListener(this)
         uiSettings.unregisterListener(this)
-        topwayCoordinator.clear("widget-release")
-        scopeJob.cancel()
         widgetProvider.reset(context, uiSettings)
         updateTopwayWidget(null)
     }
@@ -348,15 +255,6 @@ private constructor(
         } else {
             lastRenderedIsPlaying = progression.isPlaying
         }
-        val duration =
-            playbackManager.currentSong?.durationMs
-                ?: playbackManager.rawPlaybackMetadata?.durationMs
-                ?: 0L
-        topwayCoordinator.publishProgress(
-            progression.calculateElapsedPositionMs(),
-            duration,
-            reason = "progression",
-        )
     }
 
     override fun onRepeatModeChanged(repeatMode: RepeatMode) = update()

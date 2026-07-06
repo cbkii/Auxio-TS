@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * TopwayLauncherIntegrationCoordinator.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package org.oxycblt.auxio.headunit.topway
 
 import android.content.Context
@@ -23,6 +41,14 @@ constructor(
     private var lastMetadata: HeadUnitMetadataSnapshot? = null
     private var lastProgress: TopwayProgressSnapshot? = null
     private var lastProgressAtMs = 0L
+    private val isDoFunInstalled: Boolean by lazy {
+        try {
+            context.packageManager.getLaunchIntentForPackage(DOFUN_PACKAGE) != null
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to query DoFun launcher package state")
+            false
+        }
+    }
 
     var mode: Ts18LauncherIntegrationMode
         get() =
@@ -43,7 +69,7 @@ constructor(
         reason: String,
         force: Boolean = false,
     ) {
-        if (!canBroadcast("metadata:$reason")) return
+        if (!canBroadcast("TX metadata:$reason")) return
         if (!force && snapshot == lastMetadata) return
         sendTopwayBroadcast(
             TopwayMusicIntentFactory.metadataIntent(snapshot),
@@ -60,7 +86,7 @@ constructor(
         force: Boolean = false,
         nowMs: Long = SystemClock.elapsedRealtime(),
     ) {
-        if (!canBroadcast("progress:$reason")) return
+        if (!canBroadcast("TX progress:$reason")) return
         val snapshot =
             TopwayProgressStatePolicy.active(progressMs, durationMs)
                 ?: TopwayProgressStatePolicy.CLEAR
@@ -109,13 +135,13 @@ constructor(
                     source = "TopwayLauncherIntegrationCoordinator",
                 )
             )
-        journal.log(
+        logJournalAndTimber(
             DiagnosticJournal.CAT_TOPWAY_CMD,
-            "RX",
+            "RX command",
             "action=${intent.action} cmd=${extras.cmd} seek=${extras.widgetProgress}",
         )
         if (!mode.handlesTopwayCommands) {
-            logSuppressed("command:${intent.action}")
+            logSuppressed("RX command:${intent.action}")
             callbacks.ignore()
             return true
         }
@@ -126,21 +152,29 @@ constructor(
                     callbacks.currentDurationMs,
                     seekUnitPolicy,
                 )
-            journal.log(
+            logJournalAndTimber(
                 DiagnosticJournal.CAT_TOPWAY_CMD,
-                "Seek interpreted",
+                "RX widget seek",
                 decision.detail,
-                decision.unit.name,
+                decision.unit?.name ?: "ignored",
             )
             decision.positionMs?.let { callbacks.seekTo(it) } ?: callbacks.ignore()
             return true
         }
         when (TopwayMusicCommandMapper.map(intent.action, extras.cmd)) {
-            TopwayMappedCommand.PREV -> callbacks.previous()
-            TopwayMappedCommand.NEXT -> callbacks.next()
+            TopwayMappedCommand.PREV ->
+                if (callbacks.hasCurrentSong) callbacks.previous() else callbacks.ignore()
+            TopwayMappedCommand.NEXT ->
+                if (callbacks.hasCurrentSong) callbacks.next() else callbacks.ignore()
             TopwayMappedCommand.PLAY_PAUSE -> callbacks.playPause()
-            TopwayMappedCommand.UPDATE -> callbacks.widgetUpdate()
-            TopwayMappedCommand.UNKNOWN -> callbacks.ignore()
+            TopwayMappedCommand.UPDATE -> {
+                logJournalAndTimber(DiagnosticJournal.CAT_TOPWAY_CMD, "RX forced update")
+                callbacks.widgetUpdate()
+            }
+            TopwayMappedCommand.UNKNOWN -> {
+                logJournalAndTimber(DiagnosticJournal.CAT_TOPWAY_CMD, "RX unknown", intent.action)
+                callbacks.ignore()
+            }
         }
         return true
     }
@@ -152,7 +186,12 @@ constructor(
     }
 
     private fun logSuppressed(reason: String) {
-        journal.log(DiagnosticJournal.CAT_TOPWAY_BROADCAST, "Suppressed", reason, mode.name)
+        logJournalAndTimber(
+            DiagnosticJournal.CAT_TOPWAY_BROADCAST,
+            "Ignored due to mode",
+            reason,
+            mode.name,
+        )
     }
 
     private fun sendTopwayBroadcast(intent: Intent, reason: String, detail: String?) {
@@ -162,32 +201,51 @@ constructor(
         }
         try {
             context.sendBroadcast(Intent(intent))
-            journal.log(
+            logJournalAndTimber(
                 DiagnosticJournal.CAT_TOPWAY_BROADCAST,
-                "TX ${intent.action}",
+                "TX ${intent.txKind()}",
                 detail,
                 reason,
             )
         } catch (e: RuntimeException) {
             L.w(e, "Unable to send Topway broadcast")
-            journal.log(
+            logJournalAndTimber(
                 DiagnosticJournal.CAT_TOPWAY_BROADCAST,
                 "TX failed",
                 intent.action,
                 e.javaClass.simpleName,
             )
         }
-        if (context.packageManager.getLaunchIntentForPackage(DOFUN_PACKAGE) != null) {
+        if (isDoFunInstalled) {
             try {
                 context.sendBroadcast(Intent(intent).setPackage(DOFUN_PACKAGE))
+            } catch (e: SecurityException) {
+                L.w(e, "Unable to send DoFun-targeted broadcast due to security policy")
             } catch (e: RuntimeException) {
                 L.w(e, "Unable to send DoFun-targeted broadcast")
             }
         }
     }
 
+    private fun logJournalAndTimber(
+        category: String,
+        event: String,
+        detail: String? = null,
+        result: String? = null,
+    ) {
+        journal.log(category, event, detail, result)
+        L.i("Topway launcher bridge: $category/$event detail=$detail result=$result")
+    }
+
+    private fun Intent.txKind(): String =
+        when (action) {
+            TopwayMusicContract.ACTION_MUSIC_INFO -> "metadata"
+            TopwayMusicContract.ACTION_PROGRESS_DURATION -> "progress"
+            else -> action.orEmpty()
+        }
+
     private fun HeadUnitMetadataSnapshot.safeSummary(): String =
-        "title=${displayTitle.take(48)} artist=${artist.take(48)} duration=$durationMs path=${mediaUri.isNotBlank()}"
+        "titleLen=${displayTitle.length} artistLen=${artist.length} duration=$durationMs path=${mediaUri.isNotBlank()}"
 
     companion object {
         const val PREF_SEEK_UNIT = "auxio_ts18_launcher_seek_unit_policy"

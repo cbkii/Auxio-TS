@@ -91,7 +91,7 @@ class TopwayStartRoutingPolicyTest {
                 durationMs = 5_000L,
                 hasSong = true,
             )
-        assertEquals(0L, negative.seekTargetMs)
+        assertEquals(TopwayServiceAction.IGNORE, negative.action)
 
         val beyond =
             decide(
