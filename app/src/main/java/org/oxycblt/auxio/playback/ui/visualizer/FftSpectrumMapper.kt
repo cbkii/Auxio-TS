@@ -28,8 +28,8 @@ import kotlin.math.pow
  * Converts Android [android.media.audiofx.Visualizer] FFT frames into stable radial bands.
  *
  * Android FFT bytes are laid out as DC real at index 0, Nyquist real at index 1, then real/
- * imaginary pairs for bins 1 until n/2. This mapper intentionally ignores DC/Nyquist for drawing
- * so constant offsets do not turn the visualizer into a static circle. It then groups component-pair
+ * imaginary pairs for bins 1 until n/2. This mapper intentionally ignores DC/Nyquist for drawing so
+ * constant offsets do not turn the visualizer into a static circle. It then groups component-pair
  * magnitudes into logarithmic-ish bands, applies adaptive gain for quiet music, and keeps a small
  * peak/decay envelope so the head-unit visual remains lively without flickering.
  */

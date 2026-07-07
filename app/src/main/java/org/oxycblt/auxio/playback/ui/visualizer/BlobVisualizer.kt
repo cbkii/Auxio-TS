@@ -44,16 +44,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val spectrumMapper = FftSpectrumMapper()
     private val bands: FloatArray
         get() = spectrumMapper.bands
+
     private var hasValidFrame = false
     private var lastFrameAtMs = 0L
     private var idleInvalidateScheduled = false
-    private val idleInvalidateRunnable =
-        Runnable {
-            idleInvalidateScheduled = false
-            if (shouldAnimateIdlePulse()) {
-                invalidate()
-            }
+    private val idleInvalidateRunnable = Runnable {
+        idleInvalidateScheduled = false
+        if (shouldAnimateIdlePulse()) {
+            invalidate()
         }
+    }
 
     private val scrimPaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
