@@ -288,6 +288,24 @@
     <string name="set_ts18_source_repair_status">TS18 USB source status</string>
     <string name="set_ts18_source_repair_status_desc">Check /storage/usbdisk0 and /storage/usbdisk1 source readiness</string>
 
+
+    <string name="set_ts18_launcher_integration_mode">TS18 launcher integration</string>
+    <string name="set_ts18_launcher_integration_mode_desc">Controls safe in-app Android, Topway broadcast, and Topway command paths for DoFun/Topway launchers.</string>
+    <string name="set_ts18_launcher_integration_mode_auto_all_safe_paths">Auto / all safe paths</string>
+    <string name="set_ts18_launcher_integration_mode_android_media_session_only">Android media session only</string>
+    <string name="set_ts18_launcher_integration_mode_topway_broadcast_only">Topway broadcast only</string>
+    <string name="set_ts18_launcher_integration_mode_topway_command_only">Topway command only</string>
+    <string name="set_ts18_launcher_integration_mode_topway_broadcast_and_command">Topway broadcast + command</string>
+    <string name="set_ts18_launcher_integration_mode_diagnostics_only">Diagnostics only</string>
+    <string name="set_ts18_launcher_integration_mode_disabled">Disabled</string>
+    <string name="set_topway_seek_unit_policy">Topway widget seek unit</string>
+    <string name="set_topway_seek_unit_policy_desc">Select how incoming launcher seek values are interpreted. Use explicit units if TS18 validation shows Auto is wrong.</string>
+    <string name="set_topway_seek_unit_policy_auto">Auto</string>
+    <string name="set_topway_seek_unit_policy_milliseconds">Milliseconds</string>
+    <string name="set_topway_seek_unit_policy_seconds">Seconds</string>
+    <string name="set_topway_seek_unit_policy_percent">Percent 0–100</string>
+    <string name="set_topway_seek_unit_policy_permille">Permille 0–1000</string>
+
     <string name="set_visualizer_mode">Now Playing Visualizer</string>
     <string name="set_visualizer_mode_desc">Shows an on-device visualizer for the current playback audio session. Android labels this as audio recording permission, but Auxio-TS does not record microphone audio.</string>
     <string name="set_key_visualizer_mode" translatable="false">ui_visualizer_mode</string>

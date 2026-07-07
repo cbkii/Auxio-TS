@@ -79,6 +79,23 @@
             app:summary="@string/set_ts18_fast_resume_status_desc"
             app:title="@string/set_ts18_fast_resume_status" />
 
+
+        <androidx.preference.ListPreference
+            app:defaultValue="AutoAllSafePaths"
+            app:entries="@array/entries_ts18_launcher_integration_mode"
+            app:entryValues="@array/values_ts18_launcher_integration_mode"
+            app:key="@string/set_key_ts18_launcher_integration_mode"
+            app:summary="@string/set_ts18_launcher_integration_mode_desc"
+            app:title="@string/set_ts18_launcher_integration_mode" />
+
+        <androidx.preference.ListPreference
+            app:defaultValue="Auto"
+            app:entries="@array/entries_topway_seek_unit_policy"
+            app:entryValues="@array/values_topway_seek_unit_policy"
+            app:key="@string/set_key_topway_seek_unit_policy"
+            app:summary="@string/set_topway_seek_unit_policy_desc"
+            app:title="@string/set_topway_seek_unit_policy" />
+
         <Preference
             app:key="@string/set_key_ts18_startup_scanning_policy"
             app:summary="@string/set_ts18_startup_scanning_policy_desc"
