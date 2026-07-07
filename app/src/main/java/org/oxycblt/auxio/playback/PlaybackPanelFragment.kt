@@ -411,13 +411,28 @@ class PlaybackPanelFragment :
     }
 
     private fun releaseVisualizer() {
-        try {
-            visualizer?.release()
-        } catch (e: Exception) {
-            // Ignore any issues during release
-        }
+        val activeVisualizer = visualizer
         visualizer = null
         visualizerSessionId = null
+        if (activeVisualizer != null) {
+            try {
+                activeVisualizer.setDataCaptureListener(null, 0, false, false)
+            } catch (e: RuntimeException) {
+                L.d(e, "Visualizer listener cleanup failed")
+            }
+            try {
+                if (activeVisualizer.enabled) {
+                    activeVisualizer.enabled = false
+                }
+            } catch (e: RuntimeException) {
+                L.d(e, "Visualizer disable during release failed")
+            }
+            try {
+                activeVisualizer.release()
+            } catch (e: RuntimeException) {
+                L.d(e, "Visualizer native release failed")
+            }
+        }
         playbackModel.updateVisualizerFft(null)
     }
 
@@ -438,13 +453,21 @@ class PlaybackPanelFragment :
             notifyCoverVisualizerStateChanged()
             return
         }
-        val sessionId = playbackModel.currentAudioSessionId?.takeIf { it != 0 } ?: return
+        val sessionId =
+            playbackModel.currentAudioSessionId?.takeIf { it != 0 }
+                ?: run {
+                    L.d("Visualizer not started: no non-zero audio session")
+                    playbackModel.updateVisualizerFft(null)
+                    return
+                }
 
         val hasPermission =
             ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
 
         if (!hasPermission) {
+            L.w("Visualizer not started: RECORD_AUDIO permission denied or not yet granted")
+            playbackModel.updateVisualizerFft(null)
             notifyCoverVisualizerStateChanged()
             return // Will be requested in onResume if needed
         }
@@ -458,9 +481,20 @@ class PlaybackPanelFragment :
                 visualizer =
                     Visualizer(sessionId).apply {
                         visualizerSessionId = sessionId
-                        captureSize = Visualizer.getCaptureSizeRange()[1]
+                        val captureRange = Visualizer.getCaptureSizeRange()
+                        captureSize = captureRange[1]
+                        try {
+                            scalingMode = Visualizer.SCALING_MODE_NORMALIZED
+                        } catch (e: RuntimeException) {
+                            L.d(
+                                e,
+                                "Visualizer normalized scaling unavailable; continuing with default",
+                            )
+                        }
                         setDataCaptureListener(
                             object : Visualizer.OnDataCaptureListener {
+                                private var frameCount = 0
+
                                 override fun onWaveFormDataCapture(
                                     visualizer: Visualizer,
                                     waveform: ByteArray,
@@ -472,19 +506,51 @@ class PlaybackPanelFragment :
                                     fft: ByteArray,
                                     samplingRate: Int,
                                 ) {
+                                    if (++frameCount == 1) {
+                                        L.d(
+                                            "Visualizer FFT frames started for session $sessionId " +
+                                                "at ${samplingRate}mHz"
+                                        )
+                                    }
                                     playbackModel.updateVisualizerFft(fft)
                                 }
                             },
-                            Visualizer.getMaxCaptureRate() / 2,
+                            (Visualizer.getMaxCaptureRate() * 3 / 4).coerceAtLeast(1),
                             false,
                             true,
                         )
                         enabled = true
+                        L.d(
+                            "Visualizer started for session $sessionId " +
+                                "with captureSize=$captureSize " +
+                                "captureRate=${Visualizer.getMaxCaptureRate() * 3 / 4}"
+                        )
                     }
-            } catch (e: Exception) {
-                L.w("Failed to initialize visualizer: ${e.message}")
+            } catch (e: SecurityException) {
+                L.w(e, "Visualizer construction denied for session $sessionId")
                 visualizer = null
                 visualizerSessionId = null
+                playbackModel.updateVisualizerFft(null)
+            } catch (e: IllegalArgumentException) {
+                L.w(e, "Visualizer rejected session/capture configuration for session $sessionId")
+                visualizer = null
+                visualizerSessionId = null
+                playbackModel.updateVisualizerFft(null)
+            } catch (e: IllegalStateException) {
+                L.w(e, "Visualizer entered invalid state for session $sessionId")
+                visualizer = null
+                visualizerSessionId = null
+                playbackModel.updateVisualizerFft(null)
+            } catch (e: UnsupportedOperationException) {
+                L.w(e, "Visualizer unsupported on this device for session $sessionId")
+                visualizer = null
+                visualizerSessionId = null
+                playbackModel.updateVisualizerFft(null)
+            } catch (e: RuntimeException) {
+                L.w(e, "Visualizer construction failed for session $sessionId")
+                visualizer = null
+                visualizerSessionId = null
+                playbackModel.updateVisualizerFft(null)
             }
         }
         notifyCoverVisualizerStateChanged()
