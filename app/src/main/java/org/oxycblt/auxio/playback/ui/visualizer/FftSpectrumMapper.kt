@@ -34,23 +34,29 @@ import kotlin.math.pow
  * peak/decay envelope so the head-unit visual remains lively without flickering.
  */
 class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
-    private val bands = FloatArray(bandCount)
+    init {
+        require(bandCount > 0) { "bandCount must be positive" }
+    }
+
+    /** Current normalized band levels. Read-only by convention; mutated by [update] and [reset]. */
+    val bands = FloatArray(bandCount)
     private val peaks = FloatArray(bandCount)
+    private val raw = FloatArray(bandCount)
     private var adaptivePeak = MIN_ADAPTIVE_PEAK
 
-    fun update(fft: ByteArray?): FloatArray {
-        if (fft == null || fft.size < MIN_FFT_SIZE || bandCount <= 0) {
+    fun update(fft: ByteArray?) {
+        if (fft == null || fft.size < MIN_FFT_SIZE) {
             decayToSilence()
-            return bands.copyOf()
+            return
         }
 
         val usablePairCount = ((fft.size - 2) / 2).coerceAtLeast(0)
         if (usablePairCount == 0) {
             decayToSilence()
-            return bands.copyOf()
+            return
         }
 
-        val raw = FloatArray(bandCount)
+        raw.fill(0f)
         var framePeak = 0f
         var contributingBins = 0
 
@@ -72,34 +78,34 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
         if (contributingBins == 0 || framePeak <= 0f) {
             decayToSilence()
-            return bands.copyOf()
+            return
         }
 
         adaptivePeak = max(MIN_ADAPTIVE_PEAK, max(framePeak, adaptivePeak * ADAPTIVE_DECAY))
-        val gain = TARGET_PEAK / adaptivePeak
 
         for (i in bands.indices) {
-            val boosted = ((raw[i] * gain) / TARGET_PEAK).coerceIn(0f, 1f).pow(RESPONSE_CURVE)
+            val boosted = (raw[i] / adaptivePeak).coerceIn(0f, 1f).pow(RESPONSE_CURVE)
             val withFloor = if (boosted > 0f) max(boosted, ACTIVITY_FLOOR) else 0f
-            val smoothed = if (withFloor > bands[i]) {
-                bands[i] + (withFloor - bands[i]) * ATTACK
-            } else {
-                bands[i] * RELEASE
-            }
+            val smoothed =
+                if (withFloor > bands[i]) {
+                    bands[i] + (withFloor - bands[i]) * ATTACK
+                } else {
+                    bands[i] * RELEASE
+                }
             peaks[i] = max(smoothed, peaks[i] * PEAK_DECAY)
             bands[i] = max(smoothed, peaks[i] * PEAK_BLEND).coerceIn(0f, 1f)
         }
-
-        return bands.copyOf()
     }
 
     fun reset() {
         bands.fill(0f)
         peaks.fill(0f)
+        raw.fill(0f)
         adaptivePeak = MIN_ADAPTIVE_PEAK
     }
 
     private fun decayToSilence() {
+        raw.fill(0f)
         for (i in bands.indices) {
             peaks[i] *= PEAK_DECAY
             bands[i] = max(bands[i] * SILENCE_DECAY, peaks[i] * PEAK_BLEND).coerceIn(0f, 1f)
@@ -115,7 +121,6 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
         const val DEFAULT_BAND_COUNT = 64
         private const val MIN_FFT_SIZE = 4
         private const val MIN_ADAPTIVE_PEAK = 18f
-        private const val TARGET_PEAK = 128f
         private const val ADAPTIVE_DECAY = 0.96f
         private const val ATTACK = 0.72f
         private const val RELEASE = 0.82f

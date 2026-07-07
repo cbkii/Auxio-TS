@@ -26,6 +26,7 @@ import android.graphics.Path
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.View
+import androidx.appcompat.R as AR
 import androidx.core.graphics.ColorUtils
 import com.google.android.material.R as MR
 import kotlin.math.PI
@@ -41,9 +42,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     View(context, attrs, defStyleAttr) {
 
     private val spectrumMapper = FftSpectrumMapper()
-    private val bands = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
+    private val bands: FloatArray
+        get() = spectrumMapper.bands
     private var hasValidFrame = false
     private var lastFrameAtMs = 0L
+    private var idleInvalidateScheduled = false
+    private val idleInvalidateRunnable =
+        Runnable {
+            idleInvalidateScheduled = false
+            if (shouldAnimateIdlePulse()) {
+                invalidate()
+            }
+        }
 
     private val scrimPaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -83,16 +93,34 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         refreshThemeColors()
+        if (shouldAnimateIdlePulse()) {
+            scheduleIdleInvalidation()
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelIdleInvalidation()
+        super.onDetachedFromWindow()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (visibility == VISIBLE) {
+            if (shouldAnimateIdlePulse()) {
+                scheduleIdleInvalidation()
+            }
+        } else {
+            cancelIdleInvalidation()
+        }
     }
 
     fun updateFft(bytes: ByteArray?) {
         if (bytes == null) {
             spectrumMapper.reset()
-            bands.fill(0f)
             hasValidFrame = false
+            cancelIdleInvalidation()
         } else {
-            val next = spectrumMapper.update(bytes)
-            System.arraycopy(next, 0, bands, 0, minOf(next.size, bands.size))
+            spectrumMapper.update(bytes)
             hasValidFrame = bands.any { it > 0.01f }
             if (hasValidFrame) lastFrameAtMs = SystemClock.uptimeMillis()
         }
@@ -100,7 +128,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     private fun refreshThemeColors() {
-        val primary = context.getAttrColorCompat(MR.attr.colorPrimary).defaultColor
+        val primary = context.getAttrColorCompat(AR.attr.colorPrimary).defaultColor
         val secondary = context.getAttrColorCompat(MR.attr.colorSecondary).defaultColor
         val surface = context.getAttrColorCompat(MR.attr.colorSurface).defaultColor
         val surfaceIsLight = ColorUtils.calculateLuminance(surface) > 0.5
@@ -135,6 +163,23 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         return candidate
     }
 
+    private fun shouldAnimateIdlePulse() =
+        isAttachedToWindow && visibility == VISIBLE && (!hasValidFrame || isCurrentFrameStale())
+
+    private fun isCurrentFrameStale() = SystemClock.uptimeMillis() - lastFrameAtMs > STALE_FRAME_MS
+
+    private fun scheduleIdleInvalidation() {
+        if (!idleInvalidateScheduled && shouldAnimateIdlePulse()) {
+            idleInvalidateScheduled = true
+            postDelayed(idleInvalidateRunnable, IDLE_INVALIDATE_MS)
+        }
+    }
+
+    private fun cancelIdleInvalidation() {
+        idleInvalidateScheduled = false
+        removeCallbacks(idleInvalidateRunnable)
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
@@ -146,8 +191,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val baseRadius = size * 0.32f
         val maxSpike = size * 0.34f
         val backplateRadius = size * 0.49f
-        val now = SystemClock.uptimeMillis()
-        val stale = !hasValidFrame || now - lastFrameAtMs > STALE_FRAME_MS
+        val stale = !hasValidFrame || isCurrentFrameStale()
 
         canvas.drawCircle(cx, cy, backplateRadius, scrimPaint)
 
@@ -158,9 +202,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         path.reset()
         val count = bands.size
-        val phase = if (stale) (now % LISTENING_PULSE_MS).toFloat() / LISTENING_PULSE_MS else 0f
+        val phase =
+            if (stale) {
+                (SystemClock.uptimeMillis() % LISTENING_PULSE_MS).toFloat() / LISTENING_PULSE_MS
+            } else {
+                0f
+            }
         for (i in 0 until count) {
-            val angle = (i.toDouble() / count.toDouble()) * 2.0 * PI - PI / 2.0
             // Waiting pulse is intentionally modest and regular: it shows the view is listening,
             // but avoids pretending to be audio-reactive after capture has failed or not started.
             val level =
@@ -171,10 +219,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                 }
             val inner = baseRadius * 0.88f
             val outer = (baseRadius + maxSpike * level).coerceAtMost(size * 0.47f)
-            val sx = cx + (inner * cos(angle)).toFloat()
-            val sy = cy + (inner * sin(angle)).toFloat()
-            val ex = cx + (outer * cos(angle)).toFloat()
-            val ey = cy + (outer * sin(angle)).toFloat()
+            val cosAngle = COS_LOOKUP[i]
+            val sinAngle = SIN_LOOKUP[i]
+            val sx = cx + inner * cosAngle
+            val sy = cy + inner * sinAngle
+            val ex = cx + outer * cosAngle
+            val ey = cy + outer * sinAngle
 
             canvas.drawLine(sx, sy, ex, ey, glowPaint)
             canvas.drawLine(sx, sy, ex, ey, spikePaint)
@@ -185,8 +235,10 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         canvas.drawPath(path, fillPaint)
         canvas.drawCircle(cx, cy, baseRadius * 0.82f, corePaint)
 
-        if (stale && visibility == VISIBLE) {
-            postInvalidateDelayed(IDLE_INVALIDATE_MS)
+        if (stale) {
+            scheduleIdleInvalidation()
+        } else {
+            cancelIdleInvalidation()
         }
     }
 
@@ -198,5 +250,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         private const val MIN_SPIKE_CONTRAST = 4.5
         private const val MIN_GLOW_CONTRAST = 3.2
         private const val MIN_FILL_CONTRAST = 2.8
+        private val COS_LOOKUP =
+            FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT) { index ->
+                cos(angleForBand(index)).toFloat()
+            }
+        private val SIN_LOOKUP =
+            FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT) { index ->
+                sin(angleForBand(index)).toFloat()
+            }
+
+        private fun angleForBand(index: Int) =
+            (index.toDouble() / FftSpectrumMapper.DEFAULT_BAND_COUNT.toDouble()) * 2.0 * PI -
+                PI / 2.0
     }
 }

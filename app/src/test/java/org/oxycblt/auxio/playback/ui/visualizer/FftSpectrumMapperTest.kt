@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.playback.ui.visualizer
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,9 +28,23 @@ class FftSpectrumMapperTest {
     fun nullEmptyAndShortFramesReturnSafeZeros() {
         val mapper = FftSpectrumMapper(8)
 
-        assertTrue(mapper.update(null).all { it == 0f })
-        assertTrue(mapper.update(byteArrayOf()).all { it == 0f })
-        assertTrue(mapper.update(byteArrayOf(1, 2, 3)).all { it == 0f })
+        mapper.update(null)
+        assertTrue(mapper.bands.all { it == 0f })
+        mapper.update(byteArrayOf())
+        assertTrue(mapper.bands.all { it == 0f })
+        mapper.update(byteArrayOf(1, 2, 3))
+        assertTrue(mapper.bands.all { it == 0f })
+    }
+
+    @Test
+    fun updateReusesInternalBandBuffer() {
+        val mapper = FftSpectrumMapper(8)
+        val firstBands = mapper.bands
+
+        mapper.update(byteArrayOf(0, 0, 3, 4, 0, 0))
+        mapper.update(byteArrayOf(0, 0, 6, 8, 0, 0))
+
+        assertSame(firstBands, mapper.bands)
     }
 
     @Test
@@ -37,15 +52,19 @@ class FftSpectrumMapperTest {
         val mapper = FftSpectrumMapper(8)
         val fft = byteArrayOf(0, 0, 3, 4, 0, 0)
 
-        val bands = mapper.update(fft)
+        mapper.update(fft)
 
-        assertTrue(bands.any { it > 0f })
+        assertTrue(mapper.bands.any { it > 0f })
     }
 
     @Test
     fun highEnergyFrameProducesStrongerBandsThanLowEnergyFrame() {
-        val low = FftSpectrumMapper(8).update(byteArrayOf(0, 0, 4, 3, 0, 0)).maxOrNull() ?: 0f
-        val high = FftSpectrumMapper(8).update(byteArrayOf(0, 0, 80, 60, 0, 0)).maxOrNull() ?: 0f
+        val lowMapper = FftSpectrumMapper(8)
+        lowMapper.update(byteArrayOf(0, 0, 4, 3, 0, 0))
+        val low = lowMapper.bands.maxOrNull() ?: 0f
+        val highMapper = FftSpectrumMapper(8)
+        highMapper.update(byteArrayOf(0, 0, 80, 60, 0, 0))
+        val high = highMapper.bands.maxOrNull() ?: 0f
 
         assertTrue(high > low)
     }
@@ -53,8 +72,10 @@ class FftSpectrumMapperTest {
     @Test
     fun smoothingAndDecayAreDeterministicAndClamped() {
         val mapper = FftSpectrumMapper(8)
-        val first = mapper.update(byteArrayOf(0, 0, 100, 100, 0, 0)).maxOrNull() ?: 0f
-        val decayed = mapper.update(byteArrayOf(0, 0, 0, 0, 0, 0)).maxOrNull() ?: 0f
+        mapper.update(byteArrayOf(0, 0, 100, 100, 0, 0))
+        val first = mapper.bands.copyOf().maxOrNull() ?: 0f
+        mapper.update(byteArrayOf(0, 0, 0, 0, 0, 0))
+        val decayed = mapper.bands.copyOf().maxOrNull() ?: 0f
 
         assertTrue(first in 0f..1f)
         assertTrue(decayed in 0f..1f)
@@ -64,9 +85,9 @@ class FftSpectrumMapperTest {
     @Test
     fun malformedOddLengthFrameDoesNotCrashAndClamps() {
         val mapper = FftSpectrumMapper(8)
-        val bands = mapper.update(byteArrayOf(0, 0, 127, 127, 64))
+        mapper.update(byteArrayOf(0, 0, 127, 127, 64))
 
-        assertEquals(8, bands.size)
-        assertTrue(bands.all { it in 0f..1f })
+        assertEquals(8, mapper.bands.size)
+        assertTrue(mapper.bands.all { it in 0f..1f })
     }
 }

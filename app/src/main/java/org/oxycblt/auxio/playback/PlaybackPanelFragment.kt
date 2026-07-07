@@ -482,6 +482,8 @@ class PlaybackPanelFragment :
                     Visualizer(sessionId).apply {
                         visualizerSessionId = sessionId
                         val captureRange = Visualizer.getCaptureSizeRange()
+                        val maxCaptureRate = Visualizer.getMaxCaptureRate()
+                        val captureRate = (maxCaptureRate * 3 / 4).coerceAtLeast(1)
                         captureSize = captureRange[1]
                         try {
                             scalingMode = Visualizer.SCALING_MODE_NORMALIZED
@@ -509,13 +511,14 @@ class PlaybackPanelFragment :
                                     if (++frameCount == 1) {
                                         L.d(
                                             "Visualizer FFT frames started for session $sessionId " +
-                                                "at ${samplingRate}mHz"
+                                                "samplingRate=${samplingRate}mHz " +
+                                                "(${samplingRate / 1000f}Hz)"
                                         )
                                     }
                                     playbackModel.updateVisualizerFft(fft)
                                 }
                             },
-                            (Visualizer.getMaxCaptureRate() * 3 / 4).coerceAtLeast(1),
+                            captureRate,
                             false,
                             true,
                         )
@@ -523,31 +526,20 @@ class PlaybackPanelFragment :
                         L.d(
                             "Visualizer started for session $sessionId " +
                                 "with captureSize=$captureSize " +
-                                "captureRate=${Visualizer.getMaxCaptureRate() * 3 / 4}"
+                                "captureRate=${captureRate}mHz (${captureRate / 1000f}Hz)"
                         )
                     }
-            } catch (e: SecurityException) {
-                L.w(e, "Visualizer construction denied for session $sessionId")
-                visualizer = null
-                visualizerSessionId = null
-                playbackModel.updateVisualizerFft(null)
-            } catch (e: IllegalArgumentException) {
-                L.w(e, "Visualizer rejected session/capture configuration for session $sessionId")
-                visualizer = null
-                visualizerSessionId = null
-                playbackModel.updateVisualizerFft(null)
-            } catch (e: IllegalStateException) {
-                L.w(e, "Visualizer entered invalid state for session $sessionId")
-                visualizer = null
-                visualizerSessionId = null
-                playbackModel.updateVisualizerFft(null)
-            } catch (e: UnsupportedOperationException) {
-                L.w(e, "Visualizer unsupported on this device for session $sessionId")
-                visualizer = null
-                visualizerSessionId = null
-                playbackModel.updateVisualizerFft(null)
             } catch (e: RuntimeException) {
-                L.w(e, "Visualizer construction failed for session $sessionId")
+                val message =
+                    when (e) {
+                        is SecurityException -> "Visualizer construction denied"
+                        is IllegalArgumentException ->
+                            "Visualizer rejected session/capture configuration"
+                        is IllegalStateException -> "Visualizer entered invalid state"
+                        is UnsupportedOperationException -> "Visualizer unsupported on this device"
+                        else -> "Visualizer construction failed"
+                    }
+                L.w(e, "$message for session $sessionId")
                 visualizer = null
                 visualizerSessionId = null
                 playbackModel.updateVisualizerFft(null)
