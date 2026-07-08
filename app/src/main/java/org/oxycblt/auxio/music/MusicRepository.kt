@@ -523,36 +523,39 @@ constructor(
         )
     }
 
-    private fun readTwStorageSwitch(): String? {
-        val process =
+    private suspend fun readTwStorageSwitch(): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val process =
+                try {
+                    ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    L.w(e, "Unable to start TS18 storage switch diagnostic read")
+                    return@withContext null
+                }
             try {
-                ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
+                return@withContext if (!process.waitForCompat(500)) {
+                    process.destroyCompat()
+                    null
+                } else {
+                    process.inputStream
+                        .bufferedReader()
+                        .use { it.readText().trim() }
+                        .takeIf { it.isNotEmpty() }
+                }
             } catch (e: Exception) {
-                L.w(e, "Unable to start TS18 storage switch diagnostic read")
-                return null
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                L.w(e, "Unable to read TS18 storage switch diagnostic value")
+                return@withContext null
+            } finally {
+                process.inputStream.closeQuietly()
+                process.errorStream.closeQuietly()
+                process.outputStream.closeQuietly()
+                process.destroy()
             }
-        try {
-            return if (!process.waitForCompat(500)) {
-                process.destroyCompat()
-                null
-            } else {
-                process.inputStream
-                    .bufferedReader()
-                    .use { it.readText().trim() }
-                    .takeIf { it.isNotEmpty() }
-            }
-        } catch (e: Exception) {
-            L.w(e, "Unable to read TS18 storage switch diagnostic value")
-            return null
-        } finally {
-            process.inputStream.closeQuietly()
-            process.errorStream.closeQuietly()
-            process.outputStream.closeQuietly()
-            process.destroy()
         }
-    }
 
-    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
+    private suspend fun Process.waitForCompat(timeoutMs: Long): Boolean {
         val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
         while (true) {
             try {
@@ -562,14 +565,8 @@ constructor(
 
             if (System.nanoTime() >= deadlineNanos) return false
 
-            try {
-                val remainingMs =
-                    ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
-                Thread.sleep(minOf(remainingMs, 25L))
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
+            val remainingMs = ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+            kotlinx.coroutines.delay(minOf(remainingMs, 25L))
         }
     }
 
