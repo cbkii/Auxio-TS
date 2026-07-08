@@ -18,7 +18,6 @@
 
 package org.oxycblt.auxio.music.decision
 
-import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.databinding.ItemNewPlaylistChoiceBinding
@@ -76,9 +75,9 @@ private constructor(private val binding: ItemNewPlaylistChoiceBinding) :
          * @param parent The parent to inflate this instance from.
          * @return A new instance.
          */
-        fun from(parent: View) =
+        fun from(parent: ViewGroup) =
             NewPlaylistFooterViewHolder(
-                ItemNewPlaylistChoiceBinding.inflate(parent.context.inflater)
+                ItemNewPlaylistChoiceBinding.inflate(parent.context.inflater, parent, false)
             )
     }
 }
