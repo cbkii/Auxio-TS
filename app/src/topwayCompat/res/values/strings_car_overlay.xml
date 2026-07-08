@@ -12,4 +12,7 @@
     <string name="car_overlay_setting_title" translatable="false">Car Floating Controls</string>
     <string name="car_overlay_setting_summary" translatable="false">Show persistent media controls over other apps</string>
     <string name="car_overlay_reset_position" translatable="false">Reset overlay position</string>
+    <string name="car_overlay_hide_when_foreground_title" translatable="false">Hide while Auxio is open</string>
+    <string name="car_overlay_hide_when_foreground_summary" translatable="false">Hide floating controls when the main Auxio app is in the foreground</string>
+    <string name="car_overlay_opacity" translatable="false">Overlay opacity</string>
 </resources>

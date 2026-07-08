@@ -22,9 +22,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.musikr.fs.RootGate
+import android.content.Context
+import androidx.preference.PreferenceManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 @Singleton
-class RootStateHolder @Inject constructor() : RootGate {
+class RootStateHolder @Inject constructor(@ApplicationContext private val context: Context) : RootGate {
     enum class State {
         Unknown,
         Available,
@@ -44,6 +47,11 @@ class RootStateHolder @Inject constructor() : RootGate {
 
     @Synchronized
     fun probeSync(): State {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        if (!prefs.getBoolean("auxio_use_root_fs", false)) {
+            return State.Denied
+        }
+
         // Timeouts are intentionally retryable: TS18 su prompts can be transient, and a
         // process-wide permanent timeout would disable root-assisted DirectFS until restart.
         if (state != State.Unknown && state != State.TimedOut) return state
@@ -80,6 +88,9 @@ class RootStateHolder @Inject constructor() : RootGate {
     // Prevent free-form shell execution. Only accept known-safe deterministic commands.
     @Synchronized
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        if (!prefs.getBoolean("auxio_use_root_fs", false)) return null
+
         if (state == State.Unknown || state == State.TimedOut) probeSync()
         if (state != State.Available) return null
 

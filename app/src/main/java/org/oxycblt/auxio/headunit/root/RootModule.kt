@@ -27,5 +27,5 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object RootModule {
-    @Provides @Singleton fun provideRootStateHolder(): RootStateHolder = RootStateHolder()
+    @Provides @Singleton fun provideRootStateHolder(@dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context): RootStateHolder = RootStateHolder(context)
 }

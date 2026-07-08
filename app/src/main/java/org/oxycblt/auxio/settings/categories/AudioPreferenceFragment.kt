@@ -36,11 +36,19 @@ class AudioPreferenceFragment : BasePreferenceFragment(R.xml.preferences_audio) 
 
     override fun onSetupPreference(preference: Preference) {
         when (preference.key) {
+
             getString(R.string.set_key_autostart_floating_only) -> {
                 if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                     preference.isVisible = false
+                } else {
+                    val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                    val enabled = prefs.getBoolean("car_overlay_enabled", false)
+                    if (!enabled) {
+                        preference.summary = getString(R.string.set_autostart_floating_only_desc) + "\n\n(Disabled because Car Floating Controls is not enabled)"
+                    }
                 }
             }
+
         }
     }
 

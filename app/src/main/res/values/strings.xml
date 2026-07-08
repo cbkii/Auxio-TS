@@ -280,6 +280,10 @@
     <string name="set_ts18_source_repair_status_desc">Check /storage/usbdisk0 and /storage/usbdisk1 source readiness</string>
     <string name="set_ts18_source_repair_checking">Checking USB source status…</string>
     <string name="set_ts18_source_repair_status_summary">%1$s\n%2$s</string>
+    <string name="set_ts18_fast_resume_status">Fast resume status</string>
+    <string name="set_ts18_fast_resume_status_desc">Current readiness of TS18 raw fast resume before library load</string>
+    <string name="set_ts18_startup_scanning_policy">Startup scanning</string>
+    <string name="set_ts18_startup_scanning_policy_desc">Manual/cache-first on this build. Use Refresh music or Rescan music after changing USB contents.</string>
     <string name="set_ts18_source_repair_ready">All checked USB sources are ready</string>
     <string name="set_ts18_source_repair_mount_missing">USB mount missing; reinsert USB and keep cached library</string>
     <string name="set_ts18_source_repair_direct_inaccessible">Direct path inaccessible; choose source or keep cached library</string>
@@ -343,6 +347,12 @@
     <string name="set_intelligent_sorting_desc">Correctly sort names that begin with numbers or words like \"the\" (works best with english-language music)</string>
     <string name="set_hide_collaborators">Hide collaborators</string>
     <string name="set_hide_collaborators_desc">Only show artists that are directly credited on an album (works best on well-tagged libraries)</string>
+    <string name="set_ts18_system_source_filter">Limit system library to music folders</string>
+    <string name="set_ts18_system_source_filter_desc">Filters System Database results to likely music/download/media paths on TS18 to avoid noisy system audio. Turn off if expected tracks are missing.</string>
+    <string name="set_auxio_use_root_fs">Use root-assisted file access</string>
+    <string name="set_auxio_use_root_fs_desc">Uses root permissions to list files in Direct mode only. Does not modify system files.</string>
+    <string name="set_auxio_root_fs_status">Root access status</string>
+    <string name="set_auxio_root_fs_status_desc">Status of root-assisted directory listing</string>
 
 
     <string name="set_images">Images</string>
@@ -359,7 +369,7 @@
     <string name="set_autostart_on_boot">Autostart</string>
     <string name="set_autostart_on_boot_desc">Launch Auxio-TS when the device boots</string>
     <string name="set_autostart_floating_only">Launch Floating Controls only</string>
-    <string name="set_autostart_floating_only_desc">Restores the floating playback controls without launching the main application</string>
+    <string name="set_autostart_floating_only_desc">Restores the floating playback controls without launching the main application. Requires Floating Controls to be enabled and overlay permission granted.</string>
     <string name="set_autoplay_on_launch">Autoplay</string>
     <string name="set_autoplay_on_launch_desc">Start playback when Auxio-TS launches</string>
     <string name="set_always_play_immediately">Always play immediately</string>

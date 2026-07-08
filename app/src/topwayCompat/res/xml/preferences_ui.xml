@@ -60,6 +60,32 @@
             app:key="@string/set_head_unit_compat_status"
             app:summary="@string/set_head_unit_compat_status_desc"
             app:title="@string/set_head_unit_compat_status" />
+
+        <Preference
+            app:key="@string/set_ts18_fast_resume_status"
+            app:summary="@string/set_ts18_fast_resume_status_desc"
+            app:title="@string/set_ts18_fast_resume_status" />
+
+        <Preference
+            app:key="@string/set_ts18_startup_scanning_policy"
+            app:summary="@string/set_ts18_startup_scanning_policy_desc"
+            app:title="@string/set_ts18_startup_scanning_policy" />
+
+        <Preference
+            app:key="@string/set_ts18_source_repair_status"
+            app:summary="@string/set_ts18_source_repair_status_desc"
+            app:title="@string/set_ts18_source_repair_status" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="auxio_use_root_fs"
+            app:summary="@string/set_auxio_use_root_fs_desc"
+            app:title="@string/set_auxio_use_root_fs" />
+
+        <Preference
+            app:key="auxio_root_fs_status"
+            app:summary="@string/set_auxio_root_fs_status_desc"
+            app:title="@string/set_auxio_root_fs_status" />
     </PreferenceCategory>
 
     <PreferenceCategory
@@ -74,6 +100,21 @@
         <Preference
             app:key="car_overlay_reset_position"
             app:title="@string/car_overlay_reset_position"
+            app:dependency="car_overlay_enabled" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="car_overlay_hide_auxio_fg"
+            app:summary="@string/car_overlay_hide_when_foreground_summary"
+            app:title="@string/car_overlay_hide_when_foreground_title"
+            app:dependency="car_overlay_enabled" />
+
+        <org.oxycblt.auxio.settings.ui.IntListPreference
+            app:defaultValue="90"
+            app:entries="@array/entries_car_overlay_opacity"
+            app:entryValues="@array/values_car_overlay_opacity"
+            app:key="car_overlay_opacity"
+            app:title="@string/car_overlay_opacity"
             app:dependency="car_overlay_enabled" />
     </PreferenceCategory>
 

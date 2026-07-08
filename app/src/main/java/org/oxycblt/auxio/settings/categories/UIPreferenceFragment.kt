@@ -110,6 +110,24 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
                     ) + "\n" + uiSettings.headUnitCompatStatusSummary
             }
             KEY_CAR_OVERLAY_ENABLED -> setupCarOverlayEnabled(preference)
+
+
+            getString(R.string.set_ts18_fast_resume_status) -> {
+                val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                val hasSnapshot = prefs.contains("fast_resume_media_id") || prefs.contains("ts18_fast_resume_media_id") || prefs.contains("playback_state_media_id")
+                preference.summary = if (hasSnapshot) "Ready / snapshot available" else "No previous playback snapshot"
+            }
+
+            getString(R.string.set_ts18_startup_scanning_policy) -> {
+                preference.summary = getString(R.string.set_ts18_startup_scanning_policy_desc)
+            }
+
+            "auxio_root_fs_status" -> {
+                val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                val rootEnabled = prefs.getBoolean("auxio_use_root_fs", false)
+                preference.summary = if (!rootEnabled) "Disabled by user" else "Available or not checked"
+            }
+
             getString(R.string.set_ts18_source_repair_status) ->
                 setupTs18SourceRepairStatus(preference)
             KEY_CAR_OVERLAY_RESET_POSITION -> setupCarOverlayReset(preference)
