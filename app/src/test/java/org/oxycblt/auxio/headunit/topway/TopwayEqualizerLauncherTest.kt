@@ -25,6 +25,8 @@ import android.media.audiofx.AudioEffect
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assume
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -92,7 +94,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testResolverOrderEqChoiceActivity() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         val resolver = TestIntentResolver()
         resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQActivity"))
@@ -105,7 +107,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testResolverOrderEqActivity() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         val resolver = TestIntentResolver()
         // EQChoiceActivity is NOT added, only EQActivity
@@ -118,7 +120,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testPackageFallback() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         val resolver = TestIntentResolver()
         // No native components added, only package
@@ -146,8 +148,17 @@ class TopwayEqualizerLauncherTest {
     }
 
     @Test
+    fun testAudioEffectFallbackFailure() {
+        val resolver = TestIntentResolver()
+        resolver.mockAudioEffectFallback = false
+
+        val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
+        assertNull(intent)
+    }
+
+    @Test
     fun testNoMainActivity() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         // Make sure it doesn't contain com.tw.eq.MainActivity
         assertEquals(
@@ -160,7 +171,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testStandardModeIsolation() {
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        Assume.assumeTrue(!BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         val resolver = TestIntentResolver()
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
