@@ -68,27 +68,25 @@ interface Settings<Listener> {
         /** @see [Context.getString] */
         protected fun getString(@StringRes stringRes: Int) = context.getString(stringRes)
 
-        protected var listener: Listener? = null
+        protected val listeners = mutableListOf<Listener>()
 
         override fun registerListener(listener: Listener) {
-            if (this.listener == null) {
+            if (this.listeners.isEmpty()) {
                 // Registering a listener when it was null prior, attach the callback.
                 L.d("Registering shared preference listener for ${this::class.simpleName}")
                 sharedPreferences.registerOnSharedPreferenceChangeListener(this)
             }
             L.d("Registering listener $listener for ${this::class.simpleName}")
-            this.listener = listener
+            if (!listeners.contains(listener)) listeners.add(listener)
         }
 
         override fun unregisterListener(listener: Listener) {
-            if (this.listener !== listener) {
-                L.w("Given listener was not the current listener.")
-                return
-            }
             L.d("Unregistering listener $listener")
-            this.listener = null
-            // No longer have a listener, detach from the preferences instance.
-            sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
+            listeners.remove(listener)
+            if (listeners.isEmpty()) {
+                // No longer have a listener, detach from the preferences instance.
+                sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
+            }
         }
 
         final override fun onSharedPreferenceChanged(
@@ -97,7 +95,7 @@ interface Settings<Listener> {
         ) {
             // FIXME: Settings initialization firing the listener.
             L.d("Dispatching settings change $key")
-            onSettingChanged(unlikelyToBeNull(key), unlikelyToBeNull(listener))
+            listeners.toList().forEach { onSettingChanged(unlikelyToBeNull(key), it) }
         }
 
         /**
