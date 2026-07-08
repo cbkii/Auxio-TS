@@ -105,7 +105,13 @@ interface Settings<Listener> {
         ) {
             val changedKey = key ?: return
             L.d("Dispatching settings change $changedKey")
-            listeners.forEach { onSettingChanged(changedKey, it) }
+            listeners.forEach { listener ->
+                try {
+                    onSettingChanged(changedKey, listener)
+                } catch (e: Exception) {
+                    L.e(e, "Listener $listener failed to handle settings change for $changedKey")
+                }
+            }
         }
 
         /**
