@@ -54,12 +54,17 @@ class TopwayEqualizerLauncherTest {
     class TestIntentResolver : TopwayEqualizerLauncher.IntentResolver {
         var resolvedComponents = mutableSetOf<ComponentName>()
         var resolvedPackages = mutableSetOf<String>()
+        var queriedComponents = mutableListOf<ComponentName>()
+        var queriedPackages = mutableListOf<String>()
         var mockAudioEffectFallback = true
 
         override fun resolveActivity(intent: Intent): ComponentName? {
             val component = intent.component
-            if (component != null && resolvedComponents.contains(component)) {
-                return component
+            if (component != null) {
+                queriedComponents.add(component)
+                if (resolvedComponents.contains(component)) {
+                    return component
+                }
             }
             if (
                 intent.action == AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL &&
@@ -74,6 +79,7 @@ class TopwayEqualizerLauncherTest {
         }
 
         override fun getLaunchIntentForPackage(packageName: String): Intent? {
+            queriedPackages.add(packageName)
             if (resolvedPackages.contains(packageName)) {
                 return Intent(Intent.ACTION_MAIN)
                     .addCategory(Intent.CATEGORY_LAUNCHER)
@@ -142,16 +148,26 @@ class TopwayEqualizerLauncherTest {
     @Test
     fun testNoMainActivity() {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
-        val fields = TopwayEqualizerLauncher::class.java.declaredFields
-        fields.forEach { it.isAccessible = true }
-        val nativeComponents =
-            fields.first { it.name == "nativeComponents" }.get(TopwayEqualizerLauncher)
-                as List<ComponentName>
 
         // Make sure it doesn't contain com.tw.eq.MainActivity
         assertEquals(
             false,
-            nativeComponents.contains(ComponentName("com.tw.eq", "com.tw.eq.MainActivity")),
+            TopwayEqualizerLauncher.nativeComponents.contains(
+                ComponentName("com.tw.eq", "com.tw.eq.MainActivity")
+            ),
         )
+    }
+
+    @Test
+    fun testStandardModeIsolation() {
+        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+
+        val resolver = TestIntentResolver()
+        val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
+
+        assertNotNull(intent)
+        assertEquals(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL, intent?.action)
+        assertEquals(0, resolver.queriedComponents.size)
+        assertEquals(0, resolver.queriedPackages.size)
     }
 }

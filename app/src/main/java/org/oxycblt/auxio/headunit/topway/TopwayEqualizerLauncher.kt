@@ -28,7 +28,8 @@ import timber.log.Timber as L
 /** Resolves TS18/Topway native EQ/DSP apps before falling back to Android AudioEffect. */
 object TopwayEqualizerLauncher {
 
-    // VisibleForTesting: An internal seam for testing deterministic resolution policies
+    // Internal seam allowing host-side tests to validate resolution ordering without relying on
+    // Robolectric ShadowPackageManager explicit-intent behaviour.
     internal interface IntentResolver {
         fun resolveActivity(intent: Intent): ComponentName?
 
@@ -45,7 +46,7 @@ object TopwayEqualizerLauncher {
         }
     }
 
-    private val nativeComponents =
+    internal val nativeComponents =
         listOf(
             ComponentName("com.tw.eq", "com.tw.eq.EQChoiceActivity"),
             ComponentName("com.tw.eq", "com.tw.eq.EQActivity"),
