@@ -95,9 +95,9 @@ interface Settings<Listener> {
             sharedPreferences: SharedPreferences,
             key: String?,
         ) {
-            // FIXME: Settings initialization firing the listener.
+            val currentListener = listener ?: return
             L.d("Dispatching settings change $key")
-            onSettingChanged(unlikelyToBeNull(key), unlikelyToBeNull(listener))
+            onSettingChanged(unlikelyToBeNull(key), currentListener)
         }
 
         /**
