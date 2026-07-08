@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.detail.list
 
 import android.text.format.Formatter
+import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.StringRes
 import androidx.recyclerview.widget.RecyclerView
@@ -160,10 +161,8 @@ class SongPropertyViewHolder private constructor(private val binding: ItemSongPr
          * @param parent The parent to inflate this instance from.
          * @return A new instance.
          */
-        fun from(parent: ViewGroup) =
-            SongPropertyViewHolder(
-                ItemSongPropertyBinding.inflate(parent.context.inflater, parent, false)
-            )
+        fun from(parent: View) =
+            SongPropertyViewHolder(ItemSongPropertyBinding.inflate(parent.context.inflater))
 
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =

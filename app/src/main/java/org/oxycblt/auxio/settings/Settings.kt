@@ -22,7 +22,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.annotation.StringRes
 import androidx.preference.PreferenceManager
-import java.util.concurrent.CopyOnWriteArrayList
+import org.oxycblt.auxio.util.unlikelyToBeNull
 import timber.log.Timber as L
 
 /**
@@ -42,7 +42,7 @@ interface Settings<Listener> {
     }
 
     /**
-     * Add a listener to monitor for settings updates. Duplicate registrations are ignored.
+     * Add a listener to monitor for settings updates. Will do nothing if
      *
      * @param listener The listener to add.
      */
@@ -69,32 +69,23 @@ interface Settings<Listener> {
         /** @see [Context.getString] */
         protected fun getString(@StringRes stringRes: Int) = context.getString(stringRes)
 
-        protected val listeners = CopyOnWriteArrayList<Listener>()
+        protected val listeners = mutableListOf<Listener>()
 
-        @Synchronized
         override fun registerListener(listener: Listener) {
-            val wasEmpty = listeners.isEmpty()
-            if (!listeners.addIfAbsent(listener)) {
-                L.d("Listener $listener is already registered for ${this::class.simpleName}")
-                return
-            }
-            if (wasEmpty) {
-                // Registering the first listener attaches the framework preference callback.
+            if (this.listeners.isEmpty()) {
+                // Registering a listener when it was null prior, attach the callback.
                 L.d("Registering shared preference listener for ${this::class.simpleName}")
                 sharedPreferences.registerOnSharedPreferenceChangeListener(this)
             }
             L.d("Registering listener $listener for ${this::class.simpleName}")
+            if (!listeners.contains(listener)) listeners.add(listener)
         }
 
-        @Synchronized
         override fun unregisterListener(listener: Listener) {
-            if (!listeners.remove(listener)) {
-                L.w("Given listener was not currently registered.")
-                return
-            }
             L.d("Unregistering listener $listener")
+            listeners.remove(listener)
             if (listeners.isEmpty()) {
-                // No listeners remain, so detach from the preferences instance.
+                // No longer have a listener, detach from the preferences instance.
                 sharedPreferences.unregisterOnSharedPreferenceChangeListener(this)
             }
         }
@@ -103,15 +94,9 @@ interface Settings<Listener> {
             sharedPreferences: SharedPreferences,
             key: String?,
         ) {
-            val changedKey = key ?: return
-            L.d("Dispatching settings change $changedKey")
-            listeners.forEach { listener ->
-                try {
-                    onSettingChanged(changedKey, listener)
-                } catch (e: Exception) {
-                    L.e(e, "Listener $listener failed to handle settings change for $changedKey")
-                }
-            }
+            // FIXME: Settings initialization firing the listener.
+            L.d("Dispatching settings change $key")
+            listeners.toList().forEach { onSettingChanged(unlikelyToBeNull(key), it) }
         }
 
         /**

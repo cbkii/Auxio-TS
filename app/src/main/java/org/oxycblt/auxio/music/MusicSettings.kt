@@ -265,12 +265,12 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         }
 
     override fun forceLocationUpdate() {
-        // Notify listeners directly when persisted location settings are unchanged but callers need
-        // a refresh.
-        listeners.forEach { it.onMusicLocationsChanged() }
+        listeners.toList().forEach { it.onMusicLocationsChanged() }
     }
 
     override fun onSettingChanged(key: String, listener: MusicSettings.Listener) {
+        // TODO: Differentiate "hard reloads" (Need the cache) and "Soft reloads"
+        //  (just need to manipulate data)
         when (key) {
             getString(R.string.set_key_locations_mode),
             getString(R.string.set_key_music_locations) -> {

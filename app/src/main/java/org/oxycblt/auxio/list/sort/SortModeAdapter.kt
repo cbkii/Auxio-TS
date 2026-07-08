@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.list.sort
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import org.oxycblt.auxio.databinding.ItemSortModeBinding
@@ -104,8 +105,8 @@ class SortModeViewHolder private constructor(private val binding: ItemSortModeBi
     }
 
     companion object {
-        fun from(parent: ViewGroup) =
-            SortModeViewHolder(ItemSortModeBinding.inflate(parent.context.inflater, parent, false))
+        fun from(parent: View) =
+            SortModeViewHolder(ItemSortModeBinding.inflate(parent.context.inflater))
 
         val DIFF_CALLBACK =
             object : DiffUtil.ItemCallback<Sort.Mode>() {
