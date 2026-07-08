@@ -18,7 +18,6 @@
 
 package org.oxycblt.auxio.music.decision
 
-import android.view.View
 import android.view.ViewGroup
 import org.oxycblt.auxio.databinding.ItemPickerChoiceBinding
 import org.oxycblt.auxio.list.ClickableListListener
@@ -71,8 +70,10 @@ class PlaylistChoiceViewHolder private constructor(private val binding: ItemPick
          * @param parent The parent to inflate this instance from.
          * @return A new instance.
          */
-        fun from(parent: View) =
-            PlaylistChoiceViewHolder(ItemPickerChoiceBinding.inflate(parent.context.inflater))
+        fun from(parent: ViewGroup) =
+            PlaylistChoiceViewHolder(
+                ItemPickerChoiceBinding.inflate(parent.context.inflater, parent, false)
+            )
 
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
