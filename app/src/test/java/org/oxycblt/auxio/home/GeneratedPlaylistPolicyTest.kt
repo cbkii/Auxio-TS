@@ -136,6 +136,30 @@ class GeneratedPlaylistPolicyTest {
     }
 
     @Test
+    fun songsByDecade_groupsCorrectlyAndExcludesUnknown() {
+        val unknown = testSong("unknown", year = null, addedMs = 1)
+        val s1985 = testSong("1985", year = 1985, addedMs = 2)
+        val s1989 = testSong("1989", year = 1989, addedMs = 3)
+        val s1990 = testSong("1990", year = 1990, addedMs = 4)
+        val s2005 = testSong("2005", year = 2005, addedMs = 5)
+
+        val map = GeneratedPlaylistPolicy.songsByDecade(listOf(unknown, s1985, s1989, s1990, s2005))
+
+        assertEquals(3, map.size)
+        // 1980s bucket sorted newest-first
+        assertEquals(listOf(s1989, s1985), map[1980])
+        // 1990s bucket
+        assertEquals(listOf(s1990), map[1990])
+        // 2000s bucket
+        assertEquals(listOf(s2005), map[2000])
+    }
+
+    @Test
+    fun songsByDecade_emptyInputReturnsEmptyMap() {
+        assertTrue(GeneratedPlaylistPolicy.songsByDecade(emptyList()).isEmpty())
+    }
+
+    @Test
     fun generatedPlaylists_returnEmptySafelyForEmptyLibrary() {
         assertTrue(GeneratedPlaylistPolicy.songsForDecade(emptyList(), 1990).isEmpty())
         assertTrue(GeneratedPlaylistPolicy.recentlyAddedSongs(emptyList()).isEmpty())

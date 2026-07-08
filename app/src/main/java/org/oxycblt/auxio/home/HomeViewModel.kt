@@ -78,9 +78,19 @@ constructor(
             field = value
             // Invalidate the derived year list so allSongYears recomputes lazily.
             _cachedSongYears = null
+            // Invalidate the decade queue cache.
+            _cachedSongsByDecade = null
         }
 
     private var _cachedSongYears: List<Int>? = null
+    private var _cachedSongsByDecade: Map<Int, List<Song>>? = null
+
+    private val songsByDecade: Map<Int, List<Song>>
+        get() =
+            _cachedSongsByDecade
+                ?: GeneratedPlaylistPolicy.songsByDecade(_allSongs).also {
+                    _cachedSongsByDecade = it
+                }
 
     /**
      * All valid release years in the unfiltered library, for computing available decade chips. This
@@ -100,8 +110,7 @@ constructor(
      * Generate a decade playlist from the full unfiltered library. This intentionally ignores
      * [songList] so a currently active tab filter cannot shrink the playback queue.
      */
-    fun songsForDecade(decade: Int): List<Song> =
-        GeneratedPlaylistPolicy.songsForDecade(_allSongs, decade)
+    fun songsForDecade(decade: Int): List<Song> = songsByDecade[decade].orEmpty()
 
     /** Generate a newest-first playlist from the full unfiltered library. */
     fun recentlyAddedSongs(): List<Song> = GeneratedPlaylistPolicy.recentlyAddedSongs(_allSongs)

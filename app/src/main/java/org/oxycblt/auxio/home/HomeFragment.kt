@@ -211,7 +211,22 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         // --- VIEWMODEL SETUP ---
         collect(homeModel.recreateTabs.flow, ::handleRecreate)
         collect(homeModel.chooseMusicLocations.flow, ::handleChooseFolders)
-        collectImmediately(homeModel.currentTabType, ::updateCurrentTab)
+        collectImmediately(homeModel.currentTabType) { tabType ->
+            updateCurrentTab(tabType)
+            // Re-bind metadata shortcuts on tab switch to enforce visibility
+            // We only do this if songs are loaded, to avoid wiping out the chips entirely on start
+            if (
+                homeModel.songList.value.isNotEmpty() ||
+                    homeModel.genreList.value.isNotEmpty() ||
+                    homeModel.playlistList.value.isNotEmpty()
+            ) {
+                updateMetadataShortcuts(
+                    homeModel.songList.value,
+                    homeModel.genreList.value,
+                    homeModel.playlistList.value,
+                )
+            }
+        }
         collect(detailModel.toShow.flow, ::handleShow)
         collect(listModel.menu.flow, ::handleMenu)
         collectImmediately(listModel.selected, ::updateSelection)
@@ -356,7 +371,10 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     ) {
         val binding = requireBinding()
         favouritesPlaylist = playlists.firstOrNull { it.name.raw == FAVOURITES_PLAYLIST_NAME }
-        val decades = HeadUnitQuickAccess.deriveDecades(homeModel.allSongYears)
+        val isPlaylistsTab = homeModel.currentTabType.value == MusicType.PLAYLISTS
+        val decades =
+            if (isPlaylistsTab) HeadUnitQuickAccess.deriveDecades(homeModel.allSongYears)
+            else emptyList()
         val metadataState =
             HeadUnitQuickAccess.metadataChipState(
                 genreCount = genres.size,
@@ -372,13 +390,15 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 activeDecade = homeModel.decadeFilter.value,
                 recentlyAdded = metadataState.recentlyAdded,
                 favourites = metadataState.favourites,
+                tabType = homeModel.currentTabType.value,
             )
         val oldSignature = metadataChipSignature
         when {
             oldSignature != null &&
                 oldSignature.decades == signature.decades &&
                 oldSignature.recentlyAdded == signature.recentlyAdded &&
-                oldSignature.favourites == signature.favourites -> {
+                oldSignature.favourites == signature.favourites &&
+                oldSignature.tabType == signature.tabType -> {
                 if (oldSignature.activeDecade != signature.activeDecade) {
                     updateDecadeChipSelection(binding, signature)
                 }
@@ -551,7 +571,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         // can see and tap individual decade chips in the metadata chip section above.
         homeModel.applyDecadeFilter(null)
         homeModel.applySongSort(GeneratedPlaylistPolicy.decadePlaybackSort)
-        openTab(MusicType.SONGS)
+        openTab(MusicType.PLAYLISTS)
     }
 
     override fun onDestroyBinding(binding: FragmentHomeBinding) {
@@ -855,6 +875,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val activeDecade: Int?,
         val recentlyAdded: Boolean,
         val favourites: Boolean,
+        val tabType: MusicType? = null,
     )
 
     private companion object {
