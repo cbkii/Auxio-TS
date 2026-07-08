@@ -49,8 +49,8 @@ interface Settings<Listener> {
     fun registerListener(listener: Listener)
 
     /**
-     * Unregister a listener, preventing any further settings updates from being sent to it.
-     * Unknown listeners are ignored.
+     * Unregister a listener, preventing any further settings updates from being sent to it. Unknown
+     * listeners are ignored.
      *
      * @param listener The listener to unregister.
      */

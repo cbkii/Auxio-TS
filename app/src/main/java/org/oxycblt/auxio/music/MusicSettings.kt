@@ -265,7 +265,8 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         }
 
     override fun forceLocationUpdate() {
-        // Notify listeners directly when persisted location settings are unchanged but callers need a refresh.
+        // Notify listeners directly when persisted location settings are unchanged but callers need
+        // a refresh.
         listeners.forEach { it.onMusicLocationsChanged() }
     }
 
