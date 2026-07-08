@@ -73,6 +73,11 @@
             app:key="@string/set_key_ts18_source_repair_status"
             app:summary="@string/set_ts18_source_repair_status_desc"
             app:title="@string/set_ts18_source_repair_status" />
+        <Preference
+            app:fragment="org.oxycblt.auxio.settings.categories.Ts18IntegrationResolverPreferenceFragment"
+            app:key="@string/set_ts18_launcher_integration_mode"
+            app:title="TS18 DoFun Launcher Integration"
+            app:summary="Run diagnostics and root-assisted resolvers for DoFun launcher" />
     </PreferenceCategory>
 
 </PreferenceScreen>
