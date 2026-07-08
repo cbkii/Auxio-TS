@@ -22,7 +22,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.annotation.StringRes
 import androidx.preference.PreferenceManager
-import org.oxycblt.auxio.util.unlikelyToBeNull
 import timber.log.Timber as L
 
 /**
@@ -96,8 +95,9 @@ interface Settings<Listener> {
             key: String?,
         ) {
             val currentListener = listener ?: return
-            L.d("Dispatching settings change $key")
-            onSettingChanged(unlikelyToBeNull(key), currentListener)
+            val changedKey = key ?: return
+            L.d("Dispatching settings change $changedKey")
+            onSettingChanged(changedKey, currentListener)
         }
 
         /**
