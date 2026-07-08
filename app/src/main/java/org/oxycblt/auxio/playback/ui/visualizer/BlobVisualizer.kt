@@ -213,7 +213,7 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             // but avoids pretending to be audio-reactive after capture has failed or not started.
             val level =
                 if (stale) {
-                    0.1f + 0.08f * (1f + sin(((i.toFloat() / count) + phase) * 2f * PI).toFloat())
+                    0.1f + 0.08f * (1f + sin(((i.toFloat() / count) + phase) * 2f * PI.toFloat()))
                 } else {
                     bands[i]
                 }

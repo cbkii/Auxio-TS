@@ -416,16 +416,16 @@ class PlaybackPanelFragment :
         visualizerSessionId = null
         if (activeVisualizer != null) {
             try {
-                activeVisualizer.setDataCaptureListener(null, 0, false, false)
-            } catch (e: RuntimeException) {
-                L.d(e, "Visualizer listener cleanup failed")
-            }
-            try {
                 if (activeVisualizer.enabled) {
                     activeVisualizer.enabled = false
                 }
             } catch (e: RuntimeException) {
                 L.d(e, "Visualizer disable during release failed")
+            }
+            try {
+                activeVisualizer.setDataCaptureListener(null, 0, false, false)
+            } catch (e: RuntimeException) {
+                L.d(e, "Visualizer listener cleanup failed")
             }
             try {
                 activeVisualizer.release()

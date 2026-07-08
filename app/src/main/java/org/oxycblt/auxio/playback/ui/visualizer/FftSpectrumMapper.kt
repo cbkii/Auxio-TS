@@ -18,11 +18,11 @@
 
 package org.oxycblt.auxio.playback.ui.visualizer
 
-import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * Converts Android [android.media.audiofx.Visualizer] FFT frames into stable radial bands.
@@ -66,7 +66,7 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
             val real = fft[pairIndex].toFloat()
             val imaginary = fft[pairIndex + 1].toFloat()
-            val magnitude = hypot(real, imaginary)
+            val magnitude = sqrt(real * real + imaginary * imaginary)
             if (magnitude <= 0f) continue
 
             val normalizedBin = (bin - 1).toFloat() / usablePairCount.toFloat()
