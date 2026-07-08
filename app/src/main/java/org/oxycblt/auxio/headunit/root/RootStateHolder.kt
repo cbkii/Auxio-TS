@@ -69,6 +69,18 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
     }
 
     @Synchronized
+    fun runTs18ProbeSync(probe: org.oxycblt.auxio.headunit.root.dofun.Ts18RootProbe): String? {
+        if (stateSnapshot() != State.Available) return null
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", probe.command))
+            val stdout = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            return stdout.take(5000)
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
     fun probeSync(): State {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant
