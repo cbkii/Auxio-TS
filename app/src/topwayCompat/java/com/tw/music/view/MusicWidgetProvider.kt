@@ -114,7 +114,24 @@ class MusicWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    @android.annotation.SuppressLint("MissingPermission")
     private fun startTopwayWidgetUpdateService(context: Context, appWidgetIds: IntArray) {
+        @Suppress("DEPRECATION")
+        try {
+            val stickyIntent =
+                Intent(TopwayMusicContract.ACTION_CMD).apply {
+                    putExtra(TopwayMusicContract.EXTRA_CMD, TopwayMusicContract.CMD_UPDATE)
+                    if (appWidgetIds.isNotEmpty()) putExtra(EXTRA_APP_WIDGET_IDS, appWidgetIds)
+                    @android.annotation.SuppressLint("WrongConstant") addFlags(0x40000000.toInt())
+                }
+            context.sendStickyBroadcast(stickyIntent)
+            L.d("Topway widget sticky cmd update sent")
+        } catch (e: SecurityException) {
+            L.w(e, "Topway widget sticky cmd update denied")
+        } catch (e: RuntimeException) {
+            L.w(e, "Topway widget sticky cmd update failed")
+        }
+
         val serviceIntent =
             Intent(context, MusicService::class.java)
                 .setAction(TopwayMusicContract.ACTION_CMD)

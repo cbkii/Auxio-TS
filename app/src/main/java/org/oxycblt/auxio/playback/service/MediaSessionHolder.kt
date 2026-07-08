@@ -110,6 +110,27 @@ private constructor(
         imageSettings.registerListener(this)
         mediaSession.apply {
             isActive = true
+            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                setSessionActivity(
+                    android.app.PendingIntent.getActivity(
+                        context,
+                        0,
+                        Intent().apply {
+                            component =
+                                android.content.ComponentName(
+                                    context.packageName,
+                                    "com.tw.music.MusicActivity",
+                                )
+                            action = Intent.ACTION_MAIN
+                            addCategory(Intent.CATEGORY_LAUNCHER)
+                        },
+                        android.app.PendingIntent.FLAG_IMMUTABLE or
+                            android.app.PendingIntent.FLAG_UPDATE_CURRENT,
+                    )
+                )
+            } else {
+                setSessionActivity(context.newNowPlayingPendingIntent())
+            }
             setQueueTitle(context.getString(R.string.lbl_queue))
             setCallback(mediaSessionInterface)
         }

@@ -54,7 +54,6 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
     private fun userEnabled(): Boolean =
         BuildConfig.TOPWAY_COMPAT_FLAVOR && prefs.getBoolean(KEY_USE_ROOT_FS, false)
 
-    @Synchronized
     fun stateSnapshot(): State {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             return State.UnsupportedForVariant
@@ -68,7 +67,58 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
         return state
     }
 
-    @Synchronized
+    fun runTs18ProbeSync(probe: org.oxycblt.auxio.headunit.root.dofun.Ts18RootProbe): String? {
+        if (stateSnapshot() != State.Available) return null
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", probe.command))
+            process.outputStream.closeQuietly()
+            var stdout = ""
+            val outThread = Thread {
+                stdout = process.inputStream.bufferedReader().use { it.readText() }
+            }
+            val errThread = Thread { process.errorStream.bufferedReader().use { it.readText() } }
+            outThread.start()
+            errThread.start()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            } else {
+                process.waitFor()
+            }
+            outThread.join(1000)
+            errThread.join(1000)
+            return stdout.take(5000)
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    fun runTs18MutationSync(
+        mutation: org.oxycblt.auxio.headunit.root.dofun.Ts18RootMutation
+    ): String? {
+        if (stateSnapshot() != State.Available) return null
+        try {
+            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", mutation.command))
+            process.outputStream.closeQuietly()
+            var stdout = ""
+            val outThread = Thread {
+                stdout = process.inputStream.bufferedReader().use { it.readText() }
+            }
+            val errThread = Thread { process.errorStream.bufferedReader().use { it.readText() } }
+            outThread.start()
+            errThread.start()
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            } else {
+                process.waitFor()
+            }
+            outThread.join(1000)
+            errThread.join(1000)
+            return stdout.take(5000)
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
     fun probeSync(): State {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant
@@ -83,7 +133,7 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
             state = State.Unknown
         }
 
-        // Timeouts are intentionally retryable: TS18 su prompts can be transient, and a
+        //
         // process-wide permanent timeout would disable root-assisted DirectFS until restart.
         if (state != State.Unknown && state != State.TimedOut) return state
         val process =
@@ -113,7 +163,7 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
     }
 
     // Prevent free-form shell execution. Only accept known-safe deterministic commands.
-    @Synchronized
+
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant

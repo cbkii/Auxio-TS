@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:title="TS18 DoFun Launcher Integration">
+
+    <PreferenceCategory android:title="Diagnostics">
+        <Preference
+            app:key="run_check"
+            app:title="Run DoFun integration check"
+            app:summary="Tap to run checks" />
+        <Preference
+            app:key="export_report"
+            app:title="Export DoFun integration report"
+            app:summary="Copy the check results to clipboard"
+            android:enabled="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="Root-assisted test actions (Advanced)"
+        app:iconSpaceReserved="false">
+        <Preference
+            app:key="test_stock_disable"
+            app:title="Disable stock com.tw.music"
+            app:summary="Reversibly disable the stock music app to test DoFun fallback to Auxio. Requires root enabled in UI settings." />
+        <Preference
+            app:key="restore_stock"
+            app:title="Re-enable stock com.tw.music"
+            app:summary="Restore the stock music app." />
+    </PreferenceCategory>
+
+</PreferenceScreen>
