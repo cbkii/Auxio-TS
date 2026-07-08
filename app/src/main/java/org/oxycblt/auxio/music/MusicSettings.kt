@@ -265,21 +265,15 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         }
 
     override fun forceLocationUpdate() {
-        // TODO: Temporary!!! This is really dumb, just need to ship a workaround for this rn
-        val cur = sharedPreferences.getInt(getString(R.string.set_key_locations_mode), 0)
-        sharedPreferences.edit {
-            putInt(getString(R.string.set_key_force_reload_workaround), cur + 1)
-            apply()
-        }
+        // Notify listeners directly when persisted location settings are unchanged but callers need
+        // a refresh.
+        listeners.forEach { it.onMusicLocationsChanged() }
     }
 
     override fun onSettingChanged(key: String, listener: MusicSettings.Listener) {
-        // TODO: Differentiate "hard reloads" (Need the cache) and "Soft reloads"
-        //  (just need to manipulate data)
         when (key) {
             getString(R.string.set_key_locations_mode),
-            getString(R.string.set_key_music_locations),
-            getString(R.string.set_key_force_reload_workaround) -> {
+            getString(R.string.set_key_music_locations) -> {
                 L.d("Dispatching music locations change")
                 listener.onMusicLocationsChanged()
             }
