@@ -78,8 +78,6 @@
     <string name="set_key_library_state" translatable="false">auxio_library_state</string>
     <string name="set_key_library_last_scan_failed" translatable="false">auxio_library_last_scan_failed</string>
 
-
-
     <string-array name="entries_theme">
         <item>@string/set_theme_auto</item>
         <item>@string/set_theme_day</item>
