@@ -144,7 +144,6 @@ private class DiscHeaderViewHolder(private val binding: ItemDiscHeaderBinding) :
          */
         fun from(parent: ViewGroup) =
             DiscHeaderViewHolder(
-                // TODO: Get all viewholders to inflate anchored to parent
                 ItemDiscHeaderBinding.inflate(parent.context.inflater, parent, false)
             )
 
