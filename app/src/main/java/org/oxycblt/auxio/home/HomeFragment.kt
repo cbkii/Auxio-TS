@@ -211,7 +211,22 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         // --- VIEWMODEL SETUP ---
         collect(homeModel.recreateTabs.flow, ::handleRecreate)
         collect(homeModel.chooseMusicLocations.flow, ::handleChooseFolders)
-        collectImmediately(homeModel.currentTabType, ::updateCurrentTab)
+        collectImmediately(homeModel.currentTabType) { tabType ->
+            updateCurrentTab(tabType)
+            // Re-bind metadata shortcuts on tab switch to enforce visibility
+            // We only do this if songs are loaded, to avoid wiping out the chips entirely on start
+            if (
+                homeModel.songList.value.isNotEmpty() ||
+                    homeModel.genreList.value.isNotEmpty() ||
+                    homeModel.playlistList.value.isNotEmpty()
+            ) {
+                updateMetadataShortcuts(
+                    homeModel.songList.value,
+                    homeModel.genreList.value,
+                    homeModel.playlistList.value,
+                )
+            }
+        }
         collect(detailModel.toShow.flow, ::handleShow)
         collect(listModel.menu.flow, ::handleMenu)
         collectImmediately(listModel.selected, ::updateSelection)
@@ -644,13 +659,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
 
     private fun updateCurrentTab(tabType: MusicType) {
         val binding = requireBinding()
-
-        // Force a rebuild of metadata chips to respect tab-specific visibility.
-        updateMetadataShortcuts(
-            homeModel.songList.value,
-            homeModel.genreList.value,
-            homeModel.playlistList.value,
-        )
 
         // Update the scrolling view in AppBarLayout to align with the current tab's
         // scrolling state. This prevents the lift state from being confused as one
