@@ -35,8 +35,8 @@ import org.oxycblt.auxio.list.recycler.FastScrollRecyclerView
 import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.IndexingState
-import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
 import org.oxycblt.auxio.util.collectImmediately
@@ -173,12 +173,13 @@ class SongListFragment :
         indexingState: IndexingState?,
         startupState: StartupReadinessState,
     ) {
-        requireBinding().updateLibraryEmptyState(
-            empty = empty,
-            indexingState = indexingState,
-            startupState = startupState,
-            emptyMessage = R.string.lng_empty_songs,
-        )
+        requireBinding()
+            .updateLibraryEmptyState(
+                empty = empty,
+                indexingState = indexingState,
+                startupState = startupState,
+                emptyMessage = R.string.lng_empty_songs,
+            )
     }
 
     private fun updateSelection(selection: List<Music>) {

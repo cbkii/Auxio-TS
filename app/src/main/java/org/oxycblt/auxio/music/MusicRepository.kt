@@ -310,7 +310,9 @@ constructor(
         listener.onStartupReadinessStateChanged()
     }
 
-    override fun removeStartupReadinessListener(listener: MusicRepository.StartupReadinessListener) {
+    override fun removeStartupReadinessListener(
+        listener: MusicRepository.StartupReadinessListener
+    ) {
         if (!startupReadinessListeners.remove(listener)) {
             L.w("Startup readiness listener $listener was not added prior, cannot remove")
         }
