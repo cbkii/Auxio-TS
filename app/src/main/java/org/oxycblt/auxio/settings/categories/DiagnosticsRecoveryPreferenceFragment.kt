@@ -27,7 +27,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
@@ -71,31 +74,31 @@ class DiagnosticsRecoveryPreferenceFragment :
                 )
             getString(R.string.set_key_ts18_fast_resume_status) ->
                 setupTs18FastResumeStatus(preference)
-            "car_overlay_status" -> setupCarOverlayStatus(preference)
+            getString(R.string.set_key_car_overlay_status) -> setupCarOverlayStatus(preference)
         }
 
-        if (preference.key == "run_check") {
+        if (preference.key == getString(R.string.set_key_diagnostics_run_check)) {
             preference.setOnPreferenceClickListener {
                 runCheck()
                 true
             }
         }
 
-        if (preference.key == "export_report") {
+        if (preference.key == getString(R.string.set_key_diagnostics_export_report)) {
             preference.setOnPreferenceClickListener {
                 exportReport()
                 true
             }
         }
 
-        if (preference.key == "test_stock_disable") {
+        if (preference.key == getString(R.string.set_key_diagnostics_test_stock_disable)) {
             preference.setOnPreferenceClickListener {
                 showDisableStockConfirmation()
                 true
             }
         }
 
-        if (preference.key == "restore_stock") {
+        if (preference.key == getString(R.string.set_key_diagnostics_restore_stock)) {
             preference.setOnPreferenceClickListener {
                 restoreStock()
                 true
@@ -150,41 +153,61 @@ class DiagnosticsRecoveryPreferenceFragment :
         if (status) getString(R.string.lbl_enabled) else getString(R.string.lbl_disabled)
 
     private fun runCheck() {
-        val pref = findPreference<Preference>("run_check")
+        val pref = findPreference<Preference>(getString(R.string.set_key_diagnostics_run_check))
         pref?.summary = getString(R.string.set_diagnostics_running)
         pref?.isEnabled = false
 
         viewLifecycleOwner.lifecycleScope.launch {
-            val report = resolver.runIntegrationCheck()
+            try {
+                val report = withContext(Dispatchers.IO) { resolver.runIntegrationCheck() }
+                val ctx = context ?: return@launch
 
-            val sb = StringBuilder()
-            sb.appendLine("Root state: ${report.rootState}")
-            sb.appendLine("\nInstalled packages:")
-            report.installedPackages.forEach { sb.appendLine("- $it") }
+                val sb = StringBuilder()
+                sb.appendLine("Root state: ${report.rootState}")
+                sb.appendLine("\nInstalled packages:")
+                report.installedPackages.forEach { sb.appendLine("- $it") }
 
-            sb.appendLine("\nProbes:")
-            report.probeResults.forEach { (probe, result) ->
-                sb.appendLine("--- ${probe.name} ---")
-                sb.appendLine(result)
-                sb.appendLine()
+                sb.appendLine("\nProbes:")
+                report.probeResults.forEach { (probe, result) ->
+                    sb.appendLine("--- ${probe.name} ---")
+                    sb.appendLine(result)
+                    sb.appendLine()
+                }
+
+                sb.appendLine("\nDetected Path: ${report.detectedPath}")
+                sb.appendLine("Recommended Step: ${report.recommendedStep}")
+                sb.appendLine("\n${report.bootClassification}")
+
+                lastReportStr = sb.toString()
+
+                pref?.summary =
+                    ctx.getString(
+                        R.string.set_diagnostics_check_complete_summary,
+                        report.detectedPath,
+                        report.rootState.toString(),
+                        report.installedPackages.joinToString(),
+                    )
+                findPreference<Preference>(
+                        ctx.getString(R.string.set_key_diagnostics_export_report)
+                    )
+                    ?.isEnabled = true
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                lastReportStr = null
+                val ctx = context ?: return@launch
+                pref?.summary = ctx.getString(R.string.set_diagnostics_check_failed)
+                Toast.makeText(
+                        ctx,
+                        ctx.getString(R.string.set_diagnostics_check_failed),
+                        Toast.LENGTH_SHORT,
+                    )
+                    .show()
+            } finally {
+                if (isAdded) {
+                    pref?.isEnabled = true
+                    updateUiState()
+                }
             }
-
-            sb.appendLine("\nDetected Path: ${report.detectedPath}")
-            sb.appendLine("Recommended Step: ${report.recommendedStep}")
-            sb.appendLine("\n${report.bootClassification}")
-
-            lastReportStr = sb.toString()
-
-            pref?.summary =
-                getString(
-                    R.string.set_diagnostics_check_complete_summary,
-                    report.detectedPath,
-                    report.rootState.toString(),
-                    report.installedPackages.joinToString(),
-                )
-            pref?.isEnabled = true
-            findPreference<Preference>("export_report")?.isEnabled = true
-            updateUiState()
         }
     }
 
@@ -208,12 +231,33 @@ class DiagnosticsRecoveryPreferenceFragment :
             .setTitle(getString(R.string.set_diagnostics_disable_title))
             .setMessage(getString(R.string.set_diagnostics_disable_message))
             .setPositiveButton(getString(R.string.set_diagnostics_disable_btn)) { _, _ ->
+                val pref =
+                    findPreference<Preference>(
+                        getString(R.string.set_key_diagnostics_test_stock_disable)
+                    )
+                pref?.isEnabled = false
                 viewLifecycleOwner.lifecycleScope.launch {
-                    val success = resolver.testStockSelectionDisabledUser0()
                     val msg =
-                        if (success) getString(R.string.set_diagnostics_disable_success)
-                        else getString(R.string.set_diagnostics_disable_failed)
-                    Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                        try {
+                            val success =
+                                withContext(Dispatchers.IO) {
+                                    resolver.testStockSelectionDisabledUser0()
+                                }
+                            val ctx = context ?: return@launch
+                            if (success) ctx.getString(R.string.set_diagnostics_disable_success)
+                            else ctx.getString(R.string.set_diagnostics_disable_failed)
+                        } catch (e: Exception) {
+                            if (e is CancellationException) throw e
+                            val ctx = context ?: return@launch
+                            ctx.getString(R.string.set_diagnostics_disable_failed)
+                        } finally {
+                            if (isAdded) {
+                                pref?.isEnabled = true
+                                updateUiState()
+                            }
+                        }
+                    val ctx = context ?: return@launch
+                    Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton(getString(R.string.set_diagnostics_cancel_btn), null)
@@ -221,22 +265,41 @@ class DiagnosticsRecoveryPreferenceFragment :
     }
 
     private fun restoreStock() {
+        val pref =
+            findPreference<Preference>(getString(R.string.set_key_diagnostics_restore_stock))
+        pref?.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
-            val success = resolver.restoreStockSelectionDisabledUser0()
             val msg =
-                if (success) {
-                    getString(R.string.set_diagnostics_restore_success)
-                } else {
-                    getString(R.string.set_diagnostics_restore_failed)
+                try {
+                    val success =
+                        withContext(Dispatchers.IO) {
+                            resolver.restoreStockSelectionDisabledUser0()
+                        }
+                    val ctx = context ?: return@launch
+                    if (success) ctx.getString(R.string.set_diagnostics_restore_success)
+                    else ctx.getString(R.string.set_diagnostics_restore_failed)
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    val ctx = context ?: return@launch
+                    ctx.getString(R.string.set_diagnostics_restore_failed)
+                } finally {
+                    if (isAdded) {
+                        pref?.isEnabled = true
+                        updateUiState()
+                    }
                 }
-            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+            val ctx = context ?: return@launch
+            Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun updateUiState() {
         val isRootAvailable = rootStateHolder.stateSnapshot() == RootStateHolder.State.Available
-        findPreference<Preference>("test_stock_disable")?.isVisible = isRootAvailable
-        findPreference<Preference>("restore_stock")?.isVisible = isRootAvailable
-        findPreference<Preference>("export_report")?.isEnabled = lastReportStr != null
+        findPreference<Preference>(getString(R.string.set_key_diagnostics_test_stock_disable))
+            ?.isVisible = isRootAvailable
+        findPreference<Preference>(getString(R.string.set_key_diagnostics_restore_stock))
+            ?.isVisible = isRootAvailable
+        findPreference<Preference>(getString(R.string.set_key_diagnostics_export_report))
+            ?.isEnabled = lastReportStr != null
     }
 }
