@@ -57,6 +57,10 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
     val index: StateFlow<Int>
         get() = _index
 
+    private val _isInitialQueueLoaded = MutableStateFlow(false)
+    val isInitialQueueLoaded: StateFlow<Boolean>
+        get() = _isInitialQueueLoaded
+
     init {
         playbackManager.addListener(this)
     }
@@ -72,6 +76,7 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         L.d("Updating queue display")
         _queueInstructions.put(change.instructions)
         _queue.value = queue
+        _isInitialQueueLoaded.value = true
         if (change.type != QueueChange.Type.MAPPING) {
             // Index changed, make sure it remains updated without actually scrolling to it.
             L.d("Index changed with queue, synchronizing new position")
@@ -86,6 +91,7 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         _scrollTo.put(index)
         _queue.value = queue
         _index.value = index
+        _isInitialQueueLoaded.value = true
     }
 
     override fun onNewPlayback(
@@ -100,6 +106,7 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         _scrollTo.put(index)
         _queue.value = queue
         _index.value = index
+        _isInitialQueueLoaded.value = true
     }
 
     override fun onCleared() {

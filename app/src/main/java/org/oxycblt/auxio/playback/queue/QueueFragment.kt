@@ -90,8 +90,11 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
             queueModel.queue,
             queueModel.index,
             playbackModel.isPlaying,
-            ::updateQueue,
-        )
+            queueModel.isInitialQueueLoaded,
+            playbackModel.song,
+        ) { queue, index, isPlaying, isLoaded, currentSong ->
+            updateQueue(queue, index, isPlaying, isLoaded, currentSong != null)
+        }
     }
 
     override fun onDestroyBinding(binding: FragmentQueueBinding) {
@@ -118,15 +121,24 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
                 .findFirstCompletelyVisibleItemPosition() < 1
     }
 
-    private fun updateQueue(queue: List<Song>, index: Int, isPlaying: Boolean) {
+    private fun updateQueue(
+        queue: List<Song>,
+        index: Int,
+        isPlaying: Boolean,
+        isLoaded: Boolean,
+        hasSong: Boolean
+    ) {
         val binding = requireBinding()
 
         queueAdapter.update(queue, queueModel.queueInstructions.consume())
         queueAdapter.setPosition(index, isPlaying)
-        binding.queueEmpty.isVisible = queue.isEmpty()
-        binding.queueEmptyAction.isVisible = queue.isEmpty()
-        binding.queueRecycler.isVisible = queue.isNotEmpty()
-        binding.queueDivider.isVisible = queue.isNotEmpty()
+
+        val isLoading = !isLoaded && hasSong
+        binding.queueLoading.isVisible = isLoading
+        binding.queueEmpty.isVisible = queue.isEmpty() && !isLoading
+        binding.queueEmptyAction.isVisible = queue.isEmpty() && !isLoading
+        binding.queueRecycler.isVisible = queue.isNotEmpty() && !isLoading
+        binding.queueDivider.isVisible = queue.isNotEmpty() && !isLoading
 
         // If requested, scroll to a new item (occurs when the index moves)
         val scrollTo = queueModel.scrollTo.consume()
