@@ -41,7 +41,8 @@ import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.ui.UISettings
 
 @AndroidEntryPoint
-class DiagnosticsRecoveryPreferenceFragment : BasePreferenceFragment(R.xml.preferences_diagnostics) {
+class DiagnosticsRecoveryPreferenceFragment :
+    BasePreferenceFragment(R.xml.preferences_diagnostics) {
 
     @javax.inject.Inject lateinit var rootStateHolder: RootStateHolder
     @javax.inject.Inject lateinit var uiSettings: UISettings
@@ -57,9 +58,11 @@ class DiagnosticsRecoveryPreferenceFragment : BasePreferenceFragment(R.xml.prefe
     override fun onSetupPreference(preference: Preference) {
         when (preference.key) {
             getString(R.string.set_head_unit_compat_status) -> setupCompatStatus(preference)
-            getString(R.string.set_key_ts18_source_repair_status) -> setupTs18SourceRepairStatus(preference)
+            getString(R.string.set_key_ts18_source_repair_status) ->
+                setupTs18SourceRepairStatus(preference)
             getString(R.string.set_key_root_fs_status) -> setupRootFsStatus(preference)
-            getString(R.string.set_key_ts18_fast_resume_status) -> setupTs18FastResumeStatus(preference)
+            getString(R.string.set_key_ts18_fast_resume_status) ->
+                setupTs18FastResumeStatus(preference)
             "car_overlay_status" -> setupCarOverlayStatus(preference)
         }
 
@@ -95,24 +98,28 @@ class DiagnosticsRecoveryPreferenceFragment : BasePreferenceFragment(R.xml.prefe
     }
 
     private fun setupCompatStatus(preference: Preference) {
-        val compatStatus = HeadUnitCompatManager.currentStatus(
-            compatModeEnabled = uiSettings.headUnitLandscapeMode,
-            widgetMetadataPublishable = uiSettings.showHeadUnitAlbumArt,
-            shortcutCompatReady = uiSettings.showHeadUnitDashboardQuickAccess,
-            sessionCompatReady = uiSettings.headUnitLandscapeMode,
-        )
-        val nativeStatusSummary = when (compatStatus.nativePrivateIntegrationStatus) {
-            NativePrivateIntegrationStatus.NOT_ENABLED_REQUIRES_VALIDATION -> getString(R.string.set_head_unit_compat_native_not_enabled_requires_validation)
-        }
-        preference.summary = getString(
-            R.string.set_head_unit_compat_status_summary,
-            statusSummary(compatStatus.compatModeEnabled),
-            statusSummary(compatStatus.androidFallbackActive),
-            statusSummary(compatStatus.widgetMetadataPublishable),
-            statusSummary(compatStatus.shortcutCompatReady),
-            statusSummary(compatStatus.sessionCompatReady),
-            nativeStatusSummary,
-        ) + "\n" + uiSettings.headUnitCompatStatusSummary
+        val compatStatus =
+            HeadUnitCompatManager.currentStatus(
+                compatModeEnabled = uiSettings.headUnitLandscapeMode,
+                widgetMetadataPublishable = uiSettings.showHeadUnitAlbumArt,
+                shortcutCompatReady = uiSettings.showHeadUnitDashboardQuickAccess,
+                sessionCompatReady = uiSettings.headUnitLandscapeMode,
+            )
+        val nativeStatusSummary =
+            when (compatStatus.nativePrivateIntegrationStatus) {
+                NativePrivateIntegrationStatus.NOT_ENABLED_REQUIRES_VALIDATION ->
+                    getString(R.string.set_head_unit_compat_native_not_enabled_requires_validation)
+            }
+        preference.summary =
+            getString(
+                R.string.set_head_unit_compat_status_summary,
+                statusSummary(compatStatus.compatModeEnabled),
+                statusSummary(compatStatus.androidFallbackActive),
+                statusSummary(compatStatus.widgetMetadataPublishable),
+                statusSummary(compatStatus.shortcutCompatReady),
+                statusSummary(compatStatus.sessionCompatReady),
+                nativeStatusSummary,
+            ) + "\n" + uiSettings.headUnitCompatStatusSummary
     }
 
     private fun setupTs18FastResumeStatus(preference: Preference) {
@@ -125,7 +132,8 @@ class DiagnosticsRecoveryPreferenceFragment : BasePreferenceFragment(R.xml.prefe
         preference.summary = rootStatusSummary(status)
 
         preference.setOnPreferenceClickListener {
-            val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+            val prefs =
+                androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
             val enabled = prefs.getBoolean(getString(R.string.set_key_use_root_fs), false)
             if (!enabled) {
                 preference.summary = getString(R.string.set_root_fs_status_disabled)
@@ -143,7 +151,8 @@ class DiagnosticsRecoveryPreferenceFragment : BasePreferenceFragment(R.xml.prefe
     private fun rootStatusSummary(state: RootStateHolder.State): String =
         when (state) {
             RootStateHolder.State.DisabledByUser -> getString(R.string.set_root_fs_status_disabled)
-            RootStateHolder.State.UnsupportedForVariant -> getString(R.string.set_root_fs_status_unsupported)
+            RootStateHolder.State.UnsupportedForVariant ->
+                getString(R.string.set_root_fs_status_unsupported)
             RootStateHolder.State.Unknown -> getString(R.string.set_root_fs_status_unknown)
             RootStateHolder.State.Available -> getString(R.string.set_root_fs_status_available)
             RootStateHolder.State.Denied -> getString(R.string.set_root_fs_status_denied)
@@ -152,11 +161,12 @@ class DiagnosticsRecoveryPreferenceFragment : BasePreferenceFragment(R.xml.prefe
         }
 
     private fun setupTs18SourceRepairStatus(preference: Preference) {
-        preference.summary = getString(
-            R.string.set_ts18_source_repair_status_summary,
-            getString(R.string.set_ts18_source_repair_checking),
-            "",
-        )
+        preference.summary =
+            getString(
+                R.string.set_ts18_source_repair_status_summary,
+                getString(R.string.set_ts18_source_repair_checking),
+                "",
+            )
         refreshTs18SourceRepairStatus(preference)
         preference.setOnPreferenceClickListener {
             refreshTs18SourceRepairStatus(preference)
@@ -166,27 +176,39 @@ class DiagnosticsRecoveryPreferenceFragment : BasePreferenceFragment(R.xml.prefe
 
     private fun refreshTs18SourceRepairStatus(preference: Preference) {
         viewLifecycleOwner.lifecycleScope.launch {
-            val states = withContext(Dispatchers.IO) { Ts18SourceRepairStatePolicy.classifyDirectPaths() }
+            val states =
+                withContext(Dispatchers.IO) { Ts18SourceRepairStatePolicy.classifyDirectPaths() }
             val summaryKind = Ts18SourceRepairStatePolicy.summarise(states)
             val stateText = sourceRepairKindText(summaryKind)
-            val details = states.joinToString(separator = "\n") { state ->
-                "${state.path}: ${sourceRepairKindText(state.kind)}"
-            }
-            preference.summary = getString(R.string.set_ts18_source_repair_status_summary, stateText, details)
+            val details =
+                states.joinToString(separator = "\n") { state ->
+                    "${state.path}: ${sourceRepairKindText(state.kind)}"
+                }
+            preference.summary =
+                getString(R.string.set_ts18_source_repair_status_summary, stateText, details)
         }
     }
 
     private fun sourceRepairKindText(kind: Ts18SourceRepairStatePolicy.Kind): String =
         when (kind) {
-            Ts18SourceRepairStatePolicy.Kind.ALL_SOURCES_READY -> getString(R.string.set_ts18_source_repair_ready)
-            Ts18SourceRepairStatePolicy.Kind.MOUNT_MISSING -> getString(R.string.set_ts18_source_repair_mount_missing)
-            Ts18SourceRepairStatePolicy.Kind.DIRECT_PATH_INACCESSIBLE -> getString(R.string.set_ts18_source_repair_direct_inaccessible)
-            Ts18SourceRepairStatePolicy.Kind.SAF_PERMISSION_MISSING -> getString(R.string.set_ts18_source_repair_saf_permission_missing)
-            Ts18SourceRepairStatePolicy.Kind.SAF_PROVIDER_FAILURE -> getString(R.string.set_ts18_source_repair_saf_provider_failure)
-            Ts18SourceRepairStatePolicy.Kind.SOURCE_EMPTY -> getString(R.string.set_ts18_source_repair_source_empty)
-            Ts18SourceRepairStatePolicy.Kind.SOURCE_CONTAINS_NO_SUPPORTED_AUDIO -> getString(R.string.set_ts18_source_repair_no_audio)
-            Ts18SourceRepairStatePolicy.Kind.MIXED_MULTIPLE_VOLUME_STATE -> getString(R.string.set_ts18_source_repair_mixed)
-            Ts18SourceRepairStatePolicy.Kind.UNKNOWN_FAILURE -> getString(R.string.set_ts18_source_repair_unknown)
+            Ts18SourceRepairStatePolicy.Kind.ALL_SOURCES_READY ->
+                getString(R.string.set_ts18_source_repair_ready)
+            Ts18SourceRepairStatePolicy.Kind.MOUNT_MISSING ->
+                getString(R.string.set_ts18_source_repair_mount_missing)
+            Ts18SourceRepairStatePolicy.Kind.DIRECT_PATH_INACCESSIBLE ->
+                getString(R.string.set_ts18_source_repair_direct_inaccessible)
+            Ts18SourceRepairStatePolicy.Kind.SAF_PERMISSION_MISSING ->
+                getString(R.string.set_ts18_source_repair_saf_permission_missing)
+            Ts18SourceRepairStatePolicy.Kind.SAF_PROVIDER_FAILURE ->
+                getString(R.string.set_ts18_source_repair_saf_provider_failure)
+            Ts18SourceRepairStatePolicy.Kind.SOURCE_EMPTY ->
+                getString(R.string.set_ts18_source_repair_source_empty)
+            Ts18SourceRepairStatePolicy.Kind.SOURCE_CONTAINS_NO_SUPPORTED_AUDIO ->
+                getString(R.string.set_ts18_source_repair_no_audio)
+            Ts18SourceRepairStatePolicy.Kind.MIXED_MULTIPLE_VOLUME_STATE ->
+                getString(R.string.set_ts18_source_repair_mixed)
+            Ts18SourceRepairStatePolicy.Kind.UNKNOWN_FAILURE ->
+                getString(R.string.set_ts18_source_repair_unknown)
         }
 
     private fun setupCarOverlayStatus(preference: Preference) {

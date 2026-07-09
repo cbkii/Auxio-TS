@@ -88,7 +88,8 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
             }
             getString(R.string.set_key_diagnostics) -> {
                 L.d("Navigating to diagnostics preferences")
-                findNavController().navigateSafe(RootPreferenceFragmentDirections.diagnosticsPreferences())
+                findNavController()
+                    .navigateSafe(RootPreferenceFragmentDirections.diagnosticsPreferences())
             }
 
             getString(R.string.set_key_reindex) -> musicModel.refresh()

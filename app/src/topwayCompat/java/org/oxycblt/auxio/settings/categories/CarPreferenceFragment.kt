@@ -21,6 +21,7 @@ package org.oxycblt.auxio.settings.categories
 import android.content.Context
 import androidx.preference.Preference
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
@@ -28,7 +29,6 @@ import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.ui.UISettings
 import timber.log.Timber as L
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
@@ -65,8 +65,10 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             }
             KEY_CAR_OVERLAY_ENABLED -> setupCarOverlayEnabled(preference)
             KEY_CAR_OVERLAY_RESET_POSITION -> setupCarOverlayReset(preference)
-            getString(R.string.set_key_ts18_fast_resume_status) -> setupTs18FastResumeStatus(preference)
-            getString(R.string.set_key_autostart_floating_only) -> setupAutostartFloatingOnly(preference)
+            getString(R.string.set_key_ts18_fast_resume_status) ->
+                setupTs18FastResumeStatus(preference)
+            getString(R.string.set_key_autostart_floating_only) ->
+                setupAutostartFloatingOnly(preference)
         }
     }
 
@@ -81,7 +83,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             return
         }
 
-        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val prefs =
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
         val overlayEnabled = prefs.getBoolean(KEY_CAR_OVERLAY_ENABLED, false)
 
         preference.summary =
@@ -119,7 +122,10 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                         (pref as? androidx.preference.TwoStatePreference)?.isChecked = false
                     }
                     // Update dependent preferences like autostart floating only
-                    val autostartFloatingOnly = findPreference<Preference>(getString(R.string.set_key_autostart_floating_only))
+                    val autostartFloatingOnly =
+                        findPreference<Preference>(
+                            getString(R.string.set_key_autostart_floating_only)
+                        )
                     if (autostartFloatingOnly != null) {
                         setupAutostartFloatingOnly(autostartFloatingOnly)
                     }

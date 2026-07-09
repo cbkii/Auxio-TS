@@ -24,10 +24,10 @@ import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import coil3.ImageLoader
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import javax.inject.Inject
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.ts18.Ts18SourceRepairStatePolicy
