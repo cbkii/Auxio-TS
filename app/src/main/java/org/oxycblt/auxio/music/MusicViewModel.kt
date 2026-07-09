@@ -55,15 +55,23 @@ constructor(
     @ApplicationContext context: Context,
     private val listSettings: ListSettings,
     private val musicRepository: MusicRepository,
-) : ViewModel(), MusicRepository.UpdateListener, MusicRepository.IndexingListener {
+) :
+    ViewModel(),
+    MusicRepository.UpdateListener,
+    MusicRepository.IndexingListener,
+    MusicRepository.StartupReadinessListener {
     private val externalPlaylistManager = ExternalPlaylistManager.from(context)
 
     private val _indexingState = MutableStateFlow<IndexingState?>(null)
+    private val _startupReadinessState =
+        MutableStateFlow<StartupReadinessState>(StartupReadinessState.CheckingCachedLibrary)
 
     @Volatile private var libraryGeneration = 0L
 
     /** The current music loading state, or null if no loading is going on. */
     val indexingState: StateFlow<IndexingState?> = _indexingState
+
+    val startupReadinessState: StateFlow<StartupReadinessState> = _startupReadinessState
 
     private val _statistics = MutableStateFlow<Statistics?>(null)
 
@@ -87,11 +95,13 @@ constructor(
     init {
         musicRepository.addUpdateListener(this)
         musicRepository.addIndexingListener(this)
+        musicRepository.addStartupReadinessListener(this)
     }
 
     override fun onCleared() {
         musicRepository.removeUpdateListener(this)
         musicRepository.removeIndexingListener(this)
+        musicRepository.removeStartupReadinessListener(this)
     }
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
@@ -130,6 +140,10 @@ constructor(
 
     override fun onIndexingStateChanged() {
         _indexingState.value = musicRepository.indexingState
+    }
+
+    override fun onStartupReadinessStateChanged() {
+        _startupReadinessState.value = musicRepository.startupReadinessState
     }
 
     /** Requests that the music library should be re-loaded while leveraging the cache. */

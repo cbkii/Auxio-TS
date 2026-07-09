@@ -21,8 +21,6 @@ package org.oxycblt.auxio.home.list
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.core.view.isInvisible
-import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Calendar
@@ -39,6 +37,7 @@ import org.oxycblt.auxio.list.recycler.FastScrollRecyclerView
 import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
 import org.oxycblt.auxio.util.collectImmediately
@@ -86,7 +85,12 @@ class AlbumListFragment :
         binding.homeNoMusicAction.setOnClickListener { homeModel.startChooseMusicLocations() }
 
         collectImmediately(homeModel.albumList, ::updateAlbums)
-        collectImmediately(homeModel.empty, musicModel.indexingState, ::updateNoMusicIndicator)
+        collectImmediately(
+            homeModel.empty,
+            musicModel.indexingState,
+            musicModel.startupReadinessState,
+            ::updateNoMusicIndicator,
+        )
         collectImmediately(listModel.selected, ::updateSelection)
         collectImmediately(
             playbackModel.song,
@@ -163,12 +167,18 @@ class AlbumListFragment :
         albumAdapter.update(albums, homeModel.albumInstructions.consume())
     }
 
-    private fun updateNoMusicIndicator(empty: Boolean, indexingState: IndexingState?) {
-        val binding = requireBinding()
-        binding.homeRecycler.isInvisible = empty
-        binding.homeNoMusic.isInvisible = !empty
-        binding.homeNoMusicAction.isVisible =
-            indexingState == null || (empty && indexingState is IndexingState.Completed)
+    private fun updateNoMusicIndicator(
+        empty: Boolean,
+        indexingState: IndexingState?,
+        startupState: StartupReadinessState,
+    ) {
+        requireBinding()
+            .updateLibraryEmptyState(
+                empty = empty,
+                indexingState = indexingState,
+                startupState = startupState,
+                emptyMessage = R.string.lng_empty_albums,
+            )
     }
 
     private fun updateSelection(selection: List<Music>) {

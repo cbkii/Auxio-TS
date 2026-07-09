@@ -21,8 +21,6 @@ package org.oxycblt.auxio.home.list
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.core.view.isInvisible
-import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
@@ -37,6 +35,7 @@ import org.oxycblt.auxio.list.recycler.PlaylistViewHolder
 import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
 import org.oxycblt.auxio.util.collectImmediately
@@ -85,6 +84,7 @@ class PlaylistListFragment :
             homeModel.empty,
             homeModel.playlistList,
             musicModel.indexingState,
+            musicModel.startupReadinessState,
             ::updateNoMusicIndicator,
         )
         collectImmediately(listModel.selected, ::updateSelection)
@@ -148,17 +148,26 @@ class PlaylistListFragment :
         empty: Boolean,
         playlists: List<Playlist>,
         indexingState: IndexingState?,
+        startupState: StartupReadinessState,
     ) {
         val binding = requireBinding()
-        binding.homeRecycler.isInvisible = empty
-        binding.homeNoMusic.isInvisible = !empty && playlists.isNotEmpty()
         if (!empty && playlists.isEmpty()) {
-            binding.homeNoMusicAction.isVisible = true
+            binding.updateLibraryEmptyState(
+                empty = false,
+                indexingState = indexingState,
+                startupState = startupState,
+                emptyMessage = R.string.lng_empty_playlists,
+                actionVisibleWhenNotEmpty = true,
+            )
             binding.homeNoMusicAction.text = getString(R.string.lbl_new_playlist)
             binding.homeNoMusicAction.setOnClickListener { musicModel.createPlaylist() }
         } else {
-            binding.homeNoMusicAction.isVisible =
-                indexingState == null || (empty && indexingState is IndexingState.Completed)
+            binding.updateLibraryEmptyState(
+                empty = empty,
+                indexingState = indexingState,
+                startupState = startupState,
+                emptyMessage = R.string.lng_empty_playlists,
+            )
             binding.homeNoMusicAction.text = getString(R.string.set_locations)
             binding.homeNoMusicAction.setOnClickListener { homeModel.startChooseMusicLocations() }
         }
