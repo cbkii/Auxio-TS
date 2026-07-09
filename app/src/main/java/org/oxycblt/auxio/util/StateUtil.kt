@@ -141,7 +141,9 @@ fun <T1, T2, T3, T4> Fragment.collectImmediately(
     block: (T1, T2, T3, T4) -> Unit,
 ) {
     block(a.value, b.value, c.value, d.value)
-    launch { combine(a, b, c, d) { a1, b2, c3, d4 -> block(a1, b2, c3, d4) }.collect {} }
+    launch {
+        combine(a, b, c, d) { a1, b2, c3, d4 -> block(a1, b2, c3, d4) }.collect {}
+    }
 }
 
 /** Like [collectImmediately], but with five [StateFlow] instances. */
@@ -154,7 +156,9 @@ fun <T1, T2, T3, T4, T5> Fragment.collectImmediately(
     block: (T1, T2, T3, T4, T5) -> Unit,
 ) {
     block(a.value, b.value, c.value, d.value, e.value)
-    launch { combine(a, b, c, d, e) { a1, b2, c3, d4, e5 -> block(a1, b2, c3, d4, e5) }.collect {} }
+    launch {
+        combine(a, b, c, d, e) { a1, b2, c3, d4, e5 -> block(a1, b2, c3, d4, e5) }.collect {}
+    }
 }
 
 /**

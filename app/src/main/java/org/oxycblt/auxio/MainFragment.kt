@@ -645,18 +645,17 @@ class MainFragment :
         if (startupPlaybackOpenConsumed) return
 
         val readinessState = musicModel.startupReadinessState.value
-        if (readinessState == StartupReadinessState.NeedsMusicSource) {
-            startupPlaybackOpenConsumed = true
+        if (readinessState == StartupReadinessState.CheckingCachedLibrary) {
             return
         }
-        if (readinessState == StartupReadinessState.CheckingCachedLibrary) {
+        startupPlaybackOpenConsumed = true
+        if (readinessState == StartupReadinessState.NeedsMusicSource) {
             return
         }
 
         val currentSong = playbackModel.song.value
         if (currentSong != null) {
             playbackModel.openPlayback()
-            startupPlaybackOpenConsumed = true
         }
     }
 
