@@ -2,7 +2,7 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
     app:title="@string/set_car">
 
-    <PreferenceCategory app:title="Dashboard and controls" xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <PreferenceCategory app:title="@string/set_category_dashboard_and_controls">
 
         <androidx.preference.ListPreference
             app:defaultValue="@string/visualizer_mode_off"
@@ -76,7 +76,7 @@
 
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="Startup and resume" xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <PreferenceCategory app:title="@string/set_category_startup_and_resume">
 
         <SwitchPreferenceCompat
             app:defaultValue="false"
@@ -91,7 +91,7 @@
 
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="Topway / DoFun launcher" xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <PreferenceCategory app:title="@string/set_category_topway_dofun_launcher">
 
         <androidx.preference.ListPreference
             app:defaultValue="AutoAllSafePaths"
@@ -107,10 +107,9 @@
             app:title="@string/set_head_unit_compat_status" />
 
         <Preference
-            app:fragment="org.oxycblt.auxio.settings.categories.DiagnosticsRecoveryPreferenceFragment"
-            app:key="@string/set_key_diagnostics"
-            app:title="TS18 DoFun Launcher Integration"
-            app:summary="Run diagnostics and root-assisted resolvers for DoFun launcher" />
+            app:key="open_diagnostics"
+            app:title="@string/set_dofun_launcher_integration"
+            app:summary="@string/set_dofun_launcher_integration_desc" />
 
         <androidx.preference.ListPreference
             app:defaultValue="Auto"

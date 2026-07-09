@@ -3,7 +3,7 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     app:title="@string/set_diagnostics">
 
-    <PreferenceCategory app:title="Status" xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <PreferenceCategory app:title="@string/set_category_status">
         <Preference
             app:key="@string/set_head_unit_compat_status"
             app:summary="@string/set_head_unit_compat_status_desc"
@@ -26,32 +26,32 @@
 
         <Preference
             app:key="car_overlay_status"
-            app:title="Floating Controls Permission" />
+            app:title="@string/set_floating_controls_permission" />
     </PreferenceCategory>
 
-    <PreferenceCategory android:title="Diagnostics">
+    <PreferenceCategory app:title="@string/set_category_diagnostics">
         <Preference
             app:key="run_check"
-            app:title="Run DoFun integration check"
-            app:summary="Tap to run checks" />
+            app:title="@string/set_run_dofun_check"
+            app:summary="@string/set_run_dofun_check_desc" />
         <Preference
             app:key="export_report"
-            app:title="Export DoFun integration report"
-            app:summary="Copy the check results to clipboard"
+            app:title="@string/set_export_dofun_report"
+            app:summary="@string/set_export_dofun_report_desc"
             android:enabled="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="Root-assisted test actions (Advanced)"
+        app:title="@string/set_category_advanced_recovery"
         app:iconSpaceReserved="false">
         <Preference
             app:key="test_stock_disable"
-            app:title="Disable stock com.tw.music for user 0"
-            app:summary="Reversibly disable the stock music app to test DoFun fallback to Auxio. Requires root enabled." />
+            app:title="@string/set_disable_stock_music"
+            app:summary="@string/set_disable_stock_music_desc" />
         <Preference
             app:key="restore_stock"
-            app:title="Re-enable stock com.tw.music"
-            app:summary="Restore the stock music app." />
+            app:title="@string/set_restore_stock_music"
+            app:summary="@string/set_restore_stock_music_desc" />
     </PreferenceCategory>
 
 </PreferenceScreen>

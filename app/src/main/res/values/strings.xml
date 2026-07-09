@@ -405,6 +405,8 @@
     <string name="set_car_desc">Configure Topway specific behaviour and overlay</string>
     <string name="set_diagnostics">Diagnostics &amp; recovery</string>
     <string name="set_diagnostics_desc">Status checks and advanced Topway troubleshooting tools</string>
+    <string name="set_diagnostics_granted">Granted</string>
+    <string name="set_diagnostics_not_granted">Not granted</string>
     <string name="set_playback">Playback</string>
     <string name="set_autostart_on_boot">Autostart</string>
     <string name="set_autostart_on_boot_desc">Launch Auxio-TS when the device boots</string>
@@ -657,4 +659,37 @@
 
     <string name="set_key_ts18_source_repair_status" translatable="false">ts18_source_repair_status</string>
     <string name="set_autostart_floating_only_desc_requires_overlay">Requires Autostart, Car Floating Controls, and Display over other apps permission</string>
+    <!-- Topway / TS18 Categories -->
+    <string name="set_category_dashboard_and_controls">Dashboard and controls</string>
+    <string name="set_category_startup_and_resume">Startup and resume</string>
+    <string name="set_category_topway_dofun_launcher">Topway / DoFun launcher</string>
+    <string name="set_category_topway_source_loading">Topway / Source loading</string>
+    <string name="set_category_status">Status</string>
+    <string name="set_category_diagnostics">Diagnostics</string>
+    <string name="set_category_advanced_recovery">Root-assisted test actions (Advanced)</string>
+
+    <string name="set_dofun_launcher_integration">TS18 DoFun Launcher Integration</string>
+    <string name="set_dofun_launcher_integration_desc">Run diagnostics and root-assisted resolvers for DoFun launcher</string>
+
+    <string name="set_floating_controls_permission">Floating Controls Permission</string>
+    <string name="set_run_dofun_check">Run DoFun integration check</string>
+    <string name="set_run_dofun_check_desc">Tap to run checks</string>
+    <string name="set_export_dofun_report">Export DoFun integration report</string>
+    <string name="set_export_dofun_report_desc">Copy the check results to clipboard</string>
+
+    <string name="set_disable_stock_music">Disable stock com.tw.music for user 0</string>
+    <string name="set_disable_stock_music_desc">Reversibly disable the stock music app to test DoFun fallback to Auxio. Requires root enabled.</string>
+    <string name="set_restore_stock_music">Re-enable stock com.tw.music</string>
+    <string name="set_restore_stock_music_desc">Restore the stock music app.</string>
+
+    <string name="set_diagnostics_running">Running...</string>
+    <string name="set_diagnostics_copied">Report copied to clipboard</string>
+    <string name="set_diagnostics_disable_title">Disable stock com.tw.music?</string>
+    <string name="set_diagnostics_disable_message">This will use root to disable the stock com.tw.music package for user 0. This is reversible. Do you want to continue?</string>
+    <string name="set_diagnostics_disable_btn">Disable</string>
+    <string name="set_diagnostics_cancel_btn">Cancel</string>
+    <string name="set_diagnostics_disable_success">Disabled stock com.tw.music successfully</string>
+    <string name="set_diagnostics_disable_failed">Failed to disable stock com.tw.music</string>
+    <string name="set_diagnostics_restore_success">Enabled stock com.tw.music successfully</string>
+    <string name="set_diagnostics_restore_failed">Failed to enable stock com.tw.music</string>
 </resources>

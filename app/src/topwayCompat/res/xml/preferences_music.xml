@@ -44,7 +44,7 @@
             app:title="@string/set_square_covers" />
 
     </PreferenceCategory>
-    <PreferenceCategory app:title="Topway / Source loading">
+    <PreferenceCategory app:title="@string/set_category_topway_source_loading">
         <Preference
             app:key="@string/set_key_ts18_source_repair_status"
             app:summary="@string/set_ts18_source_repair_status_desc"

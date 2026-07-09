@@ -35,7 +35,6 @@ import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.root.dofun.Ts18DofunIntegrationResolver
 import org.oxycblt.auxio.settings.BasePreferenceFragment
-import org.oxycblt.auxio.settings.RootDiagnosticsHelper
 import org.oxycblt.auxio.ui.UISettings
 
 @AndroidEntryPoint
@@ -57,18 +56,8 @@ class DiagnosticsRecoveryPreferenceFragment :
         when (preference.key) {
             getString(R.string.set_head_unit_compat_status) -> setupCompatStatus(preference)
             getString(R.string.set_key_ts18_source_repair_status) ->
-                RootDiagnosticsHelper.setupTs18SourceRepairStatus(
-                    requireContext(),
-                    preference,
-                    viewLifecycleOwner.lifecycleScope,
-                )
-            getString(R.string.set_key_root_fs_status) ->
-                RootDiagnosticsHelper.setupRootFsStatus(
-                    requireContext(),
-                    preference,
-                    rootStateHolder,
-                    viewLifecycleOwner.lifecycleScope,
-                )
+                setupTs18SourceRepairStatus(preference)
+            getString(R.string.set_key_root_fs_status) -> setupRootFsStatus(preference)
             getString(R.string.set_key_ts18_fast_resume_status) ->
                 setupTs18FastResumeStatus(preference)
             "car_overlay_status" -> setupCarOverlayStatus(preference)

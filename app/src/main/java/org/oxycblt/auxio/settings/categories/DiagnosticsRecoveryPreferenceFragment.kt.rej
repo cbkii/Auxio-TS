@@ -1,0 +1,13 @@
+--- app/src/main/java/org/oxycblt/auxio/settings/categories/DiagnosticsRecoveryPreferenceFragment.kt
++++ app/src/main/java/org/oxycblt/auxio/settings/categories/DiagnosticsRecoveryPreferenceFragment.kt
+@@ -54,8 +55,8 @@
+     override fun onSetupPreference(preference: Preference) {
+         when (preference.key) {
+             getString(R.string.set_head_unit_compat_status) -> setupCompatStatus(preference)
+-            getString(R.string.set_key_ts18_source_repair_status) -> setupTs18SourceRepairStatus(preference)
+-            getString(R.string.set_key_root_fs_status) -> setupRootFsStatus(preference)
++            getString(R.string.set_key_ts18_source_repair_status) -> RootDiagnosticsHelper.setupTs18SourceRepairStatus(requireContext(), preference, viewLifecycleOwner.lifecycleScope)
++            getString(R.string.set_key_root_fs_status) -> RootDiagnosticsHelper.setupRootFsStatus(requireContext(), preference, rootStateHolder, viewLifecycleOwner.lifecycleScope)
+             getString(R.string.set_key_ts18_fast_resume_status) -> setupTs18FastResumeStatus(preference)
+             "car_overlay_status" -> setupCarOverlayStatus(preference)
+         }
