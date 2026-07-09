@@ -197,7 +197,7 @@ class DiagnosticsRecoveryPreferenceFragment :
         clipboard.setPrimaryClip(clip)
         Toast.makeText(
                 requireContext(),
-                getString(R.string.set_diagnostics_report_copied),
+                getString(R.string.set_diagnostics_copied),
                 Toast.LENGTH_SHORT,
             )
             .show()
@@ -205,18 +205,18 @@ class DiagnosticsRecoveryPreferenceFragment :
 
     private fun showDisableStockConfirmation() {
         AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.set_diagnostics_disable_stock_title))
-            .setMessage(getString(R.string.set_diagnostics_disable_stock_message))
-            .setPositiveButton(getString(R.string.set_diagnostics_disable_stock_button)) { _, _ ->
+            .setTitle(getString(R.string.set_diagnostics_disable_title))
+            .setMessage(getString(R.string.set_diagnostics_disable_message))
+            .setPositiveButton(getString(R.string.set_diagnostics_disable_btn)) { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
                     val success = resolver.testStockSelectionDisabledUser0()
                     val msg =
-                        if (success) getString(R.string.set_diagnostics_disable_stock_success)
-                        else getString(R.string.set_diagnostics_disable_stock_failure)
+                        if (success) getString(R.string.set_diagnostics_disable_success)
+                        else getString(R.string.set_diagnostics_disable_failed)
                     Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton(getString(R.string.set_diagnostics_cancel_button), null)
+            .setNegativeButton(getString(R.string.set_diagnostics_cancel_btn), null)
             .show()
     }
 
@@ -224,8 +224,8 @@ class DiagnosticsRecoveryPreferenceFragment :
         viewLifecycleOwner.lifecycleScope.launch {
             val success = resolver.restoreStockSelectionDisabledUser0()
             val msg =
-                if (success) getString(R.string.set_diagnostics_restore_stock_success)
-                else getString(R.string.set_diagnostics_restore_stock_failure)
+                if (success) getString(R.string.set_diagnostics_restore_success)
+                else getString(R.string.set_diagnostics_restore_failed)
             Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
         }
     }
