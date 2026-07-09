@@ -191,7 +191,6 @@ class StartupLibraryPolicyTest {
         assertEquals(StartupReadinessState.NeedsMusicSource, state)
     }
 
-
     @Test
     fun `SAF persisted but currently not openable still counts as configured for startup UI`() {
         assertTrue(StartupLibraryPolicy.isMusicSourceConfigured(LocationMode.SAF, sourceCount = 1))
@@ -263,6 +262,18 @@ class StartupLibraryPolicyTest {
             )
 
         assertEquals(StartupReadinessState.EmptyLibrary, state)
+    }
+
+    @Test
+    fun `recovery without configured source needs source dialog`() {
+        val state =
+            StartupLibraryPolicy.startupReadinessAfterDecision(
+                StartupLibraryPolicy.onCachedLoadFailed(LibraryState.USABLE, false),
+                sourceConfigured = false,
+                cachedSongCount = null,
+            )
+
+        assertEquals(StartupReadinessState.NeedsMusicSource, state)
     }
 
     @Test

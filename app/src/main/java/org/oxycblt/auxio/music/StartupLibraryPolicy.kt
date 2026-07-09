@@ -171,8 +171,7 @@ object StartupLibraryPolicy {
             cachedSongCount != null && cachedSongCount > 0 -> StartupReadinessState.Ready
             decision.libraryState == LibraryState.USABLE -> StartupReadinessState.Ready
             decision.libraryState == LibraryState.EMPTY -> StartupReadinessState.EmptyLibrary
-            sourceConfigured -> StartupReadinessState.CachedLibraryUnavailable
-            decision.libraryState == LibraryState.NEVER -> StartupReadinessState.NeedsMusicSource
+            !sourceConfigured -> StartupReadinessState.NeedsMusicSource
             else -> StartupReadinessState.CachedLibraryUnavailable
         }
 

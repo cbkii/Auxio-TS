@@ -306,12 +306,13 @@ constructor(
     }
 
     override fun addStartupReadinessListener(listener: MusicRepository.StartupReadinessListener) {
-        startupReadinessListeners.add(listener)
+        synchronized(this) { startupReadinessListeners.add(listener) }
         listener.onStartupReadinessStateChanged()
     }
 
     override fun removeStartupReadinessListener(listener: MusicRepository.StartupReadinessListener) {
-        if (!startupReadinessListeners.remove(listener)) {
+        val removed = synchronized(this) { startupReadinessListeners.remove(listener) }
+        if (!removed) {
             L.w("Startup readiness listener $listener was not added prior, cannot remove")
         }
     }
@@ -518,11 +519,11 @@ constructor(
             L.d("Cleanup")
             result.cleanup()
             // Finish up loading.
-            musicSettings.libraryState =
-                if (result.library.songs.isEmpty()) LibraryState.EMPTY else LibraryState.USABLE
+            val isEmpty = result.library.songs.isEmpty()
+            musicSettings.libraryState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
             musicSettings.lastScanFailed = false
             emitStartupReadinessState(
-                if (musicSettings.libraryState == LibraryState.EMPTY) {
+                if (isEmpty) {
                     StartupReadinessState.EmptyLibrary
                 } else {
                     StartupReadinessState.Ready
@@ -663,8 +664,12 @@ constructor(
     }
 
     private fun emitStartupReadinessState(state: StartupReadinessState) {
-        currentStartupReadinessState = state
-        for (listener in startupReadinessListeners) {
+        val listeners =
+            synchronized(this) {
+                currentStartupReadinessState = state
+                startupReadinessListeners.toList()
+            }
+        for (listener in listeners) {
             listener.onStartupReadinessStateChanged()
         }
     }
