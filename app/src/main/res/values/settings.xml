@@ -7,6 +7,11 @@
     <string name="set_key_audio" translatable="false">auxio_audio</string>
     <string name="set_key_car" translatable="false">auxio_car</string>
     <string name="set_key_diagnostics" translatable="false">auxio_diagnostics</string>
+    <string name="set_key_car_overlay_status" translatable="false">auxio_car_overlay_status</string>
+    <string name="set_key_diagnostics_run_check" translatable="false">auxio_diagnostics_run_check</string>
+    <string name="set_key_diagnostics_export_report" translatable="false">auxio_diagnostics_export_report</string>
+    <string name="set_key_diagnostics_test_stock_disable" translatable="false">auxio_diagnostics_test_stock_disable</string>
+    <string name="set_key_diagnostics_restore_stock" translatable="false">auxio_diagnostics_restore_stock</string>
 
     <string name="set_key_theme" translatable="false">KEY_THEME2</string>
     <string name="set_key_black_theme" translatable="false">KEY_BLACK_THEME</string>

@@ -73,10 +73,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             "open_diagnostics" -> {
                 preference.setOnPreferenceClickListener {
                     findNavController()
-                        .navigateSafe(
-                            org.oxycblt.auxio.settings.RootPreferenceFragmentDirections
-                                .diagnosticsPreferences()
-                        )
+                        .navigateSafe(CarPreferenceFragmentDirections.diagnosticsPreferences())
                     true
                 }
             }
@@ -94,9 +91,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             return
         }
 
-        val prefs =
-            androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-        val overlayEnabled = prefs.getBoolean(KEY_CAR_OVERLAY_ENABLED, false)
+        val overlayEnabled = CarOverlaySettings.isEnabled(requireContext())
 
         preference.summary =
             if (overlayEnabled) {
