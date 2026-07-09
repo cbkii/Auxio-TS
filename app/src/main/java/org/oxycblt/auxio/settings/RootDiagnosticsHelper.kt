@@ -48,13 +48,8 @@ object RootDiagnosticsHelper {
             }
 
             lifecycleScope.launch {
-                preference.summary =
-                    try {
-                        val probed = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
-                        rootStatusSummary(context, probed)
-                    } catch (_: Exception) {
-                        context.getString(R.string.set_root_fs_status_unavailable)
-                    }
+                val probed = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
+                preference.summary = rootStatusSummary(context, probed)
             }
             true
         }
@@ -100,32 +95,20 @@ object RootDiagnosticsHelper {
         lifecycleScope: LifecycleCoroutineScope,
     ) {
         lifecycleScope.launch {
-            val summary =
-                try {
-                    val states =
-                        withContext(Dispatchers.IO) {
-                            Ts18SourceRepairStatePolicy.classifyDirectPaths()
-                        }
-                    val summaryKind = Ts18SourceRepairStatePolicy.summarise(states)
-                    val stateText = sourceRepairKindText(context, summaryKind)
-                    val details =
-                        states.joinToString(separator = "\n") { state ->
-                            "${state.path}: ${sourceRepairKindText(context, state.kind)}"
-                        }
-                    context.getString(
-                        R.string.set_ts18_source_repair_status_summary,
-                        stateText,
-                        details,
-                    )
-                } catch (_: Exception) {
-                    context.getString(
-                        R.string.set_ts18_source_repair_status_summary,
-                        context.getString(R.string.set_ts18_source_repair_unknown),
-                        "",
-                    )
+            val states =
+                withContext(Dispatchers.IO) { Ts18SourceRepairStatePolicy.classifyDirectPaths() }
+            val summaryKind = Ts18SourceRepairStatePolicy.summarise(states)
+            val stateText = sourceRepairKindText(context, summaryKind)
+            val details =
+                states.joinToString(separator = "\n") { state ->
+                    "${state.path}: ${sourceRepairKindText(context, state.kind)}"
                 }
             preference.summary =
-                summary
+                context.getString(
+                    R.string.set_ts18_source_repair_status_summary,
+                    stateText,
+                    details,
+                )
         }
     }
 

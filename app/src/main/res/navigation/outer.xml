@@ -83,11 +83,7 @@
     <fragment
         android:id="@+id/car_preferences_fragment"
         android:name="org.oxycblt.auxio.settings.categories.CarPreferenceFragment"
-        android:label="car_preferences_fragment">
-        <action
-            android:id="@+id/diagnostics_preferences"
-            app:destination="@id/diagnostics_preferences_fragment" />
-    </fragment>
+        android:label="car_preferences_fragment" />
 
     <fragment
         android:id="@+id/diagnostics_preferences_fragment"

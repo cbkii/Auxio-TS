@@ -25,17 +25,17 @@
             app:title="@string/set_ts18_fast_resume_status" />
 
         <Preference
-            app:key="@string/set_key_car_overlay_status"
+            app:key="car_overlay_status"
             app:title="@string/set_floating_controls_permission" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/set_category_diagnostics">
         <Preference
-            app:key="@string/set_key_diagnostics_run_check"
+            app:key="run_check"
             app:title="@string/set_run_dofun_check"
             app:summary="@string/set_run_dofun_check_desc" />
         <Preference
-            app:key="@string/set_key_diagnostics_export_report"
+            app:key="export_report"
             app:title="@string/set_export_dofun_report"
             app:summary="@string/set_export_dofun_report_desc"
             android:enabled="false" />
@@ -45,11 +45,11 @@
         app:title="@string/set_category_advanced_recovery"
         app:iconSpaceReserved="false">
         <Preference
-            app:key="@string/set_key_diagnostics_test_stock_disable"
+            app:key="test_stock_disable"
             app:title="@string/set_disable_stock_music"
             app:summary="@string/set_disable_stock_music_desc" />
         <Preference
-            app:key="@string/set_key_diagnostics_restore_stock"
+            app:key="restore_stock"
             app:title="@string/set_restore_stock_music"
             app:summary="@string/set_restore_stock_music_desc" />
     </PreferenceCategory>
