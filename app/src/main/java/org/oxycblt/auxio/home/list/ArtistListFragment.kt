@@ -35,8 +35,8 @@ import org.oxycblt.auxio.list.recycler.ArtistViewHolder
 import org.oxycblt.auxio.list.recycler.FastScrollRecyclerView
 import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.IndexingState
-import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
 import org.oxycblt.auxio.util.collectImmediately
@@ -155,12 +155,13 @@ class ArtistListFragment :
         indexingState: IndexingState?,
         startupState: StartupReadinessState,
     ) {
-        requireBinding().updateLibraryEmptyState(
-            empty = empty,
-            indexingState = indexingState,
-            startupState = startupState,
-            emptyMessage = R.string.lng_empty_artists,
-        )
+        requireBinding()
+            .updateLibraryEmptyState(
+                empty = empty,
+                indexingState = indexingState,
+                startupState = startupState,
+                emptyMessage = R.string.lng_empty_artists,
+            )
     }
 
     private fun updateSelection(selection: List<Music>) {
