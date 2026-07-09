@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:title="@string/set_car">
+
+    <PreferenceCategory app:title="Dashboard and controls" xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+
+        <androidx.preference.ListPreference
+            app:defaultValue="@string/visualizer_mode_off"
+            app:entries="@array/entries_visualizer_mode"
+            app:entryValues="@array/values_visualizer_mode"
+            app:key="@string/set_key_visualizer_mode"
+            app:title="@string/set_visualizer_mode"
+            app:summary="@string/set_visualizer_mode_desc" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="@string/set_key_driver_side"
+            app:summary="@string/set_driver_side_desc"
+            app:title="@string/set_driver_side" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="@string/set_key_head_unit_large_controls"
+            app:summary="@string/set_head_unit_large_controls_desc"
+            app:title="@string/set_head_unit_large_controls" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="@string/set_key_head_unit_album_art"
+            app:summary="@string/set_head_unit_album_art_desc"
+            app:title="@string/set_head_unit_album_art" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="@string/set_key_head_unit_dashboard_quick_access"
+            app:summary="@string/set_head_unit_dashboard_quick_access_desc"
+            app:title="@string/set_head_unit_dashboard_quick_access" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:title="@string/car_overlay_setting_title">
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="car_overlay_enabled"
+            app:summary="@string/car_overlay_setting_summary"
+            app:title="@string/car_overlay_setting_title" />
+
+        <Preference
+            app:key="car_overlay_reset_position"
+            app:title="@string/car_overlay_reset_position"
+            app:dependency="car_overlay_enabled" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="car_overlay_hide_auxio_fg"
+            app:summary="@string/car_overlay_hide_auxio_fg_desc"
+            app:title="@string/car_overlay_hide_auxio_fg"
+            app:dependency="car_overlay_enabled" />
+
+        <org.oxycblt.auxio.settings.ui.IntListPreference
+            app:defaultValue="90"
+            app:entries="@array/entries_car_overlay_opacity"
+            app:entryValues="@array/values_car_overlay_opacity"
+            app:key="car_overlay_opacity"
+            app:summary="@string/car_overlay_opacity_desc"
+            app:title="@string/car_overlay_opacity"
+            app:dependency="car_overlay_enabled" />
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="@string/set_key_autostart_floating_only"
+            app:summary="@string/set_autostart_floating_only_desc"
+            app:title="@string/set_autostart_floating_only"
+            app:dependency="@string/set_key_autostart_on_boot" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Startup and resume" xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="@string/set_key_autostart_on_boot"
+            app:summary="@string/set_autostart_on_boot_desc"
+            app:title="@string/set_autostart_on_boot" />
+
+        <Preference
+            app:key="@string/set_key_ts18_fast_resume_status"
+            app:summary="@string/set_ts18_fast_resume_status_desc"
+            app:title="@string/set_ts18_fast_resume_status" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Topway / DoFun launcher" xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+
+        <androidx.preference.ListPreference
+            app:defaultValue="AutoAllSafePaths"
+            app:entries="@array/entries_ts18_launcher_integration_mode"
+            app:entryValues="@array/values_ts18_launcher_integration_mode"
+            app:key="@string/set_key_ts18_launcher_integration_mode"
+            app:summary="@string/set_ts18_launcher_integration_mode_desc"
+            app:title="@string/set_ts18_launcher_integration_mode" />
+
+        <Preference
+            app:key="@string/set_head_unit_compat_status"
+            app:summary="@string/set_head_unit_compat_status_desc"
+            app:title="@string/set_head_unit_compat_status" />
+
+        <Preference
+            app:fragment="org.oxycblt.auxio.settings.categories.DiagnosticsRecoveryPreferenceFragment"
+            app:key="@string/set_key_diagnostics"
+            app:title="TS18 DoFun Launcher Integration"
+            app:summary="Run diagnostics and root-assisted resolvers for DoFun launcher" />
+
+        <androidx.preference.ListPreference
+            app:defaultValue="Auto"
+            app:entries="@array/entries_topway_seek_unit_policy"
+            app:entryValues="@array/values_topway_seek_unit_policy"
+            app:key="@string/set_key_topway_seek_unit_policy"
+            app:summary="@string/set_topway_seek_unit_policy_desc"
+            app:title="@string/set_topway_seek_unit_policy" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

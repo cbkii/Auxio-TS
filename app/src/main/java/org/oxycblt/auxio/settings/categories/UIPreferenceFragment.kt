@@ -18,21 +18,11 @@
 
 package org.oxycblt.auxio.settings.categories
 
-import android.content.Context
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
-import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
-import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
-import org.oxycblt.auxio.headunit.root.RootStateHolder
-import org.oxycblt.auxio.headunit.ts18.Ts18SourceRepairStatePolicy
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.ui.UISettings
@@ -48,7 +38,6 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
     @Inject lateinit var uiSettings: UISettings
-    @Inject lateinit var rootStateHolder: RootStateHolder
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
         if (preference.key == getString(R.string.set_key_accent)) {
@@ -85,193 +74,6 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
                         true
                     }
             }
-            getString(R.string.set_head_unit_compat_status) -> {
-                val compatStatus =
-                    HeadUnitCompatManager.currentStatus(
-                        compatModeEnabled = uiSettings.headUnitLandscapeMode,
-                        widgetMetadataPublishable = uiSettings.showHeadUnitAlbumArt,
-                        shortcutCompatReady = uiSettings.showHeadUnitDashboardQuickAccess,
-                        sessionCompatReady = uiSettings.headUnitLandscapeMode,
-                    )
-                val nativeStatusSummary =
-                    when (compatStatus.nativePrivateIntegrationStatus) {
-                        NativePrivateIntegrationStatus.NOT_ENABLED_REQUIRES_VALIDATION ->
-                            getString(
-                                R.string.set_head_unit_compat_native_not_enabled_requires_validation
-                            )
-                    }
-                preference.summary =
-                    getString(
-                        R.string.set_head_unit_compat_status_summary,
-                        statusSummary(compatStatus.compatModeEnabled),
-                        statusSummary(compatStatus.androidFallbackActive),
-                        statusSummary(compatStatus.widgetMetadataPublishable),
-                        statusSummary(compatStatus.shortcutCompatReady),
-                        statusSummary(compatStatus.sessionCompatReady),
-                        nativeStatusSummary,
-                    ) + "\n" + uiSettings.headUnitCompatStatusSummary
-            }
-            KEY_CAR_OVERLAY_ENABLED -> setupCarOverlayEnabled(preference)
-            getString(R.string.set_key_ts18_source_repair_status) ->
-                setupTs18SourceRepairStatus(preference)
-            KEY_CAR_OVERLAY_RESET_POSITION -> setupCarOverlayReset(preference)
-            getString(R.string.set_key_root_fs_status) -> setupRootFsStatus(preference)
-            getString(R.string.set_key_ts18_fast_resume_status) ->
-                setupTs18FastResumeStatus(preference)
         }
-    }
-
-    private fun setupTs18FastResumeStatus(preference: Preference) {
-        preference.summary = getString(R.string.set_ts18_fast_resume_status_desc)
-        preference.setOnPreferenceClickListener(null)
-    }
-
-    private fun setupRootFsStatus(preference: Preference) {
-        val status = rootStateHolder.stateSnapshot()
-        preference.summary = rootStatusSummary(status)
-
-        preference.setOnPreferenceClickListener {
-            val prefs =
-                androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-            val enabled = prefs.getBoolean(getString(R.string.set_key_use_root_fs), false)
-            if (!enabled) {
-                preference.summary = getString(R.string.set_root_fs_status_disabled)
-                return@setOnPreferenceClickListener true
-            }
-
-            viewLifecycleOwner.lifecycleScope.launch {
-                val probed = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
-                preference.summary = rootStatusSummary(probed)
-            }
-            true
-        }
-    }
-
-    private fun rootStatusSummary(state: RootStateHolder.State): String =
-        when (state) {
-            RootStateHolder.State.DisabledByUser -> getString(R.string.set_root_fs_status_disabled)
-            RootStateHolder.State.UnsupportedForVariant ->
-                getString(R.string.set_root_fs_status_unsupported)
-            RootStateHolder.State.Unknown -> getString(R.string.set_root_fs_status_unknown)
-            RootStateHolder.State.Available -> getString(R.string.set_root_fs_status_available)
-            RootStateHolder.State.Denied -> getString(R.string.set_root_fs_status_denied)
-            RootStateHolder.State.TimedOut -> getString(R.string.set_root_fs_status_timed_out)
-            RootStateHolder.State.Unavailable -> getString(R.string.set_root_fs_status_unavailable)
-        }
-
-    private fun setupTs18SourceRepairStatus(preference: Preference) {
-        preference.summary =
-            getString(
-                R.string.set_ts18_source_repair_status_summary,
-                getString(R.string.set_ts18_source_repair_checking),
-                "",
-            )
-        refreshTs18SourceRepairStatus(preference)
-        preference.setOnPreferenceClickListener {
-            refreshTs18SourceRepairStatus(preference)
-            true
-        }
-    }
-
-    private fun refreshTs18SourceRepairStatus(preference: Preference) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val states =
-                withContext(Dispatchers.IO) { Ts18SourceRepairStatePolicy.classifyDirectPaths() }
-            val summaryKind = Ts18SourceRepairStatePolicy.summarise(states)
-            val stateText = sourceRepairKindText(summaryKind)
-            val details =
-                states.joinToString(separator = "\n") { state ->
-                    "${state.path}: ${sourceRepairKindText(state.kind)}"
-                }
-            preference.summary =
-                getString(R.string.set_ts18_source_repair_status_summary, stateText, details)
-        }
-    }
-
-    private fun sourceRepairKindText(kind: Ts18SourceRepairStatePolicy.Kind): String =
-        when (kind) {
-            Ts18SourceRepairStatePolicy.Kind.ALL_SOURCES_READY ->
-                getString(R.string.set_ts18_source_repair_ready)
-            Ts18SourceRepairStatePolicy.Kind.MOUNT_MISSING ->
-                getString(R.string.set_ts18_source_repair_mount_missing)
-            Ts18SourceRepairStatePolicy.Kind.DIRECT_PATH_INACCESSIBLE ->
-                getString(R.string.set_ts18_source_repair_direct_inaccessible)
-            Ts18SourceRepairStatePolicy.Kind.SAF_PERMISSION_MISSING ->
-                getString(R.string.set_ts18_source_repair_saf_permission_missing)
-            Ts18SourceRepairStatePolicy.Kind.SAF_PROVIDER_FAILURE ->
-                getString(R.string.set_ts18_source_repair_saf_provider_failure)
-            Ts18SourceRepairStatePolicy.Kind.SOURCE_EMPTY ->
-                getString(R.string.set_ts18_source_repair_source_empty)
-            Ts18SourceRepairStatePolicy.Kind.SOURCE_CONTAINS_NO_SUPPORTED_AUDIO ->
-                getString(R.string.set_ts18_source_repair_no_audio)
-            Ts18SourceRepairStatePolicy.Kind.MIXED_MULTIPLE_VOLUME_STATE ->
-                getString(R.string.set_ts18_source_repair_mixed)
-            Ts18SourceRepairStatePolicy.Kind.UNKNOWN_FAILURE ->
-                getString(R.string.set_ts18_source_repair_unknown)
-        }
-
-    /**
-     * Called when the car overlay enabled preference is found. Uses reflection to wire the overlay
-     * settings facade since the class only exists in the topwayTwMusic variant.
-     *
-     * The switch is non-persistent (`app:persistent="false"` would be ideal but the preference XML
-     * uses default persistence). Instead, we sync its checked state from CarOverlayPrefs and return
-     * the actual Boolean result from `setEnabled()` so the switch reverts when permission is
-     * needed.
-     */
-    private fun setupCarOverlayEnabled(preference: Preference) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
-        try {
-            val settingsClass = Class.forName("org.oxycblt.auxio.car.overlay.CarOverlaySettings")
-            val instance = settingsClass.getDeclaredField("INSTANCE").get(null)
-            val setEnabledMethod =
-                settingsClass.getMethod(
-                    "setEnabled",
-                    Context::class.java,
-                    Boolean::class.javaPrimitiveType,
-                )
-            val isEnabledMethod = settingsClass.getMethod("isEnabled", Context::class.java)
-
-            // Sync initial checked state from the actual source of truth.
-            val currentlyEnabled = isEnabledMethod.invoke(instance, requireContext()) as Boolean
-            (preference as? androidx.preference.TwoStatePreference)?.isChecked = currentlyEnabled
-
-            preference.onPreferenceChangeListener =
-                Preference.OnPreferenceChangeListener { pref, newValue ->
-                    val result =
-                        setEnabledMethod.invoke(instance, requireContext(), newValue as Boolean)
-                            as Boolean
-                    if (!result) {
-                        // Permission needed — revert switch to unchecked.
-                        (pref as? androidx.preference.TwoStatePreference)?.isChecked = false
-                    }
-                    result
-                }
-        } catch (e: ReflectiveOperationException) {
-            L.w("Car overlay settings class not available: ${e.message}")
-        }
-    }
-
-    private fun setupCarOverlayReset(preference: Preference) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
-        try {
-            val settingsClass = Class.forName("org.oxycblt.auxio.car.overlay.CarOverlaySettings")
-            val instance = settingsClass.getDeclaredField("INSTANCE").get(null)
-            val resetMethod = settingsClass.getMethod("resetPosition", Context::class.java)
-            preference.setOnPreferenceClickListener {
-                resetMethod.invoke(instance, requireContext())
-                true
-            }
-        } catch (e: ReflectiveOperationException) {
-            L.w("Car overlay settings class not available: ${e.message}")
-        }
-    }
-
-    private fun statusSummary(status: Boolean): String =
-        if (status) getString(R.string.lbl_enabled) else getString(R.string.lbl_disabled)
-
-    private companion object {
-        const val KEY_CAR_OVERLAY_ENABLED = "car_overlay_enabled"
-        const val KEY_CAR_OVERLAY_RESET_POSITION = "car_overlay_reset_position"
     }
 }

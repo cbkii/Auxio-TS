@@ -25,7 +25,6 @@ package org.oxycblt.auxio.settings.categories
  */
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
-import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
@@ -34,29 +33,7 @@ import timber.log.Timber as L
 
 class AudioPreferenceFragment : BasePreferenceFragment(R.xml.preferences_audio) {
 
-    override fun onSetupPreference(preference: Preference) {
-        when (preference.key) {
-            getString(R.string.set_key_autostart_floating_only) -> {
-                if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                    preference.isVisible = false
-                    return
-                }
-
-                val prefs =
-                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(
-                        requireContext()
-                    )
-                val overlayEnabled = prefs.getBoolean("car_overlay_enabled", false)
-
-                preference.summary =
-                    if (overlayEnabled) {
-                        getString(R.string.set_autostart_floating_only_desc)
-                    } else {
-                        getString(R.string.set_autostart_floating_only_desc_requires_overlay)
-                    }
-            }
-        }
-    }
+    override fun onSetupPreference(preference: Preference) {}
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
         if (preference.key == getString(R.string.set_key_pre_amp)) {

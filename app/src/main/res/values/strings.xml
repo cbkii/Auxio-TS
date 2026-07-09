@@ -401,6 +401,10 @@
 
     <string name="set_audio">Audio</string>
     <string name="set_audio_desc">Configure sound and playback behavior</string>
+    <string name="set_car">Car &amp; head unit</string>
+    <string name="set_car_desc">Configure Topway specific behaviour and overlay</string>
+    <string name="set_diagnostics">Diagnostics &amp; recovery</string>
+    <string name="set_diagnostics_desc">Status checks and advanced Topway troubleshooting tools</string>
     <string name="set_playback">Playback</string>
     <string name="set_autostart_on_boot">Autostart</string>
     <string name="set_autostart_on_boot_desc">Launch Auxio-TS when the device boots</string>
