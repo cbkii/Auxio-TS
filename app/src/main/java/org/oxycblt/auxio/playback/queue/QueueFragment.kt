@@ -126,7 +126,7 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
         index: Int,
         isPlaying: Boolean,
         isLoaded: Boolean,
-        hasSong: Boolean,
+        hasSong: Boolean
     ) {
         val binding = requireBinding()
 
