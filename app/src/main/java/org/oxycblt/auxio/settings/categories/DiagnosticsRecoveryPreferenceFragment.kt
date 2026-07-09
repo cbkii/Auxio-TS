@@ -140,14 +140,10 @@ class DiagnosticsRecoveryPreferenceFragment :
             preference.isVisible = false
             return
         }
-        try {
-            val enabled = android.provider.Settings.canDrawOverlays(requireContext())
-            preference.summary =
-                if (enabled) getString(R.string.set_diagnostics_granted)
-                else getString(R.string.set_diagnostics_not_granted)
-        } catch (e: ReflectiveOperationException) {
-            preference.isVisible = false
-        }
+        val enabled = android.provider.Settings.canDrawOverlays(requireContext())
+        preference.summary =
+            if (enabled) getString(R.string.set_diagnostics_granted)
+            else getString(R.string.set_diagnostics_not_granted)
     }
 
     private fun statusSummary(status: Boolean): String =
@@ -180,7 +176,12 @@ class DiagnosticsRecoveryPreferenceFragment :
             lastReportStr = sb.toString()
 
             pref?.summary =
-                "Check complete. Path: ${report.detectedPath}. Root: ${report.rootState}. Packages: ${report.installedPackages.joinToString()}"
+                getString(
+                    R.string.set_diagnostics_check_complete_summary,
+                    report.detectedPath,
+                    report.rootState.toString(),
+                    report.installedPackages.joinToString(),
+                )
             pref?.isEnabled = true
             findPreference<Preference>("export_report")?.isEnabled = true
             updateUiState()
@@ -191,27 +192,31 @@ class DiagnosticsRecoveryPreferenceFragment :
         val report = lastReportStr ?: return
         val clipboard =
             requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("TS18 DoFun Report", report)
+        val clip =
+            ClipData.newPlainText(getString(R.string.set_diagnostics_clipboard_label), report)
         clipboard.setPrimaryClip(clip)
-        Toast.makeText(requireContext(), "Report copied to clipboard", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+                requireContext(),
+                getString(R.string.set_diagnostics_report_copied),
+                Toast.LENGTH_SHORT,
+            )
+            .show()
     }
 
     private fun showDisableStockConfirmation() {
         AlertDialog.Builder(requireContext())
-            .setTitle("Disable stock com.tw.music?")
-            .setMessage(
-                "This will use root to disable the stock com.tw.music package for user 0. This is reversible. Do you want to continue?"
-            )
-            .setPositiveButton("Disable") { _, _ ->
+            .setTitle(getString(R.string.set_diagnostics_disable_stock_title))
+            .setMessage(getString(R.string.set_diagnostics_disable_stock_message))
+            .setPositiveButton(getString(R.string.set_diagnostics_disable_stock_button)) { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
                     val success = resolver.testStockSelectionDisabledUser0()
                     val msg =
-                        if (success) "Disabled stock com.tw.music successfully"
-                        else "Failed to disable stock com.tw.music"
+                        if (success) getString(R.string.set_diagnostics_disable_stock_success)
+                        else getString(R.string.set_diagnostics_disable_stock_failure)
                     Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(R.string.set_diagnostics_cancel_button), null)
             .show()
     }
 
@@ -219,8 +224,8 @@ class DiagnosticsRecoveryPreferenceFragment :
         viewLifecycleOwner.lifecycleScope.launch {
             val success = resolver.restoreStockSelectionDisabledUser0()
             val msg =
-                if (success) "Enabled stock com.tw.music successfully"
-                else "Failed to enable stock com.tw.music"
+                if (success) getString(R.string.set_diagnostics_restore_stock_success)
+                else getString(R.string.set_diagnostics_restore_stock_failure)
             Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
         }
     }
