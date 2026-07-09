@@ -18,6 +18,26 @@
 
 package org.oxycblt.auxio.music
 
+import org.oxycblt.auxio.music.locations.LocationMode
+
+/** UI-visible startup/readiness state for launch UX. */
+sealed interface StartupReadinessState {
+    /** The repository is deciding whether a cached library can be restored. */
+    data object CheckingCachedLibrary : StartupReadinessState
+
+    /** Cached or indexed library is ready for normal home rendering. */
+    data object Ready : StartupReadinessState
+
+    /** No source is configured and no cached library is known/restorable. */
+    data object NeedsMusicSource : StartupReadinessState
+
+    /** A source is configured, but cached startup could not recover a usable library. */
+    data object CachedLibraryUnavailable : StartupReadinessState
+
+    /** A prior scan intentionally produced an empty library. */
+    data object EmptyLibrary : StartupReadinessState
+}
+
 /**
  * Pure startup state-machine for restoring the persisted music library before any slow scan.
  *
@@ -134,6 +154,28 @@ object StartupLibraryPolicy {
                 )
         }
 
+    fun isMusicSourceConfigured(locationMode: LocationMode, sourceCount: Int): Boolean =
+        when (locationMode) {
+            LocationMode.SAF,
+            LocationMode.DIRECT_FS -> sourceCount > 0
+            // MediaStore is the selected system music provider. An empty filter list means "all".
+            LocationMode.MEDIA_STORE -> true
+        }
+
+    fun startupReadinessAfterDecision(
+        decision: Decision,
+        sourceConfigured: Boolean,
+        cachedSongCount: Int?,
+    ): StartupReadinessState =
+        when {
+            cachedSongCount != null && cachedSongCount > 0 -> StartupReadinessState.Ready
+            decision.libraryState == LibraryState.USABLE -> StartupReadinessState.Ready
+            decision.libraryState == LibraryState.EMPTY -> StartupReadinessState.EmptyLibrary
+            sourceConfigured -> StartupReadinessState.CachedLibraryUnavailable
+            decision.libraryState == LibraryState.NEVER -> StartupReadinessState.NeedsMusicSource
+            else -> StartupReadinessState.CachedLibraryUnavailable
+        }
+
     fun onIndexFailed(priorState: LibraryState): LibraryState =
         if (priorState == LibraryState.NEVER) LibraryState.RECOVERY else priorState
 }
@@ -157,7 +199,11 @@ object StartupLibraryStartup {
         emitCachedLoadFailure: suspend (Exception) -> Unit,
         setLibraryState: (LibraryState) -> Unit,
         requestIndex: (withCache: Boolean) -> Unit,
+        setStartupReadinessState: (StartupReadinessState) -> Unit = {},
+        sourceConfigured: Boolean = true,
     ): StartupLibraryPolicy.Decision {
+        setStartupReadinessState(StartupReadinessState.CheckingCachedLibrary)
+        var cachedSongCountOrNull: Int? = null
         var decision =
             if (
                 StartupLibraryPolicy.shouldAttemptCachedLoad(
@@ -169,6 +215,7 @@ object StartupLibraryStartup {
                 try {
                     val cached = loadCachedLibrary()
                     val songCount = cachedSongCount(cached)
+                    cachedSongCountOrNull = songCount
                     StartupLibraryPolicy.onCachedLoadSucceeded(
                             priorState,
                             songCount,
@@ -199,6 +246,13 @@ object StartupLibraryStartup {
         }
 
         setLibraryState(decision.libraryState)
+        setStartupReadinessState(
+            StartupLibraryPolicy.startupReadinessAfterDecision(
+                decision,
+                sourceConfigured,
+                cachedSongCountOrNull,
+            )
+        )
         if (decision.requestScan) {
             requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
         }

@@ -229,6 +229,8 @@ constructor(
     val chooseMusicLocations: Event<Unit>
         get() = _chooseMusicLocations
 
+    private var automaticSourceDialogStarted = false
+
     init {
         homeGenerator.attach()
     }
@@ -365,6 +367,12 @@ constructor(
 
     fun startChooseMusicLocations() {
         _chooseMusicLocations.put(Unit)
+    }
+
+    fun markAutomaticSourceDialogStarted(): Boolean {
+        if (automaticSourceDialogStarted) return false
+        automaticSourceDialogStarted = true
+        return true
     }
 
     fun showSettings() {

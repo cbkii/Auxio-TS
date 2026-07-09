@@ -23,6 +23,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.music.locations.LocationMode
 
 class StartupLibraryPolicyTest {
     @Test
@@ -152,6 +153,128 @@ class StartupLibraryPolicyTest {
                 priorState = LibraryState.NEVER,
             )
         )
+    }
+
+
+    @Test
+    fun `ui waits while prior usable cache may exist`() {
+        assertTrue(
+            StartupLibraryPolicy.shouldAttemptCachedLoad(
+                hasInMemoryLibrary = false,
+                revisionKnown = true,
+                priorState = LibraryState.USABLE,
+            )
+        )
+    }
+
+    @Test
+    fun `cached library with songs is ready and needs no source dialog`() {
+        val state =
+            StartupLibraryPolicy.startupReadinessAfterDecision(
+                StartupLibraryPolicy.onCachedLoadSucceeded(LibraryState.USABLE, 3, false),
+                sourceConfigured = false,
+                cachedSongCount = 3,
+            )
+
+        assertEquals(StartupReadinessState.Ready, state)
+    }
+
+    @Test
+    fun `first launch without source or cache needs source dialog`() {
+        val state =
+            StartupLibraryPolicy.startupReadinessAfterDecision(
+                StartupLibraryPolicy.onNoCachedRevision(LibraryState.NEVER, false),
+                sourceConfigured = false,
+                cachedSongCount = null,
+            )
+
+        assertEquals(StartupReadinessState.NeedsMusicSource, state)
+    }
+
+
+    @Test
+    fun `SAF persisted but currently not openable still counts as configured for startup UI`() {
+        assertTrue(StartupLibraryPolicy.isMusicSourceConfigured(LocationMode.SAF, sourceCount = 1))
+    }
+
+    @Test
+    fun `DIRECT FS persisted but currently not openable still counts as configured for startup UI`() {
+        assertTrue(
+            StartupLibraryPolicy.isMusicSourceConfigured(LocationMode.DIRECT_FS, sourceCount = 1)
+        )
+    }
+
+    @Test
+    fun `no persisted SAF source is not configured for startup UI`() {
+        assertFalse(StartupLibraryPolicy.isMusicSourceConfigured(LocationMode.SAF, sourceCount = 0))
+    }
+
+    @Test
+    fun `configured SAF source with no cache does not need automatic source dialog`() {
+        assertTrue(StartupLibraryPolicy.isMusicSourceConfigured(LocationMode.SAF, sourceCount = 1))
+        val state =
+            StartupLibraryPolicy.startupReadinessAfterDecision(
+                StartupLibraryPolicy.onNoCachedRevision(LibraryState.NEVER, false),
+                sourceConfigured = true,
+                cachedSongCount = null,
+            )
+
+        assertEquals(StartupReadinessState.CachedLibraryUnavailable, state)
+    }
+
+    @Test
+    fun `configured DIRECT FS source with no cache does not need automatic source dialog`() {
+        assertTrue(
+            StartupLibraryPolicy.isMusicSourceConfigured(LocationMode.DIRECT_FS, sourceCount = 1)
+        )
+    }
+
+    @Test
+    fun `MEDIA STORE mode is configured even with empty filters`() {
+        assertTrue(
+            StartupLibraryPolicy.isMusicSourceConfigured(LocationMode.MEDIA_STORE, sourceCount = 0)
+        )
+    }
+
+    @Test
+    fun `topway first launch suppresses auto scan but still needs source when no source or cache`() =
+        runBlocking {
+            val harness =
+                StartupHarness(
+                    priorState = LibraryState.NEVER,
+                    revisionKnown = false,
+                    isTopwayCompat = true,
+                    sourceConfigured = false,
+                )
+
+            harness.run()
+
+            assertEquals(emptyList<Boolean>(), harness.scanRequests)
+            assertEquals(StartupReadinessState.NeedsMusicSource, harness.startupState)
+        }
+
+    @Test
+    fun `library state empty is intentional empty readiness`() {
+        val state =
+            StartupLibraryPolicy.startupReadinessAfterDecision(
+                StartupLibraryPolicy.onCachedLoadSucceeded(LibraryState.EMPTY, 0, false),
+                sourceConfigured = false,
+                cachedSongCount = 0,
+            )
+
+        assertEquals(StartupReadinessState.EmptyLibrary, state)
+    }
+
+    @Test
+    fun `recovery with configured source does not need automatic source dialog`() {
+        val state =
+            StartupLibraryPolicy.startupReadinessAfterDecision(
+                StartupLibraryPolicy.onCachedLoadFailed(LibraryState.USABLE, false),
+                sourceConfigured = true,
+                cachedSongCount = null,
+            )
+
+        assertEquals(StartupReadinessState.CachedLibraryUnavailable, state)
     }
 
     @Test
@@ -331,12 +454,14 @@ class StartupLibraryPolicyTest {
         private val hasInMemoryLibrary: Boolean = false,
         private val lastScanFailed: Boolean = false,
         private val isTopwayCompat: Boolean = false,
+        private val sourceConfigured: Boolean = true,
     ) {
         var persistedState: LibraryState? = null
         var emittedSongCount: Int? = null
         var cachedLoadFailures = 0
         var cachedLoadAttempts = 0
         val scanRequests = mutableListOf<Boolean>()
+        var startupState: StartupReadinessState? = null
 
         suspend fun run(
             cachedSongCount: Int = 0,
@@ -358,6 +483,8 @@ class StartupLibraryPolicyTest {
                 emitCachedLoadFailure = { cachedLoadFailures++ },
                 setLibraryState = { persistedState = it },
                 requestIndex = { scanRequests.add(it) },
+                setStartupReadinessState = { startupState = it },
+                sourceConfigured = sourceConfigured,
             )
     }
 }

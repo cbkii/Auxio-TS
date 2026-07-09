@@ -56,6 +56,9 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** The currently configured SAF query (if any) * */
     var safQuery: SAF.Query
 
+    /** Raw persisted SAF/DirectFS source count, without requiring paths to open successfully. */
+    val configuredSourceCount: Int
+
     /** The currently configured MediaStore query (if any) * */
     var mediaStoreQuery: MediaStore.Query
 
@@ -219,6 +222,9 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             }
         }
 
+    override val configuredSourceCount: Int
+        get() = rawConfiguredSourceCount(fileOnly = locationMode == LocationMode.DIRECT_FS)
+
     override var mediaStoreQuery: MediaStore.Query
         get() {
             val filterMode =
@@ -298,6 +304,13 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     private fun List<Location>.stringify(): String =
         joinToString(separator = ";") { it.uri.toString().replace(";", "\\;") }
+
+    private fun rawConfiguredSourceCount(fileOnly: Boolean): Int =
+        unlikelyToBeNull(
+                sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
+            )
+            .splitEscaped { it == ';' }
+            .count { normalizePersistedLocation(it, fileOnly) != null }
 
     private fun String.toOpenedLocations(fileOnly: Boolean): List<Location.Opened> =
         splitEscaped { it == ';' }
