@@ -132,6 +132,26 @@ fun <T1, T2, T3> Fragment.collectImmediately(
     launch { combine.collect { block(it.first, it.second, it.third) } }
 }
 
+/** Like [collectImmediately], but with four [StateFlow] instances. */
+fun <T1, T2, T3, T4> Fragment.collectImmediately(
+    a: StateFlow<T1>,
+    b: StateFlow<T2>,
+    c: StateFlow<T3>,
+    d: StateFlow<T4>,
+    block: (T1, T2, T3, T4) -> Unit,
+) {
+    block(a.value, b.value, c.value, d.value)
+    val combine = combine(a, b, c, d) { a1, b2, c3, d4 -> Quad(a1, b2, c3, d4) }
+    launch { combine.collect { block(it.first, it.second, it.third, it.fourth) } }
+}
+
+private data class Quad<T1, T2, T3, T4>(
+    val first: T1,
+    val second: T2,
+    val third: T3,
+    val fourth: T4,
+)
+
 /**
  * Launch a [Fragment] co-routine whenever the [Lifecycle] hits the given [Lifecycle.State]. This
  * should always been used when launching [Fragment] co-routines was it will not result in

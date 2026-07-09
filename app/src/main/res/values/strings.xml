@@ -162,6 +162,9 @@
     <string name="set_path_root_unavailable">Root-assisted DirectFS is not available for this raw storage path</string>
     <string name="set_path_open_failed">The source path was found but could not be opened on this volume</string>
     <string name="lng_loading_music_library">Loading your music library…</string>
+    <string name="lng_loading_cached_music_library">Loading your music library…</string>
+    <string name="lng_music_source_needed">Choose where Auxio-TS should load your music from.</string>
+    <string name="lng_cached_library_unavailable">Your music source is configured, but the cached library could not be loaded. Check the source or refresh when ready.</string>
     <string name="err_no_equalizer_app">No TS18 EQ/DSP or Android equalizer app is available</string>
     <string name="lbl_shuffle_shortcut_short">Shuffle</string>
     <!-- Limit to 25 characters -->

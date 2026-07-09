@@ -70,6 +70,7 @@ import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.ui.FadingToolbarOffsetListener
@@ -230,6 +231,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         collect(detailModel.toShow.flow, ::handleShow)
         collect(listModel.menu.flow, ::handleMenu)
         collectImmediately(listModel.selected, ::updateSelection)
+        collectImmediately(musicModel.startupReadinessState, ::handleStartupReadinessState)
         collectImmediately(musicModel.indexingState) {
             updateIndexerState(it)
             setupHeadUnitQuickAccess(requireBinding())
@@ -682,6 +684,19 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         // Make sure tabs are set up to also follow the new ViewPager configuration.
         setupPager(binding)
         homeModel.recreateTabs.consume()
+    }
+
+    private fun handleStartupReadinessState(state: StartupReadinessState) {
+        if (state !is StartupReadinessState.NeedsMusicSource) {
+            return
+        }
+        val navController = findNavController()
+        if (navController.currentDestination?.id != R.id.home_fragment) {
+            return
+        }
+        if (homeModel.markAutomaticSourceDialogStarted()) {
+            navController.navigateSafe(HomeFragmentDirections.chooseLocations())
+        }
     }
 
     private fun handleChooseFolders(unit: Unit?) {

@@ -78,6 +78,9 @@ interface MusicRepository {
     /** The current state of music loading. Null if no load has occurred yet. */
     val indexingState: IndexingState?
 
+    /** UI-visible startup/readiness state used to avoid alarming launch empty states. */
+    val startupReadinessState: StartupReadinessState
+
     /**
      * Add an [UpdateListener] to receive updates from this instance.
      *
@@ -107,6 +110,10 @@ interface MusicRepository {
      * @param listener The [IndexingListener] to remove.
      */
     fun removeIndexingListener(listener: IndexingListener)
+
+    fun addStartupReadinessListener(listener: StartupReadinessListener)
+
+    fun removeStartupReadinessListener(listener: StartupReadinessListener)
 
     /**
      * Synchronously returns the [Music] item with the given [Music.UID].
@@ -212,6 +219,10 @@ interface MusicRepository {
         fun onIndexingStateChanged()
     }
 
+    interface StartupReadinessListener {
+        fun onStartupReadinessStateChanged()
+    }
+
     /** A worker that performs library indexing and tag extraction. */
     interface IndexingWorker {
         /**
@@ -252,6 +263,8 @@ constructor(
 ) : MusicRepository {
     private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
     private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
+    private val startupReadinessListeners =
+        CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
 
     @Volatile override var library: MutableLibrary? = null
@@ -259,6 +272,12 @@ constructor(
     @Volatile private var currentIndexingState: IndexingState? = null
     override val indexingState: IndexingState?
         get() = currentIndexingState ?: previousCompletedState
+
+    @Volatile
+    private var currentStartupReadinessState: StartupReadinessState =
+        StartupReadinessState.CheckingCachedLibrary
+    override val startupReadinessState: StartupReadinessState
+        get() = currentStartupReadinessState
 
     override fun addUpdateListener(listener: MusicRepository.UpdateListener) {
         L.d("Adding $listener to update listeners")
@@ -283,6 +302,17 @@ constructor(
         L.d("Removing $listener from indexing listeners")
         if (!indexingListeners.remove(listener)) {
             L.w("Indexing listener $listener was not added prior, cannot remove")
+        }
+    }
+
+    override fun addStartupReadinessListener(listener: MusicRepository.StartupReadinessListener) {
+        startupReadinessListeners.add(listener)
+        listener.onStartupReadinessStateChanged()
+    }
+
+    override fun removeStartupReadinessListener(listener: MusicRepository.StartupReadinessListener) {
+        if (!startupReadinessListeners.remove(listener)) {
+            L.w("Startup readiness listener $listener was not added prior, cannot remove")
         }
     }
 
@@ -386,6 +416,12 @@ constructor(
                     },
                     setLibraryState = { musicSettings.libraryState = it },
                     requestIndex = { withCache -> worker.requestIndex(withCache) },
+                    setStartupReadinessState = ::emitStartupReadinessState,
+                    sourceConfigured =
+                        StartupLibraryPolicy.isMusicSourceConfigured(
+                            musicSettings.locationMode,
+                            musicSettings.safQuery.source.size,
+                        ),
                 )
             L.d(
                 "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
@@ -485,6 +521,13 @@ constructor(
             musicSettings.libraryState =
                 if (result.library.songs.isEmpty()) LibraryState.EMPTY else LibraryState.USABLE
             musicSettings.lastScanFailed = false
+            emitStartupReadinessState(
+                if (musicSettings.libraryState == LibraryState.EMPTY) {
+                    StartupReadinessState.EmptyLibrary
+                } else {
+                    StartupReadinessState.Ready
+                }
+            )
             L.i("Indexing complete [state=${musicSettings.libraryState}]")
             emitIndexingCompletion(null)
         }
@@ -617,6 +660,13 @@ constructor(
             Storage(cache, covers, storedPlaylists),
             Interpretation(nameFactory, separators),
         )
+    }
+
+    private fun emitStartupReadinessState(state: StartupReadinessState) {
+        currentStartupReadinessState = state
+        for (listener in startupReadinessListeners) {
+            listener.onStartupReadinessStateChanged()
+        }
     }
 
     private suspend fun emitIndexingProgress(progress: IndexingProgress) {
