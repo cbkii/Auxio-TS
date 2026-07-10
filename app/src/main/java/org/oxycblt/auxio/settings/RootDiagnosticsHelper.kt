@@ -127,8 +127,7 @@ object RootDiagnosticsHelper {
                         "",
                     )
                 }
-            preference.summary =
-                summary
+            preference.summary = summary
         }
     }
 

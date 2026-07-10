@@ -272,15 +272,12 @@ class DiagnosticsRecoveryPreferenceFragment :
     }
 
     private fun restoreStock() {
-        val pref =
-            findPreference<Preference>(getString(R.string.set_key_diagnostics_restore_stock))
+        val pref = findPreference<Preference>(getString(R.string.set_key_diagnostics_restore_stock))
         pref?.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val success =
-                    withContext(Dispatchers.IO) {
-                        resolver.restoreStockSelectionDisabledUser0()
-                    }
+                    withContext(Dispatchers.IO) { resolver.restoreStockSelectionDisabledUser0() }
                 val ctx = context ?: return@launch
                 val msg =
                     if (success) {
