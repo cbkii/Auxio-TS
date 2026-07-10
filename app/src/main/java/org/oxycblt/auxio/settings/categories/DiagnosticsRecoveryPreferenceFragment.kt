@@ -237,27 +237,34 @@ class DiagnosticsRecoveryPreferenceFragment :
                     )
                 pref?.isEnabled = false
                 viewLifecycleOwner.lifecycleScope.launch {
-                    val msg =
-                        try {
-                            val success =
-                                withContext(Dispatchers.IO) {
-                                    resolver.testStockSelectionDisabledUser0()
-                                }
-                            val ctx = context ?: return@launch
-                            if (success) ctx.getString(R.string.set_diagnostics_disable_success)
-                            else ctx.getString(R.string.set_diagnostics_disable_failed)
-                        } catch (e: Exception) {
-                            if (e is CancellationException) throw e
-                            val ctx = context ?: return@launch
-                            ctx.getString(R.string.set_diagnostics_disable_failed)
-                        } finally {
-                            if (isAdded) {
-                                pref?.isEnabled = true
-                                updateUiState()
+                    try {
+                        val success =
+                            withContext(Dispatchers.IO) {
+                                resolver.testStockSelectionDisabledUser0()
                             }
+                        val ctx = context ?: return@launch
+                        val msg =
+                            if (success) {
+                                ctx.getString(R.string.set_diagnostics_disable_success)
+                            } else {
+                                ctx.getString(R.string.set_diagnostics_disable_failed)
+                            }
+                        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        val ctx = context ?: return@launch
+                        Toast.makeText(
+                                ctx,
+                                ctx.getString(R.string.set_diagnostics_disable_failed),
+                                Toast.LENGTH_SHORT,
+                            )
+                            .show()
+                    } finally {
+                        if (isAdded) {
+                            pref?.isEnabled = true
+                            updateUiState()
                         }
-                    val ctx = context ?: return@launch
-                    Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
             .setNegativeButton(getString(R.string.set_diagnostics_cancel_btn), null)
@@ -269,27 +276,34 @@ class DiagnosticsRecoveryPreferenceFragment :
             findPreference<Preference>(getString(R.string.set_key_diagnostics_restore_stock))
         pref?.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
-            val msg =
-                try {
-                    val success =
-                        withContext(Dispatchers.IO) {
-                            resolver.restoreStockSelectionDisabledUser0()
-                        }
-                    val ctx = context ?: return@launch
-                    if (success) ctx.getString(R.string.set_diagnostics_restore_success)
-                    else ctx.getString(R.string.set_diagnostics_restore_failed)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    val ctx = context ?: return@launch
-                    ctx.getString(R.string.set_diagnostics_restore_failed)
-                } finally {
-                    if (isAdded) {
-                        pref?.isEnabled = true
-                        updateUiState()
+            try {
+                val success =
+                    withContext(Dispatchers.IO) {
+                        resolver.restoreStockSelectionDisabledUser0()
                     }
+                val ctx = context ?: return@launch
+                val msg =
+                    if (success) {
+                        ctx.getString(R.string.set_diagnostics_restore_success)
+                    } else {
+                        ctx.getString(R.string.set_diagnostics_restore_failed)
+                    }
+                Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                val ctx = context ?: return@launch
+                Toast.makeText(
+                        ctx,
+                        ctx.getString(R.string.set_diagnostics_restore_failed),
+                        Toast.LENGTH_SHORT,
+                    )
+                    .show()
+            } finally {
+                if (isAdded) {
+                    pref?.isEnabled = true
+                    updateUiState()
                 }
-            val ctx = context ?: return@launch
-            Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
