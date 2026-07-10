@@ -19,14 +19,17 @@
 package org.oxycblt.auxio.settings.categories
 
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import coil3.ImageLoader
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.BasePreferenceFragment
+import org.oxycblt.auxio.settings.RootDiagnosticsHelper
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.util.navigateSafe
 import timber.log.Timber as L
@@ -39,6 +42,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) {
     private val musicModel: MusicViewModel by viewModels()
+    @Inject lateinit var rootStateHolder: RootStateHolder
     @Inject lateinit var imageLoader: ImageLoader
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
@@ -84,6 +88,21 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     musicModel.refresh()
                     true
                 }
+        }
+        if (preference.key == getString(R.string.set_key_root_fs_status)) {
+            RootDiagnosticsHelper.setupRootFsStatus(
+                requireContext(),
+                preference,
+                rootStateHolder,
+                viewLifecycleOwner.lifecycleScope,
+            )
+        }
+        if (preference.key == getString(R.string.set_key_ts18_source_repair_status)) {
+            RootDiagnosticsHelper.setupTs18SourceRepairStatus(
+                requireContext(),
+                preference,
+                viewLifecycleOwner.lifecycleScope,
+            )
         }
     }
 }

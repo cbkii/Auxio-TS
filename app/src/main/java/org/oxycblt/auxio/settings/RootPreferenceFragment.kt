@@ -82,6 +82,16 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 L.d("Navigating to audio preferences")
                 findNavController().navigateSafe(RootPreferenceFragmentDirections.audioPeferences())
             }
+            getString(R.string.set_key_car) -> {
+                L.d("Navigating to car preferences")
+                findNavController().navigateSafe(RootPreferenceFragmentDirections.carPreferences())
+            }
+            getString(R.string.set_key_diagnostics) -> {
+                L.d("Navigating to diagnostics preferences")
+                findNavController()
+                    .navigateSafe(RootPreferenceFragmentDirections.diagnosticsPreferences())
+            }
+
             getString(R.string.set_key_reindex) -> musicModel.refresh()
             getString(R.string.set_key_rescan) -> musicModel.rescan()
             else -> return super.onPreferenceTreeClick(preference)

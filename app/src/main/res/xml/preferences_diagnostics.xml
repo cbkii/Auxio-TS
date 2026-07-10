@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    app:title="@string/set_diagnostics">
+
+    <PreferenceCategory app:title="@string/set_category_status">
+        <Preference
+            app:key="@string/set_head_unit_compat_status"
+            app:summary="@string/set_head_unit_compat_status_desc"
+            app:title="@string/set_head_unit_compat_status" />
+
+        <Preference
+            app:key="@string/set_key_ts18_source_repair_status"
+            app:summary="@string/set_ts18_source_repair_status_desc"
+            app:title="@string/set_ts18_source_repair_status" />
+
+        <Preference
+            app:key="@string/set_key_root_fs_status"
+            app:summary="@string/set_root_fs_status_desc"
+            app:title="@string/set_root_fs_status" />
+
+        <Preference
+            app:key="@string/set_key_ts18_fast_resume_status"
+            app:summary="@string/set_ts18_fast_resume_status_desc"
+            app:title="@string/set_ts18_fast_resume_status" />
+
+        <Preference
+            app:key="@string/set_key_car_overlay_status"
+            app:title="@string/set_floating_controls_permission" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/set_category_diagnostics">
+        <Preference
+            app:key="@string/set_key_diagnostics_run_check"
+            app:title="@string/set_run_dofun_check"
+            app:summary="@string/set_run_dofun_check_desc" />
+        <Preference
+            app:key="@string/set_key_diagnostics_export_report"
+            app:title="@string/set_export_dofun_report"
+            app:summary="@string/set_export_dofun_report_desc"
+            android:enabled="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:title="@string/set_category_advanced_recovery"
+        app:iconSpaceReserved="false">
+        <Preference
+            app:key="@string/set_key_diagnostics_test_stock_disable"
+            app:title="@string/set_disable_stock_music"
+            app:summary="@string/set_disable_stock_music_desc" />
+        <Preference
+            app:key="@string/set_key_diagnostics_restore_stock"
+            app:title="@string/set_restore_stock_music"
+            app:summary="@string/set_restore_stock_music_desc" />
+    </PreferenceCategory>
+
+</PreferenceScreen>
