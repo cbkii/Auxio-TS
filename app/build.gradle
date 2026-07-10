@@ -17,8 +17,8 @@ android {
 
     defaultConfig {
         applicationId namespace
-        versionName "6.0.2"
-        versionCode 90
+        versionName "6.0.3"
+        versionCode 91
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
