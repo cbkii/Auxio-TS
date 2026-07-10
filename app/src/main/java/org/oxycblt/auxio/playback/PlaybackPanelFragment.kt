@@ -479,82 +479,84 @@ class PlaybackPanelFragment :
         if (visualizer == null) {
             playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
             try {
-                visualizer =
-                    Visualizer(sessionId).apply {
-                        visualizerSessionId = sessionId
-                        val captureRange = Visualizer.getCaptureSizeRange()
-                        captureSize =
-                            captureRange.filter { it <= 512 }.maxOrNull() ?: captureRange[0]
-                        val maxCaptureRate = Visualizer.getMaxCaptureRate()
-                        val captureRate = minOf(maxCaptureRate, 30_000).coerceAtLeast(1)
-                        try {
-                            scalingMode = Visualizer.SCALING_MODE_AS_PLAYED
-                        } catch (e: RuntimeException) {
-                            L.d(
-                                e,
-                                "Visualizer as-played scaling unavailable; continuing with default",
-                            )
-                        }
+                val candidate = Visualizer(sessionId)
+                val captureRange = Visualizer.getCaptureSizeRange()
+                val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
+                candidate.captureSize = targetSize
+                val maxCaptureRate = Visualizer.getMaxCaptureRate()
+                val targetRate = minOf(maxCaptureRate, 30_000).coerceAtLeast(1)
+                try {
+                    candidate.scalingMode = Visualizer.SCALING_MODE_AS_PLAYED
+                } catch (e: RuntimeException) {
+                    L.d(e, "Visualizer as-played scaling unavailable; continuing with default")
+                }
 
-                        val listenerStatus =
-                            setDataCaptureListener(
-                                object : Visualizer.OnDataCaptureListener {
-                                    private var frameCount = 0
+                val listenerStatus =
+                    candidate.setDataCaptureListener(
+                        object : Visualizer.OnDataCaptureListener {
+                            private var frameCount = 0
 
-                                    override fun onWaveFormDataCapture(
-                                        visualizer: Visualizer,
-                                        waveform: ByteArray,
-                                        samplingRate: Int,
-                                    ) {}
+                            override fun onWaveFormDataCapture(
+                                visualizer: Visualizer,
+                                waveform: ByteArray,
+                                samplingRate: Int,
+                            ) {}
 
-                                    override fun onFftDataCapture(
-                                        visualizer: Visualizer,
-                                        fft: ByteArray,
-                                        samplingRate: Int,
-                                    ) {
-                                        if (++frameCount == 1) {
-                                            L.d(
-                                                "Visualizer FFT frames started for session $sessionId " +
-                                                    "samplingRate=${samplingRate}mHz " +
-                                                    "(${samplingRate / 1000f}Hz)"
-                                            )
-                                        }
+                            override fun onFftDataCapture(
+                                visualizer: Visualizer,
+                                fft: ByteArray,
+                                samplingRate: Int,
+                            ) {
+                                if (++frameCount == 1) {
+                                    L.d(
+                                        "Visualizer FFT frames started for session $sessionId " +
+                                            "samplingRate=${samplingRate}mHz " +
+                                            "(${samplingRate / 1000f}Hz)"
+                                    )
+                                }
 
-                                        val hasUsableData =
-                                            fft.size > 2 &&
-                                                fft.slice(2..fft.lastIndex).any { it != 0.toByte() }
-                                        if (hasUsableData) {
-                                            playbackModel.updateVisualizerState(
-                                                VisualizerState.Live(
-                                                    fft.copyOf(),
-                                                    samplingRate,
-                                                    android.os.SystemClock.uptimeMillis(),
-                                                )
-                                            )
-                                        }
+                                var hasUsableData = false
+                                for (i in 2 until fft.size) {
+                                    if (fft[i] != 0.toByte()) {
+                                        hasUsableData = true
+                                        break
                                     }
-                                },
-                                captureRate,
-                                false,
-                                true,
-                            )
-                        if (listenerStatus != Visualizer.SUCCESS) {
-                            L.w(
-                                "Visualizer setDataCaptureListener failed with status: $listenerStatus"
-                            )
-                            playbackModel.updateVisualizerState(
-                                VisualizerState.Failed("Listener registration failed")
-                            )
-                            return@apply
-                        }
+                                }
+                                if (hasUsableData) {
+                                    playbackModel.updateVisualizerState(
+                                        VisualizerState.Live(
+                                            fft.copyOf(),
+                                            samplingRate,
+                                            android.os.SystemClock.uptimeMillis(),
+                                        )
+                                    )
+                                }
+                            }
+                        },
+                        targetRate,
+                        false,
+                        true,
+                    )
 
-                        enabled = true
-                        L.d(
-                            "Visualizer started for session $sessionId " +
-                                "with captureSize=$captureSize " +
-                                "captureRate=${captureRate}mHz (${captureRate / 1000f}Hz)"
-                        )
-                    }
+                if (listenerStatus != Visualizer.SUCCESS) {
+                    L.w("Visualizer setDataCaptureListener failed with status: $listenerStatus")
+                    playbackModel.updateVisualizerState(
+                        VisualizerState.Failed("Listener registration failed")
+                    )
+                    try {
+                        candidate.release()
+                    } catch (e: RuntimeException) {}
+                    return
+                }
+
+                candidate.enabled = true
+                visualizer = candidate
+                visualizerSessionId = sessionId
+                L.d(
+                    "Visualizer started for session $sessionId " +
+                        "with captureSize=$targetSize " +
+                        "captureRate=${targetRate}mHz (${targetRate / 1000f}Hz)"
+                )
             } catch (e: RuntimeException) {
                 val message =
                     when (e) {

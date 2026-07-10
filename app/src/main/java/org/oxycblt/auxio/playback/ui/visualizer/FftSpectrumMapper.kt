@@ -50,6 +50,30 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
     private val sumSquares = FloatArray(bandCount)
     private val sampleCounts = IntArray(bandCount)
 
+    private var cachedFftSize = -1
+    private var cachedSamplingRate = -1
+    private var binToBandMapping = IntArray(0)
+
+    private fun recalculateBinToBandMapping(fftSize: Int, samplingRate: Int) {
+        cachedFftSize = fftSize
+        cachedSamplingRate = samplingRate
+
+        val usablePairCount = ((fftSize - 2) / 2).coerceAtLeast(0)
+        binToBandMapping = IntArray(usablePairCount + 1) { -1 }
+
+        if (usablePairCount == 0) return
+
+        val freqResolution = (samplingRate / 1000f) / usablePairCount.toFloat() / 2f
+        for (bin in 1..usablePairCount) {
+            val freq = bin * freqResolution
+            if (freq < MIN_FREQ || freq > MAX_FREQ) continue
+
+            val normalizedLogFreq = (ln(freq) - MIN_FREQ_LOG) / LOG_RANGE
+            val band = (normalizedLogFreq * bandCount).toInt().coerceIn(0, bandCount - 1)
+            binToBandMapping[bin] = band
+        }
+    }
+
     fun update(fft: ByteArray?, samplingRate: Int = 44100000) {
         if (fft == null || fft.size < MIN_FFT_SIZE) {
             decayToSilence()
@@ -62,16 +86,19 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             return
         }
 
+        if (cachedSamplingRate != samplingRate || cachedFftSize != fft.size) {
+            recalculateBinToBandMapping(fft.size, samplingRate)
+        }
+
         sumSquares.fill(0f)
         sampleCounts.fill(0)
 
-        val freqResolution = (samplingRate / 1000f) / usablePairCount.toFloat() / 2f
         var frameGlobalSumSquares = 0f
         var globalSampleCount = 0
 
         for (bin in 1..usablePairCount) {
-            val freq = bin * freqResolution
-            if (freq < MIN_FREQ || freq > MAX_FREQ) continue
+            val band = binToBandMapping[bin]
+            if (band < 0) continue
 
             val pairIndex = bin * 2
             if (pairIndex + 1 >= fft.size) break
@@ -82,9 +109,6 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
             frameGlobalSumSquares += magnitude * magnitude
             globalSampleCount++
-
-            val normalizedLogFreq = (ln(freq) - MIN_FREQ_LOG) / LOG_RANGE
-            val band = (normalizedLogFreq * bandCount).toInt().coerceIn(0, bandCount - 1)
 
             sumSquares[band] += magnitude * magnitude
             sampleCounts[band]++
