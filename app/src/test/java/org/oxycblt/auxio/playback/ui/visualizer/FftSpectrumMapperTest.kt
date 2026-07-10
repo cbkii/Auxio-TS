@@ -112,29 +112,30 @@ class FftSpectrumMapperTest {
     fun frequencyRangeExclusion() {
         val mapper = FftSpectrumMapper(48)
 
-        // Very low frequency (e.g. 10Hz) should be excluded
-        mapper.update(createSineWaveFft(10f), 44100000)
+        // Generate a 10 Hz tone but force a higher resolution so that the bin index > 0.
+        // E.g. at 44.1kHz sampling rate with 8192 points, bin resolution is ~5.38 Hz,
+        // 10 Hz is around bin 2.
+        mapper.update(createSineWaveFft(10f, size = 8192), 44100000)
         val lowFreqMax = mapper.bands.maxOrNull() ?: 0f
 
         mapper.reset()
 
         // Very high frequency (e.g. 20000Hz) should be excluded
-        mapper.update(createSineWaveFft(20000f), 44100000)
+        mapper.update(createSineWaveFft(20000f, size = 8192), 44100000)
         val highFreqMax = mapper.bands.maxOrNull() ?: 0f
 
         mapper.reset()
 
         // Valid frequency (e.g. 1000Hz)
-        mapper.update(createSineWaveFft(1000f), 44100000)
+        mapper.update(createSineWaveFft(1000f, size = 8192), 44100000)
         val validFreqMax = mapper.bands.maxOrNull() ?: 0f
 
-        assertTrue(lowFreqMax == 0f)
-        assertTrue(highFreqMax == 0f)
-        assertTrue(validFreqMax > 0f)
+        assertTrue("Low freq should be excluded, was $lowFreqMax", lowFreqMax == 0f)
+        assertTrue("High freq should be excluded, was $highFreqMax", highFreqMax == 0f)
+        assertTrue("Valid freq should be included", validFreqMax > 0f)
     }
 
-    private fun createSineWaveFft(freq: Float, amplitude: Byte = 100): ByteArray {
-        val size = 512
+    private fun createSineWaveFft(freq: Float, amplitude: Byte = 100, size: Int = 512): ByteArray {
         val fft = ByteArray(size)
         val sampleRate = 44100f
         val resolution = sampleRate / size
