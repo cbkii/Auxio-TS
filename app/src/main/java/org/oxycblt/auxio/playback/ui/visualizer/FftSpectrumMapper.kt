@@ -27,10 +27,13 @@ import kotlin.math.sqrt
  * Converts Android [android.media.audiofx.Visualizer] FFT frames into stable radial bands.
  *
  * Android FFT bytes are laid out as DC real at index 0, Nyquist real at index 1, then real/
- * imaginary pairs for bins 1 until n/2. This mapper intentionally ignores DC/Nyquist for drawing so
- * constant offsets do not turn the visualizer into a static circle. It then groups component-pair
- * magnitudes into logarithmic-ish bands, applies adaptive gain for quiet music, and keeps a small
- * peak/decay envelope so the head-unit visual remains lively without flickering.
+ * imaginary pairs for bins 1 until n/2. This mapper ignores DC and Nyquist, groups component-pair
+ * magnitudes into logarithmic bands, applies adaptive gain for quiet music, and maintains bounded
+ * attack/release envelopes.
+ *
+ * [android.media.audiofx.Visualizer.OnDataCaptureListener.onFftDataCapture] supplies the sampling
+ * rate in milliHertz, not Hertz. [update] preserves that platform unit explicitly and converts to
+ * Hertz only while rebuilding the cached bin-to-band mapping.
  */
 class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
     init {
@@ -39,43 +42,60 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
     /** Current normalized band levels. Read-only by convention; mutated by [update] and [reset]. */
     val bands = FloatArray(bandCount)
-    private val peaks = FloatArray(bandCount)
     private val raw = FloatArray(bandCount)
+    private val sumSquares = FloatArray(bandCount)
+    private val sampleCounts = IntArray(bandCount)
     private var adaptivePeak = MIN_ADAPTIVE_PEAK
 
     /** Current global energy envelope for visualizer scaling. */
     var globalEnvelope = 0f
         private set
 
-    private val sumSquares = FloatArray(bandCount)
-    private val sampleCounts = IntArray(bandCount)
-
     private var cachedFftSize = -1
-    private var cachedSamplingRate = -1
+    private var cachedSamplingRateMilliHertz = -1
     private var binToBandMapping = IntArray(0)
 
-    private fun recalculateBinToBandMapping(fftSize: Int, samplingRate: Int) {
+    /** Number of mapping rebuilds, exposed internally for deterministic cache tests. */
+    internal var mappingRebuildCount = 0
+        private set
+
+    private fun recalculateBinToBandMapping(fftSize: Int, samplingRateMilliHertz: Int) {
         cachedFftSize = fftSize
-        cachedSamplingRate = samplingRate
+        cachedSamplingRateMilliHertz = samplingRateMilliHertz
+        mappingRebuildCount++
 
         val usablePairCount = ((fftSize - 2) / 2).coerceAtLeast(0)
-        binToBandMapping = IntArray(usablePairCount + 1) { -1 }
-
+        binToBandMapping = IntArray(usablePairCount + 1) { EXCLUDED_BAND }
         if (usablePairCount == 0) return
 
-        val freqResolution = (samplingRate / 1000f) / usablePairCount.toFloat() / 2f
+        val samplingRateHertz = samplingRateMilliHertz / 1000f
+        val frequencyResolutionHertz = samplingRateHertz / usablePairCount.toFloat() / 2f
         for (bin in 1..usablePairCount) {
-            val freq = bin * freqResolution
-            if (freq < MIN_FREQ || freq > MAX_FREQ) continue
+            val frequencyHertz = bin * frequencyResolutionHertz
+            if (frequencyHertz < MIN_FREQ_HZ || frequencyHertz > MAX_FREQ_HZ) continue
 
-            val normalizedLogFreq = (ln(freq) - MIN_FREQ_LOG) / LOG_RANGE
-            val band = (normalizedLogFreq * bandCount).toInt().coerceIn(0, bandCount - 1)
-            binToBandMapping[bin] = band
+            val normalizedLogFrequency = (ln(frequencyHertz) - MIN_FREQ_LOG) / LOG_RANGE
+            binToBandMapping[bin] =
+                (normalizedLogFrequency * bandCount).toInt().coerceIn(0, bandCount - 1)
         }
     }
 
-    fun update(fft: ByteArray?, samplingRate: Int = 44100000) {
-        if (fft == null || fft.size < MIN_FFT_SIZE) {
+    /**
+     * Update this mapper from one Android Visualizer FFT frame.
+     *
+     * @param fft Android Visualizer FFT bytes, or null to decay toward silence.
+     * @param samplingRateMilliHertz sampling rate reported by Android Visualizer in milliHertz;
+     *   `44_100_000` represents 44.1 kHz.
+     */
+    fun update(
+        fft: ByteArray?,
+        samplingRateMilliHertz: Int = DEFAULT_SAMPLING_RATE_MILLIHERTZ,
+    ) {
+        if (
+            fft == null ||
+                fft.size < MIN_FFT_SIZE ||
+                samplingRateMilliHertz <= 0
+        ) {
             decayToSilence()
             return
         }
@@ -86,8 +106,10 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             return
         }
 
-        if (cachedSamplingRate != samplingRate || cachedFftSize != fft.size) {
-            recalculateBinToBandMapping(fft.size, samplingRate)
+        if (
+            cachedSamplingRateMilliHertz != samplingRateMilliHertz || cachedFftSize != fft.size
+        ) {
+            recalculateBinToBandMapping(fft.size, samplingRateMilliHertz)
         }
 
         sumSquares.fill(0f)
@@ -98,7 +120,7 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
         for (bin in 1..usablePairCount) {
             val band = binToBandMapping[bin]
-            if (band < 0) continue
+            if (band == EXCLUDED_BAND) continue
 
             val pairIndex = bin * 2
             if (pairIndex + 1 >= fft.size) break
@@ -109,7 +131,6 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
             frameGlobalSumSquares += magnitude * magnitude
             globalSampleCount++
-
             sumSquares[band] += magnitude * magnitude
             sampleCounts[band]++
         }
@@ -176,11 +197,14 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
     companion object {
         const val DEFAULT_BAND_COUNT = 48
+        const val DEFAULT_SAMPLING_RATE_MILLIHERTZ = 44_100_000
+
+        private const val EXCLUDED_BAND = -1
         private const val MIN_FFT_SIZE = 4
-        private const val MIN_FREQ = 40f
-        private const val MAX_FREQ = 12000f
-        private val MIN_FREQ_LOG = ln(MIN_FREQ)
-        private val MAX_FREQ_LOG = ln(MAX_FREQ)
+        private const val MIN_FREQ_HZ = 40f
+        private const val MAX_FREQ_HZ = 12_000f
+        private val MIN_FREQ_LOG = ln(MIN_FREQ_HZ)
+        private val MAX_FREQ_LOG = ln(MAX_FREQ_HZ)
         private val LOG_RANGE = MAX_FREQ_LOG - MIN_FREQ_LOG
 
         private const val MIN_ADAPTIVE_PEAK = 18f
