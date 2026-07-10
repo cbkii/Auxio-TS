@@ -369,3 +369,25 @@ adb shell find /sdcard/Music /storage/emulated/0/Music /storage/usbdiskN -maxdep
 - Duplicate service lifecycle/notification behaviour: inspect `adb shell dumpsys activity services | grep -E 'AuxioService|MusicService'` and `adb shell dumpsys notification | grep -E 'Auxio|com.tw.music|com.tw.media'` before and after DoFun/widget actions. Failure interpretation: two simultaneous foreground playback services or duplicate media notifications means the wrapper/base-service routing needs another implementation pass.
 - **Observed / exact-device; Porting decision: use app-facing public storage path:** Music-library visibility for `/sdcard/Music`, `/storage/usbdiskN`, and USB/UDisk scanning on Android 10.
 - Overlay permission grant/revoke, 1280x720 bounds with about 55px top/right system bars, background-start behaviour, boot completed, and ACC wake/restore.
+
+## Physical TS18/DoFun Validation Checklist
+
+Use these specific commands and manual checks on the physical device to confirm final behavior:
+
+**1. Shell Identity Commands:**
+```sh
+# Verify the installed package path
+adb shell pm path com.tw.music
+
+# Inspect the package dumpsys to ensure no stock conflict exists
+adb shell dumpsys package com.tw.music | sed -n '/Package \[com.tw.music\]/,/User 0/p'
+
+# Verify the explicit activity resolution expected by the launcher
+adb shell cmd package resolve-activity --brief com.tw.music/com.tw.music.MusicActivity
+```
+
+**2. UI/Launcher Integration Checks:**
+- **Hotseat Launch:** Tap the Music icon in the DoFun hotseat. It must open Auxio.
+- **Widget/Sticky Update:** Play a track in Auxio. The DoFun widget must update with the correct track info.
+- **Media Session Visibility:** Run `adb shell dumpsys media_session | grep com.tw.music` to ensure the session is active under the correct package identity during playback.
+- **Source Loading:** Insert a USB drive and ensure Auxio successfully discovers and scans music from dynamic paths like `/storage/usbdisk0`.
