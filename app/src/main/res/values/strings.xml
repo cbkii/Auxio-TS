@@ -692,6 +692,7 @@
     <string name="set_diagnostics_disable_failed">Failed to disable stock com.tw.music</string>
     <string name="set_diagnostics_restore_success">Enabled stock com.tw.music successfully</string>
     <string name="set_diagnostics_restore_failed">Failed to enable stock com.tw.music</string>
+    <string name="set_diagnostics_check_failed">Check failed. See logs or retry after root/DoFun state is available.</string>
     <string name="set_diagnostics_check_complete_summary">Check complete. Path: %1$s. Root: %2$s. Packages: %3$s</string>
     <string name="set_diagnostics_clipboard_label">TS18 DoFun Report</string>
 </resources>
