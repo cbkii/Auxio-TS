@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.playback.ui.swiper
 
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.Lifecycle
@@ -26,6 +27,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
@@ -43,6 +46,7 @@ import org.oxycblt.musikr.Song
  *
  * Visualizer state is collected once at adapter scope. Only the currently visible ViewPager item
  * receives live FFT frames; attached off-screen holders are explicitly reset to [VisualizerState.Hidden].
+ * A low-frequency freshness check restores artwork if the last live frame is no longer current.
  *
  * @param listener The [StepperOverlay.Listener] that step gesture events will be forwarded to
  * @author Alexander Capehart (OxygenCobalt)
@@ -70,9 +74,26 @@ class CoverPagerAdapter(
     init {
         lifecycleOwner.lifecycleScope.launch {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                playbackModel.visualizerState.collect { state ->
-                    latestVisualizerState = state
-                    updateActivePositionAndDispatch()
+                launch {
+                    playbackModel.visualizerState.collect { state ->
+                        latestVisualizerState = state
+                        updateActivePositionAndDispatch()
+                    }
+                }
+                launch {
+                    while (isActive) {
+                        delay(FRESHNESS_CHECK_INTERVAL_MS)
+                        val state = latestVisualizerState
+                        if (
+                            state is VisualizerState.Live &&
+                                SystemClock.uptimeMillis() - state.receivedAtUptimeMs >
+                                    LIVE_FRAME_FRESHNESS_MS
+                        ) {
+                            latestVisualizerState =
+                                VisualizerState.Failed("Visualizer frame freshness expired")
+                            updateActivePositionAndDispatch()
+                        }
+                    }
                 }
             }
         }
@@ -134,6 +155,11 @@ class CoverPagerAdapter(
                 hasArtwork = song.cover != null,
             )
         }
+    }
+
+    companion object {
+        private const val LIVE_FRAME_FRESHNESS_MS = 1_500L
+        private const val FRESHNESS_CHECK_INTERVAL_MS = 500L
     }
 }
 
