@@ -2,6 +2,16 @@
 # collect-ts18-evidence.sh
 # Helper script to collect evidence from a rooted TS18 device
 
+if ! command -v adb &> /dev/null; then
+    echo "Error: adb command not found. Please install Android SDK Platform Tools." >&2
+    exit 1
+fi
+
+if ! adb get-state &> /dev/null; then
+    echo "Error: No ADB device connected or authorized. Please connect a device and try again." >&2
+    exit 1
+fi
+
 echo "--- Collecting Package Identity ---"
 echo "Path for com.tw.music:"
 adb shell pm path com.tw.music || true
