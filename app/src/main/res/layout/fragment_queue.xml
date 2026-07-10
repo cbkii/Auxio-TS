@@ -30,6 +30,15 @@
         android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
         android:visibility="gone" />
 
+    <ProgressBar
+        android:id="@+id/queue_loading"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminate="true"
+        android:visibility="gone" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/queue_empty_action"
         style="?attr/materialButtonOutlinedStyle"

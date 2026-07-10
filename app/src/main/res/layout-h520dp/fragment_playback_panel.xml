@@ -15,7 +15,7 @@
         app:navigationIcon="@drawable/ic_arrow_drop_down_24"
         app:subtitleCentered="true"
         app:subtitleTextAppearance="?attr/textAppearanceBodySmall"
-        app:title="@string/lbl_playback"
+        app:title="@string/lbl_playing"
         app:titleCentered="true"
         app:titleTextAppearance="?attr/textAppearanceLabelLargeEmphasized"
         tools:subtitle="@string/lbl_all_songs" />

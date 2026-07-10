@@ -54,6 +54,7 @@ import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
 import org.oxycblt.auxio.playback.PlaybackViewModel
@@ -100,6 +101,7 @@ class MainFragment :
     private var maxScaleXDistance = 0f
     private var sheetRising: Boolean? = null
     private var lastStretchRatio = -1f
+    private var startupPlaybackOpenConsumed = false
     @Inject lateinit var uiSettings: UISettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -223,6 +225,7 @@ class MainFragment :
         collectImmediately(musicModel.indexingState, ::updateIndexerState)
         collectImmediately(listModel.selected, selectionBackCallback::invalidateEnabled)
         collectImmediately(playbackModel.song, ::updateSong)
+        collectImmediately(musicModel.startupReadinessState) { maybeOpenStartupPlayback() }
         collectImmediately(playbackModel.openPanel.flow, ::handlePanel)
     }
 
@@ -634,6 +637,25 @@ class MainFragment :
             tryShowSheets()
         } else {
             tryHideAllSheets()
+        }
+        maybeOpenStartupPlayback()
+    }
+
+    private fun maybeOpenStartupPlayback() {
+        if (startupPlaybackOpenConsumed) return
+
+        val readinessState = musicModel.startupReadinessState.value
+        if (readinessState == StartupReadinessState.CheckingCachedLibrary) {
+            return
+        }
+        startupPlaybackOpenConsumed = true
+        if (readinessState == StartupReadinessState.NeedsMusicSource) {
+            return
+        }
+
+        val currentSong = playbackModel.song.value
+        if (currentSong != null) {
+            playbackModel.openPlayback()
         }
     }
 
