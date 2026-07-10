@@ -1,0 +1,57 @@
+name: Format this PR once
+
+on:
+  push:
+    branches:
+    - fix-visualizer-10840476153597340699
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      with:
+        ref: fix-visualizer-10840476153597340699
+        fetch-depth: 0
+        token: ${{ github.token }}
+    - name: Prepare CI environment
+      run: bash ./scripts/prepare-ci-environment.sh
+    - uses: actions/setup-java@v5
+      with:
+        java-version: "21"
+        distribution: "temurin"
+    - name: Write local.properties for Android SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        if [ -z "${sdk_dir}" ]; then
+          echo "ANDROID_HOME/ANDROID_SDK_ROOT is not set" >&2
+          exit 1
+        fi
+        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+    - uses: gradle/actions/setup-gradle@v5
+      with:
+        cache-read-only: true
+    - name: Apply Spotless, remove this one-shot workflow, and push
+      shell: bash
+      env:
+        AUXIO_TS_CI_GRADLE_TIMEOUT: 20m
+      run: |
+        set -euo pipefail
+        bash ./scripts/ci-gradle.sh spotlessApply
+        git rm .github/workflows/format-this-pr.yml
+        git diff --check
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add -A
+        if git diff --cached --quiet; then
+          echo "No formatting changes to commit."
+          exit 0
+        fi
+        git commit -m "Apply Spotless formatting"
+        git push origin HEAD:fix-visualizer-10840476153597340699
