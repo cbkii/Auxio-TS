@@ -139,6 +139,17 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val size = minOf(width, height).toFloat()
         if (size <= 0f) return
 
+        if (hasValidFrame && isCurrentFrameStale()) {
+            // Capture has stopped delivering fresh frames for the most recent Live state (e.g.
+            // playback paused or the session stalled without the state machine noticing yet).
+            // Decay the spectrum toward silence so the contour settles instead of freezing while
+            // still consuming redraws indefinitely.
+            spectrumMapper.update(null)
+            if (isSpectrumSettled()) {
+                hasValidFrame = false
+            }
+        }
+
         val cx = width / 2f
         val cy = height / 2f
         val baseRadius = size * 0.35f
@@ -191,15 +202,18 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         canvas.drawPath(path, fillPaint)
         canvas.drawPath(path, outlinePaint)
 
-        val stale = !hasValidFrame || isCurrentFrameStale()
-        if (stale && hasValidFrame) {
-            // Still waiting for it to decay out, keep invalidating
+        if (hasValidFrame && isCurrentFrameStale()) {
+            // Still decaying toward silence; keep animating until it settles.
             invalidate()
         }
     }
 
+    private fun isSpectrumSettled(): Boolean =
+        spectrumMapper.globalEnvelope <= SETTLE_THRESHOLD && bands.all { it <= SETTLE_THRESHOLD }
+
     companion object {
         private const val STALE_FRAME_MS = 1500L
+        private const val SETTLE_THRESHOLD = 0.01f
         private val COS_LOOKUP =
             FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT) { index ->
                 cos(angleForBand(index)).toFloat()
