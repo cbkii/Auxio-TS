@@ -63,6 +63,7 @@ import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.playback.ui.swiper.CarouselTransformer
 import org.oxycblt.auxio.playback.ui.swiper.CoverPagerAdapter
 import org.oxycblt.auxio.playback.ui.swiper.UserAwarePagerCallback
+import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
@@ -326,7 +327,7 @@ class PlaybackPanelFragment :
             val equalizerIntent =
                 TopwayEqualizerLauncher.resolveIntent(
                     requireContext(),
-                    playbackModel.currentAudioSessionId,
+                    playbackModel.currentAudioSessionId.value,
                 )
             if (equalizerIntent == null) {
                 requireContext().showToast(R.string.err_no_equalizer_app)
@@ -433,11 +434,11 @@ class PlaybackPanelFragment :
                 L.d(e, "Visualizer native release failed")
             }
         }
-        playbackModel.updateVisualizerFft(null)
+        playbackModel.updateVisualizerState(VisualizerState.Hidden)
     }
 
     private fun shouldUseVisualizerForCurrentState(): Boolean {
-        val sessionId = playbackModel.currentAudioSessionId ?: return false
+        val sessionId = playbackModel.currentAudioSessionId.value ?: return false
         if (sessionId == 0 || !playbackModel.isPlaying.value) return false
 
         return when (uiSettings.visualizerMode) {
@@ -450,14 +451,14 @@ class PlaybackPanelFragment :
     private fun updateVisualizerState() {
         if (!shouldUseVisualizerForCurrentState()) {
             releaseVisualizer()
-            notifyCoverVisualizerStateChanged()
+            playbackModel.updateVisualizerState(VisualizerState.Hidden)
             return
         }
         val sessionId =
-            playbackModel.currentAudioSessionId?.takeIf { it != 0 }
+            playbackModel.currentAudioSessionId.value?.takeIf { it != 0 }
                 ?: run {
                     L.d("Visualizer not started: no non-zero audio session")
-                    playbackModel.updateVisualizerFft(null)
+                    playbackModel.updateVisualizerState(VisualizerState.Hidden)
                     return
                 }
 
@@ -467,8 +468,7 @@ class PlaybackPanelFragment :
 
         if (!hasPermission) {
             L.w("Visualizer not started: RECORD_AUDIO permission denied or not yet granted")
-            playbackModel.updateVisualizerFft(null)
-            notifyCoverVisualizerStateChanged()
+            playbackModel.updateVisualizerState(VisualizerState.Failed("Permission denied"))
             return // Will be requested in onResume if needed
         }
 
@@ -477,51 +477,77 @@ class PlaybackPanelFragment :
         }
 
         if (visualizer == null) {
+            playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
             try {
                 visualizer =
                     Visualizer(sessionId).apply {
                         visualizerSessionId = sessionId
                         val captureRange = Visualizer.getCaptureSizeRange()
+                        captureSize =
+                            captureRange.filter { it <= 512 }.maxOrNull() ?: captureRange[0]
                         val maxCaptureRate = Visualizer.getMaxCaptureRate()
-                        val captureRate = (maxCaptureRate * 3 / 4).coerceAtLeast(1)
-                        captureSize = captureRange[1]
+                        val captureRate = minOf(maxCaptureRate, 30_000).coerceAtLeast(1)
                         try {
-                            scalingMode = Visualizer.SCALING_MODE_NORMALIZED
+                            scalingMode = Visualizer.SCALING_MODE_AS_PLAYED
                         } catch (e: RuntimeException) {
                             L.d(
                                 e,
-                                "Visualizer normalized scaling unavailable; continuing with default",
+                                "Visualizer as-played scaling unavailable; continuing with default",
                             )
                         }
-                        setDataCaptureListener(
-                            object : Visualizer.OnDataCaptureListener {
-                                private var frameCount = 0
 
-                                override fun onWaveFormDataCapture(
-                                    visualizer: Visualizer,
-                                    waveform: ByteArray,
-                                    samplingRate: Int,
-                                ) {}
+                        val listenerStatus =
+                            setDataCaptureListener(
+                                object : Visualizer.OnDataCaptureListener {
+                                    private var frameCount = 0
 
-                                override fun onFftDataCapture(
-                                    visualizer: Visualizer,
-                                    fft: ByteArray,
-                                    samplingRate: Int,
-                                ) {
-                                    if (++frameCount == 1) {
-                                        L.d(
-                                            "Visualizer FFT frames started for session $sessionId " +
-                                                "samplingRate=${samplingRate}mHz " +
-                                                "(${samplingRate / 1000f}Hz)"
-                                        )
+                                    override fun onWaveFormDataCapture(
+                                        visualizer: Visualizer,
+                                        waveform: ByteArray,
+                                        samplingRate: Int,
+                                    ) {}
+
+                                    override fun onFftDataCapture(
+                                        visualizer: Visualizer,
+                                        fft: ByteArray,
+                                        samplingRate: Int,
+                                    ) {
+                                        if (++frameCount == 1) {
+                                            L.d(
+                                                "Visualizer FFT frames started for session $sessionId " +
+                                                    "samplingRate=${samplingRate}mHz " +
+                                                    "(${samplingRate / 1000f}Hz)"
+                                            )
+                                        }
+
+                                        val hasUsableData =
+                                            fft.size > 2 &&
+                                                fft.slice(2..fft.lastIndex).any { it != 0.toByte() }
+                                        if (hasUsableData) {
+                                            playbackModel.updateVisualizerState(
+                                                VisualizerState.Live(
+                                                    fft.copyOf(),
+                                                    samplingRate,
+                                                    android.os.SystemClock.uptimeMillis(),
+                                                )
+                                            )
+                                        }
                                     }
-                                    playbackModel.updateVisualizerFft(fft)
-                                }
-                            },
-                            captureRate,
-                            false,
-                            true,
-                        )
+                                },
+                                captureRate,
+                                false,
+                                true,
+                            )
+                        if (listenerStatus != Visualizer.SUCCESS) {
+                            L.w(
+                                "Visualizer setDataCaptureListener failed with status: $listenerStatus"
+                            )
+                            playbackModel.updateVisualizerState(
+                                VisualizerState.Failed("Listener registration failed")
+                            )
+                            return@apply
+                        }
+
                         enabled = true
                         L.d(
                             "Visualizer started for session $sessionId " +
@@ -542,10 +568,9 @@ class PlaybackPanelFragment :
                 L.w(e, "$message for session $sessionId")
                 visualizer = null
                 visualizerSessionId = null
-                playbackModel.updateVisualizerFft(null)
+                playbackModel.updateVisualizerState(VisualizerState.Failed(message))
             }
         }
-        notifyCoverVisualizerStateChanged()
     }
 
     private fun updatePlaying(isPlaying: Boolean) {

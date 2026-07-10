@@ -344,6 +344,8 @@ interface PlaybackStateManager {
          */
         fun onRepeatModeChanged(repeatMode: RepeatMode) {}
 
+        fun onAudioSessionIdChanged(audioSessionId: Int) {}
+
         fun onSessionEnded() {}
     }
 
@@ -776,6 +778,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             is StateAck.RepeatModeChanged -> {
                 stateMirror = stateMirror.copy(repeatMode = stateHolder.repeatMode)
                 listeners.forEach { it.onRepeatModeChanged(stateMirror.repeatMode) }
+            }
+            is StateAck.AudioSessionIdChanged -> {
+                listeners.forEach { it.onAudioSessionIdChanged(ack.audioSessionId) }
             }
             is StateAck.SessionEnded -> {
                 listeners.forEach { it.onSessionEnded() }

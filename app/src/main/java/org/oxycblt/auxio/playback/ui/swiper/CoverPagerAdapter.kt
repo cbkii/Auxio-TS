@@ -79,7 +79,9 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
     fun onViewRecycled() {
         fftJob?.cancel()
         fftJob = null
-        binding.coverVisualizer.updateFft(null)
+        binding.coverVisualizer.updateState(
+            org.oxycblt.auxio.playback.ui.visualizer.VisualizerState.Hidden
+        )
         binding.coverVisualizer.visibility = View.GONE
         binding.cover.visibility = View.VISIBLE
     }
@@ -96,40 +98,37 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
 
         fftJob?.cancel()
         fftJob = null
-        binding.coverVisualizer.updateFft(null)
+        binding.coverVisualizer.updateState(
+            org.oxycblt.auxio.playback.ui.visualizer.VisualizerState.Hidden
+        )
         binding.coverVisualizer.visibility = View.GONE
         binding.cover.visibility = View.VISIBLE
 
-        val visualizerMode = uiSettings.visualizerMode
-        val hasArtwork = song.cover != null
-        val hasPermission =
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                binding.root.context,
-                android.Manifest.permission.RECORD_AUDIO,
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        val sessionId = playbackModel.currentAudioSessionId
-        val shouldShowVisualizer =
-            hasPermission &&
-                playbackModel.isPlaying.value &&
-                sessionId != null &&
-                sessionId != 0 &&
-                (visualizerMode == UISettings.VisualizerMode.ALWAYS ||
-                    (visualizerMode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
+        fftJob =
+            lifecycleOwner.lifecycleScope.launch {
+                playbackModel.visualizerState.collect { state ->
+                    binding.coverVisualizer.updateState(state)
 
-        if (shouldShowVisualizer) {
-            binding.coverVisualizer.visibility = View.VISIBLE
-            binding.cover.visibility = View.INVISIBLE
-            fftJob =
-                lifecycleOwner.lifecycleScope.launch {
-                    playbackModel.visualizerFft.collect { bytes ->
-                        binding.coverVisualizer.updateFft(bytes)
+                    val visualizerMode = uiSettings.visualizerMode
+                    val hasArtwork = song.cover != null
+
+                    // Only show if the global visualizer state is Live and mode permits.
+                    // Waiting/Failed should still hide the visualizer view and keep the cover.
+                    val shouldShow =
+                        state is org.oxycblt.auxio.playback.ui.visualizer.VisualizerState.Live &&
+                            (visualizerMode == UISettings.VisualizerMode.ALWAYS ||
+                                (visualizerMode == UISettings.VisualizerMode.FALLBACK &&
+                                    !hasArtwork))
+
+                    if (shouldShow) {
+                        binding.coverVisualizer.visibility = View.VISIBLE
+                        binding.cover.visibility = View.INVISIBLE
+                    } else {
+                        binding.coverVisualizer.visibility = View.GONE
+                        binding.cover.visibility = View.VISIBLE
                     }
                 }
-        } else {
-            binding.coverVisualizer.updateFft(null)
-            binding.coverVisualizer.visibility = View.GONE
-            binding.cover.visibility = View.VISIBLE
-        }
+            }
     }
 
     companion object {

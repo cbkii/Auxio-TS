@@ -668,6 +668,12 @@ class ExoPlaybackStateHolder(
         }
     }
 
+    override fun onAudioSessionIdChanged(audioSessionId: Int) {
+        super.onAudioSessionIdChanged(audioSessionId)
+        L.d("Audio session ID changed to $audioSessionId")
+        playbackManager.ack(this, StateAck.AudioSessionIdChanged(audioSessionId))
+    }
+
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         super.onMediaItemTransition(mediaItem, reason)
 
