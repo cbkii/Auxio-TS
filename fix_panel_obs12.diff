@@ -1,0 +1,17 @@
+<<<<<<< SEARCH
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                playbackModel.currentAudioSessionId.collect {
+                    updateVisualizerState()
+                }
+            }
+        }
+=======
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                playbackModel.currentAudioSessionId.collect {
+                    updateVisualizerState()
+                }
+            }
+        }
+>>>>>>> REPLACE

@@ -41,10 +41,13 @@ import androidx.core.view.updatePaddingRelative
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.findNavController
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
 import org.oxycblt.auxio.detail.DetailViewModel
@@ -128,6 +131,12 @@ class PlaybackPanelFragment :
                     }
                 }
             }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                playbackModel.currentAudioSessionId.collect { updateVisualizerState() }
+            }
+        }
 
         // --- UI SETUP ---
         binding.root.setOnApplyWindowInsetsListener { view, insets ->
