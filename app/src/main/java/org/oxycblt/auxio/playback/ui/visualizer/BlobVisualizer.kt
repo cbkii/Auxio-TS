@@ -35,10 +35,9 @@ import org.oxycblt.auxio.util.getAttrColorCompat
 /**
  * Smooth filled radial FFT visualizer for the Now Playing cover slot.
  *
- * The contour approach is adapted from `gauravk95/audio-visualizer-android`, Copyright 2018
- * Gaurav Kumar, licensed under the Apache License 2.0. This implementation keeps Auxio's GPL
- * header and uses a single filled path without synthetic idle animation or view-owned freshness
- * polling.
+ * The contour approach is adapted from `gauravk95/audio-visualizer-android`, Copyright 2018 Gaurav
+ * Kumar, licensed under the Apache License 2.0. This implementation keeps Auxio's GPL header and
+ * uses a single filled path without synthetic idle animation or view-owned freshness polling.
  */
 class BlobVisualizer
 @JvmOverloads

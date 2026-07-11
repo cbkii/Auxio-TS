@@ -45,8 +45,9 @@ import org.oxycblt.musikr.Song
  * gesture overlays.
  *
  * Visualizer state is collected once at adapter scope. Only the currently visible ViewPager item
- * receives live FFT frames; attached off-screen holders are explicitly reset to [VisualizerState.Hidden].
- * A low-frequency freshness check restores artwork if the last live frame is no longer current.
+ * receives live FFT frames; attached off-screen holders are explicitly reset to
+ * [VisualizerState.Hidden]. A low-frequency freshness check restores artwork if the last live frame
+ * is no longer current.
  *
  * @param listener The [StepperOverlay.Listener] that step gesture events will be forwarded to
  * @author Alexander Capehart (OxygenCobalt)
@@ -137,9 +138,10 @@ class CoverPagerAdapter(
         val resolvedPosition =
             layoutManager?.findFirstCompletelyVisibleItemPosition()?.takeIf {
                 it != RecyclerView.NO_POSITION
-            } ?: layoutManager?.findFirstVisibleItemPosition()?.takeIf {
-                it != RecyclerView.NO_POSITION
             }
+                ?: layoutManager?.findFirstVisibleItemPosition()?.takeIf {
+                    it != RecyclerView.NO_POSITION
+                }
         if (resolvedPosition != null) {
             activePosition = resolvedPosition
         }

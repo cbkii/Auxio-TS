@@ -87,15 +87,8 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
      * @param samplingRateMilliHertz sampling rate reported by Android Visualizer in milliHertz;
      *   `44_100_000` represents 44.1 kHz.
      */
-    fun update(
-        fft: ByteArray?,
-        samplingRateMilliHertz: Int = DEFAULT_SAMPLING_RATE_MILLIHERTZ,
-    ) {
-        if (
-            fft == null ||
-                fft.size < MIN_FFT_SIZE ||
-                samplingRateMilliHertz <= 0
-        ) {
+    fun update(fft: ByteArray?, samplingRateMilliHertz: Int = DEFAULT_SAMPLING_RATE_MILLIHERTZ) {
+        if (fft == null || fft.size < MIN_FFT_SIZE || samplingRateMilliHertz <= 0) {
             decayToSilence()
             return
         }
@@ -106,9 +99,7 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             return
         }
 
-        if (
-            cachedSamplingRateMilliHertz != samplingRateMilliHertz || cachedFftSize != fft.size
-        ) {
+        if (cachedSamplingRateMilliHertz != samplingRateMilliHertz || cachedFftSize != fft.size) {
             recalculateBinToBandMapping(fft.size, samplingRateMilliHertz)
         }
 
