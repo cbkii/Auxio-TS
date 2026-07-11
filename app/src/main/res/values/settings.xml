@@ -39,6 +39,7 @@
 
     <string name="set_key_autostart_on_boot" translatable="false">auxio_autostart_on_boot</string>
     <string name="set_key_autostart_floating_only" translatable="false">auxio_autostart_floating_only</string>
+    <string name="set_key_launch_to_panel" translatable="false">auxio_launch_to_panel</string>
     <string name="set_key_autoplay_on_launch" translatable="false">auxio_autoplay_on_launch</string>
     <string name="set_key_always_play_immediately" translatable="false">auxio_always_play_immediately</string>
     <string name="set_key_headset_autoplay" translatable="false">auxio_headset_autoplay</string>

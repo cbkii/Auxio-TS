@@ -72,6 +72,7 @@ import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RawQueue
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.StateAck
 import org.oxycblt.musikr.Library
@@ -223,6 +224,7 @@ class ExoPlaybackStateHolder(
             val library = musicRepository.library?.takeIf { !it.empty() }
             if (library == null) {
                 L.d("Cached library not ready; attempting TS18 raw fast-resume snapshot")
+                playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_LIBRARY)
                 return tryStartRawFastResume(action)
             }
             rawFastResumeItem?.let {
@@ -242,8 +244,14 @@ class ExoPlaybackStateHolder(
                         if (shouldPlay) {
                             playbackManager.playing(true)
                         }
+                        playbackManager.notifyRestoreOutcome(
+                            RestoreOutcome.RESTORED_EXISTING_SESSION
+                        )
                     } else if (action.fallback != null) {
+                        playbackManager.notifyRestoreOutcome(RestoreOutcome.FALLBACK_QUEUE_CREATED)
                         playbackManager.playDeferred(action.fallback)
+                    } else {
+                        playbackManager.notifyRestoreOutcome(RestoreOutcome.NO_SAVED_SESSION)
                     }
                 }
             }
@@ -832,6 +840,7 @@ class ExoPlaybackStateHolder(
                         pendingLibraryRestoreAfterRawFailure = null
                         val shouldPlay = shouldPlayImmediately(action.play)
                         startRawFastResume(validation.item, shouldPlay)
+                        playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
                     }
                     is RawFastResumeValidator.Result.Invalid -> {
                         L.w(
