@@ -37,6 +37,7 @@ import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
@@ -114,6 +115,9 @@ constructor(
      */
     val openPanel: Event<OpenPanel>
         get() = _openPanel
+    private val _panelRoute = MutableStateFlow<PanelRouteRequest?>(null)
+    val panelRoute: StateFlow<PanelRouteRequest?> = _panelRoute
+    private var nextPanelRouteId = 1L
 
     private val _pagerQueue = MutableStateFlow(PagerQueue(listOf(), 0))
     /** The current queue in a special bundled format suitable for the cover ViewPager2. */
@@ -122,6 +126,9 @@ constructor(
     private val _visualizerState = MutableStateFlow<VisualizerState>(VisualizerState.Hidden)
     /** The current state of the audio visualizer. */
     val visualizerState: StateFlow<VisualizerState> = _visualizerState
+
+    private val _rawPlaybackMetadata = MutableStateFlow(playbackManager.rawPlaybackMetadata)
+    val rawPlaybackMetadata: StateFlow<RawPlaybackMetadata?> = _rawPlaybackMetadata
 
     fun updateVisualizerState(state: VisualizerState) {
         _visualizerState.value = state
@@ -239,6 +246,10 @@ constructor(
         if (_currentAudioSessionId.value != audioSessionId) {
             _currentAudioSessionId.value = audioSessionId
         }
+    }
+
+    override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {
+        _rawPlaybackMetadata.value = metadata
     }
 
     override fun onBarActionChanged() {
@@ -804,12 +815,51 @@ constructor(
     fun openQueue() = openImpl(OpenPanel.QUEUE)
 
     private fun openImpl(panel: OpenPanel) {
-        val existing = openPanel.flow.value
-        if (existing != null) {
-            L.d("Already opening $existing, ignoring opening $panel")
+        requestPanelRoute(
+            panel,
+            PanelRouteOrigin.USER_ACTION,
+            PanelRoutePriority.EXPLICIT,
+            waitForSong = panel != OpenPanel.MAIN,
+            reason = "legacy-open-impl",
+        )
+        _openPanel.put(panel)
+    }
+
+    fun requestPanelRoute(
+        panel: OpenPanel,
+        origin: PanelRouteOrigin,
+        priority: PanelRoutePriority,
+        waitForSong: Boolean,
+        reason: String,
+    ) {
+        val existing = _panelRoute.value
+        if (existing != null && existing.priority.value > priority.value) {
+            L.i(
+                "Keeping panel route ${existing.id}/${existing.destination}; rejected $panel " +
+                    "origin=$origin reason=$reason"
+            )
             return
         }
-        _openPanel.put(panel)
+        val request =
+            PanelRouteRequest(nextPanelRouteId++, panel, origin, priority, waitForSong, reason)
+        L.i("Panel route requested $request")
+        _panelRoute.value = request
+    }
+
+    fun acknowledgePanelRoute(id: Long, rendered: Boolean, reason: String) {
+        val existing = _panelRoute.value ?: return
+        if (existing.id != id) return
+        if (rendered) {
+            L.i("Panel route acknowledged id=$id reason=$reason")
+            _panelRoute.value = null
+        } else {
+            L.i("Panel route pending id=$id reason=$reason")
+        }
+    }
+
+    fun cancelPanelRoute(reason: String) {
+        _panelRoute.value?.let { L.i("Panel route cancelled id=${it.id} reason=$reason") }
+        _panelRoute.value = null
     }
 
     private companion object {

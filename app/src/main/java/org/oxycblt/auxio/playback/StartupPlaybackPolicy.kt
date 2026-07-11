@@ -61,4 +61,104 @@ object StartupPlaybackPolicy {
     fun shouldOpenPanelOnLaunch(library: Library?): Boolean {
         return library != null && !library.empty()
     }
+
+    fun startupRoute(
+        input: StartupPanelInput,
+    ): StartupPanelDecision =
+        when {
+            input.explicitDestination != null ->
+                StartupPanelDecision.RequestRoute(
+                    destination = input.explicitDestination,
+                    origin = PanelRouteOrigin.EXPLICIT_INTENT,
+                    priority = PanelRoutePriority.EXPLICIT,
+                    waitForSong = input.explicitDestination != OpenPanel.MAIN,
+                    reason = "explicit-destination",
+                )
+            !input.coldLaunch || input.restoredTask || input.userCancelled ->
+                StartupPanelDecision.KeepCurrent("not-new-cold-launch")
+            input.hasNormalSong ->
+                StartupPanelDecision.RequestRoute(
+                    destination = OpenPanel.PLAYBACK,
+                    origin = PanelRouteOrigin.STARTUP_RESTORE,
+                    priority = PanelRoutePriority.STARTUP,
+                    waitForSong = false,
+                    reason = "restored-normal-song",
+                )
+            input.libraryState == StartupLibraryRouteState.NEEDS_SOURCE ->
+                StartupPanelDecision.KeepCurrent("needs-source")
+            input.libraryState == StartupLibraryRouteState.EMPTY ->
+                StartupPanelDecision.KeepCurrent("empty-library")
+            input.libraryState == StartupLibraryRouteState.RECOVERY ->
+                StartupPanelDecision.KeepCurrent("library-recovery")
+            input.rawFastResumeActive ->
+                StartupPanelDecision.RequestRoute(
+                    destination = OpenPanel.PLAYBACK,
+                    origin = PanelRouteOrigin.STARTUP_RESTORE,
+                    priority = PanelRoutePriority.STARTUP,
+                    waitForSong = true,
+                    reason = "raw-fast-resume-awaiting-reconciliation",
+                )
+            input.topwayCompatFlavor && input.headUnitLandscapeMode ->
+                StartupPanelDecision.RequestRoute(
+                    destination = OpenPanel.PLAYBACK,
+                    origin = PanelRouteOrigin.STARTUP_RESTORE,
+                    priority = PanelRoutePriority.STARTUP,
+                    waitForSong = true,
+                    reason = "topway-cold-launch-awaiting-restore",
+                )
+            else -> StartupPanelDecision.KeepCurrent("standard-home-default")
+        }
+}
+
+data class StartupPanelInput(
+    val coldLaunch: Boolean,
+    val restoredTask: Boolean,
+    val topwayCompatFlavor: Boolean,
+    val headUnitLandscapeMode: Boolean,
+    val libraryState: StartupLibraryRouteState,
+    val hasNormalSong: Boolean,
+    val rawFastResumeActive: Boolean,
+    val explicitDestination: OpenPanel? = null,
+    val userCancelled: Boolean = false,
+)
+
+enum class StartupLibraryRouteState {
+    CHECKING,
+    READY_OR_UNKNOWN,
+    NEEDS_SOURCE,
+    EMPTY,
+    RECOVERY,
+}
+
+enum class PanelRouteOrigin {
+    EXPLICIT_INTENT,
+    USER_ACTION,
+    LAUNCHER,
+    STARTUP_RESTORE,
+}
+
+enum class PanelRoutePriority(val value: Int) {
+    STARTUP(10),
+    LAUNCHER(20),
+    EXPLICIT(30),
+}
+
+data class PanelRouteRequest(
+    val id: Long,
+    val destination: OpenPanel,
+    val origin: PanelRouteOrigin,
+    val priority: PanelRoutePriority,
+    val waitForSong: Boolean,
+    val reason: String,
+)
+
+sealed interface StartupPanelDecision {
+    data class KeepCurrent(val reason: String) : StartupPanelDecision
+    data class RequestRoute(
+        val destination: OpenPanel,
+        val origin: PanelRouteOrigin,
+        val priority: PanelRoutePriority,
+        val waitForSong: Boolean,
+        val reason: String,
+    ) : StartupPanelDecision
 }

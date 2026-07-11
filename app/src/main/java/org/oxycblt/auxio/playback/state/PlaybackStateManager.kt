@@ -478,7 +478,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                 null,
             )
         }
-        pendingDeferredPlayback?.let(stateHolder::handleDeferred)
+        if (pendingDeferredPlayback?.let(stateHolder::handleDeferred) == true) {
+            L.d("Pending action consumed during state-holder registration")
+            pendingDeferredPlayback = null
+        }
     }
 
     @Synchronized

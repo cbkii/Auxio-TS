@@ -39,6 +39,9 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.playback.StartupLibraryRouteState
+import org.oxycblt.auxio.playback.StartupPanelDecision
+import org.oxycblt.auxio.playback.StartupPanelInput
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.ui.UISettings
@@ -116,20 +119,44 @@ class MainActivity : AppCompatActivity() {
 
     private fun maybeRouteToPlaybackOnColdHeadUnitLaunch() {
         if (!isFirstResume) return
-        if (StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)) {
-            playbackModel.openPlayback()
-            return
+        val libraryRouteState =
+            when {
+                musicSettings.libraryState == LibraryState.NEVER ->
+                    StartupLibraryRouteState.NEEDS_SOURCE
+                musicRepository.library?.empty() == true -> StartupLibraryRouteState.EMPTY
+                musicRepository.library != null -> StartupLibraryRouteState.READY_OR_UNKNOWN
+                else -> StartupLibraryRouteState.READY_OR_UNKNOWN
+            }
+        val decision =
+            StartupPlaybackPolicy.startupRoute(
+                StartupPanelInput(
+                    coldLaunch = true,
+                    restoredTask = false,
+                    topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    headUnitLandscapeMode = pendingHeadUnitLaunchRoute,
+                    libraryState = libraryRouteState,
+                    hasNormalSong = playbackModel.song.value != null,
+                    rawFastResumeActive = false,
+                )
+            )
+        when (decision) {
+            is StartupPanelDecision.KeepCurrent ->
+                L.i("Startup panel route skipped reason=${decision.reason}")
+            is StartupPanelDecision.RequestRoute -> {
+                pendingHeadUnitLaunchRoute = false
+                L.i(
+                    "Startup panel route selected destination=${decision.destination} " +
+                        "reason=${decision.reason}"
+                )
+                playbackModel.requestPanelRoute(
+                    decision.destination,
+                    decision.origin,
+                    decision.priority,
+                    decision.waitForSong,
+                    decision.reason,
+                )
+            }
         }
-        if (!pendingHeadUnitLaunchRoute || !BuildConfig.TOPWAY_COMPAT_FLAVOR) return
-        if (musicSettings.libraryState == LibraryState.NEVER) {
-            L.d("Keeping first setup launch on library/setup flow")
-            return
-        }
-        pendingHeadUnitLaunchRoute = false
-        L.i(
-            "Routing TS18 cold launch to playback/queue [libraryState=${musicSettings.libraryState}]"
-        )
-        playbackModel.openPlaybackQueue()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -209,7 +236,7 @@ class MainActivity : AppCompatActivity() {
             }
         when (destination) {
             HeadUnitEntryPoints.EntryDestination.NOW_PLAYING -> playbackModel.openPlayback()
-            HeadUnitEntryPoints.EntryDestination.QUEUE -> playbackModel.openQueue()
+            HeadUnitEntryPoints.EntryDestination.QUEUE -> playbackModel.openPlaybackQueue()
             null -> {
                 L.w("Unexpected intent ${intent.action}")
                 return false

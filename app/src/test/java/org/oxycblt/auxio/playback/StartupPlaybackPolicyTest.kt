@@ -89,4 +89,124 @@ class StartupPlaybackPolicyTest {
         val result = StartupPlaybackPolicy.shouldOpenPanelOnLaunch(emptyLibrary)
         assertFalse(result)
     }
+    @Test
+    fun `startupRoute waits for restored song on Topway cold launch`() {
+        val decision =
+            StartupPlaybackPolicy.startupRoute(
+                StartupPanelInput(
+                    coldLaunch = true,
+                    restoredTask = false,
+                    topwayCompatFlavor = true,
+                    headUnitLandscapeMode = true,
+                    libraryState = StartupLibraryRouteState.READY_OR_UNKNOWN,
+                    hasNormalSong = false,
+                    rawFastResumeActive = false,
+                )
+            )
+        val request = decision as StartupPanelDecision.RequestRoute
+        assertEquals(OpenPanel.PLAYBACK, request.destination)
+        assertTrue(request.waitForSong)
+    }
+
+    @Test
+    fun `startupRoute opens restored paused or playing song independently of autoplay`() {
+        val decision =
+            StartupPlaybackPolicy.startupRoute(
+                StartupPanelInput(
+                    coldLaunch = true,
+                    restoredTask = false,
+                    topwayCompatFlavor = true,
+                    headUnitLandscapeMode = true,
+                    libraryState = StartupLibraryRouteState.READY_OR_UNKNOWN,
+                    hasNormalSong = true,
+                    rawFastResumeActive = false,
+                )
+            )
+        val request = decision as StartupPanelDecision.RequestRoute
+        assertEquals(OpenPanel.PLAYBACK, request.destination)
+        assertFalse(request.waitForSong)
+    }
+
+    @Test
+    fun `startupRoute never routes first setup empty or recovery states`() {
+        listOf(
+                StartupLibraryRouteState.NEEDS_SOURCE,
+                StartupLibraryRouteState.EMPTY,
+                StartupLibraryRouteState.RECOVERY,
+            )
+            .forEach { state ->
+                val decision =
+                    StartupPlaybackPolicy.startupRoute(
+                        StartupPanelInput(
+                            coldLaunch = true,
+                            restoredTask = false,
+                            topwayCompatFlavor = true,
+                            headUnitLandscapeMode = true,
+                            libraryState = state,
+                            hasNormalSong = false,
+                            rawFastResumeActive = false,
+                        )
+                    )
+                assertTrue(decision is StartupPanelDecision.KeepCurrent)
+            }
+    }
+
+    @Test
+    fun `startupRoute retains raw fast resume until normal song reconciliation`() {
+        val decision =
+            StartupPlaybackPolicy.startupRoute(
+                StartupPanelInput(
+                    coldLaunch = true,
+                    restoredTask = false,
+                    topwayCompatFlavor = true,
+                    headUnitLandscapeMode = true,
+                    libraryState = StartupLibraryRouteState.CHECKING,
+                    hasNormalSong = false,
+                    rawFastResumeActive = true,
+                )
+            )
+        val request = decision as StartupPanelDecision.RequestRoute
+        assertEquals("raw-fast-resume-awaiting-reconciliation", request.reason)
+        assertTrue(request.waitForSong)
+    }
+
+    @Test
+    fun `startupRoute explicit queue supersedes generic startup playback`() {
+        val decision =
+            StartupPlaybackPolicy.startupRoute(
+                StartupPanelInput(
+                    coldLaunch = true,
+                    restoredTask = false,
+                    topwayCompatFlavor = true,
+                    headUnitLandscapeMode = true,
+                    libraryState = StartupLibraryRouteState.READY_OR_UNKNOWN,
+                    hasNormalSong = true,
+                    rawFastResumeActive = false,
+                    explicitDestination = OpenPanel.PLAYBACK_QUEUE,
+                )
+            )
+        val request = decision as StartupPanelDecision.RequestRoute
+        assertEquals(OpenPanel.PLAYBACK_QUEUE, request.destination)
+        assertEquals(PanelRoutePriority.EXPLICIT, request.priority)
+    }
+
+    @Test
+    fun `startupRoute does not reopen on restored task warm return or user cancellation`() {
+        val base =
+            StartupPanelInput(
+                coldLaunch = true,
+                restoredTask = true,
+                topwayCompatFlavor = true,
+                headUnitLandscapeMode = true,
+                libraryState = StartupLibraryRouteState.READY_OR_UNKNOWN,
+                hasNormalSong = true,
+                rawFastResumeActive = false,
+            )
+        assertTrue(StartupPlaybackPolicy.startupRoute(base) is StartupPanelDecision.KeepCurrent)
+        assertTrue(
+            StartupPlaybackPolicy.startupRoute(base.copy(restoredTask = false, userCancelled = true))
+                is StartupPanelDecision.KeepCurrent
+        )
+    }
+
 }
