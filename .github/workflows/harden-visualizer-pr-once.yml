@@ -1,0 +1,405 @@
+name: Harden visualizer PR once
+
+on:
+  push:
+    branches:
+    - fix-visualizer-10840476153597340699
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      with:
+        ref: fix-visualizer-10840476153597340699
+        fetch-depth: 0
+        token: ${{ github.token }}
+    - name: Apply bounded visualizer lifecycle hardening
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        from pathlib import Path
+
+        panel_path = Path('app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt')
+        panel = panel_path.read_text()
+
+        def replace_once(text, old, new, label):
+            count = text.count(old)
+            if count != 1:
+                raise SystemExit(f'{label}: expected exactly one match, found {count}')
+            return text.replace(old, new, 1)
+
+        panel = replace_once(
+            panel,
+            '    private var visualizerPermissionLauncher: ActivityResultLauncher<String>? = null\n',
+            '''    private var visualizerPermissionLauncher: ActivityResultLauncher<String>? = null
+    private var visualizerGeneration = 0L
+    private var visualizerWatchdogJob: kotlinx.coroutines.Job? = null
+    private var visualizerCaptureStartedAtMs = 0L
+    private var visualizerLastCallbackAtMs = 0L
+    private var visualizerLastUsableFrameAtMs = 0L
+''',
+            'visualizer fields',
+        )
+
+        panel = replace_once(
+            panel,
+            '''                if (isGranted) {
+                    updateVisualizerState()
+                    if (coverPagerAdapter.itemCount > 0) {
+                        coverPagerAdapter.notifyItemRangeChanged(0, coverPagerAdapter.itemCount)
+                    }
+                }
+''',
+            '''                if (isGranted) {
+                    updateVisualizerState()
+                    if (coverPagerAdapter.itemCount > 0) {
+                        coverPagerAdapter.notifyItemRangeChanged(0, coverPagerAdapter.itemCount)
+                    }
+                } else {
+                    releaseVisualizer()
+                    playbackModel.updateVisualizerState(
+                        VisualizerState.Failed("Permission denied")
+                    )
+                }
+''',
+            'permission callback',
+        )
+
+        panel = replace_once(
+            panel,
+            'viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED)',
+            'viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED)',
+            'resumed session collector',
+        )
+
+        panel = replace_once(
+            panel,
+            '''    private fun releaseVisualizer() {
+        val activeVisualizer = visualizer
+''',
+            '''    private fun releaseVisualizer() {
+        visualizerGeneration++
+        visualizerWatchdogJob?.cancel()
+        visualizerWatchdogJob = null
+        visualizerCaptureStartedAtMs = 0L
+        visualizerLastCallbackAtMs = 0L
+        visualizerLastUsableFrameAtMs = 0L
+        val activeVisualizer = visualizer
+''',
+            'release generation cleanup',
+        )
+
+        panel = replace_once(
+            panel,
+            '''        if (!hasPermission) {
+            L.w("Visualizer not started: RECORD_AUDIO permission denied or not yet granted")
+            playbackModel.updateVisualizerState(VisualizerState.Failed("Permission denied"))
+            return // Will be requested in onResume if needed
+        }
+''',
+            '''        if (!hasPermission) {
+            L.w("Visualizer not started: RECORD_AUDIO permission denied or not yet granted")
+            releaseVisualizer()
+            playbackModel.updateVisualizerState(VisualizerState.Failed("Permission denied"))
+            return // Will be requested in onResume if needed
+        }
+''',
+            'permission loss release',
+        )
+
+        panel = replace_once(
+            panel,
+            '''        if (visualizer == null) {
+            playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
+            try {
+                val candidate = Visualizer(sessionId)
+''',
+            '''        if (visualizer == null) {
+            playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
+            var pendingCandidate: Visualizer? = null
+            val generation = ++visualizerGeneration
+            visualizerCaptureStartedAtMs = android.os.SystemClock.uptimeMillis()
+            visualizerLastCallbackAtMs = 0L
+            visualizerLastUsableFrameAtMs = 0L
+            try {
+                val candidate = Visualizer(sessionId)
+                pendingCandidate = candidate
+''',
+            'transactional candidate start',
+        )
+
+        panel = replace_once(
+            panel,
+            '''                            ) {
+                                if (++frameCount == 1) {
+''',
+            '''                            ) {
+                                if (generation != visualizerGeneration) return
+                                val receivedAtMs = android.os.SystemClock.uptimeMillis()
+                                visualizerLastCallbackAtMs = receivedAtMs
+                                if (++frameCount == 1) {
+''',
+            'callback generation guard',
+        )
+
+        panel = replace_once(
+            panel,
+            '''                                if (hasUsableData) {
+                                    playbackModel.updateVisualizerState(
+                                        VisualizerState.Live(
+                                            fft.copyOf(),
+                                            samplingRate,
+                                            android.os.SystemClock.uptimeMillis(),
+                                        )
+                                    )
+                                }
+''',
+            '''                                if (hasUsableData) {
+                                    visualizerLastUsableFrameAtMs = receivedAtMs
+                                    playbackModel.updateVisualizerState(
+                                        VisualizerState.Live(
+                                            fft.copyOf(),
+                                            samplingRate,
+                                            receivedAtMs,
+                                        )
+                                    )
+                                }
+''',
+            'usable frame timestamp',
+        )
+
+        panel = replace_once(
+            panel,
+            '''                    try {
+                        candidate.release()
+                    } catch (e: RuntimeException) {
+                        L.d(e, "Visualizer native release failed during partial initialization")
+                    }
+                    return
+''',
+            '''                    releaseVisualizerCandidate(candidate, "listener registration failure")
+                    pendingCandidate = null
+                    return
+''',
+            'listener failure cleanup',
+        )
+
+        panel = replace_once(
+            panel,
+            '''                visualizer = candidate
+                visualizerSessionId = sessionId
+                L.d(
+''',
+            '''                visualizer = candidate
+                visualizerSessionId = sessionId
+                pendingCandidate = null
+                startVisualizerWatchdog(generation, sessionId)
+                L.d(
+''',
+            'publish and watchdog',
+        )
+
+        panel = replace_once(
+            panel,
+            '''            } catch (e: RuntimeException) {
+                val message =
+''',
+            '''            } catch (e: RuntimeException) {
+                pendingCandidate?.let {
+                    releaseVisualizerCandidate(it, "partial initialization failure")
+                }
+                val message =
+''',
+            'outer failure cleanup',
+        )
+
+        panel = replace_once(
+            panel,
+            '''    private fun updatePlaying(isPlaying: Boolean) {
+''',
+            '''    private fun releaseVisualizerCandidate(candidate: Visualizer, reason: String) {
+        try {
+            if (candidate.enabled) candidate.enabled = false
+        } catch (e: RuntimeException) {
+            L.d(e, "Visualizer disable failed during $reason")
+        }
+        try {
+            candidate.setDataCaptureListener(null, 0, false, false)
+        } catch (e: RuntimeException) {
+            L.d(e, "Visualizer listener cleanup failed during $reason")
+        }
+        try {
+            candidate.release()
+        } catch (e: RuntimeException) {
+            L.d(e, "Visualizer native release failed during $reason")
+        }
+    }
+
+    private fun startVisualizerWatchdog(generation: Long, sessionId: Int) {
+        visualizerWatchdogJob?.cancel()
+        visualizerWatchdogJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
+                    if (
+                        generation != visualizerGeneration || visualizerSessionId != sessionId
+                    ) {
+                        return@launch
+                    }
+
+                    val now = android.os.SystemClock.uptimeMillis()
+                    val failureReason =
+                        when {
+                            visualizerLastCallbackAtMs == 0L &&
+                                now - visualizerCaptureStartedAtMs >
+                                    VISUALIZER_INITIAL_CALLBACK_TIMEOUT_MS ->
+                                "Visualizer produced no callbacks"
+                            visualizerLastCallbackAtMs > 0L &&
+                                now - visualizerLastCallbackAtMs >
+                                    VISUALIZER_CALLBACK_STALL_TIMEOUT_MS ->
+                                "Visualizer callbacks stalled"
+                            visualizerLastUsableFrameAtMs == 0L &&
+                                now - visualizerCaptureStartedAtMs >
+                                    VISUALIZER_USABLE_FRAME_TIMEOUT_MS ->
+                                "Visualizer produced no usable frames"
+                            visualizerLastUsableFrameAtMs > 0L &&
+                                now - visualizerLastUsableFrameAtMs >
+                                    VISUALIZER_USABLE_FRAME_TIMEOUT_MS ->
+                                "Visualizer usable frames became stale"
+                            else -> null
+                        }
+
+                    if (failureReason != null) {
+                        L.w("$failureReason for session $sessionId generation $generation")
+                        releaseVisualizer()
+                        playbackModel.updateVisualizerState(VisualizerState.Failed(failureReason))
+                        return@launch
+                    }
+                }
+            }
+    }
+
+    private fun updatePlaying(isPlaying: Boolean) {
+''',
+            'cleanup and watchdog helpers',
+        )
+
+        panel = replace_once(
+            panel,
+            '''    private fun updatePager(queue: PagerQueue) {
+''',
+            '''    private fun updatePager(queue: PagerQueue) {
+''',
+            'pager marker',
+        )
+
+        # Insert bounded watchdog constants in the existing class companion object.
+        marker = '''    companion object {
+'''
+        if panel.count(marker) != 1:
+            raise SystemExit(f'companion object: expected exactly one match, found {panel.count(marker)}')
+        panel = panel.replace(
+            marker,
+            '''    companion object {
+        private const val VISUALIZER_WATCHDOG_INTERVAL_MS = 250L
+        private const val VISUALIZER_INITIAL_CALLBACK_TIMEOUT_MS = 1_500L
+        private const val VISUALIZER_CALLBACK_STALL_TIMEOUT_MS = 1_500L
+        private const val VISUALIZER_USABLE_FRAME_TIMEOUT_MS = 1_500L
+
+''',
+            1,
+        )
+        panel_path.write_text(panel)
+
+        adapter_path = Path('app/src/main/java/org/oxycblt/auxio/playback/ui/swiper/CoverPagerAdapter.kt')
+        adapter = adapter_path.read_text()
+        for line in (
+            'import android.os.SystemClock\n',
+            'import kotlinx.coroutines.delay\n',
+            'import kotlinx.coroutines.isActive\n',
+        ):
+            adapter = adapter.replace(line, '')
+
+        old_block = '''            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    playbackModel.visualizerState.collect { state ->
+                        latestVisualizerState = state
+                        updateActivePositionAndDispatch()
+                    }
+                }
+                launch {
+                    while (isActive) {
+                        delay(FRESHNESS_CHECK_INTERVAL_MS)
+                        val state = latestVisualizerState
+                        if (
+                            state is VisualizerState.Live &&
+                                SystemClock.uptimeMillis() - state.receivedAtUptimeMs >
+                                    LIVE_FRAME_FRESHNESS_MS
+                        ) {
+                            latestVisualizerState =
+                                VisualizerState.Failed("Visualizer frame freshness expired")
+                            updateActivePositionAndDispatch()
+                        }
+                    }
+                }
+            }
+'''
+        new_block = '''            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                playbackModel.visualizerState.collect { state ->
+                    latestVisualizerState = state
+                    updateActivePositionAndDispatch()
+                }
+            }
+'''
+        adapter = replace_once(adapter, old_block, new_block, 'single adapter collector')
+        adapter = replace_once(
+            adapter,
+            '''
+    companion object {
+        private const val LIVE_FRAME_FRESHNESS_MS = 1_500L
+        private const val FRESHNESS_CHECK_INTERVAL_MS = 500L
+    }
+}
+''',
+            '''
+}
+''',
+            'remove duplicate adapter freshness owner',
+        )
+        adapter_path.write_text(adapter)
+        PY
+    - name: Prepare CI environment
+      run: bash ./scripts/prepare-ci-environment.sh
+    - uses: actions/setup-java@v5
+      with:
+        java-version: "21"
+        distribution: "temurin"
+    - name: Write local.properties for Android SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        test -n "${sdk_dir}"
+        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+    - uses: gradle/actions/setup-gradle@v5
+      with:
+        cache-read-only: true
+    - name: Format, remove workflow, and push
+      shell: bash
+      env:
+        AUXIO_TS_CI_GRADLE_TIMEOUT: 20m
+      run: |
+        set -euo pipefail
+        bash ./scripts/ci-gradle.sh spotlessApply
+        git rm .github/workflows/harden-visualizer-pr-once.yml
+        git diff --check
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add -A
+        git commit -m "Harden visualizer capture lifecycle"
+        git push origin HEAD:fix-visualizer-10840476153597340699
