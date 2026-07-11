@@ -113,9 +113,9 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
                     return@combine null
                 }
 
-                // A normal panel requires a reconciled Song. Raw fast-resume remains pending under
-                // its explicitly modelled outcome until the UI can apply the selected policy.
-                if (state.outcome != RestoreOutcome.RAW_FAST_RESUME_ACTIVE && state.song == null) {
+                // The current panel cannot safely render raw-only metadata. Keep the route pending
+                // until raw fast-resume reconciles to a normal Song.
+                if (state.song == null) {
                     return@combine null
                 }
 
