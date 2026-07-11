@@ -125,7 +125,6 @@ android {
     }
 
 
-
     testOptions {
         unitTests {
             includeAndroidResources = true
@@ -158,14 +157,6 @@ android {
             java.srcDirs += ["src/topwayCompat/java"]
             kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
             res.srcDirs += ["src/topwayCompat/res"]
-        }
-        testTopwayTwMusic {
-            java.srcDirs += ["src/topwayCompatTest/java"]
-            kotlin.srcDirs += ["src/topwayCompatTest/java"]
-        }
-        testTopwayTwMedia {
-            java.srcDirs += ["src/topwayCompatTest/java"]
-            kotlin.srcDirs += ["src/topwayCompatTest/java"]
         }
     }
 
