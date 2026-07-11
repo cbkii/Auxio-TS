@@ -76,6 +76,9 @@ object TopwayOverlayRestoreBridge {
         } catch (e: IllegalStateException) {
             L.w(e, "Direct Topway overlay foreground-service restore was rejected")
             CarOverlayContract.OverlayRestoreResult.StartRejected("IllegalStateException")
+        } catch (e: RuntimeException) {
+            L.w(e, "Direct Topway overlay foreground-service restore failed unexpectedly")
+            CarOverlayContract.OverlayRestoreResult.StartRejected("RuntimeException")
         }
     }
 }
