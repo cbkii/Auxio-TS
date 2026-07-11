@@ -34,6 +34,7 @@ import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.state.RestoreOutcome
+import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -54,63 +55,67 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
     )
 
     enum class Priority {
-        EXPLICIT_INTENT,
         GENERIC_STARTUP,
+        EXPLICIT_INTENT,
     }
 
-    private val activeRequest = MutableStateFlow<RouteRequest?>(null)
+    private data class CoordinatorState(
+        val song: Song?,
+        val outcome: RestoreOutcome,
+        val readiness: StartupReadinessState,
+    )
 
-    // Tracked state inputs updated by fragments
-    private val currentSong = MutableStateFlow<org.oxycblt.musikr.Song?>(null)
-    private val restoreOutcome = MutableStateFlow(RestoreOutcome.NOT_REQUESTED)
-    private val startupReadinessState =
-        MutableStateFlow<StartupReadinessState>(StartupReadinessState.CheckingCachedLibrary)
+    private val activeRequest = MutableStateFlow<RouteRequest?>(null)
+    private val coordinatorState =
+        MutableStateFlow(
+            CoordinatorState(
+                song = null,
+                outcome = RestoreOutcome.NOT_REQUESTED,
+                readiness = StartupReadinessState.CheckingCachedLibrary,
+            )
+        )
 
     val routeDecision: StateFlow<RouteRequest?> =
-        combine(activeRequest, startupReadinessState, restoreOutcome, currentSong) {
-                request: RouteRequest?,
-                readiness: StartupReadinessState,
-                outcome: RestoreOutcome,
-                song: org.oxycblt.musikr.Song? ->
+        combine(activeRequest, coordinatorState) { request, state ->
                 if (request == null) return@combine null
 
                 if (
-                    readiness == StartupReadinessState.CheckingCachedLibrary ||
-                        readiness == StartupReadinessState.NeedsMusicSource
+                    state.readiness == StartupReadinessState.CheckingCachedLibrary ||
+                        state.readiness == StartupReadinessState.NeedsMusicSource
                 ) {
                     return@combine null
                 }
 
-                // Exclude empty libraries from generic panel routing
+                // Exclude empty libraries from generic panel routing.
                 if (
                     request.priority == Priority.GENERIC_STARTUP &&
-                        readiness == StartupReadinessState.EmptyLibrary
+                        state.readiness == StartupReadinessState.EmptyLibrary
                 ) {
-                    L.d("Cancelling generic startup route: Library is empty")
+                    L.d("Suppressing generic startup route: Library is empty")
                     return@combine null
                 }
 
-                // Await an outcome
+                // Await a terminal or renderable restore outcome.
                 if (
-                    outcome == RestoreOutcome.NOT_REQUESTED ||
-                        outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                        outcome == RestoreOutcome.WAITING_FOR_LIBRARY
+                    state.outcome == RestoreOutcome.NOT_REQUESTED ||
+                        state.outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                        state.outcome == RestoreOutcome.WAITING_FOR_LIBRARY
                 ) {
                     return@combine null
                 }
 
-                // Do not route generic launches if there is no session to restore
+                // Do not route generic launches if there is no session to restore.
                 if (
                     request.priority == Priority.GENERIC_STARTUP &&
-                        outcome == RestoreOutcome.NO_SAVED_SESSION
+                        state.outcome == RestoreOutcome.NO_SAVED_SESSION
                 ) {
-                    L.d("Cancelling generic startup route: No saved session")
+                    L.d("Suppressing generic startup route: No saved session")
                     return@combine null
                 }
 
-                // If we're relying on a normal song, ensure we have one, unless it's raw
-                // fast-resume
-                if (outcome != RestoreOutcome.RAW_FAST_RESUME_ACTIVE && song == null) {
+                // A normal panel requires a reconciled Song. Raw fast-resume remains pending under
+                // its explicitly modelled outcome until the UI can apply the selected policy.
+                if (state.outcome != RestoreOutcome.RAW_FAST_RESUME_ACTIVE && state.song == null) {
                     return@combine null
                 }
 
@@ -121,14 +126,8 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    fun updateState(
-        song: org.oxycblt.musikr.Song?,
-        outcome: RestoreOutcome,
-        readiness: StartupReadinessState,
-    ) {
-        currentSong.value = song
-        restoreOutcome.value = outcome
-        startupReadinessState.value = readiness
+    fun updateState(song: Song?, outcome: RestoreOutcome, readiness: StartupReadinessState) {
+        coordinatorState.value = CoordinatorState(song, outcome, readiness)
     }
 
     /** Provide an explicit launch route (e.g., from an Intent). Overrides generic routes. */
@@ -146,8 +145,8 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
             return
         }
         activeRequest.update { current ->
-            if (current != null && current.priority >= Priority.EXPLICIT_INTENT) {
-                L.d("Generic startup route suppressed by existing higher-priority route: $current")
+            if (current?.priority == Priority.EXPLICIT_INTENT) {
+                L.d("Generic startup route suppressed by existing explicit route: $current")
                 current
             } else {
                 val destination =
