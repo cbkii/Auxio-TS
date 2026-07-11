@@ -213,6 +213,8 @@ sealed interface StateAck {
     /** @see PlaybackStateHolder.repeatMode */
     data object RepeatModeChanged : StateAck
 
+    data class AudioSessionIdChanged(val audioSessionId: Int) : StateAck
+
     data object SessionEnded : StateAck
 }
 

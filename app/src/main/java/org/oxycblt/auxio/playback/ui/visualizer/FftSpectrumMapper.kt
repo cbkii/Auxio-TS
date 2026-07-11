@@ -20,7 +20,6 @@ package org.oxycblt.auxio.playback.ui.visualizer
 
 import kotlin.math.ln
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -44,7 +43,38 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
     private val raw = FloatArray(bandCount)
     private var adaptivePeak = MIN_ADAPTIVE_PEAK
 
-    fun update(fft: ByteArray?) {
+    /** Current global energy envelope for visualizer scaling. */
+    var globalEnvelope = 0f
+        private set
+
+    private val sumSquares = FloatArray(bandCount)
+    private val sampleCounts = IntArray(bandCount)
+
+    private var cachedFftSize = -1
+    private var cachedSamplingRate = -1
+    private var binToBandMapping = IntArray(0)
+
+    private fun recalculateBinToBandMapping(fftSize: Int, samplingRate: Int) {
+        cachedFftSize = fftSize
+        cachedSamplingRate = samplingRate
+
+        val usablePairCount = ((fftSize - 2) / 2).coerceAtLeast(0)
+        binToBandMapping = IntArray(usablePairCount + 1) { -1 }
+
+        if (usablePairCount == 0) return
+
+        val freqResolution = (samplingRate / 1000f) / usablePairCount.toFloat() / 2f
+        for (bin in 1..usablePairCount) {
+            val freq = bin * freqResolution
+            if (freq < MIN_FREQ || freq > MAX_FREQ) continue
+
+            val normalizedLogFreq = (ln(freq) - MIN_FREQ_LOG) / LOG_RANGE
+            val band = (normalizedLogFreq * bandCount).toInt().coerceIn(0, bandCount - 1)
+            binToBandMapping[bin] = band
+        }
+    }
+
+    fun update(fft: ByteArray?, samplingRate: Int = 44100000) {
         if (fft == null || fft.size < MIN_FFT_SIZE) {
             decayToSilence()
             return
@@ -56,79 +86,109 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             return
         }
 
-        raw.fill(0f)
-        var framePeak = 0f
-        var contributingBins = 0
+        if (cachedSamplingRate != samplingRate || cachedFftSize != fft.size) {
+            recalculateBinToBandMapping(fft.size, samplingRate)
+        }
+
+        sumSquares.fill(0f)
+        sampleCounts.fill(0)
+
+        var frameGlobalSumSquares = 0f
+        var globalSampleCount = 0
 
         for (bin in 1..usablePairCount) {
+            val band = binToBandMapping[bin]
+            if (band < 0) continue
+
             val pairIndex = bin * 2
             if (pairIndex + 1 >= fft.size) break
 
             val real = fft[pairIndex].toFloat()
             val imaginary = fft[pairIndex + 1].toFloat()
             val magnitude = sqrt(real * real + imaginary * imaginary)
-            if (magnitude <= 0f) continue
 
-            val normalizedBin = (bin - 1).toFloat() / usablePairCount.toFloat()
-            val band = frequencyBandFor(normalizedBin)
-            raw[band] = max(raw[band], magnitude)
-            framePeak = max(framePeak, magnitude)
-            contributingBins++
+            frameGlobalSumSquares += magnitude * magnitude
+            globalSampleCount++
+
+            sumSquares[band] += magnitude * magnitude
+            sampleCounts[band]++
         }
 
-        if (contributingBins == 0 || framePeak <= 0f) {
+        if (globalSampleCount == 0) {
             decayToSilence()
             return
         }
 
-        adaptivePeak = max(MIN_ADAPTIVE_PEAK, max(framePeak, adaptivePeak * ADAPTIVE_DECAY))
+        val frameGlobalRms = sqrt(frameGlobalSumSquares / globalSampleCount)
+        adaptivePeak = max(MIN_ADAPTIVE_PEAK, max(frameGlobalRms, adaptivePeak * ADAPTIVE_DECAY))
+
+        val normalizedGlobalEnvelope = (frameGlobalRms / adaptivePeak).coerceIn(0f, 1f)
+        globalEnvelope = max(normalizedGlobalEnvelope, globalEnvelope * ENVELOPE_DECAY)
 
         for (i in bands.indices) {
-            val boosted = (raw[i] / adaptivePeak).coerceIn(0f, 1f).pow(RESPONSE_CURVE)
-            val withFloor = if (boosted > 0f) max(boosted, ACTIVITY_FLOOR) else 0f
-            val smoothed =
-                if (withFloor > bands[i]) {
-                    bands[i] + (withFloor - bands[i]) * ATTACK
+            raw[i] =
+                if (sampleCounts[i] > 0) {
+                    sqrt(sumSquares[i] / sampleCounts[i])
                 } else {
-                    bands[i] * RELEASE
+                    0f
                 }
-            peaks[i] = max(smoothed, peaks[i] * PEAK_DECAY)
-            bands[i] = max(smoothed, peaks[i] * PEAK_BLEND).coerceIn(0f, 1f)
+        }
+
+        for (i in bands.indices) {
+            val left2 = raw[(i - 2 + bandCount) % bandCount]
+            val left1 = raw[(i - 1 + bandCount) % bandCount]
+            val center = raw[i]
+            val right1 = raw[(i + 1) % bandCount]
+            val right2 = raw[(i + 2) % bandCount]
+
+            val smoothedRaw =
+                (left2 * 0.10f) +
+                    (left1 * 0.22f) +
+                    (center * 0.36f) +
+                    (right1 * 0.22f) +
+                    (right2 * 0.10f)
+
+            val boosted = (smoothedRaw / adaptivePeak).coerceIn(0f, 1f).pow(RESPONSE_CURVE)
+
+            if (boosted > bands[i]) {
+                bands[i] += (boosted - bands[i]) * ATTACK
+            } else {
+                bands[i] *= RELEASE
+            }
+            bands[i] = bands[i].coerceIn(0f, 1f)
         }
     }
 
     fun reset() {
         bands.fill(0f)
-        peaks.fill(0f)
         raw.fill(0f)
         adaptivePeak = MIN_ADAPTIVE_PEAK
+        globalEnvelope = 0f
     }
 
     private fun decayToSilence() {
         raw.fill(0f)
+        globalEnvelope *= ENVELOPE_DECAY
         for (i in bands.indices) {
-            peaks[i] *= PEAK_DECAY
-            bands[i] = max(bands[i] * SILENCE_DECAY, peaks[i] * PEAK_BLEND).coerceIn(0f, 1f)
+            bands[i] = (bands[i] * SILENCE_DECAY).coerceIn(0f, 1f)
         }
     }
 
-    private fun frequencyBandFor(normalizedBin: Float): Int {
-        val curved = ln(1f + normalizedBin * LOG_WEIGHT) / ln(1f + LOG_WEIGHT)
-        return min(bandCount - 1, (curved * bandCount).toInt())
-    }
-
     companion object {
-        const val DEFAULT_BAND_COUNT = 64
+        const val DEFAULT_BAND_COUNT = 48
         private const val MIN_FFT_SIZE = 4
+        private const val MIN_FREQ = 40f
+        private const val MAX_FREQ = 12000f
+        private val MIN_FREQ_LOG = ln(MIN_FREQ)
+        private val MAX_FREQ_LOG = ln(MAX_FREQ)
+        private val LOG_RANGE = MAX_FREQ_LOG - MIN_FREQ_LOG
+
         private const val MIN_ADAPTIVE_PEAK = 18f
-        private const val ADAPTIVE_DECAY = 0.96f
-        private const val ATTACK = 0.72f
-        private const val RELEASE = 0.82f
-        private const val PEAK_DECAY = 0.9f
-        private const val PEAK_BLEND = 0.72f
+        private const val ADAPTIVE_DECAY = 0.98f
+        private const val ATTACK = 0.65f
+        private const val RELEASE = 0.88f
         private const val SILENCE_DECAY = 0.84f
-        private const val ACTIVITY_FLOOR = 0.08f
-        private const val RESPONSE_CURVE = 0.62f
-        private const val LOG_WEIGHT = 7f
+        private const val RESPONSE_CURVE = 0.70f
+        private const val ENVELOPE_DECAY = 0.92f
     }
 }

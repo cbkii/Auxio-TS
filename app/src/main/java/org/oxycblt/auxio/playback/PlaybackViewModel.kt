@@ -40,6 +40,7 @@ import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
+import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
@@ -118,12 +119,12 @@ constructor(
     /** The current queue in a special bundled format suitable for the cover ViewPager2. */
     val pagerQueue: StateFlow<PagerQueue> = _pagerQueue
 
-    private val _visualizerFft = MutableStateFlow<ByteArray?>(null)
-    /** The current FFT data to be dispatched to visualizer UI components. */
-    val visualizerFft: StateFlow<ByteArray?> = _visualizerFft
+    private val _visualizerState = MutableStateFlow<VisualizerState>(VisualizerState.Hidden)
+    /** The current state of the audio visualizer. */
+    val visualizerState: StateFlow<VisualizerState> = _visualizerState
 
-    fun updateVisualizerFft(bytes: ByteArray?) {
-        _visualizerFft.value = bytes?.copyOf()
+    fun updateVisualizerState(state: VisualizerState) {
+        _visualizerState.value = state
     }
 
     private val _pagerCommand = MutableEvent<PagerCommand>()
@@ -139,11 +140,13 @@ constructor(
     val playbackDecision: Event<PlaybackDecision>
         get() = _playbackDecision
 
+    private val _currentAudioSessionId =
+        MutableStateFlow<Int?>(playbackManager.currentAudioSessionId)
     /**
      * The current audio session ID of the internal player. Null if no audio player is available.
      */
-    val currentAudioSessionId: Int?
-        get() = playbackManager.currentAudioSessionId
+    val currentAudioSessionId: StateFlow<Int?>
+        get() = _currentAudioSessionId
 
     init {
         playbackManager.addListener(this)
@@ -230,6 +233,12 @@ constructor(
 
     override fun onRepeatModeChanged(repeatMode: RepeatMode) {
         _repeatMode.value = repeatMode
+    }
+
+    override fun onAudioSessionIdChanged(audioSessionId: Int) {
+        if (_currentAudioSessionId.value != audioSessionId) {
+            _currentAudioSessionId.value = audioSessionId
+        }
     }
 
     override fun onBarActionChanged() {
