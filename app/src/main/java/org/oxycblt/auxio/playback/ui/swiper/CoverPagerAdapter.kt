@@ -77,7 +77,7 @@ class CoverPagerAdapter(
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch {
                     playbackModel.visualizerState.collect { state ->
-                        latestVisualizerState = state
+                        latestVisualizerState = state.withFreshLiveFrameOrFailure()
                         updateActivePositionAndDispatch()
                     }
                 }
@@ -130,6 +130,16 @@ class CoverPagerAdapter(
     override fun onViewRecycled(viewHolder: CoverViewHolder) {
         viewHolder.onViewRecycled()
         super.onViewRecycled(viewHolder)
+    }
+
+    private fun VisualizerState.withFreshLiveFrameOrFailure(): VisualizerState {
+        if (
+            this is VisualizerState.Live &&
+                SystemClock.uptimeMillis() - receivedAtUptimeMs > LIVE_FRAME_FRESHNESS_MS
+        ) {
+            return VisualizerState.Failed("Visualizer frame freshness expired")
+        }
+        return this
     }
 
     private fun updateActivePositionAndDispatch() {
