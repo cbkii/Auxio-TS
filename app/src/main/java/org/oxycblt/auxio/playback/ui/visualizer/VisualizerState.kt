@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.playback.ui.visualizer
 
+/** Immutable capture states shared by the playback owner and the active cover renderer. */
 sealed interface VisualizerState {
     /** Visualizer is disabled by settings, playback is stopped, or not requested. */
     data object Hidden : VisualizerState
