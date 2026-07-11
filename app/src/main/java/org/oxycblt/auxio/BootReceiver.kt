@@ -124,7 +124,13 @@ class BootReceiver : BroadcastReceiver() {
                 "Floating-only autostart",
                 "requesting overlay restore",
             )
-            if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
+            val result = TopwayOverlayRestoreBridge.requestOverlayRestore(context)
+            if (
+                result is
+                    org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.StartRequested ||
+                    result is
+                        org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.AlreadyVisible
+            ) {
                 L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
                 journal.log(
                     DiagnosticJournal.CAT_BOOT,
@@ -133,8 +139,8 @@ class BootReceiver : BroadcastReceiver() {
                 )
                 return
             } else {
-                L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")
-                journal.log(DiagnosticJournal.CAT_BOOT, "Floating-only skipped", "non-Topway build")
+                L.w("Launch Floating Controls only could not start the overlay: $result")
+                journal.log(DiagnosticJournal.CAT_BOOT, "Floating-only skipped", result.toString())
             }
         }
 

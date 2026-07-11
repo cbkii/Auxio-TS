@@ -21,26 +21,41 @@ package org.oxycblt.auxio.headunit.overlay
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract.ACTION_START
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract.EXTRA_START_REASON
-import org.oxycblt.auxio.headunit.overlay.CarOverlayContract.RESTORE_ACTION
 import timber.log.Timber as L
 
 object TopwayOverlayRestoreBridge {
     private const val SERVICE_CLASS = "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
 
-    fun requestOverlayRestore(context: Context): Boolean {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return false
+    fun requestOverlayRestore(context: Context): CarOverlayContract.OverlayRestoreResult {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR)
+            return CarOverlayContract.OverlayRestoreResult.UnsupportedBuild
+
+        val prefs =
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(
+                context.applicationContext
+            )
+        if (!prefs.getBoolean(CarOverlayContract.KEY_ENABLED, false)) {
+            return CarOverlayContract.OverlayRestoreResult.Disabled
+        }
+
+        if (!Settings.canDrawOverlays(context)) {
+            return CarOverlayContract.OverlayRestoreResult.PermissionMissing
+        }
+
         val reason = "boot_autostart"
-        context.sendBroadcast(Intent(RESTORE_ACTION).setPackage(context.packageName))
-        tryStartOverlayService(context, reason)
-        return true
+        return tryStartOverlayService(context, reason)
     }
 
-    private fun tryStartOverlayService(context: Context, reason: String) {
-        try {
+    private fun tryStartOverlayService(
+        context: Context,
+        reason: String,
+    ): CarOverlayContract.OverlayRestoreResult {
+        return try {
             val serviceClass = Class.forName(SERVICE_CLASS).asSubclass(Service::class.java)
             val serviceIntent =
                 Intent(context, serviceClass)
@@ -48,16 +63,19 @@ object TopwayOverlayRestoreBridge {
                     .putExtra(EXTRA_START_REASON, reason)
             ContextCompat.startForegroundService(context, serviceIntent)
             L.i("Requested direct Topway overlay foreground-service restore [$reason]")
+            CarOverlayContract.OverlayRestoreResult.StartRequested
         } catch (e: ClassNotFoundException) {
             L.w(e, "Topway overlay service class is not present in this source set")
+            CarOverlayContract.OverlayRestoreResult.StartRejected("ClassNotFoundException")
         } catch (e: ClassCastException) {
             L.w(e, "Topway overlay service class did not extend Service")
+            CarOverlayContract.OverlayRestoreResult.StartRejected("ClassCastException")
         } catch (e: SecurityException) {
             L.w(e, "Direct Topway overlay foreground-service restore was denied")
+            CarOverlayContract.OverlayRestoreResult.StartRejected("SecurityException")
         } catch (e: IllegalStateException) {
             L.w(e, "Direct Topway overlay foreground-service restore was rejected")
-        } catch (e: RuntimeException) {
-            L.w(e, "Direct Topway overlay foreground-service restore failed unexpectedly")
+            CarOverlayContract.OverlayRestoreResult.StartRejected("IllegalStateException")
         }
     }
 }

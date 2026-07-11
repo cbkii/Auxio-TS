@@ -81,8 +81,17 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         }
 
     override fun onCreate() {
+        OverlayLifecycleJournal.init(this)
         super.onCreate()
         isServiceCreated = true
+        OverlayLifecycleJournal.log(
+            "service_create",
+            prefs.enabled,
+            Settings.canDrawOverlays(this),
+            CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+            isServiceCreated,
+            "Created",
+        )
         prefs = CarOverlayPrefs.from(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         L.d("CarFloatingControlsService created")
@@ -96,6 +105,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             // Re-establish the overlay if still enabled and permitted; otherwise stop cleanly.
             if (!prefs.enabled || !Settings.canDrawOverlays(this)) {
                 stopSelfCleanly()
+                OverlayLifecycleJournal.log(
+                    "service_destroy",
+                    prefs.enabled,
+                    Settings.canDrawOverlays(this),
+                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                    isServiceCreated,
+                    "Destroyed",
+                )
                 return START_NOT_STICKY
             }
             journal.log(
@@ -114,16 +131,40 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         if (intent.action == ACTION_STOP) {
             stopOverlayRuntime()
             stopSelfCleanly()
+            OverlayLifecycleJournal.log(
+                "service_destroy",
+                prefs.enabled,
+                Settings.canDrawOverlays(this),
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                isServiceCreated,
+                "Destroyed",
+            )
             return START_NOT_STICKY
         }
 
         if (!isForegroundPromoted) {
             if (!prefs.enabled || !Settings.canDrawOverlays(this)) {
                 stopSelfCleanly()
+                OverlayLifecycleJournal.log(
+                    "service_destroy",
+                    prefs.enabled,
+                    Settings.canDrawOverlays(this),
+                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                    isServiceCreated,
+                    "Destroyed",
+                )
                 return START_NOT_STICKY
             }
             if (!promoteForeground()) {
                 stopSelfCleanly()
+                OverlayLifecycleJournal.log(
+                    "service_destroy",
+                    prefs.enabled,
+                    Settings.canDrawOverlays(this),
+                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                    isServiceCreated,
+                    "Destroyed",
+                )
                 return START_NOT_STICKY
             }
             isForegroundPromoted = true
@@ -152,11 +193,19 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 } else {
                     L.d("Ignoring reset-position command with no live overlay")
                     stopSelfCleanly()
+                    OverlayLifecycleJournal.log(
+                        "service_destroy",
+                        prefs.enabled,
+                        Settings.canDrawOverlays(this),
+                        CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                        isServiceCreated,
+                        "Destroyed",
+                    )
                 }
             }
             ACTION_AUXIO_FOREGROUND_CHANGED -> {
                 isAuxioForeground = intent.getBooleanExtra(EXTRA_AUXIO_FOREGROUND, false)
-                prefs.suppressedByAuxioForeground =
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground =
                     isAuxioForeground && prefs.hideWhileAuxioForeground
                 if (shouldSuppressForForegroundPreference()) {
                     hideOverlay()
@@ -167,6 +216,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             else -> {
                 L.w("Unknown action: ${intent.action}, stopping idle service")
                 stopSelfCleanly()
+                OverlayLifecycleJournal.log(
+                    "service_destroy",
+                    prefs.enabled,
+                    Settings.canDrawOverlays(this),
+                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                    isServiceCreated,
+                    "Destroyed",
+                )
             }
         }
         return restartMode()
@@ -190,6 +247,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             if (!promoteForeground()) {
                 // Foreground promotion failed — stop cleanly.
                 stopSelfCleanly()
+                OverlayLifecycleJournal.log(
+                    "service_destroy",
+                    prefs.enabled,
+                    Settings.canDrawOverlays(this),
+                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                    isServiceCreated,
+                    "Destroyed",
+                )
                 return
             }
             isForegroundPromoted = true
@@ -225,7 +290,8 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     }
 
     private fun shouldSuppressForForegroundPreference(): Boolean =
-        prefs.hideWhileAuxioForeground && (isAuxioForeground || prefs.suppressedByAuxioForeground)
+        prefs.hideWhileAuxioForeground &&
+            (isAuxioForeground || CarOverlayVisibilityHooks.isSuppressedByAuxioForeground)
 
     private fun restartMode(): Int =
         if (prefs.enabled && Settings.canDrawOverlays(this)) START_STICKY else START_NOT_STICKY
@@ -235,12 +301,28 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             L.d("Cannot show overlay: disabled, stopping")
             removeOverlay()
             stopSelfCleanly()
+            OverlayLifecycleJournal.log(
+                "service_destroy",
+                prefs.enabled,
+                Settings.canDrawOverlays(this),
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                isServiceCreated,
+                "Destroyed",
+            )
             return
         }
         if (!Settings.canDrawOverlays(this)) {
             L.w("Cannot show overlay: permission revoked, stopping")
             removeOverlay()
             stopSelfCleanly()
+            OverlayLifecycleJournal.log(
+                "service_destroy",
+                prefs.enabled,
+                Settings.canDrawOverlays(this),
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                isServiceCreated,
+                "Destroyed",
+            )
             return
         }
         if (isOverlayAttached) return
@@ -266,6 +348,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         } catch (e: Exception) {
             L.e(e, "Failed to add overlay view, stopping")
             stopSelfCleanly()
+            OverlayLifecycleJournal.log(
+                "service_destroy",
+                prefs.enabled,
+                Settings.canDrawOverlays(this),
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+                isServiceCreated,
+                "Destroyed",
+            )
             return
         }
         overlayView = view
@@ -476,6 +566,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     }
 
     private fun stopSelfCleanly() {
+        OverlayLifecycleJournal.log(
+            "service_destroy",
+            prefs.enabled,
+            Settings.canDrawOverlays(this),
+            CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+            isServiceCreated,
+            "Destroyed",
+        )
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -532,9 +630,18 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     }
 
     override fun onStopRequested() {
+        CarOverlaySettings.setEnabled(this, false)
         L.d("Stop requested via triple-tap")
         stopOverlayRuntime()
         stopSelfCleanly()
+        OverlayLifecycleJournal.log(
+            "service_destroy",
+            prefs.enabled,
+            Settings.canDrawOverlays(this),
+            CarOverlayVisibilityHooks.isSuppressedByAuxioForeground,
+            isServiceCreated,
+            "Destroyed",
+        )
     }
 
     /**
@@ -601,13 +708,16 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 return
             }
             if (clearsForegroundSuppression(reason)) {
-                prefs.suppressedByAuxioForeground = false
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
             }
             if (reason == "application_on_create" && prefs.hideWhileAuxioForeground) {
                 L.d("Skipping app-start overlay restore while hide-foreground preference is active")
                 return
             }
-            if (prefs.hideWhileAuxioForeground && prefs.suppressedByAuxioForeground) {
+            if (
+                prefs.hideWhileAuxioForeground &&
+                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground
+            ) {
                 L.d(
                     "Skipping overlay restore while Auxio foreground suppression is active [$reason]"
                 )

@@ -86,12 +86,12 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
     }
 
     private fun setupAutostartFloatingOnly(preference: Preference) {
+        val overlayEnabled = CarOverlaySettings.isEnabled(requireContext())
+        preference.isEnabled = overlayEnabled
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             preference.isVisible = false
             return
         }
-
-        val overlayEnabled = CarOverlaySettings.isEnabled(requireContext())
 
         preference.summary =
             if (overlayEnabled) {
@@ -120,6 +120,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                     findPreference<Preference>(getString(R.string.set_key_autostart_floating_only))
                 if (autostartFloatingOnly != null) {
                     setupAutostartFloatingOnly(autostartFloatingOnly)
+                    autostartFloatingOnly.isEnabled = newValue as Boolean
                 }
                 result
             }
