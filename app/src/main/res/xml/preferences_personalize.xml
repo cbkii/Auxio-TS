@@ -49,6 +49,12 @@
             app:summary="@string/set_task_exit_desc"
             app:title="@string/set_task_exit" />
 
+        <SwitchPreferenceCompat
+            app:defaultValue="@bool/launch_to_panel_default"
+            app:key="@string/set_key_launch_to_panel"
+            app:summary="@string/set_launch_to_panel_desc"
+            app:title="@string/set_launch_to_panel" />
+
     </PreferenceCategory>
 
 

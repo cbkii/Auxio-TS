@@ -643,6 +643,7 @@ class MainFragment :
                 is Outer.About -> MainFragmentDirections.about()
                 null -> return
             }
+        startupPanelCoordinator.cancelRouting()
         findNavController().navigateSafe(directions)
         homeModel.showOuter.consume()
     }
@@ -712,11 +713,11 @@ class MainFragment :
     }
 
     private fun tryOpenPlaybackPanel() {
+        startupPanelCoordinator.cancelRouting()
+
         val binding = requireBinding()
         val playbackSheetBehavior =
             binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
-
-        startupPanelCoordinator.cancelRouting()
 
         if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED) {
             // Playback sheet is not expanded and not hidden, we can expand it.
@@ -727,8 +728,6 @@ class MainFragment :
 
         val queueSheetBehavior =
             (binding.queueSheet.coordinatorLayoutBehavior ?: return) as QueueBottomSheetBehavior
-
-        startupPanelCoordinator.cancelRouting()
 
         if (
             playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED &&
@@ -742,6 +741,8 @@ class MainFragment :
     }
 
     private fun tryClosePlaybackPanel() {
+        startupPanelCoordinator.cancelRouting()
+
         val binding = requireBinding()
         val playbackSheetBehavior =
             binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
@@ -756,6 +757,8 @@ class MainFragment :
     }
 
     private fun tryOpenQueuePanel() {
+        startupPanelCoordinator.cancelRouting()
+
         val binding = requireBinding()
         val playbackSheetBehavior =
             binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
