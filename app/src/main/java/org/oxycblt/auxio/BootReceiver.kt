@@ -117,7 +117,8 @@ class BootReceiver : BroadcastReceiver() {
             }
         }
 
-        // If floating controls only is enabled, start the overlay and skip the main activity
+        // Floating-only is an explicit request not to launch the full UI. Return after every
+        // typed restore outcome, including disabled/permission/rejected results.
         if (playbackSettings.autostartFloatingOnly) {
             journal.log(
                 DiagnosticJournal.CAT_BOOT,
@@ -137,11 +138,11 @@ class BootReceiver : BroadcastReceiver() {
                     "Overlay restore requested",
                     "topway_bridge",
                 )
-                return
             } else {
                 L.w("Launch Floating Controls only could not start the overlay: $result")
                 journal.log(DiagnosticJournal.CAT_BOOT, "Floating-only skipped", result.toString())
             }
+            return
         }
 
         // Attempt to show the activity UI for head-unit use. Background activity starts may be
