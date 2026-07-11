@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
+import timber.log.Timber as L
 
 object OverlayLifecycleJournal {
 
@@ -69,7 +70,7 @@ object OverlayLifecycleJournal {
 
             saveEventsArray(events)
         } catch (e: Exception) {
-            // Failsafe reset on corrupted JSON
+            L.w(e, "Unable to persist overlay lifecycle history; resetting it")
             prefs.edit().remove(KEY_EVENTS).apply()
             eventsCache = null
         }
@@ -84,6 +85,7 @@ object OverlayLifecycleJournal {
             try {
                 JSONArray(jsonString)
             } catch (e: Exception) {
+                L.w(e, "Unable to parse overlay lifecycle history")
                 JSONArray()
             }
         return eventsCache!!
