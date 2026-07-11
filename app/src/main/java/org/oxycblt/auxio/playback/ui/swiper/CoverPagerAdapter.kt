@@ -36,7 +36,10 @@ import org.oxycblt.musikr.Song
 
 /**
  * A [FlexibleListAdapter] that hosts [CoverViewHolder]s containing a [Song]'s cover and step
- * gesture overlays.
+ * gesture overlays. Visualizer state is collected once at adapter scope. Only the currently visible
+ * ViewPager item receives live FFT frames; attached off-screen holders are explicitly reset to
+ * [VisualizerState.Hidden]. A low-frequency freshness check restores artwork if the last live frame
+ * is no longer current.
  *
  * @param listener The [StepperOverlay.Listener] that step gesture events will be forwarded to
  * @author Alexander Capehart (OxygenCobalt)

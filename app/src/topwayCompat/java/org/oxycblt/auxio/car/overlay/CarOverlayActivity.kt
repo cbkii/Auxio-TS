@@ -25,7 +25,16 @@ import android.os.Bundle
 class CarOverlayActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        CarFloatingControlsService.start(this, "explicit")
+
+        if (!CarOverlaySettings.hasOverlayPermission(this)) {
+            val prefs = CarOverlayPrefs.from(this)
+            prefs.pendingEnable = true
+            startActivity(CarOverlayPermissionActivity.intent(this))
+        } else {
+            CarOverlaySettings.setEnabled(this, true)
+            CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
+            CarFloatingControlsService.start(this, "explicit")
+        }
         finish()
     }
 }

@@ -145,8 +145,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <!-- Add LAUNCHER category if you want it to appear as an app icon,
-                     but typically user can launch via shortcuts or settings -->
+                <!-- Expose the dedicated floating-controls entry point as a launcher icon. -->
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
