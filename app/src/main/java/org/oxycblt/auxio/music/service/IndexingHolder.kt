@@ -106,7 +106,12 @@ private constructor(
 
     fun release() {
         startupJob?.cancel()
+        startupJob = null
         stopTracking()
+        currentIndexJob?.cancel()
+        currentIndexJob = null
+        indexJob.cancel()
+        wakeLock.releaseSafe()
         musicRepository.unregisterWorker(this)
         musicRepository.removeIndexingListener(this)
         musicRepository.removeUpdateListener(this)
