@@ -22,7 +22,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.View
 import androidx.appcompat.R as AR
@@ -51,13 +50,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private var hasValidFrame = false
     private var lastFrameAtMs = 0L
-    private var idleInvalidateScheduled = false
-    private val idleInvalidateRunnable = Runnable {
-        idleInvalidateScheduled = false
-        if (shouldAnimateIdlePulse()) {
-            invalidate()
-        }
-    }
+
+    private var pointsX = FloatArray(0)
+    private var pointsY = FloatArray(0)
 
     private val outlinePaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -75,25 +70,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         refreshThemeColors()
-        if (shouldAnimateIdlePulse()) {
-            scheduleIdleInvalidation()
-        }
-    }
-
-    override fun onDetachedFromWindow() {
-        cancelIdleInvalidation()
-        super.onDetachedFromWindow()
-    }
-
-    override fun onVisibilityChanged(changedView: View, visibility: Int) {
-        super.onVisibilityChanged(changedView, visibility)
-        if (visibility == VISIBLE) {
-            if (shouldAnimateIdlePulse()) {
-                scheduleIdleInvalidation()
-            }
-        } else {
-            cancelIdleInvalidation()
-        }
     }
 
     fun updateState(state: VisualizerState) {
@@ -103,10 +79,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             is VisualizerState.Failed -> {
                 spectrumMapper.reset()
                 hasValidFrame = false
-                cancelIdleInvalidation()
             }
             is VisualizerState.Live -> {
-                // Ignore stale frames here, the UI should handle the transition.
                 spectrumMapper.update(state.frame, state.samplingRate)
                 hasValidFrame = true
                 lastFrameAtMs = state.receivedAtUptimeMs
@@ -120,23 +94,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         outlinePaint.color = ColorUtils.setAlphaComponent(primary, 200)
         fillPaint.color = ColorUtils.setAlphaComponent(primary, 140)
-    }
-
-    private fun shouldAnimateIdlePulse() =
-        isAttachedToWindow && visibility == VISIBLE && (!hasValidFrame || isCurrentFrameStale())
-
-    private fun isCurrentFrameStale() = SystemClock.uptimeMillis() - lastFrameAtMs > STALE_FRAME_MS
-
-    private fun scheduleIdleInvalidation() {
-        if (!idleInvalidateScheduled && shouldAnimateIdlePulse()) {
-            idleInvalidateScheduled = true
-            postDelayed(idleInvalidateRunnable, 33L)
-        }
-    }
-
-    private fun cancelIdleInvalidation() {
-        idleInvalidateScheduled = false
-        removeCallbacks(idleInvalidateRunnable)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -164,13 +121,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         // To draw a smooth Catmull-Rom or smooth curve, we'll use a standard technique of
         // passing through the midpoints or utilizing Bezier curves. Here, we'll use quadratic
         // beziers through midpoints for an organic closed path.
-        val pointsX = FloatArray(count)
-        val pointsY = FloatArray(count)
+        if (pointsX.size != count) {
+            pointsX = FloatArray(count)
+            pointsY = FloatArray(count)
+        }
 
         for (i in 0 until count) {
             val level = bands[i]
-
-            // Limit excursion
             val excursion = maxPeakExcursion * level
             val r = baseRadiusWithEnv + excursion
 
@@ -196,16 +153,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         canvas.drawPath(path, fillPaint)
         canvas.drawPath(path, outlinePaint)
-
-        val stale = !hasValidFrame || isCurrentFrameStale()
-        if (stale && hasValidFrame) {
-            // Still waiting for it to decay out, keep invalidating
-            invalidate()
-        }
     }
 
     companion object {
-        private const val STALE_FRAME_MS = 1500L
         private val COS_LOOKUP =
             FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT) { index ->
                 cos(angleForBand(index)).toFloat()
