@@ -27,6 +27,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.car.overlay.CarOverlaySettings
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.navigateSafe
@@ -115,12 +116,11 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                     // Permission needed — revert switch to unchecked.
                     (pref as? androidx.preference.TwoStatePreference)?.isChecked = false
                 }
-                // Update dependent preferences like autostart floating only
+                // Re-read the persisted source of truth because permission policy may reject enable.
                 val autostartFloatingOnly =
                     findPreference<Preference>(getString(R.string.set_key_autostart_floating_only))
                 if (autostartFloatingOnly != null) {
                     setupAutostartFloatingOnly(autostartFloatingOnly)
-                    autostartFloatingOnly.isEnabled = newValue as Boolean
                 }
                 result
             }
@@ -138,7 +138,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         if (status) getString(R.string.lbl_enabled) else getString(R.string.lbl_disabled)
 
     private companion object {
-        const val KEY_CAR_OVERLAY_ENABLED = "car_overlay_enabled"
+        const val KEY_CAR_OVERLAY_ENABLED = CarOverlayContract.KEY_ENABLED
         const val KEY_CAR_OVERLAY_RESET_POSITION = "car_overlay_reset_position"
     }
 }
