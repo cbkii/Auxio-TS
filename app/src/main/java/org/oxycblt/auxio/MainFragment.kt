@@ -102,7 +102,6 @@ class MainFragment :
     private var maxScaleXDistance = 0f
     private var sheetRising: Boolean? = null
     private var lastStretchRatio = -1f
-    private var startupPlaybackOpenConsumed = false
     @Inject lateinit var uiSettings: UISettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -649,16 +648,16 @@ class MainFragment :
     }
 
     private fun updateSong(song: Song?) {
-        startupPanelCoordinator.updateState(
-            song,
-            playbackModel.restoreOutcome.value,
-            musicModel.startupReadinessState.value,
-        )
         if (song != null) {
             tryShowSheets()
         } else {
             tryHideAllSheets()
         }
+        startupPanelCoordinator.updateState(
+            song,
+            playbackModel.restoreOutcome.value,
+            musicModel.startupReadinessState.value,
+        )
     }
 
     private fun handleStartupRoute(
@@ -682,8 +681,7 @@ class MainFragment :
             OpenPanel.PLAYBACK -> tryOpenPlaybackPanel()
             OpenPanel.PLAYBACK_QUEUE -> {
                 tryOpenPlaybackPanel()
-                val root = requireBinding().root
-                root.post {
+                binding.root.post {
                     if (isAdded && view != null) {
                         tryOpenQueuePanel()
                     }
