@@ -18,34 +18,26 @@
 
 package org.oxycblt.auxio.playback.ui.swiper
 
-import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
-import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
 import org.oxycblt.musikr.Song
 
 /**
  * A [FlexibleListAdapter] that hosts [CoverViewHolder]s containing a [Song]'s cover and step
- * gesture overlays.
- *
- * Visualizer state is collected once at adapter scope. Only the currently visible ViewPager item
- * receives live FFT frames; attached off-screen holders are explicitly reset to
+ * gesture overlays. Visualizer state is collected once at adapter scope. Only the currently visible
+ * ViewPager item receives live FFT frames; attached off-screen holders are explicitly reset to
  * [VisualizerState.Hidden]. A low-frequency freshness check restores artwork if the last live frame
  * is no longer current.
  *
@@ -54,124 +46,20 @@ import org.oxycblt.musikr.Song
  */
 class CoverPagerAdapter(
     private val listener: StepperOverlay.Listener,
-    playbackModel: PlaybackViewModel,
+    private val playbackModel: PlaybackViewModel,
     private val uiSettings: UISettings,
-    lifecycleOwner: LifecycleOwner,
+    private val lifecycleOwner: LifecycleOwner,
 ) : FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
-
-    private var recyclerView: RecyclerView? = null
-    private var activePosition = 0
-    private var latestVisualizerState: VisualizerState = VisualizerState.Hidden
-
-    private val scrollListener =
-        object : RecyclerView.OnScrollListener() {
-            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
-                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
-                    updateActivePositionAndDispatch()
-                }
-            }
-        }
-
-    init {
-        lifecycleOwner.lifecycleScope.launch {
-            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    playbackModel.visualizerState.collect { state ->
-                        latestVisualizerState = state.withFreshLiveFrameOrFailure()
-                        updateActivePositionAndDispatch()
-                    }
-                }
-                launch {
-                    while (isActive) {
-                        delay(FRESHNESS_CHECK_INTERVAL_MS)
-                        val state = latestVisualizerState
-                        if (
-                            state is VisualizerState.Live &&
-                                SystemClock.uptimeMillis() - state.receivedAtUptimeMs >
-                                    LIVE_FRAME_FRESHNESS_MS
-                        ) {
-                            latestVisualizerState =
-                                VisualizerState.Failed("Visualizer frame freshness expired")
-                            updateActivePositionAndDispatch()
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
-        super.onAttachedToRecyclerView(recyclerView)
-        this.recyclerView = recyclerView
-        recyclerView.addOnScrollListener(scrollListener)
-        recyclerView.post { updateActivePositionAndDispatch() }
-    }
-
-    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
-        recyclerView.removeOnScrollListener(scrollListener)
-        if (this.recyclerView === recyclerView) {
-            this.recyclerView = null
-        }
-        super.onDetachedFromRecyclerView(recyclerView)
-    }
 
     override fun onCreateViewHolder(parent: ViewGroup, pos: Int) = CoverViewHolder.from(parent)
 
     override fun onBindViewHolder(viewHolder: CoverViewHolder, pos: Int) {
-        val song = currentList[pos]
-        viewHolder.bind(song, listener)
-        viewHolder.updateVisualizerState(
-            if (pos == activePosition) latestVisualizerState else VisualizerState.Hidden,
-            uiSettings.visualizerMode,
-            hasArtwork = song.cover != null,
-        )
+        viewHolder.bind(currentList[pos], listener, playbackModel, uiSettings, lifecycleOwner)
     }
 
     override fun onViewRecycled(viewHolder: CoverViewHolder) {
         viewHolder.onViewRecycled()
         super.onViewRecycled(viewHolder)
-    }
-
-    private fun VisualizerState.withFreshLiveFrameOrFailure(): VisualizerState {
-        if (
-            this is VisualizerState.Live &&
-                SystemClock.uptimeMillis() - receivedAtUptimeMs > LIVE_FRAME_FRESHNESS_MS
-        ) {
-            return VisualizerState.Failed("Visualizer frame freshness expired")
-        }
-        return this
-    }
-
-    private fun updateActivePositionAndDispatch() {
-        val recycler = recyclerView ?: return
-        val layoutManager = recycler.layoutManager as? LinearLayoutManager
-        val resolvedPosition =
-            layoutManager?.findFirstCompletelyVisibleItemPosition()?.takeIf {
-                it != RecyclerView.NO_POSITION
-            }
-                ?: layoutManager?.findFirstVisibleItemPosition()?.takeIf {
-                    it != RecyclerView.NO_POSITION
-                }
-        if (resolvedPosition != null) {
-            activePosition = resolvedPosition
-        }
-
-        for (index in 0 until recycler.childCount) {
-            val child = recycler.getChildAt(index)
-            val holder = recycler.getChildViewHolder(child) as? CoverViewHolder ?: continue
-            val position = holder.bindingAdapterPosition
-            val song = currentList.getOrNull(position) ?: continue
-            holder.updateVisualizerState(
-                if (position == activePosition) latestVisualizerState else VisualizerState.Hidden,
-                uiSettings.visualizerMode,
-                hasArtwork = song.cover != null,
-            )
-        }
-    }
-
-    companion object {
-        private const val LIVE_FRAME_FRESHNESS_MS = 1_500L
-        private const val FRESHNESS_CHECK_INTERVAL_MS = 500L
     }
 }
 
@@ -183,39 +71,80 @@ class CoverPagerAdapter(
 class CoverViewHolder private constructor(private val binding: ItemCoverBinding) :
     RecyclerView.ViewHolder(binding.root) {
 
+    private var fftJob: Job? = null
+
+    /**
+     * Bind new data to this instance.
+     *
+     * @param song The new [Song] to bind.
+     * @param listener An [StepperOverlay.Listener] to bind fast seek interactions to.
+     */
     fun onViewRecycled() {
-        updateVisualizerState(
-            VisualizerState.Hidden,
-            UISettings.VisualizerMode.OFF,
-            hasArtwork = true,
+        fftJob?.cancel()
+        fftJob = null
+        binding.coverVisualizer.updateState(
+            org.oxycblt.auxio.playback.ui.visualizer.VisualizerState.Hidden
         )
+        binding.coverVisualizer.visibility = View.GONE
+        binding.cover.visibility = View.VISIBLE
     }
 
-    /** Bind song artwork and fast-seek interaction without starting a per-holder coroutine. */
-    fun bind(song: Song, listener: StepperOverlay.Listener) {
+    fun bind(
+        song: Song,
+        listener: StepperOverlay.Listener,
+        playbackModel: PlaybackViewModel,
+        uiSettings: UISettings,
+        lifecycleOwner: LifecycleOwner,
+    ) {
         binding.cover.bind(song)
         binding.coverFastSeekOverlay.listener = listener
-    }
 
-    fun updateVisualizerState(
-        state: VisualizerState,
-        visualizerMode: UISettings.VisualizerMode,
-        hasArtwork: Boolean,
-    ) {
-        val shouldShow =
-            state is VisualizerState.Live &&
-                (visualizerMode == UISettings.VisualizerMode.ALWAYS ||
-                    (visualizerMode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
+        fftJob?.cancel()
+        fftJob = null
+        binding.coverVisualizer.updateState(
+            org.oxycblt.auxio.playback.ui.visualizer.VisualizerState.Hidden
+        )
+        binding.coverVisualizer.visibility = View.GONE
+        binding.cover.visibility = View.VISIBLE
 
-        binding.coverVisualizer.updateState(if (shouldShow) state else VisualizerState.Hidden)
-        binding.coverVisualizer.visibility = if (shouldShow) View.VISIBLE else View.GONE
-        binding.cover.visibility = if (shouldShow) View.INVISIBLE else View.VISIBLE
+        fftJob =
+            lifecycleOwner.lifecycleScope.launch {
+                playbackModel.visualizerState.collect { state ->
+                    binding.coverVisualizer.updateState(state)
+
+                    val visualizerMode = uiSettings.visualizerMode
+                    val hasArtwork = song.cover != null
+
+                    // Only show if the global visualizer state is Live and mode permits.
+                    // Waiting/Failed should still hide the visualizer view and keep the cover.
+                    val shouldShow =
+                        state is org.oxycblt.auxio.playback.ui.visualizer.VisualizerState.Live &&
+                            (visualizerMode == UISettings.VisualizerMode.ALWAYS ||
+                                (visualizerMode == UISettings.VisualizerMode.FALLBACK &&
+                                    !hasArtwork))
+
+                    if (shouldShow) {
+                        binding.coverVisualizer.visibility = View.VISIBLE
+                        binding.cover.visibility = View.INVISIBLE
+                    } else {
+                        binding.coverVisualizer.visibility = View.GONE
+                        binding.cover.visibility = View.VISIBLE
+                    }
+                }
+            }
     }
 
     companion object {
+        /**
+         * Create a new instance.
+         *
+         * @param parent The parent to inflate this instance from.
+         * @return A new instance.
+         */
         fun from(parent: ViewGroup) =
             CoverViewHolder(ItemCoverBinding.inflate(parent.context.inflater, parent, false))
 
+        /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Song>() {
                 override fun areContentsTheSame(oldItem: Song, newItem: Song) =

@@ -18,7 +18,6 @@
 
 package org.oxycblt.auxio.playback.ui.visualizer
 
-/** Immutable capture states shared by the playback owner and the active cover renderer. */
 sealed interface VisualizerState {
     /** Visualizer is disabled by settings, playback is stopped, or not requested. */
     data object Hidden : VisualizerState
@@ -26,17 +25,10 @@ sealed interface VisualizerState {
     /** Capture is established, but no valid recent frame has arrived yet. */
     data object WaitingForFrames : VisualizerState
 
-    /**
-     * A fresh, non-zero Android Visualizer FFT frame.
-     *
-     * [samplingRateMilliHertz] uses the platform callback unit: `44_100_000` represents 44.1 kHz.
-     */
-    data class Live(
-        val frame: ByteArray,
-        val samplingRateMilliHertz: Int,
-        val receivedAtUptimeMs: Long,
-    ) : VisualizerState
+    /** A fresh, non-zero audio frame has arrived. */
+    data class Live(val frame: ByteArray, val samplingRate: Int, val receivedAtUptimeMs: Long) :
+        VisualizerState
 
-    /** Permission, listener registration, construction, or capture-liveness failure. */
+    /** Permission, listener registration, or construction failed, or capture stalled. */
     data class Failed(val reason: String) : VisualizerState
 }

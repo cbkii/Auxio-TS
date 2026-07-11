@@ -554,9 +554,7 @@ class PlaybackPanelFragment :
                     )
                     try {
                         candidate.release()
-                    } catch (e: RuntimeException) {
-                        L.d(e, "Visualizer native release failed during partial initialization")
-                    }
+                    } catch (e: RuntimeException) {}
                     return
                 }
 
