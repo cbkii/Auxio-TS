@@ -1,0 +1,102 @@
+name: PR 167 review fix
+
+on:
+  push:
+    branches:
+      - fix-startup-routing-11126370068088722538
+    paths:
+      - .github/workflows/pr167-review-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-review-fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix-startup-routing-11126370068088722538
+          fetch-depth: 0
+
+      - name: Apply verified review fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          fragment = Path("app/src/main/java/org/oxycblt/auxio/MainFragment.kt")
+          text = fragment.read_text()
+
+          replacements = [
+              (
+                  '''        findNavController().navigateSafe(directions)\n        homeModel.showOuter.consume()''',
+                  '''        startupPanelCoordinator.cancelRouting()\n        findNavController().navigateSafe(directions)\n        homeModel.showOuter.consume()''',
+              ),
+              (
+                  '''    private fun tryOpenPlaybackPanel() {\n        val binding = requireBinding()''',
+                  '''    private fun tryOpenPlaybackPanel() {\n        startupPanelCoordinator.cancelRouting()\n\n        val binding = requireBinding()''',
+              ),
+              (
+                  '''\n        startupPanelCoordinator.cancelRouting()\n\n        if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED) {''',
+                  '''\n        if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED) {''',
+              ),
+              (
+                  '''        val queueSheetBehavior =\n            (binding.queueSheet.coordinatorLayoutBehavior ?: return) as QueueBottomSheetBehavior\n\n        startupPanelCoordinator.cancelRouting()\n\n        if (''',
+                  '''        val queueSheetBehavior =\n            (binding.queueSheet.coordinatorLayoutBehavior ?: return) as QueueBottomSheetBehavior\n\n        if (''',
+              ),
+              (
+                  '''    private fun tryClosePlaybackPanel() {\n        val binding = requireBinding()''',
+                  '''    private fun tryClosePlaybackPanel() {\n        startupPanelCoordinator.cancelRouting()\n\n        val binding = requireBinding()''',
+              ),
+              (
+                  '''    private fun tryOpenQueuePanel() {\n        val binding = requireBinding()''',
+                  '''    private fun tryOpenQueuePanel() {\n        startupPanelCoordinator.cancelRouting()\n\n        val binding = requireBinding()''',
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected one MainFragment match, found {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+          fragment.write_text(text)
+
+          ui = Path("app/src/main/res/xml/preferences_ui.xml")
+          ui_text = ui.read_text()
+          preference = '''    <SwitchPreferenceCompat\n        app:defaultValue="@bool/launch_to_panel_default"\n        app:key="@string/set_key_launch_to_panel"\n        app:summary="@string/set_launch_to_panel_desc"\n        app:title="@string/set_launch_to_panel" />\n\n'''
+          if ui_text.count(preference) != 1:
+              raise SystemExit("Launch-to-panel preference not found exactly once in preferences_ui.xml")
+          ui.write_text(ui_text.replace(preference, "", 1))
+
+          personalize = Path("app/src/main/res/xml/preferences_personalize.xml")
+          personalize_text = personalize.read_text()
+          anchor = '''        <SwitchPreferenceCompat\n            app:defaultValue="false"\n            app:key="@string/set_key_task_exit"\n            app:summary="@string/set_task_exit_desc"\n            app:title="@string/set_task_exit" />\n\n'''
+          moved = '''        <SwitchPreferenceCompat\n            app:defaultValue="@bool/launch_to_panel_default"\n            app:key="@string/set_key_launch_to_panel"\n            app:summary="@string/set_launch_to_panel_desc"\n            app:title="@string/set_launch_to_panel" />\n\n'''
+          if personalize_text.count(anchor) != 1:
+              raise SystemExit("Behavior-category anchor not found exactly once")
+          if "set_key_launch_to_panel" in personalize_text:
+              raise SystemExit("Launch-to-panel preference already exists in preferences_personalize.xml")
+          personalize.write_text(personalize_text.replace(anchor, anchor + moved, 1))
+          PY
+
+          rm -- .github/workflows/pr167-review-fix.yml
+
+          git diff --check
+          test "$(grep -R -l 'set_key_launch_to_panel' app/src/main/res/xml/preferences_*.xml | wc -l)" -eq 1
+          grep -q 'set_key_launch_to_panel' app/src/main/res/xml/preferences_personalize.xml
+          test "$(grep -c 'startupPanelCoordinator.cancelRouting()' app/src/main/java/org/oxycblt/auxio/MainFragment.kt)" -eq 4
+
+      - name: Commit and push fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/org/oxycblt/auxio/MainFragment.kt \
+                  app/src/main/res/xml/preferences_ui.xml \
+                  app/src/main/res/xml/preferences_personalize.xml \
+                  .github/workflows/pr167-review-fix.yml
+          git commit -m "fix: cancel stale startup routes on manual navigation"
+          git push origin HEAD:fix-startup-routing-11126370068088722538
