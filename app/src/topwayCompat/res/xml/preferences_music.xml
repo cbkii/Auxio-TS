@@ -1,71 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
-    app:title="@string/set_content">
-    <PreferenceCategory app:title="@string/set_music">
-
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:key="@string/set_key_observing"
-            app:summary="@string/set_observing_desc"
-            app:title="@string/set_observing" />
-
-        <org.oxycblt.auxio.settings.ui.WrappedDialogPreference
-            app:key="@string/set_key_separators"
-            app:summary="@string/set_separators_desc"
-            app:title="@string/set_separators" />
-
-        <SwitchPreferenceCompat
-            app:defaultValue="true"
-            app:key="@string/set_key_auto_sort_names"
-            app:summary="@string/set_intelligent_sorting_desc"
-            app:title="@string/set_intelligent_sorting" />
-
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:key="@string/set_key_hide_collaborators"
-            app:summary="@string/set_hide_collaborators_desc"
-            app:title="@string/set_hide_collaborators" />
-
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto" app:title="@string/set_content">
+    <PreferenceCategory app:title="@string/set_locations">
+        <org.oxycblt.auxio.settings.ui.WrappedDialogPreference app:key="@string/set_key_music_dirs" app:summary="@string/set_music_sources_summary" app:title="@string/set_locations" />
+        <Preference app:key="@string/set_key_ts18_source_repair_status" app:summary="@string/set_ts18_source_repair_status_desc" app:title="@string/set_ts18_source_repair_status" />
     </PreferenceCategory>
-
-    <PreferenceCategory app:title="@string/set_images">
-
-        <org.oxycblt.auxio.settings.ui.IntListPreference
-            app:defaultValue="@integer/cover_mode_balanced"
-            app:entries="@array/entries_cover_mode"
-            app:entryValues="@array/values_cover_mode"
-            app:key="@string/set_key_cover_mode"
-            app:title="@string/set_cover_mode" />
-
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:key="@string/set_key_square_covers"
-            app:summary="@string/set_square_covers_desc"
-            app:title="@string/set_square_covers" />
-
+    <PreferenceCategory app:title="@string/set_library_maintenance">
+        <Preference app:key="@string/set_key_reindex" app:summary="@string/set_reindex_desc" app:title="@string/set_reindex" />
+        <Preference app:key="@string/set_key_rescan" app:summary="@string/set_rescan_desc" app:title="@string/set_rescan" />
     </PreferenceCategory>
-    <PreferenceCategory app:title="@string/set_category_topway_source_loading">
-        <Preference
-            app:key="@string/set_key_ts18_source_repair_status"
-            app:summary="@string/set_ts18_source_repair_status_desc"
-            app:title="@string/set_ts18_source_repair_status" />
-        <Preference
-            app:key="@string/set_key_ts18_startup_scanning_policy"
-            app:summary="@string/set_ts18_startup_scanning_policy_desc"
-            app:title="@string/set_ts18_startup_scanning_policy" />
-        <SwitchPreferenceCompat
-            app:defaultValue="true"
-            app:key="@string/set_key_ts18_system_source_filter"
-            app:summary="@string/set_ts18_system_source_filter_desc"
-            app:title="@string/set_ts18_system_source_filter" />
-        <SwitchPreferenceCompat
-            app:defaultValue="false"
-            app:key="@string/set_key_use_root_fs"
-            app:summary="@string/set_use_root_fs_desc"
-            app:title="@string/set_use_root_fs" />
-        <Preference
-            app:key="@string/set_key_root_fs_status"
-            app:summary="@string/set_root_fs_status_desc"
-            app:title="@string/set_root_fs_status" />
+    <PreferenceCategory app:title="@string/set_scanning">
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_observing" app:summary="@string/set_observing_desc" app:title="@string/set_observing" />
+        <SwitchPreferenceCompat app:defaultValue="true" app:key="@string/set_key_ts18_system_source_filter" app:summary="@string/set_ts18_system_source_filter_desc" app:title="@string/set_ts18_system_source_filter" />
+        <Preference app:key="@string/set_key_ts18_startup_scanning_policy" app:summary="@string/set_ts18_startup_scanning_policy_desc" app:title="@string/set_ts18_startup_scanning_policy" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/set_metadata">
+        <org.oxycblt.auxio.settings.ui.WrappedDialogPreference app:key="@string/set_key_separators" app:summary="@string/set_separators_desc" app:title="@string/set_separators" />
+        <SwitchPreferenceCompat app:defaultValue="true" app:key="@string/set_key_auto_sort_names" app:summary="@string/set_intelligent_sorting_desc" app:title="@string/set_intelligent_sorting" />
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_hide_collaborators" app:summary="@string/set_hide_collaborators_desc" app:title="@string/set_hide_collaborators" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/set_artwork_loading">
+        <org.oxycblt.auxio.settings.ui.IntListPreference app:defaultValue="@integer/cover_mode_balanced" app:entries="@array/entries_cover_mode" app:entryValues="@array/values_cover_mode" app:key="@string/set_key_cover_mode" app:title="@string/set_cover_mode" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/set_advanced_source_access">
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_use_root_fs" app:summary="@string/set_use_root_fs_desc" app:title="@string/set_use_root_fs" />
+        <Preference app:key="@string/set_key_root_fs_status" app:summary="@string/set_root_fs_status_desc" app:title="@string/set_root_fs_status" />
     </PreferenceCategory>
 </PreferenceScreen>

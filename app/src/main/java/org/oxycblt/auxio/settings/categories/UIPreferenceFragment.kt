@@ -20,6 +20,7 @@ package org.oxycblt.auxio.settings.categories
 
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
+import coil3.ImageLoader
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.R
@@ -38,11 +39,20 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
     @Inject lateinit var uiSettings: UISettings
+    @Inject lateinit var imageLoader: ImageLoader
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
-        if (preference.key == getString(R.string.set_key_accent)) {
-            L.d("Navigating to accent dialog")
-            findNavController().navigateSafe(UIPreferenceFragmentDirections.accentSettings())
+        when (preference.key) {
+            getString(R.string.set_key_accent) -> {
+                L.d("Navigating to accent dialog")
+                findNavController()
+                    .navigateSafe(UIPreferenceFragmentDirections.accentSettings())
+            }
+            getString(R.string.set_key_home_tabs) -> {
+                L.d("Navigating to home tab dialog")
+                findNavController()
+                    .navigateSafe(UIPreferenceFragmentDirections.tabSettings())
+            }
         }
     }
 
@@ -71,6 +81,15 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
                             activity.recreate()
                         }
 
+                        true
+                    }
+            }
+            getString(R.string.set_key_square_covers) -> {
+                L.d("Configuring square cover setting")
+                preference.onPreferenceChangeListener =
+                    Preference.OnPreferenceChangeListener { _, _ ->
+                        L.d("Square cover setting changed, resetting image memory cache")
+                        imageLoader.memoryCache?.clear()
                         true
                     }
             }

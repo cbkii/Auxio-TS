@@ -18,11 +18,11 @@
 
 package org.oxycblt.auxio.settings.categories
 
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
-import coil3.ImageLoader
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.R
@@ -43,31 +43,46 @@ import timber.log.Timber as L
 class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) {
     private val musicModel: MusicViewModel by viewModels()
     @Inject lateinit var rootStateHolder: RootStateHolder
-    @Inject lateinit var imageLoader: ImageLoader
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
-        if (preference.key == getString(R.string.set_key_separators)) {
-            L.d("Navigating to separator dialog")
-            findNavController().navigateSafe(MusicPreferenceFragmentDirections.separatorsSettings())
+        when (preference.key) {
+            getString(R.string.set_key_separators) -> {
+                L.d("Navigating to separator dialog")
+                findNavController()
+                    .navigateSafe(MusicPreferenceFragmentDirections.separatorsSettings())
+            }
+            getString(R.string.set_key_music_dirs) -> {
+                L.d("Navigating to music locations dialog")
+                findNavController()
+                    .navigateSafe(MusicPreferenceFragmentDirections.musicLocationsSettings())
+            }
         }
     }
 
     override fun onSetupPreference(preference: Preference) {
+        if (preference.key == getString(R.string.set_key_reindex)) {
+            preference.setOnPreferenceClickListener {
+                musicModel.refresh()
+                true
+            }
+        }
+        if (preference.key == getString(R.string.set_key_rescan)) {
+            preference.setOnPreferenceClickListener {
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.set_rescan)
+                    .setMessage(R.string.set_rescan_desc)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> musicModel.rescan() }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+                true
+            }
+        }
         if (preference.key == getString(R.string.set_key_cover_mode)) {
             L.d("Configuring cover mode setting")
             preference.onPreferenceChangeListener =
                 Preference.OnPreferenceChangeListener { _, _ ->
                     L.d("Cover mode changed, reloading music")
                     musicModel.refresh()
-                    true
-                }
-        }
-        if (preference.key == getString(R.string.set_key_square_covers)) {
-            L.d("Configuring square cover setting")
-            preference.onPreferenceChangeListener =
-                Preference.OnPreferenceChangeListener { _, _ ->
-                    L.d("Cover mode changed, resetting image memory cache")
-                    imageLoader.memoryCache?.clear()
                     true
                 }
         }
