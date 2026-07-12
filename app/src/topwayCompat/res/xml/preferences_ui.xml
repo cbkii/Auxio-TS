@@ -1,32 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
-    app:title="@string/set_ui">
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto" app:title="@string/set_ui">
+    <PreferenceCategory app:title="@string/set_theme_and_colour">
+        <org.oxycblt.auxio.settings.ui.IntListPreference app:defaultValue="@integer/theme_auto" app:entries="@array/entries_theme" app:entryIcons="@array/icons_theme" app:entryValues="@array/values_theme" app:icon="@drawable/ic_light_24" app:key="@string/set_key_theme" app:title="@string/set_theme" />
+        <org.oxycblt.auxio.settings.ui.WrappedDialogPreference app:icon="@drawable/ic_accent_dynamic_24" app:key="@string/set_key_accent" app:title="@string/set_accent" />
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_black_theme" app:summary="@string/set_black_mode_desc" app:title="@string/set_black_mode" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/set_layout">
+        <SwitchPreferenceCompat app:defaultValue="true" app:key="@string/set_key_round_mode" app:summary="@string/set_round_mode_desc" app:title="@string/set_round_mode" />
+        <org.oxycblt.auxio.settings.ui.WrappedDialogPreference app:key="@string/set_key_home_tabs" app:summary="@string/set_lib_tabs_desc" app:title="@string/set_lib_tabs" />
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_square_covers" app:summary="@string/set_square_covers_desc" app:title="@string/set_square_covers" />
+    </PreferenceCategory>
 
-    <org.oxycblt.auxio.settings.ui.IntListPreference
-        app:defaultValue="@integer/theme_auto"
-        app:entries="@array/entries_theme"
-        app:entryIcons="@array/icons_theme"
-        app:entryValues="@array/values_theme"
-        app:icon="@drawable/ic_light_24"
-        app:key="@string/set_key_theme"
-        app:title="@string/set_theme" />
-
-    <org.oxycblt.auxio.settings.ui.WrappedDialogPreference
-        app:icon="@drawable/ic_accent_dynamic_24"
-        app:key="@string/set_key_accent"
-        app:title="@string/set_accent" />
-
-    <SwitchPreferenceCompat
-        app:defaultValue="false"
-        app:key="@string/set_key_black_theme"
-        app:summary="@string/set_black_mode_desc"
-        app:title="@string/set_black_mode" />
-
-    <SwitchPreferenceCompat
-        app:defaultValue="true"
-        app:key="@string/set_key_round_mode"
-        app:summary="@string/set_round_mode_desc"
-        app:title="@string/set_round_mode" />
-
-
+    <PreferenceCategory app:title="@string/set_now_playing_appearance">
+        <androidx.preference.ListPreference app:defaultValue="@string/visualizer_mode_off" app:entries="@array/entries_visualizer_mode" app:entryValues="@array/values_visualizer_mode" app:key="@string/set_key_visualizer_mode" app:summary="@string/set_visualizer_mode_desc" app:title="@string/set_visualizer_mode" />
+    </PreferenceCategory>
 </PreferenceScreen>

@@ -19,11 +19,14 @@
 package org.oxycblt.auxio.settings.categories
 
 import androidx.navigation.fragment.findNavController
+import androidx.preference.ListPreference
 import androidx.preference.Preference
+import androidx.preference.PreferenceManager
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity
 import org.oxycblt.auxio.car.overlay.CarOverlaySettings
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
@@ -36,6 +39,11 @@ import org.oxycblt.auxio.util.navigateSafe
 class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
 
     @Inject lateinit var uiSettings: UISettings
+
+    override fun onResume() {
+        super.onResume()
+        refreshRuntimePreferences()
+    }
 
     override fun onSetupPreference(preference: Preference) {
         when (preference.key) {
@@ -69,8 +77,9 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             KEY_CAR_OVERLAY_RESET_POSITION -> setupCarOverlayReset(preference)
             getString(R.string.set_key_ts18_fast_resume_status) ->
                 setupTs18FastResumeStatus(preference)
-            getString(R.string.set_key_autostart_floating_only) ->
-                setupAutostartFloatingOnly(preference)
+            getString(R.string.set_key_head_unit_startup_mode) -> setupStartupMode(preference)
+            getString(R.string.set_key_overlay_permission) -> setupOverlayPermission(preference)
+            getString(R.string.set_key_launcher_integration) -> setupLauncherIntegration(preference)
             "open_diagnostics" -> {
                 preference.setOnPreferenceClickListener {
                     findNavController()
@@ -81,24 +90,74 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         }
     }
 
+    private fun refreshRuntimePreferences() {
+        findPreference<Preference>(getString(R.string.set_key_head_unit_startup_mode))
+            ?.let(::setupStartupMode)
+        findPreference<Preference>(getString(R.string.set_key_overlay_permission))
+            ?.let(::setupOverlayPermission)
+        findPreference<Preference>(KEY_CAR_OVERLAY_ENABLED)?.let(::setupCarOverlayEnabled)
+    }
+
     private fun setupTs18FastResumeStatus(preference: Preference) {
         preference.summary = getString(R.string.set_ts18_fast_resume_status_desc)
         preference.setOnPreferenceClickListener(null)
     }
 
-    private fun setupAutostartFloatingOnly(preference: Preference) {
+    private fun setupStartupMode(preference: Preference) {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             preference.isVisible = false
             return
         }
-        val overlayEnabled = CarOverlaySettings.isEnabled(requireContext())
-        preference.isEnabled = overlayEnabled
-        preference.summary =
-            if (overlayEnabled) {
-                getString(R.string.set_autostart_floating_only_desc)
-            } else {
-                getString(R.string.set_autostart_floating_only_desc_requires_overlay)
+        val list = preference as? ListPreference ?: return
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+        val autostart = prefs.getBoolean(getString(R.string.set_key_autostart_on_boot), false)
+        val floatingOnly =
+            prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
+        val current =
+            when {
+                !autostart -> STARTUP_NONE
+                floatingOnly -> STARTUP_FLOATING_ONLY
+                else -> STARTUP_OPEN_AUXIO
             }
+        list.isPersistent = false
+        list.value = current
+        val currentIdx = list.findIndexOfValue(current)
+        list.summary = list.entries?.getOrNull(currentIdx)
+        list.onPreferenceChangeListener =
+            Preference.OnPreferenceChangeListener { pref, newValue ->
+                val mode = newValue as String
+                prefs
+                    .edit()
+                    .putBoolean(getString(R.string.set_key_autostart_on_boot), mode != STARTUP_NONE)
+                    .putBoolean(
+                        getString(R.string.set_key_autostart_floating_only),
+                        mode == STARTUP_FLOATING_ONLY,
+                    )
+                    .apply()
+                val lp = pref as? ListPreference
+                val newIndex = lp?.findIndexOfValue(mode) ?: -1
+                lp?.entries?.getOrNull(newIndex)?.let { lp.summary = it }
+                true
+            }
+    }
+
+    private fun setupOverlayPermission(preference: Preference) {
+        val granted = CarOverlaySettings.hasOverlayPermission(requireContext())
+        preference.summary =
+            if (granted) getString(R.string.set_diagnostics_granted)
+            else getString(R.string.set_floating_controls_permission_desc)
+        preference.setOnPreferenceClickListener {
+            startActivity(CarOverlayPermissionActivity.intent(requireContext()))
+            true
+        }
+    }
+
+    private fun setupLauncherIntegration(preference: Preference) {
+        preference.setOnPreferenceClickListener {
+            findNavController()
+                .navigateSafe(CarPreferenceFragmentDirections.diagnosticsPreferences())
+            true
+        }
     }
 
     private fun setupCarOverlayEnabled(preference: Preference) {
@@ -117,11 +176,6 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                 }
                 // Re-read the persisted source of truth because permission policy may reject
                 // enable.
-                val autostartFloatingOnly =
-                    findPreference<Preference>(getString(R.string.set_key_autostart_floating_only))
-                if (autostartFloatingOnly != null) {
-                    setupAutostartFloatingOnly(autostartFloatingOnly)
-                }
                 result
             }
     }
@@ -140,5 +194,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
     private companion object {
         const val KEY_CAR_OVERLAY_ENABLED = CarOverlayContract.KEY_ENABLED
         const val KEY_CAR_OVERLAY_RESET_POSITION = "car_overlay_reset_position"
+        const val STARTUP_NONE = "none"
+        const val STARTUP_OPEN_AUXIO = "open_auxio"
+        const val STARTUP_FLOATING_ONLY = "floating_only"
     }
 }

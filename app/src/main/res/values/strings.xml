@@ -260,8 +260,8 @@
 
     <string name="set_root_title">Settings</string>
 
-    <string name="set_ui">Look and feel</string>
-    <string name="set_ui_desc">Change the theme and colors of the app</string>
+    <string name="set_ui">Appearance &amp; layout</string>
+    <string name="set_ui_desc">Theme, colors, library layout, and Now Playing appearance</string>
     <string name="set_theme">Theme</string>
     <string name="set_theme_auto">Automatic</string>
     <string name="set_theme_day">Light</string>
@@ -269,7 +269,7 @@
     <string name="set_accent">Color scheme</string>
     <string name="set_black_mode">Black theme</string>
     <string name="set_black_mode_desc">Use a pure black dark theme</string>
-    <string name="set_round_mode">Round mode</string>
+    <string name="set_round_mode">Rounded interface</string>
     <string name="set_round_mode_desc">Enable rounded corners on additional UI elements (requires album covers to be rounded)</string>
 
     <string name="set_head_unit">Head unit</string>
@@ -347,7 +347,7 @@
     <string name="msg_playback_shuffle_on">Shuffle on</string>
     <string name="msg_playback_shuffle_off">Shuffle off</string>
 
-    <string name="set_personalize">Personalize</string>
+    <string name="set_personalize">Appearance &amp; layout</string>
     <string name="set_personalize_desc">Customize UI controls and behavior</string>
     <string name="set_display">Display</string>
     <string name="set_lib_tabs">Library tabs</string>
@@ -367,11 +367,11 @@
     <string name="set_play_song_by_itself">Play song by itself</string>
     <string name="set_keep_shuffle">Remember shuffle</string>
     <string name="set_keep_shuffle_desc">Keep shuffle on when playing a new song</string>
-    <string name="set_task_exit">Always exit on close</string>
+    <string name="set_task_exit">Stop playback when Auxio-TS is closed</string>
     <string name="set_task_exit_desc">Stop playback when removed from recents, even if playing</string>
 
-    <string name="set_content">Content</string>
-    <string name="set_content_desc">Control how music and images are loaded</string>
+    <string name="set_content">Library &amp; sources</string>
+    <string name="set_content_desc">Music sources, scanning, metadata, and artwork</string>
     <string name="set_music">Music</string>
     <string name="set_observing">Automatic reloading</string>
     <string name="set_observing_desc">Reload the music library whenever it changes (requires persistent notification)</string>
@@ -403,8 +403,8 @@
     <string name="set_square_covers">Force square album covers</string>
     <string name="set_square_covers_desc">Crop all album covers to a 1:1 aspect ratio</string>
 
-    <string name="set_audio">Audio</string>
-    <string name="set_audio_desc">Configure sound and playback behavior</string>
+    <string name="set_audio">Playback &amp; audio</string>
+    <string name="set_audio_desc">Startup playback, queue behavior, controls, and volume normalization</string>
     <string name="set_car">Car &amp; head unit</string>
     <string name="set_car_desc">Configure Topway specific behaviour and overlay</string>
     <string name="set_diagnostics">Diagnostics &amp; recovery</string>
@@ -417,18 +417,18 @@
     <string name="set_autostart_floating_only">Launch Floating Controls only</string>
     <string name="set_autostart_floating_only_desc">Restores the floating playback controls without launching the main application</string>
     <string name="set_launch_to_panel">Launch to Now Playing</string>
-    <string name="set_launch_to_panel_desc">Open the playback panel automatically when the app starts</string>
-    <string name="set_autoplay_on_launch">Autoplay</string>
+    <string name="set_launch_to_panel_desc">Open Now Playing when Auxio-TS starts. This does not start audio playback.</string>
+    <string name="set_autoplay_on_launch">Autoplay when Auxio-TS launches</string>
     <string name="set_autoplay_on_launch_desc">Start playback when Auxio-TS launches</string>
     <string name="set_always_play_immediately">Always play immediately</string>
-    <string name="set_always_play_immediately_desc">Always start playback on startup/resume, overriding the previous pause state</string>
+    <string name="set_always_play_immediately_desc">When launch autoplay is enabled, begin audio even if the previous session was paused.</string>
     <string name="set_headset_autoplay">Headset autoplay</string>
     <string name="set_headset_autoplay_desc">Always start playing when a headset is connected (may not work on all devices)</string>
     <string name="set_rewind_prev">Rewind before skipping back</string>
     <string name="set_rewind_prev_desc">Rewind before skipping to the previous song</string>
     <string name="set_repeat_pause">Pause on repeat</string>
     <string name="set_repeat_pause_desc">Pause when a song repeats</string>
-    <string name="set_remember_pause">Remember pause</string>
+    <string name="set_remember_pause">Preserve play/pause state</string>
     <string name="set_remember_pause_desc">Remain playing/paused when skipping or editing queue</string>
     <string name="set_replay_gain">Volume normalization</string>
     <string name="set_replay_gain_mode">ReplayGain strategy</string>
@@ -465,7 +465,7 @@
     <string name="set_reindex">Refresh music</string>
     <string name="set_reindex_desc">Reload the music library, using cached tags when possible</string>
     <!-- Different from "Reload music" -->
-    <string name="set_rescan">Rescan music</string>
+    <string name="set_rescan">Full rescan</string>
     <string name="set_rescan_desc">Clear the tag cache and fully reload the music library (slower, but more complete)</string>
 
     <!-- Error Namespace | Error Labels -->
@@ -672,16 +672,15 @@
     <string name="set_category_topway_source_loading">Topway / Source loading</string>
     <string name="set_category_status">Status</string>
     <string name="set_category_diagnostics">Diagnostics</string>
-    <string name="set_category_advanced_recovery">Root-assisted test actions (Advanced)</string>
+    <string name="set_category_advanced_recovery">Advanced recovery</string>
 
-    <string name="set_dofun_launcher_integration">TS18 DoFun Launcher Integration</string>
-    <string name="set_dofun_launcher_integration_desc">Run diagnostics and root-assisted resolvers for DoFun launcher</string>
+    <string name="set_dofun_launcher_integration">Open diagnostics</string>
+    <string name="set_dofun_launcher_integration_desc">Open technical checks and report export</string>
 
-    <string name="set_floating_controls_permission">Floating Controls Permission</string>
-    <string name="set_run_dofun_check">Run DoFun integration check</string>
-    <string name="set_run_dofun_check_desc">Tap to run checks</string>
+    <string name="set_run_dofun_check">Run head-unit diagnostics</string>
+    <string name="set_run_dofun_check_desc">Check package, root, source, overlay, and launcher integration state</string>
     <string name="set_export_dofun_report">Export DoFun integration report</string>
-    <string name="set_export_dofun_report_desc">Copy the check results to clipboard</string>
+    <string name="set_export_dofun_report_desc">Copy the latest diagnostic report to the clipboard</string>
 
     <string name="set_disable_stock_music">Disable stock com.tw.music for user 0</string>
     <string name="set_disable_stock_music_desc">Reversibly disable the stock music app to test DoFun fallback to Auxio. Requires root enabled.</string>
@@ -701,4 +700,41 @@
     <string name="set_diagnostics_check_failed">Check failed. See logs or retry after root/DoFun state is available.</string>
     <string name="set_diagnostics_check_complete_summary">Check complete. Path: %1$s. Root: %2$s. Packages: %3$s</string>
     <string name="set_diagnostics_clipboard_label">TS18 DoFun Report</string>
+
+    <string name="set_group_general">General</string>
+    <string name="set_group_support">Support</string>
+    <string name="set_about_auxio_ts">About Auxio-TS</string>
+    <string name="set_about_auxio_ts_desc">Version, licenses, and project information</string>
+    <string name="set_theme_and_colour">Theme and colour</string>
+    <string name="set_layout">Layout</string>
+    <string name="set_now_playing_appearance">Now Playing appearance</string>
+    <string name="set_music_sources_summary">Review selected source and detailed source options</string>
+    <string name="set_library_maintenance">Library maintenance</string>
+    <string name="set_scanning">Scanning</string>
+    <string name="set_metadata">Metadata</string>
+    <string name="set_artwork_loading">Artwork loading</string>
+    <string name="set_advanced_source_access">Advanced source access</string>
+    <string name="set_starting_playback">Starting playback</string>
+    <string name="set_queue_and_navigation">Queue and navigation</string>
+    <string name="set_playback_controls">Playback controls</string>
+    <string name="set_app_lifecycle">App lifecycle</string>
+    <string name="set_driving_interface">Driving interface</string>
+    <string name="set_floating_controls">Floating controls</string>
+    <string name="set_device_startup">Device startup</string>
+    <string name="set_when_head_unit_starts">When the head unit starts</string>
+    <string name="set_when_head_unit_starts_desc">Choose the boot behavior without changing floating-control settings.</string>
+    <string name="set_startup_do_nothing">Do nothing</string>
+    <string name="set_startup_open_auxio">Open Auxio-TS</string>
+    <string name="set_startup_restore_overlay">Restore floating controls only</string>
+    <string name="set_launcher_integration">Launcher integration</string>
+    <string name="set_launcher_integration_desc">Automatic media bridge; advanced protocol options inside</string>
+    <string name="set_launcher_integration_summary">Automatic — recommended</string>
+    <string name="set_advanced">Advanced</string>
+    <string name="set_head_unit_status">Head-unit status</string>
+    <string name="set_head_unit_status_desc">High-level readiness for Topway-specific surfaces</string>
+    <string name="set_advanced_recovery">Advanced recovery</string>
+    <string name="set_advanced_recovery_desc">Root-only stock package recovery actions</string>
+    <string name="set_advanced_recovery_warning">Use only if stock twmusic package selection is blocking Auxio-TS. Actions require root and are reversible.</string>
+    <string name="set_floating_controls_permission">Display over other apps permission</string>
+    <string name="set_floating_controls_permission_desc">Open Android permission settings for floating controls</string>
 </resources>
