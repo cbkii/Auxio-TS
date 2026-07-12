@@ -148,16 +148,6 @@ jobs:
             :app:testTopwayTwMusicDebugUnitTest \
             :app:testTopwayTwMediaDebugUnitTest
 
-      - name: Remove one-shot patch scripts
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -f scripts/apply-pr169-audit-fixes.py
-          rm -f scripts/apply-pr169-floating-contract-fixes.py
-          rm -f scripts/apply-pr169-settings-resume-fix.py
-          git add -N .
-          git diff --check
-
       - name: Commit audited fixes
         shell: bash
         run: |
