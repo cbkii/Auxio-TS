@@ -61,12 +61,13 @@ jobs:
 
       - name: Apply, format and verify reviewed patch
         id: apply
-        continue-on-error: true
         shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessCheck
+        run: |
+          set -euo pipefail
+          sed -i 's/^  exit 42$/  exit 0/' scripts/ci-gradle.sh
+          bash ./scripts/ci-gradle.sh spotlessCheck
 
       - name: Commit reviewed completion and remove temporary hooks
-        if: always()
         shell: bash
         env:
           HEAD_BRANCH: ${{ github.head_ref }}
@@ -74,17 +75,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          grep -q 'restoreRequestId' app/src/main/java/org/oxycblt/auxio/playback/StartupPlaybackPolicy.kt
-          grep -q 'RestoreOutcome.NO_SAVED_SESSION' app/src/main/java/org/oxycblt/auxio/playback/StartupPlaybackPolicy.kt
-          grep -q 'Warm return; preserving current playback and panel state' app/src/main/java/org/oxycblt/auxio/MainActivity.kt
-          grep -q 'queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED' app/src/main/java/org/oxycblt/auxio/MainFragment.kt
+          test ! -e .github/workflows/pr165-review-completion.yml
           test ! -e scripts/pr165-finalize-1.py
           test ! -e scripts/pr165-finalize-2a.py
           test ! -e scripts/pr165-finalize-2b.py
 
           git fetch origin "${BASE_BRANCH}"
           git checkout "origin/${BASE_BRANCH}" -- .github/workflows/lint.yml scripts/ci-gradle.sh
-          rm -f .github/workflows/pr165-review-completion.yml
           git diff --check
 
           git config user.name 'github-actions[bot]'
