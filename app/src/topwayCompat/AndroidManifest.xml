@@ -92,9 +92,15 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay" />
+
         <activity-alias
             android:name="com.tw.music.MusicActivity"
-            android:targetActivity="org.oxycblt.auxio.MainActivity"
+            android:targetActivity="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
             android:exported="true"
             android:enabled="true"
             android:icon="@mipmap/ic_launcher"
@@ -137,18 +143,11 @@
         <!-- Dedicated launch activity for Floating Controls -->
         <activity
             android:name="org.oxycblt.auxio.car.overlay.CarOverlayActivity"
-            android:exported="true"
+            android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay"
             android:label="@string/car_overlay_setting_title"
-            android:icon="@mipmap/ic_launcher">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <!-- Expose the dedicated floating-controls entry point as a launcher icon. -->
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
+            android:icon="@mipmap/ic_launcher" />
 
         <!-- Car Floating Controls overlay permission activity -->
         <activity

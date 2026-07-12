@@ -36,6 +36,14 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         if (prefs.contains("car_overlay_suppressed_auxio_fg")) {
             prefs.edit().remove("car_overlay_suppressed_auxio_fg").apply()
         }
+        if (!prefs.getBoolean(KEY_PERSISTENCE_DEFAULT_MIGRATED, false)) {
+            // Persistent controls are the safety-first default. Clear the old default-on hide
+            // preference once; users of later builds may still explicitly opt in if re-exposed.
+            prefs.edit {
+                putBoolean(KEY_HIDE_WHILE_AUXIO_FG, false)
+                putBoolean(KEY_PERSISTENCE_DEFAULT_MIGRATED, true)
+            }
+        }
     }
 
     var enabled: Boolean
@@ -48,7 +56,7 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         set(value) = prefs.edit { putBoolean(KEY_PENDING_ENABLE, value) }
 
     var hideWhileAuxioForeground: Boolean
-        get() = prefs.getBoolean(KEY_HIDE_WHILE_AUXIO_FG, true)
+        get() = prefs.getBoolean(KEY_HIDE_WHILE_AUXIO_FG, false)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_WHILE_AUXIO_FG, value) }
 
     /**
@@ -92,6 +100,8 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         const val KEY_ENABLED = "car_overlay_enabled"
         private const val KEY_PENDING_ENABLE = "car_overlay_pending_enable"
         private const val KEY_HIDE_WHILE_AUXIO_FG = "car_overlay_hide_auxio_fg"
+        private const val KEY_PERSISTENCE_DEFAULT_MIGRATED =
+            "car_overlay_persistence_default_migrated_v2"
         private const val KEY_POSITION_X = "car_overlay_x"
         private const val KEY_POSITION_Y = "car_overlay_y"
         private const val KEY_OPACITY = "car_overlay_opacity"

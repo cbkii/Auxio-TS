@@ -1,35 +1,4 @@
-        assertEquals(DSP_ACTIVITY, intent?.component)
-        assertTrue(intent?.categories?.contains(Intent.CATEGORY_LAUNCHER) == true)
-    }
-
-    @Test
-    fun eqActivityUsesDefaultCategory() {
-        val resolver = Resolver(setOf(EQ_ACTIVITY))
-        val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
-        assertEquals(EQ_ACTIVITY, intent?.component)
-        assertTrue(intent?.categories?.contains(Intent.CATEGORY_DEFAULT) == true)
-    }
-
-    private class Resolver(private val available: Set<ComponentName>) :
-        TopwayEqualizerLauncher.IntentResolver {
-        override fun resolveActivity(intent: Intent): ComponentName? =
-            intent.component?.takeIf(available::contains)
-
-        override fun getLaunchIntentForPackage(packageName: String): Intent? = null
-    }
-
-    private companion object {
-        val DSP_ACTIVITY = ComponentName("com.tw.eq", "com.tw.eq.DSPActivity")
-        val EQ_ACTIVITY = ComponentName("com.tw.eq", "com.tw.eq.EQActivity")
-    }
-}
-''',
-)
-
-# Validation notes with exact-device evidence boundary.
-write(
-    "docs/TS18_V605_RUNTIME_REGRESSION_FIXES.md",
-    '''# TS18 v6.0.5 runtime regression fixes
+# TS18 v6.0.5 runtime regression fixes
 
 ## Exact-device observations
 
@@ -82,17 +51,3 @@ Automated checks cannot prove OEM audio-effect, WindowManager, DoFun or ACC beha
 6. Tap EQ and confirm `com.tw.eq/.DSPActivity` becomes resumed while playback remains healthy.
 
 Do not claim physical success until this matrix is completed on the exact device.
-''',
-)
-
-# Final source-level sanity checks.
-for path in [
-    "app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt",
-    "app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarFloatingControlsService.kt",
-    "app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerLauncher.kt",
-]:
-    content = read(path)
-    if "\t" in content:
-        raise RuntimeError(f"{path}: tab introduced")
-
-print("Applied TS18 v6.0.5 runtime regression fixes")

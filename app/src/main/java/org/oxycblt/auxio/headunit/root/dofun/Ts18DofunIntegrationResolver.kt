@@ -6,14 +6,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.root.dofun
@@ -27,10 +19,22 @@ import org.oxycblt.auxio.headunit.root.RootStateHolder
 enum class Ts18RootProbe(val command: String) {
     Id("id"),
     PackageSummary(
-        "pm list packages -f -u -U -i --user 0 | grep -E 'com\\\\.tw\\\\.music|com\\\\.tw\\\\.media|com\\\\.dofun\\\\.variety'"
+        "pm list packages -f -U | grep -E 'com\\.tw\\.music|com\\.tw\\.media|com\\.dofun\\.variety'"
     ),
     ResolveMusicComponents(
         "cmd package resolve-activity --user 0 --brief -c android.intent.category.LAUNCHER -a android.intent.action.MAIN com.tw.media"
+    ),
+    ResolveTopwayAlias(
+        "cmd package resolve-activity --user 0 --brief -c android.intent.category.LAUNCHER -a android.intent.action.MAIN -n com.tw.media/com.tw.music.MusicActivity"
+    ),
+    OverlayRuntime(
+        "appops get com.tw.media SYSTEM_ALERT_WINDOW 2>&1; dumpsys activity services com.tw.media 2>&1 | head -n 160; dumpsys window windows 2>&1 | grep -E 'com.tw.media|CarFloatingControls' | head -n 80"
+    ),
+    EqualizerComponents(
+        "dumpsys package com.tw.eq 2>&1 | grep -E 'EQChoiceActivity|DSPActivity|EQActivity|enabledComponents|disabledComponents' | head -n 160"
+    ),
+    VisualizerEffects(
+        "dumpsys media.audio_flinger 2>&1 | grep -i -E 'visualizer|session|com.tw.media' | head -n 200"
     ),
     PackageDumpMedia("dumpsys package com.tw.media"),
     PackageDumpMusic("dumpsys package com.tw.music"),
@@ -50,6 +54,7 @@ enum class Ts18RootMutation(val command: String) {
 enum class Ts18DofunDetectedPath {
     StockTwMusicSelected,
     AuxioTwMediaSelected,
+    AuxioTwMediaWithStockCoexisting,
     AuxioInstalledButDebugPackage,
     AuxioMissingStockAlias,
     StockTwMusicEnabledMayBePreferred,
@@ -83,11 +88,10 @@ class Ts18DofunIntegrationResolver(
                     try {
                         pm.getPackageInfo(it, 0)
                         installedPackages.add(it)
-                    } catch (e: PackageManager.NameNotFoundException) {}
+                    } catch (_: PackageManager.NameNotFoundException) {}
                 }
 
             val probeResults = mutableMapOf<Ts18RootProbe, String>()
-
             if (rootState == RootStateHolder.State.Available) {
                 Ts18RootProbe.entries.forEach { probe ->
                     val result = rootStateHolder.runTs18ProbeSync(probe) ?: "null"
@@ -104,6 +108,7 @@ class Ts18DofunIntegrationResolver(
                 - Boot restore requires: autostartOnBoot && autoplayOnLaunch
                 - Launcher 'pp' command: can restore playback with play=true
                 - cmd=update, seek, prev, next: should not start playback from nothing
+                - Floating-only routing applies to MAIN/MUSIC_PLAYER; ACTION_VIEW still opens the player
                 """
                     .trimIndent()
 
@@ -114,7 +119,7 @@ class Ts18DofunIntegrationResolver(
             val detectedPath =
                 when {
                     hasDebugMedia -> Ts18DofunDetectedPath.AuxioInstalledButDebugPackage
-                    hasStock && hasMedia -> Ts18DofunDetectedPath.StockTwMusicEnabledMayBePreferred
+                    hasStock && hasMedia -> Ts18DofunDetectedPath.AuxioTwMediaWithStockCoexisting
                     hasStock -> Ts18DofunDetectedPath.StockTwMusicSelected
                     hasMedia -> Ts18DofunDetectedPath.AuxioTwMediaSelected
                     else -> Ts18DofunDetectedPath.Unknown
@@ -123,11 +128,13 @@ class Ts18DofunIntegrationResolver(
             val recommendedStep =
                 when (detectedPath) {
                     Ts18DofunDetectedPath.StockTwMusicSelected ->
-                        "If DoFun controls stock instead of Auxio, consider using the advanced root test to disable stock com.tw.music."
+                        "Install topwayTwMediaRelease or the systemless topwayTwMusic module; do not mutate stock solely from this check."
                     Ts18DofunDetectedPath.AuxioTwMediaSelected ->
-                        "Integration appears correct based on package state. Verify widget updates locally."
+                        "Exact com.tw.media identity is present. Verify the fixed alias, overlay runtime, widget and media-session probes."
+                    Ts18DofunDetectedPath.AuxioTwMediaWithStockCoexisting ->
+                        "Stock com.tw.music and Auxio com.tw.media can safely coexist. Package presence alone does not prove DoFun preference; do not disable stock unless a bounded reversible component-selection test requires it."
                     Ts18DofunDetectedPath.StockTwMusicEnabledMayBePreferred ->
-                        "Stock com.tw.music is enabled and may still be preferred. Run the reversible stock-selection test to test DoFun fallback."
+                        "Legacy classification only; rerun with the targeted alias and launcher probes."
                     Ts18DofunDetectedPath.AuxioInstalledButDebugPackage ->
                         "Uninstall com.tw.media.debug and install topwayTwMediaRelease. DoFun requires exact match."
                     Ts18DofunDetectedPath.AndroidMediaSessionOnly ->

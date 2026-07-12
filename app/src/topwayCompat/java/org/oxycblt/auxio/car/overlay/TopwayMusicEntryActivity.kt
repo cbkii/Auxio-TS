@@ -1,0 +1,53 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * TopwayMusicEntryActivity.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.car.overlay
+
+import android.app.Activity
+import android.content.Intent
+import android.os.Bundle
+import androidx.preference.PreferenceManager
+import org.oxycblt.auxio.MainActivity
+import org.oxycblt.auxio.R
+import timber.log.Timber as L
+
+/** Routes the stock-name DoFun music component without exposing two competing launcher entries. */
+class TopwayMusicEntryActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val floatingOnly =
+            prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
+        when (TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)) {
+            TopwayMusicEntryPolicy.Route.FLOATING_CONTROLS_ONLY -> {
+                L.i("Topway music entry routed to persistent floating controls")
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
+                if (
+                    CarOverlaySettings.isEnabled(this) &&
+                        CarOverlaySettings.hasOverlayPermission(this)
+                ) {
+                    CarFloatingControlsService.restoreIfEnabled(this, "topway_music_entry")
+                } else {
+                    CarOverlaySettings.setEnabled(this, true)
+                }
+            }
+            TopwayMusicEntryPolicy.Route.FULL_PLAYER -> {
+                L.i("Topway music entry routed to full player action=${intent.action}")
+                startActivity(
+                    Intent(intent)
+                        .setClass(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                )
+            }
+        }
+        finish()
+    }
+}

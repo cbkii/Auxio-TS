@@ -119,12 +119,6 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             return
         }
 
-        val frameGlobalRms = sqrt(frameGlobalSumSquares / globalSampleCount)
-        adaptivePeak = max(MIN_ADAPTIVE_PEAK, max(frameGlobalRms, adaptivePeak * ADAPTIVE_DECAY))
-
-        val normalizedGlobalEnvelope = (frameGlobalRms / adaptivePeak).coerceIn(0f, 1f)
-        globalEnvelope = max(normalizedGlobalEnvelope, globalEnvelope * ENVELOPE_DECAY)
-
         for (i in bands.indices) {
             raw[i] =
                 if (sampleCounts[i] > 0) {
@@ -133,6 +127,56 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
                     0f
                 }
         }
+
+        applyRawLevels(sqrt(frameGlobalSumSquares / globalSampleCount))
+    }
+
+    /**
+     * Converts Android Visualizer waveform bytes into the same bounded radial-band model.
+     *
+     * Android exposes waveform samples as unsigned 8-bit values centred on 128. Some TS18 audio
+     * stacks return zeroed FFT frames while still providing a valid waveform stream, so this is a
+     * standards-only fallback for Auxio's own playback session rather than a synthetic animation.
+     */
+    fun updateWaveform(waveform: ByteArray?) {
+        if (waveform == null || waveform.size < MIN_WAVEFORM_SIZE) {
+            decayToSilence()
+            return
+        }
+
+        raw.fill(0f)
+        var frameSumSquares = 0f
+        var frameSampleCount = 0
+
+        for (band in raw.indices) {
+            val start = band * waveform.size / bandCount
+            val end = ((band + 1) * waveform.size / bandCount).coerceAtMost(waveform.size)
+            if (end <= start) continue
+
+            var bandSumSquares = 0f
+            for (index in start until end) {
+                val unsigned = waveform[index].toInt() and 0xFF
+                val centred = (unsigned - WAVEFORM_CENTRE).toFloat()
+                val square = centred * centred
+                bandSumSquares += square
+                frameSumSquares += square
+                frameSampleCount++
+            }
+            raw[band] = sqrt(bandSumSquares / (end - start).toFloat())
+        }
+
+        if (frameSampleCount == 0) {
+            decayToSilence()
+            return
+        }
+        applyRawLevels(sqrt(frameSumSquares / frameSampleCount.toFloat()))
+    }
+
+    private fun applyRawLevels(frameGlobalRms: Float) {
+        adaptivePeak = max(MIN_ADAPTIVE_PEAK, max(frameGlobalRms, adaptivePeak * ADAPTIVE_DECAY))
+
+        val normalizedGlobalEnvelope = (frameGlobalRms / adaptivePeak).coerceIn(0f, 1f)
+        globalEnvelope = max(normalizedGlobalEnvelope, globalEnvelope * ENVELOPE_DECAY)
 
         for (i in bands.indices) {
             val left2 = raw[(i - 2 + bandCount) % bandCount]
@@ -177,6 +221,8 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
     companion object {
         const val DEFAULT_BAND_COUNT = 48
         private const val MIN_FFT_SIZE = 4
+        private const val MIN_WAVEFORM_SIZE = 16
+        private const val WAVEFORM_CENTRE = 128
         private const val MIN_FREQ = 40f
         private const val MAX_FREQ = 12000f
         private val MIN_FREQ_LOG = ln(MIN_FREQ)

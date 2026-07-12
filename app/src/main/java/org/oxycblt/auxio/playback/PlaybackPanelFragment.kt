@@ -20,17 +20,14 @@ package org.oxycblt.auxio.playback
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
 import androidx.constraintlayout.widget.ConstraintSet
@@ -47,6 +44,8 @@ import androidx.navigation.findNavController
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
@@ -92,7 +91,8 @@ class PlaybackPanelFragment :
     ViewBindingFragment<FragmentPlaybackPanelBinding>(),
     Toolbar.OnMenuItemClickListener,
     StyledSeekBar.Listener,
-    StepperOverlay.Listener {
+    StepperOverlay.Listener,
+    UISettings.Listener {
     private val coverPagerAdapter by lazy {
         CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
     }
@@ -100,11 +100,14 @@ class PlaybackPanelFragment :
     private val detailModel: DetailViewModel by activityViewModels()
     @Inject lateinit var uiSettings: UISettings
     private val queueModel: QueueViewModel by viewModels()
-    private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
     private var visualizer: Visualizer? = null
     private var visualizerSessionId: Int? = null
-    private var visualizerPermissionLauncher: ActivityResultLauncher<String>? = null
+    private var visualizerPermissionLauncher:
+        androidx.activity.result.ActivityResultLauncher<String>? = null
+    private var visualizerWatchdogJob: Job? = null
+    private var visualizerGeneration = 0
+    private var visualizerRetryCount = 0
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -115,22 +118,18 @@ class PlaybackPanelFragment :
     ) {
         super.onBindingCreated(binding, savedInstanceState)
 
-        // AudioEffect expects you to use startActivityForResult with the panel intent. There is no
-        // contract analogue for this intent, so the generic contract is used instead.
-        equalizerLauncher =
-            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                // Nothing to do
-            }
-
         visualizerPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
                 if (isGranted) {
-                    updateVisualizerState()
-                    if (coverPagerAdapter.itemCount > 0) {
-                        coverPagerAdapter.notifyItemRangeChanged(0, coverPagerAdapter.itemCount)
-                    }
+                    visualizerRetryCount = 0
+                    updateVisualizerState(forceRestart = true)
+                } else {
+                    playbackModel.updateVisualizerState(
+                        VisualizerState.Failed("RECORD_AUDIO permission denied")
+                    )
                 }
             }
+        uiSettings.registerListener(this)
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
@@ -154,6 +153,7 @@ class PlaybackPanelFragment :
             adapter = coverPagerAdapter
             userAwarePagerCallback =
                 UserAwarePagerCallback(this) {
+                        coverPagerAdapter.setActivePosition(it)
                         // Posting the queue goto command prevents the seekbar pos from desyncing
                         // from the song's duration, which creates a visual flicker in the seekbar.
                         post { queueModel.goto(it) }
@@ -189,9 +189,9 @@ class PlaybackPanelFragment :
         binding.playbackSeekBar?.listener = this
         val spacingSmall = resources.getDimensionPixelSize(R.dimen.spacing_small)
         val spacingMedium = resources.getDimensionPixelSize(R.dimen.spacing_medium)
-        val forceLargeLandscapeControls =
-            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val useLargeControls = uiSettings.largeHeadUnitControls || forceLargeLandscapeControls
+        // The TS18 Now Playing controls have one deterministic automotive size. The removed
+        // preference was ineffective because this surface is always landscape on the target unit.
+        val useLargeControls = true
         binding.playbackSeekBar?.setLargeTouchMode(useLargeControls)
         val playbackInfoVerticalPadding =
             when {
@@ -318,7 +318,7 @@ class PlaybackPanelFragment :
     }
 
     override fun onDestroyBinding(binding: FragmentPlaybackPanelBinding) {
-        equalizerLauncher = null
+        uiSettings.unregisterListener(this)
         visualizerPermissionLauncher = null
         releaseVisualizer()
         binding.playbackRepeat.clearPendingIcon()
@@ -333,25 +333,26 @@ class PlaybackPanelFragment :
     override fun onMenuItemClick(item: MenuItem): Boolean {
         if (item.itemId == R.id.action_open_equalizer) {
             L.d("Launching TS18/native equalizer with Android fallback")
-            val equalizerIntent =
-                TopwayEqualizerLauncher.resolveIntent(
+            val candidates =
+                TopwayEqualizerLauncher.resolveIntents(
                     requireContext(),
                     playbackModel.currentAudioSessionId.value,
                 )
-            if (equalizerIntent == null) {
-                requireContext().showToast(R.string.err_no_equalizer_app)
-                return true
+            var launched = false
+            for (candidate in candidates) {
+                try {
+                    startActivity(candidate)
+                    launched = true
+                    break
+                } catch (e: android.content.ActivityNotFoundException) {
+                    L.w(e, "EQ/DSP candidate disappeared before launch: $candidate")
+                } catch (e: SecurityException) {
+                    L.w(e, "EQ/DSP candidate was denied: $candidate")
+                } catch (e: RuntimeException) {
+                    L.w(e, "EQ/DSP candidate failed at launch: $candidate")
+                }
             }
-            try {
-                requireNotNull(equalizerLauncher) { "Equalizer panel launcher was not available" }
-                    .launch(equalizerIntent)
-            } catch (e: ActivityNotFoundException) {
-                L.w(e, "Resolved EQ/DSP intent could not be launched: $equalizerIntent")
-                requireContext().showToast(R.string.err_no_equalizer_app)
-            } catch (e: SecurityException) {
-                L.w(e, "Resolved EQ/DSP intent was denied: $equalizerIntent")
-                requireContext().showToast(R.string.err_no_equalizer_app)
-            }
+            if (!launched) requireContext().showToast(R.string.err_no_equalizer_app)
             return true
         }
 
@@ -379,7 +380,6 @@ class PlaybackPanelFragment :
         binding.playbackAlbum?.text = song.album.name.resolve(context)
         binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
         updateVisualizerState()
-        notifyCoverVisualizerStateChanged()
     }
 
     private fun updateParent(parent: MusicParent?) {
@@ -420,7 +420,10 @@ class PlaybackPanelFragment :
         releaseVisualizer()
     }
 
-    private fun releaseVisualizer() {
+    private fun releaseVisualizer(publishHidden: Boolean = true) {
+        visualizerWatchdogJob?.cancel()
+        visualizerWatchdogJob = null
+        visualizerGeneration++
         val activeVisualizer = visualizer
         visualizer = null
         visualizerSessionId = null
@@ -443,7 +446,7 @@ class PlaybackPanelFragment :
                 L.d(e, "Visualizer native release failed")
             }
         }
-        playbackModel.updateVisualizerState(VisualizerState.Hidden)
+        if (publishHidden) playbackModel.updateVisualizerState(VisualizerState.Hidden)
     }
 
     private fun shouldUseVisualizerForCurrentState(): Boolean {
@@ -457,146 +460,225 @@ class PlaybackPanelFragment :
         }
     }
 
-    private fun updateVisualizerState() {
+    private fun updateVisualizerState(forceRestart: Boolean = false) {
         if (!shouldUseVisualizerForCurrentState()) {
+            visualizerRetryCount = 0
             releaseVisualizer()
-            playbackModel.updateVisualizerState(VisualizerState.Hidden)
             return
         }
+
         val sessionId =
-            playbackModel.currentAudioSessionId.value?.takeIf { it != 0 }
+            playbackModel.currentAudioSessionId.value?.takeIf { it > 0 }
                 ?: run {
-                    L.d("Visualizer not started: no non-zero audio session")
-                    playbackModel.updateVisualizerState(VisualizerState.Hidden)
+                    releaseVisualizer(publishHidden = false)
+                    playbackModel.updateVisualizerState(
+                        VisualizerState.Failed("Waiting for a non-zero audio session")
+                    )
                     return
                 }
-
         val hasPermission =
             ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
-
         if (!hasPermission) {
-            L.w("Visualizer not started: RECORD_AUDIO permission denied or not yet granted")
-            playbackModel.updateVisualizerState(VisualizerState.Failed("Permission denied"))
-            return // Will be requested in onResume if needed
+            releaseVisualizer(publishHidden = false)
+            playbackModel.updateVisualizerState(
+                VisualizerState.Failed("RECORD_AUDIO permission denied")
+            )
+            return
         }
 
-        if (visualizer != null && visualizerSessionId != sessionId) {
-            releaseVisualizer()
+        if (forceRestart || (visualizer != null && visualizerSessionId != sessionId)) {
+            visualizerRetryCount = 0
+            releaseVisualizer(publishHidden = false)
         }
+        if (visualizer != null) return
 
-        if (visualizer == null) {
-            playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
-            try {
-                val candidate = Visualizer(sessionId)
-                val captureRange = Visualizer.getCaptureSizeRange()
-                val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
-                candidate.captureSize = targetSize
-                val maxCaptureRate = Visualizer.getMaxCaptureRate()
-                val targetRate = minOf(maxCaptureRate, 30_000).coerceAtLeast(1)
-                try {
-                    candidate.scalingMode = Visualizer.SCALING_MODE_AS_PLAYED
-                } catch (e: RuntimeException) {
-                    L.d(e, "Visualizer as-played scaling unavailable; continuing with default")
-                }
+        startVisualizer(sessionId)
+    }
 
-                val listenerStatus =
-                    candidate.setDataCaptureListener(
-                        object : Visualizer.OnDataCaptureListener {
-                            private var frameCount = 0
-
-                            override fun onWaveFormDataCapture(
-                                visualizer: Visualizer,
-                                waveform: ByteArray,
-                                samplingRate: Int,
-                            ) {}
-
-                            override fun onFftDataCapture(
-                                visualizer: Visualizer,
-                                fft: ByteArray,
-                                samplingRate: Int,
-                            ) {
-                                if (++frameCount == 1) {
-                                    L.d(
-                                        "Visualizer FFT frames started for session $sessionId " +
-                                            "samplingRate=${samplingRate}mHz " +
-                                            "(${samplingRate / 1000f}Hz)"
-                                    )
-                                }
-
-                                var hasUsableData = false
-                                for (i in 2 until fft.size) {
-                                    if (fft[i] != 0.toByte()) {
-                                        hasUsableData = true
-                                        break
-                                    }
-                                }
-                                if (hasUsableData) {
-                                    playbackModel.updateVisualizerState(
-                                        VisualizerState.Live(
-                                            fft.copyOf(),
-                                            samplingRate,
-                                            android.os.SystemClock.uptimeMillis(),
-                                        )
-                                    )
-                                }
-                            }
-                        },
-                        targetRate,
-                        false,
-                        true,
-                    )
-
-                if (listenerStatus != Visualizer.SUCCESS) {
-                    L.w("Visualizer setDataCaptureListener failed with status: $listenerStatus")
-                    playbackModel.updateVisualizerState(
-                        VisualizerState.Failed("Listener registration failed")
-                    )
-                    try {
-                        candidate.release()
-                    } catch (e: RuntimeException) {
-                        L.d(e, "Visualizer native release failed during partial initialization")
-                    }
-                    return
-                }
-
-                candidate.enabled = true
-                visualizer = candidate
-                visualizerSessionId = sessionId
-                L.d(
-                    "Visualizer started for session $sessionId " +
-                        "with captureSize=$targetSize " +
-                        "captureRate=${targetRate}mHz (${targetRate / 1000f}Hz)"
-                )
-            } catch (e: RuntimeException) {
-                val message =
-                    when (e) {
-                        is SecurityException -> "Visualizer construction denied"
-                        is IllegalArgumentException ->
-                            "Visualizer rejected session/capture configuration"
-                        is IllegalStateException -> "Visualizer entered invalid state"
-                        is UnsupportedOperationException -> "Visualizer unsupported on this device"
-                        else -> "Visualizer construction failed"
-                    }
-                L.w(e, "$message for session $sessionId")
-                visualizer = null
-                visualizerSessionId = null
-                playbackModel.updateVisualizerState(VisualizerState.Failed(message))
+    private fun startVisualizer(sessionId: Int) {
+        val generation = ++visualizerGeneration
+        playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
+        try {
+            val captureRange = Visualizer.getCaptureSizeRange()
+            require(captureRange.size >= 2 && captureRange[0] > 0 && captureRange[1] >= captureRange[0]) {
+                "Invalid Visualizer capture-size range"
             }
+
+            val candidate = Visualizer(sessionId)
+            val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
+            candidate.captureSize = targetSize
+            val maxCaptureRate = Visualizer.getMaxCaptureRate()
+            val targetRate = minOf(maxCaptureRate, 30_000).coerceAtLeast(1)
+            val scalingMode =
+                if (visualizerRetryCount == 0) Visualizer.SCALING_MODE_NORMALIZED
+                else Visualizer.SCALING_MODE_AS_PLAYED
+            try {
+                candidate.scalingMode = scalingMode
+            } catch (e: RuntimeException) {
+                L.d(e, "Requested Visualizer scaling mode unavailable; continuing with default")
+            }
+
+            val listenerStatus =
+                candidate.setDataCaptureListener(
+                    object : Visualizer.OnDataCaptureListener {
+                        private var fftCallbacks = 0
+                        private var waveformCallbacks = 0
+                        private var lastUsableFftAtMs = 0L
+
+                        override fun onWaveFormDataCapture(
+                            visualizer: Visualizer,
+                            waveform: ByteArray,
+                            samplingRate: Int,
+                        ) {
+                            if (generation != visualizerGeneration) return
+                            waveformCallbacks++
+                            if (!hasUsableWaveform(waveform)) return
+                            val now = android.os.SystemClock.uptimeMillis()
+                            if (now - lastUsableFftAtMs <= FFT_PREFERENCE_WINDOW_MS) return
+                            playbackModel.updateVisualizerState(
+                                VisualizerState.Live(
+                                    waveform.copyOf(),
+                                    samplingRate,
+                                    now,
+                                    VisualizerState.FrameSource.WAVEFORM,
+                                )
+                            )
+                            if (waveformCallbacks == 1) {
+                                L.i("Visualizer waveform fallback live for session $sessionId")
+                            }
+                        }
+
+                        override fun onFftDataCapture(
+                            visualizer: Visualizer,
+                            fft: ByteArray,
+                            samplingRate: Int,
+                        ) {
+                            if (generation != visualizerGeneration) return
+                            fftCallbacks++
+                            if (!hasUsableFft(fft)) return
+                            val now = android.os.SystemClock.uptimeMillis()
+                            lastUsableFftAtMs = now
+                            playbackModel.updateVisualizerState(
+                                VisualizerState.Live(
+                                    fft.copyOf(),
+                                    samplingRate,
+                                    now,
+                                    VisualizerState.FrameSource.FFT,
+                                )
+                            )
+                            if (fftCallbacks == 1) {
+                                L.i(
+                                    "Visualizer FFT live for session $sessionId " +
+                                        "samplingRate=${samplingRate}mHz"
+                                )
+                            }
+                        }
+                    },
+                    targetRate,
+                    true,
+                    true,
+                )
+
+            if (listenerStatus != Visualizer.SUCCESS) {
+                playbackModel.updateVisualizerState(
+                    VisualizerState.Failed("Listener registration failed: $listenerStatus")
+                )
+                try {
+                    candidate.release()
+                } catch (e: RuntimeException) {
+                    L.d(e, "Visualizer native release failed during partial initialization")
+                }
+                return
+            }
+
+            candidate.enabled = true
+            visualizer = candidate
+            visualizerSessionId = sessionId
+            L.i(
+                "Visualizer started session=$sessionId captureSize=$targetSize " +
+                    "captureRate=${targetRate}mHz scalingMode=$scalingMode " +
+                    "attempt=$visualizerRetryCount"
+            )
+            scheduleVisualizerWatchdog(sessionId, generation)
+        } catch (e: RuntimeException) {
+            val message =
+                when (e) {
+                    is SecurityException -> "Visualizer construction denied"
+                    is IllegalArgumentException -> "Visualizer rejected session/capture configuration"
+                    is IllegalStateException -> "Visualizer entered invalid state"
+                    is UnsupportedOperationException -> "Visualizer unsupported on this device"
+                    else -> "Visualizer construction failed"
+                }
+            L.w(e, "$message for session $sessionId")
+            visualizer = null
+            visualizerSessionId = null
+            playbackModel.updateVisualizerState(VisualizerState.Failed(message))
         }
+    }
+
+    private fun scheduleVisualizerWatchdog(sessionId: Int, generation: Int) {
+        visualizerWatchdogJob?.cancel()
+        visualizerWatchdogJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                while (true) {
+                    delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
+                    if (generation != visualizerGeneration || visualizerSessionId != sessionId) return@launch
+                    val state = playbackModel.visualizerState.value
+                    val now = android.os.SystemClock.uptimeMillis()
+                    val hasFreshFrame =
+                        state is VisualizerState.Live &&
+                            now - state.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
+                    if (hasFreshFrame) continue
+
+                    if (visualizerRetryCount < MAX_VISUALIZER_RETRIES) {
+                        visualizerRetryCount++
+                        L.w(
+                            "Visualizer produced no recent usable frame; retrying session=$sessionId " +
+                                "attempt=$visualizerRetryCount"
+                        )
+                        visualizerWatchdogJob = null
+                        releaseVisualizer(publishHidden = false)
+                        if (shouldUseVisualizerForCurrentState()) startVisualizer(sessionId)
+                    } else {
+                        playbackModel.updateVisualizerState(
+                            VisualizerState.Failed("No usable FFT or waveform frames")
+                        )
+                    }
+                    return@launch
+                }
+            }
+    }
+
+    private fun hasUsableFft(fft: ByteArray): Boolean {
+        for (index in 2 until fft.size) {
+            if (fft[index] != 0.toByte()) return true
+        }
+        return false
+    }
+
+    private fun hasUsableWaveform(waveform: ByteArray): Boolean {
+        if (waveform.size < 16) return false
+        var min = 255
+        var max = 0
+        for (sample in waveform) {
+            val unsigned = sample.toInt() and 0xFF
+            if (unsigned < min) min = unsigned
+            if (unsigned > max) max = unsigned
+        }
+        return max - min >= MIN_WAVEFORM_RANGE
     }
 
     private fun updatePlaying(isPlaying: Boolean) {
         requireBinding().playbackPlayPause.isChecked = isPlaying
         requireBinding().playbackSeekBar?.setWaveEnabled(isPlaying)
         updateVisualizerState()
-        notifyCoverVisualizerStateChanged()
     }
 
-    private fun notifyCoverVisualizerStateChanged() {
-        if (coverPagerAdapter.itemCount > 0) {
-            coverPagerAdapter.notifyItemRangeChanged(0, coverPagerAdapter.itemCount)
-        }
+    override fun onVisualizerModeChanged() {
+        visualizerRetryCount = 0
+        coverPagerAdapter.refreshVisualizerMode()
+        updateVisualizerState(forceRestart = true)
     }
 
     private fun updateShuffleScope(scope: ShuffleScope) {
@@ -623,6 +705,7 @@ class PlaybackPanelFragment :
 
     private fun updatePager(queue: PagerQueue) {
         val binding = requireBinding()
+        coverPagerAdapter.setActivePosition(queue.index)
 
         val command = playbackModel.pagerCommand.consume()
         if (command == null) {
@@ -675,6 +758,14 @@ class PlaybackPanelFragment :
             Direction.FORWARDS -> playbackModel.stepForward()
             Direction.BACKWARDS -> playbackModel.stepBackwards()
         }
+    }
+
+    private companion object {
+        const val FFT_PREFERENCE_WINDOW_MS = 300L
+        const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L
+        const val VISUALIZER_STALE_AFTER_MS = 2_000L
+        const val MAX_VISUALIZER_RETRIES = 1
+        const val MIN_WAVEFORM_RANGE = 4
     }
 
     private fun applyDriverSideLayout(binding: FragmentPlaybackPanelBinding) {

@@ -99,7 +99,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
                 binding.playbackSkipNext,
                 binding.playbackShuffle,
             ),
-            compact = true,
+            banner = true,
             primaryButton = binding.playbackPlayPause,
         )
         HeadUnitUiAdapter.applyLargePlaybackText(

@@ -28,7 +28,9 @@ import android.graphics.PixelFormat
 import android.graphics.Point
 import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -42,6 +44,7 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.MainActivity
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
@@ -70,6 +73,13 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     private var isAuxioForeground = false
     private var isForegroundPromoted = false
     private var screenOnReceiverRegistered = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var attachRetryCount = 0
+    private val attachRetryRunnable = Runnable {
+        if (prefs.enabled && Settings.canDrawOverlays(this) && !isOverlayAttached) {
+            showOverlayIfAllowed()
+        }
+    }
     private val screenOnReceiver =
         object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
@@ -112,11 +122,14 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
                 "Sticky restart restore",
                 "reason=null_intent",
             )
-            if (shouldSuppressForForegroundPreference()) {
-                L.d("Skipping sticky overlay restore while Auxio foreground suppression is active")
-                return START_STICKY
+            // A null-intent sticky restart is still subject to Android's foreground-service
+            // promotion deadline. Promote before applying optional window suppression.
+            if (!promoteForeground()) {
+                stopSelfCleanly()
+                return START_NOT_STICKY
             }
-            startOverlayRuntime()
+            isForegroundPromoted = true
+            if (!shouldSuppressForForegroundPreference()) startOverlayRuntime()
             return START_STICKY
         }
 
@@ -184,6 +197,7 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(attachRetryRunnable)
         unregisterScreenOnReceiver()
         removeOverlay()
         isServiceCreated = false
@@ -282,10 +296,23 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         try {
             windowManager?.addView(view, params)
         } catch (e: Exception) {
-            L.e(e, "Failed to add overlay view, stopping")
-            stopSelfCleanly()
+            L.e(e, "Failed to add overlay view")
+            journal.log(
+                DiagnosticJournal.CAT_OVERLAY,
+                "Overlay attach failed",
+                "attempt=$attachRetryCount error=${e.javaClass.simpleName}",
+            )
+            if (attachRetryCount < MAX_ATTACH_RETRIES) {
+                attachRetryCount++
+                mainHandler.removeCallbacks(attachRetryRunnable)
+                mainHandler.postDelayed(attachRetryRunnable, ATTACH_RETRY_DELAY_MS)
+            } else {
+                stopSelfCleanly()
+            }
             return
         }
+        mainHandler.removeCallbacks(attachRetryRunnable)
+        attachRetryCount = 0
         overlayView = view
         isOverlayAttached = true
         isOverlayRuntimeAttached = true
@@ -542,11 +569,13 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
     }
 
     override fun onOpenAuxio() {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        if (launchIntent != null) {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(launchIntent)
-        }
+        // The Topway build deliberately has a routing launcher component. Never ask PackageManager
+        // to choose between launcher entries; open the real app activity explicitly.
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .setAction(org.oxycblt.auxio.headunit.HeadUnitEntryPoints.ACTION_OPEN_NOW_PLAYING)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        )
     }
 
     override fun onStopRequested() {
@@ -575,6 +604,8 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
         private const val DEFAULT_TOP_EDGE_Y = 0
         private const val OVERLAY_ESTIMATED_WIDTH_PX = 350
         private const val OVERLAY_ESTIMATED_HEIGHT_PX = 80
+        private const val MAX_ATTACH_RETRIES = 2
+        private const val ATTACH_RETRY_DELAY_MS = 750L
 
         @Volatile private var isServiceCreated = false
         @Volatile private var isOverlayRuntimeAttached = false
@@ -622,19 +653,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             if (clearsForegroundSuppression(reason)) {
                 CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
             }
-            if (reason == "application_on_create" && prefs.hideWhileAuxioForeground) {
-                L.d("Skipping app-start overlay restore while hide-foreground preference is active")
-                return
-            }
-            if (
-                prefs.hideWhileAuxioForeground &&
-                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground
-            ) {
-                L.d(
-                    "Skipping overlay restore while Auxio foreground suppression is active [$reason]"
-                )
-                return
-            }
+            // Always start the foreground service when the feature is enabled. Optional
+            // hide-over-Auxio affects only the overlay window; it must not prevent the persistent
+            // service from existing and later reattaching the controls.
             start(context, reason)
         }
 
