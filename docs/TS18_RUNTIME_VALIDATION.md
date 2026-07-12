@@ -391,3 +391,41 @@ adb shell cmd package resolve-activity --brief com.tw.music/com.tw.music.MusicAc
 - **Widget/Sticky Update:** Play a track in Auxio. The DoFun widget must update with the correct track info.
 - **Media Session Visibility:** Run `adb shell dumpsys media_session | grep com.tw.music` to ensure the session is active under the correct package identity during playback.
 - **Source Loading:** Insert a USB drive and ensure Auxio successfully discovers and scans music from dynamic paths like `/storage/usbdisk0`.
+
+## Exact-device regression validation plan — v6.0.5 follow-up
+
+[Evidence confidence: Requires TS18 validation] [Porting decision: Requires TS18 runtime validation]
+
+Target the `topwayTwMediaRelease` / `com.tw.media` build on the observed `s9863a1h10_Natv` Android 10 device with firmware `TS18.2.2_20241210.165912_WINDOW-THEME1`. Automated checks can prove only Android-standard wiring and guardrails; they do not prove physical visualizer, overlay, launcher, or stock-EQ success.
+
+### Visualizer
+
+- Grant and deny `RECORD_AUDIO`, then test modes Off, Fallback, and Always.
+- Use one track with artwork and one track without artwork.
+- Exercise play, pause, skip, audio-session replacement, leaving/returning to Now Playing, process death, reboot, and ACC sleep/wake.
+- Record backend state transitions, failure reason, capture size/rate, callback counts, non-zero FFT/waveform counts, retry count, and first usable-frame latency.
+
+### Floating Controls
+
+- Enable once with overlay permission granted and verify no settings retoggle is needed.
+- Confirm the overlay remains visible over Auxio, DoFun, and multiple third-party apps.
+- Re-test the explicit Hide while Auxio is open option as opt-in behavior.
+- Validate dedicated overlay entry, explicit full-player action from overlay, floating-only cold boot, DoFun automatic startup, manual DoFun slot tap, launcher restart, process death, screen off/on, reboot, ACC sleep/wake, permission revocation/regrant, and package replacement.
+- Confirm exactly one foreground service, one notification, and one overlay window.
+
+### Playback banner
+
+- Capture before/after screenshots on the 1280x720 display.
+- Confirm the library playback banner controls are approximately 15% smaller while full Now Playing controls remain unchanged and all controls remain tappable.
+
+### Stock EQ
+
+- Validate the exact stock DSP component with:
+
+```sh
+am start -W -n com.tw.eq/.DSPActivity
+```
+
+- Click the Now Playing EQ action and confirm `com.tw.eq/.DSPActivity` becomes the resumed activity, then return to Auxio and verify playback remains healthy.
+
+This plan does not claim platform signing, UID 1000, privileged global audio capture, or physical success until the device evidence is attached.

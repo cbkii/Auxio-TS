@@ -24,6 +24,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.settings.Settings
 import org.oxycblt.auxio.ui.accent.Accent
@@ -86,6 +87,9 @@ interface UISettings : Settings<UISettings.Listener> {
     interface Listener {
         /** Called when [roundMode] changes. */
         fun onRoundModeChanged()
+
+        /** Called when [visualizerMode] changes. */
+        fun onVisualizerModeChanged() {}
     }
 }
 
@@ -147,7 +151,11 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
 
     override val largeHeadUnitControls: Boolean
         get() =
-            sharedPreferences.getBoolean(getString(R.string.set_key_head_unit_large_controls), true)
+            !BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                sharedPreferences.getBoolean(
+                    getString(R.string.set_key_head_unit_large_controls),
+                    true,
+                )
 
     override val showHeadUnitAlbumArt: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_head_unit_album_art), true)
@@ -192,6 +200,9 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
         if (key == getString(R.string.set_key_round_mode)) {
             L.d("Dispatching round mode setting change")
             listener.onRoundModeChanged()
+        } else if (key == getString(R.string.set_key_visualizer_mode)) {
+            L.d("Dispatching visualizer mode setting change")
+            listener.onVisualizerModeChanged()
         }
     }
 

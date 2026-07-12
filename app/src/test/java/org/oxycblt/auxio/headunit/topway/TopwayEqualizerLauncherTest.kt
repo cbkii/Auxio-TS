@@ -21,6 +21,8 @@ package org.oxycblt.auxio.headunit.topway
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
 import android.media.audiofx.AudioEffect
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -58,6 +60,7 @@ class TopwayEqualizerLauncherTest {
         var resolvedPackages = mutableSetOf<String>()
         var queriedComponents = mutableListOf<ComponentName>()
         var queriedPackages = mutableListOf<String>()
+        var disabledComponents = mutableSetOf<ComponentName>()
         var mockAudioEffectFallback = true
 
         override fun resolveActivity(intent: Intent): ComponentName? {
@@ -90,27 +93,50 @@ class TopwayEqualizerLauncherTest {
             }
             return null
         }
+
+        override fun getActivityInfo(component: ComponentName): ActivityInfo? {
+            if (!resolvedComponents.contains(component) && !disabledComponents.contains(component)) {
+                return null
+            }
+            return ActivityInfo().apply {
+                packageName = component.packageName
+                name = component.className
+                enabled = !disabledComponents.contains(component)
+                exported = true
+            }
+        }
+
+        override fun getApplicationInfo(packageName: String): ApplicationInfo? {
+            val hasComponent =
+                (resolvedComponents + disabledComponents).any { it.packageName == packageName }
+            if (!hasComponent && !resolvedPackages.contains(packageName)) return null
+            return ApplicationInfo().apply {
+                this.packageName = packageName
+                enabled = true
+            }
+        }
     }
 
     @Test
-    fun testResolverOrderEqChoiceActivity() {
+    fun testResolverOrderDspActivityBeforeEqChoice() {
         Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         val resolver = TestIntentResolver()
-        resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQActivity"))
+        resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.DSPActivity"))
         resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQChoiceActivity"))
+        resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQActivity"))
 
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 0, resolver)
         assertNotNull(intent)
-        assertEquals(ComponentName("com.tw.eq", "com.tw.eq.EQChoiceActivity"), intent?.component)
+        assertEquals(ComponentName("com.tw.eq", "com.tw.eq.DSPActivity"), intent?.component)
     }
 
     @Test
-    fun testResolverOrderEqActivity() {
+    fun testDisabledEqChoiceFallsBackToEqActivity() {
         Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         val resolver = TestIntentResolver()
-        // EQChoiceActivity is NOT added, only EQActivity
+        resolver.disabledComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQChoiceActivity"))
         resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQActivity"))
 
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 0, resolver)
@@ -163,9 +189,9 @@ class TopwayEqualizerLauncherTest {
         // Make sure it doesn't contain com.tw.eq.MainActivity
         assertEquals(
             false,
-            TopwayEqualizerLauncher.nativeComponents.contains(
-                ComponentName("com.tw.eq", "com.tw.eq.MainActivity")
-            ),
+            TopwayEqualizerLauncher.nativeComponents.any {
+                it.component == ComponentName("com.tw.eq", "com.tw.eq.MainActivity")
+            },
         )
     }
 

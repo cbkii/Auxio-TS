@@ -622,10 +622,9 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             if (clearsForegroundSuppression(reason)) {
                 CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
             }
-            if (reason == "application_on_create" && prefs.hideWhileAuxioForeground) {
-                L.d("Skipping app-start overlay restore while hide-foreground preference is active")
-                return
-            }
+            // Application start is a reconciliation point. Keep the foreground service alive even
+            // when the explicit hide-over-Auxio option is enabled; visibility hooks will hide or
+            // attach the window deterministically from concrete Activity lifecycle state.
             if (
                 prefs.hideWhileAuxioForeground &&
                     CarOverlayVisibilityHooks.isSuppressedByAuxioForeground

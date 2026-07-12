@@ -21,41 +21,88 @@ package org.oxycblt.auxio.headunit.topway
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
+import android.content.pm.ComponentInfo
+import android.content.pm.PackageManager
 import android.media.audiofx.AudioEffect
 import org.oxycblt.auxio.BuildConfig
 import timber.log.Timber as L
 
 /** Resolves TS18/Topway native EQ/DSP apps before falling back to Android AudioEffect. */
 object TopwayEqualizerLauncher {
+    data class Candidate(val intent: Intent, val label: String, val kind: Kind) {
+        enum class Kind { EXPLICIT_COMPONENT, PACKAGE_LAUNCHER, ANDROID_AUDIO_EFFECT }
+    }
 
-    // Internal seam allowing host-side tests to validate resolution ordering without relying on
-    // Robolectric ShadowPackageManager explicit-intent behaviour.
     internal interface IntentResolver {
         fun resolveActivity(intent: Intent): ComponentName?
-
         fun getLaunchIntentForPackage(packageName: String): Intent?
+        fun getActivityInfo(component: ComponentName): ActivityInfo?
+        fun getApplicationInfo(packageName: String): ApplicationInfo?
     }
 
     private class DefaultIntentResolver(private val context: Context) : IntentResolver {
-        override fun resolveActivity(intent: Intent): ComponentName? {
-            return intent.resolveActivity(context.packageManager)
-        }
+        private val pm = context.packageManager
+        override fun resolveActivity(intent: Intent): ComponentName? = intent.resolveActivity(pm)
+        override fun getLaunchIntentForPackage(packageName: String): Intent? =
+            pm.getLaunchIntentForPackage(packageName)
 
-        override fun getLaunchIntentForPackage(packageName: String): Intent? {
-            return context.packageManager.getLaunchIntentForPackage(packageName)
-        }
+        override fun getActivityInfo(component: ComponentName): ActivityInfo? =
+            try {
+                pm.getActivityInfo(component, PackageManager.MATCH_DISABLED_COMPONENTS)
+            } catch (_: PackageManager.NameNotFoundException) {
+                null
+            }
+
+        override fun getApplicationInfo(packageName: String): ApplicationInfo? =
+            try {
+                pm.getApplicationInfo(packageName, PackageManager.MATCH_DISABLED_COMPONENTS)
+            } catch (_: PackageManager.NameNotFoundException) {
+                null
+            }
     }
+
+    internal data class NativeSpec(val component: ComponentName, val categories: List<String>)
 
     internal val nativeComponents =
         listOf(
-            ComponentName("com.tw.eq", "com.tw.eq.EQChoiceActivity"),
-            ComponentName("com.tw.eq", "com.tw.eq.EQActivity"),
-            ComponentName("com.tw.dsp", "com.tw.dsp.MainActivity"),
-            ComponentName("com.syu.eq", "com.syu.eq.MainActivity"),
-            ComponentName("com.syu.dsp", "com.syu.dsp.MainActivity"),
-            ComponentName("com.ts.MainUI", "com.ts.main.dsp.DspActivity"),
-            ComponentName("com.ts.mainui", "com.ts.main.dsp.DspActivity"),
-            ComponentName("com.zjinnova.eq", "com.zjinnova.eq.MainActivity"),
+            NativeSpec(
+                ComponentName("com.tw.eq", "com.tw.eq.DSPActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
+            NativeSpec(
+                ComponentName("com.tw.eq", "com.tw.eq.EQChoiceActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
+            NativeSpec(
+                ComponentName("com.tw.eq", "com.tw.eq.EQActivity"),
+                listOf(Intent.CATEGORY_DEFAULT),
+            ),
+            NativeSpec(
+                ComponentName("com.tw.dsp", "com.tw.dsp.MainActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
+            NativeSpec(
+                ComponentName("com.syu.eq", "com.syu.eq.MainActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
+            NativeSpec(
+                ComponentName("com.syu.dsp", "com.syu.dsp.MainActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
+            NativeSpec(
+                ComponentName("com.ts.MainUI", "com.ts.main.dsp.DspActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
+            NativeSpec(
+                ComponentName("com.ts.mainui", "com.ts.main.dsp.DspActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
+            NativeSpec(
+                ComponentName("com.zjinnova.eq", "com.zjinnova.eq.MainActivity"),
+                listOf(Intent.CATEGORY_LAUNCHER),
+            ),
         )
 
     private val nativePackages =
@@ -69,39 +116,61 @@ object TopwayEqualizerLauncher {
             "com.zjinnova.eq",
         )
 
-    fun resolveIntent(context: Context, audioSessionId: Int?): Intent? {
-        return resolveIntent(context, audioSessionId, DefaultIntentResolver(context))
-    }
+    fun resolveIntent(context: Context, audioSessionId: Int?): Intent? =
+        resolveCandidates(context, audioSessionId).firstOrNull()?.intent
 
-    // Internal resolution logic passing through the IntentResolver seam
-    internal fun resolveIntent(
+    fun resolveCandidates(context: Context, audioSessionId: Int?): List<Candidate> =
+        resolveCandidates(context, audioSessionId, DefaultIntentResolver(context))
+
+    internal fun resolveCandidates(
         context: Context,
         audioSessionId: Int?,
         resolver: IntentResolver,
-    ): Intent? {
+    ): List<Candidate> {
+        val candidates = mutableListOf<Candidate>()
         val attempted = mutableListOf<String>()
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            for (component in nativeComponents) {
-                attempted += component.flattenToShortString()
-                val intent =
-                    Intent(Intent.ACTION_MAIN)
-                        .addCategory(Intent.CATEGORY_LAUNCHER)
-                        .setComponent(component)
+            for (spec in nativeComponents) {
+                attempted += spec.component.flattenToShortString()
+                val app = resolver.getApplicationInfo(spec.component.packageName)
+                val info = resolver.getActivityInfo(spec.component)
+                if (
+                    app?.enabled != true ||
+                        info == null ||
+                        !info.isEffectivelyEnabled() ||
+                        !info.exported
+                ) {
+                    L.d(
+                        "Skipping disabled/unexported EQ candidate ${spec.component}: " +
+                            "app=${app?.enabled} activity=${info?.enabled} " +
+                            "exported=${info?.exported}"
+                    )
+                    continue
+                }
+                val intent = Intent(Intent.ACTION_MAIN).setComponent(spec.component)
+                spec.categories.forEach { intent.addCategory(it) }
                 if (resolver.resolveActivity(intent) != null) {
-                    L.i("Resolved native TS18 EQ/DSP component $component")
-                    return intent
+                    candidates +=
+                        Candidate(
+                            intent,
+                            spec.component.flattenToShortString(),
+                            Candidate.Kind.EXPLICIT_COMPONENT,
+                        )
+                } else {
+                    L.d(
+                        "Skipping EQ candidate without matching filter ${spec.component} " +
+                            "categories=${spec.categories}"
+                    )
                 }
             }
             for (pkg in nativePackages) {
                 attempted += pkg
-                val intent = resolver.getLaunchIntentForPackage(pkg)
-                if (intent != null) {
-                    L.i("Resolved native TS18 EQ/DSP package $pkg -> ${intent.component}")
-                    return intent
-                }
+                val app = resolver.getApplicationInfo(pkg)
+                if (app?.enabled != true) continue
+                val intent = resolver.getLaunchIntentForPackage(pkg) ?: continue
+                candidates += Candidate(intent, pkg, Candidate.Kind.PACKAGE_LAUNCHER)
             }
         }
-
         val fallback =
             Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
@@ -109,15 +178,17 @@ object TopwayEqualizerLauncher {
         audioSessionId
             ?.takeIf { it > 0 }
             ?.let { fallback.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, it) }
-
-        return if (resolver.resolveActivity(fallback) != null) {
-            L.i(
-                "No native TS18 EQ/DSP target resolved; using AudioEffect fallback. Tried=$attempted"
-            )
-            fallback
-        } else {
-            L.w("No EQ/DSP target resolved. Tried=$attempted")
-            null
+        if (resolver.resolveActivity(fallback) != null) {
+            candidates +=
+                Candidate(fallback, "android.media.audiofx", Candidate.Kind.ANDROID_AUDIO_EFFECT)
         }
+        if (candidates.isEmpty()) {
+            L.w("No EQ/DSP target resolved. Tried=$attempted")
+        } else {
+            L.i("Resolved EQ/DSP candidates: ${candidates.map { it.label }}")
+        }
+        return candidates.distinctBy { it.intent.component ?: it.intent.action }
     }
+
+    private fun ComponentInfo.isEffectivelyEnabled(): Boolean = enabled
 }

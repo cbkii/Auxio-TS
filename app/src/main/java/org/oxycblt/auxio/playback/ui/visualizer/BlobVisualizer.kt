@@ -74,8 +74,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun updateState(state: VisualizerState) {
         when (state) {
-            is VisualizerState.Hidden,
+            VisualizerState.Disabled,
+            VisualizerState.Hidden,
+            VisualizerState.WaitingForPermission,
+            VisualizerState.WaitingForSession,
+            VisualizerState.Starting,
             is VisualizerState.WaitingForFrames,
+            is VisualizerState.Retrying,
             is VisualizerState.Failed -> {
                 spectrumMapper.reset()
                 hasValidFrame = false

@@ -48,7 +48,7 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         set(value) = prefs.edit { putBoolean(KEY_PENDING_ENABLE, value) }
 
     var hideWhileAuxioForeground: Boolean
-        get() = prefs.getBoolean(KEY_HIDE_WHILE_AUXIO_FG, true)
+        get() = prefs.getBoolean(KEY_HIDE_WHILE_AUXIO_FG, false)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_WHILE_AUXIO_FG, value) }
 
     /**

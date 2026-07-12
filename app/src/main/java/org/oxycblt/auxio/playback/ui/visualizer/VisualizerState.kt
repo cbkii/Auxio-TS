@@ -19,16 +19,30 @@
 package org.oxycblt.auxio.playback.ui.visualizer
 
 sealed interface VisualizerState {
-    /** Visualizer is disabled by settings, playback is stopped, or not requested. */
+    enum class FailureReason {
+        PERMISSION_DENIED,
+        ZERO_SESSION,
+        CONSTRUCTOR_REJECTED,
+        CAPTURE_SIZE_RANGE_INVALID,
+        LISTENER_REGISTRATION_REJECTED,
+        ENABLE_FAILED,
+        NO_CALLBACKS,
+        FFT_ZERO_WITHOUT_WAVEFORM,
+        SESSION_CHANGED,
+        BACKEND_UNSUPPORTED,
+        CAPTURE_STALLED,
+    }
+
+    data object Disabled : VisualizerState
+    /** Compatibility name for disabled/hidden state used by existing UI paths. */
     data object Hidden : VisualizerState
-
-    /** Capture is established, but no valid recent frame has arrived yet. */
+    data object WaitingForPermission : VisualizerState
+    data object WaitingForSession : VisualizerState
+    data object Starting : VisualizerState
     data object WaitingForFrames : VisualizerState
-
-    /** A fresh, non-zero audio frame has arrived. */
+    data class Retrying(val reason: FailureReason, val attempt: Int) : VisualizerState
     data class Live(val frame: ByteArray, val samplingRate: Int, val receivedAtUptimeMs: Long) :
         VisualizerState
+    data class Failed(val reason: FailureReason, val detail: String? = null) : VisualizerState
 
-    /** Permission, listener registration, or construction failed, or capture stalled. */
-    data class Failed(val reason: String) : VisualizerState
 }
