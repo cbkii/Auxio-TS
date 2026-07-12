@@ -41,11 +41,18 @@ class TopwayMusicEntryActivity : Activity() {
             }
             TopwayMusicEntryPolicy.Route.FULL_PLAYER -> {
                 L.i("Topway music entry routed to full player action=${intent.action}")
-                startActivity(
-                    Intent(intent)
-                        .setClass(this, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                )
+                val fullPlayerIntent =
+                    Intent(this, MainActivity::class.java).apply {
+                        action = intent.action
+                        if (intent.data != null || intent.type != null) {
+                            setDataAndType(intent.data, intent.type)
+                        }
+                        addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        if (intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                    }
+                startActivity(fullPlayerIntent)
             }
         }
         finish()

@@ -20,7 +20,7 @@ package org.oxycblt.auxio.playback
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Intent
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
 import android.os.Bundle
@@ -47,6 +47,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
 import org.oxycblt.auxio.detail.DetailViewModel
@@ -93,9 +94,7 @@ class PlaybackPanelFragment :
     StyledSeekBar.Listener,
     StepperOverlay.Listener,
     UISettings.Listener {
-    private val coverPagerAdapter by lazy {
-        CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
-    }
+    private var coverPagerAdapter: CoverPagerAdapter? = null
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
     @Inject lateinit var uiSettings: UISettings
@@ -117,6 +116,10 @@ class PlaybackPanelFragment :
         savedInstanceState: Bundle?,
     ) {
         super.onBindingCreated(binding, savedInstanceState)
+
+        val currentCoverPagerAdapter =
+            CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
+        coverPagerAdapter = currentCoverPagerAdapter
 
         visualizerPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -150,10 +153,10 @@ class PlaybackPanelFragment :
         }
 
         binding.playbackPager?.apply {
-            adapter = coverPagerAdapter
+            adapter = currentCoverPagerAdapter
             userAwarePagerCallback =
                 UserAwarePagerCallback(this) {
-                        coverPagerAdapter.setActivePosition(it)
+                        currentCoverPagerAdapter.setActivePosition(it)
                         // Posting the queue goto command prevents the seekbar pos from desyncing
                         // from the song's duration, which creates a visual flicker in the seekbar.
                         post { queueModel.goto(it) }
@@ -189,14 +192,19 @@ class PlaybackPanelFragment :
         binding.playbackSeekBar?.listener = this
         val spacingSmall = resources.getDimensionPixelSize(R.dimen.spacing_small)
         val spacingMedium = resources.getDimensionPixelSize(R.dimen.spacing_medium)
-        // The TS18 Now Playing controls have one deterministic automotive size. The removed
-        // preference was ineffective because this surface is always landscape on the target unit.
-        val useLargeControls = true
+        val forceLargeLandscapeControls =
+            resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val useLargeControls =
+            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                true
+            } else {
+                uiSettings.largeHeadUnitControls || forceLargeLandscapeControls
+            }
         binding.playbackSeekBar?.setLargeTouchMode(useLargeControls)
         val playbackInfoVerticalPadding =
             when {
                 !uiSettings.showHeadUnitAlbumArt -> spacingMedium
-                uiSettings.largeHeadUnitControls -> spacingSmall
+                useLargeControls -> spacingSmall
                 else -> null
             }
         if (!uiSettings.showHeadUnitAlbumArt) {
@@ -327,32 +335,33 @@ class PlaybackPanelFragment :
         binding.playbackAlbum?.isSelected = false
         binding.playbackToolbar.setOnMenuItemClickListener(null)
         userAwarePagerCallback?.release()
+        userAwarePagerCallback = null
         binding.playbackPager?.adapter = null
+        coverPagerAdapter = null
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
         if (item.itemId == R.id.action_open_equalizer) {
             L.d("Launching TS18/native equalizer with Android fallback")
             val candidates =
-                TopwayEqualizerLauncher.resolveIntents(
+                TopwayEqualizerLauncher.resolveCandidates(
                     requireContext(),
                     playbackModel.currentAudioSessionId.value,
                 )
-            var launched = false
             for (candidate in candidates) {
                 try {
-                    startActivity(candidate)
-                    launched = true
-                    break
+                    requireContext().startActivity(candidate.intent)
+                    L.i("Launched EQ/DSP candidate ${candidate.label} (${candidate.kind})")
+                    return true
                 } catch (e: android.content.ActivityNotFoundException) {
-                    L.w(e, "EQ/DSP candidate disappeared before launch: $candidate")
+                    L.w(e, "EQ/DSP candidate not found after resolution: ${candidate.label}")
                 } catch (e: SecurityException) {
-                    L.w(e, "EQ/DSP candidate was denied: $candidate")
+                    L.w(e, "EQ/DSP candidate denied: ${candidate.label}")
                 } catch (e: RuntimeException) {
-                    L.w(e, "EQ/DSP candidate failed at launch: $candidate")
+                    L.w(e, "EQ/DSP candidate failed at launch: ${candidate.label}")
                 }
             }
-            if (!launched) requireContext().showToast(R.string.err_no_equalizer_app)
+            requireContext().showToast(R.string.err_no_equalizer_app)
             return true
         }
 
@@ -499,6 +508,7 @@ class PlaybackPanelFragment :
     private fun startVisualizer(sessionId: Int) {
         val generation = ++visualizerGeneration
         playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
+        var candidateToRelease: Visualizer? = null
         try {
             val captureRange = Visualizer.getCaptureSizeRange()
             require(captureRange.size >= 2 && captureRange[0] > 0 && captureRange[1] >= captureRange[0]) {
@@ -506,13 +516,14 @@ class PlaybackPanelFragment :
             }
 
             val candidate = Visualizer(sessionId)
+            candidateToRelease = candidate
             val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
             candidate.captureSize = targetSize
             val maxCaptureRate = Visualizer.getMaxCaptureRate()
             val targetRate = minOf(maxCaptureRate, 30_000).coerceAtLeast(1)
             val scalingMode =
-                if (visualizerRetryCount == 0) Visualizer.SCALING_MODE_NORMALIZED
-                else Visualizer.SCALING_MODE_AS_PLAYED
+                if (visualizerRetryCount == 0) Visualizer.SCALING_MODE_AS_PLAYED
+                else Visualizer.SCALING_MODE_NORMALIZED
             try {
                 candidate.scalingMode = scalingMode
             } catch (e: RuntimeException) {
@@ -584,16 +595,12 @@ class PlaybackPanelFragment :
                 playbackModel.updateVisualizerState(
                     VisualizerState.Failed("Listener registration failed: $listenerStatus")
                 )
-                try {
-                    candidate.release()
-                } catch (e: RuntimeException) {
-                    L.d(e, "Visualizer native release failed during partial initialization")
-                }
                 return
             }
 
             candidate.enabled = true
             visualizer = candidate
+            candidateToRelease = null
             visualizerSessionId = sessionId
             L.i(
                 "Visualizer started session=$sessionId captureSize=$targetSize " +
@@ -614,6 +621,24 @@ class PlaybackPanelFragment :
             visualizer = null
             visualizerSessionId = null
             playbackModel.updateVisualizerState(VisualizerState.Failed(message))
+        } finally {
+            candidateToRelease?.let { candidate ->
+                try {
+                    if (candidate.enabled) candidate.enabled = false
+                } catch (e: RuntimeException) {
+                    L.d(e, "Visualizer partial candidate disable failed")
+                }
+                try {
+                    candidate.setDataCaptureListener(null, 0, false, false)
+                } catch (e: RuntimeException) {
+                    L.d(e, "Visualizer partial candidate listener cleanup failed")
+                }
+                try {
+                    candidate.release()
+                } catch (e: RuntimeException) {
+                    L.d(e, "Visualizer partial candidate release failed")
+                }
+            }
         }
     }
 
@@ -677,7 +702,7 @@ class PlaybackPanelFragment :
 
     override fun onVisualizerModeChanged() {
         visualizerRetryCount = 0
-        coverPagerAdapter.refreshVisualizerMode()
+        coverPagerAdapter?.refreshVisualizerMode()
         updateVisualizerState(forceRestart = true)
     }
 
@@ -705,7 +730,7 @@ class PlaybackPanelFragment :
 
     private fun updatePager(queue: PagerQueue) {
         val binding = requireBinding()
-        coverPagerAdapter.setActivePosition(queue.index)
+        coverPagerAdapter?.setActivePosition(queue.index)
 
         val command = playbackModel.pagerCommand.consume()
         if (command == null) {

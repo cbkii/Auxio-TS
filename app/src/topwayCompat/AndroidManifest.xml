@@ -143,11 +143,17 @@
         <!-- Dedicated launch activity for Floating Controls -->
         <activity
             android:name="org.oxycblt.auxio.car.overlay.CarOverlayActivity"
-            android:exported="false"
+            android:exported="true"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay"
             android:label="@string/car_overlay_setting_title"
-            android:icon="@mipmap/ic_launcher" />
+            android:icon="@mipmap/ic_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <!-- Car Floating Controls overlay permission activity -->
         <activity
