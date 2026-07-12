@@ -1,0 +1,192 @@
+            // promotion deadline. Promote before applying optional window suppression.
+            if (!promoteForeground()) {
+                stopSelfCleanly()
+                return START_NOT_STICKY
+            }
+            isForegroundPromoted = true
+            if (!shouldSuppressForForegroundPreference()) startOverlayRuntime()
+            return START_STICKY
+''',
+)
+replace_once(
+    service,
+    '''    override fun onDestroy() {
+        unregisterScreenOnReceiver()
+        removeOverlay()
+''',
+    '''    override fun onDestroy() {
+        mainHandler.removeCallbacks(attachRetryRunnable)
+        unregisterScreenOnReceiver()
+        removeOverlay()
+''',
+)
+replace_once(
+    service,
+    '''        try {
+            windowManager?.addView(view, params)
+        } catch (e: Exception) {
+            L.e(e, "Failed to add overlay view, stopping")
+            stopSelfCleanly()
+            return
+        }
+        overlayView = view
+        isOverlayAttached = true
+        isOverlayRuntimeAttached = true
+''',
+    '''        try {
+            windowManager?.addView(view, params)
+        } catch (e: Exception) {
+            L.e(e, "Failed to add overlay view")
+            journal.log(
+                DiagnosticJournal.CAT_OVERLAY,
+                "Overlay attach failed",
+                "attempt=$attachRetryCount error=${e.javaClass.simpleName}",
+            )
+            if (attachRetryCount < MAX_ATTACH_RETRIES) {
+                attachRetryCount++
+                mainHandler.removeCallbacks(attachRetryRunnable)
+                mainHandler.postDelayed(attachRetryRunnable, ATTACH_RETRY_DELAY_MS)
+            } else {
+                stopSelfCleanly()
+            }
+            return
+        }
+        mainHandler.removeCallbacks(attachRetryRunnable)
+        attachRetryCount = 0
+        overlayView = view
+        isOverlayAttached = true
+        isOverlayRuntimeAttached = true
+''',
+)
+replace_once(
+    service,
+    '''    override fun onOpenAuxio() {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(launchIntent)
+        }
+    }
+''',
+    '''    override fun onOpenAuxio() {
+        // The Topway build deliberately has a routing launcher component. Never ask PackageManager
+        // to choose between launcher entries; open the real app activity explicitly.
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .setAction(org.oxycblt.auxio.headunit.HeadUnitEntryPoints.ACTION_OPEN_NOW_PLAYING)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        )
+    }
+''',
+)
+replace_once(
+    service,
+    '''        private const val OVERLAY_ESTIMATED_HEIGHT_PX = 80
+
+''',
+    '''        private const val OVERLAY_ESTIMATED_HEIGHT_PX = 80
+        private const val MAX_ATTACH_RETRIES = 2
+        private const val ATTACH_RETRY_DELAY_MS = 750L
+
+''',
+)
+replace_once(
+    service,
+    '''            if (reason == "application_on_create" && prefs.hideWhileAuxioForeground) {
+                L.d("Skipping app-start overlay restore while hide-foreground preference is active")
+                return
+            }
+            if (
+                prefs.hideWhileAuxioForeground &&
+                    CarOverlayVisibilityHooks.isSuppressedByAuxioForeground
+            ) {
+                L.d(
+                    "Skipping overlay restore while Auxio foreground suppression is active [$reason]"
+                )
+                return
+            }
+            start(context, reason)
+''',
+    '''            // Always start the foreground service when the feature is enabled. Optional
+            // hide-over-Auxio affects only the overlay window; it must not prevent the persistent
+            // service from existing and later reattaching the controls.
+            start(context, reason)
+''',
+)
+
+# Topway entry routing policy and Activity.
+write(
+    "app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/TopwayMusicEntryPolicy.kt",
+    '''/*
+ * Copyright (c) 2026 Auxio Project
+ * TopwayMusicEntryPolicy.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.car.overlay
+
+import android.content.Intent
+
+/** Pure routing policy for the fixed DoFun `com.tw.music.MusicActivity` component. */
+object TopwayMusicEntryPolicy {
+    enum class Route {
+        FULL_PLAYER,
+        FLOATING_CONTROLS_ONLY,
+    }
+
+    fun route(action: String?, hasData: Boolean, floatingOnly: Boolean): Route {
+        if (action == Intent.ACTION_VIEW || hasData) return Route.FULL_PLAYER
+        return if (floatingOnly) Route.FLOATING_CONTROLS_ONLY else Route.FULL_PLAYER
+    }
+}
+''',
+)
+write(
+    "app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/TopwayMusicEntryActivity.kt",
+    '''/*
+ * Copyright (c) 2026 Auxio Project
+ * TopwayMusicEntryActivity.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.car.overlay
+
+import android.app.Activity
+import android.content.Intent
+import android.os.Bundle
+import androidx.preference.PreferenceManager
+import org.oxycblt.auxio.MainActivity
+import org.oxycblt.auxio.R
+import timber.log.Timber as L
+
+/** Routes the stock-name DoFun music component without exposing two competing launcher entries. */
+class TopwayMusicEntryActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val floatingOnly =
+            prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
+        when (TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)) {
+            TopwayMusicEntryPolicy.Route.FLOATING_CONTROLS_ONLY -> {
+                L.i("Topway music entry routed to persistent floating controls")
+                CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
+                if (
+                    CarOverlaySettings.isEnabled(this) &&
+                        CarOverlaySettings.hasOverlayPermission(this)
+                ) {
+                    CarFloatingControlsService.restoreIfEnabled(this, "topway_music_entry")
+                } else {
+                    CarOverlaySettings.setEnabled(this, true)
+                }
+            }
+            TopwayMusicEntryPolicy.Route.FULL_PLAYER -> {
+                L.i("Topway music entry routed to full player action=${intent.action}")
