@@ -40,6 +40,11 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
 
     @Inject lateinit var uiSettings: UISettings
 
+    override fun onResume() {
+        super.onResume()
+        refreshRuntimePreferences()
+    }
+
     override fun onSetupPreference(preference: Preference) {
         when (preference.key) {
             getString(R.string.set_head_unit_compat_status) -> {
@@ -85,6 +90,14 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         }
     }
 
+    private fun refreshRuntimePreferences() {
+        findPreference<Preference>(getString(R.string.set_key_head_unit_startup_mode))
+            ?.let(::setupStartupMode)
+        findPreference<Preference>(getString(R.string.set_key_overlay_permission))
+            ?.let(::setupOverlayPermission)
+        findPreference<Preference>(KEY_CAR_OVERLAY_ENABLED)?.let(::setupCarOverlayEnabled)
+    }
+
     private fun setupTs18FastResumeStatus(preference: Preference) {
         preference.summary = getString(R.string.set_ts18_fast_resume_status_desc)
         preference.setOnPreferenceClickListener(null)
@@ -106,6 +119,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                 floatingOnly -> STARTUP_FLOATING_ONLY
                 else -> STARTUP_OPEN_AUXIO
             }
+        list.isPersistent = false
         list.value = current
         val currentIdx = list.findIndexOfValue(current)
         list.summary = list.entries?.getOrNull(currentIdx)
@@ -121,7 +135,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                     )
                     .apply()
                 val lp = pref as? ListPreference
-                lp?.entries?.getOrNull(lp.findIndexOfValue(mode))?.let { lp.summary = it }
+                val newIndex = lp?.findIndexOfValue(mode) ?: -1
+                lp?.entries?.getOrNull(newIndex)?.let { lp.summary = it }
                 true
             }
     }
