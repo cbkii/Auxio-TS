@@ -1,4 +1,4 @@
-name: Apply PR 169 review fixes
+name: Apply PR 169 audited fixes
 
 on:
   push:
@@ -10,180 +10,23 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: apply-pr169-audited-fixes
+  cancel-in-progress: false
+
 jobs:
   patch:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          ref: fix/ts18-runtime-regressions-v605
           fetch-depth: 0
-
-      - name: Apply verified review fixes
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt')
-          text = path.read_text()
-
-          def replace_once(old, new):
-              global text
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'expected one match, found {count}: {old[:120]!r}')
-              text = text.replace(old, new, 1)
-
-          replace_once(
-              'import android.annotation.SuppressLint\nimport android.content.Intent\n',
-              'import android.annotation.SuppressLint\nimport android.content.Intent\nimport android.content.res.Configuration\n',
-          )
-          replace_once(
-              'import org.oxycblt.auxio.R\n',
-              'import org.oxycblt.auxio.BuildConfig\nimport org.oxycblt.auxio.R\n',
-          )
-          replace_once(
-              '''    private val coverPagerAdapter by lazy {
-                  CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
-              }
-          ''',
-              '''    private var coverPagerAdapter: CoverPagerAdapter? = null
-          ''',
-          )
-          replace_once(
-              '''        super.onBindingCreated(binding, savedInstanceState)
-
-              visualizerPermissionLauncher =
-          ''',
-              '''        super.onBindingCreated(binding, savedInstanceState)
-
-              val currentCoverPagerAdapter =
-                  CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
-              coverPagerAdapter = currentCoverPagerAdapter
-
-              visualizerPermissionLauncher =
-          ''',
-          )
-          replace_once('            adapter = coverPagerAdapter\n', '            adapter = currentCoverPagerAdapter\n')
-          replace_once(
-              '                        coverPagerAdapter.setActivePosition(it)\n',
-              '                        currentCoverPagerAdapter.setActivePosition(it)\n',
-          )
-          replace_once(
-              '''        // The TS18 Now Playing controls have one deterministic automotive size. The removed
-              // preference was ineffective because this surface is always landscape on the target unit.
-              val useLargeControls = true
-          ''',
-              '''        val forceLargeLandscapeControls =
-                  resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-              val useLargeControls =
-                  if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                      true
-                  } else {
-                      uiSettings.largeHeadUnitControls || forceLargeLandscapeControls
-                  }
-          ''',
-          )
-          replace_once(
-              '                uiSettings.largeHeadUnitControls -> spacingSmall\n',
-              '                useLargeControls -> spacingSmall\n',
-          )
-          replace_once(
-              '''        binding.playbackPager?.adapter = null
-              }
-          ''',
-              '''        binding.playbackPager?.adapter = null
-                  coverPagerAdapter = null
-              }
-          ''',
-          )
-          replace_once(
-              '        coverPagerAdapter.refreshVisualizerMode()\n',
-              '        coverPagerAdapter?.refreshVisualizerMode()\n',
-          )
-          replace_once(
-              '        coverPagerAdapter.setActivePosition(queue.index)\n',
-              '        coverPagerAdapter?.setActivePosition(queue.index)\n',
-          )
-
-          # Make partial Visualizer construction transactional so every failure path releases it.
-          replace_once(
-              '''        playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
-              try {
-                  val captureRange = Visualizer.getCaptureSizeRange()
-          ''',
-              '''        playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
-              var candidateToRelease: Visualizer? = null
-              try {
-                  val captureRange = Visualizer.getCaptureSizeRange()
-          ''',
-          )
-          replace_once(
-              '''            val candidate = Visualizer(sessionId)
-                  val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
-          ''',
-              '''            val candidate = Visualizer(sessionId)
-                  candidateToRelease = candidate
-                  val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
-          ''',
-          )
-          replace_once(
-              '''                try {
-                      candidate.release()
-                  } catch (e: RuntimeException) {
-                      L.d(e, "Visualizer native release failed during partial initialization")
-                  }
-                  return
-          ''',
-              '''                return
-          ''',
-          )
-          replace_once(
-              '''            visualizer = candidate
-                  visualizerSessionId = sessionId
-                  L.i(
-          ''',
-              '''            visualizer = candidate
-                  candidateToRelease = null
-                  visualizerSessionId = sessionId
-                  L.i(
-          ''',
-          )
-          replace_once(
-              '''            playbackModel.updateVisualizerState(VisualizerState.Failed(message))
-              }
-          }
-
-              private fun scheduleVisualizerWatchdog''',
-              '''            playbackModel.updateVisualizerState(VisualizerState.Failed(message))
-              } finally {
-                  candidateToRelease?.let { candidate ->
-                      try {
-                          if (candidate.enabled) candidate.enabled = false
-                      } catch (e: RuntimeException) {
-                          L.d(e, "Visualizer partial candidate disable failed")
-                      }
-                      try {
-                          candidate.setDataCaptureListener(null, 0, false, false)
-                      } catch (e: RuntimeException) {
-                          L.d(e, "Visualizer partial candidate listener cleanup failed")
-                      }
-                      try {
-                          candidate.release()
-                      } catch (e: RuntimeException) {
-                          L.d(e, "Visualizer partial candidate release failed")
-                      }
-                  }
-              }
-          }
-
-              private fun scheduleVisualizerWatchdog''',
-          )
-
-          path.write_text(text)
-          PY
+          submodules: false
+          token: ${{ github.token }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -195,27 +38,76 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf 'sdk.dir=%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}" > local.properties
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo '::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set.'
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
-      - name: Prepare dependencies and format
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: false
+
+      - name: Ensure native build tools are present
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/bootstrap-dependencies.sh --profile full-build
-          bash scripts/ci-gradle.sh spotlessApply
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+
+      - name: Decode and apply audited patch
+        shell: bash
+        env:
+          PATCH_PAYLOAD: >-
+            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
+        run: |
+          set -euo pipefail
+          patch_script="${RUNNER_TEMP}/apply-pr169-audit-fixes.py"
+          printf '%s' "${PATCH_PAYLOAD}" | base64 --decode | gzip --decompress > "${patch_script}"
+          python -m py_compile "${patch_script}"
+          python "${patch_script}"
+
+      - name: Format and validate source
+        shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_TIMEOUT: 25m
+        run: |
+          set -euo pipefail
+          bash ./scripts/bootstrap-dependencies.sh --profile full-build
+          bash ./scripts/ci-gradle.sh spotlessApply
           rm -f .github/workflows/apply-pr169-review-fixes.yml
           git diff --check
-          bash scripts/check-ts18-apk-reference-contracts.sh
-          bash scripts/check-headunit-compat-safety.sh
-          bash scripts/check-dofun-topway-compat.sh
-          bash scripts/check-native-keep-rules.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/check-native-keep-rules.sh
 
-      - name: Commit fixes
+      - name: Run focused unit tests
+        shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_TIMEOUT: 25m
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh \
+            :app:testStandardDebugUnitTest \
+            :app:testTopwayTwMusicDebugUnitTest \
+            :app:testTopwayTwMediaDebugUnitTest
+
+      - name: Commit audited fixes
         shell: bash
         run: |
           set -euo pipefail
+          if git diff --quiet; then
+            echo '::error::Patch produced no repository changes.'
+            exit 1
+          fi
+          git status --short
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'fix: address PR 169 lifecycle and variant review findings'
+          git commit -m 'fix: preserve TS18 feature contracts in PR 169'
           git push origin HEAD:fix/ts18-runtime-regressions-v605
