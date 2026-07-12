@@ -58,6 +58,7 @@ class TopwayEqualizerLauncherTest {
         var resolvedPackages = mutableSetOf<String>()
         var queriedComponents = mutableListOf<ComponentName>()
         var queriedPackages = mutableListOf<String>()
+        var disabledComponents = mutableSetOf<ComponentName>()
         var mockAudioEffectFallback = true
 
         override fun resolveActivity(intent: Intent): ComponentName? {
@@ -90,6 +91,9 @@ class TopwayEqualizerLauncherTest {
             }
             return null
         }
+
+        override fun isComponentEffectivelyEnabled(component: ComponentName): Boolean =
+            resolvedComponents.contains(component) && !disabledComponents.contains(component)
     }
 
     @Test
