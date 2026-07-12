@@ -6,7 +6,7 @@
 `TS18.2.2_20241210.165912_WINDOW-THEME1`, using the `com.tw.media` release:
 
 - all Now Playing visualizer modes produced no visible visualizer;
-- floating controls required a settings off/on toggle and did not remain persistent;
+- floating controls required an off/on settings toggle and did not remain persistent;
 - floating-only startup still exposed the full player;
 - the Large touch controls row had no useful effect;
 - the Now Playing EQ action did not open stock EQ.
@@ -15,6 +15,17 @@ The in-app DoFun check also showed both `com.tw.media` and stock `com.tw.music` 
 `com.tw.media` MediaSession, and package-level MAIN/LAUNCHER resolution returning ResolverActivity.
 The latter was caused by two launcher entries in the Topway APK, not proof that stock music was
 preferred.
+
+## Evidence and porting decision
+
+- **Observed — Confidence: High; Porting decision: Accepted.** The exact-device failures above were
+  reproduced on the named TS18 build and `com.tw.media` v6.0.5 variant.
+- **Implemented — Confidence: High from source and automated checks; Porting decision: Accepted
+  pending runtime confirmation.** The bounded fixes below preserve Android 10/API 29 and variant
+  isolation.
+- **Runtime outcomes — Confidence: Requires device validation; Porting decision: Conditional.**
+  Visualizer output, WindowManager persistence, DoFun routing, stock EQ launch and ACC sleep/wake
+  must be revalidated on the exact unit.
 
 ## Implemented
 
@@ -25,11 +36,11 @@ preferred.
   app startup always establishes the foreground service, window attach has two bounded retries, and
   the full-player action uses an explicit component.
 - The fixed `com.tw.media/com.tw.music.MusicActivity` alias routes MAIN/MUSIC_PLAYER according to
-  the floating-only preference while ACTION_VIEW still opens the full player. The separate
+  the floating-only preference, while ACTION_VIEW still opens the full player. The separate
   user-facing Floating Controls launcher is preserved.
-- The library playback banner has dedicated ~85% dimensions (76dp/85dp buttons, 41dp/48dp icons);
-  full Now Playing dimensions remain unchanged. The ineffective Large touch controls row is removed
-  from the Topway UI.
+- The library playback banner uses 76dp/85dp buttons, about 73% of the full-panel values, and
+  41dp/48dp icons, about 85%; full Now Playing dimensions remain unchanged. The ineffective Large
+  touch controls row is removed from the Topway UI.
 - Stock EQ resolution now tries the enabled stock router `com.tw.eq/.EQChoiceActivity` first, then
   the exact-device proven fallback `com.tw.eq/.DSPActivity`, uses the correct DEFAULT category for
   `.EQActivity`, checks runtime component-enabled state via `getComponentEnabledSetting()`, and
@@ -82,8 +93,9 @@ Automated checks cannot prove OEM audio-effect, WindowManager, DoFun or ACC beha
    service, one notification and one overlay window.
 4. Select floating-only startup and confirm MAIN/DoFun music entry attaches the overlay without
    showing MainActivity. Use the overlay's app button to open the full player explicitly.
-5. Confirm the library banner is approximately 15% smaller while Now Playing controls are unchanged.
-   Verify banner buttons are 76dp/85dp and icons are 41dp/48dp (±2dp tolerance).
+5. Confirm the library banner buttons are approximately 27% smaller and its icons approximately
+   15% smaller, while Now Playing controls are unchanged. Verify banner buttons are 76dp/85dp and
+   icons are 41dp/48dp (±2dp tolerance).
 6. Tap EQ and confirm `com.tw.eq/.EQChoiceActivity` launches if enabled, or `com.tw.eq/.DSPActivity`
    if the router is disabled, while playback remains healthy.
 7. Confirm text, progress, artwork and controls remain unclipped within the TS18 1280×720 content area.
