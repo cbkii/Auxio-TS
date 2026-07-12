@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+from pathlib import Path
+import re
+
+ROOT = Path.cwd()
+
+
+def read(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def write(path: str, content: str) -> None:
+    target = ROOT / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    content = read(path)
+    count = content.count(old)
+    if count != 1:
+        raise RuntimeError(f"{path}: expected exactly one match, found {count}: {old[:120]!r}")
+    write(path, content.replace(old, new, 1))
+
+
+def delete_once(path: str, old: str) -> None:
+    replace_once(path, old, "")
+
+
+# ---------------------------------------------------------------------------
+# Visualizer: typed frame source, waveform fallback, bounded retry/watchdog,
+# immediate setting reaction, and one active ViewPager consumer.
+# ---------------------------------------------------------------------------
+
+replace_once(
+    "app/src/main/java/org/oxycblt/auxio/playback/ui/visualizer/VisualizerState.kt",
+    '''sealed interface VisualizerState {
+    /** Visualizer is disabled by settings, playback is stopped, or not requested. */
+    data object Hidden : VisualizerState
+
+    /** Capture is established, but no valid recent frame has arrived yet. */
+    data object WaitingForFrames : VisualizerState
+
+    /** A fresh, non-zero audio frame has arrived. */
+    data class Live(val frame: ByteArray, val samplingRate: Int, val receivedAtUptimeMs: Long) :
+        VisualizerState
+
+    /** Permission, listener registration, or construction failed, or capture stalled. */
+    data class Failed(val reason: String) : VisualizerState
+}
+''',
+    '''sealed interface VisualizerState {
+    /** Visualizer is disabled by settings, playback is stopped, or not requested. */
+    data object Hidden : VisualizerState
+
+    /** Capture is established, but no valid recent frame has arrived yet. */
+    data object WaitingForFrames : VisualizerState
+
+    enum class FrameSource {
+        FFT,
+        WAVEFORM,
+    }
+
+    /** A fresh, non-silent audio frame has arrived. */
+    data class Live(
+        val frame: ByteArray,
+        val samplingRate: Int,
+        val receivedAtUptimeMs: Long,
+        val source: FrameSource = FrameSource.FFT,
+    ) : VisualizerState
+
+    /** Permission, listener registration, construction, or bounded capture recovery failed. */
+    data class Failed(val reason: String) : VisualizerState
+}
+''',
+)
+
+replace_once(
+    "app/src/main/java/org/oxycblt/auxio/playback/ui/visualizer/BlobVisualizer.kt",
+    '''    private var hasValidFrame = false
+    private var lastFrameAtMs = 0L
+
+''',
+    "",
+)
+replace_once(
+    "app/src/main/java/org/oxycblt/auxio/playback/ui/visualizer/BlobVisualizer.kt",
+    '''            is VisualizerState.Hidden,
+            is VisualizerState.WaitingForFrames,
+            is VisualizerState.Failed -> {
+                spectrumMapper.reset()
+                hasValidFrame = false
+            }
+            is VisualizerState.Live -> {
+                spectrumMapper.update(state.frame, state.samplingRate)
+                hasValidFrame = true
+                lastFrameAtMs = state.receivedAtUptimeMs
+            }
+''',
+    '''            is VisualizerState.Hidden,
+            is VisualizerState.WaitingForFrames,
+            is VisualizerState.Failed -> spectrumMapper.reset()
+            is VisualizerState.Live -> {
+                when (state.source) {
+                    VisualizerState.FrameSource.FFT ->
+                        spectrumMapper.update(state.frame, state.samplingRate)
+                    VisualizerState.FrameSource.WAVEFORM ->
+                        spectrumMapper.updateWaveform(state.frame)
+                }
+            }
+''',
+)
+
+replace_once(
+    "app/src/main/java/org/oxycblt/auxio/playback/ui/visualizer/FftSpectrumMapper.kt",
+    '''        val frameGlobalRms = sqrt(frameGlobalSumSquares / globalSampleCount)
+        adaptivePeak = max(MIN_ADAPTIVE_PEAK, max(frameGlobalRms, adaptivePeak * ADAPTIVE_DECAY))
+
+        val normalizedGlobalEnvelope = (frameGlobalRms / adaptivePeak).coerceIn(0f, 1f)
+        globalEnvelope = max(normalizedGlobalEnvelope, globalEnvelope * ENVELOPE_DECAY)
+
+        for (i in bands.indices) {
+            raw[i] =
+                if (sampleCounts[i] > 0) {
+                    sqrt(sumSquares[i] / sampleCounts[i])
+                } else {
+                    0f
+                }
+        }
+
+        for (i in bands.indices) {
+''',
+    '''        for (i in bands.indices) {
+            raw[i] =
+                if (sampleCounts[i] > 0) {
+                    sqrt(sumSquares[i] / sampleCounts[i])
+                } else {
+                    0f
+                }
+        }
+
+        applyRawLevels(sqrt(frameGlobalSumSquares / globalSampleCount))
+    }
+
+    /**
+     * Converts Android Visualizer waveform bytes into the same bounded radial-band model.
+     *
+     * Android exposes waveform samples as unsigned 8-bit values centred on 128. Some TS18 audio
+     * stacks return zeroed FFT frames while still providing a valid waveform stream, so this is a
+     * standards-only fallback for Auxio's own playback session rather than a synthetic animation.
+     */
+    fun updateWaveform(waveform: ByteArray?) {
+        if (waveform == null || waveform.size < MIN_WAVEFORM_SIZE) {
+            decayToSilence()
+            return
+        }
+
+        raw.fill(0f)
+        var frameSumSquares = 0f
+        var frameSampleCount = 0
+
+        for (band in raw.indices) {
+            val start = band * waveform.size / bandCount
+            val end = ((band + 1) * waveform.size / bandCount).coerceAtMost(waveform.size)
+            if (end <= start) continue
+
+            var bandSumSquares = 0f
+            for (index in start until end) {
+                val unsigned = waveform[index].toInt() and 0xFF
+                val centred = (unsigned - WAVEFORM_CENTRE).toFloat()
+                val square = centred * centred
+                bandSumSquares += square
+                frameSumSquares += square
+                frameSampleCount++
+            }
+            raw[band] = sqrt(bandSumSquares / (end - start).toFloat())
+        }
+
+        if (frameSampleCount == 0) {
+            decayToSilence()
+            return
+        }
+        applyRawLevels(sqrt(frameSumSquares / frameSampleCount.toFloat()))
+    }
+
+    private fun applyRawLevels(frameGlobalRms: Float) {
+        adaptivePeak = max(MIN_ADAPTIVE_PEAK, max(frameGlobalRms, adaptivePeak * ADAPTIVE_DECAY))
+
+        val normalizedGlobalEnvelope = (frameGlobalRms / adaptivePeak).coerceIn(0f, 1f)
+        globalEnvelope = max(normalizedGlobalEnvelope, globalEnvelope * ENVELOPE_DECAY)
+
+        for (i in bands.indices) {
+''',
+)
+replace_once(
+    "app/src/main/java/org/oxycblt/auxio/playback/ui/visualizer/FftSpectrumMapper.kt",
+    '''        private const val MIN_FFT_SIZE = 4
+        private const val MIN_FREQ = 40f
+''',
