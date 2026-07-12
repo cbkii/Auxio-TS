@@ -349,20 +349,29 @@ class PlaybackPanelFragment :
                     requireContext(),
                     playbackModel.currentAudioSessionId.value,
                 )
-            for (candidate in candidates) {
-                try {
-                    requireContext().startActivity(candidate.intent)
-                    L.i("Launched EQ/DSP candidate ${candidate.label} (${candidate.kind})")
-                    return true
-                } catch (e: android.content.ActivityNotFoundException) {
-                    L.w(e, "EQ/DSP candidate not found after resolution: ${candidate.label}")
-                } catch (e: SecurityException) {
-                    L.w(e, "EQ/DSP candidate denied: ${candidate.label}")
-                } catch (e: RuntimeException) {
-                    L.w(e, "EQ/DSP candidate failed at launch: ${candidate.label}")
-                }
+            val launched =
+                TopwayEqualizerLauncher.launchFirstWorkingCandidate(
+                    candidates = candidates,
+                    launch = { requireContext().startActivity(it) },
+                    onFailure = { candidate, error ->
+                        when (error) {
+                            is android.content.ActivityNotFoundException ->
+                                L.w(
+                                    error,
+                                    "EQ/DSP candidate not found after resolution: ${candidate.label}",
+                                )
+                            is SecurityException ->
+                                L.w(error, "EQ/DSP candidate denied: ${candidate.label}")
+                            else ->
+                                L.w(error, "EQ/DSP candidate failed at launch: ${candidate.label}")
+                        }
+                    },
+                )
+            if (launched != null) {
+                L.i("Launched EQ/DSP candidate ${launched.label} (${launched.kind})")
+            } else {
+                requireContext().showToast(R.string.err_no_equalizer_app)
             }
-            requireContext().showToast(R.string.err_no_equalizer_app)
             return true
         }
 
@@ -735,7 +744,11 @@ class PlaybackPanelFragment :
 
     private fun updatePager(queue: PagerQueue) {
         val binding = requireBinding()
-        coverPagerAdapter?.setActivePosition(queue.index)
+        val adapter =
+            checkNotNull(coverPagerAdapter) {
+                "CoverPagerAdapter must exist while the playback-panel binding is active"
+            }
+        adapter.setActivePosition(queue.index)
 
         val command = playbackModel.pagerCommand.consume()
         if (command == null) {
@@ -745,14 +758,14 @@ class PlaybackPanelFragment :
             //
             // If it does happen we should just make sure the UI state is aligned. Don't
             // want broken UI.
-            coverPagerAdapter.update(queue.queue, null)
+            adapter.update(queue.queue, null)
             binding.playbackPager.setCurrentItem(queue.index, false)
             return
         }
 
         if (command.update != null) {
             // queue needs to be updated.
-            coverPagerAdapter.update(queue.queue, command.update)
+            adapter.update(queue.queue, command.update)
         }
 
         if (command.scroll != null) {

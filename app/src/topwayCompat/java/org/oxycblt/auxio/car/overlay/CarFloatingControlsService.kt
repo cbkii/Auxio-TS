@@ -226,6 +226,8 @@ class CarFloatingControlsService : Service(), CarFloatingControlsView.Callbacks 
             isForegroundPromoted = true
         }
         if (!isOverlayAttached) {
+            mainHandler.removeCallbacks(attachRetryRunnable)
+            attachRetryCount = 0
             showOverlayIfAllowed()
         }
     }

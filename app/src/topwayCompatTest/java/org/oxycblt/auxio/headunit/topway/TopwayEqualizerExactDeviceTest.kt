@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -137,9 +138,24 @@ class TopwayEqualizerExactDeviceTest {
             )
         val candidates = TopwayEqualizerLauncher.resolveCandidates(context, 123, resolver)
         assertTrue(candidates.size >= 2)
-        // First candidate fails at launch time -> caller should try second
-        assertEquals(TopwayEqualizerLauncher.Candidate.Kind.EXPLICIT_COMPONENT, candidates[0].kind)
-        assertEquals(TopwayEqualizerLauncher.Candidate.Kind.EXPLICIT_COMPONENT, candidates[1].kind)
+        val attempted = mutableListOf<ComponentName?>()
+        val failed = mutableListOf<ComponentName?>()
+
+        val launched =
+            TopwayEqualizerLauncher.launchFirstWorkingCandidate(
+                candidates = candidates,
+                launch = { intent ->
+                    attempted += intent.component
+                    if (attempted.size == 1) {
+                        throw ActivityNotFoundException("first candidate unavailable")
+                    }
+                },
+                onFailure = { candidate, _ -> failed += candidate.intent.component },
+            )
+
+        assertEquals(listOf(EQ_CHOICE_ACTIVITY, DSP_ACTIVITY), attempted)
+        assertEquals(listOf(EQ_CHOICE_ACTIVITY), failed)
+        assertEquals(DSP_ACTIVITY, launched?.intent?.component)
     }
 
     private class Resolver(

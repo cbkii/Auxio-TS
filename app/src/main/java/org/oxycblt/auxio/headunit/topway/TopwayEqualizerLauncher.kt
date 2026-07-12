@@ -150,6 +150,22 @@ object TopwayEqualizerLauncher {
     fun resolveCandidates(context: Context, audioSessionId: Int?): List<Candidate> =
         resolveCandidates(context, audioSessionId, DefaultIntentResolver(context))
 
+    internal fun launchFirstWorkingCandidate(
+        candidates: List<Candidate>,
+        launch: (Intent) -> Unit,
+        onFailure: (Candidate, RuntimeException) -> Unit = { _, _ -> },
+    ): Candidate? {
+        for (candidate in candidates) {
+            try {
+                launch(candidate.intent)
+                return candidate
+            } catch (error: RuntimeException) {
+                onFailure(candidate, error)
+            }
+        }
+        return null
+    }
+
     internal fun resolveIntent(
         context: Context,
         audioSessionId: Int?,
