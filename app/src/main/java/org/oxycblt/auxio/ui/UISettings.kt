@@ -85,7 +85,10 @@ interface UISettings : Settings<UISettings.Listener> {
 
     interface Listener {
         /** Called when [roundMode] changes. */
-        fun onRoundModeChanged()
+        fun onRoundModeChanged() {}
+
+        /** Called when [visualizerMode] changes. */
+        fun onVisualizerModeChanged() {}
     }
 }
 
@@ -189,9 +192,15 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
     }
 
     override fun onSettingChanged(key: String, listener: UISettings.Listener) {
-        if (key == getString(R.string.set_key_round_mode)) {
-            L.d("Dispatching round mode setting change")
-            listener.onRoundModeChanged()
+        when (key) {
+            getString(R.string.set_key_round_mode) -> {
+                L.d("Dispatching round mode setting change")
+                listener.onRoundModeChanged()
+            }
+            getString(R.string.set_key_visualizer_mode) -> {
+                L.d("Dispatching visualizer mode setting change")
+                listener.onVisualizerModeChanged()
+            }
         }
     }
 

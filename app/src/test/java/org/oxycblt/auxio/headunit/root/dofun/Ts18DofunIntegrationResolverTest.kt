@@ -35,6 +35,6 @@ class Ts18DofunIntegrationResolverTest {
 
         val listPackages = probes.first { it.name == "PackageSummary" }
         assertTrue(listPackages.command.contains("pm list packages"))
-        assertTrue(listPackages.command.contains("com\\\\.tw\\\\.media"))
+        assertTrue(listPackages.command.contains("com\\.tw\\.media"))
     }
 }
