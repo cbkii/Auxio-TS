@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto" app:title="@string/set_car">
+    <!-- Runtime-backed startup, permission, and overlay rows are refreshed on fragment resume. -->
     <PreferenceCategory app:title="@string/set_driving_interface">
         <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_driver_side" app:summary="@string/set_driver_side_desc" app:title="@string/set_driver_side" />
         <SwitchPreferenceCompat app:defaultValue="true" app:key="@string/set_key_head_unit_album_art" app:summary="@string/set_head_unit_album_art_desc" app:title="@string/set_head_unit_album_art" />
