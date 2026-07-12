@@ -57,7 +57,6 @@ enum class Ts18DofunDetectedPath {
     AuxioTwMediaWithStockCoexisting,
     AuxioInstalledButDebugPackage,
     AuxioMissingStockAlias,
-    StockTwMusicEnabledMayBePreferred,
     WidgetProviderBound,
     AndroidMediaSessionOnly,
     RootChecksSkipped,
@@ -133,8 +132,6 @@ class Ts18DofunIntegrationResolver(
                         "Exact com.tw.media identity is present. Verify the fixed alias, overlay runtime, widget and media-session probes."
                     Ts18DofunDetectedPath.AuxioTwMediaWithStockCoexisting ->
                         "Stock com.tw.music and Auxio com.tw.media can safely coexist. Package presence alone does not prove DoFun preference; do not disable stock unless a bounded reversible component-selection test requires it."
-                    Ts18DofunDetectedPath.StockTwMusicEnabledMayBePreferred ->
-                        "Legacy classification only; rerun with the targeted alias and launcher probes."
                     Ts18DofunDetectedPath.AuxioInstalledButDebugPackage ->
                         "Uninstall com.tw.media.debug and install topwayTwMediaRelease. DoFun requires exact match."
                     Ts18DofunDetectedPath.AndroidMediaSessionOnly ->
