@@ -23,6 +23,14 @@ class TopwayMusicEntryPolicyTest {
     }
 
     @Test
+    fun dataIntentWithoutViewActionOpensFullPlayer() {
+        assertEquals(
+            TopwayMusicEntryPolicy.Route.FULL_PLAYER,
+            TopwayMusicEntryPolicy.route(action = null, hasData = true, floatingOnly = true),
+        )
+    }
+
+    @Test
     fun normalMainEntryOpensFullPlayer() {
         assertEquals(
             TopwayMusicEntryPolicy.Route.FULL_PLAYER,
