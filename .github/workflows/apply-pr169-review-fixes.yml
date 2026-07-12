@@ -148,11 +148,10 @@ jobs:
             :app:testTopwayTwMusicDebugUnitTest \
             :app:testTopwayTwMediaDebugUnitTest
 
-      - name: Remove one-shot patch carriers
+      - name: Remove one-shot patch scripts
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/workflows/apply-pr169-review-fixes.yml
           rm -f scripts/apply-pr169-audit-fixes.py
           rm -f scripts/apply-pr169-floating-contract-fixes.py
           rm -f scripts/apply-pr169-settings-resume-fix.py
