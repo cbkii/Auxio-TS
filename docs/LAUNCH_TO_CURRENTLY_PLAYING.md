@@ -12,8 +12,9 @@
   matching request rather than leaving a stale future route.
 - A route is consumed only after the requested final sheet state is reached.
 - Manual sheet drag/back/panel changes and Settings/About navigation cancel pending routes.
-- Manual playback or queue mutations cancel an in-flight persisted-state restore before it
-  can overwrite the user's newer choice.
+- Persisted-state restore publishes `WAITING_FOR_PLAYER` before its asynchronous read; a later
+  manual playback or queue mutation cancels the active restore and publishes `CANCELLED` before
+  it can overwrite the user's newer choice.
 
 ## Automated coverage
 
