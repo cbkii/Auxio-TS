@@ -22,7 +22,15 @@ import timber.log.Timber as L
 class TopwayMusicEntryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            routeEntry()
+        } finally {
+            // Theme.NoDisplay activities must finish before onResume completes, including failures.
+            finish()
+        }
+    }
 
+    private fun routeEntry() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val floatingOnly =
             prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
@@ -58,6 +66,5 @@ class TopwayMusicEntryActivity : Activity() {
                 startActivity(fullPlayerIntent)
             }
         }
-        finish()
     }
 }
