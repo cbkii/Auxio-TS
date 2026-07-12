@@ -1,4 +1,5 @@
 name: PR 165 review completion
+# Trigger after workflow registration.
 
 on:
   push:
