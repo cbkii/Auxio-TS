@@ -197,7 +197,7 @@ class MainActivity : AppCompatActivity() {
                 )
             HeadUnitEntryPoints.EntryDestination.QUEUE ->
                 startupPanelCoordinator.requestExplicitRoute(
-                    org.oxycblt.auxio.playback.OpenPanel.QUEUE,
+                    org.oxycblt.auxio.playback.OpenPanel.PLAYBACK_QUEUE,
                     "Explicit Queue Intent",
                 )
             null -> {

@@ -29,7 +29,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
-import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
@@ -38,15 +37,14 @@ import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
- * Coordinates and determines panel routing at startup, reconciling explicit intent destinations,
- * generic TS18 launch settings, and the underlying playback restoration outcome.
+ * Owns startup-only panel routing independently from autoplay and playback ownership.
  *
- * @author Auxio-TS contributors
+ * A route remains pending through transient library, restore, and sheet states. Terminal policy
+ * outcomes cancel it, while the UI consumes it only after reaching the requested final panel state.
  */
 @HiltViewModel
 class StartupPanelCoordinator @Inject constructor(private val playbackSettings: PlaybackSettings) :
     ViewModel() {
-
     data class RouteRequest(
         val token: UUID,
         val destination: OpenPanel,
@@ -59,8 +57,18 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
         EXPLICIT_INTENT,
     }
 
+    sealed interface RouteEvaluation {
+        data object Idle : RouteEvaluation
+
+        data class Wait(val request: RouteRequest, val reason: String) : RouteEvaluation
+
+        data class Cancel(val request: RouteRequest, val reason: String) : RouteEvaluation
+
+        data class Render(val request: RouteRequest) : RouteEvaluation
+    }
+
     private data class CoordinatorState(
-        val song: Song?,
+        val hasSong: Boolean,
         val outcome: RestoreOutcome,
         val readiness: StartupReadinessState,
     )
@@ -69,76 +77,31 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
     private val coordinatorState =
         MutableStateFlow(
             CoordinatorState(
-                song = null,
+                hasSong = false,
                 outcome = RestoreOutcome.NOT_REQUESTED,
                 readiness = StartupReadinessState.CheckingCachedLibrary,
             )
         )
 
-    val routeDecision: StateFlow<RouteRequest?> =
+    val routeEvaluation: StateFlow<RouteEvaluation> =
         combine(activeRequest, coordinatorState) { request, state ->
-                if (request == null) return@combine null
-
-                if (
-                    state.readiness == StartupReadinessState.CheckingCachedLibrary ||
-                        state.readiness == StartupReadinessState.NeedsMusicSource
-                ) {
-                    return@combine null
-                }
-
-                // Exclude empty libraries from generic panel routing.
-                if (
-                    request.priority == Priority.GENERIC_STARTUP &&
-                        state.readiness == StartupReadinessState.EmptyLibrary
-                ) {
-                    L.d("Suppressing generic startup route: Library is empty")
-                    return@combine null
-                }
-
-                // Await a terminal or renderable restore outcome.
-                if (
-                    state.outcome == RestoreOutcome.NOT_REQUESTED ||
-                        state.outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                        state.outcome == RestoreOutcome.WAITING_FOR_LIBRARY
-                ) {
-                    return@combine null
-                }
-
-                // Do not route generic launches if there is no session to restore.
-                if (
-                    request.priority == Priority.GENERIC_STARTUP &&
-                        state.outcome == RestoreOutcome.NO_SAVED_SESSION
-                ) {
-                    L.d("Suppressing generic startup route: No saved session")
-                    return@combine null
-                }
-
-                // The current panel cannot safely render raw-only metadata. Keep the route pending
-                // until raw fast-resume reconciles to a normal Song.
-                if (state.song == null) {
-                    return@combine null
-                }
-
-                L.i(
-                    "StartupPanelCoordinator fulfilled request: ${request.description} -> ${request.destination}"
-                )
-                request
+                evaluate(request, state.hasSong, state.outcome, state.readiness)
             }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, RouteEvaluation.Idle)
 
     fun updateState(song: Song?, outcome: RestoreOutcome, readiness: StartupReadinessState) {
-        coordinatorState.value = CoordinatorState(song, outcome, readiness)
+        coordinatorState.value = CoordinatorState(song != null, outcome, readiness)
     }
 
-    /** Provide an explicit launch route (e.g., from an Intent). Overrides generic routes. */
+    /** Explicit launcher/deep-link navigation supersedes a generic startup request. */
     fun requestExplicitRoute(destination: OpenPanel, description: String) {
-        val newRequest =
+        val request =
             RouteRequest(UUID.randomUUID(), destination, Priority.EXPLICIT_INTENT, description)
-        L.d("Requesting explicit route: $newRequest")
-        activeRequest.value = newRequest
+        L.d("Requesting explicit route: $request")
+        activeRequest.value = request
     }
 
-    /** Trigger a generic startup route if settings and conditions allow. */
+    /** Request the user-configured generic cold-launch destination. */
     fun requestGenericStartupRoute() {
         if (!playbackSettings.launchToPanel) {
             L.d("Generic startup route skipped: launchToPanel disabled")
@@ -146,29 +109,21 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
         }
         activeRequest.update { current ->
             if (current?.priority == Priority.EXPLICIT_INTENT) {
-                L.d("Generic startup route suppressed by existing explicit route: $current")
+                L.d("Generic startup route suppressed by explicit route: $current")
                 current
             } else {
-                val destination =
-                    if (BuildConfig.TOPWAY_COMPAT_FLAVOR) OpenPanel.PLAYBACK_QUEUE
-                    else OpenPanel.PLAYBACK
-                val newRequest =
-                    RouteRequest(
+                RouteRequest(
                         UUID.randomUUID(),
-                        destination,
+                        genericDestination(),
                         Priority.GENERIC_STARTUP,
                         "Generic App Launch",
                     )
-                L.d("Requesting generic startup route: $newRequest")
-                newRequest
+                    .also { L.d("Requesting generic startup route: $it") }
             }
         }
     }
 
-    /**
-     * Consume the specified route. This should be called by the UI when the layout has successfully
-     * reached the target destination.
-     */
+    /** Consume only the still-matching route after its final panel state is rendered. */
     fun consumeRoute(token: UUID) {
         activeRequest.update { current ->
             if (current?.token == token) {
@@ -180,11 +135,80 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
         }
     }
 
-    /** Cancel any pending routing, such as when the user explicitly navigates somewhere else. */
-    fun cancelRouting() {
-        if (activeRequest.value != null) {
-            L.d("Active routing request cancelled")
-            activeRequest.value = null
+    /** Cancel only the still-matching request after a terminal policy result. */
+    fun cancelRoute(token: UUID, reason: String) {
+        activeRequest.update { current ->
+            if (current?.token == token) {
+                L.d("Route cancelled [reason=$reason]: ${current.description}")
+                null
+            } else {
+                current
+            }
+        }
+    }
+
+    /** Cancel startup routing after deliberate user navigation. */
+    fun cancelRouting(reason: String = "manual-navigation") {
+        activeRequest.update { current ->
+            if (current != null) {
+                L.d("Active route cancelled [reason=$reason]: ${current.description}")
+            }
+            null
+        }
+    }
+
+    companion object {
+        internal fun genericDestination(): OpenPanel = OpenPanel.PLAYBACK
+
+        internal fun evaluate(
+            request: RouteRequest?,
+            hasSong: Boolean,
+            outcome: RestoreOutcome,
+            readiness: StartupReadinessState,
+        ): RouteEvaluation {
+            request ?: return RouteEvaluation.Idle
+
+            if (
+                readiness == StartupReadinessState.NeedsMusicSource ||
+                    readiness == StartupReadinessState.EmptyLibrary ||
+                    readiness == StartupReadinessState.CachedLibraryUnavailable
+            ) {
+                return RouteEvaluation.Cancel(request, "library-terminal-$readiness")
+            }
+
+            if (request.priority == Priority.EXPLICIT_INTENT) {
+                if (hasSong) return RouteEvaluation.Render(request)
+                return when (outcome) {
+                    RestoreOutcome.NO_SAVED_SESSION,
+                    RestoreOutcome.FAILED,
+                    RestoreOutcome.CANCELLED ->
+                        RouteEvaluation.Cancel(request, "explicit-terminal-$outcome")
+                    else -> RouteEvaluation.Wait(request, "explicit-awaiting-song")
+                }
+            }
+
+            if (readiness == StartupReadinessState.CheckingCachedLibrary) {
+                return RouteEvaluation.Wait(request, "library-checking")
+            }
+
+            return when (outcome) {
+                RestoreOutcome.NOT_REQUESTED,
+                RestoreOutcome.WAITING_FOR_PLAYER,
+                RestoreOutcome.WAITING_FOR_LIBRARY ->
+                    RouteEvaluation.Wait(request, "restore-transient-$outcome")
+                RestoreOutcome.NO_SAVED_SESSION,
+                RestoreOutcome.FAILED,
+                RestoreOutcome.CANCELLED ->
+                    RouteEvaluation.Cancel(request, "restore-terminal-$outcome")
+                RestoreOutcome.RAW_FAST_RESUME_ACTIVE,
+                RestoreOutcome.RESTORED_EXISTING_SESSION,
+                RestoreOutcome.FALLBACK_QUEUE_CREATED ->
+                    if (hasSong) {
+                        RouteEvaluation.Render(request)
+                    } else {
+                        RouteEvaluation.Wait(request, "awaiting-normal-song")
+                    }
+            }
         }
     }
 }
