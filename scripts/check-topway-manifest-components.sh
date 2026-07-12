@@ -40,11 +40,13 @@ REQUIRED_TOPWAY_LOADABLE_CLASSES = {
     "com.tw.music.MusicService",
     "com.tw.music.view.MusicWidgetProvider",
     "org.oxycblt.auxio.MainActivity",
+    "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity",
     "org.oxycblt.auxio.car.overlay.CarFloatingControlsService",
     "org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver",
     "org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity",
 }
 REQUIRED_TOPWAY_ALIAS = "com.tw.music.MusicActivity"
+EXPECTED_TOPWAY_ALIAS_TARGET = "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
 
 failures = 0
 warnings = 0
@@ -133,8 +135,8 @@ def check_source_manifest():
         fail(f"topwayCompat source manifest lacks required loadable classes: {sorted(missing_decl)}")
     else:
         ok("topwayCompat source manifest declares all required loadable wrapper/overlay classes")
-    if aliases.get(REQUIRED_TOPWAY_ALIAS) == "org.oxycblt.auxio.MainActivity":
-        ok("topwayCompat source manifest keeps com.tw.music.MusicActivity as an alias to MainActivity")
+    if aliases.get(REQUIRED_TOPWAY_ALIAS) == EXPECTED_TOPWAY_ALIAS_TARGET:
+        ok("topwayCompat source manifest routes com.tw.music.MusicActivity through TopwayMusicEntryActivity")
     else:
         fail(f"topwayCompat source manifest alias mismatch for {REQUIRED_TOPWAY_ALIAS}: {aliases.get(REQUIRED_TOPWAY_ALIAS)!r}")
     for class_name in sorted(loadable & REQUIRED_TOPWAY_LOADABLE_CLASSES):
@@ -164,8 +166,8 @@ def check_merged_manifests():
             fail(f"{variant} merged manifest is missing required loadable classes: {sorted(missing)}")
         else:
             ok(f"{variant} merged manifest declares all required loadable classes")
-        if aliases.get(REQUIRED_TOPWAY_ALIAS) == "org.oxycblt.auxio.MainActivity":
-            ok(f"{variant} merged manifest aliases {REQUIRED_TOPWAY_ALIAS} to MainActivity")
+        if aliases.get(REQUIRED_TOPWAY_ALIAS) == EXPECTED_TOPWAY_ALIAS_TARGET:
+            ok(f"{variant} merged manifest aliases {REQUIRED_TOPWAY_ALIAS} to TopwayMusicEntryActivity")
         else:
             fail(f"{variant} merged manifest alias mismatch for {REQUIRED_TOPWAY_ALIAS}: {aliases.get(REQUIRED_TOPWAY_ALIAS)!r}")
 
