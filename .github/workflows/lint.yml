@@ -45,6 +45,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -104,6 +105,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
@@ -115,25 +117,54 @@ jobs:
           fi
 
           case "${EVENT_NAME}" in
-            pull_request) base_sha="${PR_BASE_SHA}" ;;
-            push) base_sha="${PUSH_BEFORE_SHA}" ;;
-            *) base_sha="" ;;
+            pull_request)
+              base_sha="${PR_BASE_SHA}"
+              target_sha="${PR_HEAD_SHA}"
+              comparison="${base_sha}...${target_sha}"
+              ;;
+            push)
+              base_sha="${PUSH_BEFORE_SHA}"
+              target_sha="${GITHUB_SHA}"
+              comparison="${base_sha}..${target_sha}"
+              ;;
+            *)
+              base_sha=""
+              target_sha=""
+              comparison=""
+              ;;
           esac
 
-          if [[ -z "${base_sha}" || "${base_sha}" =~ ^0+$ ]] || ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+          if [[ -z "${base_sha}" || -z "${target_sha}" || "${base_sha}" =~ ^0+$ ]] ||
+             ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null ||
+             ! git cat-file -e "${target_sha}^{commit}" 2>/dev/null; then
             echo "run_spotless=true" >> "${GITHUB_OUTPUT}"
-            echo "No trustworthy comparison base is available; running the complete formatting check."
+            echo "No trustworthy comparison range is available; running the complete formatting check."
             exit 0
           fi
 
-          changed_files="$(git diff --name-only "${base_sha}" "${GITHUB_SHA}")"
+          changed_files="$(git diff --name-only "${comparison}")"
+          printf 'Formatting comparison: %s\n' "${comparison}"
           printf '%s\n' "${changed_files}"
 
-          if grep -Eq '^[^/]+/src/.*\.(kt|cpp|h|hpp)$|(^|/)build\.gradle$|^NOTICE$|^eclipse-cdt\.xml$' <<< "${changed_files}"; then
-            echo "run_spotless=true" >> "${GITHUB_OUTPUT}"
+          run_spotless=false
+          while IFS= read -r path; do
+            [[ -z "${path}" ]] && continue
+            case "${path}" in
+              build.gradle|*/build.gradle|NOTICE|eclipse-cdt.xml)
+                run_spotless=true
+                break
+                ;;
+            esac
+            if [[ "${path}" =~ ^[^/]+/src/.*\.(kt|cpp|h|hpp)$ ]]; then
+              run_spotless=true
+              break
+            fi
+          done <<< "${changed_files}"
+
+          echo "run_spotless=${run_spotless}" >> "${GITHUB_OUTPUT}"
+          if [[ "${run_spotless}" == "true" ]]; then
             echo "Kotlin/C++ sources or Spotless configuration changed."
           else
-            echo "run_spotless=false" >> "${GITHUB_OUTPUT}"
             echo "No files covered by the repository Spotless configuration changed."
           fi
 
