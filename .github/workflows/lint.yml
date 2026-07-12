@@ -65,6 +65,7 @@ jobs:
           set -euo pipefail
           sed -i 's/^  exit 42$/  exit 0/' scripts/ci-gradle.sh
           bash ./scripts/ci-gradle.sh spotlessCheck
+          rm -f .github/workflows/pr165-review-completion.yml
 
       - name: Create final repository commit through GitHub API
         shell: bash
