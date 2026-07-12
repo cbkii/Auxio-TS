@@ -8,6 +8,7 @@
     <PreferenceCategory app:title="@string/set_floating_controls">
         <Preference app:key="@string/set_key_overlay_permission" app:summary="@string/set_floating_controls_permission_desc" app:title="@string/set_floating_controls_permission" />
         <SwitchPreferenceCompat app:defaultValue="false" app:key="car_overlay_enabled" app:summary="@string/car_overlay_setting_summary" app:title="@string/car_overlay_setting_title" />
+        <SwitchPreferenceCompat app:defaultValue="false" app:dependency="car_overlay_enabled" app:key="car_overlay_hide_auxio_fg" app:summary="@string/car_overlay_hide_auxio_fg_desc" app:title="@string/car_overlay_hide_auxio_fg" />
         <org.oxycblt.auxio.settings.ui.IntListPreference app:defaultValue="90" app:dependency="car_overlay_enabled" app:entries="@array/entries_car_overlay_opacity" app:entryValues="@array/values_car_overlay_opacity" app:key="car_overlay_opacity" app:summary="@string/car_overlay_opacity_desc" app:title="@string/car_overlay_opacity" />
         <Preference app:dependency="car_overlay_enabled" app:key="car_overlay_reset_position" app:title="@string/car_overlay_reset_position" />
     </PreferenceCategory>
