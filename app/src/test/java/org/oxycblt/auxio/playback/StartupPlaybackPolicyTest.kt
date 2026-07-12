@@ -77,6 +77,22 @@ class StartupPlaybackPolicyTest {
     }
 
     @Test
+    fun `explicit Now Playing wins even when generic launch routing is disabled`() {
+        val request =
+            StartupPlaybackPolicy.startupRoute(
+                input(
+                    launchToPanel = false,
+                    topwayCompatFlavor = false,
+                    headUnitLandscapeMode = false,
+                    explicitDestination = OpenPanel.PLAYBACK,
+                )
+            ) as StartupPanelDecision.RequestRoute
+        assertEquals(OpenPanel.PLAYBACK, request.destination)
+        assertEquals(PanelRoutePriority.EXPLICIT, request.priority)
+        assertFalse(request.restoreBound)
+    }
+
+    @Test
     fun `first setup empty and recovery never route generically`() {
         listOf(
                 StartupLibraryRouteState.NEEDS_SOURCE,
