@@ -108,7 +108,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             }
         list.value = current
         val currentIdx = list.findIndexOfValue(current)
-        list.summary = list.entries?.getOrNull(currentIdx) ?: ""
+        list.summary = list.entries?.getOrNull(currentIdx)
         list.onPreferenceChangeListener =
             Preference.OnPreferenceChangeListener { pref, newValue ->
                 val mode = newValue as String
@@ -121,8 +121,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                     )
                     .apply()
                 val lp = pref as? ListPreference
-                val modeIdx = lp?.findIndexOfValue(mode) ?: -1
-                lp?.entries?.getOrNull(modeIdx)?.let { lp.summary = it }
+                lp?.entries?.getOrNull(lp.findIndexOfValue(mode))?.let { lp.summary = it }
                 true
             }
     }
