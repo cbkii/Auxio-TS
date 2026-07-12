@@ -40,6 +40,16 @@ jobs:
               capture && /^[[:space:]]*PY[[:space:]]*$/ { exit }
               capture { sub(/^          /, ""); print }
             ' .github/workflows/tmp-pr167-direct-finaliser.yml > /tmp/pr167-finalise.py
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/pr167-finalise.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}")'
+          new = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}; old={old[:180]!r}")'
+          if old not in text:
+              raise SystemExit('diagnostic instrumentation target missing')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
             python3 /tmp/pr167-finalise.py >/tmp/pr167-out.txt 2>/tmp/pr167-error.txt
             patch_rc=$?
             if (( patch_rc == 0 )); then
