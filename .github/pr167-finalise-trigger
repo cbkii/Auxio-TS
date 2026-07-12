@@ -1,1 +1,1 @@
-Trigger the temporary default-branch PR167 finaliser with whitespace-tolerant restore patch pass 10.
+Trigger the validated PR167 finaliser without the competing diagnostic workflow.
