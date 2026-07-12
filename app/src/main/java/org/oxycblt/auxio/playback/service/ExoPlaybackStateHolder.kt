@@ -237,6 +237,7 @@ class ExoPlaybackStateHolder(
                 return true
             }
             L.d("Restoring playback state from cached/loaded library")
+            playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
             currentRestoreJob?.cancel()
             val generation = ++restoreGeneration
             currentRestoreJob =
@@ -359,18 +360,19 @@ class ExoPlaybackStateHolder(
     private fun cancelActiveRestore(reason: String, notify: Boolean = true) {
         val job = currentRestoreJob
         val outcome = playbackManager.restoreOutcome
-        val transient =
+        val jobActive = job?.isActive == true
+        val transientOutcome =
             outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
                 outcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
                 outcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE
-        if (job?.isActive != true && !transient) return
+        if (!jobActive && !transientOutcome) return
 
         L.i("Cancelling pending playback restore [reason=$reason outcome=$outcome]")
         restoreGeneration += 1
         currentRestoreJob = null
         pendingLibraryRestoreAfterRawFailure = null
         job?.cancel()
-        if (notify && transient) {
+        if (notify && (jobActive || transientOutcome)) {
             playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
         }
     }
