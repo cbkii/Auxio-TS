@@ -60,6 +60,8 @@ jobs:
                   '\n        queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)\n',
               '\n    elevationNormal =""",':
                   '\n        elevationNormal =""",',
+              '\n        if (queueSheetShown()) {':
+                  '\n            if (queueSheetShown()) {',
           }
           for old, new in replacements.items():
               text = text.replace(old, new)
