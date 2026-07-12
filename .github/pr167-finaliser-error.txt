@@ -1,1 +1,1 @@
-STOP: app/src/main/java/org/oxycblt/auxio/MainFragment.kt: expected one literal match, found 0; old='        val queueSheetBehavior =\n            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?\n        queueSheetBehavior?.uiSettings = uiSettings\n\n    elev'
+STOP: app/src/main/java/org/oxycblt/auxio/MainFragment.kt: expected one literal match, found 0; old='        override fun handleOnBackStarted(backEvent: BackEventCompat) {\n        if (queueSheetShown()) {'
