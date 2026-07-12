@@ -1,0 +1,1045 @@
+name: PR 167 integration finaliser
+
+on:
+  push:
+    branches:
+      - fix-startup-routing-11126370068088722538
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr-167-integration-finaliser
+  cancel-in-progress: false
+
+jobs:
+  finalise:
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.head_commit.message != 'chore: remove temporary PR167 integration workflow'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-cleanup: always
+
+      - name: Apply bounded integration patch
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from __future__ import annotations
+
+          import re
+          from pathlib import Path
+
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file_path = Path(path)
+              text = file_path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(
+                      f"STOP: expected exactly one literal match in {path}, found {count}"
+                  )
+              file_path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+          def replace_regex(path: str, pattern: str, replacement: str) -> None:
+              file_path = Path(path)
+              text = file_path.read_text(encoding="utf-8")
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(
+                      f"STOP: expected exactly one regex match in {path}, found {count}"
+                  )
+              file_path.write_text(updated, encoding="utf-8")
+
+
+          coordinator = Path(
+              "app/src/main/java/org/oxycblt/auxio/headunit/StartupPanelCoordinator.kt"
+          )
+          coordinator.write_text(
+              """/*
+           * Copyright (c) 2026 Auxio Project
+           * StartupPanelCoordinator.kt is part of Auxio.
+           *
+           * This program is free software: you can redistribute it and/or modify
+           * it under the terms of the GNU General Public License as published by
+           * the Free Software Foundation, either version 3 of the License, or
+           * (at your option) any later version.
+           *
+           * This program is distributed in the hope that it will be useful,
+           * but WITHOUT ANY WARRANTY; without even the implied warranty of
+           * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+           * GNU General Public License for more details.
+           *
+           * You should have received a copy of the GNU General Public License
+           * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+           */
+
+          package org.oxycblt.auxio.headunit
+
+          import androidx.lifecycle.ViewModel
+          import androidx.lifecycle.viewModelScope
+          import dagger.hilt.android.lifecycle.HiltViewModel
+          import java.util.UUID
+          import javax.inject.Inject
+          import kotlinx.coroutines.flow.MutableStateFlow
+          import kotlinx.coroutines.flow.SharingStarted
+          import kotlinx.coroutines.flow.StateFlow
+          import kotlinx.coroutines.flow.combine
+          import kotlinx.coroutines.flow.stateIn
+          import kotlinx.coroutines.flow.update
+          import org.oxycblt.auxio.music.StartupReadinessState
+          import org.oxycblt.auxio.playback.OpenPanel
+          import org.oxycblt.auxio.playback.PlaybackSettings
+          import org.oxycblt.auxio.playback.state.RestoreOutcome
+          import org.oxycblt.musikr.Song
+          import timber.log.Timber as L
+
+          /**
+           * Coordinates startup panel routing without coupling navigation to autoplay.
+           *
+           * Requests remain pending while playback or the library is transient, are cancelled at
+           * terminal states, and are consumed only after the UI confirms the requested sheet state.
+           *
+           * @author Auxio-TS contributors
+           */
+          @HiltViewModel
+          class StartupPanelCoordinator
+          @Inject
+          constructor(private val playbackSettings: PlaybackSettings) : ViewModel() {
+              data class RouteRequest(
+                  val token: UUID,
+                  val destination: OpenPanel,
+                  val priority: Priority,
+                  val description: String,
+              )
+
+              enum class Priority {
+                  GENERIC_STARTUP,
+                  EXPLICIT_INTENT,
+              }
+
+              sealed interface RouteEvaluation {
+                  data object Idle : RouteEvaluation
+
+                  data class Wait(val request: RouteRequest, val reason: String) : RouteEvaluation
+
+                  data class Cancel(val request: RouteRequest, val reason: String) : RouteEvaluation
+
+                  data class Render(val request: RouteRequest) : RouteEvaluation
+              }
+
+              private data class CoordinatorState(
+                  val hasSong: Boolean,
+                  val outcome: RestoreOutcome,
+                  val readiness: StartupReadinessState,
+              )
+
+              private val activeRequest = MutableStateFlow<RouteRequest?>(null)
+              private val coordinatorState =
+                  MutableStateFlow(
+                      CoordinatorState(
+                          hasSong = false,
+                          outcome = RestoreOutcome.NOT_REQUESTED,
+                          readiness = StartupReadinessState.CheckingCachedLibrary,
+                      )
+                  )
+
+              val routeEvaluation: StateFlow<RouteEvaluation> =
+                  combine(activeRequest, coordinatorState) { request, state ->
+                          evaluate(request, state.hasSong, state.outcome, state.readiness)
+                      }
+                      .stateIn(
+                          viewModelScope,
+                          SharingStarted.Eagerly,
+                          RouteEvaluation.Idle,
+                      )
+
+              fun updateState(
+                  song: Song?,
+                  outcome: RestoreOutcome,
+                  readiness: StartupReadinessState,
+              ) {
+                  coordinatorState.value =
+                      CoordinatorState(
+                          hasSong = song != null,
+                          outcome = outcome,
+                          readiness = readiness,
+                      )
+              }
+
+              /** Provide an explicit launch route, overriding a generic startup request. */
+              fun requestExplicitRoute(destination: OpenPanel, description: String) {
+                  val request =
+                      RouteRequest(
+                          UUID.randomUUID(),
+                          destination,
+                          Priority.EXPLICIT_INTENT,
+                          description,
+                      )
+                  L.d("Requesting explicit route: $request")
+                  activeRequest.value = request
+              }
+
+              /** Request the user-configured generic cold-launch destination. */
+              fun requestGenericStartupRoute() {
+                  if (!playbackSettings.launchToPanel) {
+                      L.d("Generic startup route skipped: launchToPanel disabled")
+                      return
+                  }
+                  activeRequest.update { current ->
+                      if (current?.priority == Priority.EXPLICIT_INTENT) {
+                          L.d("Generic startup route suppressed by existing explicit route: $current")
+                          current
+                      } else {
+                          RouteRequest(
+                                  UUID.randomUUID(),
+                                  genericDestination(),
+                                  Priority.GENERIC_STARTUP,
+                                  "Generic App Launch",
+                              )
+                              .also { L.d("Requesting generic startup route: $it") }
+                      }
+                  }
+              }
+
+              /** Consume [token] only after the UI has reached its requested final state. */
+              fun consumeRoute(token: UUID) {
+                  activeRequest.update { current ->
+                      if (current?.token == token) {
+                          L.d("Route consumed: ${current.description}")
+                          null
+                      } else {
+                          current
+                      }
+                  }
+              }
+
+              /** Cancel a matching route after a terminal policy result. */
+              fun cancelRoute(token: UUID, reason: String) {
+                  activeRequest.update { current ->
+                      if (current?.token == token) {
+                          L.d("Route cancelled [reason=$reason]: ${current.description}")
+                          null
+                      } else {
+                          current
+                      }
+                  }
+              }
+
+              /** Cancel pending routing because the user selected another destination. */
+              fun cancelRouting(reason: String = "manual navigation") {
+                  activeRequest.update { current ->
+                      if (current != null) {
+                          L.d("Active routing request cancelled [reason=$reason]")
+                      }
+                      null
+                  }
+              }
+
+              companion object {
+                  internal fun genericDestination(): OpenPanel = OpenPanel.PLAYBACK
+
+                  internal fun evaluate(
+                      request: RouteRequest?,
+                      hasSong: Boolean,
+                      outcome: RestoreOutcome,
+                      readiness: StartupReadinessState,
+                  ): RouteEvaluation {
+                      request ?: return RouteEvaluation.Idle
+
+                      if (
+                          readiness == StartupReadinessState.NeedsMusicSource ||
+                              readiness == StartupReadinessState.EmptyLibrary ||
+                              readiness == StartupReadinessState.CachedLibraryUnavailable
+                      ) {
+                          return RouteEvaluation.Cancel(request, "library-terminal-$readiness")
+                      }
+
+                      if (request.priority == Priority.EXPLICIT_INTENT) {
+                          if (hasSong) {
+                              return RouteEvaluation.Render(request)
+                          }
+                          return when (outcome) {
+                              RestoreOutcome.NO_SAVED_SESSION,
+                              RestoreOutcome.FAILED,
+                              RestoreOutcome.CANCELLED ->
+                                  RouteEvaluation.Cancel(request, "explicit-terminal-$outcome")
+                              else -> RouteEvaluation.Wait(request, "explicit-awaiting-song")
+                          }
+                      }
+
+                      if (readiness == StartupReadinessState.CheckingCachedLibrary) {
+                          return RouteEvaluation.Wait(request, "library-checking")
+                      }
+
+                      return when (outcome) {
+                          RestoreOutcome.NOT_REQUESTED,
+                          RestoreOutcome.WAITING_FOR_PLAYER,
+                          RestoreOutcome.WAITING_FOR_LIBRARY ->
+                              RouteEvaluation.Wait(request, "restore-transient-$outcome")
+                          RestoreOutcome.NO_SAVED_SESSION,
+                          RestoreOutcome.FAILED,
+                          RestoreOutcome.CANCELLED ->
+                              RouteEvaluation.Cancel(request, "restore-terminal-$outcome")
+                          RestoreOutcome.RAW_FAST_RESUME_ACTIVE,
+                          RestoreOutcome.RESTORED_EXISTING_SESSION,
+                          RestoreOutcome.FALLBACK_QUEUE_CREATED ->
+                              if (hasSong) {
+                                  RouteEvaluation.Render(request)
+                              } else {
+                                  RouteEvaluation.Wait(request, "awaiting-normal-song")
+                              }
+                      }
+                  }
+              }
+          }
+          """.strip()
+              + "\n",
+              encoding="utf-8",
+          )
+
+          main_activity = "app/src/main/java/org/oxycblt/auxio/MainActivity.kt"
+          replace_once(
+              main_activity,
+              """            HeadUnitEntryPoints.EntryDestination.QUEUE ->
+                          startupPanelCoordinator.requestExplicitRoute(
+                              org.oxycblt.auxio.playback.OpenPanel.QUEUE,
+                              "Explicit Queue Intent",
+                          )""",
+              """            HeadUnitEntryPoints.EntryDestination.QUEUE ->
+                          startupPanelCoordinator.requestExplicitRoute(
+                              org.oxycblt.auxio.playback.OpenPanel.PLAYBACK_QUEUE,
+                              "Explicit Queue Intent",
+                          )""",
+          )
+
+          main_fragment = "app/src/main/java/org/oxycblt/auxio/MainFragment.kt"
+          replace_once(
+              main_fragment,
+              "import android.view.LayoutInflater\n",
+              "import android.view.LayoutInflater\nimport android.view.View\n",
+          )
+          replace_once(
+              main_fragment,
+              """    private var sheetRising: Boolean? = null
+              private var lastStretchRatio = -1f
+              @Inject lateinit var uiSettings: UISettings""",
+              """    private var sheetRising: Boolean? = null
+              private var lastStretchRatio = -1f
+              private val panelRouteSheetCallback =
+                  object : BackportBottomSheetBehavior.BottomSheetCallback() {
+                      override fun onStateChanged(bottomSheet: View, newState: Int) {
+                          if (newState == BackportBottomSheetBehavior.STATE_DRAGGING) {
+                              startupPanelCoordinator.cancelRouting("user-sheet-drag")
+                              return
+                          }
+                          if (newState != BackportBottomSheetBehavior.STATE_SETTLING) {
+                              handleStartupRoute(startupPanelCoordinator.routeEvaluation.value)
+                          }
+                      }
+
+                      override fun onSlide(bottomSheet: View, slideOffset: Float) = Unit
+                  }
+              @Inject lateinit var uiSettings: UISettings""",
+          )
+          replace_once(
+              main_fragment,
+              """        val queueSheetBehavior =
+                  binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+              queueSheetBehavior?.uiSettings = uiSettings
+
+              elevationNormal =""",
+              """        val queueSheetBehavior =
+                  binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+              queueSheetBehavior?.uiSettings = uiSettings
+              playbackSheetBehavior.addBottomSheetCallback(panelRouteSheetCallback)
+              queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)
+
+              elevationNormal =""",
+          )
+          replace_once(
+              main_fragment,
+              """            SheetBackPressedCallback(
+                          playbackSheetBehavior = playbackSheetBehavior,
+                          queueSheetBehavior = queueSheetBehavior,
+                      )""",
+              """            SheetBackPressedCallback(
+                          playbackSheetBehavior = playbackSheetBehavior,
+                          queueSheetBehavior = queueSheetBehavior,
+                          onManualPanelNavigation = {
+                              startupPanelCoordinator.cancelRouting("user-panel-back")
+                          },
+                      )""",
+          )
+          replace_once(
+              main_fragment,
+              "collectImmediately(startupPanelCoordinator.routeDecision, ::handleStartupRoute)",
+              "collectImmediately(startupPanelCoordinator.routeEvaluation, ::handleStartupRoute)",
+          )
+
+          replace_regex(
+              main_fragment,
+              r"""    override fun onDestroyBinding\(binding: FragmentMainBinding\) \{
+                  super\.onDestroyBinding\(binding\)
+                  speedDialBackCallback = null""",
+              """    override fun onDestroyBinding(binding: FragmentMainBinding) {
+                  val playbackSheetBehavior =
+                      binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+                  val queueSheetBehavior =
+                      binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+                  playbackSheetBehavior.removeBottomSheetCallback(panelRouteSheetCallback)
+                  queueSheetBehavior?.removeBottomSheetCallback(panelRouteSheetCallback)
+                  super.onDestroyBinding(binding)
+                  speedDialBackCallback = null""",
+          )
+
+          replace_regex(
+              main_fragment,
+              r"""    private fun handleStartupRoute\(
+                  request: org\.oxycblt\.auxio\.headunit\.StartupPanelCoordinator\.RouteRequest\?
+              \) \{.*?
+              \}
+
+              private fun handlePanel""",
+              """    private fun handleStartupRoute(
+                  evaluation: org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation
+              ) {
+                  when (evaluation) {
+                      org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Idle,
+                      is org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Wait -> Unit
+                      is org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Cancel ->
+                          startupPanelCoordinator.cancelRoute(
+                              evaluation.request.token,
+                              evaluation.reason,
+                          )
+                      is org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Render -> {
+                          val request = evaluation.request
+                          val rendered =
+                              when (request.destination) {
+                                  OpenPanel.MAIN -> tryClosePlaybackPanel(cancelPendingRoute = false)
+                                  OpenPanel.PLAYBACK ->
+                                      tryOpenPlaybackPanel(cancelPendingRoute = false)
+                                  OpenPanel.PLAYBACK_QUEUE,
+                                  OpenPanel.QUEUE ->
+                                      tryOpenPlaybackQueuePanel(cancelPendingRoute = false)
+                              }
+                          if (rendered) {
+                              L.d(
+                                  "Consumed rendered startup route: " +
+                                      "${request.description} -> ${request.destination}"
+                              )
+                              startupPanelCoordinator.consumeRoute(request.token)
+                          }
+                      }
+                  }
+              }
+
+              private fun handlePanel""",
+          )
+
+          replace_regex(
+              main_fragment,
+              r"""    private fun tryOpenPlaybackPanel\(\) \{.*?
+              \}
+
+              private fun tryClosePlaybackPanel\(\) \{.*?
+              \}
+
+              private fun tryOpenQueuePanel\(\) \{.*?
+              \}
+
+              private fun tryShowSheets""",
+              """    private fun tryOpenPlaybackPanel(cancelPendingRoute: Boolean = true): Boolean {
+                  if (cancelPendingRoute) {
+                      startupPanelCoordinator.cancelRouting("manual-playback-open")
+                  }
+
+                  val binding = requireBinding()
+                  val playbackSheetBehavior =
+                      binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+                  val queueSheetBehavior =
+                      binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+
+                  if (playbackSheetBehavior.state != BackportBottomSheetBehavior.STATE_EXPANDED) {
+                      if (
+                          playbackSheetBehavior.targetState ==
+                              BackportBottomSheetBehavior.STATE_COLLAPSED
+                      ) {
+                          L.d("Expanding playback sheet")
+                          playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
+                      }
+                      return false
+                  }
+
+                  if (queueSheetBehavior == null) return true
+                  if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED) {
+                      return true
+                  }
+                  if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+                      L.d("Collapsing queue sheet for playback destination")
+                      queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
+                  }
+                  return false
+              }
+
+              private fun tryOpenPlaybackQueuePanel(
+                  cancelPendingRoute: Boolean = true
+              ): Boolean {
+                  if (cancelPendingRoute) {
+                      startupPanelCoordinator.cancelRouting("manual-playback-queue-open")
+                  }
+
+                  val binding = requireBinding()
+                  val playbackSheetBehavior =
+                      binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+                  val queueSheetBehavior =
+                      binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+
+                  if (playbackSheetBehavior.state != BackportBottomSheetBehavior.STATE_EXPANDED) {
+                      if (
+                          playbackSheetBehavior.targetState ==
+                              BackportBottomSheetBehavior.STATE_COLLAPSED
+                      ) {
+                          L.d("Expanding playback sheet before queue destination")
+                          playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
+                      }
+                      return false
+                  }
+
+                  if (queueSheetBehavior == null) return true
+                  if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+                      return true
+                  }
+                  if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED) {
+                      L.d("Expanding queue sheet")
+                      queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
+                  }
+                  return false
+              }
+
+              private fun tryClosePlaybackPanel(cancelPendingRoute: Boolean = true): Boolean {
+                  if (cancelPendingRoute) {
+                      startupPanelCoordinator.cancelRouting("manual-playback-close")
+                  }
+
+                  val binding = requireBinding()
+                  val playbackSheetBehavior =
+                      binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+                  val queueSheetBehavior =
+                      binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+
+                  val playbackClosed =
+                      playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED ||
+                          playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_HIDDEN
+                  val queueClosed =
+                      queueSheetBehavior == null ||
+                          queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED
+                  if (playbackClosed && queueClosed) return true
+
+                  if (queueSheetBehavior?.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+                      queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
+                  }
+                  if (playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+                      playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
+                  }
+                  return false
+              }
+
+              private fun tryOpenQueuePanel(cancelPendingRoute: Boolean = true): Boolean {
+                  if (cancelPendingRoute) {
+                      startupPanelCoordinator.cancelRouting("manual-queue-open")
+                  }
+
+                  val binding = requireBinding()
+                  val playbackSheetBehavior =
+                      binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+                  val queueSheetBehavior =
+                      binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+                          ?: return playbackSheetBehavior.state ==
+                              BackportBottomSheetBehavior.STATE_EXPANDED
+
+                  if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+                      return true
+                  }
+                  if (
+                      playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED &&
+                          queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED
+                  ) {
+                      queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
+                  }
+                  return false
+              }
+
+              private fun tryShowSheets""",
+          )
+
+          replace_once(
+              main_fragment,
+              """    private class SheetBackPressedCallback(
+                  private val playbackSheetBehavior: PlaybackBottomSheetBehavior<*>,
+                  private val queueSheetBehavior: QueueBottomSheetBehavior<*>?,
+              ) : OnBackPressedCallback(false) {""",
+              """    private class SheetBackPressedCallback(
+                  private val playbackSheetBehavior: PlaybackBottomSheetBehavior<*>,
+                  private val queueSheetBehavior: QueueBottomSheetBehavior<*>?,
+                  private val onManualPanelNavigation: () -> Unit,
+              ) : OnBackPressedCallback(false) {""",
+          )
+          replace_once(
+              main_fragment,
+              """        override fun handleOnBackPressed() {
+                  if (queueSheetShown()) {""",
+              """        override fun handleOnBackPressed() {
+                  onManualPanelNavigation()
+                  if (queueSheetShown()) {""",
+          )
+
+          exo = (
+              "app/src/main/java/org/oxycblt/auxio/playback/service/"
+              "ExoPlaybackStateHolder.kt"
+          )
+          replace_once(
+              exo,
+              "import kotlin.math.abs\n",
+              "import kotlin.math.abs\nimport kotlinx.coroutines.CancellationException\n",
+          )
+          replace_once(
+              exo,
+              """    private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
+              private var currentSaveJob: Job? = null
+              private var openAudioEffectSession = false""",
+              """    private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
+              private var currentSaveJob: Job? = null
+              private var currentRestoreJob: Job? = null
+              private var restoreGeneration = 0L
+              private var openAudioEffectSession = false""",
+          )
+          replace_once(
+              exo,
+              """    fun release() {
+                  saveJob.cancel()""",
+              """    fun release() {
+                  cancelActiveRestore("holder-release", notify = false)
+                  saveJob.cancel()""",
+          )
+          replace_once(
+              exo,
+              """    override fun handleDeferred(action: DeferredPlayback): Boolean {
+                  if (action is DeferredPlayback.RestoreState) {
+                      Ts18FirstAudioLatency.mark("restore_request_received")""",
+              """    override fun handleDeferred(action: DeferredPlayback): Boolean {
+                  if (action is DeferredPlayback.RestoreState) {
+                      cancelActiveRestore("new-restore-request")
+                      playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
+                      Ts18FirstAudioLatency.mark("restore_request_received")""",
+          )
+
+          replace_regex(
+              exo,
+              r"""            L\.d\("Restoring playback state from cached/loaded library"\)
+                  restoreScope\.launch \{
+                      val state = persistenceRepository\.readState\(\)
+                      withContext\(Dispatchers\.Main\) \{
+                          if \(state != null\) \{
+                              // Apply the saved state on the main thread to prevent code expecting
+                              // state updates on the main thread from crashing\.
+                              playbackManager\.applySavedState\(state, false\)
+                              val shouldPlay = shouldPlayImmediately\(action\.play\)
+                              if \(shouldPlay\) \{
+                                  playbackManager\.playing\(true\)
+                              \}
+                              playbackManager\.notifyRestoreOutcome\(
+                                  RestoreOutcome\.RESTORED_EXISTING_SESSION
+                              \)
+                          \} else if \(action\.fallback != null\) \{
+                              playbackManager\.notifyRestoreOutcome\(RestoreOutcome\.FALLBACK_QUEUE_CREATED\)
+                              playbackManager\.playDeferred\(action\.fallback\)
+                          \} else \{
+                              playbackManager\.notifyRestoreOutcome\(RestoreOutcome\.NO_SAVED_SESSION\)
+                          \}
+                      \}
+                  \}
+                  return true""",
+              """            L.d("Restoring playback state from cached/loaded library")
+                  val generation = ++restoreGeneration
+                  currentRestoreJob =
+                      restoreScope.launch {
+                          try {
+                              val state = persistenceRepository.readState()
+                              withContext(Dispatchers.Main) {
+                                  if (generation != restoreGeneration) return@withContext
+                                  if (state != null) {
+                                      // Apply the saved state on the main thread to prevent code
+                                      // expecting state updates on the main thread from crashing.
+                                      playbackManager.applySavedState(state, false)
+                                      val shouldPlay = shouldPlayImmediately(action.play)
+                                      if (shouldPlay) {
+                                          playbackManager.playing(true)
+                                      }
+                                      completeRestore(
+                                          generation,
+                                          RestoreOutcome.RESTORED_EXISTING_SESSION,
+                                      )
+                                  } else if (action.fallback != null) {
+                                      completeRestore(
+                                          generation,
+                                          RestoreOutcome.FALLBACK_QUEUE_CREATED,
+                                      )
+                                      playbackManager.playDeferred(action.fallback)
+                                  } else {
+                                      completeRestore(
+                                          generation,
+                                          RestoreOutcome.NO_SAVED_SESSION,
+                                      )
+                                  }
+                              }
+                          } catch (e: CancellationException) {
+                              throw e
+                          } catch (e: Exception) {
+                              L.w(e, "Unable to restore persisted playback state")
+                              withContext(Dispatchers.Main) {
+                                  completeRestore(generation, RestoreOutcome.FAILED)
+                              }
+                          } finally {
+                              if (generation == restoreGeneration) {
+                                  currentRestoreJob = null
+                              }
+                          }
+                      }
+                  return true""",
+          )
+
+          replace_once(
+              exo,
+              """    override fun playing(playing: Boolean) {""",
+              """    private fun completeRestore(generation: Long, outcome: RestoreOutcome) {
+                  if (generation != restoreGeneration) return
+                  currentRestoreJob = null
+                  playbackManager.notifyRestoreOutcome(outcome)
+              }
+
+              private fun cancelActiveRestore(reason: String, notify: Boolean = true) {
+                  val job = currentRestoreJob
+                  val outcome = playbackManager.restoreOutcome
+                  val pending =
+                      job?.isActive == true ||
+                          pendingLibraryRestoreAfterRawFailure != null ||
+                          outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                          outcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
+                          outcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE
+                  if (!pending) return
+
+                  L.i("Cancelling pending playback restore [reason=$reason outcome=$outcome]")
+                  restoreGeneration += 1
+                  currentRestoreJob = null
+                  pendingLibraryRestoreAfterRawFailure = null
+                  job?.cancel()
+                  if (
+                      notify &&
+                          outcome != RestoreOutcome.RESTORED_EXISTING_SESSION &&
+                          outcome != RestoreOutcome.FALLBACK_QUEUE_CREATED &&
+                          outcome != RestoreOutcome.NO_SAVED_SESSION &&
+                          outcome != RestoreOutcome.FAILED &&
+                          outcome != RestoreOutcome.CANCELLED
+                  ) {
+                      playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
+                  }
+              }
+
+              override fun playing(playing: Boolean) {""",
+          )
+
+          for signature, reason in (
+              ("override fun newPlayback(command: PlaybackCommand, play: Boolean) {", "new-playback"),
+              ("override fun shuffled(shuffled: Boolean) {", "queue-reordered"),
+              ("override fun next() {", "next"),
+              ("override fun prev() {", "previous"),
+              ("override fun goto(index: Int) {", "queue-index"),
+              (
+                  "override fun playNext(songs: List<Song>, ack: StateAck.PlayNext) {",
+                  "play-next",
+              ),
+              (
+                  "override fun addToQueue(songs: List<Song>, ack: StateAck.AddToQueue) {",
+                  "add-to-queue",
+              ),
+              (
+                  "override fun move(from: Int, to: Int, ack: StateAck.Move) {",
+                  "move-queue-item",
+              ),
+              ("override fun remove(at: Int, ack: StateAck.Remove) {", "remove-queue-item"),
+          ):
+              replace_once(
+                  exo,
+                  f"    {signature}\n",
+                  f'    {signature}\n        cancelActiveRestore("{reason}")\n',
+              )
+
+          replace_once(
+              exo,
+              """                rawFastResumeItem = null
+                          pendingLibraryRestoreAfterRawFailure = null
+                          playbackManager.play(command)""",
+              """                rawFastResumeItem = null
+                          pendingLibraryRestoreAfterRawFailure = null
+                          playbackManager.notifyRestoreOutcome(
+                              RestoreOutcome.RESTORED_EXISTING_SESSION
+                          )
+                          playbackManager.play(command)""",
+          )
+
+          tests = Path(
+              "app/src/test/java/org/oxycblt/auxio/headunit/"
+              "StartupPanelCoordinatorTest.kt"
+          )
+          tests.parent.mkdir(parents=True, exist_ok=True)
+          tests.write_text(
+              """/*
+           * Copyright (c) 2026 Auxio Project
+           * StartupPanelCoordinatorTest.kt is part of Auxio.
+           *
+           * This program is free software: you can redistribute it and/or modify
+           * it under the terms of the GNU General Public License as published by
+           * the Free Software Foundation, either version 3 of the License, or
+           * (at your option) any later version.
+           */
+
+          package org.oxycblt.auxio.headunit
+
+          import java.util.UUID
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+          import org.oxycblt.auxio.music.StartupReadinessState
+          import org.oxycblt.auxio.playback.OpenPanel
+          import org.oxycblt.auxio.playback.state.RestoreOutcome
+
+          class StartupPanelCoordinatorTest {
+              @Test
+              fun `generic launch always targets now playing`() {
+                  assertEquals(OpenPanel.PLAYBACK, StartupPanelCoordinator.genericDestination())
+              }
+
+              @Test
+              fun `generic request waits for transient restore`() {
+                  assertTrue(
+                      evaluate(
+                          genericRequest(),
+                          hasSong = false,
+                          outcome = RestoreOutcome.WAITING_FOR_LIBRARY,
+                      ) is StartupPanelCoordinator.RouteEvaluation.Wait
+                  )
+              }
+
+              @Test
+              fun `terminal library states cancel rather than becoming stale`() {
+                  listOf(
+                          StartupReadinessState.NeedsMusicSource,
+                          StartupReadinessState.EmptyLibrary,
+                          StartupReadinessState.CachedLibraryUnavailable,
+                      )
+                      .forEach { readiness ->
+                          assertTrue(
+                              evaluate(
+                                  genericRequest(),
+                                  hasSong = false,
+                                  outcome = RestoreOutcome.WAITING_FOR_LIBRARY,
+                                  readiness = readiness,
+                              ) is StartupPanelCoordinator.RouteEvaluation.Cancel
+                          )
+                      }
+              }
+
+              @Test
+              fun `no saved session cannot be fulfilled by a later manual song`() {
+                  assertTrue(
+                      evaluate(
+                          genericRequest(),
+                          hasSong = true,
+                          outcome = RestoreOutcome.NO_SAVED_SESSION,
+                      ) is StartupPanelCoordinator.RouteEvaluation.Cancel
+                  )
+              }
+
+              @Test
+              fun `raw resume waits for normal song reconciliation`() {
+                  assertTrue(
+                      evaluate(
+                          genericRequest(),
+                          hasSong = false,
+                          outcome = RestoreOutcome.RAW_FAST_RESUME_ACTIVE,
+                      ) is StartupPanelCoordinator.RouteEvaluation.Wait
+                  )
+                  assertTrue(
+                      evaluate(
+                          genericRequest(),
+                          hasSong = true,
+                          outcome = RestoreOutcome.RAW_FAST_RESUME_ACTIVE,
+                      ) is StartupPanelCoordinator.RouteEvaluation.Render
+                  )
+              }
+
+              @Test
+              fun `explicit queue renders an existing song without restore`() {
+                  val request =
+                      StartupPanelCoordinator.RouteRequest(
+                          UUID.randomUUID(),
+                          OpenPanel.PLAYBACK_QUEUE,
+                          StartupPanelCoordinator.Priority.EXPLICIT_INTENT,
+                          "test explicit queue",
+                      )
+                  val result =
+                      evaluate(
+                          request,
+                          hasSong = true,
+                          outcome = RestoreOutcome.NOT_REQUESTED,
+                      )
+                  assertTrue(result is StartupPanelCoordinator.RouteEvaluation.Render)
+                  assertEquals(
+                      OpenPanel.PLAYBACK_QUEUE,
+                      (result as StartupPanelCoordinator.RouteEvaluation.Render)
+                          .request
+                          .destination,
+                  )
+              }
+
+              @Test
+              fun `failed and cancelled restores terminate generic routing`() {
+                  listOf(RestoreOutcome.FAILED, RestoreOutcome.CANCELLED).forEach { outcome ->
+                      assertTrue(
+                          evaluate(genericRequest(), hasSong = false, outcome = outcome)
+                              is StartupPanelCoordinator.RouteEvaluation.Cancel
+                      )
+                  }
+              }
+
+              private fun genericRequest() =
+                  StartupPanelCoordinator.RouteRequest(
+                      UUID.randomUUID(),
+                      OpenPanel.PLAYBACK,
+                      StartupPanelCoordinator.Priority.GENERIC_STARTUP,
+                      "test generic",
+                  )
+
+              private fun evaluate(
+                  request: StartupPanelCoordinator.RouteRequest,
+                  hasSong: Boolean,
+                  outcome: RestoreOutcome,
+                  readiness: StartupReadinessState = StartupReadinessState.Ready,
+              ) =
+                  StartupPanelCoordinator.evaluate(
+                      request,
+                      hasSong,
+                      outcome,
+                      readiness,
+                  )
+          }
+          """.strip()
+              + "\n",
+              encoding="utf-8",
+          )
+
+          docs = Path("docs/LAUNCH_TO_CURRENTLY_PLAYING.md")
+          docs.write_text(
+              """# Launch to Currently Playing
+
+          ## Contract
+
+          `Launch to Now Playing` controls navigation only. It does not imply autoplay.
+
+          - Generic cold launches target **Now Playing**, never Queue.
+          - Explicit Queue launcher/deep-link requests target the playback-plus-queue state.
+          - Explicit destinations supersede generic startup routing.
+          - Requests wait through transient library/player restoration and raw fast resume.
+          - Requests are cancelled on source-required, empty/recovery, no-session, failed, or
+            cancelled terminal states.
+          - A request is consumed only after the bottom sheets reach the requested final state.
+          - Manual panel changes, predictive back, Settings, and About cancel pending routing.
+
+          ## Exact-device validation
+
+          **Requires TS18 validation** on `s9863a1h10_Natv`:
+
+          1. Cold launch with saved playing and paused sessions.
+          2. Cold launch with no saved session, empty library, and source-required state.
+          3. Raw fast resume followed by normal `Song` reconciliation.
+          4. Explicit Now Playing and Queue launches during cold and warm app states.
+          5. Manual close/back/navigation while restoration or sheet settling is pending.
+          6. DoFun launcher restart, process death, reboot, and real ACC sleep/wake.
+
+          Capture route/restore logs and final sheet state. Do not claim physical success from CI.
+          """.strip()
+              + "\n",
+              encoding="utf-8",
+          )
+
+          docs_index = "docs/README.md"
+          replace_once(
+              docs_index,
+              """- [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
+          """,
+              """- [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
+          - [`LAUNCH_TO_CURRENTLY_PLAYING.md`](LAUNCH_TO_CURRENTLY_PLAYING.md) — durable startup panel-routing contract and exact-device validation matrix.
+          """,
+          )
+          PY
+
+      - name: Prepare Android build environment
+        shell: bash
+        run: |
+          printf 'sdk.dir=%s\n' "${ANDROID_HOME}" > local.properties
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+          bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Format and validate patch
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git diff --check
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/ci-gradle.sh \
+            :app:testStandardDebugUnitTest \
+            --tests org.oxycblt.auxio.headunit.StartupPanelCoordinatorTest
+
+      - name: Commit integration result
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            app/src/main/java/org/oxycblt/auxio/MainActivity.kt \
+            app/src/main/java/org/oxycblt/auxio/MainFragment.kt \
+            app/src/main/java/org/oxycblt/auxio/headunit/StartupPanelCoordinator.kt \
+            app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt \
+            app/src/test/java/org/oxycblt/auxio/headunit/StartupPanelCoordinatorTest.kt \
+            docs/LAUNCH_TO_CURRENTLY_PLAYING.md \
+            docs/README.md
+          if git diff --cached --quiet; then
+            echo "::error::Integration patch produced no staged changes."
+            exit 1
+          fi
+          git commit -m "fix: finalise durable startup routing"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
