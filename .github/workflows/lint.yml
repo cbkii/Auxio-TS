@@ -73,7 +73,9 @@ jobs:
           HEAD_BRANCH: ${{ github.head_ref }}
           BASE_BRANCH: ${{ github.base_ref }}
         run: |
-          set -euo pipefail
+          mkdir -p build/pr165-final-commit
+          exec > >(tee build/pr165-final-commit/api-step.log) 2>&1
+          set -euxo pipefail
 
           test ! -e .github/workflows/pr165-review-completion.yml
           test ! -e scripts/pr165-finalize-1.py
@@ -84,7 +86,6 @@ jobs:
           git checkout "origin/${BASE_BRANCH}" -- .github/workflows/lint.yml scripts/ci-gradle.sh
           git diff --check
 
-          mkdir -p build/pr165-final-commit
           python3 - <<'PY'
           import base64
           import json
@@ -206,5 +207,5 @@ jobs:
         with:
           name: pr165-final-commit-metadata
           path: build/pr165-final-commit
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
