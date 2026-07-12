@@ -392,8 +392,8 @@ def require_topway_alias(application, label, debug=False):
         fail(f"{label} lacks com.tw.music.MusicActivity activity-alias")
         return
     alias = aliases[0]
-    if attr(alias, "targetActivity") == "org.oxycblt.auxio.MainActivity":
-        ok(f"{label} alias targets org.oxycblt.auxio.MainActivity")
+    if attr(alias, "targetActivity") == "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity":
+        ok(f"{label} alias targets org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity")
     else:
         fail(f"{label} alias target is {attr(alias, 'targetActivity')!r}")
     if attr(alias, "exported") == "true":

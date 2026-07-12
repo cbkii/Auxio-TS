@@ -35,6 +35,9 @@ class TopwayMusicEntryActivity : Activity() {
                         CarOverlaySettings.hasOverlayPermission(this)
                 ) {
                     CarFloatingControlsService.restoreIfEnabled(this, "topway_music_entry")
+                } else if (CarOverlaySettings.hasOverlayPermission(this)) {
+                    CarOverlaySettings.setEnabled(this, true)
+                    CarFloatingControlsService.restoreIfEnabled(this, "topway_music_entry_enable")
                 } else {
                     CarOverlaySettings.setEnabled(this, true)
                 }
