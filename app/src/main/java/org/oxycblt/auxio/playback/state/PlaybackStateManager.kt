@@ -60,6 +60,9 @@ interface PlaybackStateManager {
     /** Raw pre-library playback metadata, non-null only during TS18 raw fast resume. */
     val rawPlaybackMetadata: RawPlaybackMetadata?
 
+    /** The current outcome of a startup playback restoration attempt. */
+    val restoreOutcome: RestoreOutcome
+
     /** The current queue of [Song]s. */
     val queue: List<Song>
 
@@ -230,6 +233,9 @@ interface PlaybackStateManager {
      */
     fun playDeferred(action: DeferredPlayback)
 
+    /** Notify the manager of a change in [DeferredPlayback.RestoreState] outcome. */
+    fun notifyRestoreOutcome(outcome: RestoreOutcome)
+
     /**
      * Request that the pending [DeferredPlayback] (if any) be passed to the given
      * [PlaybackStateHolder].
@@ -337,6 +343,9 @@ interface PlaybackStateManager {
         /** Called when raw pre-library playback metadata changes. */
         fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {}
 
+        /** Called when the outcome of the [DeferredPlayback.RestoreState] process changes. */
+        fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {}
+
         /**
          * Called when the [RepeatMode] changes.
          *
@@ -415,6 +424,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     override val rawPlaybackMetadata
         get() = stateMirror.rawPlaybackMetadata
 
+    @Volatile
+    override var restoreOutcome: RestoreOutcome = RestoreOutcome.NOT_REQUESTED
+        private set
+
     override val queue
         get() = stateMirror.queue
 
@@ -478,7 +491,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                 null,
             )
         }
-        pendingDeferredPlayback?.let(stateHolder::handleDeferred)
+        if (pendingDeferredPlayback?.let { stateHolder.handleDeferred(it) } == true) {
+            L.d("Pending action consumed on register")
+            pendingDeferredPlayback = null
+        }
     }
 
     @Synchronized
@@ -608,13 +624,22 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     }
 
     @Synchronized
+    override fun notifyRestoreOutcome(outcome: RestoreOutcome) {
+        L.d("Updating restore outcome to $outcome")
+        if (restoreOutcome != outcome) {
+            restoreOutcome = outcome
+            listeners.forEach { it.onRestoreOutcomeChanged(outcome) }
+        }
+    }
+
+    @Synchronized
     override fun requestAction(stateHolder: PlaybackStateHolder) {
         if (BuildConfig.DEBUG && this.stateHolder !== stateHolder) {
             L.w("Given internal player did not match current internal player")
             return
         }
 
-        if (pendingDeferredPlayback?.let(stateHolder::handleDeferred) == true) {
+        if (pendingDeferredPlayback?.let { stateHolder.handleDeferred(it) } == true) {
             L.d("Pending action consumed")
             pendingDeferredPlayback = null
         }

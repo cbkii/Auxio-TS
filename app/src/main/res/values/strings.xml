@@ -416,6 +416,8 @@
     <string name="set_autostart_on_boot_desc">Launch Auxio-TS when the device boots</string>
     <string name="set_autostart_floating_only">Launch Floating Controls only</string>
     <string name="set_autostart_floating_only_desc">Restores the floating playback controls without launching the main application</string>
+    <string name="set_launch_to_panel">Launch to Now Playing</string>
+    <string name="set_launch_to_panel_desc">Open the playback panel automatically when the app starts</string>
     <string name="set_autoplay_on_launch">Autoplay</string>
     <string name="set_autoplay_on_launch_desc">Start playback when Auxio-TS launches</string>
     <string name="set_always_play_immediately">Always play immediately</string>

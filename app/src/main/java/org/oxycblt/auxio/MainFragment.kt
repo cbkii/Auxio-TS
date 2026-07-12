@@ -20,6 +20,7 @@ package org.oxycblt.auxio
 
 import android.os.Bundle
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import androidx.activity.BackEventCompat
@@ -54,7 +55,6 @@ import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
-import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
 import org.oxycblt.auxio.playback.PlaybackViewModel
@@ -90,6 +90,8 @@ class MainFragment :
     private val homeModel: HomeViewModel by activityViewModels()
     private val listModel: ListViewModel by activityViewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
+    private val startupPanelCoordinator: org.oxycblt.auxio.headunit.StartupPanelCoordinator by
+        activityViewModels()
     private var sheetBackCallback: SheetBackPressedCallback? = null
     private var detailBackCallback: DetailBackPressedCallback? = null
     private var selectionBackCallback: SelectionBackPressedCallback? = null
@@ -101,7 +103,20 @@ class MainFragment :
     private var maxScaleXDistance = 0f
     private var sheetRising: Boolean? = null
     private var lastStretchRatio = -1f
-    private var startupPlaybackOpenConsumed = false
+    private val panelRouteSheetCallback =
+        object : BackportBottomSheetBehavior.BottomSheetCallback() {
+            override fun onStateChanged(bottomSheet: View, newState: Int) {
+                if (newState == BackportBottomSheetBehavior.STATE_DRAGGING) {
+                    startupPanelCoordinator.cancelRouting("user-sheet-drag")
+                    return
+                }
+                if (newState != BackportBottomSheetBehavior.STATE_SETTLING) {
+                    handleStartupRoute(startupPanelCoordinator.routeEvaluation.value)
+                }
+            }
+
+            override fun onSlide(bottomSheet: View, slideOffset: Float) = Unit
+        }
     @Inject lateinit var uiSettings: UISettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -122,6 +137,8 @@ class MainFragment :
         val queueSheetBehavior =
             binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
         queueSheetBehavior?.uiSettings = uiSettings
+        playbackSheetBehavior.addBottomSheetCallback(panelRouteSheetCallback)
+        queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)
 
         elevationNormal = binding.context.getDimen(MR.dimen.m3_sys_elevation_level1)
 
@@ -132,6 +149,9 @@ class MainFragment :
             SheetBackPressedCallback(
                 playbackSheetBehavior = playbackSheetBehavior,
                 queueSheetBehavior = queueSheetBehavior,
+                onManualPanelNavigation = {
+                    startupPanelCoordinator.cancelRouting("user-panel-back")
+                },
             )
         val detailBackCallback =
             DetailBackPressedCallback(detailModel).also { detailBackCallback = it }
@@ -225,8 +245,23 @@ class MainFragment :
         collectImmediately(musicModel.indexingState, ::updateIndexerState)
         collectImmediately(listModel.selected, selectionBackCallback::invalidateEnabled)
         collectImmediately(playbackModel.song, ::updateSong)
-        collectImmediately(musicModel.startupReadinessState) { maybeOpenStartupPlayback() }
         collectImmediately(playbackModel.openPanel.flow, ::handlePanel)
+        collectImmediately(startupPanelCoordinator.routeEvaluation, ::handleStartupRoute)
+
+        collectImmediately(musicModel.startupReadinessState) {
+            startupPanelCoordinator.updateState(
+                playbackModel.song.value,
+                playbackModel.restoreOutcome.value,
+                it,
+            )
+        }
+        collectImmediately(playbackModel.restoreOutcome) {
+            startupPanelCoordinator.updateState(
+                playbackModel.song.value,
+                it,
+                musicModel.startupReadinessState.value,
+            )
+        }
     }
 
     override fun onStart() {
@@ -305,6 +340,12 @@ class MainFragment :
     }
 
     override fun onDestroyBinding(binding: FragmentMainBinding) {
+        val playbackSheetBehavior =
+            binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+        val queueSheetBehavior =
+            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+        playbackSheetBehavior.removeBottomSheetCallback(panelRouteSheetCallback)
+        queueSheetBehavior?.removeBottomSheetCallback(panelRouteSheetCallback)
         super.onDestroyBinding(binding)
         speedDialBackCallback = null
         sheetBackCallback = null
@@ -628,6 +669,7 @@ class MainFragment :
                 is Outer.About -> MainFragmentDirections.about()
                 null -> return
             }
+        startupPanelCoordinator.cancelRouting("explicit-outer-navigation")
         findNavController().navigateSafe(directions)
         homeModel.showOuter.consume()
     }
@@ -638,24 +680,38 @@ class MainFragment :
         } else {
             tryHideAllSheets()
         }
-        maybeOpenStartupPlayback()
+        startupPanelCoordinator.updateState(
+            song,
+            playbackModel.restoreOutcome.value,
+            musicModel.startupReadinessState.value,
+        )
     }
 
-    private fun maybeOpenStartupPlayback() {
-        if (startupPlaybackOpenConsumed) return
-
-        val readinessState = musicModel.startupReadinessState.value
-        if (readinessState == StartupReadinessState.CheckingCachedLibrary) {
-            return
-        }
-        startupPlaybackOpenConsumed = true
-        if (readinessState == StartupReadinessState.NeedsMusicSource) {
-            return
-        }
-
-        val currentSong = playbackModel.song.value
-        if (currentSong != null) {
-            playbackModel.openPlayback()
+    private fun handleStartupRoute(
+        evaluation: org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation
+    ) {
+        when (evaluation) {
+            org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Idle,
+            is org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Wait -> Unit
+            is org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Cancel ->
+                startupPanelCoordinator.cancelRoute(evaluation.request.token, evaluation.reason)
+            is org.oxycblt.auxio.headunit.StartupPanelCoordinator.RouteEvaluation.Render -> {
+                val request = evaluation.request
+                val rendered =
+                    when (request.destination) {
+                        OpenPanel.MAIN -> tryClosePlaybackPanel(cancelPendingRoute = false)
+                        OpenPanel.PLAYBACK -> tryOpenPlaybackPanel(cancelPendingRoute = false)
+                        OpenPanel.PLAYBACK_QUEUE,
+                        OpenPanel.QUEUE -> tryOpenPlaybackQueuePanel(cancelPendingRoute = false)
+                    }
+                if (rendered) {
+                    L.d(
+                        "Consumed rendered startup route: " +
+                            "${request.description} -> ${request.destination}"
+                    )
+                    startupPanelCoordinator.consumeRoute(request.token)
+                }
+            }
         }
     }
 
@@ -666,11 +722,11 @@ class MainFragment :
             OpenPanel.MAIN -> tryClosePlaybackPanel()
             OpenPanel.PLAYBACK -> tryOpenPlaybackPanel()
             OpenPanel.PLAYBACK_QUEUE -> {
-                tryOpenPlaybackPanel()
+                tryOpenPlaybackQueuePanel()
                 val root = requireBinding().root
                 root.post {
                     if (isAdded && view != null) {
-                        tryOpenQueuePanel()
+                        tryOpenPlaybackQueuePanel()
                     }
                 }
             }
@@ -679,58 +735,105 @@ class MainFragment :
         playbackModel.openPanel.consume()
     }
 
-    private fun tryOpenPlaybackPanel() {
+    private fun tryOpenPlaybackPanel(cancelPendingRoute: Boolean = true): Boolean {
+        if (cancelPendingRoute) {
+            startupPanelCoordinator.cancelRouting("manual-playback-open")
+        }
         val binding = requireBinding()
         val playbackSheetBehavior =
             binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
-
-        if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED) {
-            // Playback sheet is not expanded and not hidden, we can expand it.
-            L.d("Expanding playback sheet")
-            playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
-            return
-        }
-
         val queueSheetBehavior =
-            (binding.queueSheet.coordinatorLayoutBehavior ?: return) as QueueBottomSheetBehavior
-        if (
-            playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED &&
-                queueSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_EXPANDED
-        ) {
-            // Queue sheet and playback sheet is expanded, close the queue sheet so the
-            // playback panel can shown.
-            L.d("Collapsing queue sheet")
+            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+
+        if (playbackSheetBehavior.state != BackportBottomSheetBehavior.STATE_EXPANDED) {
+            if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED) {
+                L.d("Expanding playback sheet")
+                playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
+            }
+            return false
+        }
+        if (queueSheetBehavior == null) return true
+        if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED) {
+            return true
+        }
+        if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
             queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
         }
+        return false
     }
 
-    private fun tryClosePlaybackPanel() {
-        val binding = requireBinding()
-        val playbackSheetBehavior =
-            binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
-        if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_EXPANDED) {
-            // Playback sheet (and possibly queue) needs to be collapsed.
-            L.d("Collapsing playback and queue sheets")
-            val queueSheetBehavior =
-                binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
-            playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
-            queueSheetBehavior?.state = BackportBottomSheetBehavior.STATE_COLLAPSED
+    private fun tryOpenPlaybackQueuePanel(cancelPendingRoute: Boolean = true): Boolean {
+        if (cancelPendingRoute) {
+            startupPanelCoordinator.cancelRouting("manual-playback-queue-open")
         }
-    }
-
-    private fun tryOpenQueuePanel() {
         val binding = requireBinding()
         val playbackSheetBehavior =
             binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
         val queueSheetBehavior =
-            (binding.queueSheet.coordinatorLayoutBehavior ?: return) as QueueBottomSheetBehavior
-        if (
-            playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED &&
-                queueSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED
-        ) {
-            // Playback sheet is expanded and queue sheet is collapsed, we can expand it.
+            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+
+        if (playbackSheetBehavior.state != BackportBottomSheetBehavior.STATE_EXPANDED) {
+            if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED) {
+                L.d("Expanding playback sheet before queue destination")
+                playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
+            }
+            return false
+        }
+        if (queueSheetBehavior == null) return true
+        if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+            return true
+        }
+        if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED) {
             queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
         }
+        return false
+    }
+
+    private fun tryClosePlaybackPanel(cancelPendingRoute: Boolean = true): Boolean {
+        if (cancelPendingRoute) {
+            startupPanelCoordinator.cancelRouting("manual-playback-close")
+        }
+        val binding = requireBinding()
+        val playbackSheetBehavior =
+            binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+        val queueSheetBehavior =
+            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+        val playbackClosed =
+            playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED ||
+                playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_HIDDEN
+        val queueClosed =
+            queueSheetBehavior == null ||
+                queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED
+        if (playbackClosed && queueClosed) return true
+        if (queueSheetBehavior?.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+            queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
+        }
+        if (playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+            playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
+        }
+        return false
+    }
+
+    private fun tryOpenQueuePanel(cancelPendingRoute: Boolean = true): Boolean {
+        if (cancelPendingRoute) {
+            startupPanelCoordinator.cancelRouting("manual-queue-open")
+        }
+        val binding = requireBinding()
+        val playbackSheetBehavior =
+            binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+        val queueSheetBehavior =
+            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
+                ?: return playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED
+        if (queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED) {
+            return true
+        }
+        if (
+            playbackSheetBehavior.state == BackportBottomSheetBehavior.STATE_EXPANDED &&
+                queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED
+        ) {
+            queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
+        }
+        return false
     }
 
     private fun tryShowSheets() {
@@ -777,8 +880,10 @@ class MainFragment :
     private class SheetBackPressedCallback(
         private val playbackSheetBehavior: PlaybackBottomSheetBehavior<*>,
         private val queueSheetBehavior: QueueBottomSheetBehavior<*>?,
+        private val onManualPanelNavigation: () -> Unit,
     ) : OnBackPressedCallback(false) {
         override fun handleOnBackStarted(backEvent: BackEventCompat) {
+            onManualPanelNavigation()
             if (queueSheetShown()) {
                 unlikelyToBeNull(queueSheetBehavior).startBackProgress(backEvent)
             }
@@ -802,6 +907,7 @@ class MainFragment :
         }
 
         override fun handleOnBackPressed() {
+            onManualPanelNavigation()
             if (queueSheetShown()) {
                 unlikelyToBeNull(queueSheetBehavior).handleBackInvoked()
                 return

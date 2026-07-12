@@ -64,6 +64,8 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
     val autostartOnBoot: Boolean
     /** Whether to only launch the floating controls when autostarting. */
     val autostartFloatingOnly: Boolean
+    /** Whether to open the Now Playing panel automatically when Auxio-TS launches. */
+    val launchToPanel: Boolean
     /** Whether to start playback automatically when Auxio-TS launches. */
     val autoplayOnLaunch: Boolean
     /** Whether to force immediate playback on startup/resume when Autoplay is enabled. */
@@ -83,6 +85,8 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
 
 class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Context) :
     Settings.Impl<PlaybackSettings.Listener>(context), PlaybackSettings {
+    private val launchToPanelDefault = context.resources.getBoolean(R.bool.launch_to_panel_default)
+
     override val playInListWith: PlaySong
         get() =
             PlaySong.fromIntCode(
@@ -151,6 +155,13 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
     override val autostartFloatingOnly: Boolean
         get() =
             sharedPreferences.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
+
+    override val launchToPanel: Boolean
+        get() =
+            sharedPreferences.getBoolean(
+                getString(R.string.set_key_launch_to_panel),
+                launchToPanelDefault,
+            )
 
     override val autoplayOnLaunch: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_autoplay_on_launch), false)

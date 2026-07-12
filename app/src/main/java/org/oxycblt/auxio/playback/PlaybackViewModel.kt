@@ -38,6 +38,7 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
@@ -97,6 +98,10 @@ constructor(
     /** Whether the queue is shuffled or not. */
     val isShuffled: StateFlow<Boolean>
         get() = _isShuffled
+
+    private val _restoreOutcome = MutableStateFlow(playbackManager.restoreOutcome)
+    /** The outcome of a generic playback restore request. */
+    val restoreOutcome: StateFlow<RestoreOutcome> = _restoreOutcome
 
     private val _shuffleScope = MutableStateFlow(ShuffleScope.OFF)
     val shuffleScope: StateFlow<ShuffleScope>
@@ -229,6 +234,10 @@ constructor(
             } else {
                 null
             }
+    }
+
+    override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {
+        _restoreOutcome.value = outcome
     }
 
     override fun onRepeatModeChanged(repeatMode: RepeatMode) {

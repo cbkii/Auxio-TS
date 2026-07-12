@@ -33,14 +33,16 @@ import org.oxycblt.auxio.databinding.ActivityMainBinding
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
+import org.oxycblt.auxio.headunit.StartupPanelCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
-import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
+import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.isNight
@@ -55,12 +57,12 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     private val playbackModel: PlaybackViewModel by viewModels()
+    private val startupPanelCoordinator: StartupPanelCoordinator by viewModels()
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var musicRepository: MusicRepository
     @Inject lateinit var musicSettings: MusicSettings
     private var isFirstResume = true
-    private var pendingHeadUnitLaunchRoute = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         PerfTimer.trace("MainActivity.onCreate") {
@@ -70,8 +72,6 @@ class MainActivity : AppCompatActivity() {
             // re-trigger autoplay.
             isFirstResume = savedInstanceState == null
             setupTheme()
-            pendingHeadUnitLaunchRoute =
-                savedInstanceState == null && uiSettings.headUnitLandscapeMode
             if (uiSettings.headUnitLandscapeMode) {
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             } else {
@@ -108,28 +108,12 @@ class MainActivity : AppCompatActivity() {
                         playbackSettings.autoplayOnLaunch && isFirstResume
                     )
                 playbackModel.playDeferred(action)
-                maybeRouteToPlaybackOnColdHeadUnitLaunch()
+                if (isFirstResume) {
+                    startupPanelCoordinator.requestGenericStartupRoute()
+                }
             }
             isFirstResume = false
         }
-    }
-
-    private fun maybeRouteToPlaybackOnColdHeadUnitLaunch() {
-        if (!isFirstResume) return
-        if (StartupPlaybackPolicy.shouldOpenPanelOnLaunch(musicRepository.library)) {
-            playbackModel.openPlayback()
-            return
-        }
-        if (!pendingHeadUnitLaunchRoute || !BuildConfig.TOPWAY_COMPAT_FLAVOR) return
-        if (musicSettings.libraryState == LibraryState.NEVER) {
-            L.d("Keeping first setup launch on library/setup flow")
-            return
-        }
-        pendingHeadUnitLaunchRoute = false
-        L.i(
-            "Routing TS18 cold launch to playback/queue [libraryState=${musicSettings.libraryState}]"
-        )
-        playbackModel.openPlaybackQueue()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -208,8 +192,10 @@ class MainActivity : AppCompatActivity() {
                 HeadUnitRoutePolicy.entryDestinationForRoute(resolvedRoute)
             }
         when (destination) {
-            HeadUnitEntryPoints.EntryDestination.NOW_PLAYING -> playbackModel.openPlayback()
-            HeadUnitEntryPoints.EntryDestination.QUEUE -> playbackModel.openQueue()
+            HeadUnitEntryPoints.EntryDestination.NOW_PLAYING ->
+                requestExplicitPanelRoute(OpenPanel.PLAYBACK, "Explicit Now Playing Intent")
+            HeadUnitEntryPoints.EntryDestination.QUEUE ->
+                requestExplicitPanelRoute(OpenPanel.PLAYBACK_QUEUE, "Explicit Queue Intent")
             null -> {
                 L.w("Unexpected intent ${intent.action}")
                 return false
@@ -221,6 +207,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return true
+    }
+
+    private fun requestExplicitPanelRoute(destination: OpenPanel, description: String) {
+        val restoreOutcome = playbackModel.restoreOutcome.value
+        val restoreAlreadyActive =
+            restoreOutcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                restoreOutcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
+                restoreOutcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE
+        if (playbackModel.song.value == null && !restoreAlreadyActive) {
+            L.d("Starting paused restore for explicit panel route: $description")
+            playbackModel.playDeferred(StartupPlaybackPolicy.restoreActionForLaunch(false))
+        }
+        startupPanelCoordinator.requestExplicitRoute(destination, description)
     }
 
     private fun clearIntentRoutingState(intent: Intent) {
