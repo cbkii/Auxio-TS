@@ -42,13 +42,26 @@ jobs:
             ' .github/workflows/tmp-pr167-direct-finaliser.yml > /tmp/pr167-finalise.py
             python3 - <<'PY'
           from pathlib import Path
+
           path = Path('/tmp/pr167-finalise.py')
           text = path.read_text(encoding='utf-8')
-          old = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}")'
-          new = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}; old={old[:180]!r}")'
-          if old not in text:
-              raise SystemExit('diagnostic instrumentation target missing')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          error_old = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}")'
+          error_new = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}; old={old[:180]!r}")'
+          if error_old in text:
+              text = text.replace(error_old, error_new, 1)
+          replacements = {
+              '\n        binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?\n':
+                  '\n            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?\n',
+              '\n    queueSheetBehavior?.uiSettings = uiSettings\n':
+                  '\n        queueSheetBehavior?.uiSettings = uiSettings\n',
+              '\n    playbackSheetBehavior.addBottomSheetCallback(panelRouteSheetCallback)\n':
+                  '\n        playbackSheetBehavior.addBottomSheetCallback(panelRouteSheetCallback)\n',
+              '\n    queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)\n':
+                  '\n        queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)\n',
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
           PY
             python3 /tmp/pr167-finalise.py >/tmp/pr167-out.txt 2>/tmp/pr167-error.txt
             patch_rc=$?
