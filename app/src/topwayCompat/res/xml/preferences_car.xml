@@ -20,12 +20,6 @@
 
         <SwitchPreferenceCompat
             app:defaultValue="true"
-            app:key="@string/set_key_head_unit_large_controls"
-            app:summary="@string/set_head_unit_large_controls_desc"
-            app:title="@string/set_head_unit_large_controls" />
-
-        <SwitchPreferenceCompat
-            app:defaultValue="true"
             app:key="@string/set_key_head_unit_album_art"
             app:summary="@string/set_head_unit_album_art_desc"
             app:title="@string/set_head_unit_album_art" />
@@ -51,8 +45,9 @@
             app:key="car_overlay_reset_position"
             app:title="@string/car_overlay_reset_position"
             app:dependency="car_overlay_enabled" />
+
         <SwitchPreferenceCompat
-            app:defaultValue="true"
+            app:defaultValue="false"
             app:key="car_overlay_hide_auxio_fg"
             app:summary="@string/car_overlay_hide_auxio_fg_desc"
             app:title="@string/car_overlay_hide_auxio_fg"

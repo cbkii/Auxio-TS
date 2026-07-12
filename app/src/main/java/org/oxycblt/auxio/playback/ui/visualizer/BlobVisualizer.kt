@@ -48,9 +48,6 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val bands: FloatArray
         get() = spectrumMapper.bands
 
-    private var hasValidFrame = false
-    private var lastFrameAtMs = 0L
-
     private var pointsX = FloatArray(0)
     private var pointsY = FloatArray(0)
 
@@ -76,14 +73,14 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         when (state) {
             is VisualizerState.Hidden,
             is VisualizerState.WaitingForFrames,
-            is VisualizerState.Failed -> {
-                spectrumMapper.reset()
-                hasValidFrame = false
-            }
+            is VisualizerState.Failed -> spectrumMapper.reset()
             is VisualizerState.Live -> {
-                spectrumMapper.update(state.frame, state.samplingRate)
-                hasValidFrame = true
-                lastFrameAtMs = state.receivedAtUptimeMs
+                when (state.source) {
+                    VisualizerState.FrameSource.FFT ->
+                        spectrumMapper.update(state.frame, state.samplingRate)
+                    VisualizerState.FrameSource.WAVEFORM ->
+                        spectrumMapper.updateWaveform(state.frame)
+                }
             }
         }
         invalidate()

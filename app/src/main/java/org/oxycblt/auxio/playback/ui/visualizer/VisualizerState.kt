@@ -25,10 +25,19 @@ sealed interface VisualizerState {
     /** Capture is established, but no valid recent frame has arrived yet. */
     data object WaitingForFrames : VisualizerState
 
-    /** A fresh, non-zero audio frame has arrived. */
-    data class Live(val frame: ByteArray, val samplingRate: Int, val receivedAtUptimeMs: Long) :
-        VisualizerState
+    enum class FrameSource {
+        FFT,
+        WAVEFORM,
+    }
 
-    /** Permission, listener registration, or construction failed, or capture stalled. */
+    /** A fresh, non-silent audio frame has arrived. */
+    data class Live(
+        val frame: ByteArray,
+        val samplingRate: Int,
+        val receivedAtUptimeMs: Long,
+        val source: FrameSource = FrameSource.FFT,
+    ) : VisualizerState
+
+    /** Permission, listener registration, construction, or bounded capture recovery failed. */
     data class Failed(val reason: String) : VisualizerState
 }

@@ -57,28 +57,41 @@ object HeadUnitUiAdapter {
         largeControls: Boolean,
         buttons: List<View>,
         compact: Boolean = false,
+        banner: Boolean = false,
         primaryButton: View? = null,
     ) {
         if (!largeControls) return
         val size =
             resources.getDimensionPixelSize(
-                if (compact) R.dimen.size_touchable_head_unit_media_compact
-                else R.dimen.size_touchable_head_unit_media
+                when {
+                    banner -> R.dimen.size_touchable_head_unit_banner
+                    compact -> R.dimen.size_touchable_head_unit_media_compact
+                    else -> R.dimen.size_touchable_head_unit_media
+                }
             )
         val primarySize =
             resources.getDimensionPixelSize(
-                if (compact) R.dimen.size_touchable_head_unit_media_compact_primary
-                else R.dimen.size_touchable_head_unit_media_primary
+                when {
+                    banner -> R.dimen.size_touchable_head_unit_banner_primary
+                    compact -> R.dimen.size_touchable_head_unit_media_compact_primary
+                    else -> R.dimen.size_touchable_head_unit_media_primary
+                }
             )
         val iconSize =
             resources.getDimensionPixelSize(
-                if (compact) R.dimen.size_playback_icon_head_unit_media_compact
-                else R.dimen.size_playback_icon_head_unit_media
+                when {
+                    banner -> R.dimen.size_playback_icon_head_unit_banner
+                    compact -> R.dimen.size_playback_icon_head_unit_media_compact
+                    else -> R.dimen.size_playback_icon_head_unit_media
+                }
             )
         val primaryIconSize =
             resources.getDimensionPixelSize(
-                if (compact) R.dimen.size_playback_icon_head_unit_media_compact_primary
-                else R.dimen.size_playback_icon_head_unit_media_primary
+                when {
+                    banner -> R.dimen.size_playback_icon_head_unit_banner_primary
+                    compact -> R.dimen.size_playback_icon_head_unit_media_compact_primary
+                    else -> R.dimen.size_playback_icon_head_unit_media_primary
+                }
             )
         buttons.forEach { view ->
             val isPrimaryButton = view == primaryButton

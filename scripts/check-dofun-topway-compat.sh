@@ -98,7 +98,7 @@ check_apk_manifest() {
   case "$label" in
     topwayTwMusicRelease|topwayTwMediaRelease|topwayTwMusicDebug|topwayTwMediaDebug)
       require_manifest_dump_contains "$manifest_dump" 'android:name="com.tw.music.MusicActivity"' "${label} APK manifest has com.tw.music.MusicActivity" "${label} APK manifest lacks com.tw.music.MusicActivity"
-      require_manifest_dump_contains "$manifest_dump" 'android:targetActivity="org.oxycblt.auxio.MainActivity"' "${label} APK alias targets MainActivity" "${label} APK alias target mismatch"
+      require_manifest_dump_contains "$manifest_dump" 'android:targetActivity="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' "${label} APK alias targets the Topway entry router" "${label} APK alias target mismatch"
       require_manifest_dump_contains "$manifest_dump" 'android:name="android.intent.action.MAIN"' "${label} APK alias has MAIN action" "${label} APK alias lacks MAIN action"
       require_manifest_dump_contains "$manifest_dump" 'android:name="android.intent.action.MUSIC_PLAYER"' "${label} APK alias has MUSIC_PLAYER action" "${label} APK alias lacks MUSIC_PLAYER action"
       require_manifest_dump_contains "$manifest_dump" 'android:name="android.intent.category.DEFAULT"' "${label} APK alias has DEFAULT category" "${label} APK alias lacks DEFAULT category"
@@ -130,7 +130,8 @@ if [[ ! -f "$flavour_manifest" ]]; then
 else
   pass "found flavour manifest: ${flavour_manifest}"
   require_file_contains "$flavour_manifest" "com.tw.music.MusicActivity" "Topway activity alias"
-  require_file_contains "$flavour_manifest" "org.oxycblt.auxio.MainActivity" "Topway alias target"
+  require_file_contains "$flavour_manifest" "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity" "Topway alias router target"
+require_file_contains "$flavour_manifest" "org.oxycblt.auxio.MainActivity" "Topway full-player activity"
   require_file_contains "$flavour_manifest" "com.tw.music.MusicService" "Topway MusicService component fallback"
   require_file_contains "$flavour_manifest" "org.oxycblt.auxio.AuxioService" "Topway canonical external service override"
   require_file_contains "$flavour_manifest" 'tools:node="remove"' "Topway base service browser filters removed"
@@ -391,8 +392,8 @@ def require_topway_alias(application, label, debug=False):
         fail(f"{label} lacks com.tw.music.MusicActivity activity-alias")
         return
     alias = aliases[0]
-    if attr(alias, "targetActivity") == "org.oxycblt.auxio.MainActivity":
-        ok(f"{label} alias targets org.oxycblt.auxio.MainActivity")
+    if attr(alias, "targetActivity") == "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity":
+        ok(f"{label} alias targets org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity")
     else:
         fail(f"{label} alias target is {attr(alias, 'targetActivity')!r}")
     if attr(alias, "exported") == "true":
