@@ -33,21 +33,22 @@ replace_exact(
 ''',
     '''            val launched =
                 TopwayEqualizerLauncher.launchFirstWorkingCandidate(
-                    candidates,
+                    candidates = candidates,
                     launch = { requireContext().startActivity(it) },
-                ) { candidate, error ->
-                    when (error) {
-                        is android.content.ActivityNotFoundException ->
-                            L.w(
-                                error,
-                                "EQ/DSP candidate not found after resolution: ${candidate.label}",
-                            )
-                        is SecurityException ->
-                            L.w(error, "EQ/DSP candidate denied: ${candidate.label}")
-                        else ->
-                            L.w(error, "EQ/DSP candidate failed at launch: ${candidate.label}")
-                    }
-                }
+                    onFailure = { candidate, error ->
+                        when (error) {
+                            is android.content.ActivityNotFoundException ->
+                                L.w(
+                                    error,
+                                    "EQ/DSP candidate not found after resolution: ${candidate.label}",
+                                )
+                            is SecurityException ->
+                                L.w(error, "EQ/DSP candidate denied: ${candidate.label}")
+                            else ->
+                                L.w(error, "EQ/DSP candidate failed at launch: ${candidate.label}")
+                        }
+                    },
+                )
             if (launched != null) {
                 L.i("Launched EQ/DSP candidate ${launched.label} (${launched.kind})")
             } else {
@@ -135,7 +136,7 @@ replace_exact(
 
         val launched =
             TopwayEqualizerLauncher.launchFirstWorkingCandidate(
-                candidates,
+                candidates = candidates,
                 launch = { intent ->
                     attempted += intent.component
                     if (attempted.size == 1) {
