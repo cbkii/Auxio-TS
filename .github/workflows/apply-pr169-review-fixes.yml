@@ -8,13 +8,14 @@ on:
       - '.github/workflows/apply-pr169-review-fixes.yml'
       - 'scripts/apply-pr169-audit-fixes.py'
       - 'scripts/apply-pr169-floating-contract-fixes.py'
+      - 'scripts/apply-pr169-settings-resume-fix.py'
 
 permissions:
   contents: write
 
 concurrency:
   group: apply-pr169-audited-fixes
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   patch:
@@ -67,9 +68,11 @@ jobs:
           set -euo pipefail
           python -m py_compile \
             scripts/apply-pr169-audit-fixes.py \
-            scripts/apply-pr169-floating-contract-fixes.py
+            scripts/apply-pr169-floating-contract-fixes.py \
+            scripts/apply-pr169-settings-resume-fix.py
           python scripts/apply-pr169-audit-fixes.py
           python scripts/apply-pr169-floating-contract-fixes.py
+          python scripts/apply-pr169-settings-resume-fix.py
 
           if git diff --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
             echo '::error::Audit patches produced no repository changes.'
@@ -152,6 +155,7 @@ jobs:
           rm -f .github/workflows/apply-pr169-review-fixes.yml
           rm -f scripts/apply-pr169-audit-fixes.py
           rm -f scripts/apply-pr169-floating-contract-fixes.py
+          rm -f scripts/apply-pr169-settings-resume-fix.py
           git add -N .
           git diff --check
 
