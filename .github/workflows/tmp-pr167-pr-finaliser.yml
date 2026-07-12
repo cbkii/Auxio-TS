@@ -65,6 +65,23 @@ jobs:
           }
           for old, new in replacements.items():
               text = text.replace(old, new)
+
+          restore_pattern_start = (
+              'r"""            L\\.d\\("Restoring playback state from cached/loaded library"\\)'
+          )
+          start = text.find(restore_pattern_start)
+          if start == -1:
+              raise SystemExit("STOP: restore regex source marker missing")
+          end_marker = 'return true"""'
+          end = text.find(end_marker, start)
+          if end == -1:
+              raise SystemExit("STOP: restore regex source terminator missing")
+          end += len(end_marker)
+          robust_pattern = (
+              'r"""            L\\.d\\("Restoring playback state from cached/loaded library"\\)'
+              '\n.*?\n            return true"""'
+          )
+          text = text[:start] + robust_pattern + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
           python3 "${RUNNER_TEMP}/pr167-finalise.py"
