@@ -1,4 +1,21 @@
-/* Copyright (c) 2026 Auxio Project */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * TopwayEqualizerExactDeviceTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package org.oxycblt.auxio.headunit.topway
 
 import android.content.ComponentName
@@ -42,11 +59,7 @@ class TopwayEqualizerExactDeviceTest {
 
     @Test
     fun dspActivityWinsWhenChoiceActivityUnavailable() {
-        val resolver =
-            Resolver(
-                available = setOf(DSP_ACTIVITY),
-                enabled = setOf(DSP_ACTIVITY),
-            )
+        val resolver = Resolver(available = setOf(DSP_ACTIVITY), enabled = setOf(DSP_ACTIVITY))
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
         assertEquals(DSP_ACTIVITY, intent?.component)
         assertTrue(intent?.categories?.contains(Intent.CATEGORY_LAUNCHER) == true)
@@ -54,11 +67,7 @@ class TopwayEqualizerExactDeviceTest {
 
     @Test
     fun eqActivityUsesDefaultCategory() {
-        val resolver =
-            Resolver(
-                available = setOf(EQ_ACTIVITY),
-                enabled = setOf(EQ_ACTIVITY),
-            )
+        val resolver = Resolver(available = setOf(EQ_ACTIVITY), enabled = setOf(EQ_ACTIVITY))
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
         assertEquals(EQ_ACTIVITY, intent?.component)
         assertTrue(intent?.categories?.contains(Intent.CATEGORY_DEFAULT) == true)
@@ -91,11 +100,7 @@ class TopwayEqualizerExactDeviceTest {
     @Test
     fun audioEffectFallbackWhenNoNative() {
         val resolver =
-            Resolver(
-                available = emptySet(),
-                enabled = emptySet(),
-                mockAudioEffectFallback = true,
-            )
+            Resolver(available = emptySet(), enabled = emptySet(), mockAudioEffectFallback = true)
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
         assertNotNull(intent)
         assertEquals(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL, intent?.action)
@@ -104,11 +109,7 @@ class TopwayEqualizerExactDeviceTest {
     @Test
     fun noFallbackReturnsNull() {
         val resolver =
-            Resolver(
-                available = emptySet(),
-                enabled = emptySet(),
-                mockAudioEffectFallback = false,
-            )
+            Resolver(available = emptySet(), enabled = emptySet(), mockAudioEffectFallback = false)
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
         assertNull(intent)
     }
@@ -137,14 +138,8 @@ class TopwayEqualizerExactDeviceTest {
         val candidates = TopwayEqualizerLauncher.resolveCandidates(context, 123, resolver)
         assertTrue(candidates.size >= 2)
         // First candidate fails at launch time -> caller should try second
-        assertEquals(
-            TopwayEqualizerLauncher.Candidate.Kind.EXPLICIT_COMPONENT,
-            candidates[0].kind,
-        )
-        assertEquals(
-            TopwayEqualizerLauncher.Candidate.Kind.EXPLICIT_COMPONENT,
-            candidates[1].kind,
-        )
+        assertEquals(TopwayEqualizerLauncher.Candidate.Kind.EXPLICIT_COMPONENT, candidates[0].kind)
+        assertEquals(TopwayEqualizerLauncher.Candidate.Kind.EXPLICIT_COMPONENT, candidates[1].kind)
     }
 
     private class Resolver(

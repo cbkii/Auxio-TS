@@ -20,8 +20,8 @@ package org.oxycblt.auxio.playback
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.res.Configuration
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -103,7 +103,8 @@ class PlaybackPanelFragment :
     private var visualizer: Visualizer? = null
     private var visualizerSessionId: Int? = null
     private var visualizerPermissionLauncher:
-        androidx.activity.result.ActivityResultLauncher<String>? = null
+        androidx.activity.result.ActivityResultLauncher<String>? =
+        null
     private var visualizerWatchdogJob: Job? = null
     private var visualizerGeneration = 0
     private var visualizerRetryCount = 0
@@ -511,7 +512,9 @@ class PlaybackPanelFragment :
         var candidateToRelease: Visualizer? = null
         try {
             val captureRange = Visualizer.getCaptureSizeRange()
-            require(captureRange.size >= 2 && captureRange[0] > 0 && captureRange[1] >= captureRange[0]) {
+            require(
+                captureRange.size >= 2 && captureRange[0] > 0 && captureRange[1] >= captureRange[0]
+            ) {
                 "Invalid Visualizer capture-size range"
             }
 
@@ -612,7 +615,8 @@ class PlaybackPanelFragment :
             val message =
                 when (e) {
                     is SecurityException -> "Visualizer construction denied"
-                    is IllegalArgumentException -> "Visualizer rejected session/capture configuration"
+                    is IllegalArgumentException ->
+                        "Visualizer rejected session/capture configuration"
                     is IllegalStateException -> "Visualizer entered invalid state"
                     is UnsupportedOperationException -> "Visualizer unsupported on this device"
                     else -> "Visualizer construction failed"
@@ -648,7 +652,8 @@ class PlaybackPanelFragment :
             viewLifecycleOwner.lifecycleScope.launch {
                 while (true) {
                     delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
-                    if (generation != visualizerGeneration || visualizerSessionId != sessionId) return@launch
+                    if (generation != visualizerGeneration || visualizerSessionId != sessionId)
+                        return@launch
                     val state = playbackModel.visualizerState.value
                     val now = android.os.SystemClock.uptimeMillis()
                     val hasFreshFrame =

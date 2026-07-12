@@ -48,8 +48,7 @@ object TopwayEqualizerLauncher {
     private class DefaultIntentResolver(private val context: Context) : IntentResolver {
         private val pm = context.packageManager
 
-        override fun resolveActivity(intent: Intent): ComponentName? =
-            intent.resolveActivity(pm)
+        override fun resolveActivity(intent: Intent): ComponentName? = intent.resolveActivity(pm)
 
         override fun getLaunchIntentForPackage(packageName: String): Intent? =
             pm.getLaunchIntentForPackage(packageName)
@@ -87,9 +86,9 @@ object TopwayEqualizerLauncher {
     /**
      * Stock EQ router first, exact-device proven DSP fallback second.
      *
-     * EQChoiceActivity is the stock router that forwards to the correct DSP surface.
-     * DSPActivity is the direct DSP launcher proven on the exact device as a fallback
-     * when the router is disabled or unavailable. EQActivity uses CATEGORY_DEFAULT.
+     * EQChoiceActivity is the stock router that forwards to the correct DSP surface. DSPActivity is
+     * the direct DSP launcher proven on the exact device as a fallback when the router is disabled
+     * or unavailable. EQActivity uses CATEGORY_DEFAULT.
      */
     internal val nativeTargets =
         listOf(
@@ -179,8 +178,7 @@ object TopwayEqualizerLauncher {
                         .setComponent(target.component)
                 if (resolver.resolveActivity(intent) != null) {
                     L.i("Resolved native TS18 EQ/DSP component $label")
-                    candidates +=
-                        Candidate(intent, label, Candidate.Kind.EXPLICIT_COMPONENT)
+                    candidates += Candidate(intent, label, Candidate.Kind.EXPLICIT_COMPONENT)
                 }
             }
             for (pkg in nativePackages) {
