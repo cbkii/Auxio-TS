@@ -6,8 +6,8 @@ Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed 
 
 ## Current docs
 
-- [`DEVELOPMENT.md`](DEVELOPMENT.md) — local setup, CI workflow coverage, Roborazzi UI workflow, and deleted-workflow audit notes.
-- [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — manual signed release flow and expected APK assets.
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — local setup, canonical CI coverage, Roborazzi UI workflow, and deleted-workflow audit notes.
+- [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — manual signed release flow and expected APK/module assets.
 - [`UPSTREAM_AUXIO_MONITORING.md`](UPSTREAM_AUXIO_MONITORING.md) — monthly upstream Auxio change monitor, no-clutter baseline rules, and generated issue workflow.
 - [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — DoFun/Topway compatibility contract and private-hook boundaries.
 - [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — compact APK-derived reference evidence for DoFun Variety and stock `twmusic`.
@@ -62,12 +62,18 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
 
 ## CI entry points
 
-- `.github/workflows/android.yml` builds standard and Topway/DoFun APKs and runs DoFun compatibility checks on relevant PR/push changes.
-- `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety/DoFun guardrails.
-- `.github/workflows/manual-release.yml` builds, signs, verifies, and uploads standard, `topwayTwMusic`, and `topwayTwMedia` release APKs.
-- `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshots/reports for UI review.
-- `.github/workflows/dependency-health.yml` runs weekly/manual dependency bootstrap, submodule status, Gradle dependency reports, and a standard debug build.
+Canonical validation and release workflows:
+
+- `.github/workflows/android.yml` builds standard and Topway/DoFun variants and runs APK/reference compatibility checks on relevant PR and `dev` changes.
+- `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety guardrails.
+- `.github/workflows/manual-release.yml` builds, signs, verifies, and publishes selected standard/`com.tw.media` APKs and the systemless `com.tw.music` Magisk ZIP.
+- `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshot/report bundles for UI review.
+
+Auxiliary maintenance:
+
 - `.github/workflows/upstream-auxio-monitor.yml` checks `OxygenCobalt/Auxio` monthly and opens an issue only when upstream has new commits to review.
+
+There is no separate weekly dependency-build workflow or branch-mutating formatter workflow. Dependabot update PRs pass through the canonical Android Build and Android Quality checks, and formatting remains a required check fixed on the originating branch.
 
 Local preflight:
 
