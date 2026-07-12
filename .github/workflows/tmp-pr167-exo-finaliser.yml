@@ -118,12 +118,18 @@ jobs:
           fi
           bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Format and inspect source patch
+      - name: Apply Spotless formatting
         shell: bash
-        run: |
-          bash ./scripts/ci-gradle.sh spotlessApply
-          git diff --check
-          git diff -- app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt
+        run: bash ./scripts/ci-gradle.sh spotlessApply
+
+      - name: Verify patch whitespace
+        shell: bash
+        run: git diff --check
+
+      - name: Show formatted source patch
+        if: always()
+        shell: bash
+        run: git diff -- app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt
 
       - name: Validate scripts and TS18 contracts
         shell: bash
