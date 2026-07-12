@@ -39,6 +39,32 @@ jobs:
             capture { sub(/^          /, ""); print }
           ' .github/workflows/tmp-pr167-direct-finaliser.yml > "${RUNNER_TEMP}/pr167-finalise.py"
           test -s "${RUNNER_TEMP}/pr167-finalise.py"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("/home/runner/work/_temp/pr167-finalise.py")
+          if not path.exists():
+              candidates = list(Path("/home/runner/work/_temp").glob("**/pr167-finalise.py"))
+              if len(candidates) != 1:
+                  raise SystemExit(f"STOP: unable to locate extracted patch: {candidates}")
+              path = candidates[0]
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              "\n        binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?\n":
+                  "\n            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?\n",
+              "\n    queueSheetBehavior?.uiSettings = uiSettings\n":
+                  "\n        queueSheetBehavior?.uiSettings = uiSettings\n",
+              "\n    playbackSheetBehavior.addBottomSheetCallback(panelRouteSheetCallback)\n":
+                  "\n        playbackSheetBehavior.addBottomSheetCallback(panelRouteSheetCallback)\n",
+              "\n    queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)\n":
+                  "\n        queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)\n",
+              "\n    elevationNormal =\":\"\"\"":
+                  "\n        elevationNormal =\":\"\"\"",
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          PY
           python3 "${RUNNER_TEMP}/pr167-finalise.py"
 
       - name: Set up JDK 21
