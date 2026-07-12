@@ -1,0 +1,190 @@
+===== scripts/check-ts18-apk-reference-contracts.sh =====
+OK: found docs/DOFUN_VARIETY_COMPATIBILITY.md
+OK: found docs/TS18_APK_REFERENCE.md
+OK: found docs/reference/ts18-apk/README.md
+OK: found docs/reference/ts18-apk/reference-contracts.json
+OK: found docs/reference/ts18-apk/dofun-variety/apps_match_config.music-excerpts.json
+OK: found docs/reference/ts18-apk/dofun-variety/apps_config.music-excerpts.json
+OK: found docs/reference/ts18-apk/dofun-variety/manifest.string-hits.txt
+OK: found docs/reference/ts18-apk/twmusic/manifest.string-hits.txt
+OK: found docs/reference/ts18-apk/twmusic/classes.string-hits.txt
+OK: DoFun package reference: "package": "com.dofun.variety"
+OK: DoFun music hotseat package reference: "package_name": "com.tw.music"
+OK: DoFun music activity reference: "class_name": "com.tw.music.MusicActivity"
+OK: Topway metadata broadcast reference: "com.tw.music.info"
+OK: Topway progress broadcast reference: "com.tw.launcher.music_progress_duration"
+OK: Topway play/pause command reference: "com.tw.music.action.pp"
+OK: Cardoor remote service evidence reference: "cn.cardoor.libs.media.RemoteMediaService"
+OK: forbidden TWUtil reference: "android.tw.john.TWUtil"
+OK: forbidden ITWCommandAidl reference: "com.tw.service.xt.aidl.ITWCommandAidl"
+OK: agent DoFun/twmusic authority section: DoFun Variety / stock twmusic compatibility authority
+OK: agent package-identity exception: only dedicated, clearly named Topway/DoFun compatibility variants may install as those package IDs
+OK: Copilot DoFun/twmusic authority section: DoFun Variety / stock twmusic compatibility authority
+OK: docs index reference section: DoFun Variety / TS18 APK reference baseline
+Result: PASS
+STATUS=0
+
+===== scripts/check-headunit-compat-safety.sh =====
+headunit compat safety checks passed
+STATUS=0
+
+===== scripts/check-dofun-topway-compat.sh =====
+Checking source-level DoFun/Topway compatibility expectations...
+
+OK: Gradle standard product flavour contains standard
+OK: Gradle topwayTwMusic product flavour contains topwayTwMusic
+OK: Gradle topwayTwMedia product flavour contains topwayTwMedia
+OK: Gradle standard applicationId contains applicationId namespace
+OK: Gradle topwayTwMusic applicationId contains applicationId "com.tw.music"
+OK: Gradle topwayTwMedia applicationId contains applicationId "com.tw.media"
+OK: Gradle topwayTwMedia shared Java source set contains src/topwayCompat/java
+OK: Gradle topwayTwMedia shared manifest contains src/topwayCompat/AndroidManifest.xml
+OK: found flavour manifest: app/src/topwayCompat/AndroidManifest.xml
+OK: Topway activity alias contains com.tw.music.MusicActivity
+OK: Topway alias target contains org.oxycblt.auxio.MainActivity
+OK: Topway MusicService component fallback contains com.tw.music.MusicService
+OK: Topway canonical external service override contains org.oxycblt.auxio.AuxioService
+OK: Topway base service browser filters removed contains tools:node="remove"
+OK: Topway MusicWidgetProvider component fallback contains com.tw.music.view.MusicWidgetProvider
+OK: Topway alias main action contains android.intent.action.MAIN
+OK: Topway alias music action contains android.intent.action.MUSIC_PLAYER
+OK: Topway alias launcher category contains android.intent.category.LAUNCHER
+OK: Topway alias default category contains android.intent.category.DEFAULT
+OK: Topway alias app music category contains android.intent.category.APP_MUSIC
+OK: Topway flavour fallback provider must not duplicate command receiver does not contain com.tw.music.action.cmd
+OK: Topway flavour fallback provider must not duplicate previous receiver does not contain com.tw.music.action.prev
+OK: Topway flavour fallback provider must not duplicate next receiver does not contain com.tw.music.action.next
+OK: Topway flavour fallback provider must not duplicate play-pause receiver does not contain com.tw.music.action.pp
+OK: Topway flavour fallback provider must not duplicate widget progress receiver does not contain com.android.launcher.widget_music_progress
+OK: manifest applicationId-scoped CoverProvider authority contains ${applicationId}.image.CoverProvider
+OK: base media browser service contains android.media.browse.MediaBrowserService
+OK: base Topway command receiver contains .headunit.topway.TopwayMusicBridgeReceiver
+OK: Topway CoverProvider authority resource contains com.tw.music.image.CoverProvider
+OK: Topway shared label resource contains >Music<
+OK: Topway debug CoverProvider authority resource contains com.tw.music.debug.image.CoverProvider
+OK: Topway media CoverProvider authority resource contains com.tw.media.image.CoverProvider
+OK: Topway media debug CoverProvider authority resource contains com.tw.media.debug.image.CoverProvider
+OK: Topway contract string: com.tw.music.info contains com.tw.music.info
+OK: Topway contract string: com.tw.launcher.music_progress_duration contains com.tw.launcher.music_progress_duration
+OK: Topway contract string: com.tw.music.action.cmd contains com.tw.music.action.cmd
+OK: Topway contract string: com.tw.music.action.prev contains com.tw.music.action.prev
+OK: Topway contract string: com.tw.music.action.next contains com.tw.music.action.next
+OK: Topway contract string: com.tw.music.action.pp contains com.tw.music.action.pp
+OK: Topway contract string: com.android.launcher.widget_music_progress contains com.android.launcher.widget_music_progress
+OK: Topway contract string: musicTitle contains musicTitle
+OK: Topway contract string: musicaArtist contains musicaArtist
+OK: Topway contract string: musicAlbum contains musicAlbum
+OK: Topway contract string: musicPath contains musicPath
+OK: Topway contract string: msg_music_progress contains msg_music_progress
+OK: Topway contract string: msg_music_duration contains msg_music_duration
+OK: Topway contract string: music_progress contains music_progress
+OK: central Topway launcher integration coordinator contains class TopwayLauncherIntegrationCoordinator
+OK: coordinator metadata publisher contains fun publishMetadata
+OK: coordinator progress publisher contains fun publishProgress
+OK: coordinator incoming command handler contains fun handle
+OK: coordinator DoFun-targeted broadcast path contains context.sendBroadcast(Intent(intent).setPackage(DOFUN_PACKAGE))
+OK: coordinator avoids PackageManager visibility gate for DoFun targeted broadcasts does not contain getLaunchIntentForPackage(DOFUN_PACKAGE)
+OK: coordinator always attempts safe DoFun targeted broadcasts does not contain isDoFunInstalled
+OK: coordinator delegates widget seek conversion contains TopwaySeekPolicyConverter.convert
+OK: coordinator outgoing mode gate contains mode.sendsTopwayBroadcasts
+OK: coordinator incoming mode gate contains mode.handlesTopwayCommands
+OK: coordinator diagnostic journal logging contains journal.log
+OK: playback service injects coordinator contains TopwayLauncherIntegrationCoordinator
+OK: playback service state-driven Topway publisher contains publishTopwayState
+OK: playback service publishes Topway metadata contains topwayCoordinator.publishMetadata
+OK: playback service publishes Topway progress contains topwayCoordinator.publishProgress
+OK: playback service periodic Topway progress ticker contains startTopwayProgressTicker
+OK: playback service delegates Topway commands contains topwayCoordinator.handle
+OK: Topway cmd=update forced republish path contains cmd-update
+OK: playback service clears Topway launcher state contains topwayCoordinator.clear
+OK: launcher integration auto/all-safe-paths mode contains AutoAllSafePaths
+OK: launcher integration diagnostics-only mode contains DiagnosticsOnly
+OK: launcher integration outgoing mode flag contains sendsTopwayBroadcasts
+OK: launcher integration incoming mode flag contains handlesTopwayCommands
+OK: Topway seek percent policy contains Percent0To100
+OK: Topway seek permille policy contains Permille0To1000
+OK: Topway seek auto policy contains private fun chooseAuto
+OK: Topway seek auto checks percent before milliseconds contains value <= 100L -> TopwaySeekUnitPolicy.Percent0To100
+OK: Topway seek auto checks permille before milliseconds contains value <= 1000L -> TopwaySeekUnitPolicy.Permille0To1000
+OK: Topway seek auto unit tests contains TopwaySeekUnitPolicy.Auto
+OK: Topway launcher mode gating tests contains AutoAllSafePaths
+OK: Topway coordinator tests assert DoFun-targeted broadcasts contains countDofunTargeted
+OK: Topway coordinator tests define implicit broadcast counter contains private fun List<Intent>.countImplicit
+OK: Topway coordinator tests define DoFun-targeted broadcast counter contains private fun List<Intent>.countDofunTargeted
+OK: Topway cmd=update republish test contains cmd update republishes without toggling playback
+OK: Topway ignored negative seek has null target assertion contains assertNull(negative.seekTargetMs)
+OK: playback service tracks Topway progress ticker job contains private var topwayProgressTickerJob: Job? = null
+OK: WidgetComponent is not the canonical launcher broadcast bridge does not contain TopwayMusicBroadcastBridge
+OK: WidgetComponent no longer owns launcher metadata broadcasts does not contain topwayBridge.publishMetadata
+OK: WidgetComponent no longer owns launcher progress broadcasts does not contain topwayBridge.publishProgress
+OK: Topway flavour build flag contains buildConfigField "boolean", "TOPWAY_TWMUSIC_FLAVOR", "true"
+OK: Topway media flavour build flag contains buildConfigField "boolean", "TOPWAY_TWMEDIA_FLAVOR", "true"
+OK: Topway shared compat build flag contains buildConfigField "boolean", "TOPWAY_COMPAT_FLAVOR", "true"
+OK: Topway compatible bridge always enabled contains BuildConfig.TOPWAY_COMPAT_FLAVOR
+OK: Topway widget provider wrapper policy contains com.tw.music.view.MusicWidgetProvider
+OK: Topway widget onUpdate starts stock-name service update path contains startTopwayWidgetUpdateService
+OK: Topway widget renders cold control layout before service restore contains renderColdWidgetControls
+OK: Topway widget preserves stock appWidgetIds extra contains EXTRA_APP_WIDGET_IDS = "appWidgetIds"
+OK: Topway widget album art opens stock activity alias contains STOCK_MUSIC_ACTIVITY_CLASS = "com.tw.music.MusicActivity"
+OK: Topway widget enforces stock artwork byte cap contains STOCK_WIDGET_ARTWORK_MAX_BYTES = 3_680_000
+OK: Topway widget album art PendingIntent opens activity contains PendingIntent.getActivity
+OK: System receiver handles Topway widget updates contains TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate
+OK: Topway bridge receiver sanitises malformed extras contains safelyExtractIncomingExtras
+OK: overlay special-use API gate contains Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+OK: overlay special-use foreground type contains ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+OK: overlay manifest declares specialUse for API 34+ forward compatibility contains android:foregroundServiceType="specialUse"
+OK: overlay manifest declares FOREGROUND_SERVICE_SPECIAL_USE for API 34+ forward compatibility contains FOREGROUND_SERVICE_SPECIAL_USE
+OK: overlay requests full-screen layout contains FLAG_LAYOUT_IN_SCREEN
+OK: overlay requests no-limits layout contains FLAG_LAYOUT_NO_LIMITS
+OK: overlay top-edge clamp contains DEFAULT_TOP_EDGE_Y = 0
+OK: overlay Android 10 full-display metrics fallback contains getRealSize
+OK: overlay service old status-bar inset clamp does not contain STATUS_BAR_INSET_PX
+OK: overlay service old right-nav inset clamp does not contain NAV_BAR_INSET_PX
+OK: overlay API 29 foreground-service type test contains foregroundServiceTypeForApi(29)
+OK: overlay dynamic top-center bounds test contains defaultTopCenterPosition
+OK: overlay top-edge y=0 test contains assertEquals(0, y)
+OK: Topway MusicService Hilt entry point contains AndroidEntryPoint
+OK: Topway MusicService delegates to AuxioService contains AuxioService
+OK: Topway MusicWidgetProvider update fallback contains CMD_UPDATE
+OK: Topway MusicWidgetProvider safe extras extraction contains safelyExtractIncomingExtras
+OK: Topway MusicWidgetProvider single appwidget update path contains AppWidgetManager.ACTION_APPWIDGET_UPDATE
+OK: Topway update bypasses AppWidget-only gate contains topwayVariantsServeUpdateEvenWithoutNormalAppWidgetInstance
+OK: manual release builds Topway music release contains assembleTopwayTwMusicRelease
+OK: manual release builds Topway media release contains assembleTopwayTwMediaRelease
+OK: manual release names Topway music APK asset contains topway-twmusic-release.apk
+OK: manual release names Topway media APK asset contains topway-twmedia-release.apk
+
+Checking generated merged manifests when present...
+WARN: one or more merged manifests are absent; run ./gradlew :app:processStandardDebugMainManifest :app:processTopwayTwMusicDebugMainManifest :app:processTopwayTwMusicReleaseMainManifest :app:processTopwayTwMediaDebugMainManifest :app:processTopwayTwMediaReleaseMainManifest for output-level checks
+
+Checking manifest-declared Topway component class packaging guardrail...
+Checking Topway manifest-declared component classes...
+
+ERROR: topwayCompat source manifest alias mismatch for com.tw.music.MusicActivity: 'org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity'
+WARN: no Topway merged manifests found; run :app:processTopwayTwMusicReleaseMainManifest and :app:processTopwayTwMediaReleaseMainManifest for output-level manifest checks
+WARN: no Topway APKs found; run Topway assemble tasks for APK DEX component checks
+OK: topwayCompat source manifest declares all required loadable wrapper/overlay classes
+OK: source exists for manifest loadable class com.tw.music.MusicService
+OK: source exists for manifest loadable class com.tw.music.view.MusicWidgetProvider
+OK: source exists for manifest loadable class org.oxycblt.auxio.MainActivity
+OK: source exists for manifest loadable class org.oxycblt.auxio.car.overlay.CarFloatingControlsService
+OK: source exists for manifest loadable class org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver
+OK: source exists for manifest loadable class org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity
+
+Result: FAIL (1 issue(s), 0 warning(s))
+
+Checking built APK presence when present...
+Running in full compatibility mode. All release APK variants are expected if any are built.
+WARN: debug APKs not found; run ./gradlew :app:assembleStandardDebug :app:assembleTopwayTwMusicDebug :app:assembleTopwayTwMediaDebug
+WARN: release APKs not found; run ./gradlew :app:assembleStandardRelease :app:assembleTopwayTwMusicRelease :app:assembleTopwayTwMediaRelease
+
+Result: FAIL (1 issue(s))
+STATUS=1
+
+===== scripts/check-native-keep-rules.sh =====
+--- Native (JNI) keep-rule guardrail ---
+OK: musikr JNI class kept: org.oxycblt.musikr.metadata.TagLibJNI
+OK: musikr consumer/proguard keep rules are in sync
+Result: PASS
+STATUS=0
+
