@@ -29,6 +29,8 @@ jobs:
       - name: Merge latest dev and extract bounded patch
         shell: bash
         run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin dev
           git merge --no-edit origin/dev
           awk '
@@ -76,7 +78,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          rm -f .github/pr167-finalise-trigger
+          rm -f .github/pr167-finalise-trigger .github/pr167-finaliser-error.txt
           git add -A
           if git diff --cached --quiet; then
             echo '::error::No integration changes were staged.'
