@@ -6,46 +6,45 @@ on:
     branches:
       - dev
     paths:
-      - '.github/workflows/**'
-      - 'app/**'
-      - 'musikr/**'
-      - 'media'
-      - 'media/**'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - '.gitmodules'
-      - 'gradle/**'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'NOTICE'
-      - 'eclipse-cdt.xml'
-      - 'scripts/**'
-      - 'AGENTS.md'
-      - 'README.md'
+      - ".github/workflows/**"
+      - ".github/dependabot.yml"
+      - "app/**"
+      - "musikr/**"
+      - "media"
+      - "media/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - ".gitmodules"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "NOTICE"
+      - "eclipse-cdt.xml"
+      - "scripts/**"
+      - "ci/dependencies/**"
   pull_request:
     branches:
       - dev
     paths:
-      - '.github/workflows/**'
-      - 'app/**'
-      - 'musikr/**'
-      - 'media'
-      - 'media/**'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - '.gitmodules'
-      - 'gradle/**'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'NOTICE'
-      - 'eclipse-cdt.xml'
-      - 'scripts/**'
-      - 'AGENTS.md'
-      - 'README.md'
+      - ".github/workflows/**"
+      - ".github/dependabot.yml"
+      - "app/**"
+      - "musikr/**"
+      - "media"
+      - "media/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - ".gitmodules"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "NOTICE"
+      - "eclipse-cdt.xml"
+      - "scripts/**"
+      - "ci/dependencies/**"
+
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -58,200 +57,94 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      with:
-        fetch-depth: 0
-        persist-credentials: false
-    - name: Validate workflow YAML
-      shell: bash
-      run: |
-        ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
-    - name: Validate shell script syntax
-      shell: bash
-      run: find scripts -type f -name '*.sh' -print -exec bash -n {} \;
-    - name: Check manual release workflow
-      shell: bash
-      run: bash ./scripts/check-manual-release-workflow.sh
-    - name: Validate dependabot config YAML
-      shell: bash
-      run: |
-        ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/dependabot.yml
-    - name: Check version catalogue is in sync with build.gradle
-      shell: bash
-      run: bash ./scripts/check-version-catalog-sync.sh
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-  format:
+      - name: Validate workflow YAML
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+
+      - name: Validate shell script syntax
+        shell: bash
+        run: find scripts -type f -name '*.sh' -print -exec bash -n {} \;
+
+      - name: Check manual release workflow
+        shell: bash
+        run: bash ./scripts/check-manual-release-workflow.sh
+
+      - name: Validate Dependabot YAML
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/dependabot.yml
+
+      - name: Check version catalogue sync
+        shell: bash
+        run: bash ./scripts/check-version-catalog-sync.sh
+
+  formatting:
     name: Formatting
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      with:
-        # fetch-depth: 0 (full history) is required here.
-        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
-        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
-        # cause "unadvertised object" fetch errors during recursive submodule
-        # init.  Full history ensures the referenced commit is always reachable.
-        fetch-depth: 0
-        submodules: false
-        persist-credentials: false
-    - name: Set up JDK 21
-      uses: actions/setup-java@v5
-      with:
-        java-version: "21"
-        distribution: "temurin"
-    - name: Write local.properties for Android SDK
-      shell: bash
-      run: |
-        set -euo pipefail
-        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-        if [ -z "${sdk_dir}" ]; then
-          echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
-          exit 1
-        fi
-        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-    - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v5
-      with:
-        # PRs must not write to the shared Gradle cache; pushes to dev may write.
-        cache-read-only: ${{ github.event_name == 'pull_request' }}
-    - name: Ensure native build tools are present
-      run: |
-        if ! command -v ninja >/dev/null 2>&1; then
-          sudo apt-get update
-          sudo apt-get install -y ninja-build
-        fi
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-    - name: Check formatting
-      run: bash ./scripts/ci-gradle.sh spotlessCheck
-    - name: Upload formatting reports
-      if: failure()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      with:
-        name: android-quality-format-reports
-        path: |
-          build/reports/problems/**
-        if-no-files-found: ignore
-        retention-days: 7
-    - name: Comment with formatter guidance
-      if: failure() && github.event_name == 'pull_request'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
-        PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        PR_TITLE: ${{ github.event.pull_request.title }}
-        PR_BODY: ${{ github.event.pull_request.body }}
-        PR_URL: ${{ github.event.pull_request.html_url }}
-        WORKFLOW_URL: https://github.com/${{ github.repository }}/actions/workflows/format-pr-branch.yml
-        RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: |
-        set -euo pipefail
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
 
-        codex_owned=false
-        reason=""
-        if [[ "${PR_BRANCH}" == cx/* ]]; then
-          codex_owned=true
-          reason="branch name starts with cx/"
-        else
-          combined="${PR_TITLE}
-        ${PR_BODY:-}"
-          if grep -Eiq 'Codex Task|chatgpt\.com/codex|created by Codex|Codex-owned|Codex PR|generated by Codex|opened by Codex' <<<"${combined}"; then
-            codex_owned=true
-            reason="PR title/body indicates Codex ownership"
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
           fi
-        fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
-        if [[ "${codex_owned}" == "true" ]]; then
-          marker='<!-- auxio-ts-codex-safe-formatting-manual -->'
-          body="$(mktemp)"
-          cat > "${body}" <<EOF
-        ${marker}
-        ### Manual formatting required — Codex branch protected
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-        This PR appears to be Codex-owned.
+      - name: Ensure native build tools are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
 
-        Detected branch: \`${PR_BRANCH}\`
-        Detected PR: #${PR_NUMBER} ${PR_URL}
-        Current head: \`${PR_HEAD_SHA}\`
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-        I did **not** recommend the auto-push formatter workflow because moving a Codex PR branch outside Codex prevents Codex from updating the PR later.
+      - name: Check formatting
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessCheck
 
-        Reason: ${reason}.
-
-        Failed formatting check/run: ${RUN_URL}
-
-        Run formatting manually when you are ready to accept a non-Codex update:
-
-        \`\`\`bash
-        gh pr checkout ${PR_NUMBER}
-        bash ./scripts/bootstrap-dependencies.sh --profile full-build
-        bash ./scripts/ci-gradle.sh spotlessCheck
-        bash ./scripts/ci-gradle.sh spotlessApply
-        git diff --check
-        git status --short
-        git add -A
-        git commit -m "Apply Spotless formatting"
-        git push
-        \`\`\`
-
-        Or ask Codex to apply the formatting in a fresh PR.
-
-        ⚠️ Running the autoformatter workflow on this branch would move the PR head outside Codex and can prevent Codex from updating the PR later.
-        EOF
-        else
-          marker='<!-- auxio-ts-format-pr-branch-help -->'
-          body="$(mktemp)"
-          cat > "${body}" <<EOF
-        ${marker}
-        ### Formatting check failed
-
-        The Android Quality / Formatting job failed because Spotless found formatting drift.
-
-        This PR was not classified as Codex-owned, so you may use the manual formatter workflow to apply \`spotlessApply\` on this PR branch:
-
-        [Run **Format PR branch**](${WORKFLOW_URL})
-
-        Workflow input:
-
-        \`\`\`text
-        branch=${PR_BRANCH}
-        \`\`\`
-
-        Or run from a machine with GitHub CLI:
-
-        \`\`\`sh
-        gh workflow run format-pr-branch.yml --repo ${GITHUB_REPOSITORY} -f branch=${PR_BRANCH}
-        \`\`\`
-
-        The workflow checks Codex branch protection first. For non-Codex branches only, if formatting is dirty, it runs \`spotlessApply\`, commits the formatter changes, and pushes them back to the PR branch.
-        EOF
-        fi
-
-        comment_body="$(cat "${body}")"
-        existing_id="$(
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | tail -n 1
-        )"
-
-        if [[ -n "${existing_id}" ]]; then
-          gh api \
-            --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/issues/comments/${existing_id}" \
-            --raw-field "body=${comment_body}"
-        else
-          gh api \
-            --method POST \
-            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            --raw-field "body=${comment_body}"
-        fi
-
+      - name: Upload formatting reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-quality-format-reports
+          path: build/reports/problems/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   unit-tests:
     name: Unit tests
@@ -259,65 +152,63 @@ jobs:
     timeout-minutes: 45
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      with:
-        # fetch-depth: 0 (full history) is required here.
-        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
-        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
-        # cause "unadvertised object" fetch errors during recursive submodule
-        # init.  Full history ensures the referenced commit is always reachable.
-        fetch-depth: 0
-        submodules: false
-        persist-credentials: false
-    - name: Set up JDK 21
-      uses: actions/setup-java@v5
-      with:
-        java-version: "21"
-        distribution: "temurin"
-    - name: Write local.properties for Android SDK
-      shell: bash
-      run: |
-        set -euo pipefail
-        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-        if [ -z "${sdk_dir}" ]; then
-          echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
-          exit 1
-        fi
-        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-    - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v5
-      with:
-        cache-read-only: ${{ github.event_name == 'pull_request' }}
-    - name: Ensure native build tools are present
-      run: |
-        if ! command -v ninja >/dev/null 2>&1; then
-          sudo apt-get update
-          sudo apt-get install -y ninja-build
-        fi
-    - name: Prepare CI environment
-      shell: bash
-      # jvm-tests is strict in this repo (Gradle configuration still needs the
-      # media/taglib/ffmpeg submodule graph), so it bootstraps the same pinned
-      # dependencies as full-build while documenting the intent of this job.
-      run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
-    - name: Run unit tests
-      # testDebugUnitTest is scoped to :app and :musikr only.
-      # The media library test files have missing test-utility dependencies
-      # (after upstream "trim down module tree") and will not compile with the
-      # bare testDebugUnitTest task.
-      run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
-    - name: Upload unit test reports
-      if: failure()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      with:
-        name: android-quality-unit-test-reports
-        path: |
-          app/build/reports/tests/**
-          musikr/build/reports/tests/**
-          build/reports/problems/**
-        if-no-files-found: ignore
-        retention-days: 7
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Ensure native build tools are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
+
+      - name: Run unit tests
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+
+      - name: Upload unit-test reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-quality-unit-test-reports
+          path: |
+            app/build/reports/tests/**
+            musikr/build/reports/tests/**
+            build/reports/problems/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   android-lint:
     name: Android lint
@@ -325,62 +216,62 @@ jobs:
     timeout-minutes: 45
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      with:
-        # fetch-depth: 0 (full history) is required here.
-        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
-        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
-        # cause "unadvertised object" fetch errors during recursive submodule
-        # init.  Full history ensures the referenced commit is always reachable.
-        fetch-depth: 0
-        submodules: false
-        persist-credentials: false
-    - name: Set up JDK 21
-      uses: actions/setup-java@v5
-      with:
-        java-version: "21"
-        distribution: "temurin"
-    - name: Write local.properties for Android SDK
-      shell: bash
-      run: |
-        set -euo pipefail
-        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-        if [ -z "${sdk_dir}" ]; then
-          echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
-          exit 1
-        fi
-        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-    - name: Set up Gradle
-      uses: gradle/actions/setup-gradle@v5
-      with:
-        cache-read-only: ${{ github.event_name == 'pull_request' }}
-    - name: Ensure native build tools are present
-      run: |
-        if ! command -v ninja >/dev/null 2>&1; then
-          sudo apt-get update
-          sudo apt-get install -y ninja-build
-        fi
-    - name: Prepare CI environment
-      shell: bash
-      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-    - name: Run Android lint
-      # lintDebug is scoped to :app only.
-      # app/build.gradle sets checkDependencies=false so media library lint
-      # errors are not aggregated into the app report.
-      # app/lint.xml suppresses lint for vendored Google Material sources.
-      # :musikr lintDebug can be added once musikr lint issues are baselined.
-      run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
-    - name: Upload Android lint reports
-      if: failure()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      with:
-        name: android-quality-lint-reports
-        path: |
-          app/build/reports/lint-results-*
-          build/reports/problems/**
-        if-no-files-found: ignore
-        retention-days: 7
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Ensure native build tools are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Run Android lint
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+
+      - name: Upload Android lint reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-quality-lint-reports
+          path: |
+            app/build/reports/lint-results-*
+            build/reports/problems/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   headunit-safety:
     name: Head-unit safety
@@ -388,15 +279,16 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-      with:
-        fetch-depth: 0
-        persist-credentials: false
-    - name: Run head-unit compatibility safety checks
-      shell: bash
-      run: |
-        bash ./scripts/check-ts18-apk-reference-contracts.sh
-        bash ./scripts/check-headunit-compat-safety.sh
-        bash ./scripts/check-dofun-topway-compat.sh
-        bash ./scripts/check-native-keep-rules.sh
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run head-unit compatibility safety checks
+        shell: bash
+        run: |
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/check-native-keep-rules.sh
