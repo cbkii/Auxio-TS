@@ -46,7 +46,6 @@ import androidx.media3.exoplayer.source.MediaSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlin.math.abs
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -102,8 +101,6 @@ class ExoPlaybackStateHolder(
     private val saveScope = CoroutineScope(Dispatchers.IO + saveJob)
     private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
     private var currentSaveJob: Job? = null
-    private var currentRestoreJob: Job? = null
-    private var restoreGeneration = 0L
     private var openAudioEffectSession = false
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -148,7 +145,6 @@ class ExoPlaybackStateHolder(
     }
 
     fun release() {
-        cancelActiveRestore("holder-release", notify = false)
         saveJob.cancel()
         playbackManager.unregisterStateHolder(this)
         musicRepository.removeUpdateListener(this)
@@ -237,44 +233,28 @@ class ExoPlaybackStateHolder(
                 return true
             }
             L.d("Restoring playback state from cached/loaded library")
-            playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
-            currentRestoreJob?.cancel()
-            val generation = ++restoreGeneration
-            currentRestoreJob =
-                restoreScope.launch {
-                    try {
-                        val state = persistenceRepository.readState()
-                        withContext(Dispatchers.Main) {
-                            if (generation != restoreGeneration) return@withContext
-                            if (state != null) {
-                                playbackManager.applySavedState(state, false)
-                                if (shouldPlayImmediately(action.play)) {
-                                    playbackManager.playing(true)
-                                }
-                                completeRestore(
-                                    generation,
-                                    RestoreOutcome.RESTORED_EXISTING_SESSION,
-                                )
-                            } else if (action.fallback != null) {
-                                completeRestore(generation, RestoreOutcome.FALLBACK_QUEUE_CREATED)
-                                playbackManager.playDeferred(action.fallback)
-                            } else {
-                                completeRestore(generation, RestoreOutcome.NO_SAVED_SESSION)
-                            }
+            restoreScope.launch {
+                val state = persistenceRepository.readState()
+                withContext(Dispatchers.Main) {
+                    if (state != null) {
+                        // Apply the saved state on the main thread to prevent code expecting
+                        // state updates on the main thread from crashing.
+                        playbackManager.applySavedState(state, false)
+                        val shouldPlay = shouldPlayImmediately(action.play)
+                        if (shouldPlay) {
+                            playbackManager.playing(true)
                         }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        L.w(e, "Unable to restore persisted playback state")
-                        withContext(Dispatchers.Main) {
-                            completeRestore(generation, RestoreOutcome.FAILED)
-                        }
-                    } finally {
-                        if (generation == restoreGeneration) {
-                            currentRestoreJob = null
-                        }
+                        playbackManager.notifyRestoreOutcome(
+                            RestoreOutcome.RESTORED_EXISTING_SESSION
+                        )
+                    } else if (action.fallback != null) {
+                        playbackManager.notifyRestoreOutcome(RestoreOutcome.FALLBACK_QUEUE_CREATED)
+                        playbackManager.playDeferred(action.fallback)
+                    } else {
+                        playbackManager.notifyRestoreOutcome(RestoreOutcome.NO_SAVED_SESSION)
                     }
                 }
+            }
             return true
         }
 
@@ -351,32 +331,6 @@ class ExoPlaybackStateHolder(
             }
         }
 
-    private fun completeRestore(generation: Long, outcome: RestoreOutcome) {
-        if (generation != restoreGeneration) return
-        currentRestoreJob = null
-        playbackManager.notifyRestoreOutcome(outcome)
-    }
-
-    private fun cancelActiveRestore(reason: String, notify: Boolean = true) {
-        val job = currentRestoreJob
-        val outcome = playbackManager.restoreOutcome
-        val jobActive = job?.isActive == true
-        val transientOutcome =
-            outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                outcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
-                outcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE
-        if (!jobActive && !transientOutcome) return
-
-        L.i("Cancelling pending playback restore [reason=$reason outcome=$outcome]")
-        restoreGeneration += 1
-        currentRestoreJob = null
-        pendingLibraryRestoreAfterRawFailure = null
-        job?.cancel()
-        if (notify && (jobActive || transientOutcome)) {
-            playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
-        }
-    }
-
     override fun playing(playing: Boolean) {
         if (playing && !requestAudioFocus()) {
             L.w("Cannot start playback: audio focus request denied")
@@ -420,7 +374,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun newPlayback(command: PlaybackCommand, play: Boolean) {
-        cancelActiveRestore("new-playback")
         rawFastResumeItem = null
         pendingLibraryRestoreAfterRawFailure = null
         parent = command.parent
@@ -446,7 +399,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun shuffled(shuffled: Boolean) {
-        cancelActiveRestore("queue-reordered")
         player.setShuffleModeEnabled(shuffled)
         if (player.shuffleModeEnabled) {
             // Have to manually refresh the shuffle seed and anchor it to the new current songs
@@ -459,7 +411,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun next() {
-        cancelActiveRestore("next")
         if (rawFastResumeItem != null) {
             L.i("Ignoring next on single-item TS18 raw fast-resume playback")
             player.pause()
@@ -491,7 +442,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun prev() {
-        cancelActiveRestore("previous")
         if (rawFastResumeItem != null) {
             player.seekTo(0)
             if (!playbackSettings.rememberPause) {
@@ -516,7 +466,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun goto(index: Int) {
-        cancelActiveRestore("queue-index")
         val indices = player.unscrambleQueueIndices()
         if (index !in indices.indices) {
             L.w("Ignoring goto with out-of-bounds index $index for ${indices.size} items")
@@ -533,7 +482,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun playNext(songs: List<Song>, ack: StateAck.PlayNext) {
-        cancelActiveRestore("play-next")
         val currTimeline = player.currentTimeline
         val nextIndex =
             if (currTimeline.isEmpty) {
@@ -556,14 +504,12 @@ class ExoPlaybackStateHolder(
     }
 
     override fun addToQueue(songs: List<Song>, ack: StateAck.AddToQueue) {
-        cancelActiveRestore("add-to-queue")
         player.addMediaItems(songs.map { it.buildMediaItem() })
         playbackManager.ack(this, ack)
         deferSave()
     }
 
     override fun move(from: Int, to: Int, ack: StateAck.Move) {
-        cancelActiveRestore("move-queue-item")
         val indices = player.unscrambleQueueIndices()
         if (from !in indices.indices || to !in indices.indices) {
             L.w("Ignoring move with out-of-bounds indices [$from, $to] for ${indices.size} items")
@@ -589,7 +535,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun remove(at: Int, ack: StateAck.Remove) {
-        cancelActiveRestore("remove-queue-item")
         val indices = player.unscrambleQueueIndices()
         if (at !in indices.indices) {
             L.w("Ignoring remove with out-of-bounds index $at for ${indices.size} items")
@@ -673,7 +618,6 @@ class ExoPlaybackStateHolder(
     }
 
     override fun reset(ack: StateAck.NewPlayback) {
-        cancelActiveRestore("reset")
         rawFastResumeItem = null
         pendingLibraryRestoreAfterRawFailure = null
         player.setMediaItems(listOf())
@@ -962,7 +906,6 @@ class ExoPlaybackStateHolder(
                 val positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L)
                 rawFastResumeItem = null
                 pendingLibraryRestoreAfterRawFailure = null
-                playbackManager.notifyRestoreOutcome(RestoreOutcome.RESTORED_EXISTING_SESSION)
                 playbackManager.play(command)
                 playbackManager.seekTo(positionMs.coerceAtMost(song.durationMs.coerceAtLeast(0L)))
                 playbackManager.playing(wasPlaying)

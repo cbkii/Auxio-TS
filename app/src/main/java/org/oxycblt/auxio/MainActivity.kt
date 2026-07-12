@@ -37,12 +37,10 @@ import org.oxycblt.auxio.headunit.StartupPanelCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
-import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.StartupPlaybackPolicy
 import org.oxycblt.auxio.playback.state.DeferredPlayback
-import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.isNight
@@ -193,9 +191,15 @@ class MainActivity : AppCompatActivity() {
             }
         when (destination) {
             HeadUnitEntryPoints.EntryDestination.NOW_PLAYING ->
-                requestExplicitPanelRoute(OpenPanel.PLAYBACK, "Explicit Now Playing Intent")
+                startupPanelCoordinator.requestExplicitRoute(
+                    org.oxycblt.auxio.playback.OpenPanel.PLAYBACK,
+                    "Explicit Now Playing Intent",
+                )
             HeadUnitEntryPoints.EntryDestination.QUEUE ->
-                requestExplicitPanelRoute(OpenPanel.PLAYBACK_QUEUE, "Explicit Queue Intent")
+                startupPanelCoordinator.requestExplicitRoute(
+                    org.oxycblt.auxio.playback.OpenPanel.QUEUE,
+                    "Explicit Queue Intent",
+                )
             null -> {
                 L.w("Unexpected intent ${intent.action}")
                 return false
@@ -207,19 +211,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return true
-    }
-
-    private fun requestExplicitPanelRoute(destination: OpenPanel, description: String) {
-        val restoreOutcome = playbackModel.restoreOutcome.value
-        val restoreAlreadyActive =
-            restoreOutcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                restoreOutcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
-                restoreOutcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE
-        if (playbackModel.song.value == null && !restoreAlreadyActive) {
-            L.d("Starting paused restore for explicit panel route: $description")
-            playbackModel.playDeferred(StartupPlaybackPolicy.restoreActionForLaunch(false))
-        }
-        startupPanelCoordinator.requestExplicitRoute(destination, description)
     }
 
     private fun clearIntentRoutingState(intent: Intent) {

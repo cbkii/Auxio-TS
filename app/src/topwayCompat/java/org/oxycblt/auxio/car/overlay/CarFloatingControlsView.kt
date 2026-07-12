@@ -130,8 +130,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
                     }
                     true
                 }
-                MotionEvent.ACTION_UP,
-                MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_UP -> {
                     if (dragging) {
                         callbacks.onDragFinished(event.rawX.toInt(), event.rawY.toInt())
                     } else {

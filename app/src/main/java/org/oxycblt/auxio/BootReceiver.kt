@@ -117,32 +117,25 @@ class BootReceiver : BroadcastReceiver() {
             }
         }
 
-        // Floating-only is an explicit request not to launch the full UI. Return after every
-        // typed restore outcome, including disabled/permission/rejected results.
+        // If floating controls only is enabled, start the overlay and skip the main activity
         if (playbackSettings.autostartFloatingOnly) {
             journal.log(
                 DiagnosticJournal.CAT_BOOT,
                 "Floating-only autostart",
                 "requesting overlay restore",
             )
-            val result = TopwayOverlayRestoreBridge.requestOverlayRestore(context)
-            if (
-                result is
-                    org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.StartRequested ||
-                    result is
-                        org.oxycblt.auxio.headunit.overlay.CarOverlayContract.OverlayRestoreResult.AlreadyVisible
-            ) {
+            if (TopwayOverlayRestoreBridge.requestOverlayRestore(context)) {
                 L.d("Launch Floating Controls only is enabled, requesting Topway overlay restore")
                 journal.log(
                     DiagnosticJournal.CAT_BOOT,
                     "Overlay restore requested",
                     "topway_bridge",
                 )
+                return
             } else {
-                L.w("Launch Floating Controls only could not start the overlay: $result")
-                journal.log(DiagnosticJournal.CAT_BOOT, "Floating-only skipped", result.toString())
+                L.w("Launch Floating Controls only is enabled on non-Topway build, ignoring")
+                journal.log(DiagnosticJournal.CAT_BOOT, "Floating-only skipped", "non-Topway build")
             }
-            return
         }
 
         // Attempt to show the activity UI for head-unit use. Background activity starts may be

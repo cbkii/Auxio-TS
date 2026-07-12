@@ -28,4 +28,9 @@
         app:summary="@string/set_round_mode_desc"
         app:title="@string/set_round_mode" />
 
+    <SwitchPreferenceCompat
+        app:key="@string/set_key_launch_to_panel"
+        app:summary="@string/set_launch_to_panel_desc"
+        app:title="@string/set_launch_to_panel" />
+
 </PreferenceScreen>

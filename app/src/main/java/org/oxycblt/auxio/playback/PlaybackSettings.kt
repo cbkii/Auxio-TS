@@ -22,6 +22,7 @@ import android.content.Context
 import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.playback.replaygain.ReplayGainMode
@@ -85,8 +86,6 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
 
 class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Context) :
     Settings.Impl<PlaybackSettings.Listener>(context), PlaybackSettings {
-    private val launchToPanelDefault = context.resources.getBoolean(R.bool.launch_to_panel_default)
-
     override val playInListWith: PlaySong
         get() =
             PlaySong.fromIntCode(
@@ -160,7 +159,7 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
         get() =
             sharedPreferences.getBoolean(
                 getString(R.string.set_key_launch_to_panel),
-                launchToPanelDefault,
+                BuildConfig.TOPWAY_COMPAT_FLAVOR,
             )
 
     override val autoplayOnLaunch: Boolean

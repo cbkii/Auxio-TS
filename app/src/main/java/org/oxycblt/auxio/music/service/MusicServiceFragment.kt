@@ -24,7 +24,6 @@ import android.support.v4.media.MediaBrowserCompat.MediaItem
 import androidx.media.MediaBrowserServiceCompat.BrowserRoot
 import androidx.media.MediaBrowserServiceCompat.Result
 import javax.inject.Inject
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -128,8 +127,6 @@ constructor(
                     L.w("Result is null")
                 }
                 sendResult(result)
-            } catch (e: CancellationException) {
-                throw e
             } catch (e: Exception) {
                 L.d("Error while dispatching: $e")
                 sendResult(null)
