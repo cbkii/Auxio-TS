@@ -1,0 +1,63 @@
+name: Apply TS18 runtime regression fixes
+
+on:
+  push:
+    branches:
+      - fix/ts18-runtime-regressions-v605
+    paths:
+      - '.github/auxfix/**'
+      - '.github/workflows/apply-ts18-runtime-regressions.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out patch branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct and verify bounded patcher
+        id: patcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          parts=(.github/auxfix/part_*.pyfrag)
+          if (( ${#parts[@]} == 0 )); then
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'No patch source parts remain; this is the expected no-op follow-up run.'
+            exit 0
+          fi
+          cat "${parts[@]}" > "$RUNNER_TEMP/apply_auxio_ts_runtime_fixes.py"
+          echo '0c8a4e2c3c683a97ecac7a097c8fa23b63d5d2d7b983c33a55ffb2e5d9fd58b7  '"$RUNNER_TEMP"'/apply_auxio_ts_runtime_fixes.py' | sha256sum -c -
+          python -m py_compile "$RUNNER_TEMP/apply_auxio_ts_runtime_fixes.py"
+          echo 'available=true' >> "$GITHUB_OUTPUT"
+
+      - name: Apply source changes
+        if: steps.patcher.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python "$RUNNER_TEMP/apply_auxio_ts_runtime_fixes.py"
+          rm -rf .github/auxfix
+          git diff --check
+
+      - name: Commit applied changes
+        if: steps.patcher.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No source changes were produced.'
+            exit 1
+          fi
+          git commit -m 'fix(ts18): repair visualizer overlay controls and EQ routing'
+          git push origin HEAD:fix/ts18-runtime-regressions-v605
