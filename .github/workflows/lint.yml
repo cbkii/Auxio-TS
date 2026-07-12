@@ -71,7 +71,15 @@ jobs:
 
       - name: Validate shell script syntax
         shell: bash
-        run: find scripts -type f -name '*.sh' -print -exec bash -n {} \;
+        run: |
+          status=0
+          while IFS= read -r -d '' script; do
+            printf 'Checking %s\n' "${script}"
+            if ! bash -n "${script}"; then
+              status=1
+            fi
+          done < <(find scripts -type f -name '*.sh' -print0)
+          exit "${status}"
 
       - name: Check manual release workflow
         shell: bash
