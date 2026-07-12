@@ -67,19 +67,20 @@ jobs:
           python -m py_compile scripts/apply-pr169-audit-fixes.py
           python scripts/apply-pr169-audit-fixes.py
 
-          if git diff --quiet; then
-            echo '::error::Audit patch produced no tracked repository changes.'
+          if git diff --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+            echo '::error::Audit patch produced no repository changes.'
             exit 1
           fi
 
-          allowed='^(app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/TopwayMusicEntryActivity.kt|app/src/topwayCompat/AndroidManifest.xml|app/src/topwayCompat/res/xml/preferences_car.xml|app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerLauncher.kt|app/src/topwayCompatTest/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerExactDeviceTest.kt|app/src/main/java/org/oxycblt/auxio/headunit/root/dofun/Ts18DofunIntegrationResolver.kt|scripts/check-dofun-topway-compat.sh|scripts/check-topway-manifest-components.sh|docs/TS18_V605_RUNTIME_REGRESSION_FIXES.md)$'
+          allowed='^(app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/TopwayMusicEntryActivity.kt|app/src/topwayCompat/AndroidManifest.xml|app/src/topwayCompat/res/xml/preferences_car.xml|app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerLauncher.kt|app/src/topwayCompatTest/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerExactDeviceTest.kt|app/src/main/java/org/oxycblt/auxio/headunit/root/dofun/Ts18DofunIntegrationResolver.kt|scripts/check-dofun-topway-compat.sh|scripts/check-topway-manifest-components.sh|docs/TS18_V605_RUNTIME_REGRESSION_FIXES.md|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarFloatingControlsService.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarOverlaySettings.kt|app/src/main/java/org/oxycblt/auxio/headunit/overlay/TopwayOverlayRestoreBridge.kt|app/src/standard/java/org/oxycblt/auxio/headunit/overlay/TopwayOverlayRestoreBridge.kt|app/src/topwayCompat/java/org/oxycblt/auxio/headunit/overlay/TopwayOverlayRestoreBridge.kt|app/src/main/java/org/oxycblt/auxio/BootReceiver.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarOverlayActivity.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarOverlayPermissionActivity.kt|app/src/topwayCompat/java/org/oxycblt/auxio/settings/categories/CarPreferenceFragment.kt)$'
           unexpected=0
           while IFS= read -r path; do
+            [[ -n "${path}" ]] || continue
             if [[ ! "${path}" =~ ${allowed} ]]; then
               echo "::error::Patch changed an unapproved path: ${path}"
               unexpected=1
             fi
-          done < <(git diff --name-only)
+          done < <({ git diff --name-only; git ls-files --others --exclude-standard; } | sort -u)
           if (( unexpected != 0 )); then
             exit 1
           fi
@@ -94,6 +95,19 @@ jobs:
           bash ./scripts/ci-gradle.sh spotlessApply
           git add -N .
           git diff --check
+
+          allowed='^(app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/TopwayMusicEntryActivity.kt|app/src/topwayCompat/AndroidManifest.xml|app/src/topwayCompat/res/xml/preferences_car.xml|app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerLauncher.kt|app/src/topwayCompatTest/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerExactDeviceTest.kt|app/src/main/java/org/oxycblt/auxio/headunit/root/dofun/Ts18DofunIntegrationResolver.kt|scripts/check-dofun-topway-compat.sh|scripts/check-topway-manifest-components.sh|docs/TS18_V605_RUNTIME_REGRESSION_FIXES.md|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarFloatingControlsService.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarOverlaySettings.kt|app/src/main/java/org/oxycblt/auxio/headunit/overlay/TopwayOverlayRestoreBridge.kt|app/src/standard/java/org/oxycblt/auxio/headunit/overlay/TopwayOverlayRestoreBridge.kt|app/src/topwayCompat/java/org/oxycblt/auxio/headunit/overlay/TopwayOverlayRestoreBridge.kt|app/src/main/java/org/oxycblt/auxio/BootReceiver.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarOverlayActivity.kt|app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarOverlayPermissionActivity.kt|app/src/topwayCompat/java/org/oxycblt/auxio/settings/categories/CarPreferenceFragment.kt)$'
+          unexpected=0
+          while IFS= read -r path; do
+            [[ -n "${path}" ]] || continue
+            if [[ ! "${path}" =~ ${allowed} ]]; then
+              echo "::error::Formatting changed an unapproved path: ${path}"
+              unexpected=1
+            fi
+          done < <(git diff --name-only | sort -u)
+          if (( unexpected != 0 )); then
+            exit 1
+          fi
 
       - name: Run TS18 and DoFun guardrails
         shell: bash
