@@ -58,8 +58,8 @@ jobs:
                   "\n        playbackSheetBehavior.addBottomSheetCallback(panelRouteSheetCallback)\n",
               "\n    queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)\n":
                   "\n        queueSheetBehavior?.addBottomSheetCallback(panelRouteSheetCallback)\n",
-              "\n    elevationNormal =\":\"\"\"":
-                  "\n        elevationNormal =\":\"\"\"",
+              '\n    elevationNormal =""",':
+                  '\n        elevationNormal =""",',
           }
           for old, new in replacements.items():
               text = text.replace(old, new)
