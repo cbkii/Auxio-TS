@@ -62,14 +62,16 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
 
 ## CI entry points
 
-Canonical validation and release workflows:
+**Canonical validation and release workflows:**
 
 - `.github/workflows/android.yml` builds standard and Topway/DoFun variants and runs APK/reference compatibility checks on relevant PR and `dev` changes.
 - `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety guardrails.
 - `.github/workflows/manual-release.yml` builds, signs, verifies, and publishes selected standard/`com.tw.media` APKs and the systemless `com.tw.music` Magisk ZIP.
 - `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshot/report bundles for UI review.
 
-Auxiliary maintenance:
+[Evidence confidence: Observed workflow configuration] [Porting decision: CI/release artefact coverage only; requires separate TS18 runtime validation]
+
+**Auxiliary maintenance:**
 
 - `.github/workflows/upstream-auxio-monitor.yml` checks `OxygenCobalt/Auxio` monthly and opens an issue only when upstream has new commits to review.
 
@@ -77,12 +79,12 @@ There is no separate weekly dependency-build workflow or branch-mutating formatt
 
 Local preflight:
 
-```sh
+```bash
 bash scripts/bootstrap-dependencies.sh --profile full-build
 bash scripts/check-ts18-apk-reference-contracts.sh
 bash scripts/check-dofun-topway-compat.sh
 bash scripts/check-headunit-compat-safety.sh
-find scripts -type f -name '*.sh' -print -exec bash -n {} \;
+status=0; while IFS= read -r -d '' script; do bash -n "$script" || status=1; done < <(find scripts -type f -name '*.sh' -print0); exit "$status"
 ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
 ```
 
