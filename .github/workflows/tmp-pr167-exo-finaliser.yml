@@ -35,6 +35,7 @@ jobs:
           git merge --no-edit origin/dev
 
           python3 <<'PY'
+          import re
           from pathlib import Path
 
           path = Path(
@@ -43,63 +44,57 @@ jobs:
           )
           text = path.read_text(encoding='utf-8')
 
-          old_start = '''            L.d("Restoring playback state from cached/loaded library")
-              currentRestoreJob?.cancel()
-          '''
-          new_start = '''            L.d("Restoring playback state from cached/loaded library")
-              playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
-              currentRestoreJob?.cancel()
-          '''
-          if text.count(old_start) != 1:
+          old_start = (
+              '            L.d("Restoring playback state from cached/loaded library")\n'
+              '            currentRestoreJob?.cancel()\n'
+          )
+          new_start = (
+              '            L.d("Restoring playback state from cached/loaded library")\n'
+              '            playbackManager.notifyRestoreOutcome('
+              'RestoreOutcome.WAITING_FOR_PLAYER)\n'
+              '            currentRestoreJob?.cancel()\n'
+          )
+          start_count = text.count(old_start)
+          if start_count != 1:
               raise SystemExit(
-                  f'STOP: expected one cached-restore start block, found {text.count(old_start)}'
+                  f'STOP: expected one cached-restore start block, found {start_count}'
               )
           text = text.replace(old_start, new_start, 1)
 
-          old_cancel = '''    private fun cancelActiveRestore(reason: String, notify: Boolean = true) {
-                  val job = currentRestoreJob
-                  val outcome = playbackManager.restoreOutcome
-                  val transient =
-                      outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                          outcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
-                          outcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE
-                  if (job?.isActive != true && !transient) return
-
-                  L.i("Cancelling pending playback restore [reason=$reason outcome=$outcome]")
-                  restoreGeneration += 1
-                  currentRestoreJob = null
-                  pendingLibraryRestoreAfterRawFailure = null
-                  job?.cancel()
-                  if (notify && transient) {
-                      playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
-                  }
-              }
-          '''
-          new_cancel = '''    private fun cancelActiveRestore(reason: String, notify: Boolean = true) {
-                  val job = currentRestoreJob
-                  val outcome = playbackManager.restoreOutcome
-                  val jobActive = job?.isActive == true
-                  val transientOutcome =
-                      outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                          outcome == RestoreOutcome.WAITING_FOR_LIBRARY ||
-                          outcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE
-                  if (!jobActive && !transientOutcome) return
-
-                  L.i("Cancelling pending playback restore [reason=$reason outcome=$outcome]")
-                  restoreGeneration += 1
-                  currentRestoreJob = null
-                  pendingLibraryRestoreAfterRawFailure = null
-                  job?.cancel()
-                  if (notify && (jobActive || transientOutcome)) {
-                      playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
-                  }
-              }
-          '''
-          if text.count(old_cancel) != 1:
+          cancel_pattern = re.compile(
+              r'(?ms)^    private fun cancelActiveRestore\('
+              r'reason: String, notify: Boolean = true\) \{.*?'
+              r'^    \}\n\n(?=    override fun playing)'
+          )
+          replacement = (
+              '    private fun cancelActiveRestore('
+              'reason: String, notify: Boolean = true) {\n'
+              '        val job = currentRestoreJob\n'
+              '        val outcome = playbackManager.restoreOutcome\n'
+              '        val jobActive = job?.isActive == true\n'
+              '        val transientOutcome =\n'
+              '            outcome == RestoreOutcome.WAITING_FOR_PLAYER ||\n'
+              '                outcome == RestoreOutcome.WAITING_FOR_LIBRARY ||\n'
+              '                outcome == RestoreOutcome.RAW_FAST_RESUME_ACTIVE\n'
+              '        if (!jobActive && !transientOutcome) return\n\n'
+              '        L.i("Cancelling pending playback restore '
+              '[reason=$reason outcome=$outcome]")\n'
+              '        restoreGeneration += 1\n'
+              '        currentRestoreJob = null\n'
+              '        pendingLibraryRestoreAfterRawFailure = null\n'
+              '        job?.cancel()\n'
+              '        if (notify && (jobActive || transientOutcome)) {\n'
+              '            playbackManager.notifyRestoreOutcome('
+              'RestoreOutcome.CANCELLED)\n'
+              '        }\n'
+              '    }\n\n'
+          )
+          text, cancel_count = cancel_pattern.subn(replacement, text, count=1)
+          if cancel_count != 1:
               raise SystemExit(
-                  f'STOP: expected one restore-cancellation block, found {text.count(old_cancel)}'
+                  f'STOP: expected one restore-cancellation block, found {cancel_count}'
               )
-          path.write_text(text.replace(old_cancel, new_cancel, 1), encoding='utf-8')
+          path.write_text(text, encoding='utf-8')
           PY
 
       - name: Set up JDK 21
