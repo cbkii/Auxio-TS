@@ -1,0 +1,90 @@
+name: Temporary PR167 pull-request finaliser
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-pr167-pr-finaliser
+  cancel-in-progress: false
+
+jobs:
+  finalise:
+    if: github.event.pull_request.number == 167
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    steps:
+      - name: Checkout PR branch without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix-startup-routing-11126370068088722538
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Merge latest dev and extract bounded patch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin dev
+          git merge --no-edit origin/dev
+          awk '
+            /python3 <<'"'"'PY'"'"'/ { capture=1; next }
+            capture && /^[[:space:]]*PY[[:space:]]*$/ { exit }
+            capture { sub(/^          /, ""); print }
+          ' .github/workflows/tmp-pr167-direct-finaliser.yml > "${RUNNER_TEMP}/pr167-finalise.py"
+          test -s "${RUNNER_TEMP}/pr167-finalise.py"
+          python3 "${RUNNER_TEMP}/pr167-finalise.py"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-cleanup: always
+
+      - name: Prepare and validate
+        shell: bash
+        run: |
+          printf 'sdk.dir=%s\n' "${ANDROID_HOME}" > local.properties
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+          bash ./scripts/bootstrap-dependencies.sh --profile full-build
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git diff --check
+          find scripts -type f -name '*.sh' -exec sh -n {} ';'
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/ci-gradle.sh \
+            :app:testStandardDebugUnitTest \
+            --tests org.oxycblt.auxio.headunit.StartupPanelCoordinatorTest
+
+      - name: Commit and push PR branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/pr167-finalise-trigger .github/pr167-finaliser-error.txt
+          git add -A
+          if git diff --cached --quiet; then
+            echo '::error::No integration changes were staged.'
+            exit 1
+          fi
+          git commit -m 'fix: finalise durable startup routing'
+          git push \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            HEAD:fix-startup-routing-11126370068088722538

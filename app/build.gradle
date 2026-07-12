@@ -17,8 +17,8 @@ android {
 
     defaultConfig {
         applicationId namespace
-        versionName "6.0.3"
-        versionCode 91
+        versionName "6.0.4"
+        versionCode 92
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
@@ -125,7 +125,6 @@ android {
     }
 
 
-
     testOptions {
         unitTests {
             includeAndroidResources = true
@@ -144,6 +143,14 @@ android {
             java.srcDirs += ["src/topwayCompat/java"]
             kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
             res.srcDirs += ["src/topwayCompat/res"]
+        }
+        testTopwayTwMusic {
+            java.srcDirs += ["src/topwayCompatTest/java"]
+            kotlin.srcDirs += ["src/topwayCompatTest/java"]
+        }
+        testTopwayTwMedia {
+            java.srcDirs += ["src/topwayCompatTest/java"]
+            kotlin.srcDirs += ["src/topwayCompatTest/java"]
         }
         topwayTwMedia {
             manifest.srcFile "src/topwayCompat/AndroidManifest.xml"
@@ -209,6 +216,8 @@ dependencies {
     def lifecycle_version = "2.10.0"
     implementation "androidx.lifecycle:lifecycle-common:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-common-java8:$lifecycle_version"
+    topwayTwMusicImplementation "androidx.lifecycle:lifecycle-process:$lifecycle_version"
+    topwayTwMediaImplementation "androidx.lifecycle:lifecycle-process:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycle_version"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:$lifecycle_version"
 

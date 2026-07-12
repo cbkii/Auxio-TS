@@ -26,4 +26,19 @@ object CarOverlayContract {
     const val RESTORE_ACTION = "org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY"
     val ACTION_START: String = BuildConfig.APPLICATION_ID + ".car.overlay.START"
     const val EXTRA_START_REASON = "extra_start_reason"
+    const val KEY_ENABLED = "car_overlay_enabled"
+
+    sealed interface OverlayRestoreResult {
+        object AlreadyVisible : OverlayRestoreResult
+
+        object StartRequested : OverlayRestoreResult
+
+        object Disabled : OverlayRestoreResult
+
+        object PermissionMissing : OverlayRestoreResult
+
+        object UnsupportedBuild : OverlayRestoreResult
+
+        data class StartRejected(val reason: String) : OverlayRestoreResult
+    }
 }
