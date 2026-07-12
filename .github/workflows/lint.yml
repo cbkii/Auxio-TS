@@ -1,6 +1,27 @@
 name: Android Quality
 
 on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/**'
+      - 'app/**'
+      - 'musikr/**'
+      - 'media'
+      - 'media/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - '.gitmodules'
+      - 'gradle/**'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'NOTICE'
+      - 'eclipse-cdt.xml'
+      - 'scripts/**'
+      - 'AGENTS.md'
+      - 'README.md'
   pull_request:
     branches:
       - dev
@@ -8,205 +29,374 @@ on:
       - '.github/workflows/**'
       - 'app/**'
       - 'musikr/**'
+      - 'media'
       - 'media/**'
       - 'build.gradle'
       - 'settings.gradle'
+      - '.gitmodules'
       - 'gradle/**'
       - 'gradlew'
+      - 'gradlew.bat'
+      - 'NOTICE'
+      - 'eclipse-cdt.xml'
       - 'scripts/**'
-      - 'docs/**'
-
+      - 'AGENTS.md'
+      - 'README.md'
 permissions:
-  contents: write
+  contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
-  group: pr165-review-completion-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  apply-reviewed-completion:
-    if: github.head_ref == 'cx/investigate-and-implement-launch-to-currently-playing-panel'
+  workflow-syntax:
+    name: Workflow/script syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Validate workflow YAML
+      shell: bash
+      run: |
+        ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+    - name: Validate shell script syntax
+      shell: bash
+      run: find scripts -type f -name '*.sh' -print -exec bash -n {} \;
+    - name: Check manual release workflow
+      shell: bash
+      run: bash ./scripts/check-manual-release-workflow.sh
+    - name: Validate dependabot config YAML
+      shell: bash
+      run: |
+        ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/dependabot.yml
+    - name: Check version catalogue is in sync with build.gradle
+      shell: bash
+      run: bash ./scripts/check-version-catalog-sync.sh
+
+  format:
+    name: Formatting
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
     steps:
-      - name: Checkout PR branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-          submodules: recursive
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Ensure native build tools are present
-        shell: bash
-        run: |
-          set -euo pipefail
+    - name: Checkout repository
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      with:
+        # fetch-depth: 0 (full history) is required here.
+        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
+        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
+        # cause "unadvertised object" fetch errors during recursive submodule
+        # init.  Full history ensures the referenced commit is always reachable.
+        fetch-depth: 0
+        submodules: false
+        persist-credentials: false
+    - name: Set up JDK 21
+      uses: actions/setup-java@v5
+      with:
+        java-version: "21"
+        distribution: "temurin"
+    - name: Write local.properties for Android SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        if [ -z "${sdk_dir}" ]; then
+          echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+          exit 1
+        fi
+        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v5
+      with:
+        # PRs must not write to the shared Gradle cache; pushes to dev may write.
+        cache-read-only: ${{ github.event_name == 'pull_request' }}
+    - name: Ensure native build tools are present
+      run: |
+        if ! command -v ninja >/dev/null 2>&1; then
           sudo apt-get update
           sudo apt-get install -y ninja-build
+        fi
+    - name: Prepare CI environment
+      shell: bash
+      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+    - name: Check formatting
+      run: bash ./scripts/ci-gradle.sh spotlessCheck
+    - name: Upload formatting reports
+      if: failure()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: android-quality-format-reports
+        path: |
+          build/reports/problems/**
+        if-no-files-found: ignore
+        retention-days: 7
+    - name: Comment with formatter guidance
+      if: failure() && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+        PR_BODY: ${{ github.event.pull_request.body }}
+        PR_URL: ${{ github.event.pull_request.html_url }}
+        WORKFLOW_URL: https://github.com/${{ github.repository }}/actions/workflows/format-pr-branch.yml
+        RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
 
-      - name: Prepare CI environment
-        shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+        codex_owned=false
+        reason=""
+        if [[ "${PR_BRANCH}" == cx/* ]]; then
+          codex_owned=true
+          reason="branch name starts with cx/"
+        else
+          combined="${PR_TITLE}
+        ${PR_BODY:-}"
+          if grep -Eiq 'Codex Task|chatgpt\.com/codex|created by Codex|Codex-owned|Codex PR|generated by Codex|opened by Codex' <<<"${combined}"; then
+            codex_owned=true
+            reason="PR title/body indicates Codex ownership"
+          fi
+        fi
 
-      - name: Apply, format and verify reviewed patch
-        shell: bash
-        run: |
-          set -euo pipefail
-          sed -i 's/^  exit 42$/  exit 0/' scripts/ci-gradle.sh
-          bash ./scripts/ci-gradle.sh spotlessCheck
-          rm -f .github/workflows/pr165-review-completion.yml
+        if [[ "${codex_owned}" == "true" ]]; then
+          marker='<!-- auxio-ts-codex-safe-formatting-manual -->'
+          body="$(mktemp)"
+          cat > "${body}" <<EOF
+        ${marker}
+        ### Manual formatting required — Codex branch protected
 
-      - name: Create final repository commit through GitHub API
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HEAD_BRANCH: ${{ github.head_ref }}
-          BASE_BRANCH: ${{ github.base_ref }}
-        run: |
-          mkdir -p build/pr165-final-commit
-          exec > >(tee build/pr165-final-commit/api-step.log) 2>&1
-          set -euxo pipefail
+        This PR appears to be Codex-owned.
 
-          test ! -e .github/workflows/pr165-review-completion.yml
-          test ! -e scripts/pr165-finalize-1.py
-          test ! -e scripts/pr165-finalize-2a.py
-          test ! -e scripts/pr165-finalize-2b.py
+        Detected branch: \`${PR_BRANCH}\`
+        Detected PR: #${PR_NUMBER} ${PR_URL}
+        Current head: \`${PR_HEAD_SHA}\`
 
-          git fetch origin "${BASE_BRANCH}"
-          git checkout "origin/${BASE_BRANCH}" -- .github/workflows/lint.yml scripts/ci-gradle.sh
-          git diff --check
+        I did **not** recommend the auto-push formatter workflow because moving a Codex PR branch outside Codex prevents Codex from updating the PR later.
 
-          python3 - <<'PY'
-          import base64
-          import json
-          import os
-          import pathlib
-          import subprocess
-          import urllib.error
-          import urllib.request
+        Reason: ${reason}.
 
-          repo = os.environ["GITHUB_REPOSITORY"]
-          token = os.environ["GITHUB_TOKEN"]
-          branch = os.environ["HEAD_BRANCH"]
-          api = f"https://api.github.com/repos/{repo}"
+        Failed formatting check/run: ${RUN_URL}
 
-          def run(*args: str) -> str:
-              return subprocess.check_output(args, text=True).strip()
+        Run formatting manually when you are ready to accept a non-Codex update:
 
-          def request(method: str, path: str, payload=None):
-              data = None if payload is None else json.dumps(payload).encode()
-              req = urllib.request.Request(
-                  api + path,
-                  data=data,
-                  method=method,
-                  headers={
-                      "Authorization": f"Bearer {token}",
-                      "Accept": "application/vnd.github+json",
-                      "X-GitHub-Api-Version": "2022-11-28",
-                      "Content-Type": "application/json",
-                  },
-              )
-              with urllib.request.urlopen(req) as response:
-                  return json.load(response)
+        \`\`\`bash
+        gh pr checkout ${PR_NUMBER}
+        bash ./scripts/bootstrap-dependencies.sh --profile full-build
+        bash ./scripts/ci-gradle.sh spotlessCheck
+        bash ./scripts/ci-gradle.sh spotlessApply
+        git diff --check
+        git status --short
+        git add -A
+        git commit -m "Apply Spotless formatting"
+        git push
+        \`\`\`
 
-          head_sha = run("git", "rev-parse", "HEAD")
-          head_commit = request("GET", f"/git/commits/{head_sha}")
-          base_tree = head_commit["tree"]["sha"]
+        Or ask Codex to apply the formatting in a fresh PR.
 
-          raw = subprocess.check_output(
-              ["git", "diff", "--name-status", "-z", "HEAD", "--"]
-          ).split(b"\0")
-          entries = []
-          i = 0
-          while i < len(raw) and raw[i]:
-              status = raw[i].decode()
-              i += 1
-              if status.startswith("R") or status.startswith("C"):
-                  old_path = raw[i].decode()
-                  new_path = raw[i + 1].decode()
-                  i += 2
-                  entries.append(
-                      {"path": old_path, "mode": "100644", "type": "blob", "sha": None}
-                  )
-                  path = new_path
-              else:
-                  path = raw[i].decode()
-                  i += 1
+        ⚠️ Running the autoformatter workflow on this branch would move the PR head outside Codex and can prevent Codex from updating the PR later.
+        EOF
+        else
+          marker='<!-- auxio-ts-format-pr-branch-help -->'
+          body="$(mktemp)"
+          cat > "${body}" <<EOF
+        ${marker}
+        ### Formatting check failed
 
-              if status.startswith("D"):
-                  entries.append(
-                      {"path": path, "mode": "100644", "type": "blob", "sha": None}
-                  )
-                  continue
+        The Android Quality / Formatting job failed because Spotless found formatting drift.
 
-              file_path = pathlib.Path(path)
-              content = base64.b64encode(file_path.read_bytes()).decode()
-              blob = request(
-                  "POST",
-                  "/git/blobs",
-                  {"content": content, "encoding": "base64"},
-              )
-              mode = "100755" if os.access(file_path, os.X_OK) else "100644"
-              entries.append(
-                  {"path": path, "mode": mode, "type": "blob", "sha": blob["sha"]}
-              )
+        This PR was not classified as Codex-owned, so you may use the manual formatter workflow to apply \`spotlessApply\` on this PR branch:
 
-          if not entries:
-              raise SystemExit("No reviewed changes remained after temporary-hook cleanup")
+        [Run **Format PR branch**](${WORKFLOW_URL})
 
-          tree = request(
-              "POST",
-              "/git/trees",
-              {"base_tree": base_tree, "tree": entries},
-          )
-          commit = request(
-              "POST",
-              "/git/commits",
-              {
-                  "message": "fix: complete durable startup routing contract",
-                  "tree": tree["sha"],
-                  "parents": [head_sha],
-              },
-          )
-          new_sha = commit["sha"]
-          pathlib.Path("build/pr165-final-commit/commit-sha.txt").write_text(new_sha + "\n")
-          pathlib.Path("build/pr165-final-commit/changed-files.json").write_text(
-              json.dumps(entries, indent=2) + "\n"
-          )
-          print(f"Created final commit {new_sha} with {len(entries)} tree entries")
+        Workflow input:
 
-          try:
-              request(
-                  "PATCH",
-                  f"/git/refs/heads/{branch}",
-                  {"sha": new_sha, "force": False},
-              )
-              pathlib.Path("build/pr165-final-commit/ref-updated.txt").write_text("true\n")
-              print(f"Updated {branch} to {new_sha}")
-          except urllib.error.HTTPError as exc:
-              body = exc.read().decode(errors="replace")
-              pathlib.Path("build/pr165-final-commit/ref-update-error.txt").write_text(
-                  f"HTTP {exc.code}\n{body}\n"
-              )
-              print(f"Ref update failed after commit creation: HTTP {exc.code}: {body}")
-          PY
+        \`\`\`text
+        branch=${PR_BRANCH}
+        \`\`\`
 
-      - name: Upload final commit metadata
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr165-final-commit-metadata
-          path: build/pr165-final-commit
-          if-no-files-found: warn
-          retention-days: 7
+        Or run from a machine with GitHub CLI:
+
+        \`\`\`sh
+        gh workflow run format-pr-branch.yml --repo ${GITHUB_REPOSITORY} -f branch=${PR_BRANCH}
+        \`\`\`
+
+        The workflow checks Codex branch protection first. For non-Codex branches only, if formatting is dirty, it runs \`spotlessApply\`, commits the formatter changes, and pushes them back to the PR branch.
+        EOF
+        fi
+
+        comment_body="$(cat "${body}")"
+        existing_id="$(
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | tail -n 1
+        )"
+
+        if [[ -n "${existing_id}" ]]; then
+          gh api \
+            --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/issues/comments/${existing_id}" \
+            --raw-field "body=${comment_body}"
+        else
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --raw-field "body=${comment_body}"
+        fi
+
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      with:
+        # fetch-depth: 0 (full history) is required here.
+        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
+        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
+        # cause "unadvertised object" fetch errors during recursive submodule
+        # init.  Full history ensures the referenced commit is always reachable.
+        fetch-depth: 0
+        submodules: false
+        persist-credentials: false
+    - name: Set up JDK 21
+      uses: actions/setup-java@v5
+      with:
+        java-version: "21"
+        distribution: "temurin"
+    - name: Write local.properties for Android SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        if [ -z "${sdk_dir}" ]; then
+          echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+          exit 1
+        fi
+        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v5
+      with:
+        cache-read-only: ${{ github.event_name == 'pull_request' }}
+    - name: Ensure native build tools are present
+      run: |
+        if ! command -v ninja >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+        fi
+    - name: Prepare CI environment
+      shell: bash
+      # jvm-tests is strict in this repo (Gradle configuration still needs the
+      # media/taglib/ffmpeg submodule graph), so it bootstraps the same pinned
+      # dependencies as full-build while documenting the intent of this job.
+      run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
+    - name: Run unit tests
+      # testDebugUnitTest is scoped to :app and :musikr only.
+      # The media library test files have missing test-utility dependencies
+      # (after upstream "trim down module tree") and will not compile with the
+      # bare testDebugUnitTest task.
+      run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+    - name: Upload unit test reports
+      if: failure()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: android-quality-unit-test-reports
+        path: |
+          app/build/reports/tests/**
+          musikr/build/reports/tests/**
+          build/reports/problems/**
+        if-no-files-found: ignore
+        retention-days: 7
+
+  android-lint:
+    name: Android lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      with:
+        # fetch-depth: 0 (full history) is required here.
+        # The nested ffmpeg submodule resolves from git.ffmpeg.org via an
+        # unadvertised object reference.  Shallow clones (fetch-depth: 1)
+        # cause "unadvertised object" fetch errors during recursive submodule
+        # init.  Full history ensures the referenced commit is always reachable.
+        fetch-depth: 0
+        submodules: false
+        persist-credentials: false
+    - name: Set up JDK 21
+      uses: actions/setup-java@v5
+      with:
+        java-version: "21"
+        distribution: "temurin"
+    - name: Write local.properties for Android SDK
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        if [ -z "${sdk_dir}" ]; then
+          echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+          exit 1
+        fi
+        printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v5
+      with:
+        cache-read-only: ${{ github.event_name == 'pull_request' }}
+    - name: Ensure native build tools are present
+      run: |
+        if ! command -v ninja >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+        fi
+    - name: Prepare CI environment
+      shell: bash
+      run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+    - name: Run Android lint
+      # lintDebug is scoped to :app only.
+      # app/build.gradle sets checkDependencies=false so media library lint
+      # errors are not aggregated into the app report.
+      # app/lint.xml suppresses lint for vendored Google Material sources.
+      # :musikr lintDebug can be added once musikr lint issues are baselined.
+      run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+    - name: Upload Android lint reports
+      if: failure()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: android-quality-lint-reports
+        path: |
+          app/build/reports/lint-results-*
+          build/reports/problems/**
+        if-no-files-found: ignore
+        retention-days: 7
+
+  headunit-safety:
+    name: Head-unit safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Run head-unit compatibility safety checks
+      shell: bash
+      run: |
+        bash ./scripts/check-ts18-apk-reference-contracts.sh
+        bash ./scripts/check-headunit-compat-safety.sh
+        bash ./scripts/check-dofun-topway-compat.sh
+        bash ./scripts/check-native-keep-rules.sh

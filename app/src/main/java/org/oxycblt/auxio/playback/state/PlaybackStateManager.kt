@@ -60,6 +60,9 @@ interface PlaybackStateManager {
     /** Raw pre-library playback metadata, non-null only during TS18 raw fast resume. */
     val rawPlaybackMetadata: RawPlaybackMetadata?
 
+    /** Latest progress for the currently tracked startup restore request. */
+    val restoreProgress: RestoreProgress?
+
     /** The current queue of [Song]s. */
     val queue: List<Song>
 
@@ -230,6 +233,9 @@ interface PlaybackStateManager {
      */
     fun playDeferred(action: DeferredPlayback)
 
+    /** Publish a restore outcome for [requestId]. Stale asynchronous completions are ignored. */
+    fun notifyRestoreOutcome(requestId: Long?, outcome: RestoreOutcome)
+
     /**
      * Request that the pending [DeferredPlayback] (if any) be passed to the given
      * [PlaybackStateHolder].
@@ -337,6 +343,9 @@ interface PlaybackStateManager {
         /** Called when raw pre-library playback metadata changes. */
         fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {}
 
+        /** Called when the tracked startup restore outcome changes. */
+        fun onRestoreProgressChanged(progress: RestoreProgress) {}
+
         /**
          * Called when the [RepeatMode] changes.
          *
@@ -398,6 +407,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         )
     @Volatile private var stateHolder: PlaybackStateHolder? = null
     @Volatile private var pendingDeferredPlayback: DeferredPlayback? = null
+    @Volatile private var currentRestoreProgress: RestoreProgress? = null
     @Volatile private var isInitialized = false
 
     override val progression
@@ -414,6 +424,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     override val rawPlaybackMetadata
         get() = stateMirror.rawPlaybackMetadata
+
+    override val restoreProgress
+        get() = currentRestoreProgress
 
     override val queue
         get() = stateMirror.queue
@@ -603,11 +616,52 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun playDeferred(action: DeferredPlayback) {
+        if (action is DeferredPlayback.RestoreState && action.requestId != null) {
+            val previous = currentRestoreProgress
+            if (
+                previous != null &&
+                    previous.requestId != action.requestId &&
+                    previous.outcome !in TERMINAL_RESTORE_OUTCOMES
+            ) {
+                L.i("Superseding restore request ${previous.requestId} with ${action.requestId}")
+            }
+            updateRestoreProgress(
+                RestoreProgress(action.requestId, RestoreOutcome.WAITING_FOR_PLAYER)
+            )
+        } else if (action is DeferredPlayback.RestoreState) {
+            val active = currentRestoreProgress
+            if (active != null && active.outcome !in TERMINAL_RESTORE_OUTCOMES) {
+                L.i("Untracked restore superseded tracked request ${active.requestId}")
+                updateRestoreProgress(RestoreProgress(active.requestId, RestoreOutcome.CANCELLED))
+            }
+        }
+
         val stateHolder = stateHolder
         if (stateHolder == null || !stateHolder.handleDeferred(action)) {
             L.d("Internal player not present or did not consume action, waiting")
             pendingDeferredPlayback = action
         }
+    }
+
+    @Synchronized
+    override fun notifyRestoreOutcome(requestId: Long?, outcome: RestoreOutcome) {
+        if (requestId == null) return
+        val current = currentRestoreProgress
+        if (current != null && current.requestId != requestId) {
+            L.i(
+                "Ignoring stale restore outcome request=$requestId outcome=$outcome " +
+                    "active=${current.requestId}/${current.outcome}"
+            )
+            return
+        }
+        updateRestoreProgress(RestoreProgress(requestId, outcome))
+    }
+
+    private fun updateRestoreProgress(progress: RestoreProgress) {
+        if (currentRestoreProgress == progress) return
+        currentRestoreProgress = progress
+        L.i("Restore progress request=${progress.requestId} outcome=${progress.outcome}")
+        listeners.forEach { it.onRestoreProgressChanged(progress) }
     }
 
     @Synchronized
@@ -901,6 +955,17 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         )
 
         isInitialized = true
+    }
+
+    private companion object {
+        val TERMINAL_RESTORE_OUTCOMES =
+            setOf(
+                RestoreOutcome.RESTORED_EXISTING_SESSION,
+                RestoreOutcome.FALLBACK_QUEUE_CREATED,
+                RestoreOutcome.NO_SAVED_SESSION,
+                RestoreOutcome.FAILED,
+                RestoreOutcome.CANCELLED,
+            )
     }
 
     private fun defaultShuffleScope(isShuffled: Boolean) =

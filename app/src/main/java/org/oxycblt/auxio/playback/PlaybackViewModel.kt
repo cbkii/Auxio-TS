@@ -39,6 +39,8 @@ import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.playback.state.RestoreOutcome
+import org.oxycblt.auxio.playback.state.RestoreProgress
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
@@ -108,16 +110,13 @@ constructor(
     val currentBarAction: StateFlow<ActionMode>
         get() = _currentBarAction
 
-    private val _openPanel = MutableEvent<OpenPanel>()
-    /**
-     * A [OpenPanel] command that is awaiting a view capable of responding to it. Null if none
-     * currently.
-     */
-    val openPanel: Event<OpenPanel>
-        get() = _openPanel
     private val _panelRoute = MutableStateFlow<PanelRouteRequest?>(null)
+    /** Durable panel route retained until rendered, cancelled, or superseded. */
     val panelRoute: StateFlow<PanelRouteRequest?> = _panelRoute
     private var nextPanelRouteId = 1L
+    private var nextRestoreRequestId = 1L
+    private var activeRestoreRequestId: Long? = null
+    private var lastPendingRouteLog: Pair<Long, String>? = null
 
     private val _pagerQueue = MutableStateFlow(PagerQueue(listOf(), 0))
     /** The current queue in a special bundled format suitable for the cover ViewPager2. */
@@ -128,7 +127,12 @@ constructor(
     val visualizerState: StateFlow<VisualizerState> = _visualizerState
 
     private val _rawPlaybackMetadata = MutableStateFlow(playbackManager.rawPlaybackMetadata)
+    /** Raw pre-library TS18 playback metadata; never a normal Musikr [Song]. */
     val rawPlaybackMetadata: StateFlow<RawPlaybackMetadata?> = _rawPlaybackMetadata
+
+    private val _restoreProgress = MutableStateFlow(playbackManager.restoreProgress)
+    /** Outcome of the Activity-scoped startup restore request. */
+    val restoreProgress: StateFlow<RestoreProgress?> = _restoreProgress
 
     fun updateVisualizerState(state: VisualizerState) {
         _visualizerState.value = state
@@ -169,6 +173,7 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
+        markRestoreRenderableIfNeeded()
 
         _pagerCommand.put(PagerCommand(update = null, scroll = index))
         _pagerQueue.value = _pagerQueue.value.copy(index = index)
@@ -179,6 +184,7 @@ constructor(
         if (change.type == QueueChange.Type.SONG) {
             L.d("Queue changed, updating current song")
             _song.value = playbackManager.currentSong
+            markRestoreRenderableIfNeeded()
         }
 
         _pagerCommand.put(
@@ -206,6 +212,7 @@ constructor(
     ) {
         L.d("New playback started, updating playback information")
         _song.value = playbackManager.currentSong
+        markRestoreRenderableIfNeeded()
         _parent.value = parent
         _isShuffled.value = isShuffled
         _shuffleScope.value = playbackManager.shuffleScope
@@ -250,6 +257,34 @@ constructor(
 
     override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {
         _rawPlaybackMetadata.value = metadata
+        if (metadata != null) {
+            activeRestoreRequestId?.let { requestId ->
+                playbackManager.notifyRestoreOutcome(
+                    requestId,
+                    RestoreOutcome.RAW_FAST_RESUME_ACTIVE,
+                )
+            }
+        }
+    }
+
+    override fun onRestoreProgressChanged(progress: RestoreProgress) {
+        _restoreProgress.value = progress
+        if (
+            progress.requestId == activeRestoreRequestId &&
+                progress.outcome in TERMINAL_RESTORE_OUTCOMES
+        ) {
+            activeRestoreRequestId = null
+        }
+    }
+
+    private fun markRestoreRenderableIfNeeded() {
+        if (playbackManager.currentSong == null) return
+        activeRestoreRequestId?.let { requestId ->
+            playbackManager.notifyRestoreOutcome(
+                requestId,
+                RestoreOutcome.RESTORED_EXISTING_SESSION,
+            )
+        }
     }
 
     override fun onBarActionChanged() {
@@ -478,6 +513,7 @@ constructor(
         play: Boolean = true,
     ) {
         val playbackCommand = requireNotNull(command) { "Invalid playback parameters" }
+        cancelStartupPanelRoute("user-playback")
         if (shuffleScope != null) {
             playbackManager.play(playbackCommand, shuffleScope, play)
         } else {
@@ -494,6 +530,20 @@ constructor(
     fun playDeferred(action: DeferredPlayback) {
         L.d("Starting action $action")
         playbackManager.playDeferred(action)
+    }
+
+    /**
+     * Start and identify the one restore request associated with a new Activity launch.
+     *
+     * The returned ID binds the generic panel request to this restore. A service attach restore
+     * without this ID is deduplicated while the tracked request remains active.
+     */
+    fun requestStartupRestore(action: DeferredPlayback.RestoreState): Long {
+        val requestId = nextRestoreRequestId++
+        activeRestoreRequestId = requestId
+        L.i("Starting tracked startup restore request=$requestId")
+        playbackManager.playDeferred(action.copy(requestId = requestId))
+        return requestId
     }
 
     // --- PLAYER FUNCTIONS ---
@@ -548,6 +598,7 @@ constructor(
      * @param song The [Song] to add.
      */
     fun playNext(song: Song) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Playing $song next")
         playbackManager.playNext(song)
     }
@@ -558,6 +609,7 @@ constructor(
      * @param album The [Album] to add.
      */
     fun playNext(album: Album) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Playing $album next")
         playbackManager.playNext(listSettings.albumSongSort.songs(album.songs))
     }
@@ -568,6 +620,7 @@ constructor(
      * @param artist The [Artist] to add.
      */
     fun playNext(artist: Artist) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Playing $artist next")
         playbackManager.playNext(listSettings.artistSongSort.songs(artist.songs))
     }
@@ -578,6 +631,7 @@ constructor(
      * @param genre The [Genre] to add.
      */
     fun playNext(genre: Genre) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Playing $genre next")
         playbackManager.playNext(listSettings.genreSongSort.songs(genre.songs))
     }
@@ -588,6 +642,7 @@ constructor(
      * @param playlist The [Playlist] to add.
      */
     fun playNext(playlist: Playlist) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Playing $playlist next")
         playbackManager.playNext(playlist.songs)
     }
@@ -598,6 +653,7 @@ constructor(
      * @param songs The [Song]s to add.
      */
     fun playNext(songs: List<Song>) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Playing ${songs.size} songs next")
         playbackManager.playNext(songs)
     }
@@ -608,6 +664,7 @@ constructor(
      * @param song The [Song] to add.
      */
     fun addToQueue(song: Song) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Adding $song to queue")
         playbackManager.addToQueue(song)
     }
@@ -618,6 +675,7 @@ constructor(
      * @param album The [Album] to add.
      */
     fun addToQueue(album: Album) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Adding $album to queue")
         playbackManager.addToQueue(listSettings.albumSongSort.songs(album.songs))
     }
@@ -628,6 +686,7 @@ constructor(
      * @param artist The [Artist] to add.
      */
     fun addToQueue(artist: Artist) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Adding $artist to queue")
         playbackManager.addToQueue(listSettings.artistSongSort.songs(artist.songs))
     }
@@ -638,6 +697,7 @@ constructor(
      * @param genre The [Genre] to add.
      */
     fun addToQueue(genre: Genre) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Adding $genre to queue")
         playbackManager.addToQueue(listSettings.genreSongSort.songs(genre.songs))
     }
@@ -648,6 +708,7 @@ constructor(
      * @param playlist The [Playlist] to add.
      */
     fun addToQueue(playlist: Playlist) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Adding $playlist to queue")
         playbackManager.addToQueue(playlist.songs)
     }
@@ -658,6 +719,7 @@ constructor(
      * @param songs The [Song]s to add.
      */
     fun addToQueue(songs: List<Song>) {
+        cancelStartupPanelRoute("user-queue-playback")
         L.d("Adding ${songs.size} songs to queue")
         playbackManager.addToQueue(songs)
     }
@@ -820,49 +882,86 @@ constructor(
             PanelRouteOrigin.USER_ACTION,
             PanelRoutePriority.EXPLICIT,
             waitForSong = panel != OpenPanel.MAIN,
-            reason = "legacy-open-impl",
+            reason = "user-panel-action",
         )
-        _openPanel.put(panel)
     }
 
+    /** Record a durable panel route, preserving any higher-priority request. */
     fun requestPanelRoute(
         panel: OpenPanel,
         origin: PanelRouteOrigin,
         priority: PanelRoutePriority,
         waitForSong: Boolean,
         reason: String,
-    ) {
+        restoreRequestId: Long? = null,
+    ): Long? {
         val existing = _panelRoute.value
         if (existing != null && existing.priority.value > priority.value) {
             L.i(
                 "Keeping panel route ${existing.id}/${existing.destination}; rejected $panel " +
                     "origin=$origin reason=$reason"
             )
-            return
+            return null
         }
         val request =
-            PanelRouteRequest(nextPanelRouteId++, panel, origin, priority, waitForSong, reason)
+            PanelRouteRequest(
+                nextPanelRouteId++,
+                panel,
+                origin,
+                priority,
+                waitForSong,
+                reason,
+                restoreRequestId,
+            )
         L.i("Panel route requested $request")
+        lastPendingRouteLog = null
         _panelRoute.value = request
+        return request.id
     }
 
+    /** Keep or consume [id] after a bounded render attempt. */
     fun acknowledgePanelRoute(id: Long, rendered: Boolean, reason: String) {
         val existing = _panelRoute.value ?: return
         if (existing.id != id) return
         if (rendered) {
             L.i("Panel route acknowledged id=$id reason=$reason")
+            lastPendingRouteLog = null
             _panelRoute.value = null
-        } else {
+        } else if (lastPendingRouteLog != (id to reason)) {
             L.i("Panel route pending id=$id reason=$reason")
+            lastPendingRouteLog = id to reason
         }
     }
 
-    fun cancelPanelRoute(reason: String) {
-        _panelRoute.value?.let { L.i("Panel route cancelled id=${it.id} reason=$reason") }
+    /** Cancel a specific request without clearing a newer superseding route. */
+    fun cancelPanelRoute(id: Long, reason: String) {
+        val existing = _panelRoute.value ?: return
+        if (existing.id != id) return
+        L.i("Panel route cancelled id=$id reason=$reason")
+        lastPendingRouteLog = null
         _panelRoute.value = null
     }
 
+    fun cancelPanelRoute(reason: String) {
+        _panelRoute.value?.let { cancelPanelRoute(it.id, reason) }
+    }
+
+    fun cancelStartupPanelRoute(reason: String) {
+        val existing = _panelRoute.value ?: return
+        if (existing.origin == PanelRouteOrigin.STARTUP_RESTORE) {
+            cancelPanelRoute(existing.id, reason)
+        }
+    }
+
     private companion object {
+        val TERMINAL_RESTORE_OUTCOMES =
+            setOf(
+                RestoreOutcome.RESTORED_EXISTING_SESSION,
+                RestoreOutcome.FALLBACK_QUEUE_CREATED,
+                RestoreOutcome.NO_SAVED_SESSION,
+                RestoreOutcome.FAILED,
+                RestoreOutcome.CANCELLED,
+            )
         private const val STEP_INCREMENT = 10000 // ms
     }
 }

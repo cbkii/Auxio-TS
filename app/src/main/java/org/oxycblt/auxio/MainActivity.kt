@@ -37,6 +37,8 @@ import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.playback.PanelRouteOrigin
+import org.oxycblt.auxio.playback.PanelRoutePriority
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.StartupLibraryRouteState
@@ -110,33 +112,40 @@ class MainActivity : AppCompatActivity() {
                     StartupPlaybackPolicy.restoreActionForLaunch(
                         playbackSettings.autoplayOnLaunch && isFirstResume
                     )
-                playbackModel.playDeferred(action)
-                maybeRouteToPlaybackOnColdHeadUnitLaunch()
+                val restoreRequestId = playbackModel.requestStartupRestore(action)
+                maybeRouteToPlaybackOnColdHeadUnitLaunch(restoreRequestId)
             }
             isFirstResume = false
         }
     }
 
-    private fun maybeRouteToPlaybackOnColdHeadUnitLaunch() {
+    private fun maybeRouteToPlaybackOnColdHeadUnitLaunch(restoreRequestId: Long) {
         if (!isFirstResume) return
+        val library = musicRepository.library
         val libraryRouteState =
             when {
+                library?.empty() == false -> StartupLibraryRouteState.READY_OR_UNKNOWN
+                library?.empty() == true -> StartupLibraryRouteState.EMPTY
                 musicSettings.libraryState == LibraryState.NEVER ->
                     StartupLibraryRouteState.NEEDS_SOURCE
-                musicRepository.library?.empty() == true -> StartupLibraryRouteState.EMPTY
-                musicRepository.library != null -> StartupLibraryRouteState.READY_OR_UNKNOWN
-                else -> StartupLibraryRouteState.READY_OR_UNKNOWN
+                musicSettings.libraryState == LibraryState.EMPTY -> StartupLibraryRouteState.EMPTY
+                musicSettings.libraryState == LibraryState.RECOVERY ->
+                    StartupLibraryRouteState.RECOVERY
+                else -> StartupLibraryRouteState.CHECKING
             }
         val decision =
             StartupPlaybackPolicy.startupRoute(
                 StartupPanelInput(
                     coldLaunch = true,
                     restoredTask = false,
+                    // Product decision: preserve standard behavior; Topway-compatible variants
+                    // enable launch-to-panel by default without coupling it to autoplay.
+                    launchToPanel = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     headUnitLandscapeMode = pendingHeadUnitLaunchRoute,
                     libraryState = libraryRouteState,
                     hasNormalSong = playbackModel.song.value != null,
-                    rawFastResumeActive = false,
+                    rawFastResumeActive = playbackModel.rawPlaybackMetadata.value != null,
                 )
             )
         when (decision) {
@@ -146,7 +155,7 @@ class MainActivity : AppCompatActivity() {
                 pendingHeadUnitLaunchRoute = false
                 L.i(
                     "Startup panel route selected destination=${decision.destination} " +
-                        "reason=${decision.reason}"
+                        "reason=${decision.reason} restore=$restoreRequestId"
                 )
                 playbackModel.requestPanelRoute(
                     decision.destination,
@@ -154,6 +163,7 @@ class MainActivity : AppCompatActivity() {
                     decision.priority,
                     decision.waitForSong,
                     decision.reason,
+                    restoreRequestId.takeIf { decision.restoreBound },
                 )
             }
         }
@@ -226,6 +236,7 @@ class MainActivity : AppCompatActivity() {
             }
         if (action != null) {
             L.d("Translated intent to $action")
+            playbackModel.cancelPanelRoute("explicit-playback-intent")
             playbackModel.playDeferred(action)
             return true
         }
@@ -235,13 +246,28 @@ class MainActivity : AppCompatActivity() {
                 HeadUnitRoutePolicy.entryDestinationForRoute(resolvedRoute)
             }
         when (destination) {
-            HeadUnitEntryPoints.EntryDestination.NOW_PLAYING -> playbackModel.openPlayback()
-            HeadUnitEntryPoints.EntryDestination.QUEUE -> playbackModel.openPlaybackQueue()
+            HeadUnitEntryPoints.EntryDestination.NOW_PLAYING ->
+                playbackModel.requestPanelRoute(
+                    org.oxycblt.auxio.playback.OpenPanel.PLAYBACK,
+                    PanelRouteOrigin.EXPLICIT_INTENT,
+                    PanelRoutePriority.EXPLICIT,
+                    waitForSong = true,
+                    reason = "explicit-now-playing-intent",
+                )
+            HeadUnitEntryPoints.EntryDestination.QUEUE ->
+                playbackModel.requestPanelRoute(
+                    org.oxycblt.auxio.playback.OpenPanel.PLAYBACK_QUEUE,
+                    PanelRouteOrigin.EXPLICIT_INTENT,
+                    PanelRoutePriority.EXPLICIT,
+                    waitForSong = true,
+                    reason = "explicit-queue-intent",
+                )
             null -> {
                 L.w("Unexpected intent ${intent.action}")
                 return false
             }
             else -> {
+                playbackModel.cancelPanelRoute("explicit-navigation-intent")
                 intent.putExtra(HeadUnitEntryPoints.EXTRA_ENTRY_DESTINATION, destination.name)
                 setIntent(intent)
                 L.d("Mapped deep-link action to destination $destination")
