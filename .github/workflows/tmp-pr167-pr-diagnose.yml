@@ -45,10 +45,12 @@ jobs:
 
           path = Path('/tmp/pr167-finalise.py')
           text = path.read_text(encoding='utf-8')
-          error_old = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}")'
-          error_new = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}; old={old[:180]!r}")'
-          if error_old in text:
-              text = text.replace(error_old, error_new, 1)
+          literal_old = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}")'
+          literal_new = 'raise SystemExit(f"STOP: {path}: expected one literal match, found {count}; old={old[:180]!r}")'
+          regex_old = 'raise SystemExit(f"STOP: {path}: expected one regex match, found {count}")'
+          regex_new = 'raise SystemExit(f"STOP: {path}: expected one regex match, found {count}; pattern={pattern[:220]!r}")'
+          text = text.replace(literal_old, literal_new, 1)
+          text = text.replace(regex_old, regex_new, 1)
           replacements = {
               '\n        binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?\n':
                   '\n            binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?\n',
@@ -65,6 +67,23 @@ jobs:
           }
           for old, new in replacements.items():
               text = text.replace(old, new)
+
+          restore_pattern_start = (
+              'r"""            L\\.d\\("Restoring playback state from cached/loaded library"\\)'
+          )
+          start = text.find(restore_pattern_start)
+          if start == -1:
+              raise SystemExit('STOP: restore regex source marker missing')
+          end_marker = 'return true"""'
+          end = text.find(end_marker, start)
+          if end == -1:
+              raise SystemExit('STOP: restore regex source terminator missing')
+          end += len(end_marker)
+          robust_pattern = (
+              'r"""            L\\.d\\("Restoring playback state from cached/loaded library"\\)'
+              '\n.*?\n            return true"""'
+          )
+          text = text[:start] + robust_pattern + text[end:]
           path.write_text(text, encoding='utf-8')
           PY
             python3 /tmp/pr167-finalise.py >/tmp/pr167-out.txt 2>/tmp/pr167-error.txt
