@@ -26,6 +26,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch -q origin dev
           git merge -q --no-edit origin/dev
           merge_rc=$?
@@ -44,12 +46,14 @@ jobs:
               printf 'patch completed successfully\n' > /tmp/pr167-error.txt
             fi
           fi
+          saved_head=$(git rev-parse HEAD)
+          git reset --hard "$saved_head"
           cp /tmp/pr167-error.txt .github/pr167-finaliser-error.txt
-          git reset --hard HEAD
-          cp /tmp/pr167-error.txt .github/pr167-finaliser-error.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .github/pr167-finaliser-error.txt
+          if git diff --cached --quiet; then
+            printf '\nrun=%s\n' "${GITHUB_RUN_ID}" >> .github/pr167-finaliser-error.txt
+            git add .github/pr167-finaliser-error.txt
+          fi
           git commit -m 'ci: capture PR167 finaliser diagnostic'
           git push \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
