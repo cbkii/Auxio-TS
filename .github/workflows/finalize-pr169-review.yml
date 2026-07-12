@@ -1,4 +1,4 @@
-name: Finalize PR 169 review
+name: Diagnose PR 169 final patch
 
 on:
   pull_request:
@@ -10,14 +10,14 @@ on:
       - reopened
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: finalize-pr169-review
+  group: diagnose-pr169-review
   cancel-in-progress: true
 
 jobs:
-  finalize:
+  diagnose:
     if: >-
       github.repository == 'cbkii/Auxio-TS' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -48,12 +48,11 @@ jobs:
       - name: Write local.properties
         shell: bash
         run: |
-          set -euo pipefail
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           test -n "${sdk_dir}"
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
-      - name: Prepare full build dependencies
+      - name: Prepare dependencies
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
@@ -61,48 +60,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile .github/scripts/finalize_pr169_review.py
           python3 .github/scripts/finalize_pr169_review.py
           rm app/src/main/java/org/oxycblt/auxio/playback/CoverPagerAdapterNullableCompat.kt
 
-      - name: Validate exact patch scope
-        shell: bash
-        run: |
-          set -euo pipefail
-          allowed="$(mktemp)"
-          actual="$(mktemp)"
-          cat > "${allowed}" <<'EOF'
-          app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerLauncher.kt
-          app/src/main/java/org/oxycblt/auxio/playback/CoverPagerAdapterNullableCompat.kt
-          app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt
-          app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarFloatingControlsService.kt
-          app/src/topwayCompatTest/java/org/oxycblt/auxio/headunit/topway/TopwayEqualizerExactDeviceTest.kt
-          EOF
-          sort -u -o "${allowed}" "${allowed}"
-          git diff --name-only | sort -u > "${actual}"
-          diff -u "${allowed}" "${actual}"
-          git diff --check
-
-      - name: Apply and verify formatting
+      - name: Capture Spotless output
+        id: spotless
         shell: bash
         env:
           AUXIO_TS_CI_GRADLE_TIMEOUT: 20m
         run: |
-          set -euo pipefail
-          bash ./scripts/ci-gradle.sh spotlessApply
-          bash ./scripts/ci-gradle.sh spotlessCheck
-          git diff --check
+          set +e
+          bash ./scripts/ci-gradle.sh spotlessApply > spotless-pr169.log 2>&1
+          status=$?
+          tail -n 400 spotless-pr169.log
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          exit 0
 
-      - name: Commit final review fixes and remove temporary machinery
+      - name: Upload Spotless diagnostic
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr169-spotless-diagnostic
+          path: spotless-pr169.log
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Fail when Spotless failed
+        if: steps.spotless.outputs.status != '0'
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git rm .github/scripts/finalize_pr169_review.py .github/workflows/finalize-pr169-review.yml
-          git diff --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'fix(ts18): complete final runtime review fixes'
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:fix/ts18-runtime-regressions-v605
+        run: exit 1
