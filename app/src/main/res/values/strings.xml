@@ -677,7 +677,6 @@
     <string name="set_dofun_launcher_integration">Open diagnostics</string>
     <string name="set_dofun_launcher_integration_desc">Open technical checks and report export</string>
 
-    <string name="set_floating_controls_permission">Floating Controls Permission</string>
     <string name="set_run_dofun_check">Run head-unit diagnostics</string>
     <string name="set_run_dofun_check_desc">Check package, root, source, overlay, and launcher integration state</string>
     <string name="set_export_dofun_report">Export DoFun integration report</string>

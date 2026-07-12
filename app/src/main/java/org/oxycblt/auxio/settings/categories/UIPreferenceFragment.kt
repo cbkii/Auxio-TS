@@ -45,13 +45,11 @@ class UIPreferenceFragment : BasePreferenceFragment(R.xml.preferences_ui) {
         when (preference.key) {
             getString(R.string.set_key_accent) -> {
                 L.d("Navigating to accent dialog")
-                findNavController()
-                    .navigateSafe(UIPreferenceFragmentDirections.accentSettings())
+                findNavController().navigateSafe(UIPreferenceFragmentDirections.accentSettings())
             }
             getString(R.string.set_key_home_tabs) -> {
                 L.d("Navigating to home tab dialog")
-                findNavController()
-                    .navigateSafe(UIPreferenceFragmentDirections.tabSettings())
+                findNavController().navigateSafe(UIPreferenceFragmentDirections.tabSettings())
             }
         }
     }

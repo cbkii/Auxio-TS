@@ -54,11 +54,6 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 L.d("Navigating to UI preferences")
                 findNavController().navigateSafe(RootPreferenceFragmentDirections.uiPreferences())
             }
-            getString(R.string.set_key_personalize) -> {
-                L.d("Navigating to personalization preferences")
-                findNavController()
-                    .navigateSafe(RootPreferenceFragmentDirections.personalizePreferences())
-            }
             getString(R.string.set_key_music) -> {
                 L.d("Navigating to music preferences")
                 findNavController()

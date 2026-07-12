@@ -107,11 +107,13 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                 else -> STARTUP_OPEN_AUXIO
             }
         list.value = current
-        list.summary = list.entries[list.findIndexOfValue(current)]
+        val currentIdx = list.findIndexOfValue(current)
+        list.summary = list.entries?.getOrNull(currentIdx) ?: ""
         list.onPreferenceChangeListener =
             Preference.OnPreferenceChangeListener { pref, newValue ->
                 val mode = newValue as String
-                prefs.edit()
+                prefs
+                    .edit()
                     .putBoolean(getString(R.string.set_key_autostart_on_boot), mode != STARTUP_NONE)
                     .putBoolean(
                         getString(R.string.set_key_autostart_floating_only),
@@ -119,7 +121,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                     )
                     .apply()
                 val lp = pref as? ListPreference
-                lp?.summary = lp?.entries?.get(lp.findIndexOfValue(mode))
+                val modeIdx = lp?.findIndexOfValue(mode) ?: -1
+                lp?.entries?.getOrNull(modeIdx)?.let { lp.summary = it }
                 true
             }
     }
