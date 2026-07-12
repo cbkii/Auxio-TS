@@ -1,0 +1,221 @@
+name: Apply PR 169 review fixes
+
+on:
+  push:
+    branches:
+      - fix/ts18-runtime-regressions-v605
+    paths:
+      - '.github/workflows/apply-pr169-review-fixes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified review fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt')
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one match, found {count}: {old[:120]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'import android.annotation.SuppressLint\nimport android.content.Intent\n',
+              'import android.annotation.SuppressLint\nimport android.content.Intent\nimport android.content.res.Configuration\n',
+          )
+          replace_once(
+              'import org.oxycblt.auxio.R\n',
+              'import org.oxycblt.auxio.BuildConfig\nimport org.oxycblt.auxio.R\n',
+          )
+          replace_once(
+              '''    private val coverPagerAdapter by lazy {
+                  CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
+              }
+          ''',
+              '''    private var coverPagerAdapter: CoverPagerAdapter? = null
+          ''',
+          )
+          replace_once(
+              '''        super.onBindingCreated(binding, savedInstanceState)
+
+              visualizerPermissionLauncher =
+          ''',
+              '''        super.onBindingCreated(binding, savedInstanceState)
+
+              val currentCoverPagerAdapter =
+                  CoverPagerAdapter(this, playbackModel, uiSettings, viewLifecycleOwner)
+              coverPagerAdapter = currentCoverPagerAdapter
+
+              visualizerPermissionLauncher =
+          ''',
+          )
+          replace_once('            adapter = coverPagerAdapter\n', '            adapter = currentCoverPagerAdapter\n')
+          replace_once(
+              '                        coverPagerAdapter.setActivePosition(it)\n',
+              '                        currentCoverPagerAdapter.setActivePosition(it)\n',
+          )
+          replace_once(
+              '''        // The TS18 Now Playing controls have one deterministic automotive size. The removed
+              // preference was ineffective because this surface is always landscape on the target unit.
+              val useLargeControls = true
+          ''',
+              '''        val forceLargeLandscapeControls =
+                  resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+              val useLargeControls =
+                  if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                      true
+                  } else {
+                      uiSettings.largeHeadUnitControls || forceLargeLandscapeControls
+                  }
+          ''',
+          )
+          replace_once(
+              '                uiSettings.largeHeadUnitControls -> spacingSmall\n',
+              '                useLargeControls -> spacingSmall\n',
+          )
+          replace_once(
+              '''        binding.playbackPager?.adapter = null
+              }
+          ''',
+              '''        binding.playbackPager?.adapter = null
+                  coverPagerAdapter = null
+              }
+          ''',
+          )
+          replace_once(
+              '        coverPagerAdapter.refreshVisualizerMode()\n',
+              '        coverPagerAdapter?.refreshVisualizerMode()\n',
+          )
+          replace_once(
+              '        coverPagerAdapter.setActivePosition(queue.index)\n',
+              '        coverPagerAdapter?.setActivePosition(queue.index)\n',
+          )
+
+          # Make partial Visualizer construction transactional so every failure path releases it.
+          replace_once(
+              '''        playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
+              try {
+                  val captureRange = Visualizer.getCaptureSizeRange()
+          ''',
+              '''        playbackModel.updateVisualizerState(VisualizerState.WaitingForFrames)
+              var candidateToRelease: Visualizer? = null
+              try {
+                  val captureRange = Visualizer.getCaptureSizeRange()
+          ''',
+          )
+          replace_once(
+              '''            val candidate = Visualizer(sessionId)
+                  val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
+          ''',
+              '''            val candidate = Visualizer(sessionId)
+                  candidateToRelease = candidate
+                  val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
+          ''',
+          )
+          replace_once(
+              '''                try {
+                      candidate.release()
+                  } catch (e: RuntimeException) {
+                      L.d(e, "Visualizer native release failed during partial initialization")
+                  }
+                  return
+          ''',
+              '''                return
+          ''',
+          )
+          replace_once(
+              '''            visualizer = candidate
+                  visualizerSessionId = sessionId
+                  L.i(
+          ''',
+              '''            visualizer = candidate
+                  candidateToRelease = null
+                  visualizerSessionId = sessionId
+                  L.i(
+          ''',
+          )
+          replace_once(
+              '''            playbackModel.updateVisualizerState(VisualizerState.Failed(message))
+              }
+          }
+
+              private fun scheduleVisualizerWatchdog''',
+              '''            playbackModel.updateVisualizerState(VisualizerState.Failed(message))
+              } finally {
+                  candidateToRelease?.let { candidate ->
+                      try {
+                          if (candidate.enabled) candidate.enabled = false
+                      } catch (e: RuntimeException) {
+                          L.d(e, "Visualizer partial candidate disable failed")
+                      }
+                      try {
+                          candidate.setDataCaptureListener(null, 0, false, false)
+                      } catch (e: RuntimeException) {
+                          L.d(e, "Visualizer partial candidate listener cleanup failed")
+                      }
+                      try {
+                          candidate.release()
+                      } catch (e: RuntimeException) {
+                          L.d(e, "Visualizer partial candidate release failed")
+                      }
+                  }
+              }
+          }
+
+              private fun scheduleVisualizerWatchdog''',
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'sdk.dir=%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}" > local.properties
+
+      - name: Prepare dependencies and format
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/bootstrap-dependencies.sh --profile full-build
+          bash scripts/ci-gradle.sh spotlessApply
+          rm -f .github/workflows/apply-pr169-review-fixes.yml
+          git diff --check
+          bash scripts/check-ts18-apk-reference-contracts.sh
+          bash scripts/check-headunit-compat-safety.sh
+          bash scripts/check-dofun-topway-compat.sh
+          bash scripts/check-native-keep-rules.sh
+
+      - name: Commit fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: address PR 169 lifecycle and variant review findings'
+          git push origin HEAD:fix/ts18-runtime-regressions-v605
