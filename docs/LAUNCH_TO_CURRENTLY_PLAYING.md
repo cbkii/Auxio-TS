@@ -15,6 +15,16 @@
 - Manual playback or queue mutations cancel an in-flight persisted-state restore before it
   can overwrite the user's newer choice.
 
+## Automated coverage
+
+`StartupPanelCoordinatorTest` verifies the pure policy boundary for generic Now Playing routing,
+transient restore waits, terminal library and restore outcomes, raw-fast-resume reconciliation,
+and explicit Queue routing. Repository CI additionally exercises formatting, lint, the full unit
+suite, Android builds, workflow/script syntax, and head-unit compatibility guardrails.
+
+Bottom-sheet animation timing, launcher ordering, process death, and ACC sleep/wake remain physical
+runtime concerns rather than unit-test claims.
+
 ## Exact-device validation
 
 **Requires TS18 validation** on `s9863a1h10_Natv`:
