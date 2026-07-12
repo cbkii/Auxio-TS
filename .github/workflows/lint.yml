@@ -98,13 +98,54 @@ jobs:
           submodules: false
           persist-credentials: false
 
+      - name: Detect format-relevant changes
+        id: format_scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "run_spotless=true" >> "${GITHUB_OUTPUT}"
+            echo "Manual dispatch: running the complete formatting check."
+            exit 0
+          fi
+
+          case "${EVENT_NAME}" in
+            pull_request) base_sha="${PR_BASE_SHA}" ;;
+            push) base_sha="${PUSH_BEFORE_SHA}" ;;
+            *) base_sha="" ;;
+          esac
+
+          if [[ -z "${base_sha}" || "${base_sha}" =~ ^0+$ ]] || ! git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            echo "run_spotless=true" >> "${GITHUB_OUTPUT}"
+            echo "No trustworthy comparison base is available; running the complete formatting check."
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${base_sha}" "${GITHUB_SHA}")"
+          printf '%s\n' "${changed_files}"
+
+          if grep -Eq '^[^/]+/src/.*\.(kt|cpp|h|hpp)$|(^|/)build\.gradle$|^NOTICE$|^eclipse-cdt\.xml$' <<< "${changed_files}"; then
+            echo "run_spotless=true" >> "${GITHUB_OUTPUT}"
+            echo "Kotlin/C++ sources or Spotless configuration changed."
+          else
+            echo "run_spotless=false" >> "${GITHUB_OUTPUT}"
+            echo "No files covered by the repository Spotless configuration changed."
+          fi
+
       - name: Set up JDK 21
+        if: steps.format_scope.outputs.run_spotless == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Write local.properties for Android SDK
+        if: steps.format_scope.outputs.run_spotless == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -116,11 +157,13 @@ jobs:
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
       - name: Set up Gradle
+        if: steps.format_scope.outputs.run_spotless == 'true'
         uses: gradle/actions/setup-gradle@v5
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
       - name: Ensure native build tools are present
+        if: steps.format_scope.outputs.run_spotless == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -130,15 +173,22 @@ jobs:
           fi
 
       - name: Prepare CI environment
+        if: steps.format_scope.outputs.run_spotless == 'true'
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
       - name: Check formatting
+        if: steps.format_scope.outputs.run_spotless == 'true'
         shell: bash
         run: bash ./scripts/ci-gradle.sh spotlessCheck
 
+      - name: Formatting not required
+        if: steps.format_scope.outputs.run_spotless != 'true'
+        shell: bash
+        run: echo "Formatting check skipped because this change does not touch files covered by Spotless."
+
       - name: Upload formatting reports
-        if: failure()
+        if: failure() && steps.format_scope.outputs.run_spotless == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: android-quality-format-reports
