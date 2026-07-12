@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/apply-pr169-review-fixes.yml'
       - 'scripts/apply-pr169-audit-fixes.py'
+      - 'scripts/apply-pr169-floating-contract-fixes.py'
 
 permissions:
   contents: write
@@ -60,15 +61,18 @@ jobs:
             sudo apt-get install -y ninja-build
           fi
 
-      - name: Apply reviewable audited patch
+      - name: Apply reviewable audited patches
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile scripts/apply-pr169-audit-fixes.py
+          python -m py_compile \
+            scripts/apply-pr169-audit-fixes.py \
+            scripts/apply-pr169-floating-contract-fixes.py
           python scripts/apply-pr169-audit-fixes.py
+          python scripts/apply-pr169-floating-contract-fixes.py
 
           if git diff --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
-            echo '::error::Audit patch produced no repository changes.'
+            echo '::error::Audit patches produced no repository changes.'
             exit 1
           fi
 
@@ -141,12 +145,13 @@ jobs:
             :app:testTopwayTwMusicDebugUnitTest \
             :app:testTopwayTwMediaDebugUnitTest
 
-      - name: Remove one-shot patch carrier
+      - name: Remove one-shot patch carriers
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/workflows/apply-pr169-review-fixes.yml
           rm -f scripts/apply-pr169-audit-fixes.py
+          rm -f scripts/apply-pr169-floating-contract-fixes.py
           git add -N .
           git diff --check
 
