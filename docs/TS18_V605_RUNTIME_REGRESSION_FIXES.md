@@ -82,6 +82,9 @@ preferred.
 
 ## Requires TS18 validation
 
+Both Android Build and Android Quality must pass on the exact release-candidate commit before its
+artifact is selected for device validation.
+
 Automated checks cannot prove OEM audio-effect, WindowManager, DoFun or ACC behaviour. Validate the
 `topwayTwMediaRelease` artifact on the exact unit:
 
