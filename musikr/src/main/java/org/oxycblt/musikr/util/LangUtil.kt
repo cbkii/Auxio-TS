@@ -100,7 +100,7 @@ fun <T, R> CoroutineScope.mapParallel(
 suspend fun List<Deferred<Result<Unit>>>.tryAwaitAll() = awaitAll().forEach { it.getOrThrow() }
 
 fun CoroutineScope.merge(vararg deferreds: Deferred<Result<Unit>>): Deferred<Result<Unit>> =
-    tryAsync(Dispatchers.Main) {
+    tryAsync(Dispatchers.Default) {
         val results = awaitAll(*deferreds)
         results.forEach { result -> result.getOrThrow() }
     }

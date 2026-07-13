@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.playback.persist
 
 import android.content.Context
+import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.oxycblt.auxio.music.MusicRepository
@@ -51,6 +52,16 @@ data class FastResumeSnapshot(
  * @author Alexander Capehart (OxygenCobalt)
  */
 interface PersistenceRepository {
+    /** Read primitive queue session without requiring a loaded Musikr library. */
+    suspend fun readQueueSession(): QueueSessionEntity?
+
+    /** Read a bounded primitive queue window without requiring a loaded Musikr library. */
+    suspend fun readQueueWindow(
+        sessionId: Long,
+        startInclusive: Int,
+        endExclusive: Int,
+    ): List<QueueItemRefEntity>
+
     /** Read the previously persisted [PlaybackStateManager.SavedState]. */
     suspend fun readState(): PlaybackStateManager.SavedState?
 
@@ -72,6 +83,7 @@ class PersistenceRepositoryImpl
 @Inject
 constructor(
     @ApplicationContext private val context: Context,
+    private val database: PersistenceDatabase,
     private val playbackStateDao: PlaybackStateDao,
     private val queueDao: QueueDao,
     private val musicRepository: MusicRepository,
@@ -79,6 +91,26 @@ constructor(
     private val fastResumePrefs by lazy {
         context.getSharedPreferences(FAST_RESUME_PREFS, Context.MODE_PRIVATE)
     }
+
+    override suspend fun readQueueSession(): QueueSessionEntity? =
+        try {
+            queueDao.getQueueSession()
+        } catch (e: Exception) {
+            L.w(e, "Unable to read primitive queue session")
+            null
+        }
+
+    override suspend fun readQueueWindow(
+        sessionId: Long,
+        startInclusive: Int,
+        endExclusive: Int,
+    ): List<QueueItemRefEntity> =
+        try {
+            queueDao.getQueueWindow(sessionId, startInclusive, endExclusive)
+        } catch (e: Exception) {
+            L.w(e, "Unable to read primitive queue window")
+            emptyList()
+        }
 
     override suspend fun readState(): PlaybackStateManager.SavedState? {
         val library = musicRepository.library?.takeIf { !it.empty() } ?: return null
@@ -112,51 +144,83 @@ constructor(
     }
 
     override suspend fun saveState(state: PlaybackStateManager.SavedState?): Boolean {
-        try {
-            playbackStateDao.nukeState()
-            queueDao.nukeHeap()
-            queueDao.nukeShuffledMapping()
-        } catch (e: Exception) {
-            L.e("Unable to clear previous state")
-            L.e(e.stackTraceToString())
-            return false
-        }
-
-        L.d("Successfully cleared previous state")
-        if (state != null) {
-            // Transform saved state into raw state, which can then be written to the database.
-            val playbackState =
+        val playbackState =
+            state?.let {
                 PlaybackState(
                     id = 0,
-                    index = state.index,
-                    positionMs = state.positionMs,
-                    repeatMode = state.repeatMode,
-                    songUid = state.songUid,
-                    parentUid = state.parent?.uid,
-                    shuffleScope = state.shuffleScope,
+                    index = it.index,
+                    positionMs = it.positionMs,
+                    repeatMode = it.repeatMode,
+                    songUid = it.songUid,
+                    parentUid = it.parent?.uid,
+                    shuffleScope = it.shuffleScope,
                 )
-
-            // Convert the remaining queue information do their database-specific counterparts.
-            val heap =
-                state.heap.mapIndexed { i, song -> QueueHeapItem(i, requireNotNull(song).uid) }
-
-            val shuffledMapping =
-                state.shuffledMapping.mapIndexed { i, index -> QueueShuffledMappingItem(i, index) }
-
-            try {
-                playbackStateDao.insertState(playbackState)
-                queueDao.insertHeap(heap)
-                queueDao.insertShuffledMapping(shuffledMapping)
-            } catch (e: Exception) {
-                L.e("Unable to write new state")
-                L.e(e.stackTraceToString())
-                return false
+            }
+        val heap =
+            state?.heap?.mapIndexed { i, song -> QueueHeapItem(i, requireNotNull(song).uid) }
+                ?: emptyList()
+        val shuffledMapping =
+            state?.shuffledMapping?.mapIndexed { i, index -> QueueShuffledMappingItem(i, index) }
+                ?: emptyList()
+        val orderedHeapIndexes =
+            state?.shuffledMapping?.takeIf { it.isNotEmpty() } ?: heap.map { it.id }
+        val currentLogicalPosition =
+            orderedHeapIndexes.indexOf(state?.index ?: -1).takeIf { it >= 0 } ?: (state?.index ?: 0)
+        val session =
+            state?.let {
+                QueueSessionEntity(
+                    id = 1,
+                    currentLogicalPosition = currentLogicalPosition,
+                    positionMs = it.positionMs,
+                    repeatMode = it.repeatMode,
+                    shuffleScope = it.shuffleScope,
+                    totalCount = heap.size,
+                    revision = System.currentTimeMillis(),
+                    updatedAtMs = System.currentTimeMillis(),
+                )
+            }
+        val primitiveItems =
+            if (state == null) {
+                emptyList()
+            } else {
+                orderedHeapIndexes.mapIndexedNotNull { logicalPosition, heapIndex ->
+                    val song = state.heap.getOrNull(heapIndex) ?: return@mapIndexedNotNull null
+                    QueueItemRefEntity(
+                        sessionId = 1,
+                        logicalPosition = logicalPosition,
+                        stableSongUid = song.uid,
+                        uri = song.uri.toString(),
+                        pathFallback = song.path.toString(),
+                        titleFallback = song.name.raw,
+                        artistFallback = song.artists.joinToString { it.name.raw },
+                        albumFallback = song.album.name.raw,
+                        durationMs = song.durationMs,
+                    )
+                }
             }
 
-            L.d("Successfully wrote new state")
+        return try {
+            database.withTransaction {
+                playbackStateDao.nukeState()
+                queueDao.nukeHeap()
+                queueDao.nukeShuffledMapping()
+                queueDao.nukeQueueSessions()
+                queueDao.nukeQueueItemRefs()
+                if (playbackState != null && session != null) {
+                    playbackStateDao.insertState(playbackState)
+                    queueDao.insertHeap(heap)
+                    queueDao.insertShuffledMapping(shuffledMapping)
+                    queueDao.insertQueueSession(session)
+                    queueDao.insertQueueItemRefs(primitiveItems)
+                }
+            }
+            L.d("Successfully wrote playback state transaction")
+            true
+        } catch (e: Exception) {
+            L.e("Unable to transactionally write playback state")
+            L.e(e.stackTraceToString())
+            false
         }
-
-        return true
     }
 
     override suspend fun readFastResumeSnapshot(): FastResumeSnapshot? {

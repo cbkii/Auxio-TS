@@ -127,9 +127,8 @@ private constructor(
             }
             startupJob =
                 indexScope.launch {
-                    if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                        launch { rootGate.probeSync() }
-                    }
+                    // Root probing is intentionally on-demand. Normal startup must restore
+                    // playback/session surfaces without waiting for su.
                     musicRepository.startup(this@IndexingHolder)
                 }
         }
@@ -158,6 +157,9 @@ private constructor(
     }
 
     @Synchronized
+    override fun playbackActiveSnapshot(): Boolean =
+        playbackManager.progression.isPlaying || playbackManager.currentSong != null
+
     override fun requestIndex(withCache: Boolean) {
         if (currentIndexJob?.isActive == true) {
             L.i("Ignoring duplicate indexing request while scan is running [cache=$withCache]")

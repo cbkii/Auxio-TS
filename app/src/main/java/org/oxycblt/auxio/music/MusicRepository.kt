@@ -225,6 +225,9 @@ interface MusicRepository {
 
     /** A worker that performs library indexing and tag extraction. */
     interface IndexingWorker {
+        /** Snapshot whether playback is currently active for scan resource policy decisions. */
+        fun playbackActiveSnapshot(): Boolean = false
+
         /**
          * Request that the library be indexed.
          *
@@ -451,8 +454,20 @@ constructor(
 
             val currentRevision = musicSettings.revision
             val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
+            val workerCount =
+                DefaultIndexingResourcePolicy.resolveWorkerCount(
+                    scanPriority = ScanPriority.PLAYBACK_FIRST,
+                    playbackActive = worker.playbackActiveSnapshot(),
+                    isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    availableProcessors = Runtime.getRuntime().availableProcessors(),
+                )
+            L.d("Resolved Musikr worker count: $workerCount")
             val config =
-                createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
+                createConfig(
+                    newRevision,
+                    if (withCache) cache else WriteOnlyMutableCache(cache),
+                    workerCount,
+                )
 
             // Check accessibility before starting
             val locations =
@@ -566,6 +581,7 @@ constructor(
             fs,
             Storage(cache, covers, storedPlaylists),
             Interpretation(nameFactory, separators),
+            indexingWorkerCount = 1,
         )
     }
 
@@ -629,7 +645,11 @@ constructor(
         } catch (_: Exception) {}
     }
 
-    private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
+    private suspend fun createConfig(
+        revision: UUID,
+        cache: MutableCache,
+        workerCount: Int = 2,
+    ): Config {
         val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
         val nameFactory =
@@ -662,6 +682,7 @@ constructor(
             fs,
             Storage(cache, covers, storedPlaylists),
             Interpretation(nameFactory, separators),
+            indexingWorkerCount = workerCount,
         )
     }
 

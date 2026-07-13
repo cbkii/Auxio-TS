@@ -41,7 +41,7 @@ internal class FilteredFS(
     private val lowercaseKeywords = pathKeywords.map { it.lowercase() }
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
-        val delegateChannel = Channel<File>(Channel.UNLIMITED)
+        val delegateChannel = Channel<File>(org.oxycblt.musikr.pipeline.PipelinePolicy.BUFFER_CAPACITY)
         val delegateTask =
             try {
                 delegate.explore(delegateChannel)

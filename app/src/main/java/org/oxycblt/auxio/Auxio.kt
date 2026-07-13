@@ -23,6 +23,7 @@ import android.content.Context
 import android.os.Build
 import android.os.StrictMode
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.preference.PreferenceManager
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import java.io.PrintWriter
@@ -33,6 +34,7 @@ import java.util.Locale
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
@@ -106,28 +108,36 @@ class Auxio : Application() {
                 Timber.e(e, "Failed to migrate settings: ${settings.javaClass.simpleName}")
             }
         }
-        // Dynamic shortcuts are a non-essential convenience. Some OEM launchers (including
-        // head-unit launchers such as DoFun) ship a partial or buggy ShortcutManager that can
-        // throw from setDynamicShortcuts; never let that crash every app launch. Publishing
-        // involves synchronous binder calls to system_server, so keep it off the main thread
-        // to avoid slowing first-frame startup on weak head-unit hardware.
-        Thread(
-                {
-                    try {
-                        ShortcutManagerCompat.setDynamicShortcuts(
-                            this,
-                            HeadUnitEntryPoints.createDynamicShortcuts(this),
-                        )
-                    } catch (e: Exception) {
-                        Timber.w(e, "Unable to register dynamic shortcuts")
-                    }
-                },
-                "Auxio:ShortcutPublish",
-            )
-            .start()
+        // Dynamic shortcuts are a non-essential convenience. Avoid republishing on every
+        // process launch; the launcher-visible entry points are static for this build, so publish
+        // once per app version unless a future state-change path explicitly clears the marker.
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val shortcutMarker = "auxio_dynamic_shortcuts_published_${BuildConfig.VERSION_CODE}"
+        if (!prefs.getBoolean(shortcutMarker, false)) {
+            Thread(
+                    {
+                        try {
+                            ShortcutManagerCompat.setDynamicShortcuts(
+                                this,
+                                HeadUnitEntryPoints.createDynamicShortcuts(this),
+                            )
+                            prefs.edit().putBoolean(shortcutMarker, true).apply()
+                        } catch (e: Exception) {
+                            Timber.w(e, "Unable to register dynamic shortcuts")
+                        }
+                    },
+                    "Auxio:ShortcutPublish",
+                )
+                .start()
+        }
 
-        // Register car floating controls visibility hooks for the Topway/TS18 variant.
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+        // Register car floating controls visibility hooks for the Topway/TS18 variant only when
+        // the user has actually enabled the overlay. Disabled floating controls must not pay the
+        // reflective startup/restore cost on every boot.
+        if (
+            BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                prefs.getBoolean(CarOverlayContract.KEY_ENABLED, false)
+        ) {
             try {
                 val companionClass =
                     Class.forName(

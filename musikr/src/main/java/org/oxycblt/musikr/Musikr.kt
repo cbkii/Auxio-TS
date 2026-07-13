@@ -34,6 +34,8 @@ import org.oxycblt.musikr.pipeline.ExtractStep
 import org.oxycblt.musikr.pipeline.Extracted
 import org.oxycblt.musikr.pipeline.RawPlaylist
 import org.oxycblt.musikr.pipeline.RawSong
+import org.oxycblt.musikr.pipeline.PipelinePolicy
+
 import org.oxycblt.musikr.util.merge
 import org.oxycblt.musikr.util.tryAsyncWith
 
@@ -97,7 +99,7 @@ interface Musikr {
          */
         suspend fun loadCached(context: Context, config: Config): MutableLibrary {
             val start = System.currentTimeMillis()
-            val extracted = Channel<Extracted>(Channel.UNLIMITED)
+            val extracted = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
             for (cachedFile in config.storage.cache.snapshot()) {
                 cachedFile.toRawSongFast(config.storage)?.let { extracted.send(it) }
             }
@@ -176,18 +178,18 @@ private class MusikrImpl(
         val start = System.currentTimeMillis()
         var explored = 0
         var loaded = 0
-        val exploredChannel = Channel<Explored>(Channel.UNLIMITED)
+        val exploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
         val exploredTask = exploreStep.explore(this, exploredChannel)
-        val trackedExploredChannel = Channel<Explored>(Channel.UNLIMITED)
+        val trackedExploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
         val trackedExploredTask =
-            tryAsyncWith(trackedExploredChannel, Dispatchers.Main) {
+            tryAsyncWith(trackedExploredChannel, Dispatchers.Default) {
                 var lastEmitMs = 0L
                 for (item in exploredChannel) {
                     explored++
                     // Emitting per-item progress floods the main thread with state updates
                     // (notification/UI refreshes) on large libraries; throttle to a humane rate.
                     val now = System.currentTimeMillis()
-                    if (now - lastEmitMs >= PROGRESS_INTERVAL_MS) {
+                    if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
                         lastEmitMs = now
                         onProgress(IndexingProgress.Songs(loaded, explored))
                     }
@@ -195,16 +197,16 @@ private class MusikrImpl(
                 }
                 onProgress(IndexingProgress.Songs(loaded, explored))
             }
-        val extractedChannel = Channel<Extracted>(Channel.UNLIMITED)
+        val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
         val extractedTask = extractStep.extract(this, trackedExploredChannel, extractedChannel)
-        val trackedExtractedChannel = Channel<Extracted>(Channel.UNLIMITED)
+        val trackedExtractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
         val trackedExtractedTask =
-            tryAsyncWith(trackedExtractedChannel, Dispatchers.Main) {
+            tryAsyncWith(trackedExtractedChannel, Dispatchers.Default) {
                 var lastEmitMs = 0L
                 for (item in extractedChannel) {
                     loaded++
                     val now = System.currentTimeMillis()
-                    if (now - lastEmitMs >= PROGRESS_INTERVAL_MS) {
+                    if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
                         lastEmitMs = now
                         onProgress(IndexingProgress.Songs(loaded, explored))
                     }
@@ -219,14 +221,6 @@ private class MusikrImpl(
         LibraryResultImpl(config, library)
     }
 
-    private companion object {
-        /**
-         * Minimum interval between [IndexingProgress.Songs] emissions. Progress consumers update
-         * notifications/UI on the main thread, so per-item emission floods weak head-unit CPUs
-         * during large scans.
-         */
-        const val PROGRESS_INTERVAL_MS = 100L
-    }
 }
 
 private class LibraryResultImpl(private val config: Config, override val library: MutableLibrary) :
