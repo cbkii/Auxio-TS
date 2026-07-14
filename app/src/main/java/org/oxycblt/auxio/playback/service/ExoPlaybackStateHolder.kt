@@ -20,9 +20,9 @@ package org.oxycblt.auxio.playback.service
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.media.AudioManager
 import android.media.audiofx.AudioEffect
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
@@ -267,7 +267,6 @@ class ExoPlaybackStateHolder(
             startPrimitiveQueueRestore(action)
             return true
         }
-
 
         val library =
             musicRepository.library?.takeIf { !it.empty() }
@@ -542,11 +541,7 @@ class ExoPlaybackStateHolder(
                     )
                 val expanded =
                     persistenceRepository
-                        .readQueueWindow(
-                            descriptor,
-                            range.startInclusive,
-                            range.endExclusive,
-                        )
+                        .readQueueWindow(descriptor, range.startInclusive, range.endExclusive)
                         ?.contiguousPlayableWindow()
                 if (expanded == null || expanded.items.size <= window.items.size) return@launch
                 withContext(Dispatchers.Main) {
@@ -634,14 +629,18 @@ class ExoPlaybackStateHolder(
     private fun launchPrimitiveMutation(
         operation: String,
         preservePosition: Boolean = true,
-        mutate: suspend (org.oxycblt.auxio.playback.persist.QueueDescriptor) -> org.oxycblt.auxio.playback.persist.QueueDescriptor?,
+        mutate:
+            suspend (
+                org.oxycblt.auxio.playback.persist.QueueDescriptor
+            ) -> org.oxycblt.auxio.playback.persist.QueueDescriptor?,
     ) {
         val initial = activePrimitiveWindow ?: return
         val wasPlaying = player.playWhenReady || player.isPlaying
         val positionMs = if (preservePosition) player.currentPosition.coerceAtLeast(0L) else 0L
         restoreScope.launch {
             primitiveMutationMutex.withLock {
-                val active = withContext(Dispatchers.Main) { activePrimitiveWindow } ?: return@withLock
+                val active =
+                    withContext(Dispatchers.Main) { activePrimitiveWindow } ?: return@withLock
                 if (active.descriptor.sessionId != initial.descriptor.sessionId) return@withLock
                 val descriptor = mutate(active.descriptor)
                 if (descriptor == null) {
@@ -827,14 +826,19 @@ class ExoPlaybackStateHolder(
                 val all = persistenceRepository.readAllQueueItems(descriptor)
                 if (all.size != descriptor.totalCount) return@launchPrimitiveMutation null
                 val currentCanonical =
-                    all.firstOrNull {
-                        it.logicalPosition == descriptor.currentLogicalPosition
-                    }?.canonicalPosition ?: return@launchPrimitiveMutation null
+                    all.firstOrNull { it.logicalPosition == descriptor.currentLogicalPosition }
+                        ?.canonicalPosition ?: return@launchPrimitiveMutation null
                 val canonicalOrder =
                     if (shuffled) {
-                        val others = all.map { it.canonicalPosition }.filter { it != currentCanonical }.shuffled()
+                        val others =
+                            all.map { it.canonicalPosition }
+                                .filter { it != currentCanonical }
+                                .shuffled()
                         others.toMutableList().also {
-                            it.add(descriptor.currentLogicalPosition.coerceIn(0, it.size), currentCanonical)
+                            it.add(
+                                descriptor.currentLogicalPosition.coerceIn(0, it.size),
+                                currentCanonical,
+                            )
                         }
                     } else {
                         all.sortedBy { it.canonicalPosition }.map { it.canonicalPosition }
@@ -1586,7 +1590,8 @@ class ExoPlaybackStateHolder(
             }
 
         if (song == null) {
-            val primitive = withContext(Dispatchers.Main) { synchronizePrimitivePositionFromPlayer() }
+            val primitive =
+                withContext(Dispatchers.Main) { synchronizePrimitivePositionFromPlayer() }
             val primitiveItem = primitive?.currentItem
             val snapshot =
                 when {
@@ -1607,8 +1612,7 @@ class ExoPlaybackStateHolder(
                             artist = primitiveItem.artistFallback,
                             album = primitiveItem.albumFallback,
                             durationMs = primitiveItem.durationMs,
-                            positionMs =
-                                progression.calculateElapsedPositionMs().coerceAtLeast(0L),
+                            positionMs = progression.calculateElapsedPositionMs().coerceAtLeast(0L),
                             playing = progression.isPlaying,
                             savedAtMs = System.currentTimeMillis(),
                         )

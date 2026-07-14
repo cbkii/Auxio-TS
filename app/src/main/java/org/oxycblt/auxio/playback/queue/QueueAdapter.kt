@@ -132,6 +132,7 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
     private var editable = true
     override val enabled: Boolean
         get() = editable
+
     override val root = binding.root
     override val body = binding.body
     override val delete = binding.background
@@ -213,10 +214,8 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : DiffUtil.ItemCallback<QueueDisplayItem>() {
-                override fun areItemsTheSame(
-                    oldItem: QueueDisplayItem,
-                    newItem: QueueDisplayItem,
-                ) = oldItem.globalPosition == newItem.globalPosition
+                override fun areItemsTheSame(oldItem: QueueDisplayItem, newItem: QueueDisplayItem) =
+                    oldItem.globalPosition == newItem.globalPosition
 
                 override fun areContentsTheSame(
                     oldItem: QueueDisplayItem,

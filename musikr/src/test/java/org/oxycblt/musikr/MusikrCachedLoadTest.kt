@@ -1,6 +1,19 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * MusikrCachedLoadTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr
@@ -23,6 +36,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.oxycblt.musikr.cache.CacheResult
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.cache.MutableCache
@@ -37,7 +51,9 @@ import org.oxycblt.musikr.playlist.PlaylistHandle
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
 import org.oxycblt.musikr.tag.interpret.Naming
 import org.oxycblt.musikr.tag.interpret.Separators
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class MusikrCachedLoadTest {
     @Test
     fun `cached load consumes more items than the bounded channel capacity`() = runTest {
@@ -66,7 +82,9 @@ class MusikrCachedLoadTest {
         val streams = (0 until 20).map { async { lazy.open() } }.awaitAll()
 
         assertEquals(1, covers.obtainCount.get())
-        streams.forEach { stream -> assertEquals(listOf(1, 2, 3), stream!!.readBytes().map(Byte::toInt)) }
+        streams.forEach { stream ->
+            assertEquals(listOf(1, 2, 3), stream!!.readBytes().map(Byte::toInt))
+        }
     }
 
     @Test

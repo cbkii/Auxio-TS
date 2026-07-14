@@ -95,10 +95,7 @@ interface PersistenceRepository {
     ): QueueDescriptor?
 
     /** Remove one primitive item and return the committed descriptor. */
-    suspend fun removeQueueItem(
-        descriptor: QueueDescriptor,
-        logicalPosition: Int,
-    ): QueueDescriptor?
+    suspend fun removeQueueItem(descriptor: QueueDescriptor, logicalPosition: Int): QueueDescriptor?
 
     /** Move one primitive item and return the committed descriptor. */
     suspend fun moveQueueItem(
@@ -154,8 +151,7 @@ constructor(
             QueueDescriptor(
                 sessionId = session.id,
                 totalCount = totalCount,
-                currentLogicalPosition =
-                    session.currentLogicalPosition.coerceIn(0, totalCount - 1),
+                currentLogicalPosition = session.currentLogicalPosition.coerceIn(0, totalCount - 1),
                 positionMs = session.positionMs.coerceAtLeast(0L),
                 repeatMode = session.repeatMode,
                 shuffleScope = session.shuffleScope,
@@ -203,11 +199,7 @@ constructor(
         descriptor: QueueDescriptor,
         anchorLogicalPosition: Int,
     ): QueueWindow? {
-        val range =
-            QueueWindowPolicy.around(
-                descriptor.totalCount,
-                anchorLogicalPosition,
-            )
+        val range = QueueWindowPolicy.around(descriptor.totalCount, anchorLogicalPosition)
         return readQueueWindow(descriptor, range.startInclusive, range.endExclusive)
     }
 
@@ -303,17 +295,12 @@ constructor(
     ): QueueDescriptor? =
         mutateDescriptor("remove primitive queue item") { session ->
             if (logicalPosition !in 0 until session.totalCount) return@mutateDescriptor null
-            val removed = queueDao.getQueueItem(session.id, logicalPosition)
-                ?: return@mutateDescriptor null
+            val removed =
+                queueDao.getQueueItem(session.id, logicalPosition) ?: return@mutateDescriptor null
             if (queueDao.deleteQueueItem(session.id, logicalPosition) != 1) {
                 return@mutateDescriptor null
             }
-            moveLogicalRangeToOffset(
-                session.id,
-                logicalPosition + 1,
-                session.totalCount,
-                -1,
-            )
+            moveLogicalRangeToOffset(session.id, logicalPosition + 1, session.totalCount, -1)
             moveCanonicalRangeToOffset(
                 session.id,
                 removed.canonicalPosition + 1,
@@ -360,12 +347,7 @@ constructor(
                     -1,
                 )
             } else {
-                moveLogicalRangeToOffset(
-                    session.id,
-                    toLogicalPosition,
-                    fromLogicalPosition,
-                    1,
-                )
+                moveLogicalRangeToOffset(session.id, toLogicalPosition, fromLogicalPosition, 1)
             }
             check(queueDao.setLogicalPosition(session.id, TEMP_POSITION, toLogicalPosition) == 1)
             val current =
@@ -397,18 +379,12 @@ constructor(
                 return@mutateDescriptor null
             }
             val currentCanonical =
-                rows.firstOrNull { it.logicalPosition == session.currentLogicalPosition }
+                rows
+                    .firstOrNull { it.logicalPosition == session.currentLogicalPosition }
                     ?.canonicalPosition ?: return@mutateDescriptor null
-            queueDao.offsetLogicalPositions(
-                session.id,
-                0,
-                session.totalCount,
-                POSITION_OFFSET,
-            )
+            queueDao.offsetLogicalPositions(session.id, 0, session.totalCount, POSITION_OFFSET)
             canonicalOrder.forEachIndexed { logical, canonical ->
-                check(
-                    queueDao.setLogicalPositionByCanonical(session.id, canonical, logical) == 1
-                )
+                check(queueDao.setLogicalPositionByCanonical(session.id, canonical, logical) == 1)
             }
             val current = canonicalOrder.indexOf(currentCanonical)
             commitLayout(session, current, session.totalCount, shuffleScope)
@@ -435,12 +411,7 @@ constructor(
         finalDelta: Int,
     ) {
         if (startInclusive >= endExclusive) return
-        queueDao.offsetLogicalPositions(
-            sessionId,
-            startInclusive,
-            endExclusive,
-            POSITION_OFFSET,
-        )
+        queueDao.offsetLogicalPositions(sessionId, startInclusive, endExclusive, POSITION_OFFSET)
         queueDao.offsetLogicalPositions(
             sessionId,
             startInclusive + POSITION_OFFSET,
@@ -456,12 +427,7 @@ constructor(
         finalDelta: Int,
     ) {
         if (startInclusive >= endExclusive) return
-        queueDao.offsetCanonicalPositions(
-            sessionId,
-            startInclusive,
-            endExclusive,
-            POSITION_OFFSET,
-        )
+        queueDao.offsetCanonicalPositions(sessionId, startInclusive, endExclusive, POSITION_OFFSET)
         queueDao.offsetCanonicalPositions(
             sessionId,
             startInclusive + POSITION_OFFSET,

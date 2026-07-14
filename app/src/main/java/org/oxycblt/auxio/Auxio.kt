@@ -41,8 +41,8 @@ import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
 import org.oxycblt.auxio.home.HomeSettings
-import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.image.ImageSettings
+import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
@@ -133,8 +133,7 @@ class Auxio : Application() {
                     !BuildConfig.TOPWAY_COMPAT_FLAVOR,
                 )
             if (shortcutsEnabled) {
-                val shortcutMarker =
-                    "auxio_dynamic_shortcuts_published_${BuildConfig.VERSION_CODE}"
+                val shortcutMarker = "auxio_dynamic_shortcuts_published_${BuildConfig.VERSION_CODE}"
                 if (!prefs.getBoolean(shortcutMarker, false)) {
                     try {
                         ShortcutManagerCompat.setDynamicShortcuts(
@@ -160,9 +159,7 @@ class Auxio : Application() {
     private fun registerCarOverlayIfAvailable() {
         try {
             val companionClass =
-                Class.forName(
-                    "org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks\$Companion"
-                )
+                Class.forName("org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks\$Companion")
             val hooksClass =
                 Class.forName("org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks")
             val companion = hooksClass.getDeclaredField("Companion").get(null)

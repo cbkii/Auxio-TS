@@ -18,11 +18,11 @@
 
 package org.oxycblt.musikr.pipeline.shim
 
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import org.oxycblt.musikr.fs.FS
@@ -41,7 +41,8 @@ internal class FilteredFS(
     private val lowercaseKeywords = pathKeywords.map { it.lowercase() }
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
-        val delegateChannel = Channel<File>(org.oxycblt.musikr.pipeline.PipelinePolicy.BUFFER_CAPACITY)
+        val delegateChannel =
+            Channel<File>(org.oxycblt.musikr.pipeline.PipelinePolicy.BUFFER_CAPACITY)
         val delegateTask =
             try {
                 delegate.explore(delegateChannel)

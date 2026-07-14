@@ -184,22 +184,30 @@ interface QueueDao {
         endExclusive: Int,
     ): List<QueueItemRefEntity>
 
-    @Query("SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition LIMIT 1")
+    @Query(
+        "SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition LIMIT 1"
+    )
     suspend fun getQueueItem(sessionId: Long, logicalPosition: Int): QueueItemRefEntity?
 
     @Query("SELECT COUNT(*) FROM QueueItemRefEntity WHERE sessionId = :sessionId")
     suspend fun countQueueItems(sessionId: Long): Int
 
-    @Query("SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId ORDER BY logicalPosition ASC")
+    @Query(
+        "SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId ORDER BY logicalPosition ASC"
+    )
     suspend fun getAllQueueItems(sessionId: Long): List<QueueItemRefEntity>
 
-    @Query("SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId AND canonicalPosition = :canonicalPosition LIMIT 1")
+    @Query(
+        "SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId AND canonicalPosition = :canonicalPosition LIMIT 1"
+    )
     suspend fun getQueueItemByCanonicalPosition(
         sessionId: Long,
         canonicalPosition: Int,
     ): QueueItemRefEntity?
 
-    @Query("DELETE FROM QueueItemRefEntity WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition")
+    @Query(
+        "DELETE FROM QueueItemRefEntity WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition"
+    )
     suspend fun deleteQueueItem(sessionId: Long, logicalPosition: Int): Int
 
     @Query(
@@ -302,8 +310,6 @@ interface QueueDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertQueueItemRefs(items: List<QueueItemRefEntity>)
-
-
 }
 
 @Entity

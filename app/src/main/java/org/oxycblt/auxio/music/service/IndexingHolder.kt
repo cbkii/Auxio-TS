@@ -169,8 +169,7 @@ private constructor(
             return
         }
         if (
-            musicSettings.observationMode == ObservationMode.WHEN_IDLE &&
-                playbackActiveSnapshot()
+            musicSettings.observationMode == ObservationMode.WHEN_IDLE && playbackActiveSnapshot()
         ) {
             coalescePendingIndex(withCache)
             L.i("Deferred indexing request until playback is idle [cache=$withCache]")
@@ -198,10 +197,8 @@ private constructor(
                         val pending = pendingIndexWithCache
                         if (
                             pending != null &&
-                                !(
-                                    musicSettings.observationMode == ObservationMode.WHEN_IDLE &&
-                                        playbackActiveSnapshot()
-                                )
+                                !(musicSettings.observationMode == ObservationMode.WHEN_IDLE &&
+                                    playbackActiveSnapshot())
                         ) {
                             pendingIndexWithCache = null
                             startIndexLocked(pending)

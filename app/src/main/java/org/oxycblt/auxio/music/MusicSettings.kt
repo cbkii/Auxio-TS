@@ -156,29 +156,22 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     override val scanPriority: ScanPriority
         get() =
             ScanPriority.fromName(
-                sharedPreferences.getString(
-                    getString(R.string.set_key_scan_priority),
-                    null,
-                )
-            ) ?: if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                ScanPriority.PLAYBACK_FIRST
-            } else {
-                ScanPriority.BALANCED
-            }
+                sharedPreferences.getString(getString(R.string.set_key_scan_priority), null)
+            )
+                ?: if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    ScanPriority.PLAYBACK_FIRST
+                } else {
+                    ScanPriority.BALANCED
+                }
 
     override val observationMode: ObservationMode
         get() {
             val stored =
                 ObservationMode.fromName(
-                    sharedPreferences.getString(
-                        getString(R.string.set_key_observation_mode),
-                        null,
-                    )
+                    sharedPreferences.getString(getString(R.string.set_key_observation_mode), null)
                 )
             if (stored != null) return stored
-            return if (
-                sharedPreferences.getBoolean(getString(R.string.set_key_observing), false)
-            ) {
+            return if (sharedPreferences.getBoolean(getString(R.string.set_key_observing), false)) {
                 ObservationMode.CONTINUOUS
             } else {
                 ObservationMode.MANUAL
@@ -188,10 +181,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     override val rootAccessPolicy: RootAccessPolicy
         get() =
             RootAccessPolicy.fromName(
-                sharedPreferences.getString(
-                    getString(R.string.set_key_root_access_policy),
-                    null,
-                )
+                sharedPreferences.getString(getString(R.string.set_key_root_access_policy), null)
             ) ?: RootAccessPolicy.ON_DEMAND
 
     override val dynamicShortcutsEnabled: Boolean
@@ -202,11 +192,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             )
 
     override val performanceCaptureEnabled: Boolean
-        get() =
-            sharedPreferences.getBoolean(
-                getString(R.string.set_key_performance_capture),
-                false,
-            )
+        get() = sharedPreferences.getBoolean(getString(R.string.set_key_performance_capture), false)
 
     override var separators: String
         // Differ from convention and store a string of separator characters instead of an int
@@ -442,7 +428,6 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
     }
 }
-
 
 /** Policy controlling when source changes trigger an automatic library refresh. */
 enum class ObservationMode {

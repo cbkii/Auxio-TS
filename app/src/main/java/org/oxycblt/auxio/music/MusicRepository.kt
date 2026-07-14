@@ -728,14 +728,15 @@ constructor(
 
     private suspend fun emitLibrary(newLibrary: MutableLibrary) {
         val emitStart = System.currentTimeMillis()
-        val changed = synchronized(this) {
-            if (library === newLibrary) {
-                false
-            } else {
-                library = newLibrary
-                true
+        val changed =
+            synchronized(this) {
+                if (library === newLibrary) {
+                    false
+                } else {
+                    library = newLibrary
+                    true
+                }
             }
-        }
         if (!changed) {
             L.d("Library instance has not changed, skipping update")
             return

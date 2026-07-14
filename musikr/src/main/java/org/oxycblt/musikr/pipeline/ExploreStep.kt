@@ -67,6 +67,7 @@ private class ExploreStepImpl(
     workerCount: Int,
 ) : ExploreStep {
     private val parallelism = workerCount.coerceAtLeast(1)
+
     override suspend fun explore(
         scope: CoroutineScope,
         explored: Channel<Explored>,
@@ -147,7 +148,6 @@ private class ExploreStepImpl(
     private data class NeedsHydration(val cachedFile: CachedFile) : Classified
 
     private data class Finalized(val explored: Explored) : Classified
-
 }
 
 internal object FileClassification {

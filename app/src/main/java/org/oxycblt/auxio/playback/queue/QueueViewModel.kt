@@ -31,8 +31,8 @@ import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.playback.persist.PersistenceRepository
 import org.oxycblt.auxio.playback.persist.QueueItemRef
-import org.oxycblt.auxio.playback.persist.QueueWindowPolicy
 import org.oxycblt.auxio.playback.persist.QueueWindow
+import org.oxycblt.auxio.playback.persist.QueueWindowPolicy
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.util.Event
@@ -61,8 +61,7 @@ class QueueViewModel
 constructor(
     private val playbackManager: PlaybackStateManager,
     private val persistenceRepository: PersistenceRepository,
-) :
-    ViewModel(), PlaybackStateManager.Listener {
+) : ViewModel(), PlaybackStateManager.Listener {
 
     private val _queue = MutableStateFlow(listOf<QueueDisplayItem>())
     /** The currently loaded queue range. */
@@ -174,9 +173,7 @@ constructor(
                     } ?: return@launch
                 _queueInstructions.put(UpdateInstructions.Replace(0))
                 _queue.value =
-                    window.items.map { item ->
-                        QueueDisplayItem(item.logicalPosition, null, item)
-                    }
+                    window.items.map { item -> QueueDisplayItem(item.logicalPosition, null, item) }
                 _index.value = window.currentLocalPosition
                 _isInitialQueueLoaded.value = true
             }
@@ -237,9 +234,7 @@ constructor(
         return true
     }
 
-    private fun List<Song>.toDisplayItems() =
-        mapIndexed { index, song ->
-            QueueDisplayItem(globalPosition = index, song = song, primitive = null)
-        }
-
+    private fun List<Song>.toDisplayItems() = mapIndexed { index, song ->
+        QueueDisplayItem(globalPosition = index, song = song, primitive = null)
+    }
 }

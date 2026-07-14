@@ -597,7 +597,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     override fun addToQueue(songs: List<Song>) {
         if (queueWindow != null) {
             val stateHolder = stateHolder ?: return
-            stateHolder.addToQueue(songs, StateAck.AddToQueue(queueWindow!!.descriptor.totalCount, songs.size))
+            stateHolder.addToQueue(
+                songs,
+                StateAck.AddToQueue(queueWindow!!.descriptor.totalCount, songs.size),
+            )
             return
         }
         if (currentSong == null) {
@@ -717,9 +720,11 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             stateMirror =
                 stateMirror.copy(
                     queueWindow = nextQueueWindow,
-                    index = nextQueueWindow?.descriptor?.currentLogicalPosition ?: stateMirror.index,
+                    index =
+                        nextQueueWindow?.descriptor?.currentLogicalPosition ?: stateMirror.index,
                     isShuffled = nextQueueWindow?.descriptor?.shuffleScope != ShuffleScope.OFF,
-                    shuffleScope = nextQueueWindow?.descriptor?.shuffleScope ?: stateMirror.shuffleScope,
+                    shuffleScope =
+                        nextQueueWindow?.descriptor?.shuffleScope ?: stateMirror.shuffleScope,
                 )
         }
 

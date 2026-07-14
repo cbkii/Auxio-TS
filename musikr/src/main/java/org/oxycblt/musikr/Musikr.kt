@@ -37,10 +37,9 @@ import org.oxycblt.musikr.pipeline.ExploreStep
 import org.oxycblt.musikr.pipeline.Explored
 import org.oxycblt.musikr.pipeline.ExtractStep
 import org.oxycblt.musikr.pipeline.Extracted
+import org.oxycblt.musikr.pipeline.PipelinePolicy
 import org.oxycblt.musikr.pipeline.RawPlaylist
 import org.oxycblt.musikr.pipeline.RawSong
-import org.oxycblt.musikr.pipeline.PipelinePolicy
-
 import org.oxycblt.musikr.util.merge
 import org.oxycblt.musikr.util.tryAsyncWith
 
@@ -252,7 +251,6 @@ private class MusikrImpl(
         Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
         LibraryResultImpl(config, library)
     }
-
 }
 
 private class LibraryResultImpl(private val config: Config, override val library: MutableLibrary) :
@@ -271,7 +269,9 @@ private class LibraryResultImpl(private val config: Config, override val library
 internal class LazyIdCover(override val id: String, private val storage: Storage) : Cover {
     private sealed interface Resolution {
         data object Unresolved : Resolution
+
         data object Missing : Resolution
+
         data class Found(val cover: Cover) : Resolution
     }
 
