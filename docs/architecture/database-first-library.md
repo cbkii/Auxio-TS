@@ -14,11 +14,20 @@ normalized projections; it is never deleted by migration or backfill.
   unique URI identity), runtime wiring via `MutableCache.populateNormalizedLibrary()` invoked at
   the end of `MusicRepositoryImpl.startup()` on the indexing scope, executable Room migration and
   backfill tests (`CacheMigrationAndBackfillTest`).
-- **Scaffold only:** `LibraryReadDao` paged projections and search queries exist but are not yet
-  consumed by ViewModels/adapters; generation columns exist but incremental generation-safe
-  scanning is not yet implemented.
+- **Scaffold only:** `LibraryReadDao` paged projections are not yet consumed by ViewModels/adapters;
+  generation columns exist but incremental generation-safe scanning is not yet implemented.
+- **Implemented (primitive, test-only consumer):** indexed database song search via
+  `LibraryReadDao.searchSongs` now escapes user `LIKE` metacharacters (`%`, `_`, `\`) with an
+  `ESCAPE '\'` clause, is paged (`limit`/`offset`) and deterministically ordered (`titleSort, id`);
+  `LikeQuery` provides the pure escaping helper and `LibrarySearcher` adds bounded, cancellable,
+  obsolete-query-suppressing coordination. Paged song/album/artist projections also gained the `id`
+  tie-breaker so `offset` paging cannot skip or repeat rows across equal sort keys. Covered by
+  `LibrarySearchTest`. Still needs a runtime consumer (the app search UI) to replace the in-memory
+  `SearchEngine` path; that requires the domain-model bridge below.
 - **Not yet implemented:** Paging 3 end-to-end UI conversion, MediaBrowser bounded async browsing,
-  database-backed search UI, Lean/Full metadata profile work differentiation.
+  database-backed search UI wiring, Lean/Full metadata profile work differentiation, and the
+  domain-model bridge that maps normalized rows to `Song`/`Album`/`Artist`/`Genre` so consumers can
+  stop constructing the full in-memory `Library` graph.
 
 | Legacy producer | Legacy consumer | Database-first replacement | Projection | Paging | Removal point |
 | --- | --- | --- | --- | --- | --- |
