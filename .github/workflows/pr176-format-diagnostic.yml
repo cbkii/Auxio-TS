@@ -1,0 +1,73 @@
+name: PR 176 formatting diagnostic
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - ".github/workflows/pr176-format-diagnostic.yml"
+      - "app/**"
+      - "musikr/**"
+      - "build.gradle"
+      - "NOTICE"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr176-format-diagnostic-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  export-spotless-patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply formatter and export patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git diff --binary -- app musikr > spotless.patch
+          git diff --stat -- app musikr
+
+      - name: Upload formatter patch
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr176-spotless-patch
+          path: spotless.patch
+          if-no-files-found: error
+          retention-days: 1
