@@ -1,0 +1,108 @@
+name: Temporary PR173 hardener
+
+on:
+  push:
+    branches:
+      - cx/implement-playback-first-startup-architecture
+    paths:
+      - ".github/workflows/temporary-pr173-hardener.yml"
+
+permissions:
+  contents: write
+
+env:
+  TARGET_BRANCH: cx/implement-playback-first-startup-architecture
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "${sdk_dir}"
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Ensure native build tools are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Repair JVM test runner and apply repository formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("musikr/src/test/java/org/oxycblt/musikr/MusikrCachedLoadTest.kt")
+          text = path.read_text()
+          if "import org.junit.runner.RunWith" not in text:
+              text = text.replace("import org.junit.Test\n", "import org.junit.Test\nimport org.junit.runner.RunWith\nimport org.robolectric.RobolectricTestRunner\n")
+          if "@RunWith(RobolectricTestRunner::class)\nclass MusikrCachedLoadTest" not in text:
+              text = text.replace("class MusikrCachedLoadTest", "@RunWith(RobolectricTestRunner::class)\nclass MusikrCachedLoadTest")
+          path.write_text(text)
+          PY
+          bash ./scripts/ci-gradle.sh spotlessApply
+          rm -- .github/workflows/temporary-pr173-hardener.yml
+          git diff --check
+
+      - name: Commit formatting and test repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No hardening changes were required."
+          else
+            git commit -m "Fix PR173 formatting and JVM test runner"
+            git push origin "HEAD:refs/heads/${TARGET_BRANCH}"
+          fi
+
+      - name: Capture debug build output
+        id: build
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug
+            bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicDebug
+            bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaDebug
+          } 2>&1 | tee "${RUNNER_TEMP}/pr173-build.log"
+
+      - name: Upload complete build log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr173-complete-build-log
+          path: ${{ runner.temp }}/pr173-build.log
+          if-no-files-found: error
+          retention-days: 7
