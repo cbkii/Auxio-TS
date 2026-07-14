@@ -737,4 +737,64 @@
     <string name="set_advanced_recovery_warning">Use only if stock twmusic package selection is blocking Auxio-TS. Actions require root and are reversible.</string>
     <string name="set_floating_controls_permission">Display over other apps permission</string>
     <string name="set_floating_controls_permission_desc">Open Android permission settings for floating controls</string>
+
+    <string name="set_key_performance">set_performance</string>
+    <string name="set_performance">Performance &amp; library</string>
+    <string name="set_performance_desc">Scan priority, observation, root access</string>
+    <string name="set_group_perf_library">Library</string>
+
+    <string name="set_key_perf_scan_priority">perf_scan_priority</string>
+    <string name="set_perf_scan_priority">Scan priority</string>
+    <string-array name="set_perf_scan_priority_entries">
+        <item>Playback first</item>
+        <item>Balanced</item>
+        <item>Fast scan</item>
+    </string-array>
+    <string-array name="set_perf_scan_priority_values">
+        <item>playback_first</item>
+        <item>balanced</item>
+        <item>fast_scan</item>
+    </string-array>
+
+    <string name="set_key_perf_auto_observation">perf_auto_observation</string>
+    <string name="set_perf_auto_observation">Automatic source observation</string>
+    <string-array name="set_perf_auto_observation_entries">
+        <item>Manual</item>
+        <item>When idle</item>
+        <item>Continuous</item>
+    </string-array>
+    <string-array name="set_perf_auto_observation_values">
+        <item>manual</item>
+        <item>when_idle</item>
+        <item>continuous</item>
+    </string-array>
+
+    <string name="set_key_perf_root_access">perf_root_access</string>
+    <string name="set_perf_root_access">Root access</string>
+    <string-array name="set_perf_root_access_entries">
+        <item>Off</item>
+        <item>On demand</item>
+    </string-array>
+    <string-array name="set_perf_root_access_values">
+        <item>off</item>
+        <item>on_demand</item>
+    </string-array>
+
+    <string name="set_group_perf_system">System</string>
+
+    <string name="set_key_perf_dynamic_shortcuts">perf_dynamic_shortcuts</string>
+    <string name="set_perf_dynamic_shortcuts">Dynamic shortcuts</string>
+    <string name="set_perf_dynamic_shortcuts_desc">Publish playback shortcuts to the launcher</string>
+
+    <string name="set_key_perf_diagnostic_capture">perf_diagnostic_capture</string>
+    <string name="set_perf_diagnostic_capture">Diagnostic performance capture</string>
+    <string-array name="set_perf_diagnostic_capture_entries">
+        <item>Off</item>
+        <item>Bounded capture</item>
+    </string-array>
+    <string-array name="set_perf_diagnostic_capture_values">
+        <item>off</item>
+        <item>bounded</item>
+    </string-array>
+
 </resources>

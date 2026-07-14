@@ -39,6 +39,7 @@ import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
 import org.oxycblt.auxio.util.NotificationBitmapSafety
+import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber
 
 internal object CrashReportStorage {
@@ -64,6 +65,7 @@ class Auxio : Application() {
     @Inject lateinit var homeSettings: HomeSettings
 
     override fun onCreate() {
+        PerfTimer.point("Application.onCreate")
         installCrashHandler()
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
@@ -111,20 +113,22 @@ class Auxio : Application() {
         // throw from setDynamicShortcuts; never let that crash every app launch. Publishing
         // involves synchronous binder calls to system_server, so keep it off the main thread
         // to avoid slowing first-frame startup on weak head-unit hardware.
-        Thread(
-                {
-                    try {
-                        ShortcutManagerCompat.setDynamicShortcuts(
-                            this,
-                            HeadUnitEntryPoints.createDynamicShortcuts(this),
-                        )
-                    } catch (e: Exception) {
-                        Timber.w(e, "Unable to register dynamic shortcuts")
-                    }
-                },
-                "Auxio:ShortcutPublish",
-            )
-            .start()
+        if (homeSettings.dynamicShortcuts) {
+            Thread(
+                    {
+                        try {
+                            ShortcutManagerCompat.setDynamicShortcuts(
+                                this,
+                                HeadUnitEntryPoints.createDynamicShortcuts(this),
+                            )
+                        } catch (e: Exception) {
+                            Timber.w(e, "Unable to register dynamic shortcuts")
+                        }
+                    },
+                    "Auxio:ShortcutPublish",
+                )
+                .start()
+        }
 
         // Register car floating controls visibility hooks for the Topway/TS18 variant.
         if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
@@ -139,23 +143,27 @@ class Auxio : Application() {
                 val registerMethod = companionClass.getMethod("register", Application::class.java)
                 registerMethod.invoke(companion, this)
 
-                try {
-                    val serviceClass =
-                        Class.forName("org.oxycblt.auxio.car.overlay.CarFloatingControlsService")
-                    val serviceCompanionClass =
-                        Class.forName(
-                            "org.oxycblt.auxio.car.overlay.CarFloatingControlsService\$Companion"
-                        )
-                    val serviceCompanion = serviceClass.getDeclaredField("Companion").get(null)
-                    val restoreMethod =
-                        serviceCompanionClass.getMethod(
-                            "restoreIfEnabled",
-                            Context::class.java,
-                            String::class.java,
-                        )
-                    restoreMethod.invoke(serviceCompanion, this, "application_on_create")
-                } catch (e: ReflectiveOperationException) {
-                    Timber.w(e, "Car overlay startup restore not available")
+                if (playbackSettings.autostartFloatingOnly) {
+                    try {
+                        val serviceClass =
+                            Class.forName(
+                                "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
+                            )
+                        val serviceCompanionClass =
+                            Class.forName(
+                                "org.oxycblt.auxio.car.overlay.CarFloatingControlsService\$Companion"
+                            )
+                        val serviceCompanion = serviceClass.getDeclaredField("Companion").get(null)
+                        val restoreMethod =
+                            serviceCompanionClass.getMethod(
+                                "restoreIfEnabled",
+                                Context::class.java,
+                                String::class.java,
+                            )
+                        restoreMethod.invoke(serviceCompanion, this, "application_on_create")
+                    } catch (e: ReflectiveOperationException) {
+                        Timber.w(e, "Car overlay startup restore not available")
+                    }
                 }
             } catch (e: ReflectiveOperationException) {
                 Timber.w(e, "Car overlay visibility hooks not available")

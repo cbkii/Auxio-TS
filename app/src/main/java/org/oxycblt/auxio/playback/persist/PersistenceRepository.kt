@@ -23,6 +23,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.musikr.MusicParent
 import timber.log.Timber as L
 
@@ -86,7 +87,10 @@ constructor(
         val heapItems: List<QueueHeapItem>
         val mappingItems: List<QueueShuffledMappingItem>
         try {
-            playbackState = playbackStateDao.getState() ?: return null
+            playbackState =
+                playbackStateDao.getState().also {
+                    PerfTimer.point("PersistenceRepository.databaseRead")
+                } ?: return null
             heapItems = queueDao.getHeap()
             mappingItems = queueDao.getShuffledMapping()
         } catch (e: Exception) {

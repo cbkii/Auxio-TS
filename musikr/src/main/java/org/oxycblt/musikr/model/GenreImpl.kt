@@ -51,10 +51,7 @@ internal class GenreImpl(private val core: GenreCore) : Genre {
     override fun hashCode() = hashCode
 
     override fun equals(other: Any?) =
-        other is GenreImpl &&
-            uid == other.uid &&
-            core.preGenre == other.core.preGenre &&
-            songs == other.songs
+        other is GenreImpl && uid == other.uid && core.preGenre == other.core.preGenre
 
     override fun toString() = "Genre(uid=$uid, name=$name)"
 }

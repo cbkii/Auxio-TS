@@ -40,7 +40,7 @@ internal class PlaylistImpl(val core: PlaylistCore) : Playlist {
         31 * (31 * uid.hashCode() + core.prePlaylist.hashCode()) + songs.hashCode()
 
     override fun equals(other: Any?) =
-        other is PlaylistImpl && core.prePlaylist == other.core.prePlaylist && songs == other.songs
+        other is PlaylistImpl && core.prePlaylist == other.core.prePlaylist
 
     override fun hashCode() = hashCode
 

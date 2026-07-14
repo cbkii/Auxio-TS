@@ -39,6 +39,7 @@ interface HomeSettings : Settings<HomeSettings.Listener> {
     var homeTabs: Array<Tab>
     /** Whether to hide artists considered "collaborators" from the home UI. */
     val shouldHideCollaborators: Boolean
+    val dynamicShortcuts: Boolean
 
     interface Listener {
         /** Called when the [homeTabs] configuration changes. */
@@ -68,6 +69,10 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
 
     override val shouldHideCollaborators: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_hide_collaborators), false)
+
+    override val dynamicShortcuts: Boolean
+        get() =
+            sharedPreferences.getBoolean(getString(R.string.set_key_perf_dynamic_shortcuts), false)
 
     override fun migrate() {
         if (sharedPreferences.contains(OLD_KEY_LIB_TABS)) {

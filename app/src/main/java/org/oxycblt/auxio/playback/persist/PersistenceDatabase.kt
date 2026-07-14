@@ -39,7 +39,7 @@ import org.oxycblt.musikr.Music
  */
 @Database(
     entities = [PlaybackState::class, QueueHeapItem::class, QueueShuffledMappingItem::class],
-    version = 39,
+    version = 40,
     exportSchema = false,
 )
 @TypeConverters(Music.UID.TypeConverters::class)
@@ -74,6 +74,12 @@ abstract class PersistenceDatabase : RoomDatabase() {
                 it.execSQL(
                     "UPDATE PlaybackState SET shuffleScope = 'ALL' " +
                         "WHERE id = 0 AND EXISTS (SELECT 1 FROM QueueShuffledMappingItem LIMIT 1)"
+                )
+            }
+        val MIGRATION_39_40 =
+            Migration(39, 40) {
+                it.execSQL(
+                    "ALTER TABLE PlaybackState ADD COLUMN shuffleSeed INTEGER NOT NULL DEFAULT 0"
                 )
             }
     }
@@ -158,6 +164,7 @@ data class PlaybackState(
     val songUid: Music.UID,
     val parentUid: Music.UID?,
     val shuffleScope: ShuffleScope,
+    val shuffleSeed: Long = 0L,
 )
 
 @Entity data class QueueHeapItem(@PrimaryKey val id: Int, val uid: Music.UID)

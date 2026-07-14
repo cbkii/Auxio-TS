@@ -140,7 +140,7 @@ private class ExploreStepImpl(
     private data class Finalized(val explored: Explored) : Classified
 
     private companion object {
-        const val PARALLELISM = 8
+        val PARALLELISM = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
     }
 }
 

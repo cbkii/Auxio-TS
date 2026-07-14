@@ -162,6 +162,7 @@ private class HomeGeneratorImpl(
      */
     private data class CachedList<T>(
         val library: Library,
+        val generation: Long,
         val sort: Sort,
         val extra: Any?,
         val items: List<T>,
@@ -183,7 +184,12 @@ private class HomeGeneratorImpl(
     ): List<T> {
         val library = musicRepository.library ?: return emptyList()
         val hit = cached
-        if (hit != null && hit.library === library && hit.sort == sort && hit.extra == extra) {
+        if (
+            hit != null &&
+                hit.generation == musicRepository.generation &&
+                hit.sort == sort &&
+                hit.extra == extra
+        ) {
             return hit.items
         }
         val start = System.currentTimeMillis()
@@ -191,7 +197,7 @@ private class HomeGeneratorImpl(
         L.d(
             "HomeGenerator.$label() sorted ${result.size} items in ${System.currentTimeMillis() - start}ms"
         )
-        store(CachedList(library, sort, extra, result))
+        store(CachedList(library, musicRepository.generation, sort, extra, result))
         return result
     }
 

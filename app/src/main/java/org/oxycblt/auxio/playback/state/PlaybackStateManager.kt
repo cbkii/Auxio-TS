@@ -897,17 +897,21 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             return
         }
 
+        // Bounded queue window for performance.
+        val WINDOW = 25
+        val minIndex = maxOf(0, index - WINDOW)
+        val maxIndex = minOf(heap.size - 1, index + WINDOW)
+
+        val newHeap = heap.subList(minIndex, maxIndex + 1)
+        val newShuffledMapping =
+            shuffledMapping.filter { it in minIndex..maxIndex }.map { it - minIndex }
+        val newIndex =
+            if (shuffledMapping.isNotEmpty())
+                newShuffledMapping.indexOf(shuffledMapping[index] - minIndex)
+            else index - minIndex
+
         val rawQueue =
-            RawQueue(
-                heap = heap,
-                shuffledMapping = shuffledMapping,
-                heapIndex =
-                    if (shuffledMapping.isNotEmpty()) {
-                        shuffledMapping[index]
-                    } else {
-                        index
-                    },
-            )
+            RawQueue(heap = newHeap, shuffledMapping = newShuffledMapping, heapIndex = newIndex)
 
         stateMirror =
             stateMirror.copy(

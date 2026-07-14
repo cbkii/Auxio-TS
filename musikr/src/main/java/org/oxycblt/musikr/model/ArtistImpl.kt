@@ -61,10 +61,7 @@ internal class ArtistImpl(private val core: ArtistCore) : Artist {
     override fun hashCode() = hashCode
 
     override fun equals(other: Any?) =
-        other is ArtistImpl &&
-            uid == other.uid &&
-            core.preArtist == other.core.preArtist &&
-            songs == other.songs
+        other is ArtistImpl && uid == other.uid && core.preArtist == other.core.preArtist
 
     override fun toString() = "Artist(uid=$uid, name=$name)"
 }

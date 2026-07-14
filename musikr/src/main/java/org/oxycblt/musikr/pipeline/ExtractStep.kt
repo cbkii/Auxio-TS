@@ -166,6 +166,6 @@ private class ExtractStepImpl(
         CachedFile(file, audio = Audio(properties, tags, cover?.id), addedMs)
 
     private companion object {
-        const val PARALLELISM = 8
+        val PARALLELISM = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
     }
 }

@@ -74,6 +74,7 @@ import timber.log.Timber as L
 interface MusicRepository {
     /** The current library */
     val library: Library?
+    val generation: Long
 
     /** The current state of music loading. Null if no load has occurred yet. */
     val indexingState: IndexingState?
@@ -268,6 +269,7 @@ constructor(
     @Volatile private var indexingWorker: IndexingWorker? = null
 
     @Volatile override var library: MutableLibrary? = null
+    @Volatile override var generation: Long = 0L
     @Volatile private var previousCompletedState: IndexingState.Completed? = null
     @Volatile private var currentIndexingState: IndexingState? = null
     override val indexingState: IndexingState?
@@ -354,7 +356,10 @@ constructor(
         val library = synchronized(this) { library ?: return }
         L.d("Creating playlist $name with ${songs.size} songs")
         val newLibrary = library.createPlaylist(name, songs)
-        synchronized(this) { this.library = newLibrary }
+        synchronized(this) {
+            this.library = newLibrary
+            this.generation++
+        }
         withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
@@ -362,7 +367,10 @@ constructor(
         val library = synchronized(this) { library ?: return }
         L.d("Renaming $playlist to $name")
         val newLibrary = library.renamePlaylist(playlist, name)
-        synchronized(this) { this.library = newLibrary }
+        synchronized(this) {
+            this.library = newLibrary
+            this.generation++
+        }
         withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
@@ -370,7 +378,10 @@ constructor(
         val library = synchronized(this) { library ?: return }
         L.d("Adding ${songs.size} song(s) to $playlist")
         val newLibrary = library.addToPlaylist(playlist, songs)
-        synchronized(this) { this.library = newLibrary }
+        synchronized(this) {
+            this.library = newLibrary
+            this.generation++
+        }
         withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
@@ -378,7 +389,10 @@ constructor(
         val library = synchronized(this) { library ?: return }
         L.d("Rewriting $playlist with ${songs.size} song(s)")
         val newLibrary = library.rewritePlaylist(playlist, songs)
-        synchronized(this) { this.library = newLibrary }
+        synchronized(this) {
+            this.library = newLibrary
+            this.generation++
+        }
         withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
@@ -386,7 +400,10 @@ constructor(
         val library = synchronized(this) { library ?: return }
         L.d("Deleting $playlist")
         val newLibrary = library.deletePlaylist(playlist)
-        synchronized(this) { this.library = newLibrary }
+        synchronized(this) {
+            this.library = newLibrary
+            this.generation++
+        }
         withContext(Dispatchers.Main) { dispatchLibraryChange(device = false, user = true) }
     }
 
@@ -409,7 +426,10 @@ constructor(
                     loadCachedLibrary = { loadCachedLibrary() },
                     cachedSongCount = { it.songs.size },
                     emitCachedLibrary = {
-                        synchronized(this) { this.library = it }
+                        synchronized(this) {
+                            this.library = it
+                            this.generation++
+                        }
                         withContext(Dispatchers.Main) {
                             dispatchLibraryChange(device = true, user = true)
                         }
@@ -709,6 +729,7 @@ constructor(
             }
 
             this.library = newLibrary
+            this.generation++
         }
 
         // Consumers expect their updates to be on the main thread (notably PlaybackService),

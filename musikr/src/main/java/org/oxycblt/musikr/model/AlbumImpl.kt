@@ -59,7 +59,7 @@ class AlbumImpl internal constructor(private val core: AlbumCore) : Album {
     override fun hashCode() = hashCode
 
     override fun equals(other: Any?) =
-        other is AlbumImpl && uid == other.uid && preAlbum == other.preAlbum && songs == other.songs
+        other is AlbumImpl && uid == other.uid && preAlbum == other.preAlbum
 
     override fun toString() = "Album(uid=$uid, name=$name)"
 

@@ -127,7 +127,10 @@ private constructor(
             }
             startupJob =
                 indexScope.launch {
-                    if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    if (
+                        BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                            musicSettings.locationMode == LocationMode.DIRECT_FS
+                    ) {
                         launch { rootGate.probeSync() }
                     }
                     musicRepository.startup(this@IndexingHolder)
