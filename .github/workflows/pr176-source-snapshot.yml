@@ -1,0 +1,45 @@
+name: PR 176 source snapshot
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - ".github/workflows/pr176-source-snapshot.yml"
+      - "app/**"
+      - "musikr/**"
+      - "build.gradle"
+      - "settings.gradle"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr176-source-snapshot-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
+      - name: Create source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=tar.gz --output=auxio-ts-pr176-source.tar.gz HEAD
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr176-source-snapshot
+          path: auxio-ts-pr176-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
