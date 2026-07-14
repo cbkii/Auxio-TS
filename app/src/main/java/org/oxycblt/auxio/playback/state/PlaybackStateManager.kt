@@ -21,6 +21,7 @@ package org.oxycblt.auxio.playback.state
 import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.playback.persist.QueueWindow
 import org.oxycblt.auxio.playback.state.PlaybackStateManager.Listener
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
@@ -63,10 +64,13 @@ interface PlaybackStateManager {
     /** The current outcome of a startup playback restoration attempt. */
     val restoreOutcome: RestoreOutcome
 
-    /** The current queue of [Song]s. */
+    /** The current hydrated queue of [Song]s, empty during primitive pre-library restoration. */
     val queue: List<Song>
 
-    /** The index of the currently playing [Song] in the queue. */
+    /** Active bounded primitive queue window, if playback restored before the library. */
+    val queueWindow: QueueWindow?
+
+    /** The global logical index of the currently playing queue item. */
     val index: Int
 
     /** Whether the queue is shuffled or not. */
@@ -343,6 +347,9 @@ interface PlaybackStateManager {
         /** Called when raw pre-library playback metadata changes. */
         fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {}
 
+        /** Called when the active bounded primitive queue window changes. */
+        fun onQueueWindowChanged(window: QueueWindow?) {}
+
         /** Called when the outcome of the [DeferredPlayback.RestoreState] process changes. */
         fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {}
 
@@ -388,6 +395,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         val shuffleScope: ShuffleScope,
         val rawQueue: RawQueue,
         val rawPlaybackMetadata: RawPlaybackMetadata?,
+        val queueWindow: QueueWindow?,
     )
 
     private val listeners = mutableListOf<Listener>()
@@ -404,6 +412,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             shuffleScope = ShuffleScope.OFF,
             rawQueue = RawQueue.nil(),
             rawPlaybackMetadata = null,
+            queueWindow = null,
         )
     @Volatile private var stateHolder: PlaybackStateHolder? = null
     @Volatile private var pendingDeferredPlayback: DeferredPlayback? = null
@@ -430,6 +439,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     override val queue
         get() = stateMirror.queue
+
+    override val queueWindow
+        get() = stateMirror.queueWindow
 
     override val index
         get() = stateMirror.index
@@ -463,6 +475,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             listener.onRepeatModeChanged(stateMirror.repeatMode)
 
             listener.onRawPlaybackMetadataChanged(stateMirror.rawPlaybackMetadata)
+            listener.onQueueWindowChanged(stateMirror.queueWindow)
         }
     }
 
@@ -533,7 +546,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         // Played something, so we are initialized now
         isInitialized = true
         stateMirror =
-            stateMirror.copy(shuffleScope = normalizedShuffleScope(command.shuffled, shuffleScope))
+            stateMirror.copy(
+                shuffleScope = normalizedShuffleScope(command.shuffled, shuffleScope),
+                queueWindow = null,
+            )
         stateHolder.newPlayback(command, play)
     }
 
@@ -562,6 +578,11 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun playNext(songs: List<Song>) {
+        if (queueWindow != null) {
+            val stateHolder = stateHolder ?: return
+            stateHolder.playNext(songs, StateAck.PlayNext(stateMirror.index + 1, songs.size))
+            return
+        }
         if (currentSong == null) {
             L.d("Nothing playing, short-circuiting to new playback")
             play(QueueCommand(songs))
@@ -574,6 +595,11 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun addToQueue(songs: List<Song>) {
+        if (queueWindow != null) {
+            val stateHolder = stateHolder ?: return
+            stateHolder.addToQueue(songs, StateAck.AddToQueue(queueWindow!!.descriptor.totalCount, songs.size))
+            return
+        }
         if (currentSong == null) {
             L.d("Nothing playing, short-circuiting to new playback")
             play(QueueCommand(songs))
@@ -684,6 +710,17 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         val rawPlaybackMetadataChanged = nextRawPlaybackMetadata != stateMirror.rawPlaybackMetadata
         if (rawPlaybackMetadataChanged) {
             stateMirror = stateMirror.copy(rawPlaybackMetadata = nextRawPlaybackMetadata)
+        }
+        val nextQueueWindow = stateHolder.primitiveQueueWindow
+        val queueWindowChanged = nextQueueWindow != stateMirror.queueWindow
+        if (queueWindowChanged) {
+            stateMirror =
+                stateMirror.copy(
+                    queueWindow = nextQueueWindow,
+                    index = nextQueueWindow?.descriptor?.currentLogicalPosition ?: stateMirror.index,
+                    isShuffled = nextQueueWindow?.descriptor?.shuffleScope != ShuffleScope.OFF,
+                    shuffleScope = nextQueueWindow?.descriptor?.shuffleScope ?: stateMirror.shuffleScope,
+                )
         }
 
         when (ack) {
@@ -796,6 +833,10 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                     )
                 }
             }
+            is StateAck.QueueWindowChanged -> {
+                isInitialized = true
+                listeners.forEach { it.onQueueWindowChanged(stateMirror.queueWindow) }
+            }
             is StateAck.ProgressionChanged -> {
                 stateMirror = stateMirror.copy(progression = stateHolder.progression)
                 listeners.forEach { it.onProgressionChanged(stateMirror.progression) }
@@ -814,6 +855,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
         if (rawPlaybackMetadataChanged) {
             listeners.forEach { it.onRawPlaybackMetadataChanged(stateMirror.rawPlaybackMetadata) }
+        }
+        if (queueWindowChanged && ack !is StateAck.QueueWindowChanged) {
+            listeners.forEach { it.onQueueWindowChanged(stateMirror.queueWindow) }
         }
     }
 

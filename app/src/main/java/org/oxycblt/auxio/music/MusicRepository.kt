@@ -23,6 +23,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -201,7 +202,12 @@ interface MusicRepository {
     suspend fun index(worker: IndexingWorker, withCache: Boolean)
 
     /** Data regarding the current changes in the music library. */
-    data class Changes(val deviceLibrary: Boolean, val userLibrary: Boolean)
+    data class Changes(
+        val deviceLibrary: Boolean,
+        val userLibrary: Boolean,
+        val deviceGeneration: Long,
+        val userGeneration: Long,
+    )
 
     /** Listener for changes in the music library. */
     interface UpdateListener {
@@ -225,6 +231,9 @@ interface MusicRepository {
 
     /** A worker that performs library indexing and tag extraction. */
     interface IndexingWorker {
+        /** Snapshot whether playback is currently active for scan resource policy decisions. */
+        fun playbackActiveSnapshot(): Boolean = false
+
         /**
          * Request that the library be indexed.
          *
@@ -266,6 +275,8 @@ constructor(
     private val startupReadinessListeners =
         CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
+    private val deviceLibraryGeneration = AtomicLong(0L)
+    private val userLibraryGeneration = AtomicLong(0L)
 
     @Volatile override var library: MutableLibrary? = null
     @Volatile private var previousCompletedState: IndexingState.Completed? = null
@@ -282,7 +293,14 @@ constructor(
     override fun addUpdateListener(listener: MusicRepository.UpdateListener) {
         L.d("Adding $listener to update listeners")
         updateListeners.add(listener)
-        listener.onMusicChanges(MusicRepository.Changes(deviceLibrary = true, userLibrary = true))
+        listener.onMusicChanges(
+            MusicRepository.Changes(
+                deviceLibrary = true,
+                userLibrary = true,
+                deviceGeneration = deviceLibraryGeneration.get(),
+                userGeneration = userLibraryGeneration.get(),
+            )
+        )
     }
 
     override fun removeUpdateListener(listener: MusicRepository.UpdateListener) {
@@ -451,8 +469,20 @@ constructor(
 
             val currentRevision = musicSettings.revision
             val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
+            val workerCount =
+                DefaultIndexingResourcePolicy.resolveWorkerCount(
+                    scanPriority = musicSettings.scanPriority,
+                    playbackActive = worker.playbackActiveSnapshot(),
+                    isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    availableProcessors = Runtime.getRuntime().availableProcessors(),
+                )
+            L.d("Resolved Musikr worker count: $workerCount")
             val config =
-                createConfig(newRevision, if (withCache) cache else WriteOnlyMutableCache(cache))
+                createConfig(
+                    newRevision,
+                    if (withCache) cache else WriteOnlyMutableCache(cache),
+                    workerCount,
+                )
 
             // Check accessibility before starting
             val locations =
@@ -566,6 +596,7 @@ constructor(
             fs,
             Storage(cache, covers, storedPlaylists),
             Interpretation(nameFactory, separators),
+            indexingWorkerCount = 1,
         )
     }
 
@@ -629,7 +660,11 @@ constructor(
         } catch (_: Exception) {}
     }
 
-    private suspend fun createConfig(revision: UUID, cache: MutableCache): Config {
+    private suspend fun createConfig(
+        revision: UUID,
+        cache: MutableCache,
+        workerCount: Int = 2,
+    ): Config {
         val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
         val nameFactory =
@@ -653,7 +688,13 @@ constructor(
                         )
                     MediaStore.from(context, query)
                 }
-                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source, rootGate)
+                LocationMode.DIRECT_FS ->
+                    DirectFS(
+                        musicSettings.safQuery.source,
+                        rootGate.takeIf {
+                            musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND
+                        },
+                    )
             }
         L.d(
             "Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]"
@@ -662,6 +703,7 @@ constructor(
             fs,
             Storage(cache, covers, storedPlaylists),
             Interpretation(nameFactory, separators),
+            indexingWorkerCount = workerCount,
         )
     }
 
@@ -686,36 +728,23 @@ constructor(
 
     private suspend fun emitLibrary(newLibrary: MutableLibrary) {
         val emitStart = System.currentTimeMillis()
-        val deviceLibraryChanged: Boolean
-        val userLibraryChanged: Boolean
-        // We want to make sure that all reads and writes are synchronized due to the sheer
-        // amount of consumers of MusicRepository.
-        synchronized(this) {
-            // It's possible that this reload might have changed nothing, so make sure that
-            // hasn't happened before dispatching a change to all consumers.
-
-            // This is an old compat shim back when device library and user library were different
-            // thinks. For the sake of avoiding drastic changes, it sticks around.
-            // TODO: Remove this once you start work on kindred.
-            deviceLibraryChanged =
-                this.library?.songs != newLibrary.songs ||
-                    this.library?.albums != newLibrary.albums ||
-                    this.library?.artists != newLibrary.artists ||
-                    this.library?.genres != newLibrary.genres
-            userLibraryChanged = this.library?.playlists != newLibrary.playlists
-            if (!deviceLibraryChanged && !userLibraryChanged) {
-                L.d("Library has not changed, skipping update")
-                return
+        val changed = synchronized(this) {
+            if (library === newLibrary) {
+                false
+            } else {
+                library = newLibrary
+                true
             }
-
-            this.library = newLibrary
+        }
+        if (!changed) {
+            L.d("Library instance has not changed, skipping update")
+            return
         }
 
-        // Consumers expect their updates to be on the main thread (notably PlaybackService),
-        // so switch to it.
-        withContext(Dispatchers.Main) {
-            dispatchLibraryChange(deviceLibraryChanged, userLibraryChanged)
-        }
+        // A completed Musikr publication is a deliberate generation boundary. Avoid comparing all
+        // songs/albums/artists/genres/playlists under the repository monitor; consumers invalidate
+        // from monotonic generations instead.
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = true, user = true) }
         L.d("emitLibrary completed in ${System.currentTimeMillis() - emitStart}ms")
     }
 
@@ -730,7 +759,17 @@ constructor(
     }
 
     private fun dispatchLibraryChange(device: Boolean, user: Boolean) {
-        val changes = MusicRepository.Changes(device, user)
+        val changes =
+            MusicRepository.Changes(
+                deviceLibrary = device,
+                userLibrary = user,
+                deviceGeneration =
+                    if (device) deviceLibraryGeneration.incrementAndGet()
+                    else deviceLibraryGeneration.get(),
+                userGeneration =
+                    if (user) userLibraryGeneration.incrementAndGet()
+                    else userLibraryGeneration.get(),
+            )
         L.d("Dispatching library change [changes=$changes]")
         for (listener in updateListeners) {
             listener.onMusicChanges(changes)

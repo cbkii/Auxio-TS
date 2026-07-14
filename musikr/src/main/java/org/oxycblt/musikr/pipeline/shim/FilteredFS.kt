@@ -22,7 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import org.oxycblt.musikr.fs.FS
@@ -41,7 +41,7 @@ internal class FilteredFS(
     private val lowercaseKeywords = pathKeywords.map { it.lowercase() }
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
-        val delegateChannel = Channel<File>(Channel.UNLIMITED)
+        val delegateChannel = Channel<File>(org.oxycblt.musikr.pipeline.PipelinePolicy.BUFFER_CAPACITY)
         val delegateTask =
             try {
                 delegate.explore(delegateChannel)
@@ -54,7 +54,7 @@ internal class FilteredFS(
             }
 
         val filterTask =
-            scope.tryAsync(Dispatchers.Default) {
+            scope.tryAsync(EmptyCoroutineContext) {
                 try {
                     for (file in delegateChannel) {
                         val componentsLower = file.path.components.components.map { it.lowercase() }
@@ -105,7 +105,7 @@ internal class FilteredFS(
                 }
             }
 
-        return scope.tryAsync(Dispatchers.Default) {
+        return scope.tryAsync(EmptyCoroutineContext) {
             try {
                 val delegateResult =
                     try {

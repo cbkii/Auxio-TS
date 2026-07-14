@@ -19,11 +19,20 @@
 package org.oxycblt.auxio.playback.queue
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.playback.persist.PersistenceRepository
+import org.oxycblt.auxio.playback.persist.QueueItemRef
+import org.oxycblt.auxio.playback.persist.QueueWindowPolicy
+import org.oxycblt.auxio.playback.persist.QueueWindow
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.util.Event
@@ -37,13 +46,27 @@ import timber.log.Timber as L
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
+data class QueueDisplayItem(
+    val globalPosition: Int,
+    val song: Song?,
+    val primitive: QueueItemRef?,
+) {
+    val editable: Boolean
+        get() = song != null || primitive != null
+}
+
 @HiltViewModel
-class QueueViewModel @Inject constructor(private val playbackManager: PlaybackStateManager) :
+class QueueViewModel
+@Inject
+constructor(
+    private val playbackManager: PlaybackStateManager,
+    private val persistenceRepository: PersistenceRepository,
+) :
     ViewModel(), PlaybackStateManager.Listener {
 
-    private val _queue = MutableStateFlow(listOf<Song>())
-    /** The current queue. */
-    val queue: StateFlow<List<Song>> = _queue
+    private val _queue = MutableStateFlow(listOf<QueueDisplayItem>())
+    /** The currently loaded queue range. */
+    val queue: StateFlow<List<QueueDisplayItem>> = _queue
     private val _queueInstructions = MutableEvent<UpdateInstructions>()
     /** Instructions for how to update [queue] in the UI. */
     val queueInstructions: Event<UpdateInstructions> = _queueInstructions
@@ -58,6 +81,8 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         get() = _index
 
     private val _isInitialQueueLoaded = MutableStateFlow(false)
+    private var rangeJob: Job? = null
+    private var lastRequestedAnchor: Int? = null
     val isInitialQueueLoaded: StateFlow<Boolean>
         get() = _isInitialQueueLoaded
 
@@ -75,7 +100,7 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         // Queue changed trivially due to item mo -> Diff queue, stay at current index.
         L.d("Updating queue display")
         _queueInstructions.put(change.instructions)
-        _queue.value = queue
+        _queue.value = queue.toDisplayItems()
         _isInitialQueueLoaded.value = true
         if (change.type != QueueChange.Type.MAPPING) {
             // Index changed, make sure it remains updated without actually scrolling to it.
@@ -89,7 +114,7 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         L.d("Queue changed completely, replacing queue and position")
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
-        _queue.value = queue
+        _queue.value = queue.toDisplayItems()
         _index.value = index
         _isInitialQueueLoaded.value = true
     }
@@ -104,9 +129,57 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         L.d("New playback, replacing queue and position")
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
-        _queue.value = queue
+        _queue.value = queue.toDisplayItems()
         _index.value = index
         _isInitialQueueLoaded.value = true
+    }
+
+    override fun onQueueWindowChanged(window: QueueWindow?) {
+        if (window == null) return
+        L.d("Updating bounded primitive queue display")
+        _queueInstructions.put(UpdateInstructions.Replace(0))
+        _queue.value =
+            window.items.map { item ->
+                QueueDisplayItem(
+                    globalPosition = item.logicalPosition,
+                    song = null,
+                    primitive = item,
+                )
+            }
+        _index.value = window.currentLocalPosition
+        _scrollTo.put(window.currentLocalPosition)
+        _isInitialQueueLoaded.value = true
+    }
+
+    fun requestAdjacentRange(firstVisible: Int, lastVisible: Int) {
+        val loaded = queue.value
+        if (loaded.isEmpty() || rangeJob?.isActive == true) return
+        val anchor =
+            when {
+                firstVisible in 0..QueueWindowPolicy.PREFETCH_DISTANCE ->
+                    loaded.first().globalPosition
+                lastVisible >= loaded.lastIndex - QueueWindowPolicy.PREFETCH_DISTANCE ->
+                    loaded.last().globalPosition
+                else -> return
+            }
+        if (anchor == lastRequestedAnchor) return
+        lastRequestedAnchor = anchor
+        rangeJob =
+            viewModelScope.launch {
+                val window =
+                    withContext(Dispatchers.IO) {
+                        val descriptor = persistenceRepository.readQueueDescriptor()
+                        if (descriptor == null) null
+                        else persistenceRepository.readQueueWindowAround(descriptor, anchor)
+                    } ?: return@launch
+                _queueInstructions.put(UpdateInstructions.Replace(0))
+                _queue.value =
+                    window.items.map { item ->
+                        QueueDisplayItem(item.logicalPosition, null, item)
+                    }
+                _index.value = window.currentLocalPosition
+                _isInitialQueueLoaded.value = true
+            }
     }
 
     override fun onCleared() {
@@ -124,8 +197,9 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         if (adapterIndex !in queue.value.indices) {
             return
         }
-        L.d("Going to position $adapterIndex in queue")
-        playbackManager.goto(adapterIndex)
+        val globalPosition = queue.value[adapterIndex].globalPosition
+        L.d("Going to logical position $globalPosition in queue")
+        playbackManager.goto(globalPosition)
     }
 
     /**
@@ -138,8 +212,10 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         if (adapterIndex !in queue.value.indices) {
             return
         }
-        L.d("Removing item $adapterIndex in queue")
-        playbackManager.removeQueueItem(adapterIndex)
+        val item = queue.value[adapterIndex]
+        if (!item.editable) return
+        L.d("Removing item ${item.globalPosition} in queue")
+        playbackManager.removeQueueItem(item.globalPosition)
     }
 
     /**
@@ -153,8 +229,17 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         if (adapterFrom !in queue.value.indices || adapterTo !in queue.value.indices) {
             return false
         }
-        L.d("Moving $adapterFrom to $adapterFrom in queue")
-        playbackManager.moveQueueItem(adapterFrom, adapterTo)
+        val from = queue.value[adapterFrom]
+        val to = queue.value[adapterTo]
+        if (!from.editable || !to.editable) return false
+        L.d("Moving ${from.globalPosition} to ${to.globalPosition} in queue")
+        playbackManager.moveQueueItem(from.globalPosition, to.globalPosition)
         return true
     }
+
+    private fun List<Song>.toDisplayItems() =
+        mapIndexed { index, song ->
+            QueueDisplayItem(globalPosition = index, song = song, primitive = null)
+        }
+
 }

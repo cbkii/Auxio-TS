@@ -41,11 +41,11 @@ import kotlinx.coroutines.flow.withIndex
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun <T, R> Flow<T>.distributedMap(
     n: Int,
-    on: CoroutineContext = Dispatchers.Main,
-    buffer: Int = Channel.UNLIMITED,
+    on: CoroutineContext = Dispatchers.Default,
+    buffer: Int = PipelinePolicy.BUFFER_CAPACITY,
     block: suspend (T) -> R,
 ): Flow<R> {
-    val posChannels = List(n) { Channel<T>(Channel.UNLIMITED) }
+    val posChannels = List(n) { Channel<T>(buffer) }
     val managerFlow =
         flow<Nothing> {
                 withIndex().collect {

@@ -47,7 +47,14 @@ internal interface ExploreStep {
             pathKeywords: List<String> = emptyList(),
             rootGate: RootGate? = null,
         ): ExploreStep =
-            ExploreStepImpl(config.fs, config.storage, noisyDirs, pathKeywords, rootGate)
+            ExploreStepImpl(
+                config.fs,
+                config.storage,
+                noisyDirs,
+                pathKeywords,
+                rootGate,
+                config.indexingWorkerCount,
+            )
     }
 }
 
@@ -57,7 +64,9 @@ private class ExploreStepImpl(
     private val noisyDirs: Set<String>,
     private val pathKeywords: List<String>,
     rootGate: RootGate?,
+    workerCount: Int,
 ) : ExploreStep {
+    private val parallelism = workerCount.coerceAtLeast(1)
     override suspend fun explore(
         scope: CoroutineScope,
         explored: Channel<Explored>,
@@ -66,12 +75,12 @@ private class ExploreStepImpl(
             if (noisyDirs.isNotEmpty() || pathKeywords.isNotEmpty())
                 FilteredFS(fs, scope, noisyDirs, pathKeywords)
             else fs
-        val files = Channel<File>(Channel.UNLIMITED)
+        val files = Channel<File>(PipelinePolicy.BUFFER_CAPACITY)
         val filesTask = filteredFs.explore(files)
 
-        val classified = Channel<Classified>(Channel.UNLIMITED)
+        val classified = Channel<Classified>(PipelinePolicy.BUFFER_CAPACITY)
         val classifiedTask =
-            scope.mapParallel(PARALLELISM, files, classified, Dispatchers.IO) { file ->
+            scope.mapParallel(parallelism, files, classified, Dispatchers.IO) { file ->
                 if (!FileClassification.isPotentialMusicFile(file)) {
                     return@mapParallel Finalized(NotAudio)
                 }
@@ -82,9 +91,9 @@ private class ExploreStepImpl(
                 }
             }
 
-        val finalized = Channel<Finalized>(Channel.UNLIMITED)
+        val finalized = Channel<Finalized>(PipelinePolicy.BUFFER_CAPACITY)
         val exploredTask =
-            scope.mapParallel(PARALLELISM, classified, finalized, Dispatchers.IO) { item ->
+            scope.mapParallel(parallelism, classified, finalized, Dispatchers.IO) { item ->
                 when (item) {
                     is Finalized -> item
                     is NeedsHydration -> {
@@ -111,7 +120,7 @@ private class ExploreStepImpl(
                     }
                 }
             }
-        val playlists = Channel<Explored>(Channel.UNLIMITED)
+        val playlists = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
         val playlistsTask =
             scope.tryAsyncWith(playlists, Dispatchers.IO) {
                 for (playlist in storage.storedPlaylists.read()) {
@@ -121,7 +130,7 @@ private class ExploreStepImpl(
             }
 
         val mergeTask =
-            scope.tryAsyncWith(explored, Dispatchers.Main) {
+            scope.tryAsyncWith(explored, Dispatchers.Default) {
                 for (item in finalized) {
                     it.send(item.explored)
                 }
@@ -139,9 +148,6 @@ private class ExploreStepImpl(
 
     private data class Finalized(val explored: Explored) : Classified
 
-    private companion object {
-        const val PARALLELISM = 8
-    }
 }
 
 internal object FileClassification {

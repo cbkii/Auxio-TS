@@ -25,6 +25,11 @@
     <string name="set_key_reindex" translatable="false">auxio_reindex</string>
     <string name="set_key_rescan" translatable="false">auxio_rescan</string>
     <string name="set_key_observing" translatable="false">auxio_observing</string>
+    <string name="set_key_scan_priority" translatable="false">auxio_scan_priority</string>
+    <string name="set_key_observation_mode" translatable="false">auxio_observation_mode</string>
+    <string name="set_key_root_access_policy" translatable="false">auxio_root_access_policy</string>
+    <string name="set_key_dynamic_shortcuts" translatable="false">auxio_dynamic_shortcuts</string>
+    <string name="set_key_performance_capture" translatable="false">auxio_performance_capture</string>
     <string name="set_key_music_dirs" translatable="false">auxio_music_dirs</string>
     <string name="set_key_excluded_dirs" translatable="false">auxio_excluded_dirs</string>
     <string name="set_key_fs_cache" translatable="false">auxio_fs_cache</string>
@@ -253,4 +258,36 @@
         <item>open_auxio</item>
         <item>floating_only</item>
     </string-array>
+
+    <string-array name="entries_scan_priority">
+        <item>@string/set_scan_priority_playback_first</item>
+        <item>@string/set_scan_priority_balanced</item>
+        <item>@string/set_scan_priority_fast</item>
+    </string-array>
+    <string-array name="values_scan_priority" translatable="false">
+        <item>PLAYBACK_FIRST</item>
+        <item>BALANCED</item>
+        <item>FAST_SCAN</item>
+    </string-array>
+
+    <string-array name="entries_observation_mode">
+        <item>@string/set_observation_manual</item>
+        <item>@string/set_observation_idle</item>
+        <item>@string/set_observation_continuous</item>
+    </string-array>
+    <string-array name="values_observation_mode" translatable="false">
+        <item>MANUAL</item>
+        <item>WHEN_IDLE</item>
+        <item>CONTINUOUS</item>
+    </string-array>
+
+    <string-array name="entries_root_access_policy">
+        <item>@string/set_root_access_off</item>
+        <item>@string/set_root_access_on_demand</item>
+    </string-array>
+    <string-array name="values_root_access_policy" translatable="false">
+        <item>OFF</item>
+        <item>ON_DEMAND</item>
+    </string-array>
+
 </resources>
