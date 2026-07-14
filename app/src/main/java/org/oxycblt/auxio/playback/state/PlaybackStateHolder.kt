@@ -22,6 +22,7 @@ import android.net.Uri
 import android.os.SystemClock
 import android.support.v4.media.session.PlaybackStateCompat
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.playback.persist.QueueWindow
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
 
@@ -47,6 +48,9 @@ interface PlaybackStateHolder {
      * @return The current queue state.
      */
     fun resolveQueue(): RawQueue
+
+    /** Active bounded primitive queue window, or null for a normal fully hydrated queue. */
+    val primitiveQueueWindow: QueueWindow?
 
     /** Whether the player currently holds Android audio focus. */
     val isAudioFocusHeld: Boolean
@@ -197,6 +201,9 @@ sealed interface StateAck {
 
     /** @see PlaybackStateHolder.shuffled */
     data object QueueReordered : StateAck
+
+    /** A bounded primitive queue window or its global current position changed. */
+    data object QueueWindowChanged : StateAck
 
     /**
      * @see PlaybackStateHolder.newPlayback

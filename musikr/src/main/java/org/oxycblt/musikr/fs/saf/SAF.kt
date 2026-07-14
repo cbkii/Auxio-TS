@@ -55,7 +55,7 @@ private constructor(
     private val query: Query,
 ) : FS {
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
-        tryAsyncWith(files, Dispatchers.Main) {
+        tryAsyncWith(files, Dispatchers.IO) {
             query.source
                 .map { location ->
                     exploreDirectoryImpl(

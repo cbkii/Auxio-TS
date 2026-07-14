@@ -19,9 +19,6 @@
 package org.oxycblt.musikr.cache.db
 
 import android.content.Context
-import android.net.Uri
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.oxycblt.musikr.cache.Audio
 import org.oxycblt.musikr.cache.Cache
 import org.oxycblt.musikr.cache.CacheResult
@@ -41,23 +38,25 @@ import org.oxycblt.musikr.tag.parse.ParsedTags
  * Create an instance with [from].
  */
 class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
-    private var mapping: Map<Uri, CachedFileData>? = null
-    private val mappingLock = Mutex()
-
     override suspend fun read(file: File): CacheResult {
-        val currentMapping =
-            mappingLock.withLock {
-                mapping ?: readDao.selectAllSongs().associateBy { it.uri }.also { mapping = it }
-            }
-        val dbSong = currentMapping[file.uri] ?: return CacheResult.Miss(file)
+        val dbSong = readDao.selectSongByUri(file.uri) ?: return CacheResult.Miss(file)
         if (dbSong.modifiedMs != file.modifiedMs) {
             return CacheResult.Stale(file, dbSong.addedMs)
         }
         return CacheResult.Hit(dbSong.toCachedFile(file))
     }
 
-    override suspend fun snapshot(): List<CachedFile> =
-        readDao.selectAllSongs().map { it.toCachedFile(it.toSyntheticFile()) }
+    override suspend fun snapshot(): List<CachedFile> {
+        val result = mutableListOf<CachedFile>()
+        var offset = 0
+        while (true) {
+            val page = readDao.selectSongsPage(SNAPSHOT_PAGE_SIZE, offset)
+            if (page.isEmpty()) break
+            result += page.map { it.toCachedFile(it.toSyntheticFile()) }
+            offset += page.size
+        }
+        return result
+    }
 
     private fun CachedFileData.toCachedFile(file: File) =
         CachedFile(
@@ -119,6 +118,8 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
     }
 
     companion object {
+        private const val SNAPSHOT_PAGE_SIZE = 256
+
         /**
          * Create a new instance of [DBCache] from the given [context].
          *
@@ -140,11 +141,16 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
  * Create an instance with [from].
  */
 class MutableDBCache
-private constructor(private val inner: DBCache, private val writeDao: CacheWriteDao) :
-    MutableCache {
+private constructor(
+    private val inner: DBCache,
+    private val writeDao: CacheWriteDao,
+    private val backfill: LibraryBackfill,
+) : MutableCache {
     override suspend fun read(file: File) = inner.read(file)
 
     override suspend fun snapshot() = inner.snapshot()
+
+    override suspend fun populateNormalizedLibrary(): Int = backfill.run()
 
     override suspend fun write(cachedFile: CachedFile) {
         val dbSong =
@@ -197,7 +203,10 @@ private constructor(private val inner: DBCache, private val writeDao: CacheWrite
          */
         fun from(context: Context): MutableDBCache {
             val db = CacheDatabase.from(context)
-            return MutableDBCache(DBCache.from(db), db.writeDao())
+            return MutableDBCache(DBCache.from(db), db.writeDao(), LibraryBackfill(db))
         }
+
+        internal fun from(db: CacheDatabase): MutableDBCache =
+            MutableDBCache(DBCache.from(db), db.writeDao(), LibraryBackfill(db))
     }
 }

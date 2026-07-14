@@ -52,6 +52,7 @@ internal interface ExtractStep {
                 TagParser.new(),
                 config.storage.cache,
                 config.storage.covers,
+                config.indexingWorkerCount,
             )
     }
 }
@@ -61,16 +62,19 @@ private class ExtractStepImpl(
     private val tagParser: TagParser,
     private val cache: MutableCache,
     private val covers: MutableCovers<out Cover>,
+    workerCount: Int,
 ) : ExtractStep {
+    private val parallelism = workerCount.coerceAtLeast(1)
+
     override suspend fun extract(
         scope: CoroutineScope,
         explored: Channel<Explored>,
         extracted: Channel<Extracted>,
     ): Deferred<Result<Unit>> {
         val addingMs = System.currentTimeMillis()
-        val extract = Channel<ParsedExtractItem>(PARALLELISM)
+        val extract = Channel<ParsedExtractItem>(parallelism)
         val extractTask =
-            scope.mapParallel(PARALLELISM, explored, extract, Dispatchers.IO) { item ->
+            scope.mapParallel(parallelism, explored, extract, Dispatchers.IO) { item ->
                 when (item) {
                     is RawSong -> Finalized(item)
                     is RawPlaylist -> Finalized(item)
@@ -87,9 +91,9 @@ private class ExtractStepImpl(
                     is NotAudio -> Finalized(NotAudio)
                 }
             }
-        val parsed = Channel<ParsedCachingItem>(Channel.UNLIMITED)
+        val parsed = Channel<ParsedCachingItem>(PipelinePolicy.BUFFER_CAPACITY)
         val parsedTask =
-            scope.mapParallel(PARALLELISM, extract, parsed, Dispatchers.IO) { item ->
+            scope.mapParallel(parallelism, extract, parsed, Dispatchers.IO) { item ->
                 when (item) {
                     is Finalized -> item
                     is NeedsParsing -> {
@@ -164,8 +168,4 @@ private class ExtractStepImpl(
 
     private fun RawSong.toCachedFile() =
         CachedFile(file, audio = Audio(properties, tags, cover?.id), addedMs)
-
-    private companion object {
-        const val PARALLELISM = 8
-    }
 }

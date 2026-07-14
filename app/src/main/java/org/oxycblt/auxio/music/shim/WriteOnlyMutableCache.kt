@@ -40,4 +40,6 @@ class WriteOnlyMutableCache(private val inner: MutableCache) : MutableCache {
     override suspend fun cleanup(excluding: List<CachedFile>) {
         inner.cleanup(excluding)
     }
+
+    override suspend fun populateNormalizedLibrary(): Int = inner.populateNormalizedLibrary()
 }

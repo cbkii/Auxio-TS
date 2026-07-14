@@ -32,40 +32,46 @@ import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.musikr.Music
 
-/**
- * Provides raw access to the database storing the persisted playback state.
- *
- * @author Alexander Capehart
- */
+/** Provides raw access to the database storing persisted playback state. */
 @Database(
-    entities = [PlaybackState::class, QueueHeapItem::class, QueueShuffledMappingItem::class],
-    version = 39,
+    entities =
+        [
+            PlaybackState::class,
+            QueueHeapItem::class,
+            QueueShuffledMappingItem::class,
+            QueueSessionEntity::class,
+            QueueItemRefEntity::class,
+        ],
+    version = 40,
     exportSchema = false,
 )
 @TypeConverters(Music.UID.TypeConverters::class)
 abstract class PersistenceDatabase : RoomDatabase() {
-    /**
-     * Get the current [PlaybackStateDao].
-     *
-     * @return A [PlaybackStateDao] providing control of the database's playback state tables.
-     */
     abstract fun playbackStateDao(): PlaybackStateDao
 
-    /**
-     * Get the current [QueueDao].
-     *
-     * @return A [QueueDao] providing control of the database's queue tables.
-     */
     abstract fun queueDao(): QueueDao
 
     companion object {
         val MIGRATION_27_32 =
             Migration(27, 32) {
-                // Switched from custom names to just letting room pick the names
                 it.execSQL("ALTER TABLE playback_state RENAME TO PlaybackState")
                 it.execSQL("ALTER TABLE queue_heap RENAME TO QueueHeapItem")
                 it.execSQL("ALTER TABLE queue_mapping RENAME TO QueueMappingItem")
             }
+
+        val MIGRATION_32_38 =
+            Migration(32, 38) { database ->
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS QueueShuffledMappingItem (" +
+                        "id INTEGER NOT NULL PRIMARY KEY, `index` INTEGER NOT NULL)"
+                )
+                database.execSQL(
+                    "INSERT OR REPLACE INTO QueueShuffledMappingItem (id, `index`) " +
+                        "SELECT id, shuffledIndex FROM QueueMappingItem"
+                )
+                database.execSQL("DROP TABLE IF EXISTS QueueMappingItem")
+            }
+
         val MIGRATION_38_39 =
             Migration(38, 39) {
                 it.execSQL(
@@ -76,79 +82,237 @@ abstract class PersistenceDatabase : RoomDatabase() {
                         "WHERE id = 0 AND EXISTS (SELECT 1 FROM QueueShuffledMappingItem LIMIT 1)"
                 )
             }
+
+        val MIGRATION_39_40 =
+            Migration(39, 40) { database ->
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS QueueSessionEntity (" +
+                        "id INTEGER NOT NULL PRIMARY KEY, " +
+                        "currentLogicalPosition INTEGER NOT NULL, " +
+                        "positionMs INTEGER NOT NULL, " +
+                        "repeatMode TEXT NOT NULL, " +
+                        "shuffleScope TEXT NOT NULL, " +
+                        "totalCount INTEGER NOT NULL, " +
+                        "revision INTEGER NOT NULL, " +
+                        "updatedAtMs INTEGER NOT NULL)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS QueueItemRefEntity (" +
+                        "sessionId INTEGER NOT NULL, " +
+                        "logicalPosition INTEGER NOT NULL, " +
+                        "canonicalPosition INTEGER NOT NULL, " +
+                        "stableSongUid TEXT, " +
+                        "uri TEXT, " +
+                        "pathFallback TEXT, " +
+                        "titleFallback TEXT, " +
+                        "artistFallback TEXT, " +
+                        "albumFallback TEXT, " +
+                        "durationMs INTEGER NOT NULL, " +
+                        "PRIMARY KEY(sessionId, logicalPosition))"
+                )
+                database.execSQL(
+                    "INSERT INTO QueueSessionEntity " +
+                        "(id, currentLogicalPosition, positionMs, repeatMode, shuffleScope, " +
+                        "totalCount, revision, updatedAtMs) " +
+                        // PlaybackState.index already stores the saved logical queue position
+                        // (the index into the shuffled mapping when shuffled, or the heap when
+                        // not). Backfill it directly, clamped to the queue bounds.
+                        "SELECT 1, " +
+                        "MAX(0, MIN(PlaybackState.`index`, " +
+                        "(SELECT COUNT(*) FROM QueueHeapItem) - 1)), " +
+                        "PlaybackState.positionMs, PlaybackState.repeatMode, " +
+                        "PlaybackState.shuffleScope, (SELECT COUNT(*) FROM QueueHeapItem), " +
+                        "1, strftime('%s', 'now') * 1000 " +
+                        "FROM PlaybackState WHERE PlaybackState.id = 0"
+                )
+                database.execSQL(
+                    "INSERT INTO QueueItemRefEntity " +
+                        "(sessionId, logicalPosition, canonicalPosition, stableSongUid, uri, pathFallback, " +
+                        "titleFallback, artistFallback, albumFallback, durationMs) " +
+                        "SELECT 1, QueueHeapItem.id, QueueHeapItem.id, QueueHeapItem.uid, NULL, NULL, NULL, NULL, NULL, 0 " +
+                        "FROM QueueHeapItem " +
+                        "WHERE (SELECT COUNT(*) FROM QueueShuffledMappingItem) = 0"
+                )
+                database.execSQL(
+                    "INSERT INTO QueueItemRefEntity " +
+                        "(sessionId, logicalPosition, canonicalPosition, stableSongUid, uri, pathFallback, " +
+                        "titleFallback, artistFallback, albumFallback, durationMs) " +
+                        "SELECT 1, QueueShuffledMappingItem.id, QueueHeapItem.id, QueueHeapItem.uid, " +
+                        "NULL, NULL, NULL, NULL, NULL, 0 " +
+                        "FROM QueueShuffledMappingItem " +
+                        "JOIN QueueHeapItem ON QueueHeapItem.id = QueueShuffledMappingItem.`index`"
+                )
+            }
     }
 }
 
-/**
- * Provides control of the persisted playback state table.
- *
- * @author Alexander Capehart (OxygenCobalt)
- */
 @Dao
 interface PlaybackStateDao {
-    /**
-     * Get the previously persisted [PlaybackState].
-     *
-     * @return The previously persisted [PlaybackState], or null if one was not present.
-     */
     @Query("SELECT * FROM PlaybackState WHERE id = 0") suspend fun getState(): PlaybackState?
 
-    /** Delete any previously persisted [PlaybackState]s. */
     @Query("DELETE FROM PlaybackState") suspend fun nukeState()
 
-    /**
-     * Insert a new [PlaybackState] into the database.
-     *
-     * @param state The [PlaybackState] to insert.
-     */
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertState(state: PlaybackState)
 }
 
-/**
- * Provides control of the persisted queue state tables.
- *
- * @author Alexander Capehart (OxygenCobalt)
- */
 @Dao
 interface QueueDao {
-    /**
-     * Get the previously persisted queue heap.
-     *
-     * @return A list of persisted [QueueHeapItem]s wrapping each heap item.
-     */
     @Query("SELECT * FROM QueueHeapItem") suspend fun getHeap(): List<QueueHeapItem>
 
-    /**
-     * Get the previously persisted queue mapping.
-     *
-     * @return A list of persisted [QueueShuffledMappingItem]s wrapping each heap item.
-     */
     @Query("SELECT * FROM QueueShuffledMappingItem")
     suspend fun getShuffledMapping(): List<QueueShuffledMappingItem>
 
-    /** Delete any previously persisted queue heap entries. */
     @Query("DELETE FROM QueueHeapItem") suspend fun nukeHeap()
 
-    /** Delete any previously persisted queue mapping entries. */
     @Query("DELETE FROM QueueShuffledMappingItem") suspend fun nukeShuffledMapping()
 
-    /**
-     * Insert new heap entries into the database.
-     *
-     * @param heap The list of wrapped [QueueHeapItem]s to insert.
-     */
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertHeap(heap: List<QueueHeapItem>)
 
-    /**
-     * Insert new mapping entries into the database.
-     *
-     * @param mapping The list of wrapped [QueueShuffledMappingItem] to insert.
-     */
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertShuffledMapping(mapping: List<QueueShuffledMappingItem>)
+
+    @Query("SELECT * FROM QueueSessionEntity WHERE id = 1")
+    suspend fun getQueueSession(): QueueSessionEntity?
+
+    @Query(
+        "SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId " +
+            "AND logicalPosition >= :startInclusive AND logicalPosition < :endExclusive " +
+            "ORDER BY logicalPosition ASC"
+    )
+    suspend fun getQueueWindow(
+        sessionId: Long,
+        startInclusive: Int,
+        endExclusive: Int,
+    ): List<QueueItemRefEntity>
+
+    @Query(
+        "SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition LIMIT 1"
+    )
+    suspend fun getQueueItem(sessionId: Long, logicalPosition: Int): QueueItemRefEntity?
+
+    @Query("SELECT COUNT(*) FROM QueueItemRefEntity WHERE sessionId = :sessionId")
+    suspend fun countQueueItems(sessionId: Long): Int
+
+    @Query(
+        "SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId ORDER BY logicalPosition ASC"
+    )
+    suspend fun getAllQueueItems(sessionId: Long): List<QueueItemRefEntity>
+
+    @Query(
+        "SELECT * FROM QueueItemRefEntity WHERE sessionId = :sessionId AND canonicalPosition = :canonicalPosition LIMIT 1"
+    )
+    suspend fun getQueueItemByCanonicalPosition(
+        sessionId: Long,
+        canonicalPosition: Int,
+    ): QueueItemRefEntity?
+
+    @Query(
+        "DELETE FROM QueueItemRefEntity WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition"
+    )
+    suspend fun deleteQueueItem(sessionId: Long, logicalPosition: Int): Int
+
+    @Query(
+        "UPDATE QueueItemRefEntity SET logicalPosition = logicalPosition + :delta " +
+            "WHERE sessionId = :sessionId AND logicalPosition >= :startInclusive " +
+            "AND logicalPosition < :endExclusive"
+    )
+    suspend fun offsetLogicalPositions(
+        sessionId: Long,
+        startInclusive: Int,
+        endExclusive: Int,
+        delta: Int,
+    ): Int
+
+    @Query(
+        "UPDATE QueueItemRefEntity SET canonicalPosition = canonicalPosition + :delta " +
+            "WHERE sessionId = :sessionId AND canonicalPosition >= :startInclusive " +
+            "AND canonicalPosition < :endExclusive"
+    )
+    suspend fun offsetCanonicalPositions(
+        sessionId: Long,
+        startInclusive: Int,
+        endExclusive: Int,
+        delta: Int,
+    ): Int
+
+    @Query(
+        "UPDATE QueueItemRefEntity SET logicalPosition = :logicalPosition " +
+            "WHERE sessionId = :sessionId AND canonicalPosition = :canonicalPosition"
+    )
+    suspend fun setLogicalPositionByCanonical(
+        sessionId: Long,
+        canonicalPosition: Int,
+        logicalPosition: Int,
+    ): Int
+
+    @Query(
+        "UPDATE QueueItemRefEntity SET logicalPosition = :toLogicalPosition " +
+            "WHERE sessionId = :sessionId AND logicalPosition = :fromLogicalPosition"
+    )
+    suspend fun setLogicalPosition(
+        sessionId: Long,
+        fromLogicalPosition: Int,
+        toLogicalPosition: Int,
+    ): Int
+
+    @Query(
+        "UPDATE QueueItemRefEntity SET uri = COALESCE(:uri, uri), " +
+            "pathFallback = COALESCE(:pathFallback, pathFallback), " +
+            "titleFallback = COALESCE(:titleFallback, titleFallback), " +
+            "artistFallback = COALESCE(:artistFallback, artistFallback), " +
+            "albumFallback = COALESCE(:albumFallback, albumFallback), " +
+            "durationMs = CASE WHEN :durationMs > 0 THEN :durationMs ELSE durationMs END " +
+            "WHERE sessionId = :sessionId AND logicalPosition = :logicalPosition"
+    )
+    suspend fun enrichQueueItem(
+        sessionId: Long,
+        logicalPosition: Int,
+        uri: String?,
+        pathFallback: String?,
+        titleFallback: String?,
+        artistFallback: String?,
+        albumFallback: String?,
+        durationMs: Long,
+    ): Int
+
+    @Query(
+        "UPDATE QueueSessionEntity SET currentLogicalPosition = :logicalPosition, " +
+            "positionMs = :positionMs, repeatMode = :repeatMode, updatedAtMs = :updatedAtMs " +
+            "WHERE id = :sessionId"
+    )
+    suspend fun updateQueuePosition(
+        sessionId: Long,
+        logicalPosition: Int,
+        positionMs: Long,
+        repeatMode: RepeatMode,
+        updatedAtMs: Long,
+    ): Int
+
+    @Query(
+        "UPDATE QueueSessionEntity SET currentLogicalPosition = :logicalPosition, " +
+            "totalCount = :totalCount, shuffleScope = :shuffleScope, revision = :revision, " +
+            "updatedAtMs = :updatedAtMs WHERE id = :sessionId"
+    )
+    suspend fun updateQueueLayout(
+        sessionId: Long,
+        logicalPosition: Int,
+        totalCount: Int,
+        shuffleScope: ShuffleScope,
+        revision: Long,
+        updatedAtMs: Long,
+    ): Int
+
+    @Query("DELETE FROM QueueSessionEntity") suspend fun nukeQueueSessions()
+
+    @Query("DELETE FROM QueueItemRefEntity") suspend fun nukeQueueItemRefs()
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertQueueSession(session: QueueSessionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertQueueItemRefs(items: List<QueueItemRefEntity>)
 }
 
-// TODO: Figure out how to get RepeatMode to map to an int instead of a string
 @Entity
 data class PlaybackState(
     @PrimaryKey val id: Int,
@@ -163,3 +327,29 @@ data class PlaybackState(
 @Entity data class QueueHeapItem(@PrimaryKey val id: Int, val uid: Music.UID)
 
 @Entity data class QueueShuffledMappingItem(@PrimaryKey val id: Int, val index: Int)
+
+@Entity
+data class QueueSessionEntity(
+    @PrimaryKey val id: Long,
+    val currentLogicalPosition: Int,
+    val positionMs: Long,
+    val repeatMode: RepeatMode,
+    val shuffleScope: ShuffleScope,
+    val totalCount: Int,
+    val revision: Long,
+    val updatedAtMs: Long,
+)
+
+@Entity(primaryKeys = ["sessionId", "logicalPosition"])
+data class QueueItemRefEntity(
+    val sessionId: Long,
+    val logicalPosition: Int,
+    val canonicalPosition: Int,
+    val stableSongUid: Music.UID?,
+    val uri: String?,
+    val pathFallback: String?,
+    val titleFallback: String?,
+    val artistFallback: String?,
+    val albumFallback: String?,
+    val durationMs: Long,
+)

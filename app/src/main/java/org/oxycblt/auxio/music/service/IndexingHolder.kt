@@ -20,7 +20,6 @@ package org.oxycblt.auxio.music.service
 
 import android.content.Context
 import android.os.PowerManager
-import coil3.ImageLoader
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,11 +32,12 @@ import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.music.ObservationMode
+import org.oxycblt.auxio.music.RootAccessPolicy
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.getSystemServiceCompat
-import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
@@ -51,20 +51,19 @@ private constructor(
     private val playbackManager: PlaybackStateManager,
     private val musicRepository: MusicRepository,
     private val musicSettings: MusicSettings,
-    private val imageLoader: ImageLoader,
     private val rootGate: RootStateHolder,
 ) :
     MusicRepository.IndexingWorker,
     MusicRepository.IndexingListener,
     MusicRepository.UpdateListener,
-    MusicSettings.Listener {
+    MusicSettings.Listener,
+    PlaybackStateManager.Listener {
     class Factory
     @Inject
     constructor(
         private val playbackManager: PlaybackStateManager,
         private val musicRepository: MusicRepository,
         private val musicSettings: MusicSettings,
-        private val imageLoader: ImageLoader,
         private val rootGate: RootStateHolder,
     ) {
         fun create(context: Context, listener: ForegroundListener) =
@@ -74,7 +73,6 @@ private constructor(
                 playbackManager,
                 musicRepository,
                 musicSettings,
-                imageLoader,
                 rootGate,
             )
     }
@@ -82,6 +80,7 @@ private constructor(
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
     private var currentIndexJob: Job? = null
+    private var pendingIndexWithCache: Boolean? = null
     private var startupJob: Job? = null
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
@@ -99,6 +98,7 @@ private constructor(
         musicRepository.addUpdateListener(this)
         musicRepository.addIndexingListener(this)
         musicRepository.registerWorker(this)
+        playbackManager.addListener(this)
         // Delay storage tracking until the cached library is emitted (or first index completes).
         // On TS18 firmware, SAF/MediaStore tracking setup can trigger slow provider queries that
         // compete with the cached startup path. Tracking will begin once onMusicChanges fires.
@@ -110,9 +110,11 @@ private constructor(
         stopTracking()
         currentIndexJob?.cancel()
         currentIndexJob = null
+        pendingIndexWithCache = null
         indexJob.cancel()
         wakeLock.releaseSafe()
         musicRepository.unregisterWorker(this)
+        playbackManager.removeListener(this)
         musicRepository.removeIndexingListener(this)
         musicRepository.removeUpdateListener(this)
         musicSettings.unregisterListener(this)
@@ -127,9 +129,8 @@ private constructor(
             }
             startupJob =
                 indexScope.launch {
-                    if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                        launch { rootGate.probeSync() }
-                    }
+                    // Root probing is intentionally on-demand. Normal startup must restore
+                    // playback/session surfaces without waiting for su.
                     musicRepository.startup(this@IndexingHolder)
                 }
         }
@@ -158,20 +159,65 @@ private constructor(
     }
 
     @Synchronized
+    override fun playbackActiveSnapshot(): Boolean = playbackManager.progression.isPlaying
+
+    @Synchronized
     override fun requestIndex(withCache: Boolean) {
         if (currentIndexJob?.isActive == true) {
-            L.i("Ignoring duplicate indexing request while scan is running [cache=$withCache]")
+            coalescePendingIndex(withCache)
+            L.i("Coalesced indexing request while scan is running [cache=$withCache]")
             return
         }
+        if (
+            musicSettings.observationMode == ObservationMode.WHEN_IDLE && playbackActiveSnapshot()
+        ) {
+            coalescePendingIndex(withCache)
+            L.i("Deferred indexing request until playback is idle [cache=$withCache]")
+            return
+        }
+        startIndexLocked(withCache)
+    }
+
+    @Synchronized
+    private fun coalescePendingIndex(withCache: Boolean) {
+        // A cache-bypassing rescan is stronger than a cached refresh, so false wins.
+        pendingIndexWithCache = pendingIndexWithCache?.and(withCache) ?: withCache
+    }
+
+    @Synchronized
+    private fun startIndexLocked(withCache: Boolean) {
         L.i("Starting new indexing job [cache=$withCache]")
         currentIndexJob =
             indexScope.launch {
                 try {
                     musicRepository.index(this@IndexingHolder, withCache)
                 } finally {
-                    synchronized(this@IndexingHolder) { currentIndexJob = null }
+                    synchronized(this@IndexingHolder) {
+                        currentIndexJob = null
+                        val pending = pendingIndexWithCache
+                        if (
+                            pending != null &&
+                                !(musicSettings.observationMode == ObservationMode.WHEN_IDLE &&
+                                    playbackActiveSnapshot())
+                        ) {
+                            pendingIndexWithCache = null
+                            startIndexLocked(pending)
+                        }
+                    }
                 }
             }
+    }
+
+    override fun onProgressionChanged(progression: org.oxycblt.auxio.playback.state.Progression) {
+        if (!progression.isPlaying) {
+            synchronized(this) {
+                val pending = pendingIndexWithCache
+                if (pending != null && currentIndexJob?.isActive != true) {
+                    pendingIndexWithCache = null
+                    startIndexLocked(pending)
+                }
+            }
+        }
     }
 
     override fun onIndexingStateChanged() {
@@ -185,41 +231,30 @@ private constructor(
     }
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
-        val library = musicRepository.library ?: return
-        L.d("Music changed, updating shared objects")
-        // Start tracking now that we have a library available.
-        // This ensures tracking doesn't start before cached startup completes.
-        if (trackingJob == null) {
+        if (musicRepository.library == null) return
+        L.d("Music changed [device=${changes.deviceLibrary}, user=${changes.userLibrary}]")
+        if (musicSettings.shouldBeObserving && trackingJob == null) {
             startTracking()
         }
-        // Only wipe covers when the underlying device library changed. Cached startup emissions
-        // and playback-state repair should not blank visible artwork after relaunch.
-        if (changes.deviceLibrary) {
-            imageLoader.memoryCache?.clear()
-        }
-        // Clear invalid models from PlaybackStateManager. This is not connected
-        // to a listener as it is bad practice for a shared object to attach to
-        // the listener system of another.
-        playbackManager.toSavedState()?.let { savedState ->
-            playbackManager.applySavedState(
-                savedState.copy(
-                    parent =
-                        savedState.parent?.let { musicRepository.find(it.uid) as? MusicParent? },
-                    heap = savedState.heap.map { song -> song?.let { library.findSong(it.uid) } },
-                ),
-                true,
-            )
-        }
+        // Playback owns its persistent primitive queue. Rich metadata reconciliation is bounded
+        // by the playback holder and must not clear all artwork or reapply a complete Song queue.
     }
 
     private fun startTracking() {
         stopTracking()
+        if (!musicSettings.shouldBeObserving) return
         val fs =
             when (musicSettings.locationMode) {
                 LocationMode.MEDIA_STORE ->
                     MediaStore.from(workerContext, musicSettings.mediaStoreQuery)
                 LocationMode.SAF -> SAF.from(workerContext, musicSettings.safQuery)
-                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source, rootGate)
+                LocationMode.DIRECT_FS ->
+                    DirectFS(
+                        musicSettings.safQuery.source,
+                        rootGate.takeIf {
+                            musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND
+                        },
+                    )
             }
         trackingJob =
             indexScope.launch {
@@ -263,7 +298,7 @@ private constructor(
 
     override fun onMusicLocationsChanged() {
         super.onMusicLocationsChanged()
-        startTracking()
+        if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
         musicRepository.requestIndex(true)
     }
 
@@ -274,6 +309,7 @@ private constructor(
 
     override fun onObservingChanged() {
         super.onObservingChanged()
+        if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
         // Make sure we don't override the service state with the observing
         // notification if we were actively loading when the automatic rescanning
         // setting changed. In such a case, the state will still be updated when

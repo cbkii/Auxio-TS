@@ -23,6 +23,7 @@ import android.content.Context
 import android.os.Build
 import android.os.StrictMode
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.preference.PreferenceManager
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import java.io.PrintWriter
@@ -31,14 +32,22 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
+import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
+import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
 import org.oxycblt.auxio.util.NotificationBitmapSafety
+import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber
 
 internal object CrashReportStorage {
@@ -62,8 +71,12 @@ class Auxio : Application() {
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var homeSettings: HomeSettings
+    @Inject lateinit var musicSettings: MusicSettings
+
+    private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
+        PerfTimer.point("Application.onCreate:start")
         installCrashHandler()
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
@@ -106,60 +119,73 @@ class Auxio : Application() {
                 Timber.e(e, "Failed to migrate settings: ${settings.javaClass.simpleName}")
             }
         }
-        // Dynamic shortcuts are a non-essential convenience. Some OEM launchers (including
-        // head-unit launchers such as DoFun) ship a partial or buggy ShortcutManager that can
-        // throw from setDynamicShortcuts; never let that crash every app launch. Publishing
-        // involves synchronous binder calls to system_server, so keep it off the main thread
-        // to avoid slowing first-frame startup on weak head-unit hardware.
-        Thread(
-                {
+        scheduleOptionalStartupWork()
+        PerfTimer.point("Application.onCreate:end")
+    }
+
+    private fun scheduleOptionalStartupWork() {
+        startupScope.launch {
+            PerfTimer.configure(musicSettings.performanceCaptureEnabled)
+            val prefs = PreferenceManager.getDefaultSharedPreferences(this@Auxio)
+            val shortcutsEnabled =
+                prefs.getBoolean(
+                    getString(R.string.set_key_dynamic_shortcuts),
+                    !BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                )
+            if (shortcutsEnabled) {
+                val shortcutMarker = "auxio_dynamic_shortcuts_published_${BuildConfig.VERSION_CODE}"
+                if (!prefs.getBoolean(shortcutMarker, false)) {
                     try {
                         ShortcutManagerCompat.setDynamicShortcuts(
-                            this,
-                            HeadUnitEntryPoints.createDynamicShortcuts(this),
+                            this@Auxio,
+                            HeadUnitEntryPoints.createDynamicShortcuts(this@Auxio),
                         )
+                        prefs.edit().putBoolean(shortcutMarker, true).apply()
                     } catch (e: Exception) {
                         Timber.w(e, "Unable to register dynamic shortcuts")
                     }
-                },
-                "Auxio:ShortcutPublish",
-            )
-            .start()
-
-        // Register car floating controls visibility hooks for the Topway/TS18 variant.
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            try {
-                val companionClass =
-                    Class.forName(
-                        "org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks\$Companion"
-                    )
-                val hooksClass =
-                    Class.forName("org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks")
-                val companion = hooksClass.getDeclaredField("Companion").get(null)
-                val registerMethod = companionClass.getMethod("register", Application::class.java)
-                registerMethod.invoke(companion, this)
-
-                try {
-                    val serviceClass =
-                        Class.forName("org.oxycblt.auxio.car.overlay.CarFloatingControlsService")
-                    val serviceCompanionClass =
-                        Class.forName(
-                            "org.oxycblt.auxio.car.overlay.CarFloatingControlsService\$Companion"
-                        )
-                    val serviceCompanion = serviceClass.getDeclaredField("Companion").get(null)
-                    val restoreMethod =
-                        serviceCompanionClass.getMethod(
-                            "restoreIfEnabled",
-                            Context::class.java,
-                            String::class.java,
-                        )
-                    restoreMethod.invoke(serviceCompanion, this, "application_on_create")
-                } catch (e: ReflectiveOperationException) {
-                    Timber.w(e, "Car overlay startup restore not available")
                 }
-            } catch (e: ReflectiveOperationException) {
-                Timber.w(e, "Car overlay visibility hooks not available")
             }
+
+            if (
+                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                    prefs.getBoolean(CarOverlayContract.KEY_ENABLED, false)
+            ) {
+                withContext(Dispatchers.Main.immediate) { registerCarOverlayIfAvailable() }
+            }
+        }
+    }
+
+    private fun registerCarOverlayIfAvailable() {
+        try {
+            val companionClass =
+                Class.forName("org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks\$Companion")
+            val hooksClass =
+                Class.forName("org.oxycblt.auxio.car.overlay.CarOverlayVisibilityHooks")
+            val companion = hooksClass.getDeclaredField("Companion").get(null)
+            val registerMethod = companionClass.getMethod("register", Application::class.java)
+            registerMethod.invoke(companion, this)
+
+            try {
+                val serviceClass =
+                    Class.forName("org.oxycblt.auxio.car.overlay.CarFloatingControlsService")
+                val serviceCompanionClass =
+                    Class.forName(
+                        "org.oxycblt.auxio.car.overlay.CarFloatingControlsService\$Companion"
+                    )
+                val serviceCompanion = serviceClass.getDeclaredField("Companion").get(null)
+                val restoreMethod =
+                    serviceCompanionClass.getMethod(
+                        "restoreIfEnabled",
+                        Context::class.java,
+                        String::class.java,
+                    )
+                restoreMethod.invoke(serviceCompanion, this, "application_on_create")
+            } catch (e: ReflectiveOperationException) {
+                Timber.w(e, "Car overlay startup restore not available")
+            }
+        } catch (e: ReflectiveOperationException) {
+            Timber.w(e, "Car overlay visibility hooks not available")
         }
     }
 

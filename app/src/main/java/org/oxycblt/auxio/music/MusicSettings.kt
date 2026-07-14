@@ -29,6 +29,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
 import org.oxycblt.auxio.settings.Settings
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.unlikelyToBeNull
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.mediastore.MediaStore
@@ -62,8 +63,24 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** The currently configured MediaStore query (if any) * */
     var mediaStoreQuery: MediaStore.Query
 
-    /** Whether to be actively watching for changes in the music library. */
+    /** Resource priority used for the next immutable Musikr scan pipeline. */
+    val scanPriority: ScanPriority
+
+    /** Policy controlling automatic source observation and rescans. */
+    val observationMode: ObservationMode
+
+    /** Whether the current observation policy requires a source watcher. */
     val shouldBeObserving: Boolean
+        get() = observationMode != ObservationMode.MANUAL
+
+    /** Root-assisted DirectFS access policy. Ordinary app access is always tried first. */
+    val rootAccessPolicy: RootAccessPolicy
+
+    /** Whether non-essential launcher dynamic shortcuts may be published. */
+    val dynamicShortcutsEnabled: Boolean
+
+    /** Whether bounded detailed performance capture is enabled. */
+    val performanceCaptureEnabled: Boolean
 
     /** A [String] of characters representing the desired characters to denote multi-value tags. */
     var separators: String
@@ -137,8 +154,46 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             }
         }
 
-    override val shouldBeObserving: Boolean
-        get() = sharedPreferences.getBoolean(getString(R.string.set_key_observing), false)
+    override val scanPriority: ScanPriority
+        get() =
+            ScanPriority.fromName(
+                sharedPreferences.getString(getString(R.string.set_key_scan_priority), null)
+            )
+                ?: if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    ScanPriority.PLAYBACK_FIRST
+                } else {
+                    ScanPriority.BALANCED
+                }
+
+    override val observationMode: ObservationMode
+        get() {
+            val stored =
+                ObservationMode.fromName(
+                    sharedPreferences.getString(getString(R.string.set_key_observation_mode), null)
+                )
+            if (stored != null) return stored
+            return if (sharedPreferences.getBoolean(getString(R.string.set_key_observing), false)) {
+                ObservationMode.CONTINUOUS
+            } else {
+                ObservationMode.MANUAL
+            }
+        }
+
+    override val rootAccessPolicy: RootAccessPolicy
+        get() =
+            RootAccessPolicy.fromName(
+                sharedPreferences.getString(getString(R.string.set_key_root_access_policy), null)
+            ) ?: RootAccessPolicy.ON_DEMAND
+
+    override val dynamicShortcutsEnabled: Boolean
+        get() =
+            sharedPreferences.getBoolean(
+                getString(R.string.set_key_dynamic_shortcuts),
+                !org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR,
+            )
+
+    override val performanceCaptureEnabled: Boolean
+        get() = sharedPreferences.getBoolean(getString(R.string.set_key_performance_capture), false)
 
     override var separators: String
         // Differ from convention and store a string of separator characters instead of an int
@@ -295,9 +350,21 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 L.d("Dispatching indexing setting change for $key")
                 listener.onIndexingSettingChanged()
             }
-            getString(R.string.set_key_observing) -> {
+            getString(R.string.set_key_observing),
+            getString(R.string.set_key_observation_mode) -> {
                 L.d("Dispatching observing setting change")
                 listener.onObservingChanged()
+            }
+            getString(R.string.set_key_scan_priority),
+            getString(R.string.set_key_root_access_policy) -> {
+                L.d("Dispatching indexing setting change for $key")
+                listener.onIndexingSettingChanged()
+            }
+            getString(R.string.set_key_performance_capture) -> {
+                // Diagnostics-only toggle: refresh the bounded capture state without
+                // requesting or starting a library reindex.
+                L.d("Applying performance capture change without reindex")
+                PerfTimer.configure(performanceCaptureEnabled)
             }
         }
     }
@@ -365,6 +432,27 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     private companion object {
         const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
+    }
+}
+
+/** Policy controlling when source changes trigger an automatic library refresh. */
+enum class ObservationMode {
+    MANUAL,
+    WHEN_IDLE,
+    CONTINUOUS;
+
+    companion object {
+        fun fromName(name: String?) = entries.firstOrNull { it.name == name }
+    }
+}
+
+/** Policy controlling whether DirectFS may fall back to bounded root-assisted listing. */
+enum class RootAccessPolicy {
+    OFF,
+    ON_DEMAND;
+
+    companion object {
+        fun fromName(name: String?) = entries.firstOrNull { it.name == name }
     }
 }
 

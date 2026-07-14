@@ -36,14 +36,14 @@ import timber.log.Timber as L
 class MusicServiceFragment
 @Inject
 constructor(
-    context: Context,
+    private val context: Context,
     foregroundListener: ForegroundListener,
     private val invalidator: Invalidator,
     indexingHolderFactory: IndexingHolder.Factory,
-    musicBrowserFactory: MusicBrowser.Factory,
+    private val musicBrowserFactory: MusicBrowser.Factory,
 ) : MusicBrowser.Invalidator {
     private val indexer = indexingHolderFactory.create(context, foregroundListener)
-    private val musicBrowser = musicBrowserFactory.create(context, this)
+    @Volatile private var musicBrowser: MusicBrowser? = null
     private val dispatchJob = Job()
     private val dispatchScope = CoroutineScope(dispatchJob + Dispatchers.Default)
 
@@ -73,12 +73,14 @@ constructor(
 
     fun attach() {
         indexer.attach()
-        musicBrowser.attach()
     }
 
     fun release() {
         dispatchJob.cancel()
-        musicBrowser.release()
+        synchronized(this) {
+            musicBrowser?.release()
+            musicBrowser = null
+        }
         indexer.release()
     }
 
@@ -98,13 +100,22 @@ constructor(
     fun getRoot() = BrowserRoot(MediaSessionUID.Tab(TabNode.Root).toString(), Bundle())
 
     fun getItem(mediaId: String, result: Result<MediaItem>) =
-        result.dispatch { musicBrowser.getItem(mediaId) }
+        result.dispatch { browser().getItem(mediaId) }
 
     fun getChildren(mediaId: String, maxTabs: Int, result: Result<MutableList<MediaItem>>) =
-        result.dispatch { musicBrowser.getChildren(mediaId, maxTabs)?.toMutableList() }
+        result.dispatch { browser().getChildren(mediaId, maxTabs)?.toMutableList() }
 
     fun search(query: String, result: Result<MutableList<MediaItem>>) =
-        result.dispatchAsync { musicBrowser.search(query) }
+        result.dispatchAsync { browser().search(query) }
+
+    @Synchronized
+    private fun browser(): MusicBrowser =
+        musicBrowser
+            ?: musicBrowserFactory.create(context, this).also {
+                it.attach()
+                musicBrowser = it
+                L.d("Created music browser catalogue on first client request")
+            }
 
     private fun <T> Result<T>.dispatch(body: () -> T?) {
         try {
