@@ -31,7 +31,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -58,7 +58,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [29])
 class MusikrCachedLoadTest {
     @Test
-    fun `cached load consumes more items than the bounded channel capacity`() = runTest {
+    fun `cached load consumes more items than the bounded channel capacity`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val playlists = (0 until 300).map { playlist(it) }
         val config =
@@ -75,7 +75,7 @@ class MusikrCachedLoadTest {
     }
 
     @Test
-    fun `lazy cover resolves a hit once for concurrent readers`() = runTest {
+    fun `lazy cover resolves a hit once for concurrent readers`() = runBlocking {
         val expected = ByteArrayCover("cover", byteArrayOf(1, 2, 3))
         val covers = CountingCovers(expected, delayMs = 25L)
         val storage = Storage(EmptyCache, covers, FakeStoredPlaylists(emptyList()))
@@ -90,7 +90,7 @@ class MusikrCachedLoadTest {
     }
 
     @Test
-    fun `lazy cover memoises a miss for the current library generation`() = runTest {
+    fun `lazy cover memoises a miss for the current library generation`() = runBlocking {
         val covers = CountingCovers(null)
         val storage = Storage(EmptyCache, covers, FakeStoredPlaylists(emptyList()))
         val lazy = LazyIdCover("missing", storage)
@@ -102,7 +102,7 @@ class MusikrCachedLoadTest {
     }
 
     @Test
-    fun `new lazy cover instance can observe a later generation hit`() = runTest {
+    fun `new lazy cover instance can observe a later generation hit`() = runBlocking {
         val covers = CountingCovers(null)
         val storage = Storage(EmptyCache, covers, FakeStoredPlaylists(emptyList()))
         assertNull(LazyIdCover("cover", storage).open())
