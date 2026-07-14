@@ -57,6 +57,8 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29])
 class MusikrCachedLoadTest {
+    // Real dispatchers are intentional: loadCached switches to IO/Default and must not be tested
+    // with a virtual-time scheduler that cannot advance those dispatcher jobs.
     @Test
     fun `cached load consumes more items than the bounded channel capacity`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
