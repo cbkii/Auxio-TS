@@ -36,7 +36,6 @@ import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -45,7 +44,8 @@ import timber.log.Timber as L
  * @author Alexander Capehart (OxygenCobalt)
  */
 @AndroidEntryPoint
-class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickListListener<Song> {
+class QueueFragment :
+    ViewBindingFragment<FragmentQueueBinding>(), EditClickListListener<QueueDisplayItem> {
     private val queueModel: QueueViewModel by viewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val queueAdapter = QueueAdapter(this)
@@ -80,6 +80,11 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
                 object : RecyclerView.OnScrollListener() {
                     override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                         updateDivider()
+                        val layout = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                        queueModel.requestAdjacentRange(
+                            layout.findFirstVisibleItemPosition(),
+                            layout.findLastVisibleItemPosition(),
+                        )
                     }
                 }
             )
@@ -106,7 +111,7 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
         queueModel.queueInstructions.consume()
     }
 
-    override fun onClick(item: Song, viewHolder: RecyclerView.ViewHolder) {
+    override fun onClick(item: QueueDisplayItem, viewHolder: RecyclerView.ViewHolder) {
         queueModel.goto(viewHolder.bindingAdapterPosition)
     }
 
@@ -122,7 +127,7 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
     }
 
     private fun updateQueue(
-        queue: List<Song>,
+        queue: List<QueueDisplayItem>,
         index: Int,
         isPlaying: Boolean,
         isLoaded: Boolean,

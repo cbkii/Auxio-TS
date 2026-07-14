@@ -23,21 +23,21 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.LayerDrawable
 import android.view.ViewGroup
 import androidx.core.view.isInvisible
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R as MR
 import com.google.android.material.shape.MaterialShapeDrawable
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemEditableSongBinding
 import org.oxycblt.auxio.list.EditClickListListener
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.PlayingIndicatorAdapter
 import org.oxycblt.auxio.list.recycler.MaterialDragCallback
-import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.inflater
-import org.oxycblt.musikr.Song
 
 /**
  * A [RecyclerView.Adapter] that shows an editable list of queue items.
@@ -45,8 +45,8 @@ import org.oxycblt.musikr.Song
  * @param listener A [EditClickListListener] to bind interactions to.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class QueueAdapter(private val listener: EditClickListListener<Song>) :
-    FlexibleListAdapter<Song, QueueSongViewHolder>(QueueSongViewHolder.DIFF_CALLBACK) {
+class QueueAdapter(private val listener: EditClickListListener<QueueDisplayItem>) :
+    FlexibleListAdapter<QueueDisplayItem, QueueSongViewHolder>(QueueSongViewHolder.DIFF_CALLBACK) {
     // Since PlayingIndicator adapter relies on an item value, we cannot use it for this
     // adapter, as one item can appear at several points in the UI. Use a similar implementation
     // with an index value instead.
@@ -122,14 +122,17 @@ class QueueAdapter(private val listener: EditClickListListener<Song>) :
 }
 
 /**
- * A [PlayingIndicatorAdapter.ViewHolder] that displays an queue [Song] which can be re-ordered and
+ * A [PlayingIndicatorAdapter.ViewHolder] that displays a queue item which can be re-ordered and
  * removed. Use [from] to create an instance.
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
 class QueueSongViewHolder private constructor(private val binding: ItemEditableSongBinding) :
     PlayingIndicatorAdapter.ViewHolder(binding.root), MaterialDragCallback.ViewHolder {
-    override val enabled = true
+    private var editable = true
+    override val enabled: Boolean
+        get() = editable
+
     override val root = binding.root
     override val body = binding.body
     override val delete = binding.background
@@ -163,15 +166,29 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
     /**
      * Bind new data to this instance.
      *
-     * @param song The new [Song] to bind.
+     * @param item The new queue item to bind.
      * @param listener A [EditClickListListener] to bind interactions to.
      */
     @SuppressLint("ClickableViewAccessibility")
-    fun bind(song: Song, listener: EditClickListListener<Song>) {
-        listener.bind(song, this, body, binding.songDragHandle)
-        binding.songAlbumCover.bind(song)
-        binding.songName.text = song.name.resolve(binding.context)
-        binding.songInfo.text = song.artists.resolveNames(binding.context)
+    fun bind(item: QueueDisplayItem, listener: EditClickListListener<QueueDisplayItem>) {
+        editable = item.editable
+        listener.bind(item, this, body, binding.songDragHandle)
+        val song = item.song
+        if (song != null) {
+            binding.songAlbumCover.bind(song)
+            binding.songName.text = song.name.resolve(binding.context)
+            binding.songInfo.text = song.artists.resolveNames(binding.context)
+        } else {
+            val primitive = item.primitive
+            binding.songAlbumCover.bind(
+                emptyList(),
+                primitive?.displayTitle ?: binding.context.getString(R.string.lbl_unknown),
+                R.drawable.ic_album_24,
+            )
+            binding.songName.text = primitive?.displayTitle
+            binding.songInfo.text = primitive?.displayArtist
+        }
+        binding.songDragHandle.isEnabled = editable
         // Not swiping this ViewHolder if it's being re-bound, ensure that the background is
         // not visible. See QueueDragCallback for why this is done.
         binding.background.isInvisible = true
@@ -195,6 +212,15 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
             )
 
         /** A comparator that can be used with DiffUtil. */
-        val DIFF_CALLBACK = SongViewHolder.DIFF_CALLBACK
+        val DIFF_CALLBACK =
+            object : DiffUtil.ItemCallback<QueueDisplayItem>() {
+                override fun areItemsTheSame(oldItem: QueueDisplayItem, newItem: QueueDisplayItem) =
+                    oldItem.globalPosition == newItem.globalPosition
+
+                override fun areContentsTheSame(
+                    oldItem: QueueDisplayItem,
+                    newItem: QueueDisplayItem,
+                ) = oldItem == newItem
+            }
     }
 }

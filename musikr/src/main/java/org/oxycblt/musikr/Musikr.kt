@@ -21,9 +21,14 @@ package org.oxycblt.musikr
 import android.content.Context
 import android.util.Log
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
@@ -32,10 +37,9 @@ import org.oxycblt.musikr.pipeline.ExploreStep
 import org.oxycblt.musikr.pipeline.Explored
 import org.oxycblt.musikr.pipeline.ExtractStep
 import org.oxycblt.musikr.pipeline.Extracted
+import org.oxycblt.musikr.pipeline.PipelinePolicy
 import org.oxycblt.musikr.pipeline.RawPlaylist
 import org.oxycblt.musikr.pipeline.RawSong
-import org.oxycblt.musikr.pipeline.PipelinePolicy
-
 import org.oxycblt.musikr.util.merge
 import org.oxycblt.musikr.util.tryAsyncWith
 
@@ -97,18 +101,42 @@ interface Musikr {
          * availability on cover storage I/O. Covers are referenced by ID and can be loaded lazily
          * by image loaders when needed.
          */
-        suspend fun loadCached(context: Context, config: Config): MutableLibrary {
+        suspend fun loadCached(context: Context, config: Config): MutableLibrary = coroutineScope {
             val start = System.currentTimeMillis()
             val extracted = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
-            for (cachedFile in config.storage.cache.snapshot()) {
-                cachedFile.toRawSongFast(config.storage)?.let { extracted.send(it) }
+            val producer =
+                async(Dispatchers.IO) {
+                    try {
+                        for (cachedFile in config.storage.cache.snapshot()) {
+                            cachedFile.toRawSongFast(config.storage)?.let { extracted.send(it) }
+                        }
+                        for (playlist in config.storage.storedPlaylists.read()) {
+                            extracted.send(RawPlaylist(playlist))
+                        }
+                        extracted.close()
+                    } catch (e: Throwable) {
+                        extracted.close(e)
+                        throw e
+                    }
+                }
+            val evaluator =
+                async(Dispatchers.Default) {
+                    EvaluateStep.new(context, config, config.interpretation).evaluate(extracted)
+                }
+            try {
+                val library = evaluator.await()
+                producer.await()
+                Log.d(
+                    "Musikr",
+                    "Cached snapshot prepared in ${System.currentTimeMillis() - start}ms",
+                )
+                library
+            } catch (e: Throwable) {
+                extracted.close(e)
+                producer.cancel()
+                evaluator.cancel()
+                throw e
             }
-            for (playlist in config.storage.storedPlaylists.read()) {
-                extracted.send(RawPlaylist(playlist))
-            }
-            extracted.close()
-            Log.d("Musikr", "Cached snapshot prepared in ${System.currentTimeMillis() - start}ms")
-            return EvaluateStep.new(context, config, config.interpretation).evaluate(extracted)
         }
 
         /**
@@ -119,7 +147,7 @@ interface Musikr {
             val audio = audio ?: return null
             // Create a lightweight cover reference without doing I/O to verify it exists.
             // The image loader will call covers.obtain(id) lazily when the art is displayed.
-            val cover = audio.coverId?.let { id -> LazyIdCover(id) }
+            val cover = audio.coverId?.let { id -> LazyIdCover(id, storage) }
             return RawSong(file, audio.properties, audio.tags, cover, addedMs)
         }
 
@@ -174,10 +202,13 @@ private class MusikrImpl(
     private val evaluateStep: EvaluateStep,
 ) : Musikr {
     override suspend fun run(onProgress: suspend (IndexingProgress) -> Unit) = coroutineScope {
-        onProgress(IndexingProgress.Songs(0, 0))
+        suspend fun emitProgress(progress: IndexingProgress) {
+            withContext(Dispatchers.Main) { onProgress(progress) }
+        }
+        emitProgress(IndexingProgress.Songs(0, 0))
         val start = System.currentTimeMillis()
-        var explored = 0
-        var loaded = 0
+        val explored = AtomicInteger(0)
+        val loaded = AtomicInteger(0)
         val exploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
         val exploredTask = exploreStep.explore(this, exploredChannel)
         val trackedExploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
@@ -185,17 +216,17 @@ private class MusikrImpl(
             tryAsyncWith(trackedExploredChannel, Dispatchers.Default) {
                 var lastEmitMs = 0L
                 for (item in exploredChannel) {
-                    explored++
+                    val exploredCount = explored.incrementAndGet()
                     // Emitting per-item progress floods the main thread with state updates
                     // (notification/UI refreshes) on large libraries; throttle to a humane rate.
                     val now = System.currentTimeMillis()
                     if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
                         lastEmitMs = now
-                        onProgress(IndexingProgress.Songs(loaded, explored))
+                        emitProgress(IndexingProgress.Songs(loaded.get(), exploredCount))
                     }
                     trackedExploredChannel.send(item)
                 }
-                onProgress(IndexingProgress.Songs(loaded, explored))
+                emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
             }
         val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
         val extractedTask = extractStep.extract(this, trackedExploredChannel, extractedChannel)
@@ -204,23 +235,22 @@ private class MusikrImpl(
             tryAsyncWith(trackedExtractedChannel, Dispatchers.Default) {
                 var lastEmitMs = 0L
                 for (item in extractedChannel) {
-                    loaded++
+                    val loadedCount = loaded.incrementAndGet()
                     val now = System.currentTimeMillis()
                     if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
                         lastEmitMs = now
-                        onProgress(IndexingProgress.Songs(loaded, explored))
+                        emitProgress(IndexingProgress.Songs(loadedCount, explored.get()))
                     }
                     trackedExtractedChannel.send(item)
                 }
-                onProgress(IndexingProgress.Songs(loaded, explored))
-                onProgress(IndexingProgress.Indeterminate)
+                emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
+                emitProgress(IndexingProgress.Indeterminate)
             }
         val library = evaluateStep.evaluate(trackedExtractedChannel)
         merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
         Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
         LibraryResultImpl(config, library)
     }
-
 }
 
 private class LibraryResultImpl(private val config: Config, override val library: MutableLibrary) :
@@ -236,8 +266,49 @@ private class LibraryResultImpl(private val config: Config, override val library
  * Used during cached startup to avoid blocking library emission on cover I/O. Image loaders resolve
  * the actual cover data lazily via [Covers.obtain].
  */
-internal class LazyIdCover(override val id: String) : Cover {
-    override suspend fun open(): InputStream? = null
+internal class LazyIdCover(override val id: String, private val storage: Storage) : Cover {
+    private sealed interface Resolution {
+        data object Unresolved : Resolution
+
+        data object Missing : Resolution
+
+        data class Found(val cover: Cover) : Resolution
+    }
+
+    private val resolutionMutex = Mutex()
+    @Volatile private var resolution: Resolution = Resolution.Unresolved
+
+    override suspend fun open(): InputStream? {
+        val cover =
+            when (val current = resolution) {
+                is Resolution.Found -> current.cover
+                Resolution.Missing -> null
+                Resolution.Unresolved -> resolveOnce()
+            } ?: return null
+        return cover.open()
+    }
+
+    private suspend fun resolveOnce(): Cover? =
+        resolutionMutex.withLock {
+            when (val current = resolution) {
+                is Resolution.Found -> current.cover
+                Resolution.Missing -> null
+                Resolution.Unresolved -> {
+                    when (val result = storage.covers.obtain(id)) {
+                        is CoverResult.Hit -> {
+                            resolution = Resolution.Found(result.cover)
+                            result.cover
+                        }
+                        is CoverResult.Miss -> {
+                            // A miss is memoised only for this lightweight object. A later cache or
+                            // library generation creates a fresh LazyIdCover and can resolve again.
+                            resolution = Resolution.Missing
+                            null
+                        }
+                    }
+                }
+            }
+        }
 
     override fun equals(other: Any?) = other is Cover && id == other.id
 

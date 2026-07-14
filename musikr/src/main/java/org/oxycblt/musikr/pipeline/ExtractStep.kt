@@ -65,6 +65,7 @@ private class ExtractStepImpl(
     workerCount: Int,
 ) : ExtractStep {
     private val parallelism = workerCount.coerceAtLeast(1)
+
     override suspend fun extract(
         scope: CoroutineScope,
         explored: Channel<Explored>,
@@ -167,5 +168,4 @@ private class ExtractStepImpl(
 
     private fun RawSong.toCachedFile() =
         CachedFile(file, audio = Audio(properties, tags, cover?.id), addedMs)
-
 }

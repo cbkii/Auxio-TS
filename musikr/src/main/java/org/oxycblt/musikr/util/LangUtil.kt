@@ -22,6 +22,7 @@ import java.security.MessageDigest
 import java.util.UUID
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -34,14 +35,17 @@ import org.oxycblt.musikr.tag.Date
 fun CoroutineScope.tryAsync(
     context: CoroutineContext,
     block: suspend () -> Unit,
-): Deferred<Result<Unit>> = async {
-    try {
-        block()
-        Result.success(Unit)
-    } catch (e: Throwable) {
-        Result.failure(e)
+): Deferred<Result<Unit>> =
+    async(context) {
+        try {
+            block()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
-}
 
 fun <T> CoroutineScope.tryAsyncWith(
     channel: Channel<T>,
@@ -53,6 +57,9 @@ fun <T> CoroutineScope.tryAsyncWith(
             block(channel)
             channel.close()
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            channel.cancel(e)
+            throw e
         } catch (e: Throwable) {
             channel.close(e)
             Result.failure(e)
