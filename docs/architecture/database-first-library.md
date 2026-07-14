@@ -1,10 +1,10 @@
 # Database-first library architecture migration map
 
-This PR establishes the Room schema, the non-destructive `MIGRATION_70_71` upgrade, a bounded
-restart-safe backfill from the legacy cache into the normalized tables, and the bounded query
-surface that replaces routine cached-library hydration. The legacy `CachedFileData` table remains
-as the import/source cache until all UI callers move to the normalized projections; it is never
-deleted by migration or backfill.
+The consolidated implementation establishes the Room schema, the non-destructive `MIGRATION_70_71`
+upgrade, a bounded restart-safe backfill from the legacy cache into the normalized tables, and a
+bounded query surface for the remaining consumer migration. The legacy `CachedFileData` table
+remains the active import/source cache until startup, UI, search and MediaBrowser callers move to the
+normalized projections; it is never deleted by migration or backfill.
 
 ## Implementation status
 
