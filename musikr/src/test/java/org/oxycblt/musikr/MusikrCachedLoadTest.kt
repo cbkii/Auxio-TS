@@ -52,8 +52,10 @@ import org.oxycblt.musikr.playlist.db.StoredPlaylists
 import org.oxycblt.musikr.tag.interpret.Naming
 import org.oxycblt.musikr.tag.interpret.Separators
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29])
 class MusikrCachedLoadTest {
     @Test
     fun `cached load consumes more items than the bounded channel capacity`() = runTest {
