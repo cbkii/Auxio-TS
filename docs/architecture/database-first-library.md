@@ -1,8 +1,24 @@
 # Database-first library architecture migration map
 
-This PR establishes the Room schema and bounded query surface that replaces routine cached-library
-hydration. The legacy `CachedFileData` table remains only as the import/source cache until all UI
-callers move to the normalized projections.
+This PR establishes the Room schema, the non-destructive `MIGRATION_70_71` upgrade, a bounded
+restart-safe backfill from the legacy cache into the normalized tables, and the bounded query
+surface that replaces routine cached-library hydration. The legacy `CachedFileData` table remains
+as the import/source cache until all UI callers move to the normalized projections; it is never
+deleted by migration or backfill.
+
+## Implementation status
+
+- **Implemented:** normalized Room schema (`MIGRATION_70_71`, no destructive fallback),
+  database-scoped `@TypeConverters`, reverse-direction relationship indexes,
+  `LibraryBackfill` (bounded batches, transactional writes, idempotent restart-safe resume via
+  unique URI identity), runtime wiring via `MutableCache.populateNormalizedLibrary()` invoked at
+  the end of `MusicRepositoryImpl.startup()` on the indexing scope, executable Room migration and
+  backfill tests (`CacheMigrationAndBackfillTest`).
+- **Scaffold only:** `LibraryReadDao` paged projections and search queries exist but are not yet
+  consumed by ViewModels/adapters; generation columns exist but incremental generation-safe
+  scanning is not yet implemented.
+- **Not yet implemented:** Paging 3 end-to-end UI conversion, MediaBrowser bounded async browsing,
+  database-backed search UI, Lean/Full metadata profile work differentiation.
 
 | Legacy producer | Legacy consumer | Database-first replacement | Projection | Paging | Removal point |
 | --- | --- | --- | --- | --- | --- |
@@ -18,7 +34,9 @@ callers move to the normalized projections.
 `LibraryVolumeData` stores availability plus committed and pending generations. `LibrarySongData`,
 `LibraryAlbumData`, `LibraryArtistData`, `LibraryGenreData` and playlist rows carry generation and
 metadata revision columns. Normal browsing must query available committed rows; failed or cancelled
-pending generations do not replace the last committed generation.
+pending generations do not replace the last committed generation. The legacy backfill writes rows
+with `scanGeneration = 0` and `metadataRevision = 0`; the first real incremental scan will re-home
+provisional `legacy:<uri>` identities onto durable source identity.
 
 ## TS18 claim labels
 

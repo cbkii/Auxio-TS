@@ -29,6 +29,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
 import org.oxycblt.auxio.settings.Settings
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.unlikelyToBeNull
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.mediastore.MediaStore
@@ -355,10 +356,15 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 listener.onObservingChanged()
             }
             getString(R.string.set_key_scan_priority),
-            getString(R.string.set_key_root_access_policy),
-            getString(R.string.set_key_performance_capture) -> {
-                L.d("Dispatching performance/indexing setting change for $key")
+            getString(R.string.set_key_root_access_policy) -> {
+                L.d("Dispatching indexing setting change for $key")
                 listener.onIndexingSettingChanged()
+            }
+            getString(R.string.set_key_performance_capture) -> {
+                // Diagnostics-only toggle: refresh the bounded capture state without
+                // requesting or starting a library reindex.
+                L.d("Applying performance capture change without reindex")
+                PerfTimer.configure(performanceCaptureEnabled)
             }
         }
     }

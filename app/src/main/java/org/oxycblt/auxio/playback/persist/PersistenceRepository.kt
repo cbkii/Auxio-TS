@@ -22,6 +22,7 @@ import android.content.Context
 import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
@@ -160,6 +161,8 @@ constructor(
                 revision = session.revision,
                 updatedAtMs = session.updatedAtMs,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to read primitive queue session")
             null
@@ -192,6 +195,8 @@ constructor(
                         )
                 }
             QueueWindow(descriptor, safeStart, items)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to read primitive queue window")
             null
@@ -219,6 +224,8 @@ constructor(
                 repeatMode = repeatMode,
                 updatedAtMs = System.currentTimeMillis(),
             ) == 1
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to update primitive queue position")
             false
@@ -240,6 +247,8 @@ constructor(
                 albumFallback = snapshot.album,
                 durationMs = snapshot.durationMs.coerceAtLeast(0L),
             ) == 1
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to enrich primitive queue item")
             false
@@ -248,6 +257,8 @@ constructor(
     override suspend fun readAllQueueItems(descriptor: QueueDescriptor): List<QueueItemRef> =
         try {
             queueDao.getAllQueueItems(descriptor.sessionId).map { it.toDomain() }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to read complete primitive queue for explicit reorder")
             emptyList()
@@ -401,6 +412,8 @@ constructor(
                 val session = queueDao.getQueueSession() ?: return@withTransaction null
                 block(session)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to $operation")
             null
@@ -492,6 +505,8 @@ constructor(
             playbackState = playbackStateDao.getState() ?: return null
             heapItems = queueDao.getHeap()
             mappingItems = queueDao.getShuffledMapping()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.e("Unable read playback state")
             L.e(e.stackTraceToString())
@@ -588,6 +603,8 @@ constructor(
             }
             L.d("Successfully wrote playback state transaction")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.e("Unable to transactionally write playback state")
             L.e(e.stackTraceToString())
@@ -610,6 +627,8 @@ constructor(
                 playing = fastResumePrefs.getBoolean(KEY_FAST_PLAYING, false),
                 savedAtMs = fastResumePrefs.getLong(KEY_FAST_SAVED_AT_MS, 0L),
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to read TS18 fast-resume snapshot")
             null
@@ -635,6 +654,8 @@ constructor(
                     .putLong(KEY_FAST_SAVED_AT_MS, snapshot.savedAtMs)
                     .commit()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             L.w(e, "Unable to save TS18 fast-resume snapshot")
             false

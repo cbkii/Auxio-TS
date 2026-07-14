@@ -114,11 +114,12 @@ abstract class PersistenceDatabase : RoomDatabase() {
                     "INSERT INTO QueueSessionEntity " +
                         "(id, currentLogicalPosition, positionMs, repeatMode, shuffleScope, " +
                         "totalCount, revision, updatedAtMs) " +
+                        // PlaybackState.index already stores the saved logical queue position
+                        // (the index into the shuffled mapping when shuffled, or the heap when
+                        // not). Backfill it directly, clamped to the queue bounds.
                         "SELECT 1, " +
-                        "CASE WHEN (SELECT COUNT(*) FROM QueueShuffledMappingItem) > 0 " +
-                        "THEN COALESCE((SELECT id FROM QueueShuffledMappingItem " +
-                        "WHERE `index` = PlaybackState.`index` LIMIT 1), PlaybackState.`index`) " +
-                        "ELSE PlaybackState.`index` END, " +
+                        "MAX(0, MIN(PlaybackState.`index`, " +
+                        "(SELECT COUNT(*) FROM QueueHeapItem) - 1)), " +
                         "PlaybackState.positionMs, PlaybackState.repeatMode, " +
                         "PlaybackState.shuffleScope, (SELECT COUNT(*) FROM QueueHeapItem), " +
                         "1, strftime('%s', 'now') * 1000 " +

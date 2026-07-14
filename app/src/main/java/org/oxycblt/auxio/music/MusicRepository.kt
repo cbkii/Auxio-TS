@@ -25,6 +25,7 @@ import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -448,6 +449,20 @@ constructor(
                 "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
                     "[state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
             )
+        }
+        // Opportunistically continue the bounded, restart-safe backfill of legacy cache rows
+        // into the normalized library tables. This runs on the indexing worker scope after the
+        // startup decision, never blocks playback restoration (which is on a separate path) and
+        // is a cheap no-op once every legacy row has been migrated.
+        try {
+            val migrated = cache.populateNormalizedLibrary()
+            if (migrated > 0) {
+                L.d("Backfilled $migrated legacy cache rows into the normalized library")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            L.w(e, "Normalized library backfill failed; last valid library remains available")
         }
     }
 

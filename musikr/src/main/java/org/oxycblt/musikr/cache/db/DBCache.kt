@@ -19,7 +19,6 @@
 package org.oxycblt.musikr.cache.db
 
 import android.content.Context
-import android.net.Uri
 import org.oxycblt.musikr.cache.Audio
 import org.oxycblt.musikr.cache.Cache
 import org.oxycblt.musikr.cache.CacheResult
@@ -142,11 +141,16 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
  * Create an instance with [from].
  */
 class MutableDBCache
-private constructor(private val inner: DBCache, private val writeDao: CacheWriteDao) :
-    MutableCache {
+private constructor(
+    private val inner: DBCache,
+    private val writeDao: CacheWriteDao,
+    private val backfill: LibraryBackfill,
+) : MutableCache {
     override suspend fun read(file: File) = inner.read(file)
 
     override suspend fun snapshot() = inner.snapshot()
+
+    override suspend fun populateNormalizedLibrary(): Int = backfill.run()
 
     override suspend fun write(cachedFile: CachedFile) {
         val dbSong =
@@ -188,8 +192,6 @@ private constructor(private val inner: DBCache, private val writeDao: CacheWrite
     }
 
     companion object {
-        private const val SNAPSHOT_PAGE_SIZE = 256
-
         /**
          * Create a new instance of [MutableDBCache] from the given [context].
          *
@@ -201,7 +203,10 @@ private constructor(private val inner: DBCache, private val writeDao: CacheWrite
          */
         fun from(context: Context): MutableDBCache {
             val db = CacheDatabase.from(context)
-            return MutableDBCache(DBCache.from(db), db.writeDao())
+            return MutableDBCache(DBCache.from(db), db.writeDao(), LibraryBackfill(db))
         }
+
+        internal fun from(db: CacheDatabase): MutableDBCache =
+            MutableDBCache(DBCache.from(db), db.writeDao(), LibraryBackfill(db))
     }
 }

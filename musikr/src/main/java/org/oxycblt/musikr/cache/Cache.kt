@@ -82,6 +82,19 @@ interface MutableCache : Cache {
      *   created by the loader this cache is used with.
      */
     suspend fun cleanup(excluding: List<CachedFile>)
+
+    /**
+     * Populate the implementation's normalized library model from any remaining legacy cache rows
+     * in bounded, restart-safe batches.
+     *
+     * Implementations without a normalized model may keep the default no-op. This must be safe to
+     * call repeatedly: reruns only process remaining rows and never duplicate data. The legacy
+     * cache remains untouched, so the last valid library stays available while backfill is
+     * incomplete.
+     *
+     * @return the number of entries backfilled by this invocation, or 0 when nothing remained.
+     */
+    suspend fun populateNormalizedLibrary(): Int = 0
 }
 
 /** A cached song entry containing the data needed by the rest of the loader. */
