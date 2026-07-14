@@ -1,0 +1,106 @@
+name: Temporary PR173 name fix
+
+on:
+  push:
+    branches:
+      - cx/implement-playback-first-startup-architecture
+    paths:
+      - ".github/workflows/temporary-pr173-name-fix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-pr173-name-fix
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "${sdk_dir}"
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Apply localisation-safe name fallbacks
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          persistence = Path("app/src/main/java/org/oxycblt/auxio/playback/persist/PersistenceRepository.kt")
+          text = persistence.read_text()
+          text = text.replace(
+              "import org.oxycblt.auxio.music.MusicRepository\n",
+              "import org.oxycblt.auxio.music.MusicRepository\n"
+              "import org.oxycblt.auxio.music.resolve\n"
+              "import org.oxycblt.auxio.music.resolveNames\n",
+          )
+          text = text.replace(
+              "artistFallback = song.artists.joinToString { it.name.raw },",
+              "artistFallback = song.artists.resolveNames(context),",
+          )
+          text = text.replace(
+              "albumFallback = song.album.name.raw,",
+              "albumFallback = song.album.name.resolve(context),",
+          )
+          persistence.write_text(text)
+
+          holder = Path("app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt")
+          text = holder.read_text()
+          text = text.replace(
+              "artistFallback = artists.joinToString { it.name.raw },",
+              "artistFallback = artists.resolveNames(context),",
+          )
+          text = text.replace(
+              "albumFallback = album.name.raw,",
+              "albumFallback = album.name.resolve(context),",
+          )
+          text = text.replace(
+              "artist = song.artists.joinToString { it.name.raw },",
+              "artist = song.artists.resolveNames(context),",
+          )
+          text = text.replace(
+              "album = song.album.name.raw,",
+              "album = song.album.name.resolve(context),",
+          )
+          holder.write_text(text)
+          PY
+
+          rm -f -- \
+            .github/workflows/temporary-pr173-diagnostics.yml \
+            .github/workflows/temporary-pr173-name-fix.yml
+
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git diff --check
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix primitive queue name fallbacks"
+          git push origin HEAD:refs/heads/cx/implement-playback-first-startup-architecture
