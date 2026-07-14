@@ -23,6 +23,8 @@ import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.resolve
+import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.musikr.MusicParent
@@ -562,8 +564,8 @@ constructor(
                         uri = song.uri.toString(),
                         pathFallback = song.path.toString(),
                         titleFallback = song.name.raw,
-                        artistFallback = song.artists.joinToString { it.name.raw },
-                        albumFallback = song.album.name.raw,
+                        artistFallback = song.artists.resolveNames(context),
+                        albumFallback = song.album.name.resolve(context),
                         durationMs = song.durationMs,
                     )
                 }

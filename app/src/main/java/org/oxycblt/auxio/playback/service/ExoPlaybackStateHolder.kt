@@ -686,8 +686,8 @@ class ExoPlaybackStateHolder(
             uri = uri.toString(),
             pathFallback = path.toString(),
             titleFallback = name.raw,
-            artistFallback = artists.joinToString { it.name.raw },
-            albumFallback = album.name.raw,
+            artistFallback = artists.resolveNames(context),
+            albumFallback = album.name.resolve(context),
             durationMs = durationMs,
         )
 
@@ -1368,8 +1368,8 @@ class ExoPlaybackStateHolder(
                         uri = song.uri.toString(),
                         path = song.path.toString(),
                         title = song.name.raw,
-                        artist = song.artists.joinToString { it.name.raw },
-                        album = song.album.name.raw,
+                        artist = song.artists.resolveNames(context),
+                        album = song.album.name.resolve(context),
                         durationMs = song.durationMs,
                         positionMs = 0L,
                         playing = false,
