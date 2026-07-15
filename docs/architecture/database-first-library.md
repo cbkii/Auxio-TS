@@ -36,7 +36,7 @@ normalized projections; it is never deleted by migration or backfill.
 ## Three-part completion programme
 
 The remaining architecture is deliberately split so the search/schema foundation does not become an
-unreviewable catch-all change:
+unreviewable catch-all change. The authoritative tracking issues are #179, #180 and #181:
 
 1. **Fast interaction startup**
    - staged startup readiness;
