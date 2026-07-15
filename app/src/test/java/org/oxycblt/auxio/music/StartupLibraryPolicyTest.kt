@@ -175,7 +175,7 @@ class StartupLibraryPolicyTest {
                 cachedSongCount = 3,
             )
 
-        assertEquals(StartupReadinessState.Ready, state)
+        assertEquals(StartupReadinessState.FullLibraryReady, state)
     }
 
     @Test

@@ -287,7 +287,7 @@ constructor(
 
     @Volatile
     private var currentStartupReadinessState: StartupReadinessState =
-        StartupReadinessState.CheckingCachedLibrary
+        StartupReadinessState.ProcessVisible
     override val startupReadinessState: StartupReadinessState
         get() = currentStartupReadinessState
 
@@ -417,6 +417,10 @@ constructor(
         PerfTimer.traceSuspend("MusicRepository.startup") {
             val start = System.currentTimeMillis()
             L.i("Music system starting...")
+            emitStartupReadinessState(StartupReadinessState.PlaybackServiceReady)
+            emitStartupReadinessState(StartupReadinessState.QueueReady)
+            emitStartupReadinessState(StartupReadinessState.FastBrowseReady)
+            emitStartupReadinessState(StartupReadinessState.SearchReady)
 
             val decision =
                 StartupLibraryStartup.run(
@@ -573,7 +577,7 @@ constructor(
                 if (isEmpty) {
                     StartupReadinessState.EmptyLibrary
                 } else {
-                    StartupReadinessState.Ready
+                    StartupReadinessState.FullLibraryReady
                 }
             )
             L.i("Indexing complete [state=${musicSettings.libraryState}]")
@@ -725,7 +729,12 @@ constructor(
     private fun emitStartupReadinessState(state: StartupReadinessState) {
         val listeners =
             synchronized(this) {
-                currentStartupReadinessState = state
+                val advanced = StartupReadinessTransitions.advance(currentStartupReadinessState, state)
+                if (advanced == currentStartupReadinessState) {
+                    return
+                }
+                currentStartupReadinessState = advanced
+                PerfTimer.point("startup.readiness.${advanced.javaClass.simpleName}")
                 startupReadinessListeners.toList()
             }
         for (listener in listeners) {

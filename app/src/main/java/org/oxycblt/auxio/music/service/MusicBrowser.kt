@@ -38,6 +38,9 @@ import org.oxycblt.musikr.Genre
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.cache.StartupProjectionCache
+import org.oxycblt.musikr.cache.StartupSongRow
 
 class MusicBrowser
 private constructor(
@@ -45,6 +48,7 @@ private constructor(
     private val invalidator: Invalidator,
     private val musicRepository: MusicRepository,
     private val searchEngine: SearchEngine,
+    private val startupProjectionCache: StartupProjectionCache?,
     homeGeneratorFactory: HomeGenerator.Factory,
     detailGeneratorFactory: DetailGenerator.Factory,
 ) : HomeGenerator.Invalidator, DetailGenerator.Invalidator {
@@ -54,6 +58,7 @@ private constructor(
     constructor(
         private val musicRepository: MusicRepository,
         private val searchEngine: SearchEngine,
+        private val cache: MutableCache,
         private val homeGeneratorFactory: HomeGenerator.Factory,
         private val detailGeneratorFactory: DetailGenerator.Factory,
     ) {
@@ -63,6 +68,7 @@ private constructor(
                 invalidator,
                 musicRepository,
                 searchEngine,
+                cache as? StartupProjectionCache,
                 homeGeneratorFactory,
                 detailGeneratorFactory,
             )
@@ -131,7 +137,7 @@ private constructor(
         }
     }
 
-    fun getChildren(parentId: String, maxTabs: Int): List<MediaItem>? {
+    suspend fun getChildren(parentId: String, maxTabs: Int): List<MediaItem>? {
         // we do not gate by library here since either
         // - we are loading tabs, which we want to always load in since some head units dont
         // cope well with sending no tabs then trying to update with tabs
@@ -144,7 +150,12 @@ private constructor(
         if (query.isEmpty()) {
             return mutableListOf()
         }
-        val library = musicRepository.library ?: return mutableListOf()
+        val library = musicRepository.library
+        if (library == null) {
+            return startupProjectionCache
+                ?.quickSearchSongs(query, limit = MEDIA_BROWSER_SEARCH_LIMIT)
+                ?.mapTo(mutableListOf()) { it.toMediaItem() } ?: mutableListOf()
+        }
         val items =
             SearchEngine.Items(
                 library.songs,
@@ -176,7 +187,7 @@ private constructor(
         return music
     }
 
-    private fun getMediaItemList(id: String, maxTabs: Int): List<MediaItem>? {
+    private suspend fun getMediaItemList(id: String, maxTabs: Int): List<MediaItem>? {
         return when (val mediaSessionUID = MediaSessionUID.fromString(id)) {
             is MediaSessionUID.Tab -> {
                 getCategoryMediaItems(mediaSessionUID.node, maxTabs)
@@ -191,7 +202,7 @@ private constructor(
         }
     }
 
-    private fun getCategoryMediaItems(node: TabNode, maxTabs: Int) =
+    private suspend fun getCategoryMediaItems(node: TabNode, maxTabs: Int) =
         when (node) {
             is TabNode.Root -> {
                 val tabs = homeGenerator.tabs()
@@ -218,20 +229,28 @@ private constructor(
                 }
             }
             is TabNode.Home ->
-                // homeGenerator list methods are now suspend; use runBlocking here since
-                // MusicBrowser.getChildren is called from a MediaBrowserService binder thread
-                // (not the main thread) via Result.dispatch.
-                kotlinx.coroutines.runBlocking {
-                    when (node.type) {
+                when (node.type) {
                         MusicType.SONGS ->
-                            homeGenerator
-                                .songs()
-                                .map { it.toMediaItem(context) }
-                                .ifEmpty {
-                                    listOf(
-                                        placeholderItem(context.getString(R.string.lbl_no_music))
-                                    )
-                                }
+                            if (musicRepository.library == null) {
+                                startupProjectionCache
+                                    ?.firstSongs(limit = BOUNDED_CHILD_LIMIT)
+                                    ?.map { it.toMediaItem() }
+                                    ?.ifEmpty {
+                                        listOf(
+                                            placeholderItem(context.getString(R.string.lbl_no_music))
+                                        )
+                                    } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
+                            } else {
+                                homeGenerator
+                                    .songs()
+                                    .take(BOUNDED_CHILD_LIMIT)
+                                    .map { it.toMediaItem(context) }
+                                    .ifEmpty {
+                                        listOf(
+                                            placeholderItem(context.getString(R.string.lbl_no_music))
+                                        )
+                                    }
+                            }
                         MusicType.ALBUMS ->
                             homeGenerator
                                 .albums()
@@ -269,7 +288,6 @@ private constructor(
                                     )
                                 }
                     }
-                }
         }
 
     private fun getChildMediaItems(uid: Music.UID): List<MediaItem>? {
@@ -298,7 +316,20 @@ private constructor(
 
     companion object {
         const val KEY_CHILD_OF = BuildConfig.APPLICATION_ID + ".key.CHILD_OF"
+        private const val BOUNDED_CHILD_LIMIT = 50
+        private const val MEDIA_BROWSER_SEARCH_LIMIT = 10
     }
+
+    private fun StartupSongRow.toMediaItem(): MediaItem =
+        MediaItem(
+            MediaDescriptionCompat.Builder()
+                .setMediaId(uri)
+                .setTitle(title)
+                .setSubtitle(primaryArtist ?: album)
+                .setDescription(album)
+                .build(),
+            MediaItem.FLAG_PLAYABLE,
+        )
 
     internal fun fallbackChildren(title: String): List<MediaItem> = listOf(placeholderItem(title))
 

@@ -79,7 +79,7 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
             CoordinatorState(
                 hasSong = false,
                 outcome = RestoreOutcome.NOT_REQUESTED,
-                readiness = StartupReadinessState.CheckingCachedLibrary,
+                readiness = StartupReadinessState.ProcessVisible,
             )
         )
 
@@ -187,7 +187,7 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
                 }
             }
 
-            if (readiness == StartupReadinessState.CheckingCachedLibrary) {
+            if (readiness == StartupReadinessState.ProcessVisible) {
                 return RouteEvaluation.Wait(request, "library-checking")
             }
 

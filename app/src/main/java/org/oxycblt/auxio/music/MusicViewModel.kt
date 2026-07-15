@@ -64,7 +64,7 @@ constructor(
 
     private val _indexingState = MutableStateFlow<IndexingState?>(null)
     private val _startupReadinessState =
-        MutableStateFlow<StartupReadinessState>(StartupReadinessState.CheckingCachedLibrary)
+        MutableStateFlow<StartupReadinessState>(StartupReadinessState.ProcessVisible)
 
     @Volatile private var libraryGeneration = 0L
 

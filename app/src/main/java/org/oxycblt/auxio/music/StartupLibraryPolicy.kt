@@ -20,22 +20,52 @@ package org.oxycblt.auxio.music
 
 import org.oxycblt.auxio.music.locations.LocationMode
 
-/** UI-visible startup/readiness state for launch UX. */
+/** UI-visible startup/readiness stage for launch UX. */
 sealed interface StartupReadinessState {
-    /** The repository is deciding whether a cached library can be restored. */
-    data object CheckingCachedLibrary : StartupReadinessState
+    val rank: Int
 
-    /** Cached or indexed library is ready for normal home rendering. */
-    data object Ready : StartupReadinessState
+    /** Process is visible; stable shell can render without library hydration. */
+    data object ProcessVisible : StartupReadinessState { override val rank = 0 }
+
+    /** The single playback service/session is constructed and can accept controller commands. */
+    data object PlaybackServiceReady : StartupReadinessState { override val rank = 1 }
+
+    /** The saved primitive queue/current item descriptor has been restored or explicitly found empty. */
+    data object QueueReady : StartupReadinessState { override val rank = 2 }
+
+    /** Bounded database/source projections are available for Fast Start browsing. */
+    data object FastBrowseReady : StartupReadinessState { override val rank = 3 }
+
+    /** Quick database search may run without full library hydration. */
+    data object SearchReady : StartupReadinessState { override val rank = 4 }
+
+    /** Complete legacy Musikr library graph is available for rich screens. */
+    data object FullLibraryReady : StartupReadinessState { override val rank = 5 }
+
+    /** Post-load enrichment has finished. */
+    data object EnrichmentComplete : StartupReadinessState { override val rank = 6 }
 
     /** No source is configured and no cached library is known/restorable. */
-    data object NeedsMusicSource : StartupReadinessState
+    data object NeedsMusicSource : StartupReadinessState { override val rank = 4 }
 
     /** A source is configured, but cached startup could not recover a usable library. */
-    data object CachedLibraryUnavailable : StartupReadinessState
+    data object CachedLibraryUnavailable : StartupReadinessState { override val rank = 4 }
 
     /** A prior scan intentionally produced an empty library. */
-    data object EmptyLibrary : StartupReadinessState
+    data object EmptyLibrary : StartupReadinessState { override val rank = 4 }
+
+    companion object {
+        /** Compatibility alias for older UI copy that meant "checking fast startup data". */
+        val CheckingCachedLibrary: StartupReadinessState = ProcessVisible
+
+        /** Compatibility alias for older callers that meant the full library can render. */
+        val Ready: StartupReadinessState = FullLibraryReady
+    }
+}
+
+object StartupReadinessTransitions {
+    fun advance(current: StartupReadinessState, next: StartupReadinessState): StartupReadinessState =
+        if (next.rank >= current.rank) next else current
 }
 
 /**
@@ -168,8 +198,8 @@ object StartupLibraryPolicy {
         cachedSongCount: Int?,
     ): StartupReadinessState =
         when {
-            cachedSongCount != null && cachedSongCount > 0 -> StartupReadinessState.Ready
-            decision.libraryState == LibraryState.USABLE -> StartupReadinessState.Ready
+            cachedSongCount != null && cachedSongCount > 0 -> StartupReadinessState.FullLibraryReady
+            decision.libraryState == LibraryState.USABLE -> StartupReadinessState.FullLibraryReady
             decision.libraryState == LibraryState.EMPTY -> StartupReadinessState.EmptyLibrary
             !sourceConfigured -> StartupReadinessState.NeedsMusicSource
             else -> StartupReadinessState.CachedLibraryUnavailable
@@ -201,7 +231,7 @@ object StartupLibraryStartup {
         setStartupReadinessState: (StartupReadinessState) -> Unit = {},
         sourceConfigured: Boolean = true,
     ): StartupLibraryPolicy.Decision {
-        setStartupReadinessState(StartupReadinessState.CheckingCachedLibrary)
+        setStartupReadinessState(StartupReadinessState.ProcessVisible)
         var cachedSongCountOrNull: Int? = null
         var decision =
             if (

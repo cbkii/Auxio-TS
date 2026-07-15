@@ -275,7 +275,7 @@ class PersistenceCancellationTest {
         override val library: Library? = null
         override val indexingState: IndexingState? = null
         override val startupReadinessState: StartupReadinessState =
-            StartupReadinessState.CheckingCachedLibrary
+            StartupReadinessState.ProcessVisible
 
         override fun addUpdateListener(listener: MusicRepository.UpdateListener) = Unit
 

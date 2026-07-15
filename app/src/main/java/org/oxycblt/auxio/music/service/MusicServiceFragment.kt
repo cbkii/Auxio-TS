@@ -103,7 +103,7 @@ constructor(
         result.dispatch { browser().getItem(mediaId) }
 
     fun getChildren(mediaId: String, maxTabs: Int, result: Result<MutableList<MediaItem>>) =
-        result.dispatch { browser().getChildren(mediaId, maxTabs)?.toMutableList() }
+        result.dispatchAsync { browser().getChildren(mediaId, maxTabs)?.toMutableList() }
 
     fun search(query: String, result: Result<MutableList<MediaItem>>) =
         result.dispatchAsync { browser().search(query) }

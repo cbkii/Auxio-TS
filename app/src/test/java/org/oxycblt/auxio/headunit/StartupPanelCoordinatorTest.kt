@@ -96,7 +96,7 @@ class StartupPanelCoordinatorTest {
                 request,
                 false,
                 RestoreOutcome.NOT_REQUESTED,
-                StartupReadinessState.Ready,
+                StartupReadinessState.FullLibraryReady,
             ) is StartupPanelCoordinator.RouteEvaluation.Wait
         )
         assertTrue(
@@ -104,7 +104,7 @@ class StartupPanelCoordinatorTest {
                 request,
                 true,
                 RestoreOutcome.NOT_REQUESTED,
-                StartupReadinessState.Ready,
+                StartupReadinessState.FullLibraryReady,
             ) is StartupPanelCoordinator.RouteEvaluation.Render
         )
     }
@@ -112,7 +112,7 @@ class StartupPanelCoordinatorTest {
     private fun evaluate(
         hasSong: Boolean,
         outcome: RestoreOutcome,
-        readiness: StartupReadinessState = StartupReadinessState.Ready,
+        readiness: StartupReadinessState = StartupReadinessState.FullLibraryReady,
     ) =
         StartupPanelCoordinator.evaluate(
             StartupPanelCoordinator.RouteRequest(

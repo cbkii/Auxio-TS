@@ -33,7 +33,7 @@ fun FragmentHomeListBinding.updateLibraryEmptyState(
     @StringRes emptyMessage: Int,
     actionVisibleWhenNotEmpty: Boolean = false,
 ) {
-    val cachedStartupPending = empty && startupState is StartupReadinessState.CheckingCachedLibrary
+    val cachedStartupPending = empty && startupState == StartupReadinessState.ProcessVisible
     val indexingPending = empty && indexingState is IndexingState.Indexing
     val showProgress = cachedStartupPending || indexingPending
     val showEmptyPanel = empty || showProgress || actionVisibleWhenNotEmpty
