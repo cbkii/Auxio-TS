@@ -88,15 +88,11 @@ internal class LibrarySearcher(
      * Run a bounded search for [rawQuery], returning at most [limit] rows from page [page].
      *
      * A blank query or non-positive limit yields no results without touching the database. Limits
-     * are capped at [MAX_PAGE_SIZE], and the page is clamped before offset multiplication so hostile
-     * or accidental values cannot overflow the DAO's integer offset. Returns
+     * are capped at [MAX_PAGE_SIZE], and the page is clamped before offset multiplication so
+     * hostile or accidental values cannot overflow the DAO's integer offset. Returns
      * [SearchResult.Superseded] if a newer [search] began before this one finished.
      */
-    suspend fun search(
-        rawQuery: String,
-        limit: Int = pageSize,
-        page: Int = 0,
-    ): SearchResult {
+    suspend fun search(rawQuery: String, limit: Int = pageSize, page: Int = 0): SearchResult {
         val token = latestToken.incrementAndGet()
         val trimmed = rawQuery.trim()
         if (trimmed.isEmpty() || limit <= 0) {

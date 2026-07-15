@@ -73,14 +73,17 @@ class LibrarySearchTest {
         available: Boolean = true,
     ) {
         fun sql(value: String?) = value?.let { "'${it.replace("'", "''")}'" } ?: "NULL"
-        db!!.openHelper.writableDatabase.execSQL(
-            "INSERT INTO LibrarySongData (stableUid, volumeId, uri, fileName, title, titleSort, " +
-                "primaryArtistName, primaryArtistSort, albumName, albumSort, sizeBytes, " +
-                "modifiedTimeMs, dateAddedMs, scanGeneration, metadataRevision, available) VALUES (" +
-                "${sql(uri)}, 1, ${sql(uri)}, ${sql(title)}, ${sql(title)}, ${sql(titleSort)}, " +
-                "NULL, ${sql(artistSort)}, NULL, ${sql(albumSort)}, 1, 1000, 2000, 0, 0, " +
-                "${if (available) 1 else 0})"
-        )
+        db!!
+            .openHelper
+            .writableDatabase
+            .execSQL(
+                "INSERT INTO LibrarySongData (stableUid, volumeId, uri, fileName, title, titleSort, " +
+                    "primaryArtistName, primaryArtistSort, albumName, albumSort, sizeBytes, " +
+                    "modifiedTimeMs, dateAddedMs, scanGeneration, metadataRevision, available) VALUES (" +
+                    "${sql(uri)}, 1, ${sql(uri)}, ${sql(title)}, ${sql(title)}, ${sql(titleSort)}, " +
+                    "NULL, ${sql(artistSort)}, NULL, ${sql(albumSort)}, 1, 1000, 2000, 0, 0, " +
+                    "${if (available) 1 else 0})"
+            )
     }
 
     @Test
@@ -146,11 +149,10 @@ class LibrarySearchTest {
     @Test
     fun `blank query returns no rows without touching the database`() = runBlocking {
         var queried = false
-        val searcher =
-            LibrarySearcher { _, _, _ ->
-                queried = true
-                emptyList()
-            }
+        val searcher = LibrarySearcher { _, _, _ ->
+            queried = true
+            emptyList()
+        }
 
         val result = searcher.search("   ")
 
@@ -161,11 +163,10 @@ class LibrarySearchTest {
     @Test
     fun `non-positive limit returns no rows without touching the database`() = runBlocking {
         var queried = false
-        val searcher =
-            LibrarySearcher { _, _, _ ->
-                queried = true
-                emptyList()
-            }
+        val searcher = LibrarySearcher { _, _, _ ->
+            queried = true
+            emptyList()
+        }
 
         assertEquals(SearchResult.Results(emptyList()), searcher.search("query", limit = 0))
         assertEquals(SearchResult.Results(emptyList()), searcher.search("query", limit = -1))
@@ -176,12 +177,11 @@ class LibrarySearchTest {
     fun `oversized pages are capped and offset multiplication cannot overflow`() = runBlocking {
         var observedLimit = -1
         var observedOffset = -1
-        val searcher =
-            LibrarySearcher { _, limit, offset ->
-                observedLimit = limit
-                observedOffset = offset
-                emptyList()
-            }
+        val searcher = LibrarySearcher { _, limit, offset ->
+            observedLimit = limit
+            observedOffset = offset
+            emptyList()
+        }
 
         searcher.search("query", limit = Int.MAX_VALUE, page = Int.MAX_VALUE)
 
@@ -196,14 +196,13 @@ class LibrarySearchTest {
     fun `a newer query supersedes an older in-flight query`() = runBlocking {
         var triggeredNewer = false
         lateinit var searcher: LibrarySearcher
-        searcher =
-            LibrarySearcher { _, _, _ ->
-                if (!triggeredNewer) {
-                    triggeredNewer = true
-                    searcher.search("newer")
-                }
-                listOf(SongListRow(1L, "u", "content://u", "t", null, null, null, null, null))
+        searcher = LibrarySearcher { _, _, _ ->
+            if (!triggeredNewer) {
+                triggeredNewer = true
+                searcher.search("newer")
             }
+            listOf(SongListRow(1L, "u", "content://u", "t", null, null, null, null, null))
+        }
 
         val older = searcher.search("older")
 
@@ -214,12 +213,11 @@ class LibrarySearchTest {
     fun `cancelling a search coroutine abandons the query cooperatively`() = runBlocking {
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
-        val searcher =
-            LibrarySearcher { _, _, _ ->
-                started.complete(Unit)
-                gate.await()
-                emptyList()
-            }
+        val searcher = LibrarySearcher { _, _, _ ->
+            started.complete(Unit)
+            gate.await()
+            emptyList()
+        }
 
         val job = launch { searcher.search("query") }
         started.await()

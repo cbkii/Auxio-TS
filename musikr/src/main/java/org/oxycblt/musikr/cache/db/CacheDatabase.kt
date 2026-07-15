@@ -435,12 +435,12 @@ internal interface LibraryReadDao {
     @Query("SELECT COUNT(*) FROM LibrarySongData WHERE available = 1") suspend fun songCount(): Int
 
     /**
-     * Indexed, bounded, paged song search.
+     * Database-backed, bounded, paged song search.
      *
      * [pattern] must already be a fully escaped `LIKE` contains-pattern (see [LikeQuery.contains]);
-     * the `ESCAPE '\'` clause makes any `%`, `_` or `\` originating from user input match
-     * literally rather than as wildcards. Ordering is deterministic (`titleSort` then the stable
-     * primary key) so that [offset]/[limit] paging never skips or repeats rows.
+     * the `ESCAPE '\'` clause makes any `%`, `_` or `\` originating from user input match literally
+     * rather than as wildcards. Ordering is deterministic (`titleSort` then the stable primary key)
+     * so that [offset]/[limit] paging never skips or repeats rows.
      */
     @Query(
         "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 AND (titleSort LIKE :pattern ESCAPE '\\' OR primaryArtistSort LIKE :pattern ESCAPE '\\' OR albumSort LIKE :pattern ESCAPE '\\') ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
