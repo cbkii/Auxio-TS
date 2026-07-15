@@ -38,9 +38,9 @@ import org.robolectric.annotation.Config
  * Executable coverage for the database-first song search primitive.
  *
  * The DAO tests run against a real Room [CacheDatabase] so that the `LIKE ... ESCAPE '\'` clause,
- * deterministic ordering and offset paging are validated by SQLite itself rather than by
- * source-text inspection. The coordinator tests validate obsolete-query suppression and cooperative
- * cancellation with in-memory fakes.
+ * deterministic ordering, and offset paging are validated by SQLite itself rather than by
+ * source-text inspection. The coordinator tests validate strict bounds, obsolete-query suppression,
+ * and cooperative cancellation with in-memory fakes.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29])
@@ -99,7 +99,8 @@ class LibrarySearchTest {
         insertSong("content://1", "a_b", titleSort = "a_b")
         insertSong("content://2", "axb", titleSort = "axb")
 
-        val results = db!!.libraryDao().searchSongs(LikeQuery.contains("a_b"), limit = 10, offset = 0)
+        val results =
+            db!!.libraryDao().searchSongs(LikeQuery.contains("a_b"), limit = 10, offset = 0)
 
         assertEquals(listOf("content://1"), results.map { it.uri })
     }
@@ -128,7 +129,6 @@ class LibrarySearchTest {
 
     @Test
     fun `paging is deterministic across equal sort keys with no gaps or repeats`() = runBlocking {
-        // All rows share a titleSort so only the stable id tie-breaker gives deterministic order.
         repeat(6) { insertSong("content://match/$it", "Song", titleSort = "song") }
         val dao = db!!.libraryDao()
 
@@ -139,7 +139,6 @@ class LibrarySearchTest {
         val all = (page0 + page1 + page2).map { it.id }
         assertEquals(2, page0.size)
         assertEquals(6, all.size)
-        // No repeats and strictly increasing ids prove stable, gap-free paging.
         assertEquals(all.sorted(), all)
         assertEquals(all.toSet().size, all.size)
     }
@@ -148,10 +147,10 @@ class LibrarySearchTest {
     fun `blank query returns no rows without touching the database`() = runBlocking {
         var queried = false
         val searcher =
-            LibrarySearcher({ _, _, _ ->
+            LibrarySearcher { _, _, _ ->
                 queried = true
                 emptyList()
-            })
+            }
 
         val result = searcher.search("   ")
 
@@ -160,18 +159,51 @@ class LibrarySearchTest {
     }
 
     @Test
+    fun `non-positive limit returns no rows without touching the database`() = runBlocking {
+        var queried = false
+        val searcher =
+            LibrarySearcher { _, _, _ ->
+                queried = true
+                emptyList()
+            }
+
+        assertEquals(SearchResult.Results(emptyList()), searcher.search("query", limit = 0))
+        assertEquals(SearchResult.Results(emptyList()), searcher.search("query", limit = -1))
+        assertFalse(queried)
+    }
+
+    @Test
+    fun `oversized pages are capped and offset multiplication cannot overflow`() = runBlocking {
+        var observedLimit = -1
+        var observedOffset = -1
+        val searcher =
+            LibrarySearcher { _, limit, offset ->
+                observedLimit = limit
+                observedOffset = offset
+                emptyList()
+            }
+
+        searcher.search("query", limit = Int.MAX_VALUE, page = Int.MAX_VALUE)
+
+        assertEquals(LibrarySearcher.MAX_PAGE_SIZE, observedLimit)
+        assertEquals(
+            (Int.MAX_VALUE / LibrarySearcher.MAX_PAGE_SIZE) * LibrarySearcher.MAX_PAGE_SIZE,
+            observedOffset,
+        )
+    }
+
+    @Test
     fun `a newer query supersedes an older in-flight query`() = runBlocking {
         var triggeredNewer = false
         lateinit var searcher: LibrarySearcher
         searcher =
-            LibrarySearcher({ _, _, _ ->
+            LibrarySearcher { _, _, _ ->
                 if (!triggeredNewer) {
                     triggeredNewer = true
-                    // Simulate a fresher query starting before the older one resolves.
                     searcher.search("newer")
                 }
                 listOf(SongListRow(1L, "u", "content://u", "t", null, null, null, null, null))
-            })
+            }
 
         val older = searcher.search("older")
 
@@ -183,11 +215,11 @@ class LibrarySearchTest {
         val started = CompletableDeferred<Unit>()
         val gate = CompletableDeferred<Unit>()
         val searcher =
-            LibrarySearcher({ _, _, _ ->
+            LibrarySearcher { _, _, _ ->
                 started.complete(Unit)
                 gate.await()
                 emptyList()
-            })
+            }
 
         val job = launch { searcher.search("query") }
         started.await()
