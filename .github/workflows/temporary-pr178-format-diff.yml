@@ -33,22 +33,59 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Generate exact Spotless patch
+      - name: Capture exact Spotless result
+        id: spotless
         shell: bash
         run: |
-          set -euo pipefail
-          ./gradlew --no-daemon spotlessApply
+          set -uo pipefail
+          output="${RUNNER_TEMP}/pr178-format"
+          mkdir -p "${output}/formatted"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt")
+          text = path.read_text()
+          old = "     * Indexed, bounded, paged song search."
+          new = "     * Database-backed, bounded, paged song search."
+          if old not in text:
+              raise SystemExit("Expected search KDoc was not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+          set +e
+          ./gradlew --no-daemon spotlessApply >"${output}/spotless.log" 2>&1
+          status=$?
+          set -e
+
           git diff --binary -- \
             musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt \
             musikr/src/main/java/org/oxycblt/musikr/cache/db/LibrarySearch.kt \
             musikr/src/test/java/org/oxycblt/musikr/cache/db/LibrarySearchTest.kt \
-            > "${RUNNER_TEMP}/pr178-format.patch"
-          cat "${RUNNER_TEMP}/pr178-format.patch"
+            > "${output}/pr178-format.patch"
 
-      - name: Upload formatter patch
+          cp musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt \
+            "${output}/formatted/CacheDatabase.kt"
+          cp musikr/src/main/java/org/oxycblt/musikr/cache/db/LibrarySearch.kt \
+            "${output}/formatted/LibrarySearch.kt"
+          cp musikr/src/test/java/org/oxycblt/musikr/cache/db/LibrarySearchTest.kt \
+            "${output}/formatted/LibrarySearchTest.kt"
+
+          echo "spotless_status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "--- Spotless log tail ---"
+          tail -n 120 "${output}/spotless.log"
+          echo "--- Exact patch ---"
+          cat "${output}/pr178-format.patch"
+
+      - name: Upload formatter evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr178-format-patch
-          path: ${{ runner.temp }}/pr178-format.patch
+          name: pr178-format-evidence
+          path: ${{ runner.temp }}/pr178-format
           if-no-files-found: error
           retention-days: 1
+
+      - name: Report Spotless failure
+        if: steps.spotless.outputs.spotless_status != '0'
+        shell: bash
+        run: exit 1
