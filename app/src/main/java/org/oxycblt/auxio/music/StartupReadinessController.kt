@@ -52,14 +52,13 @@ class StartupReadinessController @Inject constructor() {
     fun publishCapability(capability: StartupReadinessState) {
         val milestone = capability.toCapability()
         val snapshot = synchronized(this) {
-            val first = achieved.add(milestone)
-            val next = currentState.copy(
-                achieved = achieved.toSet(),
-                contiguous = deriveContiguous(),
-            )
-            if (next == currentState) return
-            currentState = next
-            if (first) PerfTimer.point("startup.capability.${milestone.name}")
+            if (!achieved.add(milestone)) return
+            currentState =
+                currentState.copy(
+                    achieved = achieved.toSet(),
+                    contiguous = deriveContiguous(),
+                )
+            PerfTimer.point("startup.capability.${milestone.name}")
             listeners.toList()
         }
         snapshot.forEach { it.onStartupReadinessStateChanged() }
