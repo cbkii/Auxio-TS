@@ -194,7 +194,7 @@ private constructor(
     private val inner: DBCache,
     private val writeDao: CacheWriteDao,
     private val backfill: LibraryBackfill,
-) : MutableCache, StartupProjectionCache {
+) : MutableCache, StartupProjectionCache by inner {
     override suspend fun read(file: File) = inner.read(file)
 
     override suspend fun snapshot() = inner.snapshot()
@@ -202,16 +202,6 @@ private constructor(
     override suspend fun populateNormalizedLibrary(): Int = backfill.run()
 
     override suspend fun prepareStartupProjections(): Int = backfill.runOneBatch(STARTUP_SEED_BATCH_SIZE)
-
-    override suspend fun firstSongs(limit: Int, offset: Int) = inner.firstSongs(limit, offset)
-
-    override suspend fun recentlyAdded(limit: Int) = inner.recentlyAdded(limit)
-
-    override suspend fun albums(limit: Int, offset: Int) = inner.albums(limit, offset)
-
-    override suspend fun artists(limit: Int, offset: Int) = inner.artists(limit, offset)
-
-    override suspend fun quickSearchSongs(query: String, limit: Int) = inner.quickSearchSongs(query, limit)
 
     override suspend fun write(cachedFile: CachedFile) {
         val dbSong =
