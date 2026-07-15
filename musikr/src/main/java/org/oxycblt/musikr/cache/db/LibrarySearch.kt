@@ -74,8 +74,8 @@ internal object LikeQuery {
  *   [SearchResult.Superseded] instead of overwriting fresher results.
  */
 internal class LibrarySearcher(
-    private val source: Source,
     private val pageSize: Int = DEFAULT_PAGE_SIZE,
+    private val source: Source,
 ) {
     /** Minimal abstraction over [LibraryReadDao] so the coordinator is unit-testable. */
     fun interface Source {
