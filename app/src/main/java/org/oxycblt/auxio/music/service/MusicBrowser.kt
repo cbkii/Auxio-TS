@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.music.service
 
 import android.content.Context
+import android.net.Uri
 import android.support.v4.media.MediaBrowserCompat.MediaItem
 import android.support.v4.media.MediaDescriptionCompat
 import javax.inject.Inject
@@ -27,6 +28,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.detail.DetailGenerator
 import org.oxycblt.auxio.detail.DetailSection
 import org.oxycblt.auxio.home.HomeGenerator
+import org.oxycblt.auxio.image.CoverProvider
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicType
@@ -231,88 +233,81 @@ private constructor(
             }
             is TabNode.Home ->
                 when (node.type) {
-                        MusicType.SONGS ->
-                            if (musicRepository.library == null) {
-                                startupProjectionCache
-                                    ?.firstSongs(limit = BOUNDED_CHILD_LIMIT)
-                                    ?.map { it.toMediaItem() }
-                                    ?.ifEmpty {
-                                        listOf(
-                                            placeholderItem(context.getString(R.string.lbl_no_music))
-                                        )
-                                    } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
-                            } else {
-                                homeGenerator
-                                    .songs()
-                                    .take(BOUNDED_CHILD_LIMIT)
-                                    .map { it.toMediaItem(context) }
-                                    .ifEmpty {
-                                        listOf(
-                                            placeholderItem(context.getString(R.string.lbl_no_music))
-                                        )
-                                    }
-                            }
-                        MusicType.ALBUMS ->
-                            if (musicRepository.library == null) {
-                                startupProjectionCache
-                                    ?.albums(limit = BOUNDED_CHILD_LIMIT)
-                                    ?.map { it.toBrowsableMediaItem("startup:album") }
-                                    ?.ifEmpty {
-                                        listOf(
-                                            placeholderItem(context.getString(R.string.lbl_no_music))
-                                        )
-                                    } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
-                            } else {
-                                homeGenerator
-                                    .albums()
-                                    .take(BOUNDED_CHILD_LIMIT)
-                                    .map { it.toMediaItem(context) }
-                                    .ifEmpty {
-                                        listOf(
-                                            placeholderItem(context.getString(R.string.lbl_no_music))
-                                        )
-                                    }
-                            }
-                        MusicType.ARTISTS ->
-                            if (musicRepository.library == null) {
-                                startupProjectionCache
-                                    ?.artists(limit = BOUNDED_CHILD_LIMIT)
-                                    ?.map { it.toBrowsableMediaItem("startup:artist") }
-                                    ?.ifEmpty {
-                                        listOf(
-                                            placeholderItem(context.getString(R.string.lbl_no_music))
-                                        )
-                                    } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
-                            } else {
-                                homeGenerator
-                                    .artists()
-                                    .take(BOUNDED_CHILD_LIMIT)
-                                    .map { it.toMediaItem(context) }
-                                    .ifEmpty {
-                                        listOf(
-                                            placeholderItem(context.getString(R.string.lbl_no_music))
-                                        )
-                                    }
-                            }
-                        MusicType.GENRES ->
+                    MusicType.SONGS ->
+                        if (musicRepository.library == null) {
+                            startupProjectionCache
+                                ?.firstSongs(limit = BOUNDED_CHILD_LIMIT)
+                                ?.map { it.toMediaItem() }
+                                ?.ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
+                        } else {
                             homeGenerator
-                                .genres()
+                                .songs()
                                 .map { it.toMediaItem(context) }
                                 .ifEmpty {
                                     listOf(
                                         placeholderItem(context.getString(R.string.lbl_no_music))
                                     )
                                 }
-                        MusicType.PLAYLISTS ->
+                        }
+                    MusicType.ALBUMS ->
+                        if (musicRepository.library == null) {
+                            startupProjectionCache
+                                ?.albums(limit = BOUNDED_CHILD_LIMIT)
+                                ?.map { it.toBrowsableMediaItem("startup:album") }
+                                ?.ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
+                        } else {
                             homeGenerator
-                                .playlists()
+                                .albums()
                                 .map { it.toMediaItem(context) }
                                 .ifEmpty {
                                     listOf(
                                         placeholderItem(context.getString(R.string.lbl_no_music))
                                     )
                                 }
-                    }
+                        }
+                    MusicType.ARTISTS ->
+                        if (musicRepository.library == null) {
+                            startupProjectionCache
+                                ?.artists(limit = BOUNDED_CHILD_LIMIT)
+                                ?.map { it.toBrowsableMediaItem("startup:artist") }
+                                ?.ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
+                        } else {
+                            homeGenerator
+                                .artists()
+                                .map { it.toMediaItem(context) }
+                                .ifEmpty {
+                                    listOf(
+                                        placeholderItem(context.getString(R.string.lbl_no_music))
+                                    )
+                                }
+                        }
+                    MusicType.GENRES ->
+                        homeGenerator
+                            .genres()
+                            .map { it.toMediaItem(context) }
+                            .ifEmpty {
+                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
+                            }
+                    MusicType.PLAYLISTS ->
+                        homeGenerator
+                            .playlists()
+                            .map { it.toMediaItem(context) }
+                            .ifEmpty {
+                                listOf(placeholderItem(context.getString(R.string.lbl_no_music)))
+                            }
+                }
         }
 
     private fun getChildMediaItems(uid: Music.UID): List<MediaItem>? {
@@ -349,10 +344,11 @@ private constructor(
         MediaItem(
             MediaDescriptionCompat.Builder()
                 .setMediaId("startup:song:$stableId")
-                .setMediaUri(android.net.Uri.parse(uri))
+                .setMediaUri(Uri.parse(uri))
                 .setTitle(title)
                 .setSubtitle(primaryArtist ?: album)
                 .setDescription(album)
+                .setIconUri(artworkRef?.let { Uri.withAppendedPath(CoverProvider.CONTENT_URI, it) })
                 .build(),
             MediaItem.FLAG_PLAYABLE,
         )
