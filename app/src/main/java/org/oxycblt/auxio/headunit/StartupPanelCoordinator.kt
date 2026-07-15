@@ -168,13 +168,6 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
         ): RouteEvaluation {
             request ?: return RouteEvaluation.Idle
 
-            if (
-                readiness == StartupReadinessState.NeedsMusicSource ||
-                    readiness == StartupReadinessState.EmptyLibrary ||
-                    readiness == StartupReadinessState.CachedLibraryUnavailable
-            ) {
-                return RouteEvaluation.Cancel(request, "library-terminal-$readiness")
-            }
 
             if (request.priority == Priority.EXPLICIT_INTENT) {
                 if (hasSong) return RouteEvaluation.Render(request)

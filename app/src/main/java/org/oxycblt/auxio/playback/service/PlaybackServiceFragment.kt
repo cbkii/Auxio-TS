@@ -35,6 +35,8 @@ import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayStartCallbacks
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
+import org.oxycblt.auxio.music.StartupReadinessController
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.PlaybackSettings
@@ -59,6 +61,7 @@ private constructor(
     widgetComponentFactory: WidgetComponent.Factory,
     systemReceiverFactory: SystemPlaybackReceiver.Factory,
     private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
+    private val startupReadinessController: StartupReadinessController,
 ) : PlaybackStateManager.Listener {
     class Factory
     @Inject
@@ -70,6 +73,7 @@ private constructor(
         private val widgetComponentFactory: WidgetComponent.Factory,
         private val systemReceiverFactory: SystemPlaybackReceiver.Factory,
         private val topwayCoordinator: TopwayLauncherIntegrationCoordinator,
+        private val startupReadinessController: StartupReadinessController,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             PlaybackServiceFragment(
@@ -82,6 +86,7 @@ private constructor(
                 widgetComponentFactory,
                 systemReceiverFactory,
                 topwayCoordinator,
+                startupReadinessController,
             )
     }
 
@@ -142,6 +147,7 @@ private constructor(
         playbackManager.addListener(this)
         publishTopwayState("service-attach", force = true)
         startTopwayProgressTicker()
+        startupReadinessController.publishCapability(StartupReadinessState.PlaybackServiceReady)
         restoreCachedPlaybackStateIfIdle()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token

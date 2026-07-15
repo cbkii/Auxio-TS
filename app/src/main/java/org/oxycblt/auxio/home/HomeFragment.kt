@@ -687,7 +687,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     }
 
     private fun handleStartupReadinessState(state: StartupReadinessState) {
-        if (state !is StartupReadinessState.NeedsMusicSource) {
+        if (state.rank >= StartupReadinessState.FastBrowseReady.rank) {
             return
         }
         val navController = findNavController()

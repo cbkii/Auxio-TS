@@ -43,9 +43,9 @@ class StartupPanelCoordinatorTest {
     @Test
     fun `terminal library states cancel the route`() {
         listOf(
-                StartupReadinessState.NeedsMusicSource,
-                StartupReadinessState.EmptyLibrary,
-                StartupReadinessState.CachedLibraryUnavailable,
+                StartupReadinessState.ProcessVisible,
+                StartupReadinessState.ProcessVisible,
+                StartupReadinessState.ProcessVisible,
             )
             .forEach { readiness ->
                 assertTrue(

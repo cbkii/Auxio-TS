@@ -63,6 +63,8 @@ import org.oxycblt.auxio.headunit.ts18.RawFastResumeValidator
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.StartupReadinessController
+import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.PlaybackSettings
@@ -99,6 +101,7 @@ class ExoPlaybackStateHolder(
     private val replayGainProcessor: ReplayGainAudioProcessor,
     private val musicRepository: MusicRepository,
     private val imageSettings: ImageSettings,
+    private val startupReadinessController: StartupReadinessController,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -319,6 +322,7 @@ class ExoPlaybackStateHolder(
                     val descriptor = persistenceRepository.readQueueDescriptor()
                     Ts18FirstAudioLatency.mark("primitive_session_read_end")
                     if (descriptor == null) {
+                        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
                         withContext(Dispatchers.Main) { startRawFallback(action, generation) }
                         return@launch
                     }
@@ -339,6 +343,7 @@ class ExoPlaybackStateHolder(
                     }
                     val playableWindow = window?.contiguousPlayableWindow()
                     if (playableWindow == null || current?.hasPlayableReference != true) {
+                        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
                         withContext(Dispatchers.Main) { startRawFallback(action, generation) }
                         return@launch
                     }
@@ -351,12 +356,14 @@ class ExoPlaybackStateHolder(
                             positionMs = descriptor.positionMs,
                             play = shouldPlayImmediately(action.play),
                         )
+                        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
                         completeRestore(generation, RestoreOutcome.RESTORED_EXISTING_SESSION)
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     L.w(e, "Unable to restore primitive playback queue")
+                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
                     withContext(Dispatchers.Main) {
                         if (generation == restoreGeneration) {
                             startRawFallback(action, generation)
@@ -1785,6 +1792,7 @@ class ExoPlaybackStateHolder(
         private val replayGainProcessor: ReplayGainAudioProcessor,
         private val musicRepository: MusicRepository,
         private val imageSettings: ImageSettings,
+        private val startupReadinessController: StartupReadinessController,
     ) {
         fun create(): ExoPlaybackStateHolder {
             // Since Auxio is a music player, only specify an audio renderer to save
@@ -1829,6 +1837,7 @@ class ExoPlaybackStateHolder(
                 replayGainProcessor,
                 musicRepository,
                 imageSettings,
+                startupReadinessController,
             )
         }
     }

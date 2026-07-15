@@ -80,8 +80,11 @@ interface MusicRepository {
     /** The current state of music loading. Null if no load has occurred yet. */
     val indexingState: IndexingState?
 
-    /** UI-visible startup/readiness state used to avoid alarming launch empty states. */
+    /** UI-visible startup/readiness capability used to avoid alarming launch empty states. */
     val startupReadinessState: StartupReadinessState
+
+    /** Recoverable startup library/source condition independent of readiness capability. */
+    val startupLibraryStatus: StartupLibraryStatus
 
     /**
      * Add an [UpdateListener] to receive updates from this instance.
@@ -270,9 +273,15 @@ constructor(
     private val settingCovers: SettingCovers,
     private val musicSettings: MusicSettings,
     private val rootGate: RootStateHolder,
+    private val startupReadinessController: StartupReadinessController,
 ) : MusicRepository {
     private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
     private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
+    private val readinessAdapter = StartupReadinessController.Listener {
+        for (listener in startupReadinessListeners) {
+            listener.onStartupReadinessStateChanged()
+        }
+    }
     private val startupReadinessListeners =
         CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
@@ -285,11 +294,15 @@ constructor(
     override val indexingState: IndexingState?
         get() = currentIndexingState ?: previousCompletedState
 
-    @Volatile
-    private var currentStartupReadinessState: StartupReadinessState =
-        StartupReadinessState.ProcessVisible
     override val startupReadinessState: StartupReadinessState
-        get() = currentStartupReadinessState
+        get() = startupReadinessController.capability
+
+    override val startupLibraryStatus: StartupLibraryStatus
+        get() = startupReadinessController.state.libraryStatus
+
+    init {
+        startupReadinessController.addListener(readinessAdapter)
+    }
 
     override fun addUpdateListener(listener: MusicRepository.UpdateListener) {
         L.d("Adding $listener to update listeners")
@@ -325,14 +338,14 @@ constructor(
     }
 
     override fun addStartupReadinessListener(listener: MusicRepository.StartupReadinessListener) {
-        synchronized(this) { startupReadinessListeners.add(listener) }
+        startupReadinessListeners.add(listener)
         listener.onStartupReadinessStateChanged()
     }
 
     override fun removeStartupReadinessListener(
         listener: MusicRepository.StartupReadinessListener
     ) {
-        val removed = synchronized(this) { startupReadinessListeners.remove(listener) }
+        val removed = startupReadinessListeners.remove(listener)
         if (!removed) {
             L.w("Startup readiness listener $listener was not added prior, cannot remove")
         }
@@ -417,11 +430,6 @@ constructor(
         PerfTimer.traceSuspend("MusicRepository.startup") {
             val start = System.currentTimeMillis()
             L.i("Music system starting...")
-            emitStartupReadinessState(StartupReadinessState.PlaybackServiceReady)
-            emitStartupReadinessState(StartupReadinessState.QueueReady)
-            emitStartupReadinessState(StartupReadinessState.FastBrowseReady)
-            emitStartupReadinessState(StartupReadinessState.SearchReady)
-
             val decision =
                 StartupLibraryStartup.run(
                     hasInMemoryLibrary = synchronized(this) { library != null },
@@ -443,6 +451,7 @@ constructor(
                     setLibraryState = { musicSettings.libraryState = it },
                     requestIndex = { withCache -> worker.requestIndex(withCache) },
                     setStartupReadinessState = ::emitStartupReadinessState,
+                    setStartupLibraryStatus = ::emitStartupLibraryStatus,
                     sourceConfigured =
                         StartupLibraryPolicy.isMusicSourceConfigured(
                             musicSettings.locationMode,
@@ -463,6 +472,8 @@ constructor(
             if (migrated > 0) {
                 L.d("Backfilled $migrated legacy cache rows into the normalized library")
             }
+            emitStartupReadinessState(StartupReadinessState.FastBrowseReady)
+            emitStartupReadinessState(StartupReadinessState.SearchReady)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -573,13 +584,10 @@ constructor(
             val isEmpty = result.library.songs.isEmpty()
             musicSettings.libraryState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
             musicSettings.lastScanFailed = false
-            emitStartupReadinessState(
-                if (isEmpty) {
-                    StartupReadinessState.EmptyLibrary
-                } else {
-                    StartupReadinessState.FullLibraryReady
-                }
+            emitStartupLibraryStatus(
+                if (isEmpty) StartupLibraryStatus.Empty else StartupLibraryStatus.Usable
             )
+            if (!isEmpty) emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
             L.i("Indexing complete [state=${musicSettings.libraryState}]")
             emitIndexingCompletion(null)
         }
@@ -727,19 +735,11 @@ constructor(
     }
 
     private fun emitStartupReadinessState(state: StartupReadinessState) {
-        val listeners =
-            synchronized(this) {
-                val advanced = StartupReadinessTransitions.advance(currentStartupReadinessState, state)
-                if (advanced == currentStartupReadinessState) {
-                    return
-                }
-                currentStartupReadinessState = advanced
-                PerfTimer.point("startup.readiness.${advanced.javaClass.simpleName}")
-                startupReadinessListeners.toList()
-            }
-        for (listener in listeners) {
-            listener.onStartupReadinessStateChanged()
-        }
+        startupReadinessController.publishCapability(state)
+    }
+
+    private fun emitStartupLibraryStatus(status: StartupLibraryStatus) {
+        startupReadinessController.publishLibraryStatus(status)
     }
 
     private suspend fun emitIndexingProgress(progress: IndexingProgress) {

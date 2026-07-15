@@ -48,10 +48,6 @@ fun FragmentHomeListBinding.updateLibraryEmptyState(
         when {
             cachedStartupPending -> R.string.lng_loading_cached_music_library
             indexingPending -> R.string.lng_loading_music_library
-            startupState is StartupReadinessState.NeedsMusicSource ->
-                R.string.lng_music_source_needed
-            startupState is StartupReadinessState.CachedLibraryUnavailable ->
-                R.string.lng_cached_library_unavailable
             else -> emptyMessage
         }
     )

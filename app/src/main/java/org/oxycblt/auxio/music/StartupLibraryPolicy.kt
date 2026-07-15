@@ -20,17 +20,17 @@ package org.oxycblt.auxio.music
 
 import org.oxycblt.auxio.music.locations.LocationMode
 
-/** UI-visible startup/readiness stage for launch UX. */
+/** UI-visible monotonic startup/readiness capability for launch UX. */
 sealed interface StartupReadinessState {
     val rank: Int
 
     /** Process is visible; stable shell can render without library hydration. */
     data object ProcessVisible : StartupReadinessState { override val rank = 0 }
 
-    /** The single playback service/session is constructed and can accept controller commands. */
+    /** The canonical playback service/session is constructed and can accept controller commands. */
     data object PlaybackServiceReady : StartupReadinessState { override val rank = 1 }
 
-    /** The saved primitive queue/current item descriptor has been restored or explicitly found empty. */
+    /** Primitive queue restore has resolved to a playable window, raw fallback, or explicit empty state. */
     data object QueueReady : StartupReadinessState { override val rank = 2 }
 
     /** Bounded database/source projections are available for Fast Start browsing. */
@@ -44,23 +44,6 @@ sealed interface StartupReadinessState {
 
     /** Post-load enrichment has finished. */
     data object EnrichmentComplete : StartupReadinessState { override val rank = 6 }
-
-    /** No source is configured and no cached library is known/restorable. */
-    data object NeedsMusicSource : StartupReadinessState { override val rank = 4 }
-
-    /** A source is configured, but cached startup could not recover a usable library. */
-    data object CachedLibraryUnavailable : StartupReadinessState { override val rank = 4 }
-
-    /** A prior scan intentionally produced an empty library. */
-    data object EmptyLibrary : StartupReadinessState { override val rank = 4 }
-
-    companion object {
-        /** Compatibility alias for older UI copy that meant "checking fast startup data". */
-        val CheckingCachedLibrary: StartupReadinessState = ProcessVisible
-
-        /** Compatibility alias for older callers that meant the full library can render. */
-        val Ready: StartupReadinessState = FullLibraryReady
-    }
 }
 
 object StartupReadinessTransitions {
@@ -196,13 +179,13 @@ object StartupLibraryPolicy {
         decision: Decision,
         sourceConfigured: Boolean,
         cachedSongCount: Int?,
-    ): StartupReadinessState =
+    ): StartupLibraryStatus =
         when {
-            cachedSongCount != null && cachedSongCount > 0 -> StartupReadinessState.FullLibraryReady
-            decision.libraryState == LibraryState.USABLE -> StartupReadinessState.FullLibraryReady
-            decision.libraryState == LibraryState.EMPTY -> StartupReadinessState.EmptyLibrary
-            !sourceConfigured -> StartupReadinessState.NeedsMusicSource
-            else -> StartupReadinessState.CachedLibraryUnavailable
+            cachedSongCount != null && cachedSongCount > 0 -> StartupLibraryStatus.Usable
+            decision.libraryState == LibraryState.USABLE -> StartupLibraryStatus.Usable
+            decision.libraryState == LibraryState.EMPTY -> StartupLibraryStatus.Empty
+            !sourceConfigured -> StartupLibraryStatus.NeedsMusicSource
+            else -> StartupLibraryStatus.CacheUnavailable
         }
 
     fun onIndexFailed(priorState: LibraryState): LibraryState =
@@ -229,9 +212,11 @@ object StartupLibraryStartup {
         setLibraryState: (LibraryState) -> Unit,
         requestIndex: (withCache: Boolean) -> Unit,
         setStartupReadinessState: (StartupReadinessState) -> Unit = {},
+        setStartupLibraryStatus: (StartupLibraryStatus) -> Unit = {},
         sourceConfigured: Boolean = true,
     ): StartupLibraryPolicy.Decision {
         setStartupReadinessState(StartupReadinessState.ProcessVisible)
+        setStartupLibraryStatus(StartupLibraryStatus.Unknown)
         var cachedSongCountOrNull: Int? = null
         var decision =
             if (
@@ -275,13 +260,16 @@ object StartupLibraryStartup {
         }
 
         setLibraryState(decision.libraryState)
-        setStartupReadinessState(
+        setStartupLibraryStatus(
             StartupLibraryPolicy.startupReadinessAfterDecision(
                 decision,
                 sourceConfigured,
                 cachedSongCountOrNull,
             )
         )
+        if (decision.libraryState == LibraryState.USABLE && cachedSongCountOrNull != null && cachedSongCountOrNull > 0) {
+            setStartupReadinessState(StartupReadinessState.FullLibraryReady)
+        }
         if (decision.requestScan) {
             requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
         }
