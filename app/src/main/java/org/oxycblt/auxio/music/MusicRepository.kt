@@ -31,10 +31,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.BuildConfig
@@ -281,11 +281,12 @@ constructor(
 ) : MusicRepository {
     private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
     private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
-    private val readinessAdapter = StartupReadinessController.Listener {
-        for (listener in startupReadinessListeners) {
-            listener.onStartupReadinessStateChanged()
+    private val readinessAdapter =
+        StartupReadinessController.Listener {
+            for (listener in startupReadinessListeners) {
+                listener.onStartupReadinessStateChanged()
+            }
         }
-    }
     private val startupReadinessListeners =
         CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
@@ -606,12 +607,29 @@ constructor(
 
     private fun startCompatibilityHydration() {
         compatibilityHydrationJob?.cancel()
+        val startingDeviceGeneration = deviceLibraryGeneration.get()
+        val startingRevision = musicSettings.revision
         compatibilityHydrationJob =
             compatibilityHydrationScope.launch {
                 try {
                     val cached = loadCachedLibrary()
-                    synchronized(this@MusicRepositoryImpl) { library = cached }
                     withContext(Dispatchers.Main) {
+                        val accepted =
+                            synchronized(this@MusicRepositoryImpl) {
+                                val superseded =
+                                    deviceLibraryGeneration.get() != startingDeviceGeneration ||
+                                        musicSettings.revision != startingRevision
+                                if (superseded) {
+                                    false
+                                } else {
+                                    library = cached
+                                    true
+                                }
+                            }
+                        if (!accepted) {
+                            L.d("Skipping compatibility hydration superseded by a newer scan")
+                            return@withContext
+                        }
                         dispatchLibraryChange(device = true, user = true)
                         if (cached.songs.isEmpty()) {
                             emitStartupLibraryStatus(StartupLibraryStatus.Empty)

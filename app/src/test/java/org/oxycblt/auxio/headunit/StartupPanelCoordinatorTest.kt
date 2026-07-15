@@ -47,7 +47,8 @@ class StartupPanelCoordinatorTest {
                 false,
                 RestoreOutcome.WAITING_FOR_LIBRARY,
                 StartupReadinessState.ProcessVisible,
-            ) is StartupPanelCoordinator.RouteEvaluation.Wait
+            )
+                is StartupPanelCoordinator.RouteEvaluation.Wait
         )
     }
 

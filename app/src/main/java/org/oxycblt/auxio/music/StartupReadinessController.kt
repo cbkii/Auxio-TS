@@ -1,7 +1,21 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * StartupReadinessController.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 package org.oxycblt.auxio.music
 
 import java.util.EnumSet
@@ -51,26 +65,25 @@ class StartupReadinessController @Inject constructor() {
 
     fun publishCapability(capability: StartupReadinessState) {
         val milestone = capability.toCapability()
-        val snapshot = synchronized(this) {
-            if (!achieved.add(milestone)) return
-            currentState =
-                currentState.copy(
-                    achieved = achieved.toSet(),
-                    contiguous = deriveContiguous(),
-                )
-            PerfTimer.point("startup.capability.${milestone.name}")
-            listeners.toList()
-        }
+        val snapshot =
+            synchronized(this) {
+                if (!achieved.add(milestone)) return
+                currentState =
+                    currentState.copy(achieved = achieved.toSet(), contiguous = deriveContiguous())
+                PerfTimer.point("startup.capability.${milestone.name}")
+                listeners.toList()
+            }
         snapshot.forEach { it.onStartupReadinessStateChanged() }
     }
 
     fun publishLibraryStatus(status: StartupLibraryStatus) {
-        val snapshot = synchronized(this) {
-            if (currentState.libraryStatus == status) return
-            currentState = currentState.copy(libraryStatus = status)
-            PerfTimer.point("startup.libraryStatus.${status.javaClass.simpleName}")
-            listeners.toList()
-        }
+        val snapshot =
+            synchronized(this) {
+                if (currentState.libraryStatus == status) return
+                currentState = currentState.copy(libraryStatus = status)
+                PerfTimer.point("startup.libraryStatus.${status.javaClass.simpleName}")
+                listeners.toList()
+            }
         snapshot.forEach { it.onStartupReadinessStateChanged() }
     }
 
@@ -119,9 +132,14 @@ private fun StartupCapability.toReadinessState(): StartupReadinessState =
 /** Recoverable library/source status independent of monotonic startup capabilities. */
 sealed interface StartupLibraryStatus {
     data object Unknown : StartupLibraryStatus
+
     data object Usable : StartupLibraryStatus
+
     data object Empty : StartupLibraryStatus
+
     data object NeedsMusicSource : StartupLibraryStatus
+
     data object CacheUnavailable : StartupLibraryStatus
+
     data object SourceUnavailable : StartupLibraryStatus
 }

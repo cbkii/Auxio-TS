@@ -168,7 +168,6 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
         ): RouteEvaluation {
             request ?: return RouteEvaluation.Idle
 
-
             if (request.priority == Priority.EXPLICIT_INTENT) {
                 if (hasSong) return RouteEvaluation.Render(request)
                 return when (outcome) {

@@ -1,15 +1,29 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * FastStartDirectFolderBrowser.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 package org.oxycblt.auxio.headunit.ts18
 
 import java.io.File
 import java.nio.file.DirectoryStream
 import java.nio.file.Files
 import java.util.Locale
-import kotlin.coroutines.coroutineContext
 import javax.inject.Inject
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -23,9 +37,7 @@ import kotlinx.coroutines.withContext
  * bounded number of visible entries, and returns reconstructed `/storage/...` paths even when the
  * kernel canonical path resolves through `/mnt/media_rw/...` on TS18 firmware.
  */
-class FastStartDirectFolderBrowser
-@Inject
-constructor() {
+class FastStartDirectFolderBrowser @Inject constructor() {
     constructor(roots: Map<String, File>) : this() {
         configuredRoots = roots
     }
@@ -159,10 +171,6 @@ constructor() {
         private val AUDIO_EXTENSIONS =
             listOf(".mp3", ".flac", ".m4a", ".ogg", ".opus", ".wav", ".aac")
         private val ENTRY_ORDER =
-            compareBy<Entry>(
-                { !it.directory },
-                { it.name.lowercase(Locale.ROOT) },
-                { it.path },
-            )
+            compareBy<Entry>({ !it.directory }, { it.name.lowercase(Locale.ROOT) }, { it.path })
     }
 }

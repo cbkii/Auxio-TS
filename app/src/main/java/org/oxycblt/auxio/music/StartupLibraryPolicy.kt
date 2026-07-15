@@ -25,30 +25,49 @@ sealed interface StartupReadinessState {
     val rank: Int
 
     /** Process is visible; stable shell can render without library hydration. */
-    data object ProcessVisible : StartupReadinessState { override val rank = 0 }
+    data object ProcessVisible : StartupReadinessState {
+        override val rank = 0
+    }
 
     /** The canonical playback service/session is constructed and can accept controller commands. */
-    data object PlaybackServiceReady : StartupReadinessState { override val rank = 1 }
+    data object PlaybackServiceReady : StartupReadinessState {
+        override val rank = 1
+    }
 
-    /** Primitive queue restore has resolved to a playable window, raw fallback, or explicit empty state. */
-    data object QueueReady : StartupReadinessState { override val rank = 2 }
+    /**
+     * Primitive queue restore has resolved to a playable window, raw fallback, or explicit empty
+     * state.
+     */
+    data object QueueReady : StartupReadinessState {
+        override val rank = 2
+    }
 
     /** Bounded database/source projections are available for Fast Start browsing. */
-    data object FastBrowseReady : StartupReadinessState { override val rank = 3 }
+    data object FastBrowseReady : StartupReadinessState {
+        override val rank = 3
+    }
 
     /** Quick database search may run without full library hydration. */
-    data object SearchReady : StartupReadinessState { override val rank = 4 }
+    data object SearchReady : StartupReadinessState {
+        override val rank = 4
+    }
 
     /** Complete legacy Musikr library graph is available for rich screens. */
-    data object FullLibraryReady : StartupReadinessState { override val rank = 5 }
+    data object FullLibraryReady : StartupReadinessState {
+        override val rank = 5
+    }
 
     /** Post-load enrichment has finished. */
-    data object EnrichmentComplete : StartupReadinessState { override val rank = 6 }
+    data object EnrichmentComplete : StartupReadinessState {
+        override val rank = 6
+    }
 }
 
 object StartupReadinessTransitions {
-    fun advance(current: StartupReadinessState, next: StartupReadinessState): StartupReadinessState =
-        if (next.rank >= current.rank) next else current
+    fun advance(
+        current: StartupReadinessState,
+        next: StartupReadinessState,
+    ): StartupReadinessState = if (next.rank >= current.rank) next else current
 }
 
 /**
@@ -267,7 +286,11 @@ object StartupLibraryStartup {
                 cachedSongCountOrNull,
             )
         )
-        if (decision.libraryState == LibraryState.USABLE && cachedSongCountOrNull != null && cachedSongCountOrNull > 0) {
+        if (
+            decision.libraryState == LibraryState.USABLE &&
+                cachedSongCountOrNull != null &&
+                cachedSongCountOrNull > 0
+        ) {
             setStartupReadinessState(StartupReadinessState.FullLibraryReady)
         }
         if (decision.requestScan) {

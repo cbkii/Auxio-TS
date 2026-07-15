@@ -322,7 +322,9 @@ class ExoPlaybackStateHolder(
                     val descriptor = persistenceRepository.readQueueDescriptor()
                     Ts18FirstAudioLatency.mark("primitive_session_read_end")
                     if (descriptor == null) {
-                        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                        startupReadinessController.publishCapability(
+                            StartupReadinessState.QueueReady
+                        )
                         withContext(Dispatchers.Main) { startRawFallback(action, generation) }
                         return@launch
                     }
@@ -343,7 +345,9 @@ class ExoPlaybackStateHolder(
                     }
                     val playableWindow = window?.contiguousPlayableWindow()
                     if (playableWindow == null || current?.hasPlayableReference != true) {
-                        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                        startupReadinessController.publishCapability(
+                            StartupReadinessState.QueueReady
+                        )
                         withContext(Dispatchers.Main) { startRawFallback(action, generation) }
                         return@launch
                     }
@@ -356,7 +360,9 @@ class ExoPlaybackStateHolder(
                             positionMs = descriptor.positionMs,
                             play = shouldPlayImmediately(action.play),
                         )
-                        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                        startupReadinessController.publishCapability(
+                            StartupReadinessState.QueueReady
+                        )
                         completeRestore(generation, RestoreOutcome.RESTORED_EXISTING_SESSION)
                     }
                 } catch (e: CancellationException) {

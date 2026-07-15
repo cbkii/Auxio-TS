@@ -40,10 +40,9 @@ import org.oxycblt.musikr.tag.parse.ParsedTags
  *
  * Create an instance with [from].
  */
-class DBCache private constructor(
-    private val readDao: CacheReadDao,
-    private val libraryDao: LibraryReadDao,
-) : Cache, StartupProjectionCache {
+class DBCache
+private constructor(private val readDao: CacheReadDao, private val libraryDao: LibraryReadDao) :
+    Cache, StartupProjectionCache {
     override suspend fun read(file: File): CacheResult {
         val dbSong = readDao.selectSongByUri(file.uri) ?: return CacheResult.Miss(file)
         if (dbSong.modifiedMs != file.modifiedMs) {
@@ -201,7 +200,8 @@ private constructor(
 
     override suspend fun populateNormalizedLibrary(): Int = backfill.run()
 
-    override suspend fun prepareStartupProjections(): Int = backfill.runOneBatch(STARTUP_SEED_BATCH_SIZE)
+    override suspend fun prepareStartupProjections(): Int =
+        backfill.runOneBatch(STARTUP_SEED_BATCH_SIZE)
 
     override suspend fun write(cachedFile: CachedFile) {
         val dbSong =
