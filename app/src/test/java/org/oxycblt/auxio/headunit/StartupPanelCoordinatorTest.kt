@@ -41,18 +41,14 @@ class StartupPanelCoordinatorTest {
     }
 
     @Test
-    fun `terminal library states cancel the route`() {
-        listOf(
+    fun `process visible readiness waits for library checking`() {
+        assertTrue(
+            evaluate(
+                false,
+                RestoreOutcome.WAITING_FOR_LIBRARY,
                 StartupReadinessState.ProcessVisible,
-                StartupReadinessState.ProcessVisible,
-                StartupReadinessState.ProcessVisible,
-            )
-            .forEach { readiness ->
-                assertTrue(
-                    evaluate(false, RestoreOutcome.WAITING_FOR_LIBRARY, readiness)
-                        is StartupPanelCoordinator.RouteEvaluation.Cancel
-                )
-            }
+            ) is StartupPanelCoordinator.RouteEvaluation.Wait
+        )
     }
 
     @Test
