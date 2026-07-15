@@ -60,12 +60,11 @@ internal object LikeQuery {
 }
 
 /**
- * Bounded, cancellable, obsolete-query-suppressing coordinator over an indexed database song
- * search.
+ * Bounded, cancellable, obsolete-query-suppressing coordinator over a database-backed song search.
  *
- * This is the database-first replacement building block for the legacy full-library in-memory
- * search: results come from an indexed, paged query rather than materialising and filtering the
- * entire [org.oxycblt.musikr.Library] graph in memory.
+ * This is a database-first replacement building block for the legacy full-library in-memory search:
+ * results come from a bounded, paged query rather than materialising and filtering the entire
+ * [org.oxycblt.musikr.Library] graph in memory.
  *
  * Two correctness properties required for a responsive search-as-you-type UI are enforced here:
  * - **Cancellation:** each [search] cooperatively checks for coroutine cancellation, so abandoning
@@ -88,7 +87,9 @@ internal class LibrarySearcher(
     /**
      * Run a bounded search for [rawQuery], returning at most [limit] rows from page [page].
      *
-     * A blank query yields no results without touching the database. Returns
+     * A blank query or non-positive limit yields no results without touching the database. Limits
+     * are capped at [MAX_PAGE_SIZE], and the page is clamped before offset multiplication so hostile
+     * or accidental values cannot overflow the DAO's integer offset. Returns
      * [SearchResult.Superseded] if a newer [search] began before this one finished.
      */
     suspend fun search(
@@ -98,15 +99,15 @@ internal class LibrarySearcher(
     ): SearchResult {
         val token = latestToken.incrementAndGet()
         val trimmed = rawQuery.trim()
-        if (trimmed.isEmpty()) {
+        if (trimmed.isEmpty() || limit <= 0) {
             return SearchResult.Results(emptyList())
         }
         coroutineContext.ensureActive()
-        val boundedLimit = limit.coerceAtLeast(0)
-        val offset = (page.coerceAtLeast(0)) * boundedLimit
+        val boundedLimit = limit.coerceAtMost(MAX_PAGE_SIZE)
+        val boundedPage = page.coerceIn(0, Int.MAX_VALUE / boundedLimit)
+        val offset = boundedPage * boundedLimit
         val rows = source.searchSongs(LikeQuery.contains(trimmed), boundedLimit, offset)
         coroutineContext.ensureActive()
-        // Suppress results if a newer query has been issued in the meantime.
         if (token != latestToken.get()) {
             return SearchResult.Superseded
         }
@@ -115,6 +116,7 @@ internal class LibrarySearcher(
 
     companion object {
         const val DEFAULT_PAGE_SIZE = 50
+        const val MAX_PAGE_SIZE = 100
     }
 }
 
