@@ -1,20 +1,21 @@
-name: Temporary PR178 format diff
+name: Temporary PR178 format finalizer
 
 on:
-  pull_request:
+  push:
     branches:
-      - dev
+      - copilot/complete-database-first-library-consumer-conversio
     paths:
       - ".github/workflows/temporary-pr178-format-diff.yml"
-      - "musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt"
-      - "musikr/src/main/java/org/oxycblt/musikr/cache/db/LibrarySearch.kt"
-      - "musikr/src/test/java/org/oxycblt/musikr/cache/db/LibrarySearchTest.kt"
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: temporary-pr178-format-finalizer
+  cancel-in-progress: false
 
 jobs:
-  format-diff:
+  format:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -23,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -41,21 +42,15 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
-        with:
-          cache-read-only: true
 
       - name: Prepare CI environment
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Capture exact Spotless result
-        id: spotless
+      - name: Apply canonical formatting and remove finalizer
         shell: bash
         run: |
-          set -uo pipefail
-          output="${RUNNER_TEMP}/pr178-format"
-          mkdir -p "${output}/formatted"
-
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           path = Path("musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt")
@@ -66,41 +61,10 @@ jobs:
               raise SystemExit("Expected search KDoc was not found")
           path.write_text(text.replace(old, new, 1))
           PY
-
-          set +e
-          bash ./scripts/ci-gradle.sh spotlessApply >"${output}/spotless.log" 2>&1
-          status=$?
-          set -e
-
-          git diff --binary -- \
-            musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt \
-            musikr/src/main/java/org/oxycblt/musikr/cache/db/LibrarySearch.kt \
-            musikr/src/test/java/org/oxycblt/musikr/cache/db/LibrarySearchTest.kt \
-            > "${output}/pr178-format.patch"
-
-          cp musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt \
-            "${output}/formatted/CacheDatabase.kt"
-          cp musikr/src/main/java/org/oxycblt/musikr/cache/db/LibrarySearch.kt \
-            "${output}/formatted/LibrarySearch.kt"
-          cp musikr/src/test/java/org/oxycblt/musikr/cache/db/LibrarySearchTest.kt \
-            "${output}/formatted/LibrarySearchTest.kt"
-
-          echo "spotless_status=${status}" >> "${GITHUB_OUTPUT}"
-          echo "--- Spotless log tail ---"
-          tail -n 120 "${output}/spotless.log"
-          echo "--- Exact patch ---"
-          cat "${output}/pr178-format.patch"
-
-      - name: Upload formatter evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pr178-format-evidence
-          path: ${{ runner.temp }}/pr178-format
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Report Spotless failure
-        if: steps.spotless.outputs.spotless_status != '0'
-        shell: bash
-        run: exit 1
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git rm .github/workflows/temporary-pr178-format-diff.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: apply canonical PR178 formatting"
+          git push origin HEAD:copilot/complete-database-first-library-consumer-conversio
