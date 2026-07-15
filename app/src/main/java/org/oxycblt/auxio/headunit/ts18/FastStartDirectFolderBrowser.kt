@@ -10,6 +10,7 @@ import java.nio.file.Files
 import java.util.Locale
 import kotlin.coroutines.coroutineContext
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -42,12 +43,16 @@ constructor() {
 
     suspend fun usbRoots(limit: Int = DEFAULT_LIMIT): Page =
         withContext(Dispatchers.IO) {
+            val validRoots =
+                configuredRoots.keys.mapNotNull { root ->
+                    resolveCandidate(root)?.takeIf { it.file.isDirectory }
+                }
+            val boundedLimit = limit.coerceIn(1, MAX_LIMIT)
             val entries =
-                configuredRoots.keys
-                    .mapNotNull { root -> resolveCandidate(root)?.takeIf { it.file.isDirectory } }
-                    .take(limit.coerceIn(1, MAX_LIMIT))
-                    .map { candidate -> Entry(candidate.appPath, candidate.file.name, true, false) }
-            Page(entries, truncated = configuredRoots.size > entries.size)
+                validRoots.take(boundedLimit).map { candidate ->
+                    Entry(candidate.appPath, candidate.file.name, true, false)
+                }
+            Page(entries, truncated = validRoots.size > boundedLimit)
         }
 
     suspend fun browse(path: String, limit: Int = DEFAULT_LIMIT): Page =
@@ -58,9 +63,11 @@ constructor() {
             val boundedLimit = limit.coerceIn(1, MAX_LIMIT)
             val selected = ArrayList<Entry>(boundedLimit)
             var processed = 0
+            var validCount = 0
             var truncated = false
             try {
-                Files.newDirectoryStream(dir.toPath()).use { stream: DirectoryStream<java.nio.file.Path> ->
+                Files.newDirectoryStream(dir.toPath()).use {
+                    stream: DirectoryStream<java.nio.file.Path> ->
                     for (childPath in stream) {
                         coroutineContext.ensureActive()
                         if (processed++ >= MAX_PROCESSED_ENTRIES) {
@@ -71,10 +78,13 @@ constructor() {
                         if (child.name.startsWith('.')) continue
                         val childCandidate =
                             resolveCandidate(candidate.appPath + "/" + child.name) ?: continue
+                        validCount++
                         offerTop(selected, childCandidate.toEntry(), boundedLimit)
-                        if (processed > boundedLimit) truncated = true
+                        if (validCount > boundedLimit) truncated = true
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 return@withContext Page(selected.sortedWith(ENTRY_ORDER), truncated)
             }
