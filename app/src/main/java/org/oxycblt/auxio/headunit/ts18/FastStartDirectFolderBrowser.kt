@@ -5,6 +5,8 @@
 package org.oxycblt.auxio.headunit.ts18
 
 import java.io.File
+import java.nio.file.DirectoryStream
+import java.nio.file.Files
 import java.util.Locale
 import kotlin.coroutines.coroutineContext
 import javax.inject.Inject
@@ -53,21 +55,28 @@ constructor() {
             val candidate = resolveCandidate(path) ?: return@withContext Page(emptyList(), false)
             val dir = candidate.file
             if (!dir.isDirectory) return@withContext Page(emptyList(), false)
-            val children = dir.listFiles() ?: return@withContext Page(emptyList(), false)
             val boundedLimit = limit.coerceIn(1, MAX_LIMIT)
             val selected = ArrayList<Entry>(boundedLimit)
             var processed = 0
             var truncated = false
-            for (child in children) {
-                coroutineContext.ensureActive()
-                if (processed++ >= MAX_PROCESSED_ENTRIES) {
-                    truncated = true
-                    break
+            try {
+                Files.newDirectoryStream(dir.toPath()).use { stream: DirectoryStream<java.nio.file.Path> ->
+                    for (childPath in stream) {
+                        coroutineContext.ensureActive()
+                        if (processed++ >= MAX_PROCESSED_ENTRIES) {
+                            truncated = true
+                            break
+                        }
+                        val child = childPath.toFile()
+                        if (child.name.startsWith('.')) continue
+                        val childCandidate =
+                            resolveCandidate(candidate.appPath + "/" + child.name) ?: continue
+                        offerTop(selected, childCandidate.toEntry(), boundedLimit)
+                        if (processed > boundedLimit) truncated = true
+                    }
                 }
-                if (child.name.startsWith('.')) continue
-                val childCandidate = resolveCandidate(candidate.appPath + "/" + child.name) ?: continue
-                offerTop(selected, childCandidate.toEntry(), boundedLimit)
-                if (processed > boundedLimit) truncated = true
+            } catch (_: Exception) {
+                return@withContext Page(selected.sortedWith(ENTRY_ORDER), truncated)
             }
             selected.sortWith(ENTRY_ORDER)
             Page(selected, truncated)

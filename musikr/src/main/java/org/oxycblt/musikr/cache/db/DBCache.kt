@@ -201,6 +201,8 @@ private constructor(
 
     override suspend fun populateNormalizedLibrary(): Int = backfill.run()
 
+    override suspend fun prepareStartupProjections(): Int = backfill.runOneBatch(STARTUP_SEED_BATCH_SIZE)
+
     override suspend fun firstSongs(limit: Int, offset: Int) = inner.firstSongs(limit, offset)
 
     override suspend fun recentlyAdded(limit: Int) = inner.recentlyAdded(limit)
@@ -251,6 +253,8 @@ private constructor(
     }
 
     companion object {
+        private const val STARTUP_SEED_BATCH_SIZE = 32
+
         /**
          * Create a new instance of [MutableDBCache] from the given [context].
          *

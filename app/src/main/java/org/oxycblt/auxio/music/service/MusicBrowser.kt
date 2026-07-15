@@ -41,6 +41,7 @@ import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.cache.StartupProjectionCache
 import org.oxycblt.musikr.cache.StartupSongRow
+import org.oxycblt.musikr.cache.StartupSummaryRow
 
 class MusicBrowser
 private constructor(
@@ -252,23 +253,47 @@ private constructor(
                                     }
                             }
                         MusicType.ALBUMS ->
-                            homeGenerator
-                                .albums()
-                                .map { it.toMediaItem(context) }
-                                .ifEmpty {
-                                    listOf(
-                                        placeholderItem(context.getString(R.string.lbl_no_music))
-                                    )
-                                }
+                            if (musicRepository.library == null) {
+                                startupProjectionCache
+                                    ?.albums(limit = BOUNDED_CHILD_LIMIT)
+                                    ?.map { it.toBrowsableMediaItem("startup:album") }
+                                    ?.ifEmpty {
+                                        listOf(
+                                            placeholderItem(context.getString(R.string.lbl_no_music))
+                                        )
+                                    } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
+                            } else {
+                                homeGenerator
+                                    .albums()
+                                    .take(BOUNDED_CHILD_LIMIT)
+                                    .map { it.toMediaItem(context) }
+                                    .ifEmpty {
+                                        listOf(
+                                            placeholderItem(context.getString(R.string.lbl_no_music))
+                                        )
+                                    }
+                            }
                         MusicType.ARTISTS ->
-                            homeGenerator
-                                .artists()
-                                .map { it.toMediaItem(context) }
-                                .ifEmpty {
-                                    listOf(
-                                        placeholderItem(context.getString(R.string.lbl_no_music))
-                                    )
-                                }
+                            if (musicRepository.library == null) {
+                                startupProjectionCache
+                                    ?.artists(limit = BOUNDED_CHILD_LIMIT)
+                                    ?.map { it.toBrowsableMediaItem("startup:artist") }
+                                    ?.ifEmpty {
+                                        listOf(
+                                            placeholderItem(context.getString(R.string.lbl_no_music))
+                                        )
+                                    } ?: fallbackChildren(context.getString(R.string.lbl_indexing))
+                            } else {
+                                homeGenerator
+                                    .artists()
+                                    .take(BOUNDED_CHILD_LIMIT)
+                                    .map { it.toMediaItem(context) }
+                                    .ifEmpty {
+                                        listOf(
+                                            placeholderItem(context.getString(R.string.lbl_no_music))
+                                        )
+                                    }
+                            }
                         MusicType.GENRES ->
                             homeGenerator
                                 .genres()
@@ -323,12 +348,22 @@ private constructor(
     private fun StartupSongRow.toMediaItem(): MediaItem =
         MediaItem(
             MediaDescriptionCompat.Builder()
-                .setMediaId(uri)
+                .setMediaId("startup:song:$stableId")
+                .setMediaUri(android.net.Uri.parse(uri))
                 .setTitle(title)
                 .setSubtitle(primaryArtist ?: album)
                 .setDescription(album)
                 .build(),
             MediaItem.FLAG_PLAYABLE,
+        )
+
+    private fun StartupSummaryRow.toBrowsableMediaItem(prefix: String): MediaItem =
+        MediaItem(
+            MediaDescriptionCompat.Builder()
+                .setMediaId("$prefix:$stableId")
+                .setTitle(title)
+                .build(),
+            MediaItem.FLAG_BROWSABLE,
         )
 
     internal fun fallbackChildren(title: String): List<MediaItem> = listOf(placeholderItem(title))

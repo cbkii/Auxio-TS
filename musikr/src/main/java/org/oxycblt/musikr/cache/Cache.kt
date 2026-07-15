@@ -95,6 +95,13 @@ interface MutableCache : Cache {
      * @return the number of entries backfilled by this invocation, or 0 when nothing remained.
      */
     suspend fun populateNormalizedLibrary(): Int = 0
+
+    /**
+     * Prepare at most one bounded batch of normalized rows for startup projections. Implementations
+     * must not drain a full legacy cache here; exhaustive compatibility backfill belongs in
+     * [populateNormalizedLibrary].
+     */
+    suspend fun prepareStartupProjections(): Int = 0
 }
 
 /** A cached song entry containing the data needed by the rest of the loader. */
