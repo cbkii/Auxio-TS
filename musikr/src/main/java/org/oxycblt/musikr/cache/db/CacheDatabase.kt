@@ -418,26 +418,34 @@ internal data class MetadataRevisionData(
 @Dao
 internal interface LibraryReadDao {
     @Query(
-        "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 ORDER BY titleSort LIMIT :limit OFFSET :offset"
+        "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
     )
     suspend fun songsPage(limit: Int, offset: Int): List<SongListRow>
 
     @Query(
-        "SELECT id, title, titleSort FROM LibraryAlbumData WHERE available = 1 ORDER BY titleSort LIMIT :limit OFFSET :offset"
+        "SELECT id, title, titleSort FROM LibraryAlbumData WHERE available = 1 ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
     )
     suspend fun albumsPage(limit: Int, offset: Int): List<AlbumListRow>
 
     @Query(
-        "SELECT id, name, nameSort FROM LibraryArtistData WHERE available = 1 ORDER BY nameSort LIMIT :limit OFFSET :offset"
+        "SELECT id, name, nameSort FROM LibraryArtistData WHERE available = 1 ORDER BY nameSort, id LIMIT :limit OFFSET :offset"
     )
     suspend fun artistsPage(limit: Int, offset: Int): List<ArtistListRow>
 
     @Query("SELECT COUNT(*) FROM LibrarySongData WHERE available = 1") suspend fun songCount(): Int
 
+    /**
+     * Database-backed, bounded, paged song search.
+     *
+     * [pattern] must already be a fully escaped `LIKE` contains-pattern (see [LikeQuery.contains]);
+     * the `ESCAPE '\'` clause makes any `%`, `_` or `\` originating from user input match literally
+     * rather than as wildcards. Ordering is deterministic (`titleSort` then the stable primary key)
+     * so that [offset]/[limit] paging never skips or repeats rows.
+     */
     @Query(
-        "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 AND (titleSort LIKE :query OR primaryArtistSort LIKE :query OR albumSort LIKE :query) ORDER BY titleSort LIMIT :limit"
+        "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 AND (titleSort LIKE :pattern ESCAPE '\\' OR primaryArtistSort LIKE :pattern ESCAPE '\\' OR albumSort LIKE :pattern ESCAPE '\\') ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
     )
-    suspend fun searchSongs(query: String, limit: Int): List<SongListRow>
+    suspend fun searchSongs(pattern: String, limit: Int, offset: Int): List<SongListRow>
 }
 
 internal data class SongListRow(
