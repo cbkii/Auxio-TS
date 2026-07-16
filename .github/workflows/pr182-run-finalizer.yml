@@ -98,6 +98,20 @@ jobs:
               'favourites = favouritesPlaylist?.songs?.isNotEmpty() == true,\\n                startupSongs = startupSongs,',
               'favourites = metadataState.favourites,\\n                startupSongs = startupSongs,',
           )
+          script += r'''
+
+# Final compile alignment discovered by the complete diagnostic pass.
+replace_once(
+    "app/src/main/java/org/oxycblt/auxio/MainFragment.kt",
+    '        startupPanelCoordinator.updateState(\n            song,\n            playbackModel.restoreOutcome.value,\n            musicModel.startupReadinessState.value,\n        )\n',
+    '        updateStartupPanelState()\n',
+)
+replace_once(
+    "app/src/main/java/org/oxycblt/auxio/music/StartupReadinessController.kt",
+    '        var latest = StartupReadinessState.ProcessVisible\n',
+    '        var latest: StartupReadinessState = StartupReadinessState.ProcessVisible\n',
+)
+'''
           Path('/tmp/pr182-finalize.py').write_text(script, encoding='utf-8')
           PY
             extract_rc=$?
