@@ -127,20 +127,40 @@ jobs:
         run: bash ./scripts/ci-gradle.sh spotlessApply
 
       - name: Verify final implementation
+        id: verification
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh \
-            :musikr:compileDebugKotlin \
-            :app:compileStandardDebugKotlin \
-            :app:testStandardDebugUnitTest \
-            :musikr:testDebugUnitTest \
-            :app:lintStandardDebug \
-            :app:assembleStandardDebug \
-            --stacktrace
-          bash ./scripts/check-headunit-compat-safety.sh
-          bash ./scripts/check-ts18-apk-reference-contracts.sh
-          bash ./scripts/check-dofun-topway-compat.sh
-          git diff --check
+          set +e
+          {
+            bash ./scripts/ci-gradle.sh \
+              :musikr:compileDebugKotlin \
+              :app:compileStandardDebugKotlin \
+              :app:testStandardDebugUnitTest \
+              :musikr:testDebugUnitTest \
+              :app:lintStandardDebug \
+              :app:assembleStandardDebug \
+              --stacktrace
+            gradle_rc=$?
+            if ((gradle_rc != 0)); then
+              exit "${gradle_rc}"
+            fi
+            bash ./scripts/check-headunit-compat-safety.sh || exit $?
+            bash ./scripts/check-ts18-apk-reference-contracts.sh || exit $?
+            bash ./scripts/check-dofun-topway-compat.sh || exit $?
+            git diff --check || exit $?
+          } 2>&1 | tee pr182-verification.log
+          rc=${PIPESTATUS[0]}
+          printf '\nVERIFICATION_EXIT_CODE=%s\n' "${rc}" | tee -a pr182-verification.log
+          exit "${rc}"
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr182-verification-log
+          path: pr182-verification.log
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Remove temporary workflows and commit
         shell: bash
