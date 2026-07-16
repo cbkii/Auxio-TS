@@ -69,10 +69,6 @@ jobs:
                   line = line[10:]
               extracted.append(line)
 
-          # The source patch contains Kotlin snippets in Python triple-quoted strings. YAML block
-          # indentation removed ten spaces from nested Kotlin lines whose indentation was >= 10.
-          # Restore only the characteristic 2-mod-4 residue; ordinary Kotlin 0/4/8 indentation and
-          # comment text remain untouched.
           repaired = []
           in_triple = False
           for line in extracted:
@@ -93,6 +89,14 @@ jobs:
           script = script.replace(
               '            show(parentFragmentManager, entry.path)',
               '            FastStartFolderDialogFragment.show(parentFragmentManager, entry.path)',
+          )
+          script = script.replace(
+              'favourites = favouritesPlaylist?.songs?.isNotEmpty() == true,\\n                tabType = homeModel.currentTabType.value,',
+              'favourites = metadataState.favourites,\\n                tabType = homeModel.currentTabType.value,',
+          )
+          script = script.replace(
+              'favourites = favouritesPlaylist?.songs?.isNotEmpty() == true,\\n                startupSongs = startupSongs,',
+              'favourites = metadataState.favourites,\\n                startupSongs = startupSongs,',
           )
           Path('/tmp/pr182-finalize.py').write_text(script, encoding='utf-8')
           PY
