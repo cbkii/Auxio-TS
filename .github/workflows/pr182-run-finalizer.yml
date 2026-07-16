@@ -55,23 +55,52 @@ jobs:
           {
             python3 <<'PY'
           from pathlib import Path
+
           workflow = Path('.github/workflows/pr182-finalizer.yml').read_text(encoding='utf-8')
           start_marker = "          python3 <<'PY'\n"
           end_marker = "\n          PY\n"
           if start_marker not in workflow or end_marker not in workflow:
               raise SystemExit('STOP: unable to locate finalizer Python block')
+
           block = workflow.split(start_marker, 1)[1].split(end_marker, 1)[0]
-          lines = []
+          extracted = []
           for line in block.splitlines():
               if line.startswith('          '):
                   line = line[10:]
-              lines.append(line)
-          Path('/tmp/pr182-finalize.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+              extracted.append(line)
+
+          # The source patch contains Kotlin snippets in Python triple-quoted strings. YAML block
+          # indentation removed ten spaces from nested Kotlin lines whose indentation was >= 10.
+          # Restore only the characteristic 2-mod-4 residue; ordinary Kotlin 0/4/8 indentation and
+          # comment text remain untouched.
+          repaired = []
+          in_triple = False
+          for line in extracted:
+              delimiter_count = line.count("'''")
+              if in_triple and delimiter_count == 0:
+                  leading = len(line) - len(line.lstrip(' '))
+                  if leading % 4 == 2:
+                      line = (' ' * 10) + line
+              repaired.append(line)
+              if delimiter_count % 2 == 1:
+                  in_triple = not in_triple
+
+          script = '\n'.join(repaired) + '\n'
+          script = script.replace(
+              'import androidx.fragment.app.lifecycleScope',
+              'import androidx.lifecycle.lifecycleScope',
+          )
+          script = script.replace(
+              '            show(parentFragmentManager, entry.path)',
+              '            FastStartFolderDialogFragment.show(parentFragmentManager, entry.path)',
+          )
+          Path('/tmp/pr182-finalize.py').write_text(script, encoding='utf-8')
           PY
             extract_rc=$?
             if ((extract_rc != 0)); then
               exit "${extract_rc}"
             fi
+            python3 -m py_compile /tmp/pr182-finalize.py
             python3 /tmp/pr182-finalize.py
           } 2>&1 | tee pr182-finalizer.log
           rc=${PIPESTATUS[0]}
