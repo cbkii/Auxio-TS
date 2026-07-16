@@ -1,0 +1,963 @@
+name: Finalise PR 182
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cx/create-fast-interaction-startup-pr
+    paths:
+      - ".github/workflows/pr182-finalizer.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  finalise:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/create-fast-interaction-startup-pr
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set"
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: false
+
+      - name: Prepare dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply final PR 182 implementation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path: str, text: str) -> None:
+              Path(path).parent.mkdir(parents=True, exist_ok=True)
+              Path(path).write_text(text, encoding="utf-8", newline="\n")
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"STOP: expected exactly one match in {path}, found {count}: {old[:120]!r}")
+              write(path, text.replace(old, new, 1))
+
+          # Room projection must return every non-null SongListRow field.
+          replace_once(
+              "musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt",
+              'SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 AND',
+              'SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM LibrarySongData WHERE available = 1 AND',
+          )
+
+          # Reserve a distinct adapter view type for primitive startup search rows.
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/IntegerTable.kt",
+              '    /** PlaylistSongViewHolder */\n    const val VIEW_TYPE_PLAYLIST_SONG = 0xA00E\n',
+              '    /** PlaylistSongViewHolder */\n    const val VIEW_TYPE_PLAYLIST_SONG = 0xA00E\n    /** StartupSongViewHolder */\n    const val VIEW_TYPE_STARTUP_SONG = 0xA00F\n',
+          )
+
+          # Expose recoverable library/source status separately from monotonic capability readiness.
+          path = "app/src/main/java/org/oxycblt/auxio/music/MusicViewModel.kt"
+          replace_once(
+              path,
+              '    private val _startupReadinessState =\n        MutableStateFlow<StartupReadinessState>(StartupReadinessState.ProcessVisible)\n\n    @Volatile private var libraryGeneration = 0L\n',
+              '    private val _startupReadinessState =\n        MutableStateFlow<StartupReadinessState>(StartupReadinessState.ProcessVisible)\n    private val _startupLibraryStatus =\n        MutableStateFlow<StartupLibraryStatus>(StartupLibraryStatus.Unknown)\n\n    @Volatile private var libraryGeneration = 0L\n',
+          )
+          replace_once(
+              path,
+              '    val startupReadinessState: StateFlow<StartupReadinessState> = _startupReadinessState\n\n    private val _statistics = MutableStateFlow<Statistics?>(null)\n',
+              '    val startupReadinessState: StateFlow<StartupReadinessState> = _startupReadinessState\n\n    /** Recoverable library/source condition independent of startup capability ordering. */\n    val startupLibraryStatus: StateFlow<StartupLibraryStatus> = _startupLibraryStatus\n\n    private val _statistics = MutableStateFlow<Statistics?>(null)\n',
+          )
+          replace_once(
+              path,
+              '    override fun onStartupReadinessStateChanged() {\n        _startupReadinessState.value = musicRepository.startupReadinessState\n    }\n',
+              '    override fun onStartupReadinessStateChanged() {\n        _startupReadinessState.value = musicRepository.startupReadinessState\n        _startupLibraryStatus.value = musicRepository.startupLibraryStatus\n    }\n',
+          )
+
+          # Surface raw/primitive playback presence to startup routing without inventing a Song.
+          path = "app/src/main/java/org/oxycblt/auxio/playback/PlaybackViewModel.kt"
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.playback.state.Progression\n',
+              'import org.oxycblt.auxio.playback.state.Progression\nimport org.oxycblt.auxio.playback.state.RawPlaybackMetadata\n',
+          )
+          replace_once(
+              path,
+              '    val song: StateFlow<Song?>\n        get() = _song\n\n    private val _parent = MutableStateFlow<MusicParent?>(null)\n',
+              '    val song: StateFlow<Song?>\n        get() = _song\n\n    private val _rawPlaybackMetadata = MutableStateFlow(playbackManager.rawPlaybackMetadata)\n    /** Primitive metadata available before the rich Musikr Song has been hydrated. */\n    val rawPlaybackMetadata: StateFlow<RawPlaybackMetadata?> = _rawPlaybackMetadata\n\n    private val _parent = MutableStateFlow<MusicParent?>(null)\n',
+          )
+          replace_once(
+              path,
+              '    override fun onIndexMoved(index: Int) {\n        L.d("Index moved, updating current song")\n        _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()\n        _song.value = playbackManager.currentSong\n',
+              '    override fun onIndexMoved(index: Int) {\n        L.d("Index moved, updating current song")\n        _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()\n        _song.value = playbackManager.currentSong\n        syncRawPlaybackMetadata()\n',
+          )
+          replace_once(
+              path,
+              '    override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {\n        // Other types of queue changes preserve the current song.\n',
+              '    override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {\n        syncRawPlaybackMetadata()\n        // Other types of queue changes preserve the current song.\n',
+          )
+          replace_once(
+              path,
+              '        _song.value = playbackManager.currentSong\n        _parent.value = parent\n',
+              '        _song.value = playbackManager.currentSong\n        syncRawPlaybackMetadata()\n        _parent.value = parent\n',
+          )
+          replace_once(
+              path,
+              '    override fun onProgressionChanged(progression: Progression) {\n        L.d("Player state changed, starting new position polling")\n        _isPlaying.value = progression.isPlaying\n',
+              '    override fun onProgressionChanged(progression: Progression) {\n        L.d("Player state changed, starting new position polling")\n        _isPlaying.value = progression.isPlaying\n        syncRawPlaybackMetadata()\n',
+          )
+          replace_once(
+              path,
+              '    override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {\n        _restoreOutcome.value = outcome\n    }\n',
+              '    override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {\n        _restoreOutcome.value = outcome\n        syncRawPlaybackMetadata()\n    }\n\n    private fun syncRawPlaybackMetadata() {\n        _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata\n    }\n',
+          )
+
+          # Make startup panel routing understand primitive playback and orthogonal library status.
+          path = "app/src/main/java/org/oxycblt/auxio/headunit/StartupPanelCoordinator.kt"
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.music.StartupReadinessState\n',
+              'import org.oxycblt.auxio.music.StartupLibraryStatus\nimport org.oxycblt.auxio.music.StartupReadinessState\n',
+          )
+          replace_once(path, 'import org.oxycblt.musikr.Song\n', '')
+          replace_once(
+              path,
+              '        val hasSong: Boolean,\n        val outcome: RestoreOutcome,\n        val readiness: StartupReadinessState,\n',
+              '        val hasPlayableItem: Boolean,\n        val outcome: RestoreOutcome,\n        val readiness: StartupReadinessState,\n        val libraryStatus: StartupLibraryStatus,\n',
+          )
+          replace_once(
+              path,
+              '                hasSong = false,\n                outcome = RestoreOutcome.NOT_REQUESTED,\n                readiness = StartupReadinessState.ProcessVisible,\n',
+              '                hasPlayableItem = false,\n                outcome = RestoreOutcome.NOT_REQUESTED,\n                readiness = StartupReadinessState.ProcessVisible,\n                libraryStatus = StartupLibraryStatus.Unknown,\n',
+          )
+          replace_once(
+              path,
+              '                evaluate(request, state.hasSong, state.outcome, state.readiness)\n',
+              '                evaluate(\n                    request,\n                    state.hasPlayableItem,\n                    state.outcome,\n                    state.readiness,\n                    state.libraryStatus,\n                )\n',
+          )
+          replace_once(
+              path,
+              '    fun updateState(song: Song?, outcome: RestoreOutcome, readiness: StartupReadinessState) {\n        coordinatorState.value = CoordinatorState(song != null, outcome, readiness)\n    }\n',
+              '    fun updateState(\n        hasPlayableItem: Boolean,\n        outcome: RestoreOutcome,\n        readiness: StartupReadinessState,\n        libraryStatus: StartupLibraryStatus,\n    ) {\n        coordinatorState.value =\n            CoordinatorState(hasPlayableItem, outcome, readiness, libraryStatus)\n    }\n',
+          )
+          replace_once(
+              path,
+              '            hasSong: Boolean,\n            outcome: RestoreOutcome,\n            readiness: StartupReadinessState,\n',
+              '            hasPlayableItem: Boolean,\n            outcome: RestoreOutcome,\n            readiness: StartupReadinessState,\n            libraryStatus: StartupLibraryStatus,\n',
+          )
+          replace_once(
+              path,
+              '            if (request.priority == Priority.EXPLICIT_INTENT) {\n                if (hasSong) return RouteEvaluation.Render(request)\n',
+              '            if (request.priority == Priority.EXPLICIT_INTENT) {\n                if (hasPlayableItem) return RouteEvaluation.Render(request)\n',
+          )
+          replace_once(
+              path,
+              '            if (readiness == StartupReadinessState.ProcessVisible) {\n                return RouteEvaluation.Wait(request, "library-checking")\n            }\n\n            return when (outcome) {\n',
+              '            val terminalLibraryStatus =\n                libraryStatus == StartupLibraryStatus.NeedsMusicSource ||\n                    libraryStatus == StartupLibraryStatus.Empty ||\n                    libraryStatus == StartupLibraryStatus.CacheUnavailable ||\n                    libraryStatus == StartupLibraryStatus.SourceUnavailable\n            val terminalRestore =\n                outcome == RestoreOutcome.NOT_REQUESTED ||\n                    outcome == RestoreOutcome.NO_SAVED_SESSION ||\n                    outcome == RestoreOutcome.FAILED ||\n                    outcome == RestoreOutcome.CANCELLED\n            if (terminalLibraryStatus && terminalRestore && !hasPlayableItem) {\n                return RouteEvaluation.Cancel(request, "library-terminal-$libraryStatus")\n            }\n\n            if (readiness == StartupReadinessState.ProcessVisible &&\n                libraryStatus == StartupLibraryStatus.Unknown) {\n                return RouteEvaluation.Wait(request, "library-checking")\n            }\n\n            return when (outcome) {\n',
+          )
+          replace_once(path, '                    if (hasSong) {\n', '                    if (hasPlayableItem) {\n')
+          replace_once(path, '                        RouteEvaluation.Wait(request, "awaiting-normal-song")\n', '                        RouteEvaluation.Wait(request, "awaiting-playable-item")\n')
+
+          # MainFragment feeds all independent state dimensions into the coordinator.
+          path = "app/src/main/java/org/oxycblt/auxio/MainFragment.kt"
+          old = '''        collectImmediately(musicModel.startupReadinessState) {
+            startupPanelCoordinator.updateState(
+                playbackModel.song.value,
+                playbackModel.restoreOutcome.value,
+                it,
+            )
+        }
+        collectImmediately(playbackModel.restoreOutcome) {
+            startupPanelCoordinator.updateState(
+                playbackModel.song.value,
+                it,
+                musicModel.startupReadinessState.value,
+            )
+        }
+'''
+          new = '''        collectImmediately(musicModel.startupReadinessState) { updateStartupPanelState() }
+        collectImmediately(musicModel.startupLibraryStatus) { updateStartupPanelState() }
+        collectImmediately(playbackModel.restoreOutcome) { updateStartupPanelState() }
+        collectImmediately(playbackModel.rawPlaybackMetadata) { updateStartupPanelState() }
+'''
+          replace_once(path, old, new)
+          replace_once(
+              path,
+              '    override fun onStart() {\n',
+              '''    private fun updateStartupPanelState() {
+        startupPanelCoordinator.updateState(
+            hasPlayableItem =
+                playbackModel.song.value != null ||
+                    playbackModel.rawPlaybackMetadata.value != null,
+            outcome = playbackModel.restoreOutcome.value,
+            readiness = musicModel.startupReadinessState.value,
+            libraryStatus = musicModel.startupLibraryStatus.value,
+        )
+    }
+
+    override fun onStart() {
+''',
+          )
+
+          # Add bounded Fast Start rows and mounted USB roots to HomeViewModel.
+          path = "app/src/main/java/org/oxycblt/auxio/home/HomeViewModel.kt"
+          replace_once(path, 'import javax.inject.Inject\n', 'import javax.inject.Inject\nimport kotlinx.coroutines.CancellationException\nimport kotlinx.coroutines.Dispatchers\n')
+          replace_once(path, 'import kotlinx.coroutines.launch\n', 'import kotlinx.coroutines.launch\nimport kotlinx.coroutines.withContext\n')
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.home.tabs.Tab\n',
+              'import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser\nimport org.oxycblt.auxio.home.tabs.Tab\n',
+          )
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.util.MutableEvent\n',
+              'import org.oxycblt.auxio.util.MutableEvent\nimport org.oxycblt.auxio.util.PerfTimer\n',
+          )
+          replace_once(
+              path,
+              'import org.oxycblt.musikr.Playlist\n',
+              'import org.oxycblt.musikr.Playlist\nimport org.oxycblt.musikr.cache.MutableCache\nimport org.oxycblt.musikr.cache.StartupProjectionCache\nimport org.oxycblt.musikr.cache.StartupSongRow\n',
+          )
+          replace_once(
+              path,
+              '/**\n * The ViewModel for managing the tab data and lists of the home view.\n',
+              '''data class FastStartHomeState(
+    val firstSongs: List<StartupSongRow> = emptyList(),
+    val recentlyAdded: List<StartupSongRow> = emptyList(),
+    val usbRoots: List<FastStartDirectFolderBrowser.Entry> = emptyList(),
+    val loading: Boolean = true,
+)
+
+/**
+ * The ViewModel for managing the tab data and lists of the home view.
+''',
+          )
+          replace_once(
+              path,
+              '    private val playbackSettings: PlaybackSettings,\n    homeGeneratorFactory: HomeGenerator.Factory,\n',
+              '    private val playbackSettings: PlaybackSettings,\n    private val cache: MutableCache,\n    private val fastFolderBrowser: FastStartDirectFolderBrowser,\n    homeGeneratorFactory: HomeGenerator.Factory,\n',
+          )
+          replace_once(
+              path,
+              '    private val _songList = MutableStateFlow(listOf<Song>())\n',
+              '''    private val _fastStartState = MutableStateFlow(FastStartHomeState())
+    val fastStartState: StateFlow<FastStartHomeState> = _fastStartState
+    private var fastStartJob: Job? = null
+
+    private val _songList = MutableStateFlow(listOf<Song>())
+''',
+          )
+          replace_once(
+              path,
+              '    init {\n        homeGenerator.attach()\n    }\n',
+              '''    init {
+        homeGenerator.attach()
+        refreshFastStart()
+    }
+
+    /** Refresh the bounded pre-library rows after startup projections become available. */
+    fun refreshFastStart(force: Boolean = false) {
+        if (fastStartJob?.isActive == true) return
+        if (!force && !_fastStartState.value.loading) return
+        fastStartJob =
+            viewModelScope.launch {
+                try {
+                    val projection = cache as? StartupProjectionCache
+                    val state =
+                        withContext(Dispatchers.IO) {
+                            FastStartHomeState(
+                                firstSongs =
+                                    projection?.firstSongs(limit = 8).orEmpty().filter { it.available },
+                                recentlyAdded =
+                                    projection?.recentlyAdded(limit = 6).orEmpty().filter { it.available },
+                                usbRoots = fastFolderBrowser.usbRoots(limit = 2).entries,
+                                loading = false,
+                            )
+                        }
+                    _fastStartState.value = state
+                    if (state.firstSongs.isNotEmpty() ||
+                        state.recentlyAdded.isNotEmpty() ||
+                        state.usbRoots.isNotEmpty()) {
+                        PerfTimer.point("startup.fast_home_first_rows")
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w(e, "Unable to load bounded Fast Start rows")
+                    _fastStartState.value = FastStartHomeState(loading = false)
+                } finally {
+                    fastStartJob = null
+                }
+            }
+    }
+''',
+          )
+          replace_once(
+              path,
+              '        super.onCleared()\n        homeGenerator.release()\n',
+              '        super.onCleared()\n        fastStartJob?.cancel()\n        homeGenerator.release()\n',
+          )
+
+          # Home consumes library status correctly and renders bounded primitive/USB chips.
+          path = "app/src/main/java/org/oxycblt/auxio/home/HomeFragment.kt"
+          replace_once(path, 'import android.os.Bundle\n', 'import android.net.Uri\nimport android.os.Bundle\n')
+          replace_once(path, 'import javax.inject.Inject\n', 'import java.io.File\nimport javax.inject.Inject\n')
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy\n',
+              'import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy\nimport org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser\n',
+          )
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.music.StartupReadinessState\n',
+              'import org.oxycblt.auxio.music.StartupLibraryStatus\nimport org.oxycblt.auxio.music.StartupReadinessState\n',
+          )
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.playback.PlaybackViewModel\n',
+              'import org.oxycblt.auxio.playback.PlaybackViewModel\nimport org.oxycblt.auxio.playback.state.DeferredPlayback\n',
+          )
+          replace_once(
+              path,
+              'import org.oxycblt.musikr.Song\n',
+              'import org.oxycblt.musikr.Song\nimport org.oxycblt.musikr.cache.StartupSongRow\n',
+          )
+          replace_once(
+              path,
+              '        collectImmediately(musicModel.startupReadinessState, ::handleStartupReadinessState)\n',
+              '''        collectImmediately(musicModel.startupReadinessState, ::handleStartupReadinessState)
+        collectImmediately(musicModel.startupLibraryStatus, ::handleStartupLibraryStatus)
+        collectImmediately(homeModel.fastStartState) {
+            updateMetadataShortcuts(
+                homeModel.songList.value,
+                homeModel.genreList.value,
+                homeModel.playlistList.value,
+            )
+        }
+''',
+          )
+          replace_once(
+              path,
+              '''    private fun handleStartupReadinessState(state: StartupReadinessState) {
+        if (state.rank >= StartupReadinessState.FastBrowseReady.rank) {
+            return
+        }
+        val navController = findNavController()
+        if (navController.currentDestination?.id != R.id.home_fragment) {
+            return
+        }
+        if (homeModel.markAutomaticSourceDialogStarted()) {
+            navController.navigateSafe(HomeFragmentDirections.chooseLocations())
+        }
+    }
+''',
+              '''    private fun handleStartupReadinessState(state: StartupReadinessState) {
+        if (state == StartupReadinessState.FastBrowseReady) {
+            homeModel.refreshFastStart(force = true)
+        }
+    }
+
+    private fun handleStartupLibraryStatus(status: StartupLibraryStatus) {
+        if (status != StartupLibraryStatus.NeedsMusicSource) return
+        val navController = findNavController()
+        if (navController.currentDestination?.id != R.id.home_fragment) return
+        if (homeModel.markAutomaticSourceDialogStarted()) {
+            navController.navigateSafe(HomeFragmentDirections.chooseLocations())
+        }
+    }
+''',
+          )
+          replace_once(
+              path,
+              '        val isPlaylistsTab = homeModel.currentTabType.value == MusicType.PLAYLISTS\n',
+              '''        val isPlaylistsTab = homeModel.currentTabType.value == MusicType.PLAYLISTS
+        val fastState = homeModel.fastStartState.value
+        val startupSongs =
+            if (homeModel.hasAnySongs) {
+                emptyList()
+            } else {
+                fastState.recentlyAdded.ifEmpty { fastState.firstSongs }.take(6)
+            }
+''',
+          )
+          replace_once(
+              path,
+              '                favourites = favouritesPlaylist?.songs?.isNotEmpty() == true,\n                tabType = homeModel.currentTabType.value,\n',
+              '                favourites = favouritesPlaylist?.songs?.isNotEmpty() == true,\n                startupSongs = startupSongs,\n                usbRoots = fastState.usbRoots,\n                tabType = homeModel.currentTabType.value,\n',
+          )
+          replace_once(
+              path,
+              '                oldSignature.favourites == signature.favourites &&\n                oldSignature.tabType == signature.tabType -> {\n',
+              '                oldSignature.favourites == signature.favourites &&\n                oldSignature.startupSongs == signature.startupSongs &&\n                oldSignature.usbRoots == signature.usbRoots &&\n                oldSignature.tabType == signature.tabType -> {\n',
+          )
+          replace_once(
+              path,
+              '        binding.homeMetadataChips.removeAllViews()\n        signature.decades.forEach { decade ->\n',
+              '''        binding.homeMetadataChips.removeAllViews()
+        if (signature.startupSongs.isNotEmpty() || signature.usbRoots.isNotEmpty()) {
+            binding.homeMetadataChips.addView(
+                buildMetaChip(binding, getString(R.string.lbl_search)) {
+                    findNavController().navigateSafe(HomeFragmentDirections.search())
+                }
+            )
+        }
+        signature.startupSongs.forEach { row ->
+            binding.homeMetadataChips.addView(
+                buildMetaChip(binding, "▶ ${row.title}") { playStartupSong(row) }
+            )
+        }
+        signature.usbRoots.forEach { root ->
+            binding.homeMetadataChips.addView(
+                buildMetaChip(binding, root.name.ifBlank { root.path.substringAfterLast('/') }) {
+                    FastStartFolderDialogFragment.show(childFragmentManager, root.path)
+                }
+            )
+        }
+        signature.decades.forEach { decade ->
+''',
+          )
+          replace_once(
+              path,
+              '    private fun handleQuickPick(action: QuickPickAction) {\n',
+              '''    private fun playStartupSong(row: StartupSongRow) {
+        if (!row.available) return
+        val parsed = Uri.parse(row.uri)
+        val uri =
+            if (!parsed.scheme.isNullOrBlank()) {
+                parsed
+            } else {
+                row.directPath?.let { Uri.fromFile(File(it)) } ?: return
+            }
+        playbackModel.playDeferred(DeferredPlayback.Open(uri))
+        playbackModel.openPlayback()
+    }
+
+    private fun handleQuickPick(action: QuickPickAction) {
+''',
+          )
+          replace_once(
+              path,
+              '        val favourites: Boolean,\n        val tabType: MusicType? = null,\n',
+              '        val favourites: Boolean,\n        val startupSongs: List<StartupSongRow>,\n        val usbRoots: List<FastStartDirectFolderBrowser.Entry>,\n        val tabType: MusicType? = null,\n',
+          )
+
+          # Bounded Quick Find uses normalized Room rows before a rich Library exists.
+          path = "app/src/main/java/org/oxycblt/auxio/search/SearchViewModel.kt"
+          replace_once(path, 'import javax.inject.Inject\n', 'import javax.inject.Inject\nimport kotlinx.coroutines.Dispatchers\n')
+          replace_once(path, 'import kotlinx.coroutines.Job\n', 'import kotlinx.coroutines.Job\nimport kotlinx.coroutines.delay\n')
+          replace_once(path, 'import kotlinx.coroutines.launch\n', 'import kotlinx.coroutines.launch\nimport kotlinx.coroutines.withContext\n')
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.playback.PlaybackSettings\n',
+              'import org.oxycblt.auxio.playback.PlaybackSettings\nimport org.oxycblt.auxio.util.PerfTimer\n',
+          )
+          replace_once(
+              path,
+              'import org.oxycblt.musikr.Library\n',
+              'import org.oxycblt.musikr.Library\nimport org.oxycblt.musikr.cache.MutableCache\nimport org.oxycblt.musikr.cache.StartupProjectionCache\n',
+          )
+          replace_once(
+              path,
+              '    private val playbackSettings: PlaybackSettings,\n',
+              '    private val playbackSettings: PlaybackSettings,\n    cache: MutableCache,\n',
+          )
+          replace_once(
+              path,
+              '    private var lastQuery: String? = null\n',
+              '    private val startupProjectionCache = cache as? StartupProjectionCache\n    private var lastQuery: String? = null\n',
+          )
+          old = '''        val library = musicRepository.library
+        if (query.isNullOrEmpty() || library == null) {
+            L.d("Cannot search for the current query, aborting")
+            _searchResults.value = listOf()
+            return
+        }
+
+        // Searching is time-consuming, so do it in the background.
+        L.d("Searching music library for $query")
+        currentSearchJob =
+            viewModelScope.launch {
+                _searchResults.value = searchImpl(library, query).also { yield() }
+            }
+'''
+          new = '''        if (query.isNullOrEmpty()) {
+            _searchResults.value = listOf()
+            return
+        }
+
+        L.d("Searching music for $query")
+        currentSearchJob =
+            viewModelScope.launch {
+                delay(QUICK_FIND_DEBOUNCE_MS)
+                val library = musicRepository.library
+                val results =
+                    if (library != null) {
+                        withContext(Dispatchers.Default) { searchImpl(library, query) }
+                    } else {
+                        val rows =
+                            withContext(Dispatchers.IO) {
+                                startupProjectionCache?.quickSearchSongs(query, limit = 10).orEmpty()
+                            }
+                        buildList {
+                            if (rows.isNotEmpty()) {
+                                add(BasicHeader(R.string.lbl_songs))
+                                addAll(rows)
+                            }
+                        }
+                    }
+                _searchResults.value = results.also { yield() }
+                if (results.isNotEmpty()) {
+                    PerfTimer.point("startup.quick_find_first_result")
+                }
+            }
+'''
+          replace_once(path, old, new)
+          replace_once(
+              path,
+              '    private companion object {\n        val SORT = Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING)\n',
+              '    private companion object {\n        const val QUICK_FIND_DEBOUNCE_MS = 125L\n        val SORT = Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING)\n',
+          )
+
+          # Search adapter renders primitive rows without pretending they are rich Song objects.
+          path = "app/src/main/java/org/oxycblt/auxio/search/SearchAdapter.kt"
+          replace_once(path, 'import android.view.ViewGroup\n', 'import android.view.ViewGroup\nimport androidx.core.view.isVisible\n')
+          replace_once(path, 'import org.oxycblt.auxio.list.BasicHeader\n', 'import org.oxycblt.auxio.IntegerTable\nimport org.oxycblt.auxio.databinding.ItemSongBinding\nimport org.oxycblt.auxio.list.BasicHeader\n')
+          replace_once(path, 'import org.oxycblt.auxio.list.recycler.SongViewHolder\n', 'import org.oxycblt.auxio.list.recycler.SongViewHolder\nimport org.oxycblt.auxio.util.inflater\n')
+          replace_once(path, 'import org.oxycblt.musikr.Song\n', 'import org.oxycblt.musikr.Song\nimport org.oxycblt.musikr.cache.StartupSongRow\n')
+          replace_once(
+              path,
+              'class SearchAdapter(private val listener: SelectableListListener<Music>) :\n',
+              'class SearchAdapter(\n    private val listener: SelectableListListener<Music>,\n    private val onStartupSongClick: (StartupSongRow) -> Unit,\n) :\n',
+          )
+          replace_once(
+              path,
+              '            is Song -> SongViewHolder.VIEW_TYPE\n',
+              '            is Song -> SongViewHolder.VIEW_TYPE\n            is StartupSongRow -> StartupSongViewHolder.VIEW_TYPE\n',
+          )
+          replace_once(
+              path,
+              '            SongViewHolder.VIEW_TYPE -> SongViewHolder.from(parent)\n',
+              '            SongViewHolder.VIEW_TYPE -> SongViewHolder.from(parent)\n            StartupSongViewHolder.VIEW_TYPE -> StartupSongViewHolder.from(parent)\n',
+          )
+          replace_once(
+              path,
+              '            is Song -> (holder as SongViewHolder).bind(item, listener)\n',
+              '            is Song -> (holder as SongViewHolder).bind(item, listener)\n            is StartupSongRow ->\n                (holder as StartupSongViewHolder).bind(item, onStartupSongClick)\n',
+          )
+          replace_once(
+              path,
+              '                        oldItem is Song && newItem is Song ->\n                            SongViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, newItem)\n',
+              '                        oldItem is Song && newItem is Song ->\n                            SongViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, newItem)\n                        oldItem is StartupSongRow && newItem is StartupSongRow -> oldItem == newItem\n',
+          )
+          text = read(path)
+          text += '''
+
+private class StartupSongViewHolder private constructor(private val binding: ItemSongBinding) :
+    SelectionIndicatorAdapter.ViewHolder(binding.root) {
+    fun bind(row: StartupSongRow, onClick: (StartupSongRow) -> Unit) {
+        binding.songMenu.isVisible = false
+        binding.songName.text = row.title
+        binding.songInfo.text = row.primaryArtist ?: row.album ?: "USB audio"
+        binding.root.isActivated = false
+        binding.root.isSelected = false
+        binding.root.setOnClickListener { onClick(row) }
+        binding.root.setOnLongClickListener(null)
+        binding.songAlbumCover.setPlaying(false)
+    }
+
+    override fun updatePlayingIndicator(isActive: Boolean, isPlaying: Boolean) {
+        binding.root.isSelected = isActive
+        binding.songAlbumCover.setPlaying(isPlaying)
+    }
+
+    override fun updateSelectionIndicator(isSelected: Boolean) {
+        binding.root.isActivated = false
+    }
+
+    companion object {
+        const val VIEW_TYPE = IntegerTable.VIEW_TYPE_STARTUP_SONG
+
+        fun from(parent: ViewGroup) =
+            StartupSongViewHolder(
+                ItemSongBinding.inflate(parent.context.inflater, parent, false)
+            )
+    }
+}
+'''
+          write(path, text)
+
+          # Search result clicks can start validated pre-library playback.
+          path = "app/src/main/java/org/oxycblt/auxio/search/SearchFragment.kt"
+          replace_once(path, 'import android.os.Bundle\n', 'import android.net.Uri\nimport android.os.Bundle\n')
+          replace_once(path, 'import dagger.hilt.android.AndroidEntryPoint\n', 'import dagger.hilt.android.AndroidEntryPoint\nimport java.io.File\n')
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.playback.PlaybackViewModel\n',
+              'import org.oxycblt.auxio.playback.PlaybackViewModel\nimport org.oxycblt.auxio.playback.state.DeferredPlayback\n',
+          )
+          replace_once(path, 'import org.oxycblt.musikr.Song\n', 'import org.oxycblt.musikr.Song\nimport org.oxycblt.musikr.cache.StartupSongRow\n')
+          replace_once(path, '    private val searchAdapter = SearchAdapter(this)\n', '    private val searchAdapter = SearchAdapter(this, ::playStartupSong)\n')
+          replace_once(
+              path,
+              '    override fun onRealClick(item: Music) {\n',
+              '''    private fun playStartupSong(row: StartupSongRow) {
+        if (!row.available) return
+        val parsed = Uri.parse(row.uri)
+        val uri =
+            if (!parsed.scheme.isNullOrBlank()) parsed
+            else row.directPath?.let { Uri.fromFile(File(it)) } ?: return
+        playbackModel.playDeferred(DeferredPlayback.Open(uri))
+        playbackModel.openPlayback()
+        hideKeyboard()
+    }
+
+    override fun onRealClick(item: Music) {
+''',
+          )
+
+          # Deferred Open is now directly playable before the rich library exists.
+          path = "app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt"
+          replace_once(
+              path,
+              '''        val library =
+            musicRepository.library?.takeIf { !it.empty() }
+                // No library, cannot do anything.
+                ?: return false
+''',
+              '''        val library = musicRepository.library?.takeIf { !it.empty() }
+        if (library == null) {
+            if (action is DeferredPlayback.Open) {
+                startDirectOpen(action)
+                return true
+            }
+            return false
+        }
+''',
+          )
+          replace_once(
+              path,
+              '    private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {\n',
+              '''    private fun startDirectOpen(action: DeferredPlayback.Open) {
+        cancelActiveRestore("direct-open", notify = false)
+        val generation = ++restoreGeneration
+        currentRestoreJob =
+            restoreScope.launch {
+                try {
+                    val uri = action.uri
+                    val snapshot =
+                        FastResumeSnapshot(
+                            uri = uri.toString(),
+                            path = uri.path.takeIf { uri.scheme.isNullOrBlank() || uri.scheme == "file" },
+                            title = uri.lastPathSegment,
+                            artist = null,
+                            album = null,
+                            durationMs = 0L,
+                            positionMs = 0L,
+                            playing = true,
+                            savedAtMs = System.currentTimeMillis(),
+                        )
+                    val validation = RawFastResumeValidator.validate(context, snapshot)
+                    withContext(Dispatchers.Main) {
+                        if (generation != restoreGeneration) return@withContext
+                        when (validation) {
+                            is RawFastResumeValidator.Result.Valid -> {
+                                startRawFastResume(validation.item, play = true)
+                                completeRestore(generation, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                            }
+                            is RawFastResumeValidator.Result.Invalid -> {
+                                L.w(
+                                    "Ignoring invalid Fast Start media ${action.uri}: " +
+                                        "${validation.reason} ${validation.detail}"
+                                )
+                                completeRestore(generation, RestoreOutcome.FAILED)
+                            }
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w(e, "Unable to open Fast Start media ${action.uri}")
+                    withContext(Dispatchers.Main) {
+                        if (generation == restoreGeneration) {
+                            completeRestore(generation, RestoreOutcome.FAILED)
+                        }
+                    }
+                } finally {
+                    if (generation == restoreGeneration) currentRestoreJob = null
+                }
+            }
+    }
+
+    private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {
+''',
+          )
+
+          # Add an in-app, bounded direct-folder browser with no SAF/DocumentsUI dependency.
+          write(
+              "app/src/main/java/org/oxycblt/auxio/home/FastStartFolderDialogFragment.kt",
+              '''/*
+ * Copyright (c) 2026 Auxio Project
+ * FastStartFolderDialogFragment.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.home
+
+import android.app.Dialog
+import android.net.Uri
+import android.os.Bundle
+import android.widget.ArrayAdapter
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import org.oxycblt.auxio.R
+import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser
+import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.playback.state.DeferredPlayback
+import timber.log.Timber as L
+
+/** Bounded TS18 USB folder navigation available before full library hydration. */
+@AndroidEntryPoint
+class FastStartFolderDialogFragment : DialogFragment() {
+    @Inject lateinit var browser: FastStartDirectFolderBrowser
+    private val playbackModel: PlaybackViewModel by activityViewModels()
+    private val entries = mutableListOf<FastStartDirectFolderBrowser.Entry>()
+    private lateinit var adapter: ArrayAdapter<String>
+    private var loaded = false
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        adapter = ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, mutableListOf())
+        return MaterialAlertDialogBuilder(requireContext())
+            .setTitle(requireArguments().getString(ARG_PATH)?.substringAfterLast('/'))
+            .setAdapter(adapter) { _, which -> handleEntry(which) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (loaded) return
+        loaded = true
+        val path = requireArguments().getString(ARG_PATH) ?: return
+        lifecycleScope.launch {
+            try {
+                val page = browser.browse(path, limit = PAGE_LIMIT)
+                entries.clear()
+                entries.addAll(page.entries.filter { it.directory || it.playable })
+                adapter.clear()
+                adapter.addAll(
+                    if (entries.isEmpty()) {
+                        listOf(getString(R.string.def_song_count))
+                    } else {
+                        entries.map { entry ->
+                            if (entry.directory) "📁 ${entry.name}" else "▶ ${entry.name}"
+                        }
+                    }
+                )
+                adapter.notifyDataSetChanged()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w(e, "Unable to browse Fast Start USB path $path")
+                adapter.clear()
+                adapter.add(getString(R.string.def_song_count))
+                adapter.notifyDataSetChanged()
+            }
+        }
+    }
+
+    private fun handleEntry(index: Int) {
+        val entry = entries.getOrNull(index) ?: return
+        if (entry.directory) {
+            dismissAllowingStateLoss()
+            show(parentFragmentManager, entry.path)
+            return
+        }
+        if (!entry.playable) return
+        playbackModel.playDeferred(DeferredPlayback.Open(Uri.fromFile(File(entry.path))))
+        playbackModel.openPlayback()
+        dismissAllowingStateLoss()
+    }
+
+    companion object {
+        private const val ARG_PATH = "path"
+        private const val TAG = "fast_start_folder"
+        private const val PAGE_LIMIT = 60
+
+        fun show(manager: androidx.fragment.app.FragmentManager, path: String) {
+            if (manager.isStateSaved) return
+            FastStartFolderDialogFragment().apply {
+                    arguments = Bundle().apply { putString(ARG_PATH, path) }
+                }
+                .show(manager, TAG)
+        }
+    }
+}
+''',
+          )
+
+          # Update coordinator tests for primitive playback and terminal status behaviour.
+          path = "app/src/test/java/org/oxycblt/auxio/headunit/StartupPanelCoordinatorTest.kt"
+          replace_once(
+              path,
+              'import org.oxycblt.auxio.music.StartupReadinessState\n',
+              'import org.oxycblt.auxio.music.StartupLibraryStatus\nimport org.oxycblt.auxio.music.StartupReadinessState\n',
+          )
+          replace_once(path, '    fun `raw resume waits for normal song reconciliation`() {\n', '    fun `raw resume renders when primitive playback is available`() {\n')
+          replace_once(
+              path,
+              '''        assertTrue(
+            evaluate(false, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                is StartupPanelCoordinator.RouteEvaluation.Wait
+        )
+        assertTrue(
+            evaluate(true, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                is StartupPanelCoordinator.RouteEvaluation.Render
+        )
+''',
+              '''        assertTrue(
+            evaluate(false, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                is StartupPanelCoordinator.RouteEvaluation.Wait
+        )
+        assertTrue(
+            evaluate(true, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                is StartupPanelCoordinator.RouteEvaluation.Render
+        )
+''',
+          )
+          replace_once(
+              path,
+              '    @Test\n    fun `explicit queue renders only after a normal song exists`() {\n',
+              '''    @Test
+    fun `terminal source status cancels generic route after restore terminates`() {
+        assertTrue(
+            evaluate(
+                false,
+                RestoreOutcome.NO_SAVED_SESSION,
+                StartupReadinessState.ProcessVisible,
+                StartupLibraryStatus.NeedsMusicSource,
+            ) is StartupPanelCoordinator.RouteEvaluation.Cancel
+        )
+    }
+
+    @Test
+    fun `explicit queue renders only after a playable item exists`() {
+''',
+          )
+          replace_once(
+              path,
+              '                StartupReadinessState.FullLibraryReady,\n            ) is StartupPanelCoordinator.RouteEvaluation.Wait\n',
+              '                StartupReadinessState.FullLibraryReady,\n                StartupLibraryStatus.Usable,\n            ) is StartupPanelCoordinator.RouteEvaluation.Wait\n',
+          )
+          replace_once(
+              path,
+              '                StartupReadinessState.FullLibraryReady,\n            ) is StartupPanelCoordinator.RouteEvaluation.Render\n',
+              '                StartupReadinessState.FullLibraryReady,\n                StartupLibraryStatus.Usable,\n            ) is StartupPanelCoordinator.RouteEvaluation.Render\n',
+          )
+          replace_once(
+              path,
+              '        readiness: StartupReadinessState = StartupReadinessState.FullLibraryReady,\n',
+              '        readiness: StartupReadinessState = StartupReadinessState.FullLibraryReady,\n        libraryStatus: StartupLibraryStatus = StartupLibraryStatus.Usable,\n',
+          )
+          replace_once(
+              path,
+              '            readiness,\n        )\n',
+              '            readiness,\n            libraryStatus,\n        )\n',
+          )
+
+          # Bring architecture notes in line with the implementation and PR 2 boundary.
+          path = "docs/architecture/FAST_INTERACTION_STARTUP.md"
+          text = read(path)
+          text += '''
+
+## User-facing fast path
+
+Before `Musikr.loadCached()` completes, Home can show bounded recent/first-song chips and mounted
+`/storage/usbdisk0` or `/storage/usbdisk1` roots. Search debounces and queries normalized Room song
+projections, and both search rows and the in-app USB folder dialog can start validated raw playback
+through the existing single playback service/session. Rich `Song` objects, relationships and artwork
+enrich later without replacing current audio.
+
+## PR 2 compatibility bridge
+
+Complete Home category materialisation, subscriber-driven category paging, source-scoped committed
+generations, changed-file-only extraction and Lean/Full enrichment remain intentionally deferred to
+the stacked incremental-library PR. `DBCache.snapshot()` and `Musikr.loadCached()` remain explicit,
+background compatibility paths for screens not yet migrated; neither gates queue restore, bounded
+Home rows, Quick Find, USB browsing or MediaBrowser startup projections.
+'''
+          write(path, text)
+          PY
+
+      - name: Format modified sources
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessApply
+
+      - name: Verify final implementation
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh \
+            :musikr:compileDebugKotlin \
+            :app:compileStandardDebugKotlin \
+            :app:testStandardDebugUnitTest \
+            :musikr:testDebugUnitTest \
+            :app:lintStandardDebug \
+            :app:assembleStandardDebug \
+            --stacktrace
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          git diff --check
+
+      - name: Remove temporary workflows and commit
+        shell: bash
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          rm -f .github/workflows/pr182-diagnostic.yml .github/workflows/pr182-finalizer.yml
+          git add -A
+          if git diff --cached --quiet; then
+            echo "::error::Finaliser produced no changes"
+            exit 1
+          fi
+          git commit -m "feat: complete PR1 fast interaction paths"
+          git push origin HEAD:cx/create-fast-interaction-startup-pr
