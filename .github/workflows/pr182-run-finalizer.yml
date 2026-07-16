@@ -110,6 +110,22 @@ jobs:
               "    '        var latest = StartupReadinessState.ProcessVisible\\n',\n"
               "    '        var latest: StartupReadinessState = StartupReadinessState.ProcessVisible\\n',\n"
               ")\n"
+              "\n# Unit-test compile alignment.\n"
+              "path = 'app/src/test/java/org/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowserTest.kt'\n"
+              "replace_once(path, 'import java.util.Locale\\n', 'import java.util.Locale\\nimport kotlin.io.path.createTempDirectory\\n')\n"
+              "text = read(path)\n"
+              "if text.count('createTempDir(prefix = \\\"usb0\\\")') != 4 or text.count('createTempDir(prefix = \\\"outside\\\")') != 1:\n"
+              "    raise SystemExit('STOP: unexpected temporary-directory call count')\n"
+              "text = text.replace('createTempDir(prefix = \\\"usb0\\\")', 'createTempDirectory(\\\"usb0\\\").toFile()')\n"
+              "text = text.replace('createTempDir(prefix = \\\"outside\\\")', 'createTempDirectory(\\\"outside\\\").toFile()')\n"
+              "write(path, text)\n"
+              "path = 'app/src/test/java/org/oxycblt/auxio/playback/persist/PersistenceCancellationTest.kt'\n"
+              "replace_once(path, 'import org.oxycblt.auxio.music.StartupReadinessState\\n', 'import org.oxycblt.auxio.music.StartupLibraryStatus\\nimport org.oxycblt.auxio.music.StartupReadinessState\\n')\n"
+              "replace_once(\n"
+              "    path,\n"
+              "    '        override val startupReadinessState: StartupReadinessState =\\n            StartupReadinessState.ProcessVisible\\n',\n"
+              "    '        override val startupReadinessState: StartupReadinessState =\\n            StartupReadinessState.ProcessVisible\\n        override val startupLibraryStatus: StartupLibraryStatus = StartupLibraryStatus.Usable\\n',\n"
+              ")\n"
           )
           Path('/tmp/pr182-finalize.py').write_text(script, encoding='utf-8')
           PY
