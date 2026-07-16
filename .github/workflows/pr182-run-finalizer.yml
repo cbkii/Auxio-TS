@@ -78,12 +78,14 @@ jobs:
           printf '\nFINALIZER_EXIT_CODE=%s\n' "${rc}" | tee -a pr182-finalizer.log
           exit "${rc}"
 
-      - name: Upload finalizer log
+      - name: Upload finalizer diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr182-finalizer-log
-          path: pr182-finalizer.log
+          name: pr182-finalizer-diagnostics
+          path: |
+            pr182-finalizer.log
+            /tmp/pr182-finalize.py
           if-no-files-found: warn
           retention-days: 3
 
