@@ -48,9 +48,12 @@ jobs:
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
       - name: Extract and run implementation patch
+        id: implementation
         shell: bash
         run: |
-          python3 <<'PY'
+          set +e
+          {
+            python3 <<'PY'
           from pathlib import Path
           workflow = Path('.github/workflows/pr182-finalizer.yml').read_text(encoding='utf-8')
           start_marker = "          python3 <<'PY'\n"
@@ -65,7 +68,24 @@ jobs:
               lines.append(line)
           Path('/tmp/pr182-finalize.py').write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
-          python3 /tmp/pr182-finalize.py
+            extract_rc=$?
+            if ((extract_rc != 0)); then
+              exit "${extract_rc}"
+            fi
+            python3 /tmp/pr182-finalize.py
+          } 2>&1 | tee pr182-finalizer.log
+          rc=${PIPESTATUS[0]}
+          printf '\nFINALIZER_EXIT_CODE=%s\n' "${rc}" | tee -a pr182-finalizer.log
+          exit "${rc}"
+
+      - name: Upload finalizer log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr182-finalizer-log
+          path: pr182-finalizer.log
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Format modified sources
         shell: bash
