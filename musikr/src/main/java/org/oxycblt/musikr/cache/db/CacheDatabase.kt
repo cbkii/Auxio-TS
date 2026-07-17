@@ -54,9 +54,15 @@ import org.oxycblt.musikr.util.splitEscaped
             PlaylistItemData::class,
             ScanGenerationData::class,
             SourceStateData::class,
+            SourceLedgerData::class,
+            SourceScanGenerationData::class,
+            ScanSeenData::class,
+            PendingCachedFileData::class,
+            IndexedSongData::class,
+            IndexedUriStateData::class,
             MetadataRevisionData::class,
         ],
-    version = 71,
+    version = 72,
     exportSchema = false,
 )
 @TypeConverters(CachedFileData.Converters::class)
@@ -66,6 +72,10 @@ internal abstract class CacheDatabase : RoomDatabase() {
     abstract fun writeDao(): CacheWriteDao
 
     abstract fun libraryDao(): LibraryReadDao
+
+    abstract fun incrementalLibraryDao(): IncrementalLibraryReadDao
+
+    abstract fun incrementalDao(): IncrementalScanDao
 
     abstract fun backfillDao(): LibraryBackfillDao
 
@@ -164,13 +174,68 @@ internal abstract class CacheDatabase : RoomDatabase() {
                 )
             }
 
+        val MIGRATION_71_72 =
+            Migration(71, 72) { database ->
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `SourceLedgerData` (`sourceKey` TEXT NOT NULL, `sourceType` TEXT NOT NULL, `rootUri` TEXT, `rootPath` TEXT, `fingerprint` TEXT, `fingerprintStrength` TEXT NOT NULL, `available` INTEGER NOT NULL, `lastSeenMs` INTEGER NOT NULL, `lastCommittedGeneration` INTEGER, `pendingGeneration` INTEGER, `lastSuccessfulScanMs` INTEGER, `configurationRevision` INTEGER NOT NULL, `invalidationVersion` INTEGER NOT NULL, `committedInvalidationVersion` INTEGER NOT NULL, `committedProfile` TEXT, `enrichmentRevision` INTEGER NOT NULL, `incomplete` INTEGER NOT NULL, PRIMARY KEY(`sourceKey`))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `SourceScanGenerationData` (`scanId` TEXT NOT NULL, `sourceKey` TEXT NOT NULL, `generation` INTEGER NOT NULL, `state` TEXT NOT NULL, `startedAtMs` INTEGER NOT NULL, `completedAtMs` INTEGER, `error` TEXT, PRIMARY KEY(`scanId`, `sourceKey`))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `ScanSeenData` (`scanId` TEXT NOT NULL, `sourceKey` TEXT NOT NULL, `uri` TEXT NOT NULL, `displayPath` TEXT, `fileName` TEXT NOT NULL, `sizeBytes` INTEGER NOT NULL, `modifiedTimeMs` INTEGER NOT NULL, `dateAddedMs` INTEGER NOT NULL, `mimeType` TEXT, `title` TEXT NOT NULL, `titleSort` TEXT NOT NULL, `primaryArtistName` TEXT, `primaryArtistSort` TEXT, `albumName` TEXT, `albumSort` TEXT, `trackNumber` INTEGER, `discNumber` INTEGER, `durationMs` INTEGER, `artworkRef` TEXT, `metadataProfile` TEXT NOT NULL, PRIMARY KEY(`scanId`, `sourceKey`, `uri`))"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_ScanSeenData_scanId_sourceKey` ON `ScanSeenData` (`scanId`, `sourceKey`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_ScanSeenData_uri` ON `ScanSeenData` (`uri`)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `PendingCachedFileData` (`scanId` TEXT NOT NULL, `sourceKey` TEXT NOT NULL, `uri` TEXT NOT NULL, `modifiedMs` INTEGER NOT NULL, `addedMs` INTEGER NOT NULL, `mimeType` TEXT, `durationMs` INTEGER, `bitrateKbps` INTEGER, `sampleRateHz` INTEGER, `musicBrainzId` TEXT, `name` TEXT, `sortName` TEXT, `track` INTEGER, `disc` INTEGER, `subtitle` TEXT, `date` TEXT, `albumMusicBrainzId` TEXT, `albumName` TEXT, `albumSortName` TEXT, `releaseTypes` TEXT, `artistMusicBrainzIds` TEXT, `artistNames` TEXT, `artistSortNames` TEXT, `albumArtistMusicBrainzIds` TEXT, `albumArtistNames` TEXT, `albumArtistSortNames` TEXT, `genreNames` TEXT, `replayGainTrackAdjustment` REAL, `replayGainAlbumAdjustment` REAL, `coverId` TEXT, PRIMARY KEY(`scanId`, `sourceKey`, `uri`))"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_PendingCachedFileData_scanId_sourceKey` ON `PendingCachedFileData` (`scanId`, `sourceKey`)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `IndexedSongData` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sourceKey` TEXT NOT NULL, `generation` INTEGER NOT NULL, `stableUid` TEXT NOT NULL, `uri` TEXT NOT NULL, `displayPath` TEXT, `fileName` TEXT NOT NULL, `title` TEXT NOT NULL, `titleSort` TEXT NOT NULL, `primaryArtistName` TEXT, `primaryArtistSort` TEXT, `albumName` TEXT, `albumSort` TEXT, `trackNumber` INTEGER, `discNumber` INTEGER, `durationMs` INTEGER, `sizeBytes` INTEGER NOT NULL, `modifiedTimeMs` INTEGER NOT NULL, `dateAddedMs` INTEGER NOT NULL, `mimeType` TEXT, `artworkRef` TEXT, `metadataProfile` TEXT NOT NULL, `enrichmentRevision` INTEGER NOT NULL)"
+                )
+                database.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_IndexedSongData_sourceKey_generation_uri` ON `IndexedSongData` (`sourceKey`, `generation`, `uri`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_IndexedSongData_sourceKey_generation_titleSort` ON `IndexedSongData` (`sourceKey`, `generation`, `titleSort`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_IndexedSongData_stableUid` ON `IndexedSongData` (`stableUid`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_IndexedSongData_uri` ON `IndexedSongData` (`uri`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_IndexedSongData_dateAddedMs` ON `IndexedSongData` (`dateAddedMs`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_IndexedSongData_primaryArtistSort` ON `IndexedSongData` (`primaryArtistSort`)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_IndexedSongData_albumSort` ON `IndexedSongData` (`albumSort`)"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `IndexedUriStateData` (`sourceKey` TEXT NOT NULL, `uri` TEXT NOT NULL, `available` INTEGER NOT NULL, `lastGeneration` INTEGER NOT NULL, `metadataProfile` TEXT NOT NULL, PRIMARY KEY(`sourceKey`, `uri`))"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_IndexedUriStateData_uri` ON `IndexedUriStateData` (`uri`)"
+                )
+            }
+
         fun from(context: Context) =
             Room.databaseBuilder(
                     context.applicationContext,
                     CacheDatabase::class.java,
                     "music_cache.db",
                 )
-                .addMigrations(MIGRATION_70_71)
+                .addMigrations(MIGRATION_70_71, MIGRATION_71_72)
                 .build()
     }
 }
@@ -189,6 +254,9 @@ internal interface CacheReadDao {
 @Dao
 internal interface CacheWriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun updateSong(data: CachedFileData)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun updateSongs(data: List<CachedFileData>)
 
     @Transaction
     suspend fun deleteExcludingUris(uris: Set<String>) {

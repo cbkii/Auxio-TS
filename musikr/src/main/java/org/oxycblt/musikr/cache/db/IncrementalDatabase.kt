@@ -12,6 +12,7 @@ package org.oxycblt.musikr.cache.db
 
 import android.net.Uri
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Insert
@@ -215,6 +216,15 @@ internal data class IndexedUriStateData(
     val metadataProfile: String,
 )
 
+internal data class CommittedCachedRow(
+    @Embedded val cache: CachedFileData,
+    val sourceKey: String,
+    val committedDisplayPath: String?,
+    val committedSizeBytes: Long,
+    val committedSourceUri: String?,
+    val committedRootPath: String?,
+)
+
 @Dao
 internal interface IncrementalScanDao {
     @Query("SELECT * FROM SourceLedgerData WHERE sourceKey = :sourceKey LIMIT 1")
@@ -301,13 +311,13 @@ internal interface IncrementalScanDao {
     suspend fun deletePending(scanId: String)
 
     @Query(
-        "SELECT cache.* FROM CachedFileData cache INNER JOIN IndexedSongData song ON song.uri = cache.uri INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE song.sourceKey IN (:sourceKeys) ORDER BY cache.uri LIMIT :limit OFFSET :offset"
+        "SELECT cache.*, song.sourceKey AS sourceKey, song.displayPath AS committedDisplayPath, song.sizeBytes AS committedSizeBytes, source.rootUri AS committedSourceUri, source.rootPath AS committedRootPath FROM CachedFileData cache INNER JOIN IndexedSongData song ON song.uri = cache.uri INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE song.sourceKey IN (:sourceKeys) ORDER BY cache.uri LIMIT :limit OFFSET :offset"
     )
     suspend fun committedCachedPage(
         sourceKeys: Set<String>,
         limit: Int,
         offset: Int,
-    ): List<CachedFileData>
+    ): List<CommittedCachedRow>
 
     @Query(
         "SELECT * FROM IndexedUriStateData WHERE sourceKey = :sourceKey AND uri = :uri LIMIT 1"
