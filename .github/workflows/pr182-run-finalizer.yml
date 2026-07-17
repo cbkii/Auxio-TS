@@ -173,6 +173,8 @@ jobs:
               :musikr:testDebugUnitTest \
               :app:lintStandardDebug \
               :app:assembleStandardDebug \
+              :app:assembleTopwayTwMusicDebug \
+              :app:assembleTopwayTwMediaDebug \
               --stacktrace
             gradle_rc=$?
             if ((gradle_rc != 0)); then
