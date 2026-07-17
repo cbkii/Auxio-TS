@@ -226,6 +226,7 @@ constructor(
         private set
 
     private val _currentTabType = MutableStateFlow(currentTabTypes[0])
+    private val categorySubscriptions = CategorySubscriptionGate(currentTabTypes[0])
     /** The [MusicType] of the currently shown [Tab]. */
     val currentTabType: StateFlow<MusicType> = _currentTabType
 
@@ -310,6 +311,9 @@ constructor(
     }
 
     override fun invalidateMusic(type: MusicType, instructions: UpdateInstructions) {
+        // Expensive rich-category work is subscriber-driven. Inactive invalidations conflate into
+        // one refresh when their tab becomes visible.
+        if (!categorySubscriptions.invalidate(type)) return
         // Cancel any previous in-flight invalidation for this type to avoid stale
         // older jobs overwriting newer state (race-safe latest-wins semantics).
         invalidationJobs[type]?.cancel()
@@ -416,8 +420,12 @@ constructor(
      * @param pagerPos The new position of the ViewPager2 instance.
      */
     fun synchronizeTabPosition(pagerPos: Int) {
-        L.d("Updating current tab to ${currentTabTypes[pagerPos]}")
-        _currentTabType.value = currentTabTypes[pagerPos]
+        val next = currentTabTypes[pagerPos]
+        L.d("Updating current tab to $next")
+        _currentTabType.value = next
+        if (categorySubscriptions.activate(next)) {
+            invalidateMusic(next, UpdateInstructions.Replace(0))
+        }
     }
 
     /**

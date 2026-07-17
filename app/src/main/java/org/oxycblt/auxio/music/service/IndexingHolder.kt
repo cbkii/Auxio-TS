@@ -39,6 +39,8 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.getSystemServiceCompat
 import org.oxycblt.musikr.fs.FSUpdate
+import org.oxycblt.musikr.fs.SourceIdentity
+import org.oxycblt.musikr.library.MetadataProfile
 import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
@@ -79,8 +81,13 @@ private constructor(
 
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
+    private data class IndexRequest(
+        val withCache: Boolean,
+        val metadataProfile: MetadataProfile?,
+    )
+
     private var currentIndexJob: Job? = null
-    private var pendingIndexWithCache: Boolean? = null
+    private var pendingIndexRequest: IndexRequest? = null
     private var startupJob: Job? = null
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
@@ -110,7 +117,7 @@ private constructor(
         stopTracking()
         currentIndexJob?.cancel()
         currentIndexJob = null
-        pendingIndexWithCache = null
+        pendingIndexRequest = null
         indexJob.cancel()
         wakeLock.releaseSafe()
         musicRepository.unregisterWorker(this)
@@ -163,45 +170,87 @@ private constructor(
 
     @Synchronized
     override fun requestIndex(withCache: Boolean) {
+        requestIndexLocked(IndexRequest(withCache, null))
+    }
+
+    @Synchronized
+    override fun requestIndex(withCache: Boolean, metadataProfile: MetadataProfile) {
+        requestIndexLocked(IndexRequest(withCache, metadataProfile))
+    }
+
+    private fun requestIndexLocked(request: IndexRequest) {
         if (currentIndexJob?.isActive == true) {
-            coalescePendingIndex(withCache)
-            L.i("Coalesced indexing request while scan is running [cache=$withCache]")
+            coalescePendingIndex(request)
+            L.i("Coalesced indexing request while scan is running [request=$request]")
             return
         }
-        if (
-            musicSettings.observationMode == ObservationMode.WHEN_IDLE && playbackActiveSnapshot()
-        ) {
-            coalescePendingIndex(withCache)
-            L.i("Deferred indexing request until playback is idle [cache=$withCache]")
+        val playbackActive = playbackActiveSnapshot()
+        val mustWaitForIdle =
+            playbackActive &&
+                (request.metadataProfile == MetadataProfile.FULL ||
+                    musicSettings.observationMode == ObservationMode.WHEN_IDLE)
+        if (mustWaitForIdle) {
+            coalescePendingIndex(request)
+            L.i("Deferred indexing/enrichment until playback is idle [request=$request]")
             return
         }
-        startIndexLocked(withCache)
+        startIndexLocked(request)
     }
 
     @Synchronized
-    private fun coalescePendingIndex(withCache: Boolean) {
-        // A cache-bypassing rescan is stronger than a cached refresh, so false wins.
-        pendingIndexWithCache = pendingIndexWithCache?.and(withCache) ?: withCache
+    private fun coalescePendingIndex(request: IndexRequest) {
+        val current = pendingIndexRequest
+        pendingIndexRequest =
+            if (current == null) {
+                request
+            } else {
+                IndexRequest(
+                    // A cache-bypassing request is stronger, so false wins.
+                    withCache = current.withCache && request.withCache,
+                    // Full enrichment is stronger than Lean; explicit beats automatic policy.
+                    metadataProfile =
+                        when {
+                            current.metadataProfile == MetadataProfile.FULL ||
+                                request.metadataProfile == MetadataProfile.FULL ->
+                                MetadataProfile.FULL
+                            current.metadataProfile == MetadataProfile.LEAN ||
+                                request.metadataProfile == MetadataProfile.LEAN ->
+                                MetadataProfile.LEAN
+                            else -> null
+                        },
+                )
+            }
     }
 
     @Synchronized
-    private fun startIndexLocked(withCache: Boolean) {
-        L.i("Starting new indexing job [cache=$withCache]")
+    private fun startIndexLocked(request: IndexRequest) {
+        L.i("Starting new indexing job [request=$request]")
         currentIndexJob =
             indexScope.launch {
                 try {
-                    musicRepository.index(this@IndexingHolder, withCache)
+                    if (request.metadataProfile != null) {
+                        musicRepository.index(
+                            this@IndexingHolder,
+                            request.withCache,
+                            request.metadataProfile,
+                        )
+                    } else {
+                        musicRepository.index(this@IndexingHolder, request.withCache)
+                    }
                 } finally {
                     synchronized(this@IndexingHolder) {
                         currentIndexJob = null
-                        val pending = pendingIndexWithCache
-                        if (
-                            pending != null &&
-                                !(musicSettings.observationMode == ObservationMode.WHEN_IDLE &&
-                                    playbackActiveSnapshot())
-                        ) {
-                            pendingIndexWithCache = null
-                            startIndexLocked(pending)
+                        val pending = pendingIndexRequest
+                        if (pending != null) {
+                            val playbackActive = playbackActiveSnapshot()
+                            val mustWaitForIdle =
+                                playbackActive &&
+                                    (pending.metadataProfile == MetadataProfile.FULL ||
+                                        musicSettings.observationMode == ObservationMode.WHEN_IDLE)
+                            if (!mustWaitForIdle) {
+                                pendingIndexRequest = null
+                                startIndexLocked(pending)
+                            }
                         }
                     }
                 }
@@ -211,9 +260,9 @@ private constructor(
     override fun onProgressionChanged(progression: org.oxycblt.auxio.playback.state.Progression) {
         if (!progression.isPlaying) {
             synchronized(this) {
-                val pending = pendingIndexWithCache
+                val pending = pendingIndexRequest
                 if (pending != null && currentIndexJob?.isActive != true) {
-                    pendingIndexWithCache = null
+                    pendingIndexRequest = null
                     startIndexLocked(pending)
                 }
             }
@@ -259,8 +308,9 @@ private constructor(
         trackingJob =
             indexScope.launch {
                 fs.track().collect { update ->
+                    val location = (update as? FSUpdate.LocationChanged)?.location
+                    musicRepository.invalidateSource(location?.let(SourceIdentity::forLocation))
                     if (update is FSUpdate.LocationChanged) {
-                        val location = update.location
                         // Check if the location that changed is still accessible
                         if (location != null && !location.path.volume.isAccessible()) {
                             L.i("Source became inaccessible (unmounted?): ${location.uri}")
@@ -299,7 +349,10 @@ private constructor(
     override fun onMusicLocationsChanged() {
         super.onMusicLocationsChanged()
         if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
-        musicRepository.requestIndex(true)
+        indexScope.launch {
+            musicRepository.invalidateSource()
+            musicRepository.requestIndex(true)
+        }
     }
 
     override fun onIndexingSettingChanged() {
