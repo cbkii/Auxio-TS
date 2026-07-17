@@ -27,10 +27,14 @@ import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.BuildConfig
@@ -80,8 +84,11 @@ interface MusicRepository {
     /** The current state of music loading. Null if no load has occurred yet. */
     val indexingState: IndexingState?
 
-    /** UI-visible startup/readiness state used to avoid alarming launch empty states. */
+    /** UI-visible startup/readiness capability used to avoid alarming launch empty states. */
     val startupReadinessState: StartupReadinessState
+
+    /** Recoverable startup library/source condition independent of readiness capability. */
+    val startupLibraryStatus: StartupLibraryStatus
 
     /**
      * Add an [UpdateListener] to receive updates from this instance.
@@ -270,14 +277,23 @@ constructor(
     private val settingCovers: SettingCovers,
     private val musicSettings: MusicSettings,
     private val rootGate: RootStateHolder,
+    private val startupReadinessController: StartupReadinessController,
 ) : MusicRepository {
     private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
     private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
+    private val readinessAdapter =
+        StartupReadinessController.Listener {
+            for (listener in startupReadinessListeners) {
+                listener.onStartupReadinessStateChanged()
+            }
+        }
     private val startupReadinessListeners =
         CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
     private val deviceLibraryGeneration = AtomicLong(0L)
     private val userLibraryGeneration = AtomicLong(0L)
+    private val compatibilityHydrationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var compatibilityHydrationJob: Job? = null
 
     @Volatile override var library: MutableLibrary? = null
     @Volatile private var previousCompletedState: IndexingState.Completed? = null
@@ -285,11 +301,15 @@ constructor(
     override val indexingState: IndexingState?
         get() = currentIndexingState ?: previousCompletedState
 
-    @Volatile
-    private var currentStartupReadinessState: StartupReadinessState =
-        StartupReadinessState.CheckingCachedLibrary
     override val startupReadinessState: StartupReadinessState
-        get() = currentStartupReadinessState
+        get() = startupReadinessController.capability
+
+    override val startupLibraryStatus: StartupLibraryStatus
+        get() = startupReadinessController.state.libraryStatus
+
+    init {
+        startupReadinessController.addListener(readinessAdapter)
+    }
 
     override fun addUpdateListener(listener: MusicRepository.UpdateListener) {
         L.d("Adding $listener to update listeners")
@@ -325,14 +345,14 @@ constructor(
     }
 
     override fun addStartupReadinessListener(listener: MusicRepository.StartupReadinessListener) {
-        synchronized(this) { startupReadinessListeners.add(listener) }
+        startupReadinessListeners.add(listener)
         listener.onStartupReadinessStateChanged()
     }
 
     override fun removeStartupReadinessListener(
         listener: MusicRepository.StartupReadinessListener
     ) {
-        val removed = synchronized(this) { startupReadinessListeners.remove(listener) }
+        val removed = startupReadinessListeners.remove(listener)
         if (!removed) {
             L.w("Startup readiness listener $listener was not added prior, cannot remove")
         }
@@ -417,7 +437,6 @@ constructor(
         PerfTimer.traceSuspend("MusicRepository.startup") {
             val start = System.currentTimeMillis()
             L.i("Music system starting...")
-
             val decision =
                 StartupLibraryStartup.run(
                     hasInMemoryLibrary = synchronized(this) { library != null },
@@ -425,20 +444,16 @@ constructor(
                     priorState = musicSettings.libraryState,
                     lastScanFailed = { musicSettings.lastScanFailed },
                     isTopwayCompat = BuildConfig.TOPWAY_COMPAT_FLAVOR,
-                    loadCachedLibrary = { loadCachedLibrary() },
-                    cachedSongCount = { it.songs.size },
-                    emitCachedLibrary = {
-                        synchronized(this) { this.library = it }
-                        withContext(Dispatchers.Main) {
-                            dispatchLibraryChange(device = true, user = true)
-                        }
-                    },
+                    loadCachedLibrary = { 0 },
+                    cachedSongCount = { 0 },
+                    emitCachedLibrary = {},
                     emitCachedLoadFailure = {
                         L.w(it, "Cached library load failed during startup")
                     },
                     setLibraryState = { musicSettings.libraryState = it },
                     requestIndex = { withCache -> worker.requestIndex(withCache) },
                     setStartupReadinessState = ::emitStartupReadinessState,
+                    setStartupLibraryStatus = ::emitStartupLibraryStatus,
                     sourceConfigured =
                         StartupLibraryPolicy.isMusicSourceConfigured(
                             musicSettings.locationMode,
@@ -450,20 +465,18 @@ constructor(
                     "[state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
             )
         }
-        // Opportunistically continue the bounded, restart-safe backfill of legacy cache rows
-        // into the normalized library tables. This runs on the indexing worker scope after the
-        // startup decision, never blocks playback restoration (which is on a separate path) and
-        // is a cheap no-op once every legacy row has been migrated.
         try {
-            val migrated = cache.populateNormalizedLibrary()
-            if (migrated > 0) {
-                L.d("Backfilled $migrated legacy cache rows into the normalized library")
-            }
+            cache.prepareStartupProjections()
+            emitStartupReadinessState(StartupReadinessState.FastBrowseReady)
+            emitStartupReadinessState(StartupReadinessState.SearchReady)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            L.w(e, "Normalized library backfill failed; last valid library remains available")
+            L.w(e, "Bounded startup projection seed failed; continuing legacy hydration")
+            emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
         }
+        startCompatibilityHydration()
+        startCompatibilityBackfill()
     }
 
     override suspend fun index(worker: IndexingWorker, withCache: Boolean) =
@@ -569,16 +582,70 @@ constructor(
             val isEmpty = result.library.songs.isEmpty()
             musicSettings.libraryState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
             musicSettings.lastScanFailed = false
-            emitStartupReadinessState(
-                if (isEmpty) {
-                    StartupReadinessState.EmptyLibrary
-                } else {
-                    StartupReadinessState.Ready
-                }
+            emitStartupLibraryStatus(
+                if (isEmpty) StartupLibraryStatus.Empty else StartupLibraryStatus.Usable
             )
+            if (!isEmpty) emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
             L.i("Indexing complete [state=${musicSettings.libraryState}]")
             emitIndexingCompletion(null)
         }
+
+    private fun startCompatibilityBackfill() {
+        compatibilityHydrationScope.launch {
+            try {
+                val migrated = cache.populateNormalizedLibrary()
+                if (migrated > 0) {
+                    L.d("Backfilled $migrated legacy cache rows into the normalized library")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w(e, "Normalized library backfill failed; last valid library remains available")
+            }
+        }
+    }
+
+    private fun startCompatibilityHydration() {
+        compatibilityHydrationJob?.cancel()
+        val startingDeviceGeneration = deviceLibraryGeneration.get()
+        val startingRevision = musicSettings.revision
+        compatibilityHydrationJob =
+            compatibilityHydrationScope.launch {
+                try {
+                    val cached = loadCachedLibrary()
+                    withContext(Dispatchers.Main) {
+                        val accepted =
+                            synchronized(this@MusicRepositoryImpl) {
+                                val superseded =
+                                    deviceLibraryGeneration.get() != startingDeviceGeneration ||
+                                        musicSettings.revision != startingRevision
+                                if (superseded) {
+                                    false
+                                } else {
+                                    library = cached
+                                    true
+                                }
+                            }
+                        if (!accepted) {
+                            L.d("Skipping compatibility hydration superseded by a newer scan")
+                            return@withContext
+                        }
+                        dispatchLibraryChange(device = true, user = true)
+                        if (cached.songs.isEmpty()) {
+                            emitStartupLibraryStatus(StartupLibraryStatus.Empty)
+                        } else {
+                            emitStartupLibraryStatus(StartupLibraryStatus.Usable)
+                            emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w(e, "Compatibility cached-library hydration failed")
+                    emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
+                }
+            }
+    }
 
     private suspend fun loadCachedLibrary(): MutableLibrary {
         val revision = musicSettings.revision ?: UUID.randomUUID()
@@ -723,14 +790,11 @@ constructor(
     }
 
     private fun emitStartupReadinessState(state: StartupReadinessState) {
-        val listeners =
-            synchronized(this) {
-                currentStartupReadinessState = state
-                startupReadinessListeners.toList()
-            }
-        for (listener in listeners) {
-            listener.onStartupReadinessStateChanged()
-        }
+        startupReadinessController.publishCapability(state)
+    }
+
+    private fun emitStartupLibraryStatus(status: StartupLibraryStatus) {
+        startupReadinessController.publishLibraryStatus(status)
     }
 
     private suspend fun emitIndexingProgress(progress: IndexingProgress) {

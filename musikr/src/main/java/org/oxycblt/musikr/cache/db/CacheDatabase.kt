@@ -418,9 +418,14 @@ internal data class MetadataRevisionData(
 @Dao
 internal interface LibraryReadDao {
     @Query(
-        "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
+        "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM LibrarySongData WHERE available = 1 ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
     )
     suspend fun songsPage(limit: Int, offset: Int): List<SongListRow>
+
+    @Query(
+        "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM LibrarySongData WHERE available = 1 ORDER BY dateAddedMs DESC, id DESC LIMIT :limit"
+    )
+    suspend fun recentlyAdded(limit: Int): List<SongListRow>
 
     @Query(
         "SELECT id, title, titleSort FROM LibraryAlbumData WHERE available = 1 ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
@@ -443,7 +448,7 @@ internal interface LibraryReadDao {
      * so that [offset]/[limit] paging never skips or repeats rows.
      */
     @Query(
-        "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 AND (titleSort LIKE :pattern ESCAPE '\\' OR primaryArtistSort LIKE :pattern ESCAPE '\\' OR albumSort LIKE :pattern ESCAPE '\\') ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
+        "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM LibrarySongData WHERE available = 1 AND (titleSort LIKE :pattern ESCAPE '\\' OR primaryArtistSort LIKE :pattern ESCAPE '\\' OR albumSort LIKE :pattern ESCAPE '\\') ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
     )
     suspend fun searchSongs(pattern: String, limit: Int, offset: Int): List<SongListRow>
 }
@@ -458,6 +463,8 @@ internal data class SongListRow(
     val durationMs: Long?,
     val embeddedArtworkRef: String?,
     val externalArtworkRef: String?,
+    val displayPath: String? = null,
+    val available: Boolean = true,
 )
 
 internal data class AlbumListRow(val id: Long, val title: String, val titleSort: String)

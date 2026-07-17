@@ -22,6 +22,7 @@ import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.state.RestoreOutcome
@@ -41,18 +42,15 @@ class StartupPanelCoordinatorTest {
     }
 
     @Test
-    fun `terminal library states cancel the route`() {
-        listOf(
-                StartupReadinessState.NeedsMusicSource,
-                StartupReadinessState.EmptyLibrary,
-                StartupReadinessState.CachedLibraryUnavailable,
+    fun `process visible readiness waits for library checking`() {
+        assertTrue(
+            evaluate(
+                false,
+                RestoreOutcome.WAITING_FOR_LIBRARY,
+                StartupReadinessState.ProcessVisible,
             )
-            .forEach { readiness ->
-                assertTrue(
-                    evaluate(false, RestoreOutcome.WAITING_FOR_LIBRARY, readiness)
-                        is StartupPanelCoordinator.RouteEvaluation.Cancel
-                )
-            }
+                is StartupPanelCoordinator.RouteEvaluation.Wait
+        )
     }
 
     @Test
@@ -64,7 +62,7 @@ class StartupPanelCoordinatorTest {
     }
 
     @Test
-    fun `raw resume waits for normal song reconciliation`() {
+    fun `raw resume renders when primitive playback is available`() {
         assertTrue(
             evaluate(false, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
                 is StartupPanelCoordinator.RouteEvaluation.Wait
@@ -83,7 +81,20 @@ class StartupPanelCoordinatorTest {
     }
 
     @Test
-    fun `explicit queue renders only after a normal song exists`() {
+    fun `terminal source status cancels generic route after restore terminates`() {
+        assertTrue(
+            evaluate(
+                false,
+                RestoreOutcome.NO_SAVED_SESSION,
+                StartupReadinessState.ProcessVisible,
+                StartupLibraryStatus.NeedsMusicSource,
+            )
+                is StartupPanelCoordinator.RouteEvaluation.Cancel
+        )
+    }
+
+    @Test
+    fun `explicit queue renders only after a playable item exists`() {
         val request =
             StartupPanelCoordinator.RouteRequest(
                 UUID.randomUUID(),
@@ -96,7 +107,8 @@ class StartupPanelCoordinatorTest {
                 request,
                 false,
                 RestoreOutcome.NOT_REQUESTED,
-                StartupReadinessState.Ready,
+                StartupReadinessState.FullLibraryReady,
+                StartupLibraryStatus.Usable,
             ) is StartupPanelCoordinator.RouteEvaluation.Wait
         )
         assertTrue(
@@ -104,7 +116,8 @@ class StartupPanelCoordinatorTest {
                 request,
                 true,
                 RestoreOutcome.NOT_REQUESTED,
-                StartupReadinessState.Ready,
+                StartupReadinessState.FullLibraryReady,
+                StartupLibraryStatus.Usable,
             ) is StartupPanelCoordinator.RouteEvaluation.Render
         )
     }
@@ -112,7 +125,8 @@ class StartupPanelCoordinatorTest {
     private fun evaluate(
         hasSong: Boolean,
         outcome: RestoreOutcome,
-        readiness: StartupReadinessState = StartupReadinessState.Ready,
+        readiness: StartupReadinessState = StartupReadinessState.FullLibraryReady,
+        libraryStatus: StartupLibraryStatus = StartupLibraryStatus.Usable,
     ) =
         StartupPanelCoordinator.evaluate(
             StartupPanelCoordinator.RouteRequest(
@@ -124,5 +138,6 @@ class StartupPanelCoordinatorTest {
             hasSong,
             outcome,
             readiness,
+            libraryStatus,
         )
 }

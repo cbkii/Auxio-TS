@@ -14,6 +14,7 @@ Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed 
 - [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — package-conflict and install-lane constraints for real TS18 firmware.
 - [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
 - [`LAUNCH_TO_CURRENTLY_PLAYING.md`](LAUNCH_TO_CURRENTLY_PLAYING.md) — durable startup-panel routing contract and TS18 validation matrix.
+- [`architecture/FAST_INTERACTION_STARTUP.md`](architecture/FAST_INTERACTION_STARTUP.md) — PR 1 staged startup readiness, bounded startup projections, fast MediaBrowser/search, and DirectFS Fast Start constraints.
 - [`TS18_COMPATIBILITY_AUDIT.md`](TS18_COMPATIBILITY_AUDIT.md) — repo-wide TS18/Topway/DoFun compatibility surface classification.
 - [`topway/README.md`](topway/README.md) — local Topway decompile/source-led compatibility notes.
 

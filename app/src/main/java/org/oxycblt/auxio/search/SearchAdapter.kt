@@ -19,7 +19,11 @@
 package org.oxycblt.auxio.search
 
 import android.view.ViewGroup
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
+import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.R
+import org.oxycblt.auxio.databinding.ItemSongBinding
 import org.oxycblt.auxio.list.BasicHeader
 import org.oxycblt.auxio.list.Item
 import org.oxycblt.auxio.list.PlainDivider
@@ -33,12 +37,14 @@ import org.oxycblt.auxio.list.recycler.DividerViewHolder
 import org.oxycblt.auxio.list.recycler.GenreViewHolder
 import org.oxycblt.auxio.list.recycler.PlaylistViewHolder
 import org.oxycblt.auxio.list.recycler.SongViewHolder
+import org.oxycblt.auxio.util.inflater
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.cache.StartupSongRow
 
 /**
  * An adapter that displays search results.
@@ -46,12 +52,15 @@ import org.oxycblt.musikr.Song
  * @param listener An [SelectableListListener] to bind interactions to.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class SearchAdapter(private val listener: SelectableListListener<Music>) :
-    SelectionIndicatorAdapter<Item, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
+class SearchAdapter(
+    private val listener: SelectableListListener<Music>,
+    private val onStartupSongClick: (StartupSongRow) -> Unit,
+) : SelectionIndicatorAdapter<Item, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
 
     override fun getItemViewType(position: Int) =
         when (getItem(position)) {
             is Song -> SongViewHolder.VIEW_TYPE
+            is StartupSongRow -> StartupSongViewHolder.VIEW_TYPE
             is Album -> AlbumViewHolder.VIEW_TYPE
             is Artist -> ArtistViewHolder.VIEW_TYPE
             is Genre -> GenreViewHolder.VIEW_TYPE
@@ -64,6 +73,7 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         when (viewType) {
             SongViewHolder.VIEW_TYPE -> SongViewHolder.from(parent)
+            StartupSongViewHolder.VIEW_TYPE -> StartupSongViewHolder.from(parent)
             AlbumViewHolder.VIEW_TYPE -> AlbumViewHolder.from(parent)
             ArtistViewHolder.VIEW_TYPE -> ArtistViewHolder.from(parent)
             GenreViewHolder.VIEW_TYPE -> GenreViewHolder.from(parent)
@@ -76,6 +86,7 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
             is Song -> (holder as SongViewHolder).bind(item, listener)
+            is StartupSongRow -> (holder as StartupSongViewHolder).bind(item, onStartupSongClick)
             is Album -> (holder as AlbumViewHolder).bind(item, listener)
             is Artist -> (holder as ArtistViewHolder).bind(item, listener)
             is Genre -> (holder as GenreViewHolder).bind(item, listener)
@@ -92,6 +103,7 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
                     when {
                         oldItem is Song && newItem is Song ->
                             SongViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, newItem)
+                        oldItem is StartupSongRow && newItem is StartupSongRow -> oldItem == newItem
                         oldItem is Album && newItem is Album ->
                             AlbumViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, newItem)
                         oldItem is Artist && newItem is Artist ->
@@ -107,5 +119,36 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
                         else -> false
                     }
             }
+    }
+}
+
+private class StartupSongViewHolder private constructor(private val binding: ItemSongBinding) :
+    SelectionIndicatorAdapter.ViewHolder(binding.root) {
+    fun bind(row: StartupSongRow, onClick: (StartupSongRow) -> Unit) {
+        binding.songMenu.isVisible = false
+        binding.songName.text = row.title
+        binding.songInfo.text =
+            row.primaryArtist ?: row.album ?: binding.root.context.getString(R.string.lbl_usb_audio)
+        binding.root.isActivated = false
+        binding.root.isSelected = false
+        binding.root.setOnClickListener { onClick(row) }
+        binding.root.setOnLongClickListener(null)
+        binding.songAlbumCover.setPlaying(false)
+    }
+
+    override fun updatePlayingIndicator(isActive: Boolean, isPlaying: Boolean) {
+        binding.root.isSelected = isActive
+        binding.songAlbumCover.setPlaying(isPlaying)
+    }
+
+    override fun updateSelectionIndicator(isSelected: Boolean) {
+        binding.root.isActivated = false
+    }
+
+    companion object {
+        const val VIEW_TYPE = IntegerTable.VIEW_TYPE_STARTUP_SONG
+
+        fun from(parent: ViewGroup) =
+            StartupSongViewHolder(ItemSongBinding.inflate(parent.context.inflater, parent, false))
     }
 }

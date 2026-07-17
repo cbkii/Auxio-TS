@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.search
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -33,6 +34,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.GridLayoutManager
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentSearchBinding
 import org.oxycblt.auxio.detail.DetailViewModel
@@ -49,6 +51,7 @@ import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.ui.FadingToolbarOffsetListener
 import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
@@ -64,6 +67,7 @@ import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.cache.StartupSongRow
 import org.oxycblt.musikr.playlist.m3u.M3U
 import timber.log.Timber as L
 
@@ -81,7 +85,7 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
     override val listModel: ListViewModel by activityViewModels()
     override val playbackModel: PlaybackViewModel by activityViewModels()
     override val musicModel: MusicViewModel by activityViewModels()
-    private val searchAdapter = SearchAdapter(this)
+    private val searchAdapter = SearchAdapter(this, ::playStartupSong)
     private var getContentLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
     private var imm: InputMethodManager? = null
@@ -202,6 +206,17 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         super.onDestroyBinding(binding)
         binding.searchNormalToolbar.setOnMenuItemClickListener(null)
         binding.searchRecycler.adapter = null
+    }
+
+    private fun playStartupSong(row: StartupSongRow) {
+        if (!row.available) return
+        val parsed = Uri.parse(row.uri)
+        val uri =
+            if (!parsed.scheme.isNullOrBlank()) parsed
+            else row.directPath?.let { Uri.fromFile(File(it)) } ?: return
+        playbackModel.playDeferred(DeferredPlayback.Open(uri))
+        playbackModel.openPlayback()
+        hideKeyboard()
     }
 
     override fun onRealClick(item: Music) {

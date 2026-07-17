@@ -106,20 +106,32 @@ internal class LibraryBackfill(private val db: CacheDatabase) {
         require(batchSize > 0) { "Backfill batch size must be positive" }
         var total = 0
         while (true) {
-            val migrated =
-                db.withTransaction {
-                    val page = dao.unmigratedLegacyPage(batchSize)
-                    if (page.isEmpty()) return@withTransaction 0
-                    val volumeId = getOrCreateLegacyVolume()
-                    page.forEach { backfillRow(volumeId, it) }
-                    page.size
-                }
+            val migrated = runBatchTransaction(batchSize)
             if (migrated == 0) break
             total += migrated
             onProgress?.invoke(total)
         }
         return total
     }
+
+    /**
+     * Run at most one bounded batch for startup projections. This intentionally does not drain the
+     * full legacy cache; callers can publish Fast Browse/Search after this returns and continue the
+     * remaining [run] work asynchronously.
+     */
+    suspend fun runOneBatch(batchSize: Int = DEFAULT_BATCH_SIZE): Int {
+        require(batchSize > 0) { "Backfill batch size must be positive" }
+        return runBatchTransaction(batchSize)
+    }
+
+    private suspend fun runBatchTransaction(batchSize: Int): Int =
+        db.withTransaction {
+            val page = dao.unmigratedLegacyPage(batchSize)
+            if (page.isEmpty()) return@withTransaction 0
+            val volumeId = getOrCreateLegacyVolume()
+            page.forEach { backfillRow(volumeId, it) }
+            page.size
+        }
 
     private suspend fun getOrCreateLegacyVolume(): Long =
         dao.volumeIdByKey(LEGACY_SOURCE_KEY)

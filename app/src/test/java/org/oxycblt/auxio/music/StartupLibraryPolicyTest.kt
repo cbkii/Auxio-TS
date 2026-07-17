@@ -175,7 +175,7 @@ class StartupLibraryPolicyTest {
                 cachedSongCount = 3,
             )
 
-        assertEquals(StartupReadinessState.Ready, state)
+        assertEquals(StartupLibraryStatus.Usable, state)
     }
 
     @Test
@@ -187,7 +187,7 @@ class StartupLibraryPolicyTest {
                 cachedSongCount = null,
             )
 
-        assertEquals(StartupReadinessState.NeedsMusicSource, state)
+        assertEquals(StartupLibraryStatus.NeedsMusicSource, state)
     }
 
     @Test
@@ -217,7 +217,7 @@ class StartupLibraryPolicyTest {
                 cachedSongCount = null,
             )
 
-        assertEquals(StartupReadinessState.CachedLibraryUnavailable, state)
+        assertEquals(StartupLibraryStatus.CacheUnavailable, state)
     }
 
     @Test
@@ -248,7 +248,7 @@ class StartupLibraryPolicyTest {
             harness.run()
 
             assertEquals(emptyList<Boolean>(), harness.scanRequests)
-            assertEquals(StartupReadinessState.NeedsMusicSource, harness.startupState)
+            assertEquals(StartupLibraryStatus.NeedsMusicSource, harness.startupState)
         }
 
     @Test
@@ -260,7 +260,7 @@ class StartupLibraryPolicyTest {
                 cachedSongCount = 0,
             )
 
-        assertEquals(StartupReadinessState.EmptyLibrary, state)
+        assertEquals(StartupLibraryStatus.Empty, state)
     }
 
     @Test
@@ -272,7 +272,7 @@ class StartupLibraryPolicyTest {
                 cachedSongCount = null,
             )
 
-        assertEquals(StartupReadinessState.NeedsMusicSource, state)
+        assertEquals(StartupLibraryStatus.NeedsMusicSource, state)
     }
 
     @Test
@@ -284,7 +284,7 @@ class StartupLibraryPolicyTest {
                 cachedSongCount = null,
             )
 
-        assertEquals(StartupReadinessState.CachedLibraryUnavailable, state)
+        assertEquals(StartupLibraryStatus.CacheUnavailable, state)
     }
 
     @Test
@@ -471,7 +471,7 @@ class StartupLibraryPolicyTest {
         var cachedLoadFailures = 0
         var cachedLoadAttempts = 0
         val scanRequests = mutableListOf<Boolean>()
-        var startupState: StartupReadinessState? = null
+        var startupState: StartupLibraryStatus? = null
 
         suspend fun run(
             cachedSongCount: Int = 0,
@@ -493,7 +493,7 @@ class StartupLibraryPolicyTest {
                 emitCachedLoadFailure = { cachedLoadFailures++ },
                 setLibraryState = { persistedState = it },
                 requestIndex = { scanRequests.add(it) },
-                setStartupReadinessState = { startupState = it },
+                setStartupLibraryStatus = { startupState = it },
                 sourceConfigured = sourceConfigured,
             )
     }

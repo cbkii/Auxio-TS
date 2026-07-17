@@ -29,11 +29,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.state.RestoreOutcome
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -68,29 +68,43 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
     }
 
     private data class CoordinatorState(
-        val hasSong: Boolean,
+        val hasPlayableItem: Boolean,
         val outcome: RestoreOutcome,
         val readiness: StartupReadinessState,
+        val libraryStatus: StartupLibraryStatus,
     )
 
     private val activeRequest = MutableStateFlow<RouteRequest?>(null)
     private val coordinatorState =
         MutableStateFlow(
             CoordinatorState(
-                hasSong = false,
+                hasPlayableItem = false,
                 outcome = RestoreOutcome.NOT_REQUESTED,
-                readiness = StartupReadinessState.CheckingCachedLibrary,
+                readiness = StartupReadinessState.ProcessVisible,
+                libraryStatus = StartupLibraryStatus.Unknown,
             )
         )
 
     val routeEvaluation: StateFlow<RouteEvaluation> =
         combine(activeRequest, coordinatorState) { request, state ->
-                evaluate(request, state.hasSong, state.outcome, state.readiness)
+                evaluate(
+                    request,
+                    state.hasPlayableItem,
+                    state.outcome,
+                    state.readiness,
+                    state.libraryStatus,
+                )
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, RouteEvaluation.Idle)
 
-    fun updateState(song: Song?, outcome: RestoreOutcome, readiness: StartupReadinessState) {
-        coordinatorState.value = CoordinatorState(song != null, outcome, readiness)
+    fun updateState(
+        hasPlayableItem: Boolean,
+        outcome: RestoreOutcome,
+        readiness: StartupReadinessState,
+        libraryStatus: StartupLibraryStatus,
+    ) {
+        coordinatorState.value =
+            CoordinatorState(hasPlayableItem, outcome, readiness, libraryStatus)
     }
 
     /** Explicit launcher/deep-link navigation supersedes a generic startup request. */
@@ -162,22 +176,15 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
 
         internal fun evaluate(
             request: RouteRequest?,
-            hasSong: Boolean,
+            hasPlayableItem: Boolean,
             outcome: RestoreOutcome,
             readiness: StartupReadinessState,
+            libraryStatus: StartupLibraryStatus,
         ): RouteEvaluation {
             request ?: return RouteEvaluation.Idle
 
-            if (
-                readiness == StartupReadinessState.NeedsMusicSource ||
-                    readiness == StartupReadinessState.EmptyLibrary ||
-                    readiness == StartupReadinessState.CachedLibraryUnavailable
-            ) {
-                return RouteEvaluation.Cancel(request, "library-terminal-$readiness")
-            }
-
             if (request.priority == Priority.EXPLICIT_INTENT) {
-                if (hasSong) return RouteEvaluation.Render(request)
+                if (hasPlayableItem) return RouteEvaluation.Render(request)
                 return when (outcome) {
                     RestoreOutcome.NO_SAVED_SESSION,
                     RestoreOutcome.FAILED,
@@ -187,7 +194,24 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
                 }
             }
 
-            if (readiness == StartupReadinessState.CheckingCachedLibrary) {
+            val terminalLibraryStatus =
+                libraryStatus == StartupLibraryStatus.NeedsMusicSource ||
+                    libraryStatus == StartupLibraryStatus.Empty ||
+                    libraryStatus == StartupLibraryStatus.CacheUnavailable ||
+                    libraryStatus == StartupLibraryStatus.SourceUnavailable
+            val terminalRestore =
+                outcome == RestoreOutcome.NOT_REQUESTED ||
+                    outcome == RestoreOutcome.NO_SAVED_SESSION ||
+                    outcome == RestoreOutcome.FAILED ||
+                    outcome == RestoreOutcome.CANCELLED
+            if (terminalLibraryStatus && terminalRestore && !hasPlayableItem) {
+                return RouteEvaluation.Cancel(request, "library-terminal-$libraryStatus")
+            }
+
+            if (
+                readiness == StartupReadinessState.ProcessVisible &&
+                    libraryStatus == StartupLibraryStatus.Unknown
+            ) {
                 return RouteEvaluation.Wait(request, "library-checking")
             }
 
@@ -203,10 +227,10 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
                 RestoreOutcome.RAW_FAST_RESUME_ACTIVE,
                 RestoreOutcome.RESTORED_EXISTING_SESSION,
                 RestoreOutcome.FALLBACK_QUEUE_CREATED ->
-                    if (hasSong) {
+                    if (hasPlayableItem) {
                         RouteEvaluation.Render(request)
                     } else {
-                        RouteEvaluation.Wait(request, "awaiting-normal-song")
+                        RouteEvaluation.Wait(request, "awaiting-playable-item")
                     }
             }
         }

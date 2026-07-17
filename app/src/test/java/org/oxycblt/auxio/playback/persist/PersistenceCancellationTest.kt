@@ -32,6 +32,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
@@ -275,7 +276,8 @@ class PersistenceCancellationTest {
         override val library: Library? = null
         override val indexingState: IndexingState? = null
         override val startupReadinessState: StartupReadinessState =
-            StartupReadinessState.CheckingCachedLibrary
+            StartupReadinessState.ProcessVisible
+        override val startupLibraryStatus: StartupLibraryStatus = StartupLibraryStatus.Usable
 
         override fun addUpdateListener(listener: MusicRepository.UpdateListener) = Unit
 

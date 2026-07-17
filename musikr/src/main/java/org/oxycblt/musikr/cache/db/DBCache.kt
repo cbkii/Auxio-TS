@@ -24,6 +24,9 @@ import org.oxycblt.musikr.cache.Cache
 import org.oxycblt.musikr.cache.CacheResult
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.cache.StartupProjectionCache
+import org.oxycblt.musikr.cache.StartupSongRow
+import org.oxycblt.musikr.cache.StartupSummaryRow
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.File
@@ -37,7 +40,9 @@ import org.oxycblt.musikr.tag.parse.ParsedTags
  *
  * Create an instance with [from].
  */
-class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
+class DBCache
+private constructor(private val readDao: CacheReadDao, private val libraryDao: LibraryReadDao) :
+    Cache, StartupProjectionCache {
     override suspend fun read(file: File): CacheResult {
         val dbSong = readDao.selectSongByUri(file.uri) ?: return CacheResult.Miss(file)
         if (dbSong.modifiedMs != file.modifiedMs) {
@@ -47,6 +52,8 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
     }
 
     override suspend fun snapshot(): List<CachedFile> {
+        // Compatibility-only API for legacy full-library reconstruction. Startup/Fast Start
+        // callers must use the bounded StartupProjectionCache methods below.
         val result = mutableListOf<CachedFile>()
         var offset = 0
         while (true) {
@@ -57,6 +64,46 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
         }
         return result
     }
+
+    override suspend fun firstSongs(limit: Int, offset: Int): List<StartupSongRow> =
+        libraryDao.songsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0)).map {
+            it.toStartupSongRow()
+        }
+
+    override suspend fun recentlyAdded(limit: Int): List<StartupSongRow> =
+        libraryDao.recentlyAdded(limit.coerceIn(1, MAX_STARTUP_LIMIT)).map { it.toStartupSongRow() }
+
+    override suspend fun albums(limit: Int, offset: Int): List<StartupSummaryRow> =
+        libraryDao.albumsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0)).map {
+            StartupSummaryRow(it.id.toString(), it.title)
+        }
+
+    override suspend fun artists(limit: Int, offset: Int): List<StartupSummaryRow> =
+        libraryDao.artistsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0)).map {
+            StartupSummaryRow(it.id.toString(), it.name)
+        }
+
+    override suspend fun quickSearchSongs(query: String, limit: Int): List<StartupSongRow> =
+        if (query.isBlank()) {
+            emptyList()
+        } else {
+            libraryDao.searchSongs(LikeQuery.contains(query), limit.coerceIn(1, 10), 0).map {
+                it.toStartupSongRow()
+            }
+        }
+
+    private fun SongListRow.toStartupSongRow() =
+        StartupSongRow(
+            stableId = stableUid,
+            uri = uri,
+            directPath = displayPath,
+            title = title,
+            primaryArtist = primaryArtistName,
+            album = albumName,
+            durationMs = durationMs,
+            artworkRef = embeddedArtworkRef ?: externalArtworkRef,
+            available = available,
+        )
 
     private fun CachedFileData.toCachedFile(file: File) =
         CachedFile(
@@ -119,6 +166,7 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
 
     companion object {
         private const val SNAPSHOT_PAGE_SIZE = 256
+        private const val MAX_STARTUP_LIMIT = 100
 
         /**
          * Create a new instance of [DBCache] from the given [context].
@@ -131,7 +179,7 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
          */
         fun from(context: Context) = from(CacheDatabase.from(context))
 
-        internal fun from(db: CacheDatabase) = DBCache(db.readDao())
+        internal fun from(db: CacheDatabase) = DBCache(db.readDao(), db.libraryDao())
     }
 }
 
@@ -145,12 +193,15 @@ private constructor(
     private val inner: DBCache,
     private val writeDao: CacheWriteDao,
     private val backfill: LibraryBackfill,
-) : MutableCache {
+) : MutableCache, StartupProjectionCache by inner {
     override suspend fun read(file: File) = inner.read(file)
 
     override suspend fun snapshot() = inner.snapshot()
 
     override suspend fun populateNormalizedLibrary(): Int = backfill.run()
+
+    override suspend fun prepareStartupProjections(): Int =
+        backfill.runOneBatch(STARTUP_SEED_BATCH_SIZE)
 
     override suspend fun write(cachedFile: CachedFile) {
         val dbSong =
@@ -192,6 +243,8 @@ private constructor(
     }
 
     companion object {
+        private const val STARTUP_SEED_BATCH_SIZE = 32
+
         /**
          * Create a new instance of [MutableDBCache] from the given [context].
          *

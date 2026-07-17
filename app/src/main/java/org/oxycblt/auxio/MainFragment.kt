@@ -248,20 +248,20 @@ class MainFragment :
         collectImmediately(playbackModel.openPanel.flow, ::handlePanel)
         collectImmediately(startupPanelCoordinator.routeEvaluation, ::handleStartupRoute)
 
-        collectImmediately(musicModel.startupReadinessState) {
-            startupPanelCoordinator.updateState(
-                playbackModel.song.value,
-                playbackModel.restoreOutcome.value,
-                it,
-            )
-        }
-        collectImmediately(playbackModel.restoreOutcome) {
-            startupPanelCoordinator.updateState(
-                playbackModel.song.value,
-                it,
-                musicModel.startupReadinessState.value,
-            )
-        }
+        collectImmediately(musicModel.startupReadinessState) { updateStartupPanelState() }
+        collectImmediately(musicModel.startupLibraryStatus) { updateStartupPanelState() }
+        collectImmediately(playbackModel.restoreOutcome) { updateStartupPanelState() }
+        collectImmediately(playbackModel.rawPlaybackMetadata) { updateStartupPanelState() }
+    }
+
+    private fun updateStartupPanelState() {
+        startupPanelCoordinator.updateState(
+            hasPlayableItem =
+                playbackModel.song.value != null || playbackModel.rawPlaybackMetadata.value != null,
+            outcome = playbackModel.restoreOutcome.value,
+            readiness = musicModel.startupReadinessState.value,
+            libraryStatus = musicModel.startupLibraryStatus.value,
+        )
     }
 
     override fun onStart() {
@@ -680,11 +680,7 @@ class MainFragment :
         } else {
             tryHideAllSheets()
         }
-        startupPanelCoordinator.updateState(
-            song,
-            playbackModel.restoreOutcome.value,
-            musicModel.startupReadinessState.value,
-        )
+        updateStartupPanelState()
     }
 
     private fun handleStartupRoute(
