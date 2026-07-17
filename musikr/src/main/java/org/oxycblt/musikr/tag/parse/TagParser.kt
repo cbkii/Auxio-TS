@@ -6,65 +6,110 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.tag.parse
 
+import org.oxycblt.musikr.library.LibraryDimensionPolicy
+import org.oxycblt.musikr.library.MetadataProfile
+import org.oxycblt.musikr.library.MetadataWorkPolicy
 import org.oxycblt.musikr.metadata.Metadata
 
 internal interface TagParser {
     fun parse(metadata: Metadata): ParsedTags
 
     companion object {
-        fun new(): TagParser = TagParserImpl
+        fun new(
+            profile: MetadataProfile = MetadataProfile.FULL,
+            dimensions: LibraryDimensionPolicy =
+                LibraryDimensionPolicy(true, true, true, true, true, true, true, true),
+        ): TagParser = ProfiledTagParser(MetadataWorkPolicy.forProfile(profile), dimensions)
     }
 }
 
-private data object TagParserImpl : TagParser {
+private class ProfiledTagParser(
+    private val work: MetadataWorkPolicy,
+    private val dimensions: LibraryDimensionPolicy,
+) : TagParser {
     override fun parse(metadata: Metadata): ParsedTags {
-        val compilation = metadata.isCompilation()
-        val artistMusicBrainzIds =
-            metadata.artistMusicBrainzIds() ?: metadata.composerMusicBrainzIds() ?: listOf()
-        val artistNames = metadata.artistNames() ?: metadata.composerNames() ?: listOf()
-        val artistSortNames = metadata.artistSortNames() ?: metadata.composerSortNames() ?: listOf()
+        val compilation = work.readReleaseTypes && metadata.isCompilation()
+        val rawArtistNames = metadata.artistNames() ?: metadata.composerNames() ?: emptyList()
+        val rawArtistSortNames =
+            metadata.artistSortNames() ?: metadata.composerSortNames() ?: emptyList()
+        val rawAlbumArtistNames = metadata.albumArtistNames().orEmpty()
+        val artistNames =
+            if (work.expandMultipleArtists) rawArtistNames else rawArtistNames.take(1)
+        val artistSortNames =
+            if (work.expandMultipleArtists) rawArtistSortNames else rawArtistSortNames.take(1)
+        val albumArtistNames =
+            if (work.expandMultipleArtists) rawAlbumArtistNames else rawAlbumArtistNames.take(1)
+
         return ParsedTags(
             durationMs = metadata.properties.durationMs,
-            replayGainTrackAdjustment = metadata.replayGainTrackAdjustment(),
-            replayGainAlbumAdjustment = metadata.replayGainAlbumAdjustment(),
-            musicBrainzId = metadata.musicBrainzId(),
+            replayGainTrackAdjustment =
+                metadata.replayGainTrackAdjustment().takeIf {
+                    work.readReplayGain && dimensions.replayGain
+                },
+            replayGainAlbumAdjustment =
+                metadata.replayGainAlbumAdjustment().takeIf {
+                    work.readReplayGain && dimensions.replayGain
+                },
+            musicBrainzId =
+                metadata.musicBrainzId().takeIf { work.readMusicBrainz && dimensions.musicBrainz },
             name = metadata.name(),
             sortName = metadata.sortName(),
             track = metadata.track(),
             disc = metadata.disc(),
             subtitle = metadata.subtitle(),
-            date = metadata.date(),
-            albumMusicBrainzId = metadata.albumMusicBrainzId(),
-            albumName = metadata.albumName(),
-            albumSortName = metadata.albumSortName(),
-            // Compilation flag implies a compilation release type in the case that
-            // we don't have any other release types
+            date = metadata.date().takeIf { work.readDetailedDates },
+            albumMusicBrainzId =
+                metadata.albumMusicBrainzId().takeIf {
+                    work.readMusicBrainz && dimensions.musicBrainz
+                },
+            albumName = metadata.albumName().takeIf { dimensions.albums },
+            albumSortName = metadata.albumSortName().takeIf { dimensions.albums },
             releaseTypes =
-                metadata.releaseTypes() ?: listOf("compilation").takeIf { compilation } ?: listOf(),
-            artistMusicBrainzIds = artistMusicBrainzIds,
-            artistNames = artistNames,
-            artistSortNames = artistSortNames,
-            albumArtistMusicBrainzIds = metadata.albumArtistMusicBrainzIds() ?: listOf(),
-            // Compilation pretty heavily implies various artists in the case that we don't
-            // have any other album artists
+                if (work.readReleaseTypes && dimensions.releaseTypes) {
+                    metadata.releaseTypes()
+                        ?: listOf("compilation").takeIf { compilation }
+                        ?: emptyList()
+                } else {
+                    emptyList()
+                },
+            artistMusicBrainzIds =
+                if (work.readMusicBrainz && dimensions.musicBrainz) {
+                    metadata.artistMusicBrainzIds()
+                        ?: metadata.composerMusicBrainzIds()
+                        ?: emptyList()
+                } else {
+                    emptyList()
+                },
+            artistNames = artistNames.takeIf { dimensions.artists }.orEmpty(),
+            artistSortNames = artistSortNames.takeIf { dimensions.artists }.orEmpty(),
+            albumArtistMusicBrainzIds =
+                if (work.readMusicBrainz && dimensions.musicBrainz) {
+                    metadata.albumArtistMusicBrainzIds().orEmpty()
+                } else {
+                    emptyList()
+                },
             albumArtistNames =
-                metadata.albumArtistNames()
-                    ?: listOf("Various Artists").takeIf { compilation }
-                    ?: listOf(),
-            albumArtistSortNames = metadata.albumArtistSortNames() ?: listOf(),
-            genreNames = metadata.genreNames() ?: listOf(),
+                if (dimensions.artists) {
+                    albumArtistNames.ifEmpty {
+                        listOf("Various Artists").takeIf { compilation }.orEmpty()
+                    }
+                } else {
+                    emptyList()
+                },
+            albumArtistSortNames =
+                if (dimensions.artists) {
+                    val values = metadata.albumArtistSortNames().orEmpty()
+                    if (work.expandMultipleArtists) values else values.take(1)
+                } else {
+                    emptyList()
+                },
+            genreNames =
+                if (work.readGenres && dimensions.genres) metadata.genreNames().orEmpty()
+                else emptyList(),
         )
     }
 }
