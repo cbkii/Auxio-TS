@@ -26,6 +26,8 @@ import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.library.ArtworkPolicy
 import org.oxycblt.musikr.library.LibraryDimensionPolicy
 import org.oxycblt.musikr.library.MetadataProfile
+import org.oxycblt.musikr.library.defaultArtworkPolicy
+import org.oxycblt.musikr.library.defaultDimensionPolicy
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
 import org.oxycblt.musikr.tag.interpret.Naming
 import org.oxycblt.musikr.tag.interpret.Separators
@@ -36,18 +38,8 @@ data class Config(
     val interpretation: Interpretation,
     val indexingWorkerCount: Int = 2,
     val metadataProfile: MetadataProfile = MetadataProfile.FULL,
-    val dimensionPolicy: LibraryDimensionPolicy =
-        LibraryDimensionPolicy(
-            genres = true,
-            playlists = true,
-            detailedCollaborators = true,
-            albumArtists = true,
-            releaseTypes = true,
-            advancedDates = true,
-            replayGain = true,
-            musicBrainz = true,
-        ),
-    val artworkPolicy: ArtworkPolicy = ArtworkPolicy.FULL_INDEXING,
+    val dimensionPolicy: LibraryDimensionPolicy = metadataProfile.defaultDimensionPolicy(),
+    val artworkPolicy: ArtworkPolicy = metadataProfile.defaultArtworkPolicy(),
     val scanPlan: IncrementalScanPlan? = null,
     /** Cover garbage collection is maintenance work, not part of ordinary incremental scans. */
     val cleanupCovers: Boolean = scanPlan == null,

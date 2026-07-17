@@ -420,7 +420,7 @@ constructor(
      * @param pagerPos The new position of the ViewPager2 instance.
      */
     fun synchronizeTabPosition(pagerPos: Int) {
-        val next = currentTabTypes[pagerPos]
+        val next = currentTabTypes.getOrNull(pagerPos) ?: return
         L.d("Updating current tab to $next")
         _currentTabType.value = next
         if (categorySubscriptions.activate(next)) {

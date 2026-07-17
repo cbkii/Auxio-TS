@@ -47,7 +47,6 @@ private constructor(
     override suspend fun read(file: File): CacheResult {
         val dbSong = readDao.selectSongByUri(file.uri)
         if (dbSong == null) {
-            incrementalStore.markSeen(file)
             return CacheResult.Miss(file)
         }
         val cachedFile = dbSong.toCachedFile(file)

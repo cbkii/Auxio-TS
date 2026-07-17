@@ -21,6 +21,8 @@ package org.oxycblt.auxio.music
 import org.oxycblt.musikr.library.ArtworkPolicy
 import org.oxycblt.musikr.library.LibraryDimensionPolicy
 import org.oxycblt.musikr.library.MetadataProfile
+import org.oxycblt.musikr.library.defaultArtworkPolicy
+import org.oxycblt.musikr.library.defaultDimensionPolicy
 
 /** Understandable, user-controlled resource policy for the first driving minute. */
 object DrivingStartupPolicy {
@@ -40,34 +42,10 @@ object DrivingStartupPolicy {
         }
     }
 
-    fun artworkPolicy(profile: MetadataProfile): ArtworkPolicy =
-        if (profile == MetadataProfile.LEAN) ArtworkPolicy.VISIBLE_ITEMS
-        else ArtworkPolicy.FULL_INDEXING
+    fun artworkPolicy(profile: MetadataProfile): ArtworkPolicy = profile.defaultArtworkPolicy()
 
     fun dimensions(profile: MetadataProfile): LibraryDimensionPolicy =
-        if (profile == MetadataProfile.LEAN) {
-            LibraryDimensionPolicy(
-                genres = false,
-                playlists = true,
-                detailedCollaborators = false,
-                albumArtists = false,
-                releaseTypes = false,
-                advancedDates = false,
-                replayGain = false,
-                musicBrainz = false,
-            )
-        } else {
-            LibraryDimensionPolicy(
-                genres = true,
-                playlists = true,
-                detailedCollaborators = true,
-                albumArtists = true,
-                releaseTypes = true,
-                advancedDates = true,
-                replayGain = true,
-                musicBrainz = true,
-            )
-        }
+        profile.defaultDimensionPolicy()
 
     fun shouldDeferFullEnrichment(playbackActive: Boolean): Boolean = playbackActive
 }

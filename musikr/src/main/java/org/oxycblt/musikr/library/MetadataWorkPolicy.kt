@@ -25,6 +25,38 @@ package org.oxycblt.musikr.library
  * sorting and a useful first row. Rich relationships, gain and artwork are separate restart-safe
  * enrichment work.
  */
+fun MetadataProfile.defaultDimensionPolicy(): LibraryDimensionPolicy =
+    when (this) {
+        MetadataProfile.LEAN ->
+            LibraryDimensionPolicy(
+                genres = false,
+                playlists = true,
+                detailedCollaborators = false,
+                albumArtists = false,
+                releaseTypes = false,
+                advancedDates = false,
+                replayGain = false,
+                musicBrainz = false,
+            )
+        MetadataProfile.FULL ->
+            LibraryDimensionPolicy(
+                genres = true,
+                playlists = true,
+                detailedCollaborators = true,
+                albumArtists = true,
+                releaseTypes = true,
+                advancedDates = true,
+                replayGain = true,
+                musicBrainz = true,
+            )
+    }
+
+fun MetadataProfile.defaultArtworkPolicy(): ArtworkPolicy =
+    when (this) {
+        MetadataProfile.LEAN -> ArtworkPolicy.VISIBLE_ITEMS
+        MetadataProfile.FULL -> ArtworkPolicy.FULL_INDEXING
+    }
+
 data class MetadataWorkPolicy(
     val useLeanPlatformExtractor: Boolean,
     val readMusicBrainz: Boolean,

@@ -531,13 +531,6 @@ constructor(
                 return@traceSuspend
             }
 
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                val twStorageSwitch = readTwStorageSwitch()
-                if (!twStorageSwitch.isNullOrEmpty()) {
-                    L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
-                }
-            }
-
             val playbackActive = worker.playbackActiveSnapshot()
             val resolvedProfile =
                 DrivingStartupPolicy.metadataProfile(

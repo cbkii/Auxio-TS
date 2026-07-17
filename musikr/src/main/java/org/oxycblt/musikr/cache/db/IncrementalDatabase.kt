@@ -57,8 +57,6 @@ internal data class SourceLedgerData(
             sourceType = snapshot.sourceType,
             rootUri = snapshot.rootUri,
             rootPath = snapshot.rootPath,
-            fingerprint = snapshot.fingerprint,
-            fingerprintStrength = snapshot.fingerprintStrength.name,
             available = snapshot.available,
             lastSeenMs = snapshot.observedAtMs,
         )

@@ -55,24 +55,33 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         kotlinx.coroutines.withContext(Dispatchers.IO) {
-            roots.distinctBy(SourceIdentity::forLocation).map { location ->
-                val root = location.uri.path?.let(::JavaFile)
-                val allowed = root != null && isAllowedRoot(root)
-                val accessible =
-                    allowed &&
-                        (root!!.isDirectory ||
-                            runCatching { listFilesSafe(root).isNotEmpty() }.getOrDefault(false))
+            roots.groupBy(SourceIdentity::forLocation).map { (sourceKey, locations) ->
+                val evaluated =
+                    locations.map { location ->
+                        val root = location.uri.path?.let(::JavaFile)
+                        val allowed = root != null && isAllowedRoot(root)
+                        val readable = allowed && listFilesSafe(requireNotNull(root)) != null
+                        RootSnapshot(location, root, readable)
+                    }
+                val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
                 SourceSnapshot(
-                    sourceKey = SourceIdentity.forLocation(location),
+                    sourceKey = sourceKey,
                     sourceType = SOURCE_TYPE,
-                    rootUri = location.uri.toString(),
-                    rootPath = root?.absolutePath,
-                    available = accessible,
-                    fingerprint = root?.takeIf { accessible }?.let(::boundedFingerprint),
-                    // FAT/direct trees expose no trustworthy generation token. A bounded sample
-                    // avoids needless warm scans, but is refreshed periodically by the ledger.
+                    // A source key may cover more than one configured folder. The first path is
+                    // display metadata only; the combined fingerprint below covers every root.
+                    rootUri = locations.firstOrNull()?.uri?.toString(),
+                    rootPath = evaluated.firstOrNull()?.root?.absolutePath,
+                    available = available,
+                    fingerprint =
+                        if (available) {
+                            combineRootFingerprints(
+                                evaluated.map { requireNotNull(it.root) to it.location }
+                            )
+                        } else {
+                            null
+                        },
                     fingerprintStrength =
-                        if (accessible) SourceFingerprintStrength.ADVISORY
+                        if (available) SourceFingerprintStrength.ADVISORY
                         else SourceFingerprintStrength.NONE,
                 )
             }
@@ -139,7 +148,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                 return@tryAsync
             }
             for (entry in entries) {
-                if (entry.name.startsWith(".") || entry.isSymlink) continue
+                if (entry.isSymlink) continue
                 val item = entry.javaFile
                 val newPath = relativePath.file(entry.name)
                 if (entry.isDirectory) {
@@ -176,6 +185,19 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             recursive.tryAwaitAll()
         }
 
+    private fun combineRootFingerprints(roots: List<Pair<JavaFile, Location.Opened>>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        roots
+            .sortedBy { it.first.absolutePath }
+            .forEach { (root, location) ->
+                digest.update(location.uri.toString().toByteArray(Charsets.UTF_8))
+                digest.update(0)
+                digest.update(boundedFingerprint(root).toByteArray(Charsets.UTF_8))
+                digest.update(0)
+            }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     private fun boundedFingerprint(root: JavaFile): String {
         val digest = MessageDigest.getInstance("SHA-256")
         fun update(value: String) = digest.update(value.toByteArray(Charsets.UTF_8))
@@ -184,7 +206,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         listFilesSafe(root)
             .orEmpty()
             .asSequence()
-            .filterNot { it.name.startsWith(".") || it.isSymlink }
+            .filterNot { it.isSymlink }
             .sortedBy { it.name.lowercase(Locale.ROOT) }
             .take(FINGERPRINT_ENTRY_LIMIT)
             .forEach {
@@ -222,6 +244,12 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         Log.w(TAG, "DirectFS root is unavailable or inaccessible: ${directory.path}")
         return null
     }
+
+    private data class RootSnapshot(
+        val location: Location.Opened,
+        val root: JavaFile?,
+        val readable: Boolean,
+    )
 
     private data class DirectEntry(
         val javaFile: JavaFile,

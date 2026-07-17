@@ -83,6 +83,20 @@ class IncrementalScanStoreTest {
     }
 
     @Test
+    fun `planning never advances committed fingerprint before commit`() = runBlocking {
+        val original = snapshot("v1")
+        val first = store.planScan(listOf(original), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", modifiedMs = 1L))
+        store.commitScan()
+
+        val candidate = original.copy(fingerprint = "v2")
+        assertTrue(store.planScan(listOf(candidate), false, MetadataProfile.LEAN, 1L).hasWork)
+        assertEquals("v1", db.incrementalDao().sourceLedger(original.sourceKey)?.fingerprint)
+        assertTrue(store.planScan(listOf(candidate), false, MetadataProfile.LEAN, 1L).hasWork)
+    }
+
+    @Test
     fun `changed file publishes a new generation atomically`() = runBlocking {
         val first = store.planScan(listOf(snapshot("v1")), false, MetadataProfile.LEAN, 1L)
         store.beginScan(first)

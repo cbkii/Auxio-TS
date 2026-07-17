@@ -18,6 +18,7 @@
 
 package org.oxycblt.musikr.library
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,6 +36,17 @@ class MetadataWorkPolicyTest {
         assertFalse(lean.readDetailedDates)
         assertFalse(lean.expandMultipleArtists)
         assertFalse(lean.extractArtwork)
+    }
+
+    @Test
+    fun `lean profile defaults cannot request full dimensions or artwork`() {
+        val dimensions = MetadataProfile.LEAN.defaultDimensionPolicy()
+        assertFalse(dimensions.genres)
+        assertFalse(dimensions.detailedCollaborators)
+        assertFalse(dimensions.albumArtists)
+        assertFalse(dimensions.replayGain)
+        assertFalse(dimensions.musicBrainz)
+        assertEquals(ArtworkPolicy.VISIBLE_ITEMS, MetadataProfile.LEAN.defaultArtworkPolicy())
     }
 
     @Test

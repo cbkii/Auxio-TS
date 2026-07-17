@@ -24,6 +24,7 @@ import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -199,11 +200,24 @@ private class MusikrImpl(
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
             LibraryResultImpl(config, library, commit?.failedSources.orEmpty())
         } catch (e: CancellationException) {
-            if (plan != null) incremental?.abortScan(e)
+            abortIncremental(plan, incremental, e)
             throw e
         } catch (e: Throwable) {
-            if (plan != null) incremental?.abortScan(e)
+            abortIncremental(plan, incremental, e)
             throw e
+        }
+    }
+
+    private suspend fun abortIncremental(
+        plan: org.oxycblt.musikr.cache.IncrementalScanPlan?,
+        incremental: IncrementalCache?,
+        original: Throwable,
+    ) {
+        if (plan == null || incremental == null) return
+        try {
+            withContext(NonCancellable) { incremental.abortScan(original) }
+        } catch (abortFailure: Throwable) {
+            original.addSuppressed(abortFailure)
         }
     }
 }
