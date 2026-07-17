@@ -6,20 +6,13 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.fs.mediastore
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore as AOSPMediaStore
 import androidx.core.database.getStringOrNull
 import kotlinx.coroutines.Deferred
@@ -65,50 +58,35 @@ private constructor(
             volumeNames().mapNotNull { volumeName ->
                 val volume = volumes.firstOrNull { it.mediaStoreName == volumeName }
                 val sourceKey = volume?.let(SourceIdentity::forVolume) ?: "media-store:$volumeName"
-                if (selectedSourceKeys != null && sourceKey !in selectedSourceKeys)
+                if (selectedSourceKeys != null && sourceKey !in selectedSourceKeys) {
                     return@mapNotNull null
+                }
                 val uri = contentUri(volumeName)
                 try {
-                    var count = 0L
-                    var maxId = 0L
-                    var maxModified = 0L
-                    context.contentResolverSafe.useQuery(
-                        uri,
-                        arrayOf(
-                            AOSPMediaStore.Audio.AudioColumns._ID,
-                            AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED,
-                        ),
-                        buildSelector().first,
-                        buildSelector().second,
-                    ) { cursor ->
-                        val idIndex =
-                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
-                        val modifiedIndex =
-                            cursor.getColumnIndexOrThrow(
-                                AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED
-                            )
-                        while (cursor.moveToNext()) {
-                            count++
-                            maxId = maxOf(maxId, cursor.getLong(idIndex))
-                            maxModified = maxOf(maxModified, cursor.getLong(modifiedIndex))
+                    val version =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            AOSPMediaStore.getVersion(context, volumeName)
+                        } else {
+                            AOSPMediaStore.getVersion(context)
                         }
-                    }
                     SourceSnapshot(
                         sourceKey = sourceKey,
                         sourceType = SOURCE_TYPE,
                         rootUri = uri.toString(),
                         rootPath = volume?.components?.unixString?.let { "/$it" },
-                        available = volume?.isAccessible() != false,
-                        fingerprint = "$count:$maxId:$maxModified:${query.hashCode()}",
-                        // API 29 offers no generation token for every configured query. The
-                        // aggregate is
-                        // cheap and useful, but periodic ledger refresh remains mandatory.
-                        fingerprintStrength = SourceFingerprintStrength.ADVISORY,
+                        available = version != null && volume?.isAccessible() != false,
+                        fingerprint = version?.let { "$it:${query.hashCode()}" },
+                        // Android 10 exposes an opaque volume version but not per-row generation
+                        // counters. ContentObserver invalidations cover live changes and the ledger
+                        // periodically refreshes advisory snapshots after process death.
+                        fingerprintStrength =
+                            if (version != null) SourceFingerprintStrength.ADVISORY
+                            else SourceFingerprintStrength.NONE,
                     )
                 } catch (e: Exception) {
                     android.util.Log.w(
                         TAG,
-                        "Unable to fingerprint MediaStore volume $volumeName",
+                        "Unable to read MediaStore version for volume $volumeName",
                         e,
                     )
                     SourceSnapshot(
@@ -246,7 +224,7 @@ private constructor(
 
     private fun volumeNames(): Set<String> {
         val names = linkedSetOf<String>()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching { names.addAll(AOSPMediaStore.getExternalVolumeNames(context)) }
                 .onFailure { android.util.Log.e(TAG, "Failed to enumerate external volumes", it) }
         }
@@ -255,7 +233,7 @@ private constructor(
     }
 
     private fun contentUri(volumeName: String): Uri =
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching { AOSPMediaStore.Audio.Media.getContentUri(volumeName) }
                 .getOrDefault(AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
         } else {
