@@ -511,15 +511,15 @@ constructor(
     }
 
     override suspend fun index(worker: IndexingWorker, withCache: Boolean) =
-        index(worker, withCache, metadataProfile = null)
+        indexWithProfile(worker, withCache, metadataProfile = null)
 
     override suspend fun index(
         worker: IndexingWorker,
         withCache: Boolean,
         metadataProfile: MetadataProfile,
-    ) = index(worker, withCache, metadataProfile as MetadataProfile?)
+    ) = indexWithProfile(worker, withCache, metadataProfile)
 
-    private suspend fun index(
+    private suspend fun indexWithProfile(
         worker: IndexingWorker,
         withCache: Boolean,
         metadataProfile: MetadataProfile?,
