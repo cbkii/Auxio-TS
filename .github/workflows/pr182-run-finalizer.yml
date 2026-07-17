@@ -126,6 +126,9 @@ jobs:
               "    '        override val startupReadinessState: StartupReadinessState =\\n            StartupReadinessState.ProcessVisible\\n',\n"
               "    '        override val startupReadinessState: StartupReadinessState =\\n            StartupReadinessState.ProcessVisible\\n        override val startupLibraryStatus: StartupLibraryStatus = StartupLibraryStatus.Usable\\n',\n"
               ")\n"
+              "path = 'app/src/test/java/org/oxycblt/auxio/music/StartupReadinessControllerTest.kt'\n"
+              "replace_once(path, 'import org.junit.Test\\n', 'import org.junit.Test\\nimport org.junit.runner.RunWith\\nimport org.robolectric.RobolectricTestRunner\\nimport org.robolectric.annotation.Config\\n')\n"
+              "replace_once(path, 'class StartupReadinessControllerTest {\\n', '@RunWith(RobolectricTestRunner::class)\\n@Config(sdk = [29])\\nclass StartupReadinessControllerTest {\\n')\n"
           )
           Path('/tmp/pr182-finalize.py').write_text(script, encoding='utf-8')
           PY
