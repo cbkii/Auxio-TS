@@ -45,6 +45,7 @@ data class IncrementalScanCommit(
     val committedSources: Set<String>,
     val reusedSources: Set<String>,
     val unavailableSources: Set<String>,
+    val failedSources: Map<String, String>,
     val changedRows: Int,
     val removedRows: Int,
     val metadataProfile: MetadataProfile,
@@ -74,6 +75,9 @@ interface IncrementalCache {
 
     /** Stage changed metadata; returns false when no incremental scan is active. */
     suspend fun stage(cachedFile: CachedFile): Boolean
+
+    /** Mark one source failed while allowing sibling source generations to commit. */
+    suspend fun markSourceFailed(sourceKey: String, detail: String)
 
     suspend fun commitScan(): IncrementalScanCommit
 

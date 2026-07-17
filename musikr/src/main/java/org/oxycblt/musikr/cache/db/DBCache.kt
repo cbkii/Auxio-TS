@@ -19,6 +19,7 @@
 package org.oxycblt.musikr.cache.db
 
 import android.content.Context
+import kotlinx.coroutines.flow.toList
 import org.oxycblt.musikr.cache.Audio
 import org.oxycblt.musikr.cache.Cache
 import org.oxycblt.musikr.cache.CacheResult
@@ -59,16 +60,9 @@ private constructor(
     }
 
     override suspend fun snapshot(): List<CachedFile> {
-        // Explicit compatibility bridge for rich screens not yet migrated to projections.
-        val result = mutableListOf<CachedFile>()
-        var offset = 0
-        while (true) {
-            val page = readDao.selectSongsPage(SNAPSHOT_PAGE_SIZE, offset)
-            if (page.isEmpty()) break
-            result += page.map { it.toCachedFile(it.toSyntheticFile()) }
-            offset += page.size
-        }
-        return result
+        // Explicit compatibility bridge for rich screens not yet migrated to projections. The
+        // source ledger filters unavailable and uncommitted generations before object hydration.
+        return incrementalStore.compatibilityCachedFiles().toList()
     }
 
     override suspend fun firstSongs(limit: Int, offset: Int): List<StartupSongRow> =
@@ -166,7 +160,6 @@ private constructor(
     }
 
     companion object {
-        private const val SNAPSHOT_PAGE_SIZE = 256
         private const val MAX_STARTUP_LIMIT = 100
 
         fun from(context: Context) = from(CacheDatabase.from(context))

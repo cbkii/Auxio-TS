@@ -23,6 +23,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore as AOSPMediaStore
 import androidx.core.database.getStringOrNull
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -59,6 +60,7 @@ private constructor(
     private val selectedSourceKeys: Set<String>? = null,
 ) : SourceAwareFS {
     private val pathInterpreterFactory = MediaStorePathInterpreter.Factory.from(volumeManager)
+    private val sourceFailures = ConcurrentHashMap<String, String>()
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         withContext(Dispatchers.IO) {
@@ -113,6 +115,9 @@ private constructor(
     override fun selectSources(sourceKeys: Set<String>): FS =
         MediaStore(context, volumeManager, query, sourceKeys)
 
+    override fun drainSourceFailures(): Map<String, String> =
+        sourceFailures.toMap().also { sourceFailures.clear() }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
@@ -120,9 +125,6 @@ private constructor(
             val (selector, args) = buildSelector()
             val seenIdentities = mutableSetOf<String>()
             val volumes = recognizedVolumes()
-            var anyVolumeSucceeded = false
-            var lastVolumeError: Exception? = null
-
             for (volumeName in volumeNames()) {
                 val volume = volumes.firstOrNull { it.mediaStoreName == volumeName }
                 val sourceKey = volume?.let(SourceIdentity::forVolume) ?: "media-store:$volumeName"
@@ -179,13 +181,11 @@ private constructor(
                             )
                         }
                     }
-                    anyVolumeSucceeded = true
                 } catch (e: Exception) {
-                    lastVolumeError = e
                     android.util.Log.e(TAG, "Failed to query volume: $volumeName", e)
+                    sourceFailures[sourceKey] = e.message ?: e.javaClass.simpleName
                 }
             }
-            if (!anyVolumeSucceeded) lastVolumeError?.let { throw it }
         }
     }
 

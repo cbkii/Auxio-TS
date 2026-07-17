@@ -51,6 +51,9 @@ interface SourceAwareFS : FS {
 
     /** Return an equivalent file system restricted to [sourceKeys]. */
     fun selectSources(sourceKeys: Set<String>): FS
+
+    /** Drain source-local failures collected by the most recent exploration. */
+    fun drainSourceFailures(): Map<String, String> = emptyMap()
 }
 
 /** Stable source-key policy shared by file-system adapters and the incremental cache. */

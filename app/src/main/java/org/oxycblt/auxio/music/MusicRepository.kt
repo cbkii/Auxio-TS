@@ -643,9 +643,22 @@ constructor(
                 }
 
                 musicSettings.revision = newRevision
-                emitLibrary(result.library)
+                val publishedLibrary =
+                    if (result.failedSources.isEmpty()) {
+                        result.library
+                    } else {
+                        L.w(
+                            "Source-local failures preserved prior generations: " +
+                                result.failedSources.keys
+                        )
+                        Musikr.loadCached(
+                            context,
+                            config.copy(scanPlan = null, cleanupCovers = false),
+                        )
+                    }
+                emitLibrary(publishedLibrary)
                 result.cleanup()
-                val isEmpty = result.library.songs.isEmpty()
+                val isEmpty = publishedLibrary.songs.isEmpty()
                 musicSettings.libraryState =
                     if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
                 musicSettings.lastScanFailed = false

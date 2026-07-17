@@ -333,6 +333,13 @@ internal interface IncrementalScanDao {
         offset: Int,
     ): List<CommittedCachedRow>
 
+    @Query(
+        "SELECT * FROM (" +
+            "SELECT cache.*, song.sourceKey AS sourceKey, song.displayPath AS committedDisplayPath, song.sizeBytes AS committedSizeBytes, source.rootUri AS committedSourceUri, source.rootPath AS committedRootPath FROM CachedFileData cache INNER JOIN IndexedSongData song ON song.uri = cache.uri INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 " +
+            "UNION ALL SELECT cache.*, 'legacy:' || cache.uri AS sourceKey, cache.uri AS committedDisplayPath, 0 AS committedSizeBytes, NULL AS committedSourceUri, NULL AS committedRootPath FROM CachedFileData cache WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = cache.uri)) rows ORDER BY uri LIMIT :limit OFFSET :offset"
+    )
+    suspend fun compatibilityCachedPage(limit: Int, offset: Int): List<CommittedCachedRow>
+
     @Query("SELECT * FROM IndexedUriStateData WHERE sourceKey = :sourceKey AND uri = :uri LIMIT 1")
     suspend fun uriState(sourceKey: String, uri: String): IndexedUriStateData?
 

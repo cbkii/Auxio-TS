@@ -24,6 +24,7 @@ import android.webkit.MimeTypeMap
 import java.io.File as JavaFile
 import java.security.MessageDigest
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -50,6 +51,8 @@ import org.oxycblt.musikr.util.tryAwaitAll
 
 class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
     SourceAwareFS {
+    private val sourceFailures = ConcurrentHashMap<String, String>()
+
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         kotlinx.coroutines.withContext(Dispatchers.IO) {
             roots.distinctBy(SourceIdentity::forLocation).map { location ->
@@ -78,20 +81,35 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
     override fun selectSources(sourceKeys: Set<String>): FS =
         DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys }, rootGate)
 
+    override fun drainSourceFailures(): Map<String, String> =
+        sourceFailures.toMap().also { sourceFailures.clear() }
+
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
             roots
                 .map { location ->
+                    val sourceKey = SourceIdentity.forLocation(location)
                     if (location.uri.scheme != "file") {
-                        Log.w(TAG, "Skipping non-file DirectFS source: ${location.uri}")
+                        val detail = "Unsupported DirectFS URI ${location.uri}"
+                        Log.w(TAG, detail)
+                        sourceFailures[sourceKey] = detail
                         return@map CompletableDeferred(Result.success(Unit))
                     }
                     val root = location.uri.path?.let(::JavaFile)
                     if (root == null || !isAllowedRoot(root)) {
-                        Log.w(TAG, "Skipping unsafe DirectFS source: ${location.uri}")
+                        val detail = "Unsafe or missing DirectFS source ${location.uri}"
+                        Log.w(TAG, detail)
+                        sourceFailures[sourceKey] = detail
                         return@map CompletableDeferred(Result.success(Unit))
                     }
-                    exploreDirectoryImpl(root, location.path, null, files, 0)
+                    tryAsync(Dispatchers.IO) {
+                        val result =
+                            exploreDirectoryImpl(root, location.path, null, files, 0, sourceKey)
+                                .await()
+                        result.exceptionOrNull()?.let { error ->
+                            sourceFailures[sourceKey] = error.message ?: error.javaClass.simpleName
+                        }
+                    }
                 }
                 .tryAwaitAll()
         }
@@ -105,19 +123,35 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         parent: Deferred<Directory>?,
         files: Channel<File>,
         depth: Int,
+        sourceKey: String,
     ): Deferred<Result<Unit>> =
         tryAsync(Dispatchers.IO) {
             if (depth > MAX_DEPTH || !isAllowedRoot(directory)) return@tryAsync
             val directoryDeferred = CompletableDeferred<Directory>()
             val children = mutableListOf<File>()
             val recursive = mutableListOf<Deferred<Result<Unit>>>()
-            for (entry in listFilesSafe(directory)) {
+            val entries = listFilesSafe(directory)
+            if (entries == null) {
+                sourceFailures.putIfAbsent(
+                    sourceKey,
+                    "DirectFS source became unavailable at ${directory.path}",
+                )
+                return@tryAsync
+            }
+            for (entry in entries) {
                 if (entry.name.startsWith(".") || entry.isSymlink) continue
                 val item = entry.javaFile
                 val newPath = relativePath.file(entry.name)
                 if (entry.isDirectory) {
                     recursive.add(
-                        exploreDirectoryImpl(item, newPath, directoryDeferred, files, depth + 1)
+                        exploreDirectoryImpl(
+                            item,
+                            newPath,
+                            directoryDeferred,
+                            files,
+                            depth + 1,
+                            sourceKey,
+                        )
                     )
                 } else {
                     val file =
@@ -148,6 +182,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         update(root.absolutePath)
         update("|${root.lastModified()}|${root.length()}|")
         listFilesSafe(root)
+            .orEmpty()
             .asSequence()
             .filterNot { it.name.startsWith(".") || it.isSymlink }
             .sortedBy { it.name.lowercase(Locale.ROOT) }
@@ -160,7 +195,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun listFilesSafe(directory: JavaFile): List<DirectEntry> {
+    private fun listFilesSafe(directory: JavaFile): List<DirectEntry>? {
         val local = directory.listFiles()
         if (local != null) {
             return local.map {
@@ -185,7 +220,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             }
         if (rootList != null) return rootList
         Log.w(TAG, "DirectFS root is unavailable or inaccessible: ${directory.path}")
-        return emptyList()
+        return null
     }
 
     private data class DirectEntry(

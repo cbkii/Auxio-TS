@@ -25,6 +25,7 @@ import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore as AOSPMediaStore
 import androidx.annotation.RequiresApi
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -59,6 +60,8 @@ private constructor(
     private val contentResolver: ContentResolver,
     private val query: Query,
 ) : SourceAwareFS {
+    private val sourceFailures = ConcurrentHashMap<String, String>()
+
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         withContext(Dispatchers.IO) {
             query.source.distinctBy(SourceIdentity::forLocation).map { location ->
@@ -116,18 +119,29 @@ private constructor(
             ),
         )
 
+    override fun drainSourceFailures(): Map<String, String> =
+        sourceFailures.toMap().also { sourceFailures.clear() }
+
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
             query.source
                 .map { location ->
-                    exploreDirectoryImpl(
-                        location.uri,
-                        DocumentsContract.getTreeDocumentId(location.uri),
-                        location.path,
-                        null,
-                        query.exclude.mapTo(mutableSetOf()) { it.path },
-                        files,
-                    )
+                    val sourceKey = SourceIdentity.forLocation(location)
+                    tryAsync(Dispatchers.IO) {
+                        val result =
+                            exploreDirectoryImpl(
+                                    location.uri,
+                                    DocumentsContract.getTreeDocumentId(location.uri),
+                                    location.path,
+                                    null,
+                                    query.exclude.mapTo(mutableSetOf()) { it.path },
+                                    files,
+                                )
+                                .await()
+                        result.exceptionOrNull()?.let { error ->
+                            sourceFailures[sourceKey] = error.message ?: error.javaClass.simpleName
+                        }
+                    }
                 }
                 .tryAwaitAll()
         }

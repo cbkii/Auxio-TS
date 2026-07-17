@@ -33,6 +33,7 @@ import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.RootGate
+import org.oxycblt.musikr.fs.SourceAwareFS
 import org.oxycblt.musikr.library.MetadataProfile
 import org.oxycblt.musikr.pipeline.shim.FilteredFS
 import org.oxycblt.musikr.playlist.m3u.M3U
@@ -87,6 +88,15 @@ private class ExploreStepImpl(
             }
         val files = Channel<File>(PipelinePolicy.BUFFER_CAPACITY)
         val filesTask = filteredFs.explore(files)
+        val sourceFailureTask =
+            scope.tryAsync(Dispatchers.IO) {
+                filesTask.await().getOrThrow()
+                val incremental = storage.cache as? IncrementalCache
+                val failures = (fs as? SourceAwareFS)?.drainSourceFailures().orEmpty()
+                for ((sourceKey, detail) in failures) {
+                    incremental?.markSourceFailed(sourceKey, detail)
+                }
+            }
 
         val classified = Channel<Classified>(PipelinePolicy.BUFFER_CAPACITY)
         val classifiedTask =
@@ -131,7 +141,14 @@ private class ExploreStepImpl(
                 for (playlist in playlists) it.send(playlist)
             }
 
-        return scope.merge(filesTask, classifiedTask, exploredTask, playlistsTask, mergeTask)
+        return scope.merge(
+            filesTask,
+            sourceFailureTask,
+            classifiedTask,
+            exploredTask,
+            playlistsTask,
+            mergeTask,
+        )
     }
 
     private suspend fun CachedFile.toExplored(): Explored {

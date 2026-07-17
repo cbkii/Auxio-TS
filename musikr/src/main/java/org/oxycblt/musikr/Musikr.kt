@@ -114,6 +114,9 @@ interface Musikr {
 interface LibraryResult {
     val library: MutableLibrary
 
+    val failedSources: Map<String, String>
+        get() = emptyMap()
+
     /** Delete only resources proven expired by the successfully published generation. */
     suspend fun cleanup()
 }
@@ -194,7 +197,7 @@ private class MusikrImpl(
                 )
             }
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
-            LibraryResultImpl(config, library)
+            LibraryResultImpl(config, library, commit?.failedSources.orEmpty())
         } catch (e: CancellationException) {
             if (plan != null) incremental?.abortScan(e)
             throw e
@@ -205,8 +208,11 @@ private class MusikrImpl(
     }
 }
 
-private class LibraryResultImpl(private val config: Config, override val library: MutableLibrary) :
-    LibraryResult {
+private class LibraryResultImpl(
+    private val config: Config,
+    override val library: MutableLibrary,
+    override val failedSources: Map<String, String>,
+) : LibraryResult {
     override suspend fun cleanup() {
         if (config.cleanupCovers) {
             config.storage.covers.cleanup(library.songs.mapNotNull { it.cover })

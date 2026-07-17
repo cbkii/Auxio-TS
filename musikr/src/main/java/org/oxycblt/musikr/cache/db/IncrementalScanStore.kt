@@ -21,6 +21,7 @@ package org.oxycblt.musikr.cache.db
 import android.net.Uri
 import androidx.room.withTransaction
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -50,6 +51,7 @@ internal class IncrementalScanStore(
     private val dao: IncrementalScanDao,
 ) : IncrementalCache {
     @Volatile private var currentPlan: IncrementalScanPlan? = null
+    private val sourceFailures = ConcurrentHashMap<String, String>()
 
     override fun activePlan(): IncrementalScanPlan? = currentPlan
 
@@ -144,6 +146,7 @@ internal class IncrementalScanStore(
 
     override suspend fun beginScan(plan: IncrementalScanPlan) {
         check(currentPlan == null) { "An incremental scan is already active" }
+        sourceFailures.clear()
         val now = System.currentTimeMillis()
         db.withTransaction {
             for (snapshot in plan.scanSources) {
@@ -295,6 +298,24 @@ internal class IncrementalScanStore(
         }
     }
 
+    internal fun compatibilityCachedFiles(): Flow<CachedFile> = flow {
+        var offset = 0
+        while (true) {
+            val page = dao.compatibilityCachedPage(PAGE_SIZE, offset)
+            if (page.isEmpty()) break
+            for (row in page) emit(row.toCachedFile())
+            if (page.size < PAGE_SIZE) break
+            offset += page.size
+        }
+    }
+
+    override suspend fun markSourceFailed(sourceKey: String, detail: String) {
+        val plan = currentPlan ?: return
+        if (sourceKey in plan.scanSourceKeys) {
+            sourceFailures[sourceKey] = detail.take(MAX_ERROR_LENGTH)
+        }
+    }
+
     override suspend fun commitScan(): IncrementalScanCommit {
         val plan = requireNotNull(currentPlan) { "No incremental scan is active" }
         var changedRows = 0
@@ -306,6 +327,22 @@ internal class IncrementalScanStore(
                 for (snapshot in plan.scanSources) {
                     val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
                     val generation = requireNotNull(ledger.pendingGeneration)
+                    val sourceFailure = sourceFailures[snapshot.sourceKey]
+                    if (sourceFailure != null) {
+                        dao.deletePendingForSource(snapshot.sourceKey)
+                        dao.deleteSeenForSource(snapshot.sourceKey)
+                        dao.upsertSourceLedger(
+                            ledger.copy(pendingGeneration = null, incomplete = true)
+                        )
+                        dao.completeGeneration(
+                            plan.scanId,
+                            snapshot.sourceKey,
+                            STATE_FAILED,
+                            System.currentTimeMillis(),
+                            sourceFailure,
+                        )
+                        continue
+                    }
                     val sourceChangedRows = dao.pendingCount(plan.scanId, snapshot.sourceKey)
                     var offset = 0
                     while (true) {
@@ -388,13 +425,18 @@ internal class IncrementalScanStore(
             }
             committedSuccessfully = true
         } finally {
-            if (committedSuccessfully) currentPlan = null
+            if (committedSuccessfully) {
+                currentPlan = null
+            }
         }
+        val failed = sourceFailures.toMap()
+        sourceFailures.clear()
         return IncrementalScanCommit(
             scanId = plan.scanId,
             committedSources = committed,
             reusedSources = plan.reuseSourceKeys,
             unavailableSources = plan.unavailableSourceKeys,
+            failedSources = failed,
             changedRows = changedRows,
             removedRows = removedRows,
             metadataProfile = plan.metadataProfile,
@@ -421,6 +463,7 @@ internal class IncrementalScanStore(
             }
         } finally {
             currentPlan = null
+            sourceFailures.clear()
         }
     }
 

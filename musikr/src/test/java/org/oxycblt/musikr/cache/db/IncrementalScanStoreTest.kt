@@ -23,6 +23,7 @@ import android.net.Uri
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -156,6 +157,45 @@ class IncrementalScanStoreTest {
         assertEquals(setOf(mounted.sourceKey), plan.unavailableSourceKeys)
         assertEquals(1, db.readDao().selectAllSongs().size)
         assertFalse(db.incrementalDao().sourceLedger(mounted.sourceKey)?.available ?: true)
+        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
+        assertEquals(1, db.readDao().selectAllSongs().size)
+    }
+
+    @Test
+    fun `one source failure preserves its prior generation while sibling commits`() = runBlocking {
+        val usb0 = snapshot("usb0-v1", "/storage/usbdisk0")
+        val usb1 = snapshot("usb1-v1", "/storage/usbdisk1")
+        val first = store.planScan(listOf(usb0, usb1), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L, "/storage/usbdisk0"))
+        store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
+        store.commitScan()
+
+        val next =
+            store.planScan(
+                listOf(usb0.copy(fingerprint = "usb0-v2"), usb1.copy(fingerprint = "usb1-v2")),
+                false,
+                MetadataProfile.LEAN,
+                1L,
+            )
+        store.beginScan(next)
+        store.stage(cachedFile("alpha.mp3", 2L, "/storage/usbdisk0"))
+        store.stage(cachedFile("beta.mp3", 2L, "/storage/usbdisk1"))
+        store.markSourceFailed(usb0.sourceKey, "removed during scan")
+        val commit = store.commitScan()
+
+        assertEquals(setOf(usb1.sourceKey), commit.committedSources)
+        assertEquals(setOf(usb0.sourceKey), commit.failedSources.keys)
+        assertEquals(
+            1L,
+            db.readDao()
+                .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+                ?.modifiedMs,
+        )
+        assertEquals(
+            2L,
+            db.readDao().selectSongByUri(Uri.parse("file:///storage/usbdisk1/beta.mp3"))?.modifiedMs,
+        )
     }
 
     @Test
