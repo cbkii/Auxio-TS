@@ -173,13 +173,21 @@ jobs:
               :musikr:testDebugUnitTest \
               :app:lintStandardDebug \
               :app:assembleStandardDebug \
-              :app:assembleTopwayTwMusicDebug \
-              :app:assembleTopwayTwMediaDebug \
               --stacktrace
             gradle_rc=$?
             if ((gradle_rc != 0)); then
               exit "${gradle_rc}"
             fi
+            bash ./scripts/ci-gradle.sh \
+              :app:assembleTopwayTwMusicDebug \
+              --max-workers=1 \
+              -Dkotlin.compiler.execution.strategy=in-process \
+              --stacktrace || exit $?
+            bash ./scripts/ci-gradle.sh \
+              :app:assembleTopwayTwMediaDebug \
+              --max-workers=1 \
+              -Dkotlin.compiler.execution.strategy=in-process \
+              --stacktrace || exit $?
             bash ./scripts/check-headunit-compat-safety.sh || exit $?
             bash ./scripts/check-ts18-apk-reference-contracts.sh || exit $?
             bash ./scripts/check-dofun-topway-compat.sh || exit $?
