@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.fs.mediastore
@@ -51,62 +59,70 @@ private constructor(
 ) : SourceAwareFS {
     private val pathInterpreterFactory = MediaStorePathInterpreter.Factory.from(volumeManager)
 
-    override suspend fun sourceSnapshots(): List<SourceSnapshot> = withContext(Dispatchers.IO) {
-        val volumes = recognizedVolumes()
-        volumeNames().mapNotNull { volumeName ->
-            val volume = volumes.firstOrNull { it.mediaStoreName == volumeName }
-            val sourceKey = volume?.let(SourceIdentity::forVolume) ?: "media-store:$volumeName"
-            if (selectedSourceKeys != null && sourceKey !in selectedSourceKeys) return@mapNotNull null
-            val uri = contentUri(volumeName)
-            try {
-                var count = 0L
-                var maxId = 0L
-                var maxModified = 0L
-                context.contentResolverSafe.useQuery(
-                    uri,
-                    arrayOf(
-                        AOSPMediaStore.Audio.AudioColumns._ID,
-                        AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED,
-                    ),
-                    buildSelector().first,
-                    buildSelector().second,
-                ) { cursor ->
-                    val idIndex = cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
-                    val modifiedIndex =
-                        cursor.getColumnIndexOrThrow(
-                            AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED
-                        )
-                    while (cursor.moveToNext()) {
-                        count++
-                        maxId = maxOf(maxId, cursor.getLong(idIndex))
-                        maxModified = maxOf(maxModified, cursor.getLong(modifiedIndex))
+    override suspend fun sourceSnapshots(): List<SourceSnapshot> =
+        withContext(Dispatchers.IO) {
+            val volumes = recognizedVolumes()
+            volumeNames().mapNotNull { volumeName ->
+                val volume = volumes.firstOrNull { it.mediaStoreName == volumeName }
+                val sourceKey = volume?.let(SourceIdentity::forVolume) ?: "media-store:$volumeName"
+                if (selectedSourceKeys != null && sourceKey !in selectedSourceKeys)
+                    return@mapNotNull null
+                val uri = contentUri(volumeName)
+                try {
+                    var count = 0L
+                    var maxId = 0L
+                    var maxModified = 0L
+                    context.contentResolverSafe.useQuery(
+                        uri,
+                        arrayOf(
+                            AOSPMediaStore.Audio.AudioColumns._ID,
+                            AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED,
+                        ),
+                        buildSelector().first,
+                        buildSelector().second,
+                    ) { cursor ->
+                        val idIndex =
+                            cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
+                        val modifiedIndex =
+                            cursor.getColumnIndexOrThrow(
+                                AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED
+                            )
+                        while (cursor.moveToNext()) {
+                            count++
+                            maxId = maxOf(maxId, cursor.getLong(idIndex))
+                            maxModified = maxOf(maxModified, cursor.getLong(modifiedIndex))
+                        }
                     }
+                    SourceSnapshot(
+                        sourceKey = sourceKey,
+                        sourceType = SOURCE_TYPE,
+                        rootUri = uri.toString(),
+                        rootPath = volume?.components?.unixString?.let { "/$it" },
+                        available = volume?.isAccessible() != false,
+                        fingerprint = "$count:$maxId:$maxModified:${query.hashCode()}",
+                        // API 29 offers no generation token for every configured query. The
+                        // aggregate is
+                        // cheap and useful, but periodic ledger refresh remains mandatory.
+                        fingerprintStrength = SourceFingerprintStrength.ADVISORY,
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w(
+                        TAG,
+                        "Unable to fingerprint MediaStore volume $volumeName",
+                        e,
+                    )
+                    SourceSnapshot(
+                        sourceKey = sourceKey,
+                        sourceType = SOURCE_TYPE,
+                        rootUri = uri.toString(),
+                        rootPath = volume?.components?.unixString?.let { "/$it" },
+                        available = false,
+                        fingerprint = null,
+                        fingerprintStrength = SourceFingerprintStrength.NONE,
+                    )
                 }
-                SourceSnapshot(
-                    sourceKey = sourceKey,
-                    sourceType = SOURCE_TYPE,
-                    rootUri = uri.toString(),
-                    rootPath = volume?.components?.unixString?.let { "/$it" },
-                    available = volume?.isAccessible() != false,
-                    fingerprint = "$count:$maxId:$maxModified:${query.hashCode()}",
-                    // API 29 offers no generation token for every configured query. The aggregate is
-                    // cheap and useful, but periodic ledger refresh remains mandatory.
-                    fingerprintStrength = SourceFingerprintStrength.ADVISORY,
-                )
-            } catch (e: Exception) {
-                android.util.Log.w(TAG, "Unable to fingerprint MediaStore volume $volumeName", e)
-                SourceSnapshot(
-                    sourceKey = sourceKey,
-                    sourceType = SOURCE_TYPE,
-                    rootUri = uri.toString(),
-                    rootPath = volume?.components?.unixString?.let { "/$it" },
-                    available = false,
-                    fingerprint = null,
-                    fingerprintStrength = SourceFingerprintStrength.NONE,
-                )
             }
         }
-    }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
         MediaStore(context, volumeManager, query, sourceKeys)
@@ -127,12 +143,8 @@ private constructor(
                 if (selectedSourceKeys != null && sourceKey !in selectedSourceKeys) continue
                 val contentUri = contentUri(volumeName)
                 try {
-                    context.contentResolverSafe.useQuery(
-                        contentUri,
-                        projection,
-                        selector,
-                        args,
-                    ) { cursor ->
+                    context.contentResolverSafe.useQuery(contentUri, projection, selector, args) {
+                        cursor ->
                         val pathInterpreter = pathInterpreterFactory.wrap(cursor)
                         val idIndex =
                             cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)

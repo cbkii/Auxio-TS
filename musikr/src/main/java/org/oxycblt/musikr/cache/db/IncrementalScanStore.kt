@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.cache.db
@@ -138,6 +146,8 @@ internal class IncrementalScanStore(
         db.withTransaction {
             for (snapshot in plan.scanSources) {
                 val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
+                dao.deletePendingForSource(snapshot.sourceKey)
+                dao.deleteSeenForSource(snapshot.sourceKey)
                 val generation = (ledger.lastCommittedGeneration ?: 0L) + 1L
                 dao.upsertSourceLedger(
                     ledger.copy(
@@ -171,8 +181,7 @@ internal class IncrementalScanStore(
         val fileName = file.path.name ?: file.uri.lastPathSegment ?: file.uri.toString()
         val profile =
             dao.uriState(sourceKey, file.uri.toString())?.metadataProfile
-                ?: if (cachedFile != null) MetadataProfile.FULL.name
-                else plan.metadataProfile.name
+                ?: if (cachedFile != null) MetadataProfile.FULL.name else plan.metadataProfile.name
         dao.upsertSeen(
             ScanSeenData(
                 scanId = plan.scanId,
@@ -206,7 +215,8 @@ internal class IncrementalScanStore(
         val sourceKey = SourceIdentity.forFile(file)
         if (sourceKey !in plan.scanSourceKeys) return true
         val state = dao.uriState(sourceKey, file.uri.toString()) ?: return true
-        val cachedProfile = runCatching { MetadataProfile.valueOf(state.metadataProfile) }.getOrNull()
+        val cachedProfile =
+            runCatching { MetadataProfile.valueOf(state.metadataProfile) }.getOrNull()
         return cachedProfile != null &&
             cachedProfile.incrementalRank >= plan.metadataProfile.incrementalRank
     }
@@ -272,11 +282,13 @@ internal class IncrementalScanStore(
         var changedRows = 0
         var removedRows = 0
         val committed = linkedSetOf<String>()
+        var committedSuccessfully = false
         try {
             db.withTransaction {
                 for (snapshot in plan.scanSources) {
                     val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
                     val generation = requireNotNull(ledger.pendingGeneration)
+                    val sourceChangedRows = dao.pendingCount(plan.scanId, snapshot.sourceKey)
                     var offset = 0
                     while (true) {
                         val page =
@@ -325,7 +337,15 @@ internal class IncrementalScanStore(
                             lastSuccessfulScanMs = completedAt,
                             configurationRevision = plan.configurationRevision,
                             committedInvalidationVersion = ledger.invalidationVersion,
-                            committedProfile = plan.metadataProfile.name,
+                            committedProfile =
+                                if (
+                                    sourceChangedRows == 0 &&
+                                        ledger.committedProfile == MetadataProfile.FULL.name
+                                ) {
+                                    MetadataProfile.FULL.name
+                                } else {
+                                    plan.metadataProfile.name
+                                },
                             enrichmentRevision =
                                 if (plan.metadataProfile == MetadataProfile.FULL) {
                                     FULL_ENRICHMENT_REVISION
@@ -348,8 +368,9 @@ internal class IncrementalScanStore(
                 dao.deletePending(plan.scanId)
                 dao.deleteSeen(plan.scanId)
             }
+            committedSuccessfully = true
         } finally {
-            currentPlan = null
+            if (committedSuccessfully) currentPlan = null
         }
         return IncrementalScanCommit(
             scanId = plan.scanId,
@@ -398,8 +419,7 @@ internal class IncrementalScanStore(
                 ),
                 committedDisplayPath
                     ?.substringAfter(committedRootPath.orEmpty())
-                    ?.let(Components::parseUnix)
-                    ?: Components.root(),
+                    ?.let(Components::parseUnix) ?: Components.root(),
             )
         val file =
             File(

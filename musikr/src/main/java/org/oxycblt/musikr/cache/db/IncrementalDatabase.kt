@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.cache.db
@@ -307,8 +315,14 @@ internal interface IncrementalScanDao {
 
     @Query("DELETE FROM ScanSeenData WHERE scanId = :scanId") suspend fun deleteSeen(scanId: String)
 
+    @Query("DELETE FROM ScanSeenData WHERE sourceKey = :sourceKey")
+    suspend fun deleteSeenForSource(sourceKey: String)
+
     @Query("DELETE FROM PendingCachedFileData WHERE scanId = :scanId")
     suspend fun deletePending(scanId: String)
+
+    @Query("DELETE FROM PendingCachedFileData WHERE sourceKey = :sourceKey")
+    suspend fun deletePendingForSource(sourceKey: String)
 
     @Query(
         "SELECT cache.*, song.sourceKey AS sourceKey, song.displayPath AS committedDisplayPath, song.sizeBytes AS committedSizeBytes, source.rootUri AS committedSourceUri, source.rootPath AS committedRootPath FROM CachedFileData cache INNER JOIN IndexedSongData song ON song.uri = cache.uri INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE song.sourceKey IN (:sourceKeys) ORDER BY cache.uri LIMIT :limit OFFSET :offset"
@@ -319,9 +333,7 @@ internal interface IncrementalScanDao {
         offset: Int,
     ): List<CommittedCachedRow>
 
-    @Query(
-        "SELECT * FROM IndexedUriStateData WHERE sourceKey = :sourceKey AND uri = :uri LIMIT 1"
-    )
+    @Query("SELECT * FROM IndexedUriStateData WHERE sourceKey = :sourceKey AND uri = :uri LIMIT 1")
     suspend fun uriState(sourceKey: String, uri: String): IndexedUriStateData?
 
     @Query("UPDATE SourceLedgerData SET invalidationVersion = invalidationVersion + 1")

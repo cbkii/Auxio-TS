@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.fs.saf
@@ -51,58 +59,61 @@ private constructor(
     private val contentResolver: ContentResolver,
     private val query: Query,
 ) : SourceAwareFS {
-    override suspend fun sourceSnapshots(): List<SourceSnapshot> = withContext(Dispatchers.IO) {
-        query.source.distinctBy(SourceIdentity::forLocation).map { location ->
-            val sourceKey = SourceIdentity.forLocation(location)
-            try {
-                val documentId = DocumentsContract.getTreeDocumentId(location.uri)
-                val documentUri =
-                    DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
-                var modified = 0L
-                var size = 0L
-                var name = ""
-                contentResolverSafe.useQuery(
-                    documentUri,
-                    arrayOf(
-                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                        DocumentsContract.Document.COLUMN_LAST_MODIFIED,
-                        DocumentsContract.Document.COLUMN_SIZE,
-                    ),
-                ) { cursor ->
-                    if (cursor.moveToFirst()) {
-                        name = cursor.getString(0).orEmpty()
-                        modified = cursor.getLong(1)
-                        size = cursor.getLong(2)
+    override suspend fun sourceSnapshots(): List<SourceSnapshot> =
+        withContext(Dispatchers.IO) {
+            query.source.distinctBy(SourceIdentity::forLocation).map { location ->
+                val sourceKey = SourceIdentity.forLocation(location)
+                try {
+                    val documentId = DocumentsContract.getTreeDocumentId(location.uri)
+                    val documentUri =
+                        DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
+                    var modified = 0L
+                    var size = 0L
+                    var name = ""
+                    context.contentResolverSafe.useQuery(
+                        documentUri,
+                        arrayOf(
+                            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                            DocumentsContract.Document.COLUMN_SIZE,
+                        ),
+                    ) { cursor ->
+                        if (cursor.moveToFirst()) {
+                            name = cursor.getString(0).orEmpty()
+                            modified = cursor.getLong(1)
+                            size = cursor.getLong(2)
+                        }
                     }
+                    SourceSnapshot(
+                        sourceKey = sourceKey,
+                        sourceType = SOURCE_TYPE,
+                        rootUri = location.uri.toString(),
+                        rootPath = location.path.components.unixString,
+                        available = true,
+                        fingerprint = "$documentId:$name:$modified:$size:${query.hashCode()}",
+                        fingerprintStrength = SourceFingerprintStrength.ADVISORY,
+                    )
+                } catch (_: Exception) {
+                    SourceSnapshot(
+                        sourceKey = sourceKey,
+                        sourceType = SOURCE_TYPE,
+                        rootUri = location.uri.toString(),
+                        rootPath = location.path.components.unixString,
+                        available = false,
+                        fingerprint = null,
+                        fingerprintStrength = SourceFingerprintStrength.NONE,
+                    )
                 }
-                SourceSnapshot(
-                    sourceKey = sourceKey,
-                    sourceType = SOURCE_TYPE,
-                    rootUri = location.uri.toString(),
-                    rootPath = location.path.components.unixString,
-                    available = true,
-                    fingerprint = "$documentId:$name:$modified:$size:${query.hashCode()}",
-                    fingerprintStrength = SourceFingerprintStrength.ADVISORY,
-                )
-            } catch (_: Exception) {
-                SourceSnapshot(
-                    sourceKey = sourceKey,
-                    sourceType = SOURCE_TYPE,
-                    rootUri = location.uri.toString(),
-                    rootPath = location.path.components.unixString,
-                    available = false,
-                    fingerprint = null,
-                    fingerprintStrength = SourceFingerprintStrength.NONE,
-                )
             }
         }
-    }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
         SAF(
             context,
             contentResolver,
-            query.copy(source = query.source.filter { SourceIdentity.forLocation(it) in sourceKeys }),
+            query.copy(
+                source = query.source.filter { SourceIdentity.forLocation(it) in sourceKeys }
+            ),
         )
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
@@ -156,9 +167,7 @@ private constructor(
                     cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
                 val sizeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
                 val lastModifiedIndex =
-                    cursor.getColumnIndexOrThrow(
-                        DocumentsContract.Document.COLUMN_LAST_MODIFIED
-                    )
+                    cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
                 while (cursor.moveToNext()) {
                     val childId = cursor.getString(childUriIndex)
                     val displayName = cursor.getString(displayNameIndex)
@@ -242,8 +251,7 @@ private constructor(
     companion object {
         private const val SOURCE_TYPE = "SAF"
 
-        fun from(context: Context, query: Query) =
-            SAF(context, context.contentResolverSafe, query)
+        fun from(context: Context, query: Query) = SAF(context, context.contentResolverSafe, query)
 
         private val PROJECTION =
             arrayOf(

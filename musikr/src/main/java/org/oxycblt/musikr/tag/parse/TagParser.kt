@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.tag.parse
@@ -22,7 +30,16 @@ internal interface TagParser {
         fun new(
             profile: MetadataProfile = MetadataProfile.FULL,
             dimensions: LibraryDimensionPolicy =
-                LibraryDimensionPolicy(true, true, true, true, true, true, true, true),
+                LibraryDimensionPolicy(
+                    genres = true,
+                    playlists = true,
+                    detailedCollaborators = true,
+                    albumArtists = true,
+                    releaseTypes = true,
+                    advancedDates = true,
+                    replayGain = true,
+                    musicBrainz = true,
+                ),
         ): TagParser = ProfiledTagParser(MetadataWorkPolicy.forProfile(profile), dimensions)
     }
 }
@@ -38,11 +55,23 @@ private class ProfiledTagParser(
             metadata.artistSortNames() ?: metadata.composerSortNames() ?: emptyList()
         val rawAlbumArtistNames = metadata.albumArtistNames().orEmpty()
         val artistNames =
-            if (work.expandMultipleArtists) rawArtistNames else rawArtistNames.take(1)
+            if (work.expandMultipleArtists && dimensions.detailedCollaborators) {
+                rawArtistNames
+            } else {
+                rawArtistNames.take(1)
+            }
         val artistSortNames =
-            if (work.expandMultipleArtists) rawArtistSortNames else rawArtistSortNames.take(1)
+            if (work.expandMultipleArtists && dimensions.detailedCollaborators) {
+                rawArtistSortNames
+            } else {
+                rawArtistSortNames.take(1)
+            }
         val albumArtistNames =
-            if (work.expandMultipleArtists) rawAlbumArtistNames else rawAlbumArtistNames.take(1)
+            if (dimensions.albumArtists) {
+                if (work.expandMultipleArtists) rawAlbumArtistNames else rawAlbumArtistNames.take(1)
+            } else {
+                emptyList()
+            }
 
         return ParsedTags(
             durationMs = metadata.properties.durationMs,
@@ -61,13 +90,13 @@ private class ProfiledTagParser(
             track = metadata.track(),
             disc = metadata.disc(),
             subtitle = metadata.subtitle(),
-            date = metadata.date().takeIf { work.readDetailedDates },
+            date = metadata.date().takeIf { work.readDetailedDates && dimensions.advancedDates },
             albumMusicBrainzId =
                 metadata.albumMusicBrainzId().takeIf {
                     work.readMusicBrainz && dimensions.musicBrainz
                 },
-            albumName = metadata.albumName().takeIf { dimensions.albums },
-            albumSortName = metadata.albumSortName().takeIf { dimensions.albums },
+            albumName = metadata.albumName(),
+            albumSortName = metadata.albumSortName(),
             releaseTypes =
                 if (work.readReleaseTypes && dimensions.releaseTypes) {
                     metadata.releaseTypes()
@@ -84,8 +113,8 @@ private class ProfiledTagParser(
                 } else {
                     emptyList()
                 },
-            artistNames = artistNames.takeIf { dimensions.artists }.orEmpty(),
-            artistSortNames = artistSortNames.takeIf { dimensions.artists }.orEmpty(),
+            artistNames = artistNames,
+            artistSortNames = artistSortNames,
             albumArtistMusicBrainzIds =
                 if (work.readMusicBrainz && dimensions.musicBrainz) {
                     metadata.albumArtistMusicBrainzIds().orEmpty()
@@ -93,7 +122,7 @@ private class ProfiledTagParser(
                     emptyList()
                 },
             albumArtistNames =
-                if (dimensions.artists) {
+                if (dimensions.albumArtists) {
                     albumArtistNames.ifEmpty {
                         listOf("Various Artists").takeIf { compilation }.orEmpty()
                     }
@@ -101,7 +130,7 @@ private class ProfiledTagParser(
                     emptyList()
                 },
             albumArtistSortNames =
-                if (dimensions.artists) {
+                if (dimensions.albumArtists) {
                     val values = metadata.albumArtistSortNames().orEmpty()
                     if (work.expandMultipleArtists) values else values.take(1)
                 } else {

@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.pipeline
@@ -97,8 +105,9 @@ private class ExtractStepImpl(
                         val tags = tagParser.parse(item.metadata)
                         val cover =
                             if (extractArtwork) {
-                                when (val result =
-                                    covers.create(item.newSong.file, item.metadata)) {
+                                when (
+                                    val result = covers.create(item.newSong.file, item.metadata)
+                                ) {
                                     is CoverResult.Hit -> result.cover
                                     else -> null
                                 }
@@ -119,7 +128,8 @@ private class ExtractStepImpl(
             }
         val finalizedTask =
             scope.tryAsyncWith(extracted, Dispatchers.IO) {
-                // Legacy caches still require the complete exclusion list. Incremental caches record
+                // Legacy caches still require the complete exclusion list. Incremental caches
+                // record
                 // every discovered row directly and reconcile missing rows in SQL at commit time.
                 val legacyExclude =
                     mutableListOf<CachedFile>().takeUnless { cache is IncrementalCache }

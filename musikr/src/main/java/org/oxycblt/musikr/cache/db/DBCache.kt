@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.cache.db
@@ -42,10 +50,7 @@ private constructor(
             return CacheResult.Miss(file)
         }
         val cachedFile = dbSong.toCachedFile(file)
-        if (
-            dbSong.modifiedMs != file.modifiedMs ||
-                !incrementalStore.cachedProfileAccepts(file)
-        ) {
+        if (dbSong.modifiedMs != file.modifiedMs || !incrementalStore.cachedProfileAccepts(file)) {
             incrementalStore.markSeen(file, cachedFile)
             return CacheResult.Stale(file, dbSong.addedMs)
         }
@@ -113,12 +118,7 @@ private constructor(
             file,
             mimeType?.let {
                 Audio(
-                    Properties(
-                        mimeType,
-                        durationMs ?: 0L,
-                        bitrateKbps ?: 0,
-                        sampleRateHz ?: 0,
-                    ),
+                    Properties(mimeType, durationMs ?: 0L, bitrateKbps ?: 0, sampleRateHz ?: 0),
                     ParsedTags(
                         musicBrainzId = musicBrainzId,
                         name = name,
@@ -172,8 +172,7 @@ private constructor(
         fun from(context: Context) = from(CacheDatabase.from(context))
 
         internal fun from(db: CacheDatabase): DBCache {
-            val store =
-                IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
+            val store = IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
             return DBCache(db.readDao(), db.incrementalLibraryDao(), store)
         }
 
@@ -189,10 +188,7 @@ private constructor(
     private val writeDao: CacheWriteDao,
     private val backfill: LibraryBackfill,
     private val incrementalStore: IncrementalScanStore,
-) :
-    MutableCache,
-    StartupProjectionCache by inner,
-    IncrementalCache by incrementalStore {
+) : MutableCache, StartupProjectionCache by inner, IncrementalCache by incrementalStore {
     override suspend fun read(file: File) = inner.read(file)
 
     override suspend fun snapshot() = inner.snapshot()
@@ -251,8 +247,7 @@ private constructor(
         fun from(context: Context): MutableDBCache = from(CacheDatabase.from(context))
 
         internal fun from(db: CacheDatabase): MutableDBCache {
-            val store =
-                IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
+            val store = IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
             return MutableDBCache(
                 DBCache.from(db, store),
                 db.writeDao(),

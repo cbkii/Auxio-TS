@@ -40,10 +40,10 @@ import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.getSystemServiceCompat
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.SourceIdentity
-import org.oxycblt.musikr.library.MetadataProfile
 import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
+import org.oxycblt.musikr.library.MetadataProfile
 import timber.log.Timber as L
 
 class IndexingHolder
@@ -81,10 +81,8 @@ private constructor(
 
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
-    private data class IndexRequest(
-        val withCache: Boolean,
-        val metadataProfile: MetadataProfile?,
-    )
+
+    private data class IndexRequest(val withCache: Boolean, val metadataProfile: MetadataProfile?)
 
     private var currentIndexJob: Job? = null
     private var pendingIndexRequest: IndexRequest? = null

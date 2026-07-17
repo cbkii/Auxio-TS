@@ -1,6 +1,19 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * DrivingStartupPolicyTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.music
@@ -51,14 +64,14 @@ class DrivingStartupPolicyTest {
     @Test
     fun `lean policy disables rich dimensions and eager artwork`() {
         val dimensions = DrivingStartupPolicy.dimensions(MetadataProfile.LEAN)
-        assertTrue(dimensions.songIdentity)
-        assertTrue(dimensions.basicTags)
+        assertTrue(dimensions.playlists)
+        assertFalse(dimensions.detailedCollaborators)
         assertFalse(dimensions.genres)
         assertFalse(dimensions.musicBrainz)
         assertFalse(dimensions.replayGain)
         assertFalse(dimensions.releaseTypes)
         assertEquals(
-            ArtworkPolicy.VISIBLE_ONLY,
+            ArtworkPolicy.VISIBLE_ITEMS,
             DrivingStartupPolicy.artworkPolicy(MetadataProfile.LEAN),
         )
     }

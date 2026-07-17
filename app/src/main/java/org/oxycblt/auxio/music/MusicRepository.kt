@@ -641,7 +641,8 @@ constructor(
                 emitLibrary(result.library)
                 result.cleanup()
                 val isEmpty = result.library.songs.isEmpty()
-                musicSettings.libraryState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
+                musicSettings.libraryState =
+                    if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
                 musicSettings.lastScanFailed = false
                 emitStartupLibraryStatus(
                     if (isEmpty) StartupLibraryStatus.Empty else StartupLibraryStatus.Usable
@@ -858,23 +859,20 @@ constructor(
             LocationMode.DIRECT_FS ->
                 DirectFS(
                     musicSettings.safQuery.source,
-                    rootGate.takeIf {
-                        musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND
-                    },
+                    rootGate.takeIf { musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND },
                 )
         }
 
     private fun sourceConfigurationRevision(): Long {
-        val material =
-            buildString {
-                append(musicSettings.locationMode)
-                append('|').append(musicSettings.safQuery)
-                append('|').append(musicSettings.mediaStoreQuery)
-                append('|').append(musicSettings.rootAccessPolicy)
-                append('|').append(musicSettings.ts18SystemSourceFilter)
-                append('|').append(musicSettings.separators)
-                append('|').append(musicSettings.intelligentSorting)
-            }
+        val material = buildString {
+            append(musicSettings.locationMode)
+            append('|').append(musicSettings.safQuery)
+            append('|').append(musicSettings.mediaStoreQuery)
+            append('|').append(musicSettings.rootAccessPolicy)
+            append('|').append(musicSettings.ts18SystemSourceFilter)
+            append('|').append(musicSettings.separators)
+            append('|').append(musicSettings.intelligentSorting)
+        }
         return material.hashCode().toLong() and 0xffffffffL
     }
 
