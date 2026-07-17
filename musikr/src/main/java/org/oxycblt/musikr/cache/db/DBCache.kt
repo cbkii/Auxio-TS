@@ -6,14 +6,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.cache.db
@@ -23,6 +15,7 @@ import org.oxycblt.musikr.cache.Audio
 import org.oxycblt.musikr.cache.Cache
 import org.oxycblt.musikr.cache.CacheResult
 import org.oxycblt.musikr.cache.CachedFile
+import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.cache.StartupProjectionCache
 import org.oxycblt.musikr.cache.StartupSongRow
@@ -35,25 +28,33 @@ import org.oxycblt.musikr.fs.Volume
 import org.oxycblt.musikr.metadata.Properties
 import org.oxycblt.musikr.tag.parse.ParsedTags
 
-/**
- * An immutable [Cache] backed by an internal Room database.
- *
- * Create an instance with [from].
- */
+/** Immutable cache view backed by the committed Room generations. */
 class DBCache
-private constructor(private val readDao: CacheReadDao, private val libraryDao: LibraryReadDao) :
-    Cache, StartupProjectionCache {
+private constructor(
+    private val readDao: CacheReadDao,
+    private val incrementalLibraryDao: IncrementalLibraryReadDao,
+    private val incrementalStore: IncrementalScanStore,
+) : Cache, StartupProjectionCache {
     override suspend fun read(file: File): CacheResult {
-        val dbSong = readDao.selectSongByUri(file.uri) ?: return CacheResult.Miss(file)
-        if (dbSong.modifiedMs != file.modifiedMs) {
+        val dbSong = readDao.selectSongByUri(file.uri)
+        if (dbSong == null) {
+            incrementalStore.markSeen(file)
+            return CacheResult.Miss(file)
+        }
+        val cachedFile = dbSong.toCachedFile(file)
+        if (
+            dbSong.modifiedMs != file.modifiedMs ||
+                !incrementalStore.cachedProfileAccepts(file)
+        ) {
+            incrementalStore.markSeen(file, cachedFile)
             return CacheResult.Stale(file, dbSong.addedMs)
         }
-        return CacheResult.Hit(dbSong.toCachedFile(file))
+        incrementalStore.markSeen(file, cachedFile)
+        return CacheResult.Hit(cachedFile)
     }
 
     override suspend fun snapshot(): List<CachedFile> {
-        // Compatibility-only API for legacy full-library reconstruction. Startup/Fast Start
-        // callers must use the bounded StartupProjectionCache methods below.
+        // Explicit compatibility bridge for rich screens not yet migrated to projections.
         val result = mutableListOf<CachedFile>()
         var offset = 0
         while (true) {
@@ -66,30 +67,32 @@ private constructor(private val readDao: CacheReadDao, private val libraryDao: L
     }
 
     override suspend fun firstSongs(limit: Int, offset: Int): List<StartupSongRow> =
-        libraryDao.songsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0)).map {
+        incrementalLibraryDao
+            .songsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0))
+            .map { it.toStartupSongRow() }
+
+    override suspend fun recentlyAdded(limit: Int): List<StartupSongRow> =
+        incrementalLibraryDao.recentlyAdded(limit.coerceIn(1, MAX_STARTUP_LIMIT)).map {
             it.toStartupSongRow()
         }
 
-    override suspend fun recentlyAdded(limit: Int): List<StartupSongRow> =
-        libraryDao.recentlyAdded(limit.coerceIn(1, MAX_STARTUP_LIMIT)).map { it.toStartupSongRow() }
-
     override suspend fun albums(limit: Int, offset: Int): List<StartupSummaryRow> =
-        libraryDao.albumsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0)).map {
-            StartupSummaryRow(it.id.toString(), it.title)
-        }
+        incrementalLibraryDao
+            .albumsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0))
+            .map { StartupSummaryRow(it.id.toString(), it.title) }
 
     override suspend fun artists(limit: Int, offset: Int): List<StartupSummaryRow> =
-        libraryDao.artistsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0)).map {
-            StartupSummaryRow(it.id.toString(), it.name)
-        }
+        incrementalLibraryDao
+            .artistsPage(limit.coerceIn(1, MAX_STARTUP_LIMIT), offset.coerceAtLeast(0))
+            .map { StartupSummaryRow(it.id.toString(), it.name) }
 
     override suspend fun quickSearchSongs(query: String, limit: Int): List<StartupSongRow> =
         if (query.isBlank()) {
             emptyList()
         } else {
-            libraryDao.searchSongs(LikeQuery.contains(query), limit.coerceIn(1, 10), 0).map {
-                it.toStartupSongRow()
-            }
+            incrementalLibraryDao
+                .searchSongs(LikeQuery.contains(query), limit.coerceIn(1, 10), 0)
+                .map { it.toStartupSongRow() }
         }
 
     private fun SongListRow.toStartupSongRow() =
@@ -110,12 +113,17 @@ private constructor(private val readDao: CacheReadDao, private val libraryDao: L
             file,
             mimeType?.let {
                 Audio(
-                    Properties(mimeType, durationMs!!, bitrateKbps!!, sampleRateHz!!),
+                    Properties(
+                        mimeType,
+                        durationMs ?: 0L,
+                        bitrateKbps ?: 0,
+                        sampleRateHz ?: 0,
+                    ),
                     ParsedTags(
                         musicBrainzId = musicBrainzId,
                         name = name,
                         sortName = sortName,
-                        durationMs = durationMs,
+                        durationMs = durationMs ?: 0L,
                         track = track,
                         disc = disc,
                         subtitle = subtitle,
@@ -123,14 +131,14 @@ private constructor(private val readDao: CacheReadDao, private val libraryDao: L
                         albumMusicBrainzId = albumMusicBrainzId,
                         albumName = albumName,
                         albumSortName = albumSortName,
-                        releaseTypes = releaseTypes!!,
-                        artistMusicBrainzIds = artistMusicBrainzIds!!,
-                        artistNames = artistNames!!,
-                        artistSortNames = artistSortNames!!,
-                        albumArtistMusicBrainzIds = albumArtistMusicBrainzIds!!,
-                        albumArtistNames = albumArtistNames!!,
-                        albumArtistSortNames = albumArtistSortNames!!,
-                        genreNames = genreNames!!,
+                        releaseTypes = releaseTypes.orEmpty(),
+                        artistMusicBrainzIds = artistMusicBrainzIds.orEmpty(),
+                        artistNames = artistNames.orEmpty(),
+                        artistSortNames = artistSortNames.orEmpty(),
+                        albumArtistMusicBrainzIds = albumArtistMusicBrainzIds.orEmpty(),
+                        albumArtistNames = albumArtistNames.orEmpty(),
+                        albumArtistSortNames = albumArtistSortNames.orEmpty(),
+                        genreNames = genreNames.orEmpty(),
                         replayGainTrackAdjustment = replayGainTrackAdjustment,
                         replayGainAlbumAdjustment = replayGainAlbumAdjustment,
                     ),
@@ -140,14 +148,7 @@ private constructor(private val readDao: CacheReadDao, private val libraryDao: L
             addedMs = addedMs,
         )
 
-    /**
-     * Build a synthetic [File] from cached data without exploring storage.
-     *
-     * Best-effort metadata only:
-     * - [File.path] is derived from the URI and may not correspond to a real filesystem path.
-     * - [File.size] is unknown (set to 0); callers must not treat this as authoritative.
-     * - [File.parent] is unknown (null); callers must not rely on it for folder navigation.
-     */
+    /** Best-effort synthetic file used only by compatibility hydration. */
     private fun CachedFileData.toSyntheticFile(): File {
         val pathText = uri.path ?: uri.lastPathSegment ?: uri.toString()
         return File(
@@ -168,32 +169,30 @@ private constructor(private val readDao: CacheReadDao, private val libraryDao: L
         private const val SNAPSHOT_PAGE_SIZE = 256
         private const val MAX_STARTUP_LIMIT = 100
 
-        /**
-         * Create a new instance of [DBCache] from the given [context].
-         *
-         * This instance should be a singleton, since it implicitly holds a Room database. As a
-         * result, you should only create EITHER a [DBCache] or a [MutableDBCache].
-         *
-         * @param context The context to use to create the Room database.
-         * @return A new instance of [DBCache].
-         */
         fun from(context: Context) = from(CacheDatabase.from(context))
 
-        internal fun from(db: CacheDatabase) = DBCache(db.readDao(), db.libraryDao())
+        internal fun from(db: CacheDatabase): DBCache {
+            val store =
+                IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
+            return DBCache(db.readDao(), db.incrementalLibraryDao(), store)
+        }
+
+        internal fun from(db: CacheDatabase, store: IncrementalScanStore) =
+            DBCache(db.readDao(), db.incrementalLibraryDao(), store)
     }
 }
 
-/**
- * A mutable [Cache] backed by an internal Room database.
- *
- * Create an instance with [from].
- */
+/** Mutable cache with staged source generations and legacy compatibility APIs. */
 class MutableDBCache
 private constructor(
     private val inner: DBCache,
     private val writeDao: CacheWriteDao,
     private val backfill: LibraryBackfill,
-) : MutableCache, StartupProjectionCache by inner {
+    private val incrementalStore: IncrementalScanStore,
+) :
+    MutableCache,
+    StartupProjectionCache by inner,
+    IncrementalCache by incrementalStore {
     override suspend fun read(file: File) = inner.read(file)
 
     override suspend fun snapshot() = inner.snapshot()
@@ -204,62 +203,62 @@ private constructor(
         backfill.runOneBatch(STARTUP_SEED_BATCH_SIZE)
 
     override suspend fun write(cachedFile: CachedFile) {
-        val dbSong =
-            CachedFileData(
-                uri = cachedFile.file.uri,
-                modifiedMs = cachedFile.file.modifiedMs,
-                addedMs = cachedFile.addedMs,
-                mimeType = cachedFile.audio?.properties?.mimeType,
-                durationMs = cachedFile.audio?.properties?.durationMs,
-                bitrateKbps = cachedFile.audio?.properties?.bitrateKbps,
-                sampleRateHz = cachedFile.audio?.properties?.sampleRateHz,
-                musicBrainzId = cachedFile.audio?.tags?.musicBrainzId,
-                name = cachedFile.audio?.tags?.name,
-                sortName = cachedFile.audio?.tags?.sortName,
-                track = cachedFile.audio?.tags?.track,
-                disc = cachedFile.audio?.tags?.disc,
-                subtitle = cachedFile.audio?.tags?.subtitle,
-                date = cachedFile.audio?.tags?.date,
-                albumMusicBrainzId = cachedFile.audio?.tags?.albumMusicBrainzId,
-                albumName = cachedFile.audio?.tags?.albumName,
-                albumSortName = cachedFile.audio?.tags?.albumSortName,
-                releaseTypes = cachedFile.audio?.tags?.releaseTypes,
-                artistMusicBrainzIds = cachedFile.audio?.tags?.artistMusicBrainzIds,
-                artistNames = cachedFile.audio?.tags?.artistNames,
-                artistSortNames = cachedFile.audio?.tags?.artistSortNames,
-                albumArtistMusicBrainzIds = cachedFile.audio?.tags?.albumArtistMusicBrainzIds,
-                albumArtistNames = cachedFile.audio?.tags?.albumArtistNames,
-                albumArtistSortNames = cachedFile.audio?.tags?.albumArtistSortNames,
-                genreNames = cachedFile.audio?.tags?.genreNames,
-                replayGainTrackAdjustment = cachedFile.audio?.tags?.replayGainTrackAdjustment,
-                replayGainAlbumAdjustment = cachedFile.audio?.tags?.replayGainAlbumAdjustment,
-                coverId = cachedFile.audio?.coverId,
-            )
-        writeDao.updateSong(dbSong)
+        if (incrementalStore.stage(cachedFile)) return
+        writeDao.updateSong(cachedFile.toCachedFileData())
     }
 
     override suspend fun cleanup(excluding: List<CachedFile>) {
+        // Generation commit performs database-side reconciliation without a complete URI set.
+        if (incrementalStore.activePlan() != null) return
         writeDao.deleteExcludingUris(excluding.mapTo(mutableSetOf()) { it.file.uri.toString() })
     }
+
+    private fun CachedFile.toCachedFileData() =
+        CachedFileData(
+            uri = file.uri,
+            modifiedMs = file.modifiedMs,
+            addedMs = addedMs,
+            mimeType = audio?.properties?.mimeType,
+            durationMs = audio?.properties?.durationMs,
+            bitrateKbps = audio?.properties?.bitrateKbps,
+            sampleRateHz = audio?.properties?.sampleRateHz,
+            musicBrainzId = audio?.tags?.musicBrainzId,
+            name = audio?.tags?.name,
+            sortName = audio?.tags?.sortName,
+            track = audio?.tags?.track,
+            disc = audio?.tags?.disc,
+            subtitle = audio?.tags?.subtitle,
+            date = audio?.tags?.date,
+            albumMusicBrainzId = audio?.tags?.albumMusicBrainzId,
+            albumName = audio?.tags?.albumName,
+            albumSortName = audio?.tags?.albumSortName,
+            releaseTypes = audio?.tags?.releaseTypes,
+            artistMusicBrainzIds = audio?.tags?.artistMusicBrainzIds,
+            artistNames = audio?.tags?.artistNames,
+            artistSortNames = audio?.tags?.artistSortNames,
+            albumArtistMusicBrainzIds = audio?.tags?.albumArtistMusicBrainzIds,
+            albumArtistNames = audio?.tags?.albumArtistNames,
+            albumArtistSortNames = audio?.tags?.albumArtistSortNames,
+            genreNames = audio?.tags?.genreNames,
+            replayGainTrackAdjustment = audio?.tags?.replayGainTrackAdjustment,
+            replayGainAlbumAdjustment = audio?.tags?.replayGainAlbumAdjustment,
+            coverId = audio?.coverId,
+        )
 
     companion object {
         private const val STARTUP_SEED_BATCH_SIZE = 32
 
-        /**
-         * Create a new instance of [MutableDBCache] from the given [context].
-         *
-         * This instance should be a singleton, since it implicitly holds a Room database. As a
-         * result, you should only create EITHER a [DBCache] or a [MutableDBCache].
-         *
-         * @param context The context to use to create the Room database.
-         * @return A new instance of [MutableDBCache].
-         */
-        fun from(context: Context): MutableDBCache {
-            val db = CacheDatabase.from(context)
-            return MutableDBCache(DBCache.from(db), db.writeDao(), LibraryBackfill(db))
-        }
+        fun from(context: Context): MutableDBCache = from(CacheDatabase.from(context))
 
-        internal fun from(db: CacheDatabase): MutableDBCache =
-            MutableDBCache(DBCache.from(db), db.writeDao(), LibraryBackfill(db))
+        internal fun from(db: CacheDatabase): MutableDBCache {
+            val store =
+                IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
+            return MutableDBCache(
+                DBCache.from(db, store),
+                db.writeDao(),
+                LibraryBackfill(db),
+                store,
+            )
+        }
     }
 }
