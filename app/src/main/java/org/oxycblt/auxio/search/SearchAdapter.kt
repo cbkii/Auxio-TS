@@ -22,6 +22,7 @@ import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemSongBinding
 import org.oxycblt.auxio.list.BasicHeader
 import org.oxycblt.auxio.list.Item
@@ -126,7 +127,8 @@ private class StartupSongViewHolder private constructor(private val binding: Ite
     fun bind(row: StartupSongRow, onClick: (StartupSongRow) -> Unit) {
         binding.songMenu.isVisible = false
         binding.songName.text = row.title
-        binding.songInfo.text = row.primaryArtist ?: row.album ?: "USB audio"
+        binding.songInfo.text =
+            row.primaryArtist ?: row.album ?: binding.root.context.getString(R.string.lbl_usb_audio)
         binding.root.isActivated = false
         binding.root.isSelected = false
         binding.root.setOnClickListener { onClick(row) }
