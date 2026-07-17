@@ -23,6 +23,7 @@ import android.util.Log
 import android.webkit.MimeTypeMap
 import java.io.File as JavaFile
 import java.security.MessageDigest
+import java.util.Locale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -149,7 +150,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         listFilesSafe(root)
             .asSequence()
             .filterNot { it.name.startsWith(".") || it.isSymlink }
-            .sortedBy { it.name.lowercase() }
+            .sortedBy { it.name.lowercase(Locale.ROOT) }
             .take(FINGERPRINT_ENTRY_LIMIT)
             .forEach {
                 update(

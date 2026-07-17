@@ -54,7 +54,7 @@ internal interface ExploreStep {
                 config.fs,
                 config.storage,
                 config.metadataProfile,
-                config.scanPlan?.let { it.reuseSourceKeys + it.unavailableSourceKeys }.orEmpty(),
+                config.scanPlan?.reuseSourceKeys.orEmpty(),
                 noisyDirs,
                 pathKeywords,
                 rootGate,

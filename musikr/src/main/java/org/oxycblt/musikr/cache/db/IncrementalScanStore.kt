@@ -105,7 +105,8 @@ internal class IncrementalScanStore(
                     previousProfile == null ||
                         metadataProfile.incrementalRank > previousProfile.incrementalRank
                 val fingerprintChanged =
-                    previous?.fingerprint != snapshot.fingerprint ||
+                    previous == null ||
+                        previous.fingerprint != snapshot.fingerprint ||
                         previous.fingerprintStrength != snapshot.fingerprintStrength.name
                 val invalidated =
                     previous != null &&
@@ -116,7 +117,8 @@ internal class IncrementalScanStore(
                             now - previous.lastSuccessfulScanMs >= ADVISORY_REFRESH_MS)
                 val mustScan =
                     force ||
-                        previous?.lastCommittedGeneration == null ||
+                        previous == null ||
+                        previous.lastCommittedGeneration == null ||
                         previous.incomplete ||
                         previous.configurationRevision != configurationRevision ||
                         profileUpgrade ||
@@ -176,12 +178,22 @@ internal class IncrementalScanStore(
         val plan = currentPlan ?: return
         val sourceKey = SourceIdentity.forFile(file)
         if (sourceKey !in plan.scanSourceKeys) return
-        val cached = cachedFile?.audio
-        val tags = cached?.tags
-        val fileName = file.path.name ?: file.uri.lastPathSegment ?: file.uri.toString()
         val profile =
             dao.uriState(sourceKey, file.uri.toString())?.metadataProfile
                 ?: if (cachedFile != null) MetadataProfile.FULL.name else plan.metadataProfile.name
+        upsertSeen(plan, sourceKey, file, cachedFile, profile)
+    }
+
+    private suspend fun upsertSeen(
+        plan: IncrementalScanPlan,
+        sourceKey: String,
+        file: File,
+        cachedFile: CachedFile?,
+        profile: String,
+    ) {
+        val cached = cachedFile?.audio
+        val tags = cached?.tags
+        val fileName = file.path.name ?: file.uri.lastPathSegment ?: file.uri.toString()
         dao.upsertSeen(
             ScanSeenData(
                 scanId = plan.scanId,
@@ -261,7 +273,13 @@ internal class IncrementalScanStore(
                 coverId = audio?.coverId,
             )
         )
-        markSeen(cachedFile.file, cachedFile)
+        upsertSeen(
+            plan = plan,
+            sourceKey = sourceKey,
+            file = cachedFile.file,
+            cachedFile = cachedFile,
+            profile = plan.metadataProfile.name,
+        )
         return true
     }
 

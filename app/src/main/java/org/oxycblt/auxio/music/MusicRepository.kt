@@ -572,7 +572,12 @@ constructor(
                     "unavailable=${plan?.unavailableSourceKeys}]"
             )
 
-            if (plan != null && !plan.hasWork && synchronized(this) { library != null }) {
+            if (
+                plan != null &&
+                    !plan.hasWork &&
+                    plan.unavailableSourceKeys.isEmpty() &&
+                    synchronized(this) { library != null }
+            ) {
                 L.i("All configured sources are unchanged; skipping provider scan and extraction")
                 if (resolvedProfile == MetadataProfile.FULL) {
                     emitStartupReadinessState(StartupReadinessState.EnrichmentComplete)
