@@ -18,8 +18,9 @@
 
 package org.oxycblt.auxio.headunit.ts18
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import java.io.File
-import java.nio.file.DirectoryStream
 import java.nio.file.Files
 import java.util.Locale
 import javax.inject.Inject
@@ -78,22 +79,25 @@ class FastStartDirectFolderBrowser @Inject constructor() {
             var validCount = 0
             var truncated = false
             try {
-                Files.newDirectoryStream(dir.toPath()).use {
-                    stream: DirectoryStream<java.nio.file.Path> ->
-                    for (childPath in stream) {
-                        coroutineContext.ensureActive()
-                        if (processed++ >= MAX_PROCESSED_ENTRIES) {
-                            truncated = true
-                            break
-                        }
-                        val child = childPath.toFile()
-                        if (child.name.startsWith('.')) continue
-                        val childCandidate =
-                            resolveCandidate(candidate.appPath + "/" + child.name) ?: continue
-                        validCount++
-                        offerTop(selected, childCandidate.toEntry(), boundedLimit)
-                        if (validCount > boundedLimit) truncated = true
+                val activeContext = coroutineContext
+                fun visit(child: File): Boolean {
+                    activeContext.ensureActive()
+                    if (processed++ >= MAX_PROCESSED_ENTRIES) {
+                        truncated = true
+                        return false
                     }
+                    if (child.name.startsWith('.')) return true
+                    val childCandidate =
+                        resolveCandidate(candidate.appPath + "/" + child.name) ?: return true
+                    validCount++
+                    offerTop(selected, childCandidate.toEntry(), boundedLimit)
+                    if (validCount > boundedLimit) truncated = true
+                    return true
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    forEachChildApi26(dir, ::visit)
+                } else {
+                    forEachChildLegacy(dir, ::visit)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -103,6 +107,21 @@ class FastStartDirectFolderBrowser @Inject constructor() {
             selected.sortWith(ENTRY_ORDER)
             Page(selected, truncated)
         }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun forEachChildApi26(dir: File, visit: (File) -> Boolean) {
+        Files.newDirectoryStream(dir.toPath()).use { stream ->
+            for (childPath in stream) {
+                if (!visit(childPath.toFile())) break
+            }
+        }
+    }
+
+    private fun forEachChildLegacy(dir: File, visit: (File) -> Boolean) {
+        for (child in dir.listFiles().orEmpty()) {
+            if (!visit(child)) break
+        }
+    }
 
     private fun offerTop(selected: MutableList<Entry>, entry: Entry, limit: Int) {
         selected.add(entry)

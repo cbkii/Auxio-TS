@@ -22,10 +22,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.list.BasicHeader
@@ -36,8 +39,11 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.auxio.playback.PlaybackSettings
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.musikr.Library
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.cache.StartupProjectionCache
 import timber.log.Timber as L
 
 /**
@@ -53,7 +59,9 @@ constructor(
     private val searchEngine: SearchEngine,
     private val searchSettings: SearchSettings,
     private val playbackSettings: PlaybackSettings,
+    cache: MutableCache,
 ) : ViewModel(), MusicRepository.UpdateListener {
+    private val startupProjectionCache = cache as? StartupProjectionCache
     private var lastQuery: String? = null
     private var currentSearchJob: Job? = null
 
@@ -93,18 +101,37 @@ constructor(
         currentSearchJob?.cancel()
         lastQuery = query
 
-        val library = musicRepository.library
-        if (query.isNullOrEmpty() || library == null) {
-            L.d("Cannot search for the current query, aborting")
+        if (query.isNullOrEmpty()) {
             _searchResults.value = listOf()
             return
         }
 
-        // Searching is time-consuming, so do it in the background.
-        L.d("Searching music library for $query")
+        L.d("Searching music for $query")
         currentSearchJob =
             viewModelScope.launch {
-                _searchResults.value = searchImpl(library, query).also { yield() }
+                delay(QUICK_FIND_DEBOUNCE_MS)
+                val library = musicRepository.library
+                val results =
+                    if (library != null) {
+                        withContext(Dispatchers.Default) { searchImpl(library, query) }
+                    } else {
+                        val rows =
+                            withContext(Dispatchers.IO) {
+                                startupProjectionCache
+                                    ?.quickSearchSongs(query, limit = 10)
+                                    .orEmpty()
+                            }
+                        buildList {
+                            if (rows.isNotEmpty()) {
+                                add(BasicHeader(R.string.lbl_songs))
+                                addAll(rows)
+                            }
+                        }
+                    }
+                _searchResults.value = results.also { yield() }
+                if (results.isNotEmpty()) {
+                    PerfTimer.point("startup.quick_find_first_result")
+                }
             }
     }
 
@@ -197,6 +224,7 @@ constructor(
     }
 
     private companion object {
+        const val QUICK_FIND_DEBOUNCE_MS = 125L
         val SORT = Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING)
     }
 }

@@ -18,8 +18,10 @@
 
 package org.oxycblt.auxio.headunit.ts18
 
+import android.annotation.SuppressLint
 import java.io.File
 import java.util.Locale
+import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -38,7 +40,7 @@ class FastStartDirectFolderBrowserTest {
 
     @Test
     fun `rejects traversal raw mounts and sibling prefixes`() = runBlocking {
-        val root = createTempDir(prefix = "usb0")
+        val root = createTempDirectory("usb0").toFile()
         val browser = browser(root)
 
         assertNull(browser.resolveCandidate("/storage/usbdisk0/../.."))
@@ -50,7 +52,7 @@ class FastStartDirectFolderBrowserTest {
 
     @Test
     fun `accepts valid nested directories and reconstructs app path`() = runBlocking {
-        val root = createTempDir(prefix = "usb0")
+        val root = createTempDirectory("usb0").toFile()
         File(root, "Music/Rock").mkdirs()
         val browser = browser(root)
 
@@ -58,10 +60,11 @@ class FastStartDirectFolderBrowserTest {
         assertEquals("/storage/usbdisk0/Music/Rock", candidate?.appPath)
     }
 
+    @SuppressLint("NewApi")
     @Test
     fun `rejects symlink escape when platform supports links`() = runBlocking {
-        val root = createTempDir(prefix = "usb0")
-        val outside = createTempDir(prefix = "outside")
+        val root = createTempDirectory("usb0").toFile()
+        val outside = createTempDirectory("outside").toFile()
         val link = File(root, "escape")
         try {
             java.nio.file.Files.createSymbolicLink(link.toPath(), outside.toPath())
@@ -78,7 +81,7 @@ class FastStartDirectFolderBrowserTest {
     @Test
     fun `browse is bounded folder first and locale stable`() = runBlocking {
         Locale.setDefault(Locale("tr", "TR"))
-        val root = createTempDir(prefix = "usb0")
+        val root = createTempDirectory("usb0").toFile()
         File(root, "İndir").mkdirs()
         File(root, "album.mp3").writeText("x")
         File(root, "Beta.flac").writeText("x")

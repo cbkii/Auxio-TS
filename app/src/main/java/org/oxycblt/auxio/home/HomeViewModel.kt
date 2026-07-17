@@ -22,10 +22,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
@@ -35,12 +39,23 @@ import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.cache.StartupProjectionCache
+import org.oxycblt.musikr.cache.StartupSongRow
 import timber.log.Timber as L
+
+data class FastStartHomeState(
+    val firstSongs: List<StartupSongRow> = emptyList(),
+    val recentlyAdded: List<StartupSongRow> = emptyList(),
+    val usbRoots: List<FastStartDirectFolderBrowser.Entry> = emptyList(),
+    val loading: Boolean = true,
+)
 
 /**
  * The ViewModel for managing the tab data and lists of the home view.
@@ -53,8 +68,14 @@ class HomeViewModel
 constructor(
     private val listSettings: ListSettings,
     private val playbackSettings: PlaybackSettings,
+    private val cache: MutableCache,
+    private val fastFolderBrowser: FastStartDirectFolderBrowser,
     homeGeneratorFactory: HomeGenerator.Factory,
 ) : ViewModel(), HomeGenerator.Invalidator {
+    private val _fastStartState = MutableStateFlow(FastStartHomeState())
+    val fastStartState: StateFlow<FastStartHomeState> = _fastStartState
+    private var fastStartJob: Job? = null
+
     private val _songList = MutableStateFlow(listOf<Song>())
     /** A list of [Song]s, sorted by the preferred [Sort] and filtered by [decadeFilter]. */
     val songList: StateFlow<List<Song>>
@@ -233,10 +254,54 @@ constructor(
 
     init {
         homeGenerator.attach()
+        refreshFastStart()
+    }
+
+    /** Refresh the bounded pre-library rows after startup projections become available. */
+    fun refreshFastStart(force: Boolean = false) {
+        if (fastStartJob?.isActive == true) return
+        if (!force && !_fastStartState.value.loading) return
+        fastStartJob =
+            viewModelScope.launch {
+                try {
+                    val projection = cache as? StartupProjectionCache
+                    val state =
+                        withContext(Dispatchers.IO) {
+                            FastStartHomeState(
+                                firstSongs =
+                                    projection?.firstSongs(limit = 8).orEmpty().filter {
+                                        it.available
+                                    },
+                                recentlyAdded =
+                                    projection?.recentlyAdded(limit = 6).orEmpty().filter {
+                                        it.available
+                                    },
+                                usbRoots = fastFolderBrowser.usbRoots(limit = 2).entries,
+                                loading = false,
+                            )
+                        }
+                    _fastStartState.value = state
+                    if (
+                        state.firstSongs.isNotEmpty() ||
+                            state.recentlyAdded.isNotEmpty() ||
+                            state.usbRoots.isNotEmpty()
+                    ) {
+                        PerfTimer.point("startup.fast_home_first_rows")
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w(e, "Unable to load bounded Fast Start rows")
+                    _fastStartState.value = FastStartHomeState(loading = false)
+                } finally {
+                    fastStartJob = null
+                }
+            }
     }
 
     override fun onCleared() {
         super.onCleared()
+        fastStartJob?.cancel()
         homeGenerator.release()
     }
 

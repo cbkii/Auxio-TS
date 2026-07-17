@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.home
 
 import android.annotation.SuppressLint
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -41,6 +42,7 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.tabs.TabLayoutMediator
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -56,6 +58,7 @@ import org.oxycblt.auxio.headunit.HeadUnitQuickAccess
 import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
 import org.oxycblt.auxio.headunit.QuickPickAction
+import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser
 import org.oxycblt.auxio.home.list.AlbumListFragment
 import org.oxycblt.auxio.home.list.ArtistListFragment
 import org.oxycblt.auxio.home.list.GenreListFragment
@@ -70,9 +73,11 @@ import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
+import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.ui.FadingToolbarOffsetListener
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.collect
@@ -85,6 +90,7 @@ import org.oxycblt.musikr.IndexingProgress
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.cache.StartupSongRow
 import org.oxycblt.musikr.playlist.m3u.M3U
 import timber.log.Timber as L
 
@@ -232,6 +238,14 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         collect(listModel.menu.flow, ::handleMenu)
         collectImmediately(listModel.selected, ::updateSelection)
         collectImmediately(musicModel.startupReadinessState, ::handleStartupReadinessState)
+        collectImmediately(musicModel.startupLibraryStatus, ::handleStartupLibraryStatus)
+        collectImmediately(homeModel.fastStartState) {
+            updateMetadataShortcuts(
+                homeModel.songList.value,
+                homeModel.genreList.value,
+                homeModel.playlistList.value,
+            )
+        }
         collectImmediately(musicModel.indexingState) {
             updateIndexerState(it)
             setupHeadUnitQuickAccess(requireBinding())
@@ -374,6 +388,13 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val binding = requireBinding()
         favouritesPlaylist = playlists.firstOrNull { it.name.raw == FAVOURITES_PLAYLIST_NAME }
         val isPlaylistsTab = homeModel.currentTabType.value == MusicType.PLAYLISTS
+        val fastState = homeModel.fastStartState.value
+        val startupSongs =
+            if (homeModel.hasAnySongs) {
+                emptyList()
+            } else {
+                fastState.recentlyAdded.ifEmpty { fastState.firstSongs }.take(6)
+            }
         val decades =
             if (isPlaylistsTab) HeadUnitQuickAccess.deriveDecades(homeModel.allSongYears)
             else emptyList()
@@ -392,6 +413,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 activeDecade = homeModel.decadeFilter.value,
                 recentlyAdded = metadataState.recentlyAdded,
                 favourites = metadataState.favourites,
+                startupSongs = startupSongs,
+                usbRoots = fastState.usbRoots,
                 tabType = homeModel.currentTabType.value,
             )
         val oldSignature = metadataChipSignature
@@ -400,6 +423,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 oldSignature.decades == signature.decades &&
                 oldSignature.recentlyAdded == signature.recentlyAdded &&
                 oldSignature.favourites == signature.favourites &&
+                oldSignature.startupSongs == signature.startupSongs &&
+                oldSignature.usbRoots == signature.usbRoots &&
                 oldSignature.tabType == signature.tabType -> {
                 if (oldSignature.activeDecade != signature.activeDecade) {
                     updateDecadeChipSelection(binding, signature)
@@ -426,6 +451,25 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         signature: MetadataChipSignature,
     ) {
         binding.homeMetadataChips.removeAllViews()
+        if (signature.startupSongs.isNotEmpty() || signature.usbRoots.isNotEmpty()) {
+            binding.homeMetadataChips.addView(
+                buildMetaChip(binding, getString(R.string.lbl_search)) {
+                    findNavController().navigateSafe(HomeFragmentDirections.search())
+                }
+            )
+        }
+        signature.startupSongs.forEach { row ->
+            binding.homeMetadataChips.addView(
+                buildMetaChip(binding, "▶ ${row.title}") { playStartupSong(row) }
+            )
+        }
+        signature.usbRoots.forEach { root ->
+            binding.homeMetadataChips.addView(
+                buildMetaChip(binding, root.name.ifBlank { root.path.substringAfterLast('/') }) {
+                    FastStartFolderDialogFragment.show(childFragmentManager, root.path)
+                }
+            )
+        }
         signature.decades.forEach { decade ->
             binding.homeMetadataChips.addView(
                 buildDecadeChip(binding, decade, signature.activeDecade)
@@ -470,6 +514,19 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             contentDescription = label
             setOnClickListener { onClick() }
         }
+
+    private fun playStartupSong(row: StartupSongRow) {
+        if (!row.available) return
+        val parsed = Uri.parse(row.uri)
+        val uri =
+            if (!parsed.scheme.isNullOrBlank()) {
+                parsed
+            } else {
+                row.directPath?.let { Uri.fromFile(File(it)) } ?: return
+            }
+        playbackModel.playDeferred(DeferredPlayback.Open(uri))
+        playbackModel.openPlayback()
+    }
 
     private fun handleQuickPick(action: QuickPickAction) {
         val route = HeadUnitRoutePolicy.routeForQuickPick(action)
@@ -687,13 +744,15 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     }
 
     private fun handleStartupReadinessState(state: StartupReadinessState) {
-        if (state.rank >= StartupReadinessState.FastBrowseReady.rank) {
-            return
+        if (state == StartupReadinessState.FastBrowseReady) {
+            homeModel.refreshFastStart(force = true)
         }
+    }
+
+    private fun handleStartupLibraryStatus(status: StartupLibraryStatus) {
+        if (status != StartupLibraryStatus.NeedsMusicSource) return
         val navController = findNavController()
-        if (navController.currentDestination?.id != R.id.home_fragment) {
-            return
-        }
+        if (navController.currentDestination?.id != R.id.home_fragment) return
         if (homeModel.markAutomaticSourceDialogStarted()) {
             navController.navigateSafe(HomeFragmentDirections.chooseLocations())
         }
@@ -890,6 +949,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val activeDecade: Int?,
         val recentlyAdded: Boolean,
         val favourites: Boolean,
+        val startupSongs: List<StartupSongRow>,
+        val usbRoots: List<FastStartDirectFolderBrowser.Entry>,
         val tabType: MusicType? = null,
     )
 

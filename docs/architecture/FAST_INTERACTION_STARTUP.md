@@ -27,3 +27,20 @@ Recoverable statuses such as no source, empty library, cache unavailable, and so
 Direct USB browsing is bounded to the visible level under `/storage/usbdisk0` and `/storage/usbdisk1`, returns app-facing `/storage/...` paths, and is separate from source indexing or MediaStore visibility.
 
 TS18 exact-device claim: [Evidence confidence: Requires TS18 validation] [Porting decision: Requires TS18 runtime validation].
+
+
+## User-facing fast path
+
+Before `Musikr.loadCached()` completes, Home can show bounded recent/first-song chips and mounted
+`/storage/usbdisk0` or `/storage/usbdisk1` roots. Search debounces and queries normalized Room song
+projections, and both search rows and the in-app USB folder dialog can start validated raw playback
+through the existing single playback service/session. Rich `Song` objects, relationships and artwork
+enrich later without replacing current audio.
+
+## PR 2 compatibility bridge
+
+Complete Home category materialisation, subscriber-driven category paging, source-scoped committed
+generations, changed-file-only extraction and Lean/Full enrichment remain intentionally deferred to
+the stacked incremental-library PR. `DBCache.snapshot()` and `Musikr.loadCached()` remain explicit,
+background compatibility paths for screens not yet migrated; neither gates queue restore, bounded
+Home rows, Quick Find, USB browsing or MediaBrowser startup projections.

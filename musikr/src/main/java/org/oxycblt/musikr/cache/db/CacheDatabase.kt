@@ -448,7 +448,7 @@ internal interface LibraryReadDao {
      * so that [offset]/[limit] paging never skips or repeats rows.
      */
     @Query(
-        "SELECT id, stableUid, uri, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef FROM LibrarySongData WHERE available = 1 AND (titleSort LIKE :pattern ESCAPE '\\' OR primaryArtistSort LIKE :pattern ESCAPE '\\' OR albumSort LIKE :pattern ESCAPE '\\') ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
+        "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM LibrarySongData WHERE available = 1 AND (titleSort LIKE :pattern ESCAPE '\\' OR primaryArtistSort LIKE :pattern ESCAPE '\\' OR albumSort LIKE :pattern ESCAPE '\\') ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
     )
     suspend fun searchSongs(pattern: String, limit: Int, offset: Int): List<SongListRow>
 }

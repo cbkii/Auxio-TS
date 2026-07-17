@@ -271,10 +271,14 @@ class ExoPlaybackStateHolder(
             return true
         }
 
-        val library =
-            musicRepository.library?.takeIf { !it.empty() }
-                // No library, cannot do anything.
-                ?: return false
+        val library = musicRepository.library?.takeIf { !it.empty() }
+        if (library == null) {
+            if (action is DeferredPlayback.Open) {
+                startDirectOpen(action)
+                return true
+            }
+            return false
+        }
 
         when (action) {
             // Restore state is handled above so it can remain pending until the cached library
@@ -309,6 +313,60 @@ class ExoPlaybackStateHolder(
         }
 
         return true
+    }
+
+    private fun startDirectOpen(action: DeferredPlayback.Open) {
+        cancelActiveRestore("direct-open", notify = false)
+        val generation = ++restoreGeneration
+        currentRestoreJob =
+            restoreScope.launch {
+                try {
+                    val uri = action.uri
+                    val snapshot =
+                        FastResumeSnapshot(
+                            uri = uri.toString(),
+                            path =
+                                uri.path.takeIf {
+                                    uri.scheme.isNullOrBlank() || uri.scheme == "file"
+                                },
+                            title = uri.lastPathSegment,
+                            artist = null,
+                            album = null,
+                            durationMs = 0L,
+                            positionMs = 0L,
+                            playing = true,
+                            savedAtMs = System.currentTimeMillis(),
+                        )
+                    val validation = RawFastResumeValidator.validate(context, snapshot)
+                    withContext(Dispatchers.Main) {
+                        if (generation != restoreGeneration) return@withContext
+                        when (validation) {
+                            is RawFastResumeValidator.Result.Valid -> {
+                                startRawFastResume(validation.item, play = true)
+                                completeRestore(generation, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                            }
+                            is RawFastResumeValidator.Result.Invalid -> {
+                                L.w(
+                                    "Ignoring invalid Fast Start media ${action.uri}: " +
+                                        "${validation.reason} ${validation.detail}"
+                                )
+                                completeRestore(generation, RestoreOutcome.FAILED)
+                            }
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w(e, "Unable to open Fast Start media ${action.uri}")
+                    withContext(Dispatchers.Main) {
+                        if (generation == restoreGeneration) {
+                            completeRestore(generation, RestoreOutcome.FAILED)
+                        }
+                    }
+                } finally {
+                    if (generation == restoreGeneration) currentRestoreJob = null
+                }
+            }
     }
 
     private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {

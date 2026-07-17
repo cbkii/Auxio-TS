@@ -37,6 +37,7 @@ import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.playback.state.ShuffleMode
@@ -75,6 +76,10 @@ constructor(
     /** The currently playing song. */
     val song: StateFlow<Song?>
         get() = _song
+
+    private val _rawPlaybackMetadata = MutableStateFlow(playbackManager.rawPlaybackMetadata)
+    /** Primitive metadata available before the rich Musikr Song has been hydrated. */
+    val rawPlaybackMetadata: StateFlow<RawPlaybackMetadata?> = _rawPlaybackMetadata
 
     private val _parent = MutableStateFlow<MusicParent?>(null)
     /** The [MusicParent] currently being played. Null if playback is occurring from all songs. */
@@ -167,12 +172,14 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
+        syncRawPlaybackMetadata()
 
         _pagerCommand.put(PagerCommand(update = null, scroll = index))
         _pagerQueue.value = _pagerQueue.value.copy(index = index)
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
+        syncRawPlaybackMetadata()
         // Other types of queue changes preserve the current song.
         if (change.type == QueueChange.Type.SONG) {
             L.d("Queue changed, updating current song")
@@ -204,6 +211,7 @@ constructor(
     ) {
         L.d("New playback started, updating playback information")
         _song.value = playbackManager.currentSong
+        syncRawPlaybackMetadata()
         _parent.value = parent
         _isShuffled.value = isShuffled
         _shuffleScope.value = playbackManager.shuffleScope
@@ -214,6 +222,7 @@ constructor(
     override fun onProgressionChanged(progression: Progression) {
         L.d("Player state changed, starting new position polling")
         _isPlaying.value = progression.isPlaying
+        syncRawPlaybackMetadata()
         // Still need to update the position now due to co-routine launch delays
         _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
         // Replace the previous position co-routine with a new one that uses the new
@@ -238,6 +247,11 @@ constructor(
 
     override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {
         _restoreOutcome.value = outcome
+        syncRawPlaybackMetadata()
+    }
+
+    private fun syncRawPlaybackMetadata() {
+        _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
     }
 
     override fun onRepeatModeChanged(repeatMode: RepeatMode) {

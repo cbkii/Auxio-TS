@@ -65,6 +65,8 @@ constructor(
     private val _indexingState = MutableStateFlow<IndexingState?>(null)
     private val _startupReadinessState =
         MutableStateFlow<StartupReadinessState>(StartupReadinessState.ProcessVisible)
+    private val _startupLibraryStatus =
+        MutableStateFlow<StartupLibraryStatus>(StartupLibraryStatus.Unknown)
 
     @Volatile private var libraryGeneration = 0L
 
@@ -72,6 +74,9 @@ constructor(
     val indexingState: StateFlow<IndexingState?> = _indexingState
 
     val startupReadinessState: StateFlow<StartupReadinessState> = _startupReadinessState
+
+    /** Recoverable library/source condition independent of startup capability ordering. */
+    val startupLibraryStatus: StateFlow<StartupLibraryStatus> = _startupLibraryStatus
 
     private val _statistics = MutableStateFlow<Statistics?>(null)
 
@@ -144,6 +149,7 @@ constructor(
 
     override fun onStartupReadinessStateChanged() {
         _startupReadinessState.value = musicRepository.startupReadinessState
+        _startupLibraryStatus.value = musicRepository.startupLibraryStatus
     }
 
     /** Requests that the music library should be re-loaded while leveraging the cache. */

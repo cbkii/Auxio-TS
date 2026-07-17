@@ -88,7 +88,7 @@ class StartupReadinessController @Inject constructor() {
     }
 
     private fun deriveContiguous(): StartupReadinessState {
-        var latest = StartupReadinessState.ProcessVisible
+        var latest: StartupReadinessState = StartupReadinessState.ProcessVisible
         for (capability in StartupCapability.entries) {
             if (capability !in achieved) break
             latest = capability.toReadinessState()
