@@ -42,5 +42,5 @@ enrich later without replacing current audio.
 Complete Home category materialisation, subscriber-driven category paging, source-scoped committed
 generations, changed-file-only extraction and Lean/Full enrichment remain intentionally deferred to
 the stacked incremental-library PR. `DBCache.snapshot()` and `Musikr.loadCached()` remain explicit,
-background compatibility paths for screens not yet migrated; neither gates queue restore, bounded
+background compatibility paths for screens not yet migrated; neither path gates queue restore, bounded
 Home rows, Quick Find, USB browsing or MediaBrowser startup projections.
