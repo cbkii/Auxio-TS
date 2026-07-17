@@ -1,0 +1,101 @@
+name: PR 183 verification
+
+on:
+  push:
+    branches:
+      - cx/incremental-library-pipeline
+    paths:
+      - .github/workflows/pr183-verify.yml
+      - app/**
+      - musikr/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr183-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+
+      - name: Ensure native build tools are present
+        shell: bash
+        run: |
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Run review verification with complete log
+        shell: bash
+        run: |
+          log_file="${GITHUB_WORKSPACE}/pr183-verification.log"
+          : > "${log_file}"
+          overall=0
+
+          run_logged() {
+            local label=$1
+            shift
+            printf '\n===== %s =====\n' "${label}" | tee -a "${log_file}"
+            "$@" 2>&1 | tee -a "${log_file}"
+            local rc=${PIPESTATUS[0]}
+            printf '===== %s exit=%s =====\n' "${label}" "${rc}" | tee -a "${log_file}"
+            if ((rc != 0)); then
+              overall=1
+            fi
+          }
+
+          run_logged formatting bash ./scripts/ci-gradle.sh spotlessCheck
+          run_logged unit-tests bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+          run_logged lint bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+          run_logged standard-debug bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug
+          run_logged topway-music-debug bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicDebug
+          run_logged topway-media-debug bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaDebug
+          run_logged ts18-contracts bash ./scripts/check-ts18-apk-reference-contracts.sh
+          run_logged dofun-topway bash ./scripts/check-dofun-topway-compat.sh
+
+          exit "${overall}"
+
+      - name: Upload complete verification log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr183-verification-log
+          path: pr183-verification.log
+          if-no-files-found: error
+          retention-days: 7
