@@ -1,3 +1,5 @@
+# Runs bounded API 29 managed-emulator profile generation or startup/interaction benchmarks.
+# Results are repository/emulator evidence only; exact TS18 behaviour requires device validation.
 name: Startup Benchmarks
 
 on:
@@ -104,7 +106,7 @@ jobs:
           fi
           bash ./scripts/check-startup-performance-contracts.sh
 
-      - name: Resolve managed-device task
+      - name: Resolve managed-device task and test class
         id: task
         shell: bash
         env:
@@ -120,24 +122,31 @@ jobs:
             topwayTwMedia) flavour_token='TopwayTwMedia' ;;
             *) echo "Unsupported flavour: ${FLAVOUR}" >&2; exit 1 ;;
           esac
-          if [[ "${SUITE}" == "baseline-profile" ]]; then
-            pattern="pixel2Api29.*${flavour_token}.*BaselineProfile"
-          else
-            pattern="pixel2Api29.*${flavour_token}.*AndroidTest"
-          fi
+          case "${SUITE}" in
+            baseline-profile)
+              test_class='org.oxycblt.auxio.startupbenchmark.BaselineProfileGenerator'
+              ;;
+            macrobenchmark)
+              test_class='org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark'
+              ;;
+            *) echo "Unsupported suite: ${SUITE}" >&2; exit 1 ;;
+          esac
+          pattern="pixel2Api29.*${flavour_token}.*AndroidTest"
           task_name="$(awk '{print $1}' "${tasks_file}" | grep -Ei "^${pattern}$" | head -n 1 || true)"
           if [[ -z "${task_name}" ]]; then
-            echo "No task matched ${pattern}. Available managed-device/profile tasks:" >&2
-            grep -Ei 'pixel2Api29|BaselineProfile|AndroidTest' "${tasks_file}" >&2 || true
+            echo "No task matched ${pattern}. Available managed-device tasks:" >&2
+            grep -Ei 'pixel2Api29|AndroidTest' "${tasks_file}" >&2 || true
             exit 1
           fi
           echo "name=${task_name}" >> "${GITHUB_OUTPUT}"
-          echo "Resolved :startup-benchmark:${task_name}"
+          echo "class=${test_class}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved :startup-benchmark:${task_name} (${test_class})"
 
       - name: Run bounded managed-device suite
         shell: bash
         env:
           TASK_NAME: ${{ steps.task.outputs.name }}
+          TEST_CLASS: ${{ steps.task.outputs.class }}
           FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
           ITERATIONS: ${{ inputs.iterations }}
           FLAVOUR: ${{ inputs.flavour }}
@@ -146,12 +155,14 @@ jobs:
           set -euo pipefail
           bash ./scripts/ci-gradle.sh \
             ":startup-benchmark:${TASK_NAME}" \
+            -Pandroid.testInstrumentationRunnerArguments.class="${TEST_CLASS}" \
             -Pandroid.testInstrumentationRunnerArguments.auxio.fixtureSongCount="${FIXTURE_SONG_COUNT}" \
             -Pandroid.testInstrumentationRunnerArguments.auxio.iterations="${ITERATIONS}"
           {
             echo "commit=${GITHUB_SHA}"
             echo "flavour=${FLAVOUR}"
             echo "suite=${SUITE}"
+            echo "testClass=${TEST_CLASS}"
             echo "fixtureSongCount=${FIXTURE_SONG_COUNT}"
             echo "iterations=${ITERATIONS}"
             echo "device=pixel2Api29-aosp"
@@ -168,7 +179,6 @@ jobs:
             startup-benchmark/build/outputs/**
             startup-benchmark/build/reports/**
             startup-benchmark/build/benchmark-context.txt
-            app/build/outputs/baselineProfiles/**
             app/src/main/baseline-prof.txt
             app/src/main/startup-prof.txt
           if-no-files-found: warn
