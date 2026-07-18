@@ -40,6 +40,9 @@ class StartupMacrobenchmark {
                 ?.coerceIn(3, 30)
                 ?: 7
 
+    private val fixtureSongCount: Int
+        get() = BenchmarkFixtureController.requestedSongCount
+
     @Test
     fun coldStartupWithoutProfiles() =
         startupBenchmark(CompilationMode.None(), StartupMode.COLD)
@@ -87,13 +90,20 @@ class StartupMacrobenchmark {
         }
 
     private fun startupBenchmark(compilationMode: CompilationMode, startupMode: StartupMode) {
+        var seeded = false
         benchmarkRule.measureRepeated(
             packageName = BuildConfig.TARGET_PACKAGE,
             metrics = listOf(StartupTimingMetric(), FrameTimingMetric()),
             compilationMode = compilationMode,
             startupMode = startupMode,
             iterations = iterations,
-            setupBlock = { pressHome() },
+            setupBlock = {
+                if (!seeded) {
+                    BenchmarkFixtureController.run { seedCommittedFixture(fixtureSongCount) }
+                    seeded = true
+                }
+                pressHome()
+            },
             measureBlock = { startActivityAndWait() },
         )
     }
@@ -101,6 +111,7 @@ class StartupMacrobenchmark {
     private fun journeyBenchmark(
         journey: androidx.benchmark.macro.MacrobenchmarkScope.() -> Unit
     ) {
+        var seeded = false
         benchmarkRule.measureRepeated(
             packageName = BuildConfig.TARGET_PACKAGE,
             metrics = listOf(StartupTimingMetric(), FrameTimingMetric()),
@@ -108,7 +119,13 @@ class StartupMacrobenchmark {
                 CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
             startupMode = StartupMode.COLD,
             iterations = iterations,
-            setupBlock = { pressHome() },
+            setupBlock = {
+                if (!seeded) {
+                    BenchmarkFixtureController.run { seedCommittedFixture(fixtureSongCount) }
+                    seeded = true
+                }
+                pressHome()
+            },
             measureBlock = journey,
         )
     }
