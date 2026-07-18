@@ -64,7 +64,7 @@ jobs:
 
       - name: Prepare formatting dependencies
         shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile format-only
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
       - name: Apply repository formatter
         shell: bash
