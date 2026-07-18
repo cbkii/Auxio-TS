@@ -59,8 +59,17 @@ class BaselineProfileGenerator {
                 launchFastStart()
                 exerciseQuickFind()
                 exercisePlaybackControls()
+
+                // Each remaining path starts from a known Fast Start surface. The previous
+                // interaction may leave search, playback or a folder dialog on top, so relying on
+                // activity state restoration would make profile generation order-dependent.
+                exerciseProcessDeathRelaunch()
                 exerciseUsbFolder()
+
+                exerciseProcessDeathRelaunch()
                 exercisePagedLibrary()
+
+                exerciseProcessDeathRelaunch()
                 exerciseEarlyMediaBrowser()
             }
         }
