@@ -1,4 +1,4 @@
-name: PR 183 one-shot repair
+name: PR 183 one-shot verification
 
 on:
   push:
@@ -11,9 +11,9 @@ permissions:
   contents: write
 
 jobs:
-  repair:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 75
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -21,79 +21,55 @@ jobs:
           ref: cx/incremental-library-pipeline
           fetch-depth: 0
 
-      - name: Repair incremental projection contracts
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Configure Android SDK
+        shell: bash
+        run: printf 'sdk.dir=%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Bootstrap dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Run focused build and tests
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+          set +e
+          log=.github/pr183-repair-ci.log
+          : >"${log}"
+          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug >>"${log}" 2>&1
+          build_rc=$?
+          if ((build_rc == 0)); then
+            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest >>"${log}" 2>&1
+            test_rc=$?
+          else
+            test_rc=125
+          fi
+          printf '\nBUILD_EXIT=%s\nTEST_EXIT=%s\n' "${build_rc}" "${test_rc}" >>"${log}"
+          echo "BUILD_EXIT=${build_rc}" >>"${GITHUB_ENV}"
+          echo "TEST_EXIT=${test_rc}" >>"${GITHUB_ENV}"
 
-          path = Path('musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalDatabase.kt')
-          text = path.read_text()
-          text = re.sub(
-              r'\nimport org\.oxycblt\.musikr\.cache\.Startup(?:Album|Artist|Folder|Song|Summary)Row',
-              '',
-              text,
-          )
-          marker = '/** Bounded queries over only committed generations, with a legacy fallback during migration. */'
-          if marker not in text:
-              raise SystemExit('IncrementalLibraryReadDao marker not found')
-          replacement = r'''/** Bounded queries over committed generations, with a legacy fallback during migration. */
-          @Dao
-          internal interface IncrementalLibraryReadDao {
-              @Query(
-                  "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM (" +
-                      "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.titleSort AS ordering FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
-                      "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.titleSort AS ordering FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 ORDER BY ordering, id LIMIT :limit OFFSET :offset"
-              )
-              suspend fun songsPage(limit: Int, offset: Int): List<SongListRow>
-
-              @Query(
-                  "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM (" +
-                      "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.dateAddedMs AS ordering FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
-                      "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.dateAddedMs AS ordering FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 ORDER BY ordering DESC, id DESC LIMIT :limit"
-              )
-              suspend fun recentlyAdded(limit: Int): List<SongListRow>
-
-              @Query(
-                  "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM (" +
-                      "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.titleSort AS ordering, song.primaryArtistSort AS artistOrdering, song.albumSort AS albumOrdering FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
-                      "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.titleSort AS ordering, legacy.primaryArtistSort AS artistOrdering, legacy.albumSort AS albumOrdering FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 AND (ordering LIKE :pattern ESCAPE '\\' OR artistOrdering LIKE :pattern ESCAPE '\\' OR albumOrdering LIKE :pattern ESCAPE '\\' OR displayPath LIKE :pattern ESCAPE '\\') ORDER BY ordering, id LIMIT :limit OFFSET :offset"
-              )
-              suspend fun searchSongs(pattern: String, limit: Int, offset: Int): List<SongListRow>
-
-              @Query(
-                  "SELECT MIN(id) AS id, albumName AS title, COALESCE(albumSort, albumName) AS titleSort FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 AND albumName IS NOT NULL GROUP BY albumName, albumSort ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
-              )
-              suspend fun albumsPage(limit: Int, offset: Int): List<AlbumListRow>
-
-              @Query(
-                  "SELECT MIN(id) AS id, primaryArtistName AS name, COALESCE(primaryArtistSort, primaryArtistName) AS nameSort FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 AND primaryArtistName IS NOT NULL GROUP BY primaryArtistName, primaryArtistSort ORDER BY nameSort, id LIMIT :limit OFFSET :offset"
-              )
-              suspend fun artistsPage(limit: Int, offset: Int): List<ArtistListRow>
-
-              @Query(
-                  "SELECT COUNT(*) FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1"
-              )
-              suspend fun songCount(): Int
-          }
-          '''
-          text = text[:text.index(marker)] + replacement
-          path.write_text(text)
-
-          Path('.github/pr183-ci-failure.log').unlink(missing_ok=True)
-          Path('.github/workflows/pr183-ci-diagnostic.yml').unlink(missing_ok=True)
-          PY
-
-      - name: Commit repaired branch
+      - name: Publish result and remove workflow on success
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if [[ "${BUILD_EXIT}" == 0 && "${TEST_EXIT}" == 0 ]]; then
+            rm -f .github/pr183-repair-ci.log .github/workflows/pr183-repair.yml
+            message='ci: remove completed PR 183 verification workflow'
+          else
+            message='ci: record focused PR 183 verification failure'
+          fi
           git add -A
           if git diff --cached --quiet; then
-            echo 'No repair changes produced'
             exit 0
           fi
-          git commit -m 'fix: align incremental Room projection contracts'
+          git commit -m "${message}"
           git push origin HEAD:cx/incremental-library-pipeline
