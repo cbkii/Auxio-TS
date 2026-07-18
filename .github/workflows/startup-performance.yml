@@ -7,11 +7,13 @@ on:
       - dev
       - cx/startup-profiles-benchmarks
     paths:
-      - ".github/workflows/startup-performance.yml"
+      - ".github/workflows/**"
       - "app/**"
       - "musikr/**"
       - "startup-benchmark/**"
-      - "scripts/check-startup-performance-contracts.sh"
+      - "scripts/**"
+      - "docs/architecture/**"
+      - "docs/validation/**"
       - "build.gradle"
       - "settings.gradle"
       - "gradle/**"
@@ -27,11 +29,13 @@ on:
       - dev
       - cx/incremental-library-pipeline
     paths:
-      - ".github/workflows/startup-performance.yml"
+      - ".github/workflows/**"
       - "app/**"
       - "musikr/**"
       - "startup-benchmark/**"
-      - "scripts/check-startup-performance-contracts.sh"
+      - "scripts/**"
+      - "docs/architecture/**"
+      - "docs/validation/**"
       - "build.gradle"
       - "settings.gradle"
       - "gradle/**"
@@ -62,6 +66,24 @@ jobs:
           fetch-depth: 0
           submodules: false
           persist-credentials: false
+
+      - name: Validate workflow YAML
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+
+      - name: Validate shell script syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=0
+          while IFS= read -r -d '' script; do
+            printf 'Checking %s\n' "${script}"
+            if ! bash -n "${script}"; then
+              status=1
+            fi
+          done < <(find scripts -type f -name '*.sh' -print0)
+          exit "${status}"
 
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
@@ -107,7 +129,7 @@ jobs:
 
       - name: Check formatting
         shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessCheck
+        run: bash ./scripts/check-format-with-diff.sh
 
       - name: Run unit tests
         shell: bash
@@ -118,6 +140,10 @@ jobs:
       - name: Run Android lint
         shell: bash
         run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+
+      - name: Run head-unit safety checks
+        shell: bash
+        run: bash ./scripts/check-headunit-compat-safety.sh
 
       - name: Compile benchmark and profile instrumentation
         shell: bash
@@ -167,6 +193,7 @@ jobs:
             musikr/build/reports/**
             startup-benchmark/build/reports/**
             build/reports/problems/**
+            build/reports/startup-performance/**
           if-no-files-found: ignore
           retention-days: 7
 
@@ -181,6 +208,6 @@ jobs:
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Static architecture contracts, formatting, unit tests, lint, benchmark/profile compilation, all maintained debug/release variants, compiled profile artefacts, TS18 APK contracts and DoFun/Topway source contracts were included."
+            echo "- Workflow/shell syntax, static architecture contracts, formatting, unit tests, lint, head-unit safety, benchmark/profile compilation, all maintained debug/release variants, compiled profile artefacts, TS18 APK contracts and DoFun/Topway source contracts were included."
             echo "- No emulator or exact-device latency claim is produced by this workflow."
           } >> "${GITHUB_STEP_SUMMARY}"
