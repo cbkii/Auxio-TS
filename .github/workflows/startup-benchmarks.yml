@@ -1,0 +1,198 @@
+name: Startup Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavour:
+        description: Application flavour to benchmark
+        required: true
+        type: choice
+        default: standard
+        options:
+          - standard
+          - topwayTwMusic
+          - topwayTwMedia
+      fixture_song_count:
+        description: Deterministic committed-library fixture size
+        required: true
+        type: choice
+        default: "5000"
+        options:
+          - "500"
+          - "5000"
+          - "20000"
+      iterations:
+        description: Measurement iterations (3-30)
+        required: true
+        type: number
+        default: 7
+      suite:
+        description: Instrumented suite
+        required: true
+        type: choice
+        default: macrobenchmark
+        options:
+          - macrobenchmark
+          - baseline-profile
+
+permissions:
+  contents: read
+
+concurrency:
+  group: startup-benchmarks-${{ github.ref }}-${{ inputs.flavour }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]]
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Enable KVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Validate benchmark inputs and contracts
+        shell: bash
+        env:
+          FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
+          ITERATIONS: ${{ inputs.iterations }}
+        run: |
+          set -euo pipefail
+          case "${FIXTURE_SONG_COUNT}" in
+            500|5000|20000) ;;
+            *) echo "Unsupported fixture size: ${FIXTURE_SONG_COUNT}" >&2; exit 1 ;;
+          esac
+          if ((ITERATIONS < 3 || ITERATIONS > 30)); then
+            echo "Iterations must be between 3 and 30." >&2
+            exit 1
+          fi
+          bash ./scripts/check-startup-performance-contracts.sh
+
+      - name: Resolve managed-device task
+        id: task
+        shell: bash
+        env:
+          FLAVOUR: ${{ inputs.flavour }}
+          SUITE: ${{ inputs.suite }}
+        run: |
+          set -euo pipefail
+          tasks_file="${RUNNER_TEMP}/startup-benchmark-tasks.txt"
+          bash ./scripts/ci-gradle.sh :startup-benchmark:tasks --all --console=plain > "${tasks_file}"
+          case "${FLAVOUR}" in
+            standard) flavour_token='Standard' ;;
+            topwayTwMusic) flavour_token='TopwayTwMusic' ;;
+            topwayTwMedia) flavour_token='TopwayTwMedia' ;;
+            *) echo "Unsupported flavour: ${FLAVOUR}" >&2; exit 1 ;;
+          esac
+          if [[ "${SUITE}" == "baseline-profile" ]]; then
+            pattern="pixel2Api29.*${flavour_token}.*BaselineProfile"
+          else
+            pattern="pixel2Api29.*${flavour_token}.*AndroidTest"
+          fi
+          task_name="$(awk '{print $1}' "${tasks_file}" | grep -Ei "^${pattern}$" | head -n 1 || true)"
+          if [[ -z "${task_name}" ]]; then
+            echo "No task matched ${pattern}. Available managed-device/profile tasks:" >&2
+            grep -Ei 'pixel2Api29|BaselineProfile|AndroidTest' "${tasks_file}" >&2 || true
+            exit 1
+          fi
+          echo "name=${task_name}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved :startup-benchmark:${task_name}"
+
+      - name: Run bounded managed-device suite
+        shell: bash
+        env:
+          TASK_NAME: ${{ steps.task.outputs.name }}
+          FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
+          ITERATIONS: ${{ inputs.iterations }}
+          FLAVOUR: ${{ inputs.flavour }}
+          SUITE: ${{ inputs.suite }}
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh \
+            ":startup-benchmark:${TASK_NAME}" \
+            -Pandroid.testInstrumentationRunnerArguments.auxio.fixtureSongCount="${FIXTURE_SONG_COUNT}" \
+            -Pandroid.testInstrumentationRunnerArguments.auxio.iterations="${ITERATIONS}"
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "flavour=${FLAVOUR}"
+            echo "suite=${SUITE}"
+            echo "fixtureSongCount=${FIXTURE_SONG_COUNT}"
+            echo "iterations=${ITERATIONS}"
+            echo "device=pixel2Api29-aosp"
+            echo "evidence=Observed on managed emulator only"
+            echo "exactTs18=Requires device validation"
+          } > startup-benchmark/build/benchmark-context.txt
+
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: startup-benchmark-${{ inputs.flavour }}-${{ inputs.fixture_song_count }}-${{ github.run_number }}
+          path: |
+            startup-benchmark/build/outputs/**
+            startup-benchmark/build/reports/**
+            startup-benchmark/build/benchmark-context.txt
+            app/build/outputs/baselineProfiles/**
+            app/src/main/baseline-prof.txt
+            app/src/main/startup-prof.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Write benchmark summary
+        if: always()
+        shell: bash
+        env:
+          JOB_STATUS: ${{ job.status }}
+          FLAVOUR: ${{ inputs.flavour }}
+          FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
+          ITERATIONS: ${{ inputs.iterations }}
+          SUITE: ${{ inputs.suite }}
+        run: |
+          {
+            echo "## Startup benchmark"
+            echo
+            echo "- Result: \`${JOB_STATUS}\`"
+            echo "- Flavour: \`${FLAVOUR}\`"
+            echo "- Suite: \`${SUITE}\`"
+            echo "- Fixture songs: \`${FIXTURE_SONG_COUNT}\`"
+            echo "- Iterations: \`${ITERATIONS}\`"
+            echo "- Environment: Pixel 2 API 29 AOSP managed emulator"
+            echo "- Evidence confidence: Observed on this managed emulator only"
+            echo "- Exact TS18 latency and runtime behaviour: Requires device validation"
+          } >> "${GITHUB_STEP_SUMMARY}"
