@@ -40,24 +40,6 @@ plugins {
     id "io.github.takahirom.roborazzi" version "1.64.0" apply false
 }
 
-// Keep profile generation reproducible while retaining the hand-reviewed profile sources committed
-// by this PR. The profile-generation target must be unminified; release variants remain minified.
-project(":app") {
-    apply plugin: "androidx.baselineprofile"
-
-    plugins.withId("com.android.application") {
-        android.buildTypes.named("benchmark").configure {
-            minifyEnabled false
-        }
-        dependencies.add("baselineProfile", project(":startup-benchmark"))
-        baselineProfile {
-            mergeIntoMain true
-            saveInSrc false
-            automaticGenerationDuringBuild false
-        }
-    }
-}
-
 spotless {
     kotlin {
         target "*/src/**/*.kt"

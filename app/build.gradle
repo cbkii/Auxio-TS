@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id "com.android.application"
+    id "androidx.baselineprofile"
     id "androidx.navigation.safeargs.kotlin"
     id "kotlin-parcelize"
     id "dagger.hilt.android.plugin"
@@ -111,6 +112,7 @@ android {
 
         benchmark {
             initWith release
+            minifyEnabled false
             signingConfig signingConfigs.debug
             debuggable false
             shrinkResources false
@@ -248,6 +250,7 @@ dependencies {
     // Build and profile installation
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$desugaring_version"
     implementation "androidx.profileinstaller:profileinstaller:1.4.1"
+    baselineProfile project(":startup-benchmark")
 
     // --- SECOND PARTY ---
 
@@ -303,6 +306,13 @@ dependencies {
     testImplementation "io.github.takahirom.roborazzi:roborazzi:1.64.0"
     testImplementation "io.github.takahirom.roborazzi:roborazzi-junit-rule:1.64.0"
 }
+
+baselineProfile {
+    mergeIntoMain true
+    saveInSrc false
+    automaticGenerationDuringBuild false
+}
+
 
 tasks.withType(Test).configureEach { testTask ->
     // Keep regular unit-test CI independent from Roborazzi's runtime android-all downloads.
