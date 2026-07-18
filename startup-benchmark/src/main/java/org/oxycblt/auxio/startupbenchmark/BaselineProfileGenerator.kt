@@ -68,8 +68,7 @@ class BaselineProfileGenerator {
     private fun isProductionRule(rule: String): Boolean {
         val productionPackage =
             rule.contains("Lorg/oxycblt/auxio/") || rule.contains("Lorg/oxycblt/musikr/")
-        val benchmarkPackage =
-            rule.contains("/benchmark/") || rule.contains("/startupbenchmark/")
+        val benchmarkPackage = rule.contains("/benchmark/") || rule.contains("/startupbenchmark/")
         return productionPackage && !benchmarkPackage
     }
 }

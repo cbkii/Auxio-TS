@@ -318,11 +318,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         statement.bindLong(21, 1)
     }
 
-    private fun fixtureRow(
-        index: Int,
-        songCount: Int,
-        playableFiles: Map<Int, File>,
-    ): FixtureRow {
+    private fun fixtureRow(index: Int, songCount: Int, playableFiles: Map<Int, File>): FixtureRow {
         val sourceIndex = index % SOURCE_KEYS.size
         val albumCount = maxOf(1, songCount / 10)
         val artistCount = maxOf(1, songCount / 25)

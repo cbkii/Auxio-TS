@@ -45,7 +45,8 @@ import org.oxycblt.auxio.BuildConfig
  * production path and containment policy unchanged while allowing the managed-emulator USB journey
  * to enumerate and play a real bounded audio fixture.
  */
-class FastStartDirectFolderBrowser private constructor(
+class FastStartDirectFolderBrowser
+private constructor(
     private val configuredRoots: Map<String, File>,
     private val exposePhysicalPlaybackPath: Boolean,
 ) {

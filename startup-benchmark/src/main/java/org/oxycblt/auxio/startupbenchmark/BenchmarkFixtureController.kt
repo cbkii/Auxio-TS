@@ -52,7 +52,9 @@ internal object BenchmarkFixtureController {
         sourceMode: String = SOURCE_MODE_NORMAL,
     ) {
         require(songCount in BenchmarkFixtures.supportedSongCounts)
-        require(sourceMode in setOf(SOURCE_MODE_NORMAL, SOURCE_MODE_USB1_ABSENT, SOURCE_MODE_PENDING))
+        require(
+            sourceMode in setOf(SOURCE_MODE_NORMAL, SOURCE_MODE_USB1_ABSENT, SOURCE_MODE_PENDING)
+        )
         val packageName = BuildConfig.TARGET_PACKAGE
         require(packageName in supportedPackages)
         startActivityAndWait()
@@ -71,7 +73,8 @@ internal object BenchmarkFixtureController {
 
     fun captureStartupReport(
         device: UiDevice,
-        requiredLabels: Set<String> = setOf("Application.onCreate:start", "Application.onCreate:end"),
+        requiredLabels: Set<String> =
+            setOf("Application.onCreate:start", "Application.onCreate:end"),
     ): String {
         val packageName = BuildConfig.TARGET_PACKAGE
         val component = "$packageName/$RECEIVER"
@@ -83,10 +86,7 @@ internal object BenchmarkFixtureController {
             "Startup report broadcast failed: $output"
         }
         val encoded =
-            Regex("data=\"?([A-Za-z0-9+/=]+)\"?")
-                .find(output)
-                ?.groupValues
-                ?.getOrNull(1)
+            Regex("data=\"?([A-Za-z0-9+/=]+)\"?").find(output)?.groupValues?.getOrNull(1)
                 ?: error("Startup report data missing: $output")
         val report = String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
         check(report.contains("authority=benchmark-ordered-broadcast")) { report }

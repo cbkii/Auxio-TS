@@ -309,7 +309,7 @@ dependencies {
 
 baselineProfile {
     mergeIntoMain true
-    saveInSrc false
+    saveInSrc true
     automaticGenerationDuringBuild false
 }
 

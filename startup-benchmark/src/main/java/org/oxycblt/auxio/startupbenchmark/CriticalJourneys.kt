@@ -54,7 +54,9 @@ internal object CriticalJourneys {
             "Play/Pause media key was not dispatched"
         }
         device.waitForIdle()
-        check(device.pressKeyCode(KeyEvent.KEYCODE_MEDIA_NEXT)) { "Next media key was not dispatched" }
+        check(device.pressKeyCode(KeyEvent.KEYCODE_MEDIA_NEXT)) {
+            "Next media key was not dispatched"
+        }
         device.waitForIdle()
         check(device.pressKeyCode(KeyEvent.KEYCODE_MEDIA_PREVIOUS)) {
             "Previous media key was not dispatched"
@@ -173,7 +175,8 @@ internal object CriticalJourneys {
             lastState = device.executeShellCommand("dumpsys media_session")
             if (
                 lastState.contains(BuildConfig.TARGET_PACKAGE) &&
-                    (lastState.contains("state=3") || lastState.contains("state=PlaybackState {state=3"))
+                    (lastState.contains("state=3") ||
+                        lastState.contains("state=PlaybackState {state=3"))
             ) {
                 return
             }
