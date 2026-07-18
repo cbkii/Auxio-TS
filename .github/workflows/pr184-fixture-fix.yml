@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -31,6 +30,9 @@ jobs:
           path = Path("app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt")
           text = path.read_text(encoding="utf-8")
 
+          def lines(*values: str) -> str:
+              return "\n".join(values) + "\n"
+
           def replace_once(old: str, new: str) -> None:
               global text
               count = text.count(old)
@@ -39,146 +41,160 @@ jobs:
               text = text.replace(old, new, 1)
 
           replace_once(
-              """        val playableFiles = preparePlayableFixtures(context)
-""",
-              """        val playableFiles = preparePlayableFixtures(context, sourceMode)
-""",
+              lines("        val playableFiles = preparePlayableFixtures(context)"),
+              lines("        val playableFiles = preparePlayableFixtures(context, sourceMode)"),
           )
           replace_once(
-              """                    insertRepresentativeLibraryRows(database, songCount, playableFiles)
-                    insertSongs(database, songCount, playableFiles)
-""",
-              """                    insertRepresentativeLibraryRows(
-                        database,
-                        songCount,
-                        playableFiles,
-                        sourceMode,
-                    )
-                    insertSongs(database, songCount, playableFiles, sourceMode)
-""",
+              lines(
+                  "                    insertRepresentativeLibraryRows(database, songCount, playableFiles)",
+                  "                    insertSongs(database, songCount, playableFiles)",
+              ),
+              lines(
+                  "                    insertRepresentativeLibraryRows(",
+                  "                        database,",
+                  "                        songCount,",
+                  "                        playableFiles,",
+                  "                        sourceMode,",
+                  "                    )",
+                  "                    insertSongs(database, songCount, playableFiles, sourceMode)",
+              ),
           )
           replace_once(
-              """    private fun insertRepresentativeLibraryRows(
-        database: SQLiteDatabase,
-        songCount: Int,
-        playableFiles: Map<Int, File>,
-    ) {
-        SOURCE_KEYS.forEachIndexed { index, sourceKey ->
-            val values =
-""",
-              """    private fun insertRepresentativeLibraryRows(
-        database: SQLiteDatabase,
-        songCount: Int,
-        playableFiles: Map<Int, File>,
-        sourceMode: String,
-    ) {
-        SOURCE_KEYS.forEachIndexed { index, sourceKey ->
-            val available = sourceMode != SOURCE_MODE_USB1_ABSENT || index != 1
-            val pending = sourceMode == SOURCE_MODE_PENDING && index == 0
-            val values =
-""",
+              lines(
+                  "    private fun insertRepresentativeLibraryRows(",
+                  "        database: SQLiteDatabase,",
+                  "        songCount: Int,",
+                  "        playableFiles: Map<Int, File>,",
+                  "    ) {",
+                  "        SOURCE_KEYS.forEachIndexed { index, sourceKey ->",
+                  "            val values =",
+              ),
+              lines(
+                  "    private fun insertRepresentativeLibraryRows(",
+                  "        database: SQLiteDatabase,",
+                  "        songCount: Int,",
+                  "        playableFiles: Map<Int, File>,",
+                  "        sourceMode: String,",
+                  "    ) {",
+                  "        SOURCE_KEYS.forEachIndexed { index, sourceKey ->",
+                  "            val available = sourceMode != SOURCE_MODE_USB1_ABSENT || index != 1",
+                  "            val pending = sourceMode == SOURCE_MODE_PENDING && index == 0",
+                  "            val values =",
+              ),
           )
           replace_once(
-              """                    put("available", 1)
-                    put("lastCommittedGeneration", FIXTURE_GENERATION)
-                    putNull("pendingGeneration")
-""",
-              """                    put("available", available)
-                    put("lastCommittedGeneration", FIXTURE_GENERATION)
-                    if (pending) put("pendingGeneration", FIXTURE_GENERATION + 1)
-                    else putNull("pendingGeneration")
-""",
+              lines(
+                  "                    put(\"available\", 1)",
+                  "                    put(\"lastCommittedGeneration\", FIXTURE_GENERATION)",
+                  "                    putNull(\"pendingGeneration\")",
+              ),
+              lines(
+                  "                    put(\"available\", available)",
+                  "                    put(\"lastCommittedGeneration\", FIXTURE_GENERATION)",
+                  "                    if (pending) put(\"pendingGeneration\", FIXTURE_GENERATION + 1)",
+                  "                    else putNull(\"pendingGeneration\")",
+              ),
           )
           replace_once(
-              """    private fun insertSongs(
-        database: SQLiteDatabase,
-        songCount: Int,
-        playableFiles: Map<Int, File>,
-    ) {
-""",
-              """    private fun insertSongs(
-        database: SQLiteDatabase,
-        songCount: Int,
-        playableFiles: Map<Int, File>,
-        sourceMode: String,
-    ) {
-""",
+              lines(
+                  "    private fun insertSongs(",
+                  "        database: SQLiteDatabase,",
+                  "        songCount: Int,",
+                  "        playableFiles: Map<Int, File>,",
+                  "    ) {",
+              ),
+              lines(
+                  "    private fun insertSongs(",
+                  "        database: SQLiteDatabase,",
+                  "        songCount: Int,",
+                  "        playableFiles: Map<Int, File>,",
+                  "        sourceMode: String,",
+                  "    ) {",
+              ),
           )
           replace_once(
-              """                "INSERT OR REPLACE INTO IndexedUriStateData " +
-                    "(sourceKey, uri, available, lastGeneration, metadataProfile) " +
-                    "VALUES (?, ?, 1, ?, ?)"
-""",
-              """                "INSERT OR REPLACE INTO IndexedUriStateData " +
-                    "(sourceKey, uri, available, lastGeneration, metadataProfile) " +
-                    "VALUES (?, ?, ?, ?, ?)"
-""",
+              lines(
+                  "                \"INSERT OR REPLACE INTO IndexedUriStateData \" +",
+                  "                    \"(sourceKey, uri, available, lastGeneration, metadataProfile) \" +",
+                  "                    \"VALUES (?, ?, 1, ?, ?)\"",
+              ),
+              lines(
+                  "                \"INSERT OR REPLACE INTO IndexedUriStateData \" +",
+                  "                    \"(sourceKey, uri, available, lastGeneration, metadataProfile) \" +",
+                  "                    \"VALUES (?, ?, ?, ?, ?)\"",
+              ),
           )
           replace_once(
-              """                val row = fixtureRow(index, songCount, playableFiles)
-                bindSong(songStatement, row)
-""",
-              """                val row = fixtureRow(index, songCount, playableFiles)
-                val available =
-                    sourceMode != SOURCE_MODE_USB1_ABSENT || row.sourceKey != SOURCE_KEYS[1]
-                bindSong(songStatement, row)
-""",
+              lines(
+                  "                val row = fixtureRow(index, songCount, playableFiles)",
+                  "                bindSong(songStatement, row)",
+              ),
+              lines(
+                  "                val row = fixtureRow(index, songCount, playableFiles)",
+                  "                val available =",
+                  "                    sourceMode != SOURCE_MODE_USB1_ABSENT || row.sourceKey != SOURCE_KEYS[1]",
+                  "                bindSong(songStatement, row)",
+              ),
           )
           replace_once(
-              """                stateStatement.bindString(1, row.sourceKey)
-                stateStatement.bindString(2, row.uri)
-                stateStatement.bindLong(3, FIXTURE_GENERATION)
-                stateStatement.bindString(4, "LEAN")
-""",
-              """                stateStatement.bindString(1, row.sourceKey)
-                stateStatement.bindString(2, row.uri)
-                stateStatement.bindLong(3, if (available) 1 else 0)
-                stateStatement.bindLong(4, FIXTURE_GENERATION)
-                stateStatement.bindString(5, "LEAN")
-""",
+              lines(
+                  "                stateStatement.bindString(1, row.sourceKey)",
+                  "                stateStatement.bindString(2, row.uri)",
+                  "                stateStatement.bindLong(3, FIXTURE_GENERATION)",
+                  "                stateStatement.bindString(4, \"LEAN\")",
+              ),
+              lines(
+                  "                stateStatement.bindString(1, row.sourceKey)",
+                  "                stateStatement.bindString(2, row.uri)",
+                  "                stateStatement.bindLong(3, if (available) 1 else 0)",
+                  "                stateStatement.bindLong(4, FIXTURE_GENERATION)",
+                  "                stateStatement.bindString(5, \"LEAN\")",
+              ),
           )
           replace_once(
-              """    private fun preparePlayableFixtures(context: Context): Map<Int, File> {
-        val files = linkedMapOf<Int, File>()
-        SOURCE_KEYS.indices.forEach { sourceIndex ->
-            val root = FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)
-            check(root.mkdirs() || root.isDirectory) { "Unable to create ${root.absolutePath}" }
-            root.listFiles()?.forEach { child ->
-                if (child.name.startsWith("benchmark-tone-")) child.delete()
-            }
-            val index = PLAYABLE_INDICES[sourceIndex]
-            val file = File(root, "benchmark-tone-$sourceIndex.wav")
-            writeSilenceWave(file)
-            files[index] = file
-        }
-        return files
-    }
-""",
-              """    private fun preparePlayableFixtures(
-        context: Context,
-        sourceMode: String,
-    ): Map<Int, File> {
-        val files = linkedMapOf<Int, File>()
-        SOURCE_KEYS.indices.forEach { sourceIndex ->
-            val root = FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)
-            if (sourceMode == SOURCE_MODE_USB1_ABSENT && sourceIndex == 1) {
-                check(!root.exists() || root.deleteRecursively()) {
-                    "Unable to remove unavailable fixture root ${root.absolutePath}"
-                }
-                return@forEach
-            }
-            check(root.mkdirs() || root.isDirectory) { "Unable to create ${root.absolutePath}" }
-            root.listFiles()?.forEach { child ->
-                if (child.name.startsWith("benchmark-tone-")) child.delete()
-            }
-            val index = PLAYABLE_INDICES[sourceIndex]
-            val file = File(root, "benchmark-tone-$sourceIndex.wav")
-            writeSilenceWave(file)
-            files[index] = file
-        }
-        return files
-    }
-""",
+              lines(
+                  "    private fun preparePlayableFixtures(context: Context): Map<Int, File> {",
+                  "        val files = linkedMapOf<Int, File>()",
+                  "        SOURCE_KEYS.indices.forEach { sourceIndex ->",
+                  "            val root = FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)",
+                  "            check(root.mkdirs() || root.isDirectory) { \"Unable to create ${root.absolutePath}\" }",
+                  "            root.listFiles()?.forEach { child ->",
+                  "                if (child.name.startsWith(\"benchmark-tone-\")) child.delete()",
+                  "            }",
+                  "            val index = PLAYABLE_INDICES[sourceIndex]",
+                  "            val file = File(root, \"benchmark-tone-$sourceIndex.wav\")",
+                  "            writeSilenceWave(file)",
+                  "            files[index] = file",
+                  "        }",
+                  "        return files",
+                  "    }",
+              ),
+              lines(
+                  "    private fun preparePlayableFixtures(",
+                  "        context: Context,",
+                  "        sourceMode: String,",
+                  "    ): Map<Int, File> {",
+                  "        val files = linkedMapOf<Int, File>()",
+                  "        SOURCE_KEYS.indices.forEach { sourceIndex ->",
+                  "            val root = FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)",
+                  "            if (sourceMode == SOURCE_MODE_USB1_ABSENT && sourceIndex == 1) {",
+                  "                check(!root.exists() || root.deleteRecursively()) {",
+                  "                    \"Unable to remove unavailable fixture root ${root.absolutePath}\"",
+                  "                }",
+                  "                return@forEach",
+                  "            }",
+                  "            check(root.mkdirs() || root.isDirectory) { \"Unable to create ${root.absolutePath}\" }",
+                  "            root.listFiles()?.forEach { child ->",
+                  "                if (child.name.startsWith(\"benchmark-tone-\")) child.delete()",
+                  "            }",
+                  "            val index = PLAYABLE_INDICES[sourceIndex]",
+                  "            val file = File(root, \"benchmark-tone-$sourceIndex.wav\")",
+                  "            writeSilenceWave(file)",
+                  "            files[index] = file",
+                  "        }",
+                  "        return files",
+                  "    }",
+              ),
           )
 
           path.write_text(text, encoding="utf-8", newline="\n")
