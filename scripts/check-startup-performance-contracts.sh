@@ -59,7 +59,7 @@ for path in \
 done
 
 require_contains settings.gradle "include ':startup-benchmark'"
-require_contains build.gradle 'id "androidx.baselineprofile" version "1.4.1" apply false'
+require_contains build.gradle 'id "androidx.baselineprofile" version "1.5.0-alpha07" apply false'
 require_contains app/build.gradle 'id "androidx.baselineprofile"'
 require_contains app/build.gradle 'minifyEnabled false'
 require_contains app/build.gradle 'baselineProfile project(":startup-benchmark")'
