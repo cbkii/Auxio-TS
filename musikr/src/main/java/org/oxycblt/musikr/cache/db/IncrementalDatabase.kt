@@ -122,15 +122,16 @@ internal data class PendingCachedFileData(
 
 /** Committed lightweight song projection for bounded readers. */
 @Entity(
-    indices = [
-        Index(value = ["sourceKey", "generation", "uri"], unique = true),
-        Index(value = ["sourceKey", "generation", "titleSort"]),
-        Index(value = ["stableUid"]),
-        Index(value = ["uri"]),
-        Index(value = ["dateAddedMs"]),
-        Index(value = ["primaryArtistSort"]),
-        Index(value = ["albumSort"]),
-    ]
+    indices =
+        [
+            Index(value = ["sourceKey", "generation", "uri"], unique = true),
+            Index(value = ["sourceKey", "generation", "titleSort"]),
+            Index(value = ["stableUid"]),
+            Index(value = ["uri"]),
+            Index(value = ["dateAddedMs"]),
+            Index(value = ["primaryArtistSort"]),
+            Index(value = ["albumSort"]),
+        ]
 )
 internal data class IndexedSongData(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -318,11 +319,7 @@ internal interface IncrementalLibraryReadDao {
             "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.titleSort AS ordering FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
             "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.titleSort FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 AND (title LIKE '%' || :likeQuery || '%' OR primaryArtistName LIKE '%' || :likeQuery || '%' OR albumName LIKE '%' || :likeQuery || '%' OR displayPath LIKE '%' || :likeQuery || '%') ORDER BY ordering, id LIMIT :limit OFFSET :offset"
     )
-    suspend fun quickFindSongs(
-        likeQuery: String,
-        limit: Int,
-        offset: Int,
-    ): List<StartupSongRow>
+    suspend fun quickFindSongs(likeQuery: String, limit: Int, offset: Int): List<StartupSongRow>
 
     @Query(
         "SELECT ROW_NUMBER() OVER (ORDER BY albumSort, albumName) AS syntheticId, albumName AS name, primaryArtistName, MIN(artworkRef) AS artworkRef, COUNT(*) AS songCount, MAX(dateAddedMs) AS dateAddedMs FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 AND albumName IS NOT NULL GROUP BY albumSort, albumName, primaryArtistName ORDER BY albumSort, albumName LIMIT :limit OFFSET :offset"
