@@ -9,6 +9,8 @@ android {
     namespace "org.oxycblt.auxio.startupbenchmark"
     compileSdk target_sdk
     targetProjectPath = ":app"
+    targetBuildType = "benchmark"
+    experimentalProperties["android.experimental.self-instrumenting"] = true
 
     defaultConfig {
         minSdk 28
@@ -82,4 +84,5 @@ dependencies {
     implementation "androidx.test.uiautomator:uiautomator:2.3.0"
     implementation "junit:junit:4.13.2"
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
 }
