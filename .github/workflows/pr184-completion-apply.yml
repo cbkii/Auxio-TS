@@ -10,6 +10,8 @@ on:
 permissions:
   contents: write
 
+actions:
+
 concurrency:
   group: pr184-completion-apply
   cancel-in-progress: false
@@ -45,16 +47,44 @@ jobs:
           python3 -m py_compile scripts/summarize-startup-benchmarks.py
           bash scripts/check-startup-performance-contracts.sh
           git diff --check
-          if git diff --quiet; then
-            echo "Completion payload produced no changes" >&2
-            exit 1
-          fi
 
-      - name: Commit and push completion
+      - name: Create completion commit
+        id: commit
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "perf: complete startup profile and benchmark hardening"
-          git push origin HEAD:cx/startup-profiles-benchmarks
+          sha="$(git rev-parse HEAD)"
+          printf '%s\n' "${sha}" > "${RUNNER_TEMP}/completion-commit.txt"
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Push completion commit
+        id: push
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          git push origin HEAD:cx/startup-profiles-benchmarks >"${RUNNER_TEMP}/push.log" 2>&1
+          status=$?
+          cat "${RUNNER_TEMP}/push.log"
+          printf '%s\n' "${status}" > "${RUNNER_TEMP}/push-status.txt"
+          exit "${status}"
+
+      - name: Upload handoff evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr184-completion-handoff
+          path: |
+            ${{ runner.temp }}/completion-commit.txt
+            ${{ runner.temp }}/push-status.txt
+            ${{ runner.temp }}/push.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Fail if push failed
+        if: steps.push.outcome != 'success'
+        shell: bash
+        run: exit 1
