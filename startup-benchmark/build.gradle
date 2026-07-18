@@ -8,8 +8,6 @@ android {
     namespace "org.oxycblt.auxio.startupbenchmark"
     compileSdk target_sdk
     targetProjectPath = ":app"
-    targetBuildType = "benchmark"
-    experimentalProperties["android.experimental.self-instrumenting"] = true
 
     defaultConfig {
         minSdk 28
@@ -32,6 +30,19 @@ android {
         topwayTwMedia {
             dimension "distribution"
             buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media"'
+        }
+    }
+
+    buildTypes {
+        benchmark {
+            debuggable true
+            matchingFallbacks = ["release"]
+        }
+    }
+
+    variantFilter { variant ->
+        if (variant.buildType.name != "benchmark") {
+            variant.setIgnore(true)
         }
     }
 
