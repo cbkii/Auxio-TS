@@ -37,15 +37,13 @@ class StartupMacrobenchmark {
             InstrumentationRegistry.getArguments()
                 .getString("auxio.iterations")
                 ?.toIntOrNull()
-                ?.coerceIn(3, 30)
-                ?: 7
+                ?.coerceIn(3, 30) ?: 7
 
     private val fixtureSongCount: Int
         get() = BenchmarkFixtureController.requestedSongCount
 
     @Test
-    fun coldStartupWithoutProfiles() =
-        startupBenchmark(CompilationMode.None(), StartupMode.COLD)
+    fun coldStartupWithoutProfiles() = startupBenchmark(CompilationMode.None(), StartupMode.COLD)
 
     @Test
     fun coldStartupWithBaselineProfile() =
@@ -62,32 +60,29 @@ class StartupMacrobenchmark {
         )
 
     @Test
-    fun findAndPlayJourney() =
-        journeyBenchmark {
-            CriticalJourneys.run {
-                launchFastStart()
-                exerciseQuickFind()
-                exercisePlaybackControls()
-            }
+    fun findAndPlayJourney() = journeyBenchmark {
+        CriticalJourneys.run {
+            launchFastStart()
+            exerciseQuickFind()
+            exercisePlaybackControls()
         }
+    }
 
     @Test
-    fun usbFolderPlaybackJourney() =
-        journeyBenchmark {
-            CriticalJourneys.run {
-                launchFastStart()
-                exerciseUsbFolder()
-            }
+    fun usbFolderPlaybackJourney() = journeyBenchmark {
+        CriticalJourneys.run {
+            launchFastStart()
+            exerciseUsbFolder()
         }
+    }
 
     @Test
-    fun pagedLibraryJourney() =
-        journeyBenchmark {
-            CriticalJourneys.run {
-                launchFastStart()
-                exercisePagedLibrary()
-            }
+    fun pagedLibraryJourney() = journeyBenchmark {
+        CriticalJourneys.run {
+            launchFastStart()
+            exercisePagedLibrary()
         }
+    }
 
     private fun startupBenchmark(compilationMode: CompilationMode, startupMode: StartupMode) {
         var seeded = false
@@ -108,9 +103,7 @@ class StartupMacrobenchmark {
         )
     }
 
-    private fun journeyBenchmark(
-        journey: androidx.benchmark.macro.MacrobenchmarkScope.() -> Unit
-    ) {
+    private fun journeyBenchmark(journey: androidx.benchmark.macro.MacrobenchmarkScope.() -> Unit) {
         var seeded = false
         benchmarkRule.measureRepeated(
             packageName = BuildConfig.TARGET_PACKAGE,

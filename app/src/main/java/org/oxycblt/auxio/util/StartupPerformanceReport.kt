@@ -73,10 +73,9 @@ object StartupPerformanceReport {
 
     internal fun readBootId(): String? =
         runCatching {
-                File("/proc/sys/kernel/random/boot_id")
-                    .readText(Charsets.UTF_8)
-                    .trim()
-                    .takeIf { it.isNotEmpty() }
+                File("/proc/sys/kernel/random/boot_id").readText(Charsets.UTF_8).trim().takeIf {
+                    it.isNotEmpty()
+                }
             }
             .getOrNull()
 

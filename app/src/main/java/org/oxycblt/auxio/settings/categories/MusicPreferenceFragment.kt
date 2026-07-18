@@ -90,7 +90,10 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                 val shareIntent =
                     Intent(Intent.ACTION_SEND)
                         .setType("text/plain")
-                        .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.set_export_startup_report))
+                        .putExtra(
+                            Intent.EXTRA_SUBJECT,
+                            getString(R.string.set_export_startup_report),
+                        )
                         .putExtra(Intent.EXTRA_TEXT, report)
                 startActivity(
                     Intent.createChooser(

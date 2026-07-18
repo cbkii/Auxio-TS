@@ -22,7 +22,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Test
 
-/** Verifies fixture scale, source separation and deterministic generation on the benchmark device. */
+/**
+ * Verifies fixture scale, source separation and deterministic generation on the benchmark device.
+ */
 class BenchmarkFixtureContractTest {
     @Test
     fun fixtureScalesAreDeterministic() {

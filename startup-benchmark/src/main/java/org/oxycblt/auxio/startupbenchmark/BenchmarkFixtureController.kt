@@ -21,7 +21,9 @@ package org.oxycblt.auxio.startupbenchmark
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.platform.app.InstrumentationRegistry
 
-/** Seeds a deterministic committed database once per benchmark test, outside measured iterations. */
+/**
+ * Seeds a deterministic committed database once per benchmark test, outside measured iterations.
+ */
 internal object BenchmarkFixtureController {
     private const val RECEIVER = "org.oxycblt.auxio.benchmark.BenchmarkFixtureReceiver"
     private const val ACTION = "org.oxycblt.auxio.action.SEED_BENCHMARK_FIXTURE"
@@ -32,8 +34,7 @@ internal object BenchmarkFixtureController {
             InstrumentationRegistry.getArguments()
                 .getString("auxio.fixtureSongCount")
                 ?.toIntOrNull()
-                ?.takeIf { it in BenchmarkFixtures.supportedSongCounts }
-                ?: 5_000
+                ?.takeIf { it in BenchmarkFixtures.supportedSongCounts } ?: 5_000
 
     fun MacrobenchmarkScope.seedCommittedFixture(songCount: Int = requestedSongCount) {
         require(songCount in BenchmarkFixtures.supportedSongCounts)
