@@ -138,6 +138,16 @@ Users retain the existing scan-priority controls. An explicit Full request is ne
 
 ## Verification matrix
 
+Maintained repository verification runs:
+
+- `bash ./scripts/ci-gradle.sh spotlessCheck`;
+- `bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest`;
+- Android lint;
+- maintained debug and release APK builds;
+- TS18 APK-reference contracts;
+- DoFun/Topway compatibility checks;
+- workflow/script syntax and head-unit safety checks.
+
 Host tests cover:
 
 - unchanged, changed, new and deleted rows;
