@@ -17,7 +17,7 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -27,28 +27,7 @@ jobs:
           submodules: false
           persist-credentials: true
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
-        with:
-          cache-read-only: true
-
-      - name: Write Android SDK location
-        shell: bash
-        run: |
-          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [[ -z "${sdk_dir}" ]]; then
-            echo "Android SDK location unavailable" >&2
-            exit 1
-          fi
-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-
-      - name: Apply audited completion payload
+      - name: Apply and validate audited completion payload
         shell: bash
         run: |
           encoded="${RUNNER_TEMP}/pr184-completion.b64"
@@ -61,18 +40,6 @@ jobs:
           tar -xzf "${archive}" -C "${GITHUB_WORKSPACE}"
           chmod +x scripts/check-startup-performance-contracts.sh scripts/summarize-startup-benchmarks.py
           rm -rf .pr184-payload .github/workflows/pr184-completion-apply.yml
-
-      - name: Prepare formatting dependencies
-        shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-
-      - name: Apply repository formatter
-        shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessApply
-
-      - name: Validate payload before commit
-        shell: bash
-        run: |
           ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
           bash -n scripts/check-startup-performance-contracts.sh
           python3 -m py_compile scripts/summarize-startup-benchmarks.py
