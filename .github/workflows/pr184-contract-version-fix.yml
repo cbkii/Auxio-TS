@@ -1,0 +1,36 @@
+name: PR 184 contract version fix
+
+on:
+  pull_request:
+    branches:
+      - cx/incremental-library-pipeline
+    paths:
+      - .github/workflows/pr184-contract-version-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/startup-profiles-benchmarks
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Align contract version
+        shell: bash
+        run: |
+          sed -i 's/id "androidx\.baselineprofile" version "1\.4\.1" apply false/id "androidx.baselineprofile" version "1.5.0-alpha07" apply false/' scripts/check-startup-performance-contracts.sh
+          grep -Fq 'id "androidx.baselineprofile" version "1.5.0-alpha07" apply false' scripts/check-startup-performance-contracts.sh
+          git diff --check
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/check-startup-performance-contracts.sh
+          git commit -m "test: align profile plugin structural contract"
+          git push origin HEAD:cx/startup-profiles-benchmarks
