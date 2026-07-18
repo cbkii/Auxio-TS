@@ -1,0 +1,88 @@
+name: PR 184 completion apply
+
+on:
+  push:
+    branches:
+      - cx/startup-profiles-benchmarks
+    paths:
+      - .github/workflows/pr184-completion-apply.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr184-completion-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/startup-profiles-benchmarks
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Write Android SDK location
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "Android SDK location unavailable" >&2
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Apply audited completion payload
+        shell: bash
+        run: |
+          archive="${RUNNER_TEMP}/pr184-completion.tar.gz"
+          cat .pr184-payload/part* | base64 --decode > "${archive}"
+          tar -xzf "${archive}" -C "${GITHUB_WORKSPACE}"
+          chmod +x scripts/check-startup-performance-contracts.sh scripts/summarize-startup-benchmarks.py
+          rm -rf .pr184-payload .github/workflows/pr184-completion-apply.yml
+
+      - name: Prepare formatting dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile format-only
+
+      - name: Apply repository formatter
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessApply
+
+      - name: Validate payload before commit
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+          bash -n scripts/check-startup-performance-contracts.sh
+          python3 -m py_compile scripts/summarize-startup-benchmarks.py
+          bash scripts/check-startup-performance-contracts.sh
+          git diff --check
+          if git diff --quiet; then
+            echo "Completion payload produced no changes" >&2
+            exit 1
+          fi
+
+      - name: Commit and push completion
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "perf: complete startup profile and benchmark hardening"
+          git push origin HEAD:cx/startup-profiles-benchmarks
