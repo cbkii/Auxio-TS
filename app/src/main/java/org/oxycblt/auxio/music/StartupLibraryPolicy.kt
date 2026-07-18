@@ -190,7 +190,6 @@ object StartupLibraryPolicy {
         when (locationMode) {
             LocationMode.SAF,
             LocationMode.DIRECT_FS -> sourceCount > 0
-            // MediaStore is the selected system music provider. An empty filter list means "all".
             LocationMode.MEDIA_STORE -> true
         }
 
@@ -222,6 +221,7 @@ object StartupLibraryStartup {
         hasInMemoryLibrary: Boolean,
         revisionKnown: Boolean,
         priorState: LibraryState,
+        deferCachedLoad: Boolean = false,
         lastScanFailed: () -> Boolean,
         isTopwayCompat: Boolean,
         loadCachedLibrary: suspend () -> T,
@@ -238,7 +238,20 @@ object StartupLibraryStartup {
         setStartupLibraryStatus(StartupLibraryStatus.Unknown)
         var cachedSongCountOrNull: Int? = null
         var decision =
-            if (
+            if (deferCachedLoad && !hasInMemoryLibrary) {
+                when (priorState) {
+                    LibraryState.USABLE,
+                    LibraryState.EMPTY ->
+                        StartupLibraryPolicy.Decision(
+                            libraryState = priorState,
+                            requestScan = false,
+                            reason = "cached-library-hydration-deferred",
+                        )
+                    LibraryState.NEVER,
+                    LibraryState.RECOVERY ->
+                        StartupLibraryPolicy.onNoCachedRevision(priorState, lastScanFailed())
+                }
+            } else if (
                 StartupLibraryPolicy.shouldAttemptCachedLoad(
                     hasInMemoryLibrary,
                     revisionKnown,
@@ -254,8 +267,8 @@ object StartupLibraryStartup {
                             songCount,
                             lastScanFailed(),
                         )
-                        .also { decision ->
-                            if (songCount > 0 || decision.libraryState == LibraryState.EMPTY) {
+                        .also { loadDecision ->
+                            if (songCount > 0 || loadDecision.libraryState == LibraryState.EMPTY) {
                                 emitCachedLibrary(cached)
                             }
                         }
@@ -273,7 +286,6 @@ object StartupLibraryStartup {
                 )
             }
 
-        // On TS18/Topway builds, scanning/rescan/refresh must only be user-triggered
         if (isTopwayCompat) {
             decision = decision.copy(requestScan = false)
         }
