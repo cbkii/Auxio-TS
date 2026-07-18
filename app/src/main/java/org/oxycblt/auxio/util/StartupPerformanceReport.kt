@@ -35,6 +35,7 @@ object StartupPerformanceReport {
         captureContext: CaptureContext,
         events: List<PerfTimer.Event> = PerfTimer.snapshot(),
         bootId: String? = readBootId(),
+        reportElapsedRealtimeMs: Long = SystemClock.elapsedRealtime(),
     ): String {
         val boundedEvents = events.takeLast(MAX_REPORT_EVENTS)
         val origin = boundedEvents.firstOrNull()?.elapsedRealtimeMs
@@ -46,7 +47,7 @@ object StartupPerformanceReport {
             appendLine("variant=${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE}")
             appendLine("commit=${captureContext.commit ?: "not-recorded"}")
             appendLine("bootId=${bootId ?: "unavailable"}")
-            appendLine("reportElapsedRealtimeMs=${SystemClock.elapsedRealtime()}")
+            appendLine("reportElapsedRealtimeMs=$reportElapsedRealtimeMs")
             appendLine("sourceState=${captureContext.sourceState}")
             appendLine("fixtureSongCount=${captureContext.fixtureSongCount ?: "not-recorded"}")
             appendLine("eventCount=${boundedEvents.size}")
