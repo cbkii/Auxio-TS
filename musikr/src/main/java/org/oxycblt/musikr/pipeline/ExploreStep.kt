@@ -196,13 +196,36 @@ internal object FileClassification {
         )
 
     private val playlistExtensions = setOf("m3u", "m3u8")
+    private val playlistMimeTypes =
+        setOf(
+            "application/vnd.apple.mpegurl",
+            "application/x-mpegurl",
+            "audio/mpegurl",
+            "audio/x-mpegurl",
+        )
+    private val applicationAudioMimeTypes =
+        setOf(
+            "application/flac",
+            "application/ogg",
+            "application/x-flac",
+            "application/x-ogg",
+        )
+    private val genericMimeTypes = setOf("application/octet-stream", "binary/octet-stream")
 
-    fun isPotentialMusicFile(file: File): Boolean {
+    fun isPotentialMusicFile(file: File): Boolean =
+        isPotentialMusicFileNameMime(file.uri.lastPathSegment.orEmpty(), file.mimeType)
+
+    fun isPotentialMusicFileNameMime(fileName: String, mimeType: String?): Boolean {
         val extension =
-            file.uri.lastPathSegment
-                ?.substringAfterLast('.', missingDelimiterValue = "")
-                ?.lowercase(Locale.ROOT)
-                .orEmpty()
-        return extension in supportedAudioExtensions || extension in playlistExtensions
+            fileName.substringAfterLast('.', missingDelimiterValue = "").lowercase(Locale.ROOT)
+        if (extension in playlistExtensions) return false
+
+        val normalizedMime = mimeType?.trim()?.lowercase(Locale.ROOT).orEmpty()
+        if (normalizedMime in playlistMimeTypes) return false
+        if (normalizedMime.startsWith("audio/")) return true
+        if (normalizedMime in applicationAudioMimeTypes) return true
+
+        return (normalizedMime.isEmpty() || normalizedMime in genericMimeTypes) &&
+            extension in supportedAudioExtensions
     }
 }
