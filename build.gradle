@@ -49,16 +49,12 @@ project(":app") {
         android.buildTypes.named("benchmark").configure {
             minifyEnabled false
         }
-    }
-
-    dependencies {
-        baselineProfile project(":startup-benchmark")
-    }
-
-    baselineProfile {
-        mergeIntoMain true
-        saveInSrc false
-        automaticGenerationDuringBuild false
+        dependencies.add("baselineProfile", project(":startup-benchmark"))
+        baselineProfile {
+            mergeIntoMain true
+            saveInSrc false
+            automaticGenerationDuringBuild false
+        }
     }
 }
 
