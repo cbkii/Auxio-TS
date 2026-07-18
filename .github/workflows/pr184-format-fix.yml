@@ -1,0 +1,55 @@
+name: PR 184 format fix
+
+on:
+  pull_request:
+    branches:
+      - cx/incremental-library-pipeline
+    paths:
+      - .github/workflows/pr184-format-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/startup-profiles-benchmarks
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+      - name: Write Android SDK location
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "${sdk_dir}"
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+      - name: Apply supported profile configuration and formatting
+        shell: bash
+        run: |
+          sed -i 's/saveInSrc false/saveInSrc true/' app/build.gradle
+          bash ./scripts/bootstrap-dependencies.sh --profile full-build
+          bash ./scripts/ci-gradle.sh spotlessApply
+          bash scripts/check-startup-performance-contracts.sh
+          rm .github/workflows/pr184-format-fix.yml
+          git diff --check
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: format startup profile implementation"
+          git push origin HEAD:cx/startup-profiles-benchmarks
