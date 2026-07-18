@@ -147,7 +147,7 @@ jobs:
 
       - name: Compile benchmark and profile instrumentation
         shell: bash
-        run: bash ./scripts/ci-gradle.sh :startup-benchmark:assembleStandardRelease
+        run: bash ./scripts/ci-gradle.sh :startup-benchmark:assembleStandardBenchmark
 
       - name: Build maintained debug variants
         shell: bash
