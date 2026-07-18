@@ -222,7 +222,6 @@ object StartupLibraryStartup {
         hasInMemoryLibrary: Boolean,
         revisionKnown: Boolean,
         priorState: LibraryState,
-        deferCachedLoad: Boolean = false,
         lastScanFailed: () -> Boolean,
         isTopwayCompat: Boolean,
         loadCachedLibrary: suspend () -> T,
@@ -239,20 +238,7 @@ object StartupLibraryStartup {
         setStartupLibraryStatus(StartupLibraryStatus.Unknown)
         var cachedSongCountOrNull: Int? = null
         var decision =
-            if (deferCachedLoad && !hasInMemoryLibrary) {
-                when (priorState) {
-                    LibraryState.USABLE,
-                    LibraryState.EMPTY ->
-                        StartupLibraryPolicy.Decision(
-                            libraryState = priorState,
-                            requestScan = false,
-                            reason = "cached-library-hydration-deferred",
-                        )
-                    LibraryState.NEVER,
-                    LibraryState.RECOVERY ->
-                        StartupLibraryPolicy.onNoCachedRevision(priorState, lastScanFailed())
-                }
-            } else if (
+            if (
                 StartupLibraryPolicy.shouldAttemptCachedLoad(
                     hasInMemoryLibrary,
                     revisionKnown,
@@ -268,8 +254,8 @@ object StartupLibraryStartup {
                             songCount,
                             lastScanFailed(),
                         )
-                        .also { loadDecision ->
-                            if (songCount > 0 || loadDecision.libraryState == LibraryState.EMPTY) {
+                        .also { decision ->
+                            if (songCount > 0 || decision.libraryState == LibraryState.EMPTY) {
                                 emitCachedLibrary(cached)
                             }
                         }
