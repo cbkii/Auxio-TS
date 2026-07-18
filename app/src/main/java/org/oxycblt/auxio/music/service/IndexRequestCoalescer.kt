@@ -28,7 +28,8 @@ internal data class IndexRequest(val withCache: Boolean, val metadataProfile: Me
  *
  * A cache-bypassing request cannot be weakened by a later cached request, and an explicit Full
  * enrichment request cannot be weakened by Lean or automatic policy. This keeps observer storms
- * bounded without losing required work.
+ * bounded without losing required work. The caller starts this one queued request only after the
+ * active indexing pass has completed.
  */
 internal object IndexRequestCoalescer {
     fun merge(current: IndexRequest?, incoming: IndexRequest): IndexRequest {
