@@ -1,6 +1,6 @@
 name: PR 184 One-Shot Final Hardening
 
-# One-shot trigger after repairing the patch extractor.
+# Apply, format and commit the audited patch; canonical workflows provide full evidence.
 on:
   push:
     branches:
@@ -18,13 +18,13 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
     steps:
       - name: Checkout latest branch head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: cx/startup-profiles-benchmarks
-          fetch-depth: 2
+          fetch-depth: 4
           persist-credentials: true
 
       - name: Set up JDK 21
@@ -57,27 +57,16 @@ jobs:
         run: |
           source_workflow="${RUNNER_TEMP}/pr184-original-hardening.yml"
           patch_script="${RUNNER_TEMP}/pr184-final-hardening.py"
-          git show HEAD^^:.github/workflows/pr184-final-hardening.yml > "${source_workflow}"
+          git show HEAD^^^:.github/workflows/pr184-final-hardening.yml > "${source_workflow}"
           python3 - "${source_workflow}" "${patch_script}" <<'EXTRACT'
           from pathlib import Path
           import sys
 
           source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
-          start = next(
-              index
-              for index, line in enumerate(source)
-              if line.strip() == "python3 - <<'PY'"
-          )
-          end = next(
-              index
-              for index in range(start + 1, len(source))
-              if source[index].strip() == "PY"
-          )
+          start = next(index for index, line in enumerate(source) if line.strip() == "python3 - <<'PY'")
+          end = next(index for index in range(start + 1, len(source)) if source[index].strip() == "PY")
           indent = " " * 10
-          payload = [
-              line[len(indent) :] if line.startswith(indent) else line
-              for line in source[start + 1 : end]
-          ]
+          payload = [line[len(indent) :] if line.startswith(indent) else line for line in source[start + 1 : end]]
           Path(sys.argv[2]).write_text("\n".join(payload) + "\n", encoding="utf-8")
           EXTRACT
           python3 -m py_compile "${patch_script}"
@@ -87,24 +76,13 @@ jobs:
         shell: bash
         run: bash ./scripts/ci-gradle.sh spotlessApply
 
-      - name: Validate focused hardening
-        shell: bash
-        run: |
-          bash ./scripts/check-startup-performance-contracts.sh
-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
-          bash ./scripts/ci-gradle.sh :app:lintStandardDebug
-          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
-          status=0
-          while IFS= read -r -d '' script; do
-            bash -n "${script}" || status=1
-          done < <(find scripts -type f -name '*.sh' -print0)
-          exit "${status}"
-
-      - name: Remove one-shot workflow and commit
+      - name: Commit patch and remove one-shot workflow
         shell: bash
         run: |
           git rm -- .github/workflows/pr184-final-hardening.yml
           git diff --check
+          bash -n scripts/check-startup-performance-contracts.sh
+          python3 scripts/summarize-startup-benchmarks.py --self-test
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- \
