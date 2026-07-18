@@ -29,6 +29,7 @@ class BaselineProfileGenerator {
     @Test
     fun generate() =
         baselineProfileRule.collect(packageName = BuildConfig.TARGET_PACKAGE) {
+            BenchmarkFixtureController.run { seedCommittedFixture() }
             CriticalJourneys.run {
                 launchFastStart()
                 exercisePlaybackControls()
