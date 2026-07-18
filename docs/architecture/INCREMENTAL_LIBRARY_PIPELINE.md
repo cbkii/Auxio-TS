@@ -71,11 +71,11 @@ Mount state, app access, committed library availability and playback viability a
 - **Removed while browsing:** bounded readers return no available rows after the ledger update.
 - **Removed while indexing:** discard that source's pending generation; healthy sources may still commit.
 - **Removed while playing:** the current player error path remains authoritative; indexing never replaces or restarts the queue.
-- **Reinserted unchanged:** the changed availability/fingerprint state schedules source reconciliation.
-- **Reinserted changed:** only new or changed rows are extracted before commit.
-- **Two USB roots:** `/storage/usbdisk0` and `/storage/usbdisk1` have separate keys and generations; one cannot invalidate the other.
+- **Reinserted unchanged:** restore access to the last committed generation without metadata extraction; advisory refresh still applies on its normal bounded interval.
+- **Reinserted changed:** extract only new or changed rows before committing the replacement generation.
+- **Two USB roots:** `/storage/usbdisk0` and `/storage/usbdisk1` have separate keys and generations; source-list ordering cannot make one invalidate the other.
 
-**Requires device validation:** mount-order swaps, actual FAT timestamp behaviour and ACC sleep/wake transitions on `s9863a1h10_Natv`.
+**Requires device validation:** real mount-name swaps, FAT timestamp behaviour and ACC sleep/wake transitions on `s9863a1h10_Natv`.
 
 ## Lean and Full metadata
 
@@ -131,7 +131,7 @@ TS18 policy claim: [Evidence confidence: Requires TS18 validation] [Porting deci
 - one or low indexing concurrency while playback is active;
 - Fast Start, Quick Find and folder access remain prioritised;
 - Full enrichment waits for idle;
-- artwork is visible-item only until Full enrichment;
+- artwork remains demand-driven;
 - no kernel, governor, LMK, zRAM or vendor-service changes.
 
 Users retain the existing scan-priority controls. An explicit Full request is never silently downgraded.
@@ -141,11 +141,15 @@ Users retain the existing scan-priority controls. An explicit Full request is ne
 Host tests cover:
 
 - unchanged, changed, new and deleted rows;
-- cancellation and stale pending rows;
-- source unmount without deletion;
+- cancellation and stale-pending restart handling;
+- temporary unmount without deletion;
+- unchanged and changed reinsertion;
+- independent `/storage/usbdisk0` and `/storage/usbdisk1` identity despite source-list reordering;
 - source-local failure with successful sibling commit;
-- Lean/Full work gates;
+- observer-event conflation and repeated scan-request coalescing;
+- Lean/Full work gates and lazy artwork policy;
 - subscriber invalidation conflation;
-- database migration and committed-generation projections.
+- database migration and committed-generation projections;
+- a 5,000-row committed fixture with a bounded first-page query.
 
-**Requires device validation:** cold boot, process death, launcher restart, Bluetooth/media-button launch, hardware-key Next/Previous, source removal while playing, two-volume mount-order change, real ACC sleep/wake and active indexing during playback on the exact TS18 build.
+**Requires device validation:** cold boot, process death, launcher restart, Bluetooth/media-button launch, hardware-key Next/Previous, source removal while playing, real two-volume mount-order changes, ACC sleep/wake and active indexing during playback on the exact TS18 build.
