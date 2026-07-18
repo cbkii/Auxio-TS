@@ -56,15 +56,21 @@ class BaselineProfileGenerator {
         ) {
             BenchmarkFixtureController.run { seedCommittedFixture() }
             CriticalJourneys.run {
+                // Exercise the bounded primitive queue before any direct-open journey replaces it.
                 launchFastStart()
-                exerciseQuickFind()
                 exercisePlaybackControls()
 
                 // Each remaining path starts from a known Fast Start surface. The previous
                 // interaction may leave search, playback or a folder dialog on top, so relying on
                 // activity state restoration would make profile generation order-dependent.
                 exerciseProcessDeathRelaunch()
-                exerciseUsbFolder()
+                exerciseQuickFind()
+
+                exerciseProcessDeathRelaunch()
+                exerciseUsbFolder(sourceIndex = 0)
+
+                exerciseProcessDeathRelaunch()
+                exerciseUsbFolder(sourceIndex = 1)
 
                 exerciseProcessDeathRelaunch()
                 exercisePagedLibrary()
