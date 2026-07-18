@@ -46,7 +46,7 @@ Neither managed device proves the exact TS18 hardware, DoFun launcher, USB mount
 
 ### Deterministic fixture contract
 
-The benchmark-only `BenchmarkFixtureReceiver` is present only in the benchmark manifest. It transactionally seeds committed source ledgers and lightweight rows before measurement.
+The benchmark-only `BenchmarkFixtureReceiver` is present only in the benchmark manifest. It transactionally seeds committed source ledgers, lightweight library rows and the primitive playback queue before measurement.
 
 Fixture contract:
 
@@ -57,11 +57,14 @@ Fixture contract:
 - logical roots: `/storage/usbdisk0` and `/storage/usbdisk1`;
 - representative Albums, Artists, Genres, Folders and Playlists;
 - normal, second-USB-unavailable and interrupted-pending-generation source modes;
-- deterministic titles, stable IDs, paths, dates and source assignment.
+- deterministic titles, stable IDs, paths, dates and source assignment;
+- a deterministic primitive queue session anchored at logical item 10;
+- queue rows written transactionally in bounded 500-row batches rather than materialising one unbounded insert;
+- real app-private WAV references for managed-emulator playback while preserving logical TS18 display paths and metadata.
 
 For managed-emulator USB interaction only, the benchmark build maps the same logical roots to app-private fixture directories and creates real bounded WAV files. Production builds continue using only the exact app-facing `/storage/usbdiskN` paths. UI rows retain logical TS18 paths while benchmark playback receives the private physical fixture path. The mapping cannot ship in maintained debug or release variants.
 
-The fixture is seeded once outside measured iterations. It does not run a source scan on every iteration.
+The music and primitive-queue fixtures are seeded once outside measured iterations. They do not run a source scan or reconstruct the queue for every iteration.
 
 ## Baseline and Startup Profiles
 
@@ -79,7 +82,7 @@ The fixture is seeded once outside measured iterations. It does not run a source
 1. Quick Find and direct playback of a real fixture;
 2. Play/Pause, Next and Previous through the existing media authority;
 3. bounded USB root browse and direct playback;
-4. first paged Albums interaction;
+4. first paged Songs and Albums interactions;
 5. early MediaBrowser root and first child page.
 
 The generator filters captured rules to `org.oxycblt.auxio` and `org.oxycblt.musikr` production code and excludes benchmark/test packages. Startup-only and broader Baseline rules are therefore not conflated.
@@ -94,15 +97,17 @@ The maintained class includes:
 - cold startup with required Baseline Profile;
 - warm startup with required Baseline Profile;
 - hot startup with required Baseline Profile;
-- saved-session cold relaunch after real fixture playback;
-- Quick Find to real first audio plus media-key controls;
-- direct USB folder open to real first audio;
-- paged Albums interaction;
+- saved-session cold relaunch from the pre-seeded primitive queue to first audio;
+- primitive Play, Pause, Next and Previous, including command-to-next-audio timing;
+- Quick Find first result and result-to-first-audio timing;
+- direct USB 0 and USB 1 folder open to real first audio;
+- first paged Songs and Albums results;
 - early MediaBrowser root/first page;
 - cold start with the second USB unavailable;
-- cold start with an interrupted pending generation while the prior committed generation remains readable.
+- cold start with an interrupted pending generation while the prior committed generation remains readable;
+- full-library-ready as a separate non-blocking milestone rather than a first-interaction prerequisite.
 
-Every required UI step fails the test when absent. Journeys no longer silently return when search, USB, Albums or result rows are missing. Playback journeys require the target media session to enter `PLAYING`.
+Every required UI and playback step fails the test when absent. Journeys do not silently return when search, USB, Songs, Albums or result rows are missing. Playback journeys require the target media session to enter the expected `PLAYING` or `PAUSED` state and media identity to change for skip operations.
 
 The manual workflow selects:
 
@@ -111,13 +116,15 @@ The manual workflow selects:
 - 3–30 iterations;
 - macrobenchmark or profile-generation suite.
 
-AndroidX JSON is retained as machine evidence. `scripts/summarize-startup-benchmarks.py` creates a human-readable table containing median, P90, P95, variance and sample count where supplied by the result schema. Context records commit, variant, suite, fixture schema/seed/size, source count, device/API and compilation modes.
+AndroidX JSON is retained as machine evidence. `scripts/summarize-startup-benchmarks.py` creates a human-readable table containing median, P90, P95, variance and sample count where supplied by the result schema. Context records commit, variant, suite, fixture schema/seed/size, source count, device/API, compilation modes, configured iterations, warm-up policy, retries and exclusions.
 
 ## Timing and trace contract
 
 `PerfTimer` retains at most 256 monotonic in-memory events. It is active by default in debug and benchmark builds; maintained release builds require explicit user opt-in. Benchmark capture therefore records the measured app process without enabling production diagnostics.
 
 `StartupPerformanceReport` exports a bounded local report containing authority, application/variant, boot ID where readable, fixture/source context, process/thread identity and monotonic events. The benchmark receiver returns the report through an explicit ordered broadcast encoded as Base64; tests verify non-empty application-start events. The user-facing settings export remains explicit and local-only.
+
+Named Macrobenchmark trace sections measure Quick Find to first result, result selection to first audio, saved-session launch to first audio, Next command to changed audio, both USB folder playback paths, first Songs/Albums pages and the first MediaBrowser page. Application events separately retain service, queue, Fast Start, full-library and enrichment milestones.
 
 Full-library-ready and enrichment-complete remain separate non-blocking milestones. They are never used as proxies for first frame, queue readiness, first rows or first audio.
 
@@ -131,7 +138,7 @@ Repository checks fail when:
 - startup and non-startup collections are conflated;
 - captured rules can include benchmark packages;
 - required UI journeys can silently skip;
-- deterministic scales, two sources, source-failure modes or real playback fixtures disappear;
+- deterministic scales, two sources, source-failure modes, primitive queue seeding or real playback fixtures disappear;
 - benchmark instrumentation is active in normal release policy;
 - startup rules include complete graph, extraction or artwork classes;
 - benchmark-only packages leak into production source sets;
@@ -179,7 +186,7 @@ The complete PR 1 → PR 2 → PR 3 path preserves these boundaries:
 - visualiser, diagnostic, shortcut and launcher integrations do not duplicate playback authority;
 - profile rules do not eagerly initialise optional enrichment;
 - benchmark instrumentation does not alter normal debug/release startup decisions;
-- the benchmark fixture receiver and USB mapping are absent from production variants.
+- the benchmark fixture receiver, primitive queue seeding and app-private USB mapping are absent from production variants.
 
 Profiles cannot turn rich enrichment or complete graph construction into a hidden prerequisite of first interaction.
 
@@ -198,7 +205,7 @@ Review readiness requires:
 - every actionable review thread is resolved;
 - PR description and final comment distinguish tests actually run from manual/device work still required.
 
-A manual managed-emulator run is required before making a numerical profile-improvement claim. Exact TS18 measurements are required before making any exact-unit latency claim.
+A managed-emulator run at each supported fixture scale is required before marking the corresponding execution checklist complete. A matched with-profile/without-profile run is required before making a numerical profile-improvement claim. Exact TS18 measurements are required before making any exact-unit latency claim.
 
 ## Exact-device TS18 validation
 
