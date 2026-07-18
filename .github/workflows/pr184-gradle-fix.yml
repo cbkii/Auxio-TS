@@ -1,0 +1,75 @@
+name: PR 184 Gradle profile fix
+
+on:
+  pull_request:
+    branches:
+      - cx/incremental-library-pipeline
+    paths:
+      - .github/workflows/pr184-gradle-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/startup-profiles-benchmarks
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Move app-target profile configuration into app module
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("build.gradle")
+          root_text = root.read_text(encoding="utf-8")
+          start = root_text.index("// Keep profile generation reproducible")
+          end = root_text.index("spotless {", start)
+          root.write_text(root_text[:start] + root_text[end:], encoding="utf-8")
+
+          app = Path("app/build.gradle")
+          text = app.read_text(encoding="utf-8")
+          text = text.replace(
+              '    id "com.android.application"\n',
+              '    id "com.android.application"\n    id "androidx.baselineprofile"\n',
+              1,
+          )
+          text = text.replace(
+              '        benchmark {\n            initWith release\n',
+              '        benchmark {\n            initWith release\n            minifyEnabled false\n',
+              1,
+          )
+          text = text.replace(
+              '    implementation "androidx.profileinstaller:profileinstaller:1.4.1"\n',
+              '    implementation "androidx.profileinstaller:profileinstaller:1.4.1"\n'
+              '    baselineProfile project(":startup-benchmark")\n',
+              1,
+          )
+          marker = '\n\ntasks.withType(Test).configureEach'
+          config = '''\n\nbaselineProfile {\n    mergeIntoMain true\n    saveInSrc false\n    automaticGenerationDuringBuild false\n}\n'''
+          if marker not in text:
+              raise SystemExit("tasks marker missing")
+          text = text.replace(marker, config + marker, 1)
+          app.write_text(text, encoding="utf-8")
+          PY
+          grep -Fq 'id "androidx.baselineprofile"' app/build.gradle
+          grep -Fq 'baselineProfile project(":startup-benchmark")' app/build.gradle
+          grep -Fq 'minifyEnabled false' app/build.gradle
+          ! grep -Fq 'project(":app") {' build.gradle
+          git diff --check
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle build.gradle
+          git commit -m "fix: configure baseline profile plugin in app module"
+          git push origin HEAD:cx/startup-profiles-benchmarks
