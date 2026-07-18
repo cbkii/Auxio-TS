@@ -61,5 +61,6 @@ class MetadataWorkPolicyTest {
         assertTrue(full.readDetailedDates)
         assertTrue(full.expandMultipleArtists)
         assertTrue(full.extractArtwork)
+        assertEquals(ArtworkPolicy.VISIBLE_ITEMS, MetadataProfile.FULL.defaultArtworkPolicy())
     }
 }

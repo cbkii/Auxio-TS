@@ -203,6 +203,7 @@ internal class IncrementalScanStore(
         file: File,
         cachedFile: CachedFile?,
         profile: String,
+        artworkRef: String? = cachedFile?.audio?.coverId,
     ) {
         val cached = cachedFile?.audio
         val tags = cached?.tags
@@ -228,7 +229,7 @@ internal class IncrementalScanStore(
                 trackNumber = tags?.track,
                 discNumber = tags?.disc,
                 durationMs = cached?.properties?.durationMs,
-                artworkRef = cached?.coverId,
+                artworkRef = artworkRef,
                 metadataProfile = profile,
             )
         )
@@ -254,6 +255,8 @@ internal class IncrementalScanStore(
         if (sourceKey !in plan.scanSourceKeys) return false
         val audio = cachedFile.audio
         val tags = audio?.tags
+        val durableCoverId =
+            audio?.coverId ?: readDao.selectSongByUri(cachedFile.file.uri)?.coverId
         dao.upsertPending(
             PendingCachedFileData(
                 scanId = plan.scanId,
@@ -285,7 +288,7 @@ internal class IncrementalScanStore(
                 genreNames = tags?.genreNames,
                 replayGainTrackAdjustment = tags?.replayGainTrackAdjustment,
                 replayGainAlbumAdjustment = tags?.replayGainAlbumAdjustment,
-                coverId = audio?.coverId,
+                coverId = durableCoverId,
             )
         )
         upsertSeen(
@@ -294,6 +297,7 @@ internal class IncrementalScanStore(
             file = cachedFile.file,
             cachedFile = cachedFile,
             profile = plan.metadataProfile.name,
+            artworkRef = durableCoverId,
         )
         return true
     }
@@ -482,6 +486,38 @@ internal class IncrementalScanStore(
     override suspend fun invalidateSource(sourceKey: String?) {
         if (sourceKey == null) dao.invalidateAllSources() else dao.invalidateSource(sourceKey)
     }
+
+    private fun PendingCachedFileData.toCachedFileData() =
+        CachedFileData(
+            uri = Uri.parse(uri),
+            modifiedMs = modifiedMs,
+            addedMs = addedMs,
+            mimeType = mimeType,
+            durationMs = durationMs,
+            bitrateKbps = bitrateKbps,
+            sampleRateHz = sampleRateHz,
+            musicBrainzId = musicBrainzId,
+            name = name,
+            sortName = sortName,
+            track = track,
+            disc = disc,
+            subtitle = subtitle,
+            date = date,
+            albumMusicBrainzId = albumMusicBrainzId,
+            albumName = albumName,
+            albumSortName = albumSortName,
+            releaseTypes = releaseTypes,
+            artistMusicBrainzIds = artistMusicBrainzIds,
+            artistNames = artistNames,
+            artistSortNames = artistSortNames,
+            albumArtistMusicBrainzIds = albumArtistMusicBrainzIds,
+            albumArtistNames = albumArtistNames,
+            albumArtistSortNames = albumArtistSortNames,
+            genreNames = genreNames,
+            replayGainTrackAdjustment = replayGainTrackAdjustment,
+            replayGainAlbumAdjustment = replayGainAlbumAdjustment,
+            coverId = coverId,
+        )
 
     private fun CommittedCachedRow.toCachedFile(): CachedFile {
         val uri = cache.uri

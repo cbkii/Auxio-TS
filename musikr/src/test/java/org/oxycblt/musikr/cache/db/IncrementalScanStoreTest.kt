@@ -288,6 +288,86 @@ class IncrementalScanStoreTest {
         assertEquals(2, db.readDao().selectAllSongs().size)
     }
 
+    @Test
+    fun `new store safely restarts stale pending generation after process death`() = runBlocking {
+        val source = snapshot("v1")
+        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        val interrupted = store.planScan(listOf(source.copy(fingerprint = "v2")), false, MetadataProfile.FULL, 1L)
+        store.beginScan(interrupted)
+        store.stage(cachedFile("alpha.mp3", 2L))
+
+        val restarted = IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
+        val restartPlan = restarted.planScan(listOf(source.copy(fingerprint = "v2")), false, MetadataProfile.FULL, 1L)
+        assertTrue(restartPlan.hasWork)
+        restarted.beginScan(restartPlan)
+        restarted.abortScan(CancellationException("simulated process restart"))
+
+        assertEquals(1L, db.readDao().selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))?.modifiedMs)
+    }
+
+    @Test
+    fun `unchanged source reinsertion reuses committed generation`() = runBlocking {
+        val source = snapshot("same")
+        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        store.planScan(listOf(source.copy(available = false, fingerprint = null)), false, MetadataProfile.LEAN, 1L)
+        val reinserted = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+
+        assertFalse(reinserted.hasWork)
+        assertEquals(setOf(source.sourceKey), reinserted.reuseSourceKeys)
+    }
+
+    @Test
+    fun `changed source reinsertion schedules only changed volume`() = runBlocking {
+        val usb0 = snapshot("usb0-v1", "/storage/usbdisk0")
+        val usb1 = snapshot("usb1-v1", "/storage/usbdisk1")
+        val initial = store.planScan(listOf(usb0, usb1), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3", 1L, "/storage/usbdisk0"))
+        store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
+        store.commitScan()
+
+        store.planScan(listOf(usb1, usb0.copy(available = false, fingerprint = null)), false, MetadataProfile.LEAN, 1L)
+        val reinserted = store.planScan(listOf(usb1, usb0.copy(fingerprint = "usb0-v2")), false, MetadataProfile.LEAN, 1L)
+
+        assertEquals(setOf(usb0.sourceKey), reinserted.scanSourceKeys)
+        assertEquals(setOf(usb1.sourceKey), reinserted.reuseSourceKeys)
+    }
+
+    @Test
+    fun `source ordering cannot swap two USB identities`() = runBlocking {
+        val usb0 = snapshot("usb0", "/storage/usbdisk0")
+        val usb1 = snapshot("usb1", "/storage/usbdisk1")
+        val initial = store.planScan(listOf(usb0, usb1), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3", 1L, "/storage/usbdisk0"))
+        store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
+        store.commitScan()
+
+        val reordered = store.planScan(listOf(usb1, usb0), false, MetadataProfile.LEAN, 1L)
+        assertFalse(reordered.hasWork)
+        assertEquals(setOf(usb0.sourceKey, usb1.sourceKey), reordered.reuseSourceKeys)
+    }
+
+    @Test
+    fun `large committed library keeps startup query bounded`() = runBlocking {
+        val source = snapshot("large")
+        val plan = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(plan)
+        repeat(5_000) { index -> store.stage(cachedFile("track-$index.mp3", index.toLong())) }
+        store.commitScan()
+
+        assertEquals(5_000, db.incrementalLibraryDao().songCount())
+        assertEquals(20, DBCache.from(db, store).firstSongs(20, 0).size)
+    }
+
     private fun snapshot(fingerprint: String, root: String = "/storage/usbdisk0"): SourceSnapshot {
         val volume = Volume.ThirdParty(Uri.parse("file://$root"))
         return SourceSnapshot(

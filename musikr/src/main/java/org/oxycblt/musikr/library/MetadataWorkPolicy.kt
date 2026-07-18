@@ -54,7 +54,7 @@ fun MetadataProfile.defaultDimensionPolicy(): LibraryDimensionPolicy =
 fun MetadataProfile.defaultArtworkPolicy(): ArtworkPolicy =
     when (this) {
         MetadataProfile.LEAN -> ArtworkPolicy.VISIBLE_ITEMS
-        MetadataProfile.FULL -> ArtworkPolicy.FULL_INDEXING
+        MetadataProfile.FULL -> ArtworkPolicy.VISIBLE_ITEMS
     }
 
 data class MetadataWorkPolicy(

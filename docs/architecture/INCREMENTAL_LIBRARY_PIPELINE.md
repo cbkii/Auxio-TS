@@ -36,7 +36,7 @@ Every configured MediaStore volume, SAF tree or DirectFS root has an independent
 - committed metadata profile and enrichment revision;
 - last successful scan and incomplete-scan state.
 
-**Observed:** attaching a source observer only increments an invalidation version. It does not itself enumerate files or construct a library.
+**Observed:** source observers attach before rich-library hydration. Attachment does not enumerate files or construct a library; notification bursts are debounced and persist only source invalidation before scan planning.
 
 MediaStore uses the platform volume-version token on Android 10. SAF uses root-document metadata. DirectFS uses a bounded root sample and periodic refresh. Direct/SAF fingerprints are advisory: they avoid needless warm work but are not treated as proof that an entire FAT/document tree cannot have changed.
 
@@ -101,7 +101,7 @@ Full uses the existing TagLib path and enables configured rich dimensions. It ru
 
 ## Artwork and optional work
 
-Artwork creation is disabled in Lean. Existing cover IDs remain durable references and are resolved only when a visible/current surface requests them. Ordinary incremental scans do not globally clear the cover store.
+Artwork creation is disabled during Lean and Full indexing. Existing cover IDs remain durable references and visible/current, widget and explicit detail surfaces resolve artwork on demand. Ordinary incremental scans neither eagerly extract complete-library artwork nor globally clear the cover store.
 
 ReplayGain metadata extraction is a Full-profile dimension. The existing playback processor remains the single standards-compatible audio processor and stays dormant when ReplayGain mode is disabled. FFmpeg remains a playback compatibility renderer rather than an indexing/enrichment component; this PR does not add a second renderer pipeline or player.
 

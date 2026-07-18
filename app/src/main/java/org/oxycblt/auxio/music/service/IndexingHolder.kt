@@ -24,6 +24,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
@@ -95,6 +96,8 @@ private constructor(
                 BuildConfig.APPLICATION_ID + ":IndexingComponent",
             )
     private var trackingJob: Job? = null
+    private var observationRequestJob: Job? = null
+    private val observationBurstGate = ObservationBurstGate()
 
     fun attach() {
         musicSettings.registerListener(this)
@@ -102,15 +105,17 @@ private constructor(
         musicRepository.addIndexingListener(this)
         musicRepository.registerWorker(this)
         playbackManager.addListener(this)
-        // Delay storage tracking until the cached library is emitted (or first index completes).
-        // On TS18 firmware, SAF/MediaStore tracking setup can trigger slow provider queries that
-        // compete with the cached startup path. Tracking will begin once onMusicChanges fires.
+        // Observer attachment is cheap: it registers notifications only. Provider enumeration and
+        // extraction remain planner-controlled and notification bursts are conflated below.
+        if (musicSettings.shouldBeObserving) startTracking()
     }
 
     fun release() {
         startupJob?.cancel()
         startupJob = null
         stopTracking()
+        observationRequestJob?.cancel()
+        observationRequestJob = null
         currentIndexJob?.cancel()
         currentIndexJob = null
         pendingIndexRequest = null
@@ -256,11 +261,8 @@ private constructor(
     }
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
-        if (musicRepository.library == null) return
         L.d("Music changed [device=${changes.deviceLibrary}, user=${changes.userLibrary}]")
-        if (musicSettings.shouldBeObserving && trackingJob == null) {
-            startTracking()
-        }
+        if (musicSettings.shouldBeObserving && trackingJob == null) startTracking()
         // Playback owns its persistent primitive queue. Rich metadata reconciliation is bounded
         // by the playback holder and must not clear all artwork or reapply a complete Song queue.
     }
@@ -297,12 +299,16 @@ private constructor(
                         }
                     }
 
-                    if (musicRepository.library == null) {
-                        L.i("Ignoring storage change before cached/startup library is available")
-                    } else {
-                        L.i("Storage change observed; refreshing library with cache")
-                        requestIndex(true)
-                    }
+                    val token = observationBurstGate.nextToken()
+                    observationRequestJob?.cancel()
+                    observationRequestJob =
+                        indexScope.launch {
+                            delay(OBSERVATION_DEBOUNCE_MS)
+                            if (observationBurstGate.isLatest(token)) {
+                                L.i("Storage notification burst settled; planning cached refresh")
+                                requestIndex(true)
+                            }
+                        }
                 }
             }
     }
@@ -310,6 +316,8 @@ private constructor(
     private fun stopTracking() {
         trackingJob?.cancel()
         trackingJob = null
+        observationRequestJob?.cancel()
+        observationRequestJob = null
     }
 
     @Synchronized
@@ -372,5 +380,6 @@ private constructor(
 
     companion object {
         const val WAKELOCK_TIMEOUT_MS = 60 * 1000L
+        internal const val OBSERVATION_DEBOUNCE_MS = 750L
     }
 }
