@@ -123,7 +123,9 @@ The compatibility snapshot reads only committed, currently available source gene
 
 ## Resource policy
 
-The Topway variants default to the Driving Startup policy:
+The Topway variants default to the Driving Startup policy.
+
+TS18 policy claim: [Evidence confidence: Requires TS18 validation] [Porting decision: Requires TS18 runtime validation].
 
 - Lean metadata first;
 - one or low indexing concurrency while playback is active;
