@@ -1,9 +1,9 @@
 name: PR 184 completion apply
 
 on:
-  push:
+  pull_request:
     branches:
-      - cx/startup-profiles-benchmarks
+      - cx/incremental-library-pipeline
     paths:
       - .github/workflows/pr184-completion-apply.yml
 
