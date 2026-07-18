@@ -41,6 +41,7 @@ fixture=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/Bench
 fixture_receiver=app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
 browser=app/src/main/java/org/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser.kt
 perf_timer=app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt
+startup_validation=.github/workflows/startup-performance.yml
 
 for path in \
   app/src/main/baseline-prof.txt \
@@ -53,6 +54,7 @@ for path in \
   "$fixture_receiver" \
   "$browser" \
   "$perf_timer" \
+  "$startup_validation" \
   scripts/summarize-startup-benchmarks.py \
   docs/architecture/STARTUP_PROFILES_BENCHMARKS.md; do
   require_file "$path"
@@ -69,6 +71,14 @@ require_contains startup-benchmark/build.gradle 'id "androidx.baselineprofile"'
 require_contains startup-benchmark/build.gradle 'pixel2Api29'
 require_contains startup-benchmark/build.gradle 'pixel6Api35'
 require_contains startup-benchmark/build.gradle 'managedDevices = ["pixel6Api35"]'
+
+for task in \
+  ':startup-benchmark:assembleStandardBenchmarkBenchmark' \
+  ':startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark' \
+  ':startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark'; do
+  require_contains "$startup_validation" "$task"
+done
+require_absent "$startup_validation" ':startup-benchmark:assembleStandardBenchmark 2>&1'
 
 require_contains "$baseline_generator" '@RunWith(AndroidJUnit4::class)'
 require_contains "$baseline_generator" 'includeInStartupProfile = true'
