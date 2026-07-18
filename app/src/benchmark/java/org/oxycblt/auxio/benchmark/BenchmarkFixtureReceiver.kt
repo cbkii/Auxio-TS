@@ -70,7 +70,8 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             try {
                 seed(context.applicationContext, songCount, sourceMode)
                 pending.resultCode = Activity.RESULT_OK
-                pending.resultData = "Seeded $songCount committed rows and primitive queue ($sourceMode)"
+                pending.resultData =
+                    "Seeded $songCount committed rows and primitive queue ($sourceMode)"
             } catch (error: Throwable) {
                 pending.resultCode = Activity.RESULT_CANCELED
                 pending.resultData = error.stackTraceToString().take(MAX_RESULT_LENGTH)
@@ -128,19 +129,13 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             .commit()
     }
 
-    private fun seedPlaybackQueue(
-        context: Context,
-        songCount: Int,
-        playableFiles: Map<Int, File>,
-    ) {
+    private fun seedPlaybackQueue(context: Context, songCount: Int, playableFiles: Map<Int, File>) {
         val physicalFiles = playableFiles.values.toList()
-        require(physicalFiles.isNotEmpty()) { "At least one playable benchmark fixture is required" }
+        require(physicalFiles.isNotEmpty()) {
+            "At least one playable benchmark fixture is required"
+        }
         val database =
-            Room.databaseBuilder(
-                    context,
-                    PersistenceDatabase::class.java,
-                    PLAYBACK_DATABASE_NAME,
-                )
+            Room.databaseBuilder(context, PersistenceDatabase::class.java, PLAYBACK_DATABASE_NAME)
                 .addMigrations(
                     PersistenceDatabase.MIGRATION_27_32,
                     PersistenceDatabase.MIGRATION_32_38,
