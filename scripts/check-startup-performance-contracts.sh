@@ -35,9 +35,10 @@ require_file startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/
 require_file docs/architecture/STARTUP_PROFILES_BENCHMARKS.md
 
 require_contains settings.gradle "include ':startup-benchmark'"
-require_contains app/build.gradle 'baselineProfile project(":startup-benchmark")'
+require_contains app/build.gradle 'implementation "androidx.profileinstaller:profileinstaller:1.4.1"'
 require_contains startup-benchmark/build.gradle 'id "com.android.test"'
 require_contains startup-benchmark/build.gradle 'id "androidx.baselineprofile"'
+require_contains startup-benchmark/build.gradle 'targetBuildType = "benchmark"'
 
 for count in 500 5_000 20_000; do
   require_contains startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt "${count}"
