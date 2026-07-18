@@ -32,6 +32,7 @@ import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.RootDiagnosticsHelper
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
+import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.StartupPerformanceReport
 import org.oxycblt.auxio.util.navigateSafe
 import timber.log.Timber as L
@@ -78,6 +79,13 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     .show()
                 true
             }
+        }
+        if (preference.key == getString(R.string.set_key_performance_capture)) {
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, newValue ->
+                    PerfTimer.configure(newValue as? Boolean == true)
+                    true
+                }
         }
         if (preference.key == getString(R.string.set_key_export_startup_report)) {
             preference.setOnPreferenceClickListener {
