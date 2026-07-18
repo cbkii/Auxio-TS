@@ -1,5 +1,6 @@
 name: PR 184 One-Shot Final Hardening
 
+# One-shot trigger after repairing the patch extractor.
 on:
   push:
     branches:
@@ -56,7 +57,7 @@ jobs:
         run: |
           source_workflow="${RUNNER_TEMP}/pr184-original-hardening.yml"
           patch_script="${RUNNER_TEMP}/pr184-final-hardening.py"
-          git show HEAD^:.github/workflows/pr184-final-hardening.yml > "${source_workflow}"
+          git show HEAD^^:.github/workflows/pr184-final-hardening.yml > "${source_workflow}"
           python3 - "${source_workflow}" "${patch_script}" <<'EXTRACT'
           from pathlib import Path
           import sys
