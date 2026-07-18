@@ -26,13 +26,21 @@ import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteStatement
 import android.util.Base64
+import androidx.room.Room
+import androidx.room.withTransaction
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.min
+import kotlinx.coroutines.runBlocking
 import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser
+import org.oxycblt.auxio.playback.persist.PersistenceDatabase
+import org.oxycblt.auxio.playback.persist.QueueItemRefEntity
+import org.oxycblt.auxio.playback.persist.QueueSessionEntity
+import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.auxio.util.StartupPerformanceReport
 
 /** Benchmark-build-only authority for deterministic fixtures and bounded timing export. */
@@ -62,7 +70,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             try {
                 seed(context.applicationContext, songCount, sourceMode)
                 pending.resultCode = Activity.RESULT_OK
-                pending.resultData = "Seeded $songCount committed rows ($sourceMode)"
+                pending.resultData = "Seeded $songCount committed rows and primitive queue ($sourceMode)"
             } catch (error: Throwable) {
                 pending.resultCode = Activity.RESULT_CANCELED
                 pending.resultData = error.stackTraceToString().take(MAX_RESULT_LENGTH)
@@ -102,18 +110,14 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                 try {
                     clearFixtureTables(database)
                     insertLedgers(database, sourceMode)
-                    insertRepresentativeLibraryRows(
-                        database,
-                        songCount,
-                        playableFiles,
-                        sourceMode,
-                    )
+                    insertRepresentativeLibraryRows(database, songCount, playableFiles, sourceMode)
                     insertSongs(database, songCount, playableFiles, sourceMode)
                     database.setTransactionSuccessful()
                 } finally {
                     database.endTransaction()
                 }
             }
+        seedPlaybackQueue(context, songCount, playableFiles)
         context
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -122,6 +126,80 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             .putLong(KEY_SEED, FIXTURE_SEED)
             .putString(KEY_SOURCE_MODE, sourceMode)
             .commit()
+    }
+
+    private fun seedPlaybackQueue(
+        context: Context,
+        songCount: Int,
+        playableFiles: Map<Int, File>,
+    ) {
+        val physicalFiles = playableFiles.values.toList()
+        require(physicalFiles.isNotEmpty()) { "At least one playable benchmark fixture is required" }
+        val database =
+            Room.databaseBuilder(
+                    context,
+                    PersistenceDatabase::class.java,
+                    PLAYBACK_DATABASE_NAME,
+                )
+                .addMigrations(
+                    PersistenceDatabase.MIGRATION_27_32,
+                    PersistenceDatabase.MIGRATION_32_38,
+                    PersistenceDatabase.MIGRATION_38_39,
+                    PersistenceDatabase.MIGRATION_39_40,
+                )
+                .build()
+        try {
+            runBlocking {
+                database.withTransaction {
+                    val playbackStateDao = database.playbackStateDao()
+                    val queueDao = database.queueDao()
+                    playbackStateDao.nukeState()
+                    queueDao.nukeHeap()
+                    queueDao.nukeShuffledMapping()
+                    queueDao.nukeQueueItemRefs()
+                    queueDao.nukeQueueSessions()
+
+                    val anchor = PLAYBACK_ANCHOR_INDEX.coerceIn(0, songCount - 1)
+                    queueDao.insertQueueSession(
+                        QueueSessionEntity(
+                            id = PLAYBACK_SESSION_ID,
+                            currentLogicalPosition = anchor,
+                            positionMs = 0L,
+                            repeatMode = RepeatMode.NONE,
+                            shuffleScope = ShuffleScope.OFF,
+                            totalCount = songCount,
+                            revision = FIXTURE_GENERATION,
+                            updatedAtMs = FIXTURE_EPOCH_MS,
+                        )
+                    )
+
+                    for (start in 0 until songCount step QUEUE_INSERT_BATCH_SIZE) {
+                        val end = min(songCount, start + QUEUE_INSERT_BATCH_SIZE)
+                        val items =
+                            (start until end).map { logicalPosition ->
+                                val row = fixtureRow(logicalPosition, songCount, playableFiles)
+                                val physicalFile =
+                                    physicalFiles[logicalPosition % physicalFiles.size]
+                                QueueItemRefEntity(
+                                    sessionId = PLAYBACK_SESSION_ID,
+                                    logicalPosition = logicalPosition,
+                                    canonicalPosition = logicalPosition,
+                                    stableSongUid = null,
+                                    uri = physicalFile.toURI().toString(),
+                                    pathFallback = row.displayPath,
+                                    titleFallback = row.title,
+                                    artistFallback = row.artist,
+                                    albumFallback = row.album,
+                                    durationMs = WAVE_DURATION_SECONDS * 1_000L,
+                                )
+                            }
+                        queueDao.insertQueueItemRefs(items)
+                    }
+                }
+            }
+        } finally {
+            database.close()
+        }
     }
 
     private fun clearFixtureTables(database: SQLiteDatabase) {
@@ -362,10 +440,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         )
     }
 
-    private fun preparePlayableFixtures(
-        context: Context,
-        sourceMode: String,
-    ): Map<Int, File> {
+    private fun preparePlayableFixtures(context: Context, sourceMode: String): Map<Int, File> {
         val files = linkedMapOf<Int, File>()
         SOURCE_KEYS.indices.forEach { sourceIndex ->
             val root = FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)
@@ -434,6 +509,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         const val SOURCE_MODE_USB1_ABSENT = "usb1_absent"
         const val SOURCE_MODE_PENDING = "pending_generation"
         private const val DATABASE_NAME = "music_cache.db"
+        private const val PLAYBACK_DATABASE_NAME = "playback_persistence.db"
         private const val PREFS_NAME = "auxio_benchmark_fixture"
         private const val KEY_SONG_COUNT = "song_count"
         private const val KEY_SCHEMA_VERSION = "schema_version"
@@ -444,6 +520,9 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         private const val FIXTURE_SEED = 18_022_026L
         private const val FIXTURE_GENERATION = 1L
         private const val FIXTURE_EPOCH_MS = 1_700_000_000_000L
+        private const val PLAYBACK_SESSION_ID = 1L
+        private const val PLAYBACK_ANCHOR_INDEX = 10
+        private const val QUEUE_INSERT_BATCH_SIZE = 500
         private const val DEFAULT_SONG_COUNT = 5_000
         private const val MAX_RESULT_LENGTH = 8_000
         private const val GENRE_COUNT = 20
