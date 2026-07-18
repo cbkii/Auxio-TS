@@ -18,7 +18,6 @@
 
 package org.oxycblt.musikr.cache.db
 
-import android.net.Uri
 import androidx.room.Dao
 import androidx.room.Embedded
 import androidx.room.Entity
@@ -27,11 +26,13 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
-import androidx.room.TypeConverters
-import org.oxycblt.musikr.fs.SourceSnapshot
-import org.oxycblt.musikr.tag.Date
+import org.oxycblt.musikr.cache.StartupAlbumRow
+import org.oxycblt.musikr.cache.StartupArtistRow
+import org.oxycblt.musikr.cache.StartupFolderRow
+import org.oxycblt.musikr.cache.StartupSongRow
+import org.oxycblt.musikr.cache.StartupSummaryRow
 
-/** Durable per-source observation and committed-generation ledger. */
+/** Durable observation and committed-generation state for one independent source. */
 @Entity
 internal data class SourceLedgerData(
     @PrimaryKey val sourceKey: String,
@@ -52,7 +53,7 @@ internal data class SourceLedgerData(
     val enrichmentRevision: Long,
     val incomplete: Boolean,
 ) {
-    fun observed(snapshot: SourceSnapshot): SourceLedgerData =
+    fun observed(snapshot: org.oxycblt.musikr.fs.SourceSnapshot): SourceLedgerData =
         copy(
             sourceType = snapshot.sourceType,
             rootUri = snapshot.rootUri,
@@ -102,12 +103,11 @@ internal data class ScanSeenData(
     val metadataProfile: String,
 )
 
-/** Changed metadata staged until every pipeline stage completes successfully. */
+/** Changed cache metadata staged until the source generation commits. */
 @Entity(
     primaryKeys = ["scanId", "sourceKey", "uri"],
     indices = [Index(value = ["scanId", "sourceKey"])],
 )
-@TypeConverters(CachedFileData.Converters::class)
 internal data class PendingCachedFileData(
     val scanId: String,
     val sourceKey: String,
@@ -115,76 +115,22 @@ internal data class PendingCachedFileData(
     val modifiedMs: Long,
     val addedMs: Long,
     val mimeType: String?,
-    val durationMs: Long?,
-    val bitrateKbps: Int?,
-    val sampleRateHz: Int?,
-    val musicBrainzId: String?,
-    val name: String?,
-    val sortName: String?,
-    val track: Int?,
-    val disc: Int?,
-    val subtitle: String?,
-    val date: Date?,
-    val albumMusicBrainzId: String?,
-    val albumName: String?,
-    val albumSortName: String?,
-    val releaseTypes: List<String>?,
-    val artistMusicBrainzIds: List<String>?,
-    val artistNames: List<String>?,
-    val artistSortNames: List<String>?,
-    val albumArtistMusicBrainzIds: List<String>?,
-    val albumArtistNames: List<String>?,
-    val albumArtistSortNames: List<String>?,
-    val genreNames: List<String>?,
-    val replayGainTrackAdjustment: Float?,
-    val replayGainAlbumAdjustment: Float?,
-    val coverId: String?,
-) {
-    fun toCachedFileData(): CachedFileData =
-        CachedFileData(
-            uri = Uri.parse(uri),
-            modifiedMs = modifiedMs,
-            addedMs = addedMs,
-            mimeType = mimeType,
-            durationMs = durationMs,
-            bitrateKbps = bitrateKbps,
-            sampleRateHz = sampleRateHz,
-            musicBrainzId = musicBrainzId,
-            name = name,
-            sortName = sortName,
-            track = track,
-            disc = disc,
-            subtitle = subtitle,
-            date = date,
-            albumMusicBrainzId = albumMusicBrainzId,
-            albumName = albumName,
-            albumSortName = albumSortName,
-            releaseTypes = releaseTypes,
-            artistMusicBrainzIds = artistMusicBrainzIds,
-            artistNames = artistNames,
-            artistSortNames = artistSortNames,
-            albumArtistMusicBrainzIds = albumArtistMusicBrainzIds,
-            albumArtistNames = albumArtistNames,
-            albumArtistSortNames = albumArtistSortNames,
-            genreNames = genreNames,
-            replayGainTrackAdjustment = replayGainTrackAdjustment,
-            replayGainAlbumAdjustment = replayGainAlbumAdjustment,
-            coverId = coverId,
-        )
-}
+    val properties: org.oxycblt.musikr.metadata.Properties?,
+    val tags: org.oxycblt.musikr.tag.parse.ParsedTags?,
+    val embeddedArtworkRef: String?,
+)
 
-/** Complete lightweight song projection for one committed source generation. */
+/** Committed lightweight song projection for bounded readers. */
 @Entity(
-    indices =
-        [
-            Index(value = ["sourceKey", "generation", "uri"], unique = true),
-            Index(value = ["sourceKey", "generation", "titleSort"]),
-            Index(value = ["stableUid"]),
-            Index(value = ["uri"]),
-            Index(value = ["dateAddedMs"]),
-            Index(value = ["primaryArtistSort"]),
-            Index(value = ["albumSort"]),
-        ]
+    indices = [
+        Index(value = ["sourceKey", "generation", "uri"], unique = true),
+        Index(value = ["sourceKey", "generation", "titleSort"]),
+        Index(value = ["stableUid"]),
+        Index(value = ["uri"]),
+        Index(value = ["dateAddedMs"]),
+        Index(value = ["primaryArtistSort"]),
+        Index(value = ["albumSort"]),
+    ]
 )
 internal data class IndexedSongData(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -334,7 +280,7 @@ internal interface IncrementalScanDao {
     @Query(
         "SELECT * FROM (" +
             "SELECT cache.*, song.sourceKey AS sourceKey, song.displayPath AS committedDisplayPath, song.sizeBytes AS committedSizeBytes, source.rootUri AS committedSourceUri, source.rootPath AS committedRootPath FROM CachedFileData cache INNER JOIN IndexedSongData song ON song.uri = cache.uri INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 " +
-            "UNION ALL SELECT cache.*, 'legacy:' || cache.uri AS sourceKey, cache.uri AS committedDisplayPath, 0 AS committedSizeBytes, NULL AS committedSourceUri, NULL AS committedRootPath FROM CachedFileData cache WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = cache.uri)) rows ORDER BY uri LIMIT :limit OFFSET :offset"
+            "UNION ALL SELECT cache.*, 'legacy:' || cache.uri AS sourceKey, cache.uri AS committedDisplayPath, 0 AS committedSizeBytes, NULL AS committedSourceUri, NULL AS committedRootPath FROM CachedFileData cache WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = cache.uri)) ORDER BY uri LIMIT :limit OFFSET :offset"
     )
     suspend fun compatibilityCachedPage(limit: Int, offset: Int): List<CommittedCachedRow>
 
@@ -358,38 +304,45 @@ internal interface IncrementalLibraryReadDao {
             "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.titleSort AS ordering FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
             "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.titleSort FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 ORDER BY ordering, id LIMIT :limit OFFSET :offset"
     )
-    suspend fun songsPage(limit: Int, offset: Int): List<SongListRow>
+    suspend fun startupSongs(limit: Int, offset: Int): List<StartupSongRow>
 
     @Query(
         "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM (" +
             "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.dateAddedMs AS ordering FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
-            "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.dateAddedMs FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 ORDER BY ordering DESC, id DESC LIMIT :limit"
+            "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.dateAddedMs FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 ORDER BY ordering DESC, id LIMIT :limit OFFSET :offset"
     )
-    suspend fun recentlyAdded(limit: Int): List<SongListRow>
-
-    @Query(
-        "SELECT MIN(id) AS id, albumName AS title, MIN(albumSort) AS titleSort FROM (" +
-            "SELECT song.id, song.albumName, COALESCE(song.albumSort, song.albumName) AS albumSort, source.available FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
-            "UNION ALL SELECT legacy.id, legacy.albumName, COALESCE(legacy.albumSort, legacy.albumName), legacy.available FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 AND albumName IS NOT NULL GROUP BY albumName ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
-    )
-    suspend fun albumsPage(limit: Int, offset: Int): List<AlbumListRow>
-
-    @Query(
-        "SELECT MIN(id) AS id, primaryArtistName AS name, MIN(primaryArtistSort) AS nameSort FROM (" +
-            "SELECT song.id, song.primaryArtistName, COALESCE(song.primaryArtistSort, song.primaryArtistName) AS primaryArtistSort, source.available FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
-            "UNION ALL SELECT legacy.id, legacy.primaryArtistName, COALESCE(legacy.primaryArtistSort, legacy.primaryArtistName), legacy.available FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 AND primaryArtistName IS NOT NULL GROUP BY primaryArtistName ORDER BY nameSort, id LIMIT :limit OFFSET :offset"
-    )
-    suspend fun artistsPage(limit: Int, offset: Int): List<ArtistListRow>
+    suspend fun recentlyAdded(limit: Int, offset: Int): List<StartupSongRow>
 
     @Query(
         "SELECT id, stableUid, uri, displayPath, title, primaryArtistName, albumName, durationMs, embeddedArtworkRef, externalArtworkRef, available FROM (" +
-            "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.titleSort AS titleSort, song.primaryArtistSort AS primaryArtistSort, song.albumSort AS albumSort FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
-            "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.titleSort, legacy.primaryArtistSort, legacy.albumSort FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 AND (titleSort LIKE :pattern ESCAPE '\\' OR primaryArtistSort LIKE :pattern ESCAPE '\\' OR albumSort LIKE :pattern ESCAPE '\\') ORDER BY titleSort, id LIMIT :limit OFFSET :offset"
+            "SELECT song.id AS id, song.stableUid AS stableUid, song.uri AS uri, song.displayPath AS displayPath, song.title AS title, song.primaryArtistName AS primaryArtistName, song.albumName AS albumName, song.durationMs AS durationMs, song.artworkRef AS embeddedArtworkRef, NULL AS externalArtworkRef, source.available AS available, song.titleSort AS ordering FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation " +
+            "UNION ALL SELECT legacy.id, legacy.stableUid, legacy.uri, legacy.displayPath, legacy.title, legacy.primaryArtistName, legacy.albumName, legacy.durationMs, legacy.embeddedArtworkRef, legacy.externalArtworkRef, legacy.available, legacy.titleSort FROM LibrarySongData legacy WHERE NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri)) merged WHERE available = 1 AND (title LIKE '%' || :likeQuery || '%' OR primaryArtistName LIKE '%' || :likeQuery || '%' OR albumName LIKE '%' || :likeQuery || '%' OR displayPath LIKE '%' || :likeQuery || '%') ORDER BY ordering, id LIMIT :limit OFFSET :offset"
     )
-    suspend fun searchSongs(pattern: String, limit: Int, offset: Int): List<SongListRow>
+    suspend fun quickFindSongs(
+        likeQuery: String,
+        limit: Int,
+        offset: Int,
+    ): List<StartupSongRow>
 
     @Query(
-        "SELECT COUNT(*) FROM (SELECT song.uri FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 UNION ALL SELECT legacy.uri FROM LibrarySongData legacy WHERE legacy.available = 1 AND NOT EXISTS (SELECT 1 FROM IndexedUriStateData state WHERE state.uri = legacy.uri))"
+        "SELECT ROW_NUMBER() OVER (ORDER BY albumSort, albumName) AS syntheticId, albumName AS name, primaryArtistName, MIN(artworkRef) AS artworkRef, COUNT(*) AS songCount, MAX(dateAddedMs) AS dateAddedMs FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 AND albumName IS NOT NULL GROUP BY albumSort, albumName, primaryArtistName ORDER BY albumSort, albumName LIMIT :limit OFFSET :offset"
     )
-    suspend fun songCount(): Int
+    suspend fun startupAlbums(limit: Int, offset: Int): List<StartupAlbumRow>
+
+    @Query(
+        "SELECT ROW_NUMBER() OVER (ORDER BY primaryArtistSort, primaryArtistName) AS syntheticId, primaryArtistName AS name, MIN(artworkRef) AS artworkRef, COUNT(*) AS songCount FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 AND primaryArtistName IS NOT NULL GROUP BY primaryArtistSort, primaryArtistName ORDER BY primaryArtistSort, primaryArtistName LIMIT :limit OFFSET :offset"
+    )
+    suspend fun startupArtists(limit: Int, offset: Int): List<StartupArtistRow>
+
+    @Query(
+        "SELECT MIN(id) AS syntheticId, COALESCE(NULLIF(SUBSTR(displayPath, 1, LENGTH(displayPath) - LENGTH(fileName) - 1), ''), '/') AS displayPath, COUNT(*) AS songCount, MAX(dateAddedMs) AS dateAddedMs FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1 GROUP BY displayPath ORDER BY displayPath LIMIT :limit OFFSET :offset"
+    )
+    suspend fun startupFolders(limit: Int, offset: Int): List<StartupFolderRow>
+
+    @Query(
+        "SELECT COUNT(*) AS songCount, COUNT(DISTINCT albumName) AS albumCount, COUNT(DISTINCT primaryArtistName) AS artistCount FROM IndexedSongData song INNER JOIN SourceLedgerData source ON source.sourceKey = song.sourceKey AND source.lastCommittedGeneration = song.generation WHERE source.available = 1"
+    )
+    suspend fun summary(): StartupSummaryRow
+
+    @Query("SELECT COUNT(*) FROM IndexedSongData") suspend fun songCount(): Int
 }
