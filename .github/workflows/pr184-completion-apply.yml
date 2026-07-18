@@ -51,8 +51,13 @@ jobs:
       - name: Apply audited completion payload
         shell: bash
         run: |
+          encoded="${RUNNER_TEMP}/pr184-completion.b64"
           archive="${RUNNER_TEMP}/pr184-completion.tar.gz"
-          cat .pr184-payload/part* | base64 --decode > "${archive}"
+          cat .pr184-payload/part* > "${encoded}"
+          test "$(wc -c < "${encoded}")" -eq 41940
+          echo '890acf7f4f5a880f28557952e2fa84a758ff614cebbcebc5e5d12666d9b12d91  '"${encoded}" | sha256sum --check
+          base64 --decode "${encoded}" > "${archive}"
+          echo '4a5b7bd9f4ea03f62ad78aa5534e9d29591fa61d6435bab51aa96b88c50b4f31  '"${archive}" | sha256sum --check
           tar -xzf "${archive}" -C "${GITHUB_WORKSPACE}"
           chmod +x scripts/check-startup-performance-contracts.sh scripts/summarize-startup-benchmarks.py
           rm -rf .pr184-payload .github/workflows/pr184-completion-apply.yml
