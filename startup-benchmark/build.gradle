@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id "com.android.test"
-    id "androidx.baselineprofile"
 }
 
 android {
@@ -70,11 +69,6 @@ kotlin {
         jvmTarget = JvmTarget.JVM_21
         freeCompilerArgs.add("-Xannotation-default-target=param-property")
     }
-}
-
-baselineProfile {
-    managedDevices = ["pixel2Api29"]
-    useConnectedDevices = false
 }
 
 dependencies {
