@@ -109,6 +109,14 @@ android {
                 includeInBundle = false
             }
         }
+
+        benchmark {
+            initWith release
+            signingConfig signingConfigs.debug
+            debuggable false
+            shrinkResources false
+            matchingFallbacks = ["release"]
+        }
     }
 
     packagingOptions {
@@ -125,13 +133,11 @@ android {
         buildConfig true
     }
 
-
     testOptions {
         unitTests {
             includeAndroidResources = true
         }
     }
-
 
     sourceSets {
         // Reuse the same thin Topway/DoFun wrapper source set for both fixed DoFun entries.
@@ -305,7 +311,6 @@ baselineProfile {
     mergeIntoMain = true
     saveInSrc = true
 }
-
 
 tasks.withType(Test).configureEach { testTask ->
     // Keep regular unit-test CI independent from Roborazzi's runtime android-all downloads.
