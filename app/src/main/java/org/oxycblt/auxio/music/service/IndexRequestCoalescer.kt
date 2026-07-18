@@ -20,9 +20,16 @@ package org.oxycblt.auxio.music.service
 
 import org.oxycblt.musikr.library.MetadataProfile
 
+/** A pending indexing request after observer and enrichment bursts have been conflated. */
 internal data class IndexRequest(val withCache: Boolean, val metadataProfile: MetadataProfile?)
 
-/** Collapses bursts into the single strongest pending indexing request. */
+/**
+ * Collapses bursts into the single strongest pending indexing request.
+ *
+ * A cache-bypassing request cannot be weakened by a later cached request, and an explicit Full
+ * enrichment request cannot be weakened by Lean or automatic policy. This keeps observer storms
+ * bounded without losing required work.
+ */
 internal object IndexRequestCoalescer {
     fun merge(current: IndexRequest?, incoming: IndexRequest): IndexRequest {
         if (current == null) return incoming
