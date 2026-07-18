@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.settings.categories
 
+import android.content.Intent
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -31,6 +32,7 @@ import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.RootDiagnosticsHelper
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
+import org.oxycblt.auxio.util.StartupPerformanceReport
 import org.oxycblt.auxio.util.navigateSafe
 import timber.log.Timber as L
 
@@ -74,6 +76,28 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     .setPositiveButton(android.R.string.ok) { _, _ -> musicModel.rescan() }
                     .setNegativeButton(android.R.string.cancel, null)
                     .show()
+                true
+            }
+        }
+        if (preference.key == getString(R.string.set_key_export_startup_report)) {
+            preference.setOnPreferenceClickListener {
+                val report =
+                    StartupPerformanceReport.render(
+                        StartupPerformanceReport.CaptureContext(
+                            authority = "user-started-settings-export"
+                        )
+                    )
+                val shareIntent =
+                    Intent(Intent.ACTION_SEND)
+                        .setType("text/plain")
+                        .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.set_export_startup_report))
+                        .putExtra(Intent.EXTRA_TEXT, report)
+                startActivity(
+                    Intent.createChooser(
+                        shareIntent,
+                        getString(R.string.set_export_startup_report_chooser),
+                    )
+                )
                 true
             }
         }
