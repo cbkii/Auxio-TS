@@ -103,19 +103,28 @@ for journey in \
   warmStartupWithBaselineProfile \
   hotStartupWithBaselineProfile \
   savedSessionColdStartupWithBaselineProfile \
+  primitiveQueueControlsJourney \
   findAndPlayJourney \
   usbFolderPlaybackJourney \
+  secondUsbFolderPlaybackJourney \
   pagedLibraryJourney \
   earlyMediaBrowserJourney \
   coldStartupWithUnavailableSecondUsb \
-  coldStartupWithInterruptedPendingGeneration; do
+  coldStartupWithInterruptedPendingGeneration \
+  completeLibraryMilestonesRemainNonBlocking; do
   require_contains "$macrobenchmark" "$journey"
 done
+require_contains "$journeys" 'exerciseSavedSessionResume'
 require_contains "$journeys" 'exerciseEarlyMediaBrowser'
+require_contains "$journeys" 'exerciseUsbFolder(sourceIndex: Int = 0)'
 require_contains "$journeys" 'waitForAudioPlayback'
 require_contains "$journeys" 'Required UI object not found'
-require_absent "$journeys" 'if (!clickIfPresent'
-require_absent "$journeys" ') return'
+require_contains "$journeys" 'TRACE_NEXT_COMMAND_TO_NEXT_AUDIO'
+require_contains "$journeys" 'TRACE_MEDIA_BROWSER_FIRST_PAGE'
+# Public journeys must fail when a required control or row is unavailable. Do not
+# use optional-click helpers that silently turn a missing interaction into a pass.
+# Helper polling loops may legitimately return once their required condition is met.
+require_absent "$journeys" 'clickIfPresent'
 
 for required_class in \
   'Lorg/oxycblt/auxio/Auxio;' \
