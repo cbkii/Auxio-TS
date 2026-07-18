@@ -147,7 +147,14 @@ jobs:
 
       - name: Compile benchmark and profile instrumentation
         shell: bash
-        run: bash ./scripts/ci-gradle.sh :startup-benchmark:assembleStandardBenchmark
+        run: |
+          mkdir -p build/reports/startup-performance
+          set +e
+          bash ./scripts/ci-gradle.sh :startup-benchmark:assembleStandardBenchmark 2>&1 |
+            tee build/reports/startup-performance/benchmark-compile.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "${status}"
 
       - name: Build maintained debug variants
         shell: bash
