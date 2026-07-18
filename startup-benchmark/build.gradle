@@ -1,0 +1,85 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    id "com.android.test"
+    id "androidx.baselineprofile"
+}
+
+android {
+    namespace "org.oxycblt.auxio.startupbenchmark"
+    compileSdk target_sdk
+    targetProjectPath = ":app"
+
+    defaultConfig {
+        minSdk 28
+        targetSdk target_sdk
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] =
+            "EMULATOR,LOW-BATTERY"
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        standard {
+            dimension "distribution"
+            buildConfigField "String", "TARGET_PACKAGE", '"org.oxycblt.auxio"'
+        }
+        topwayTwMusic {
+            dimension "distribution"
+            buildConfigField "String", "TARGET_PACKAGE", '"com.tw.music"'
+        }
+        topwayTwMedia {
+            dimension "distribution"
+            buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media"'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    testOptions {
+        animationsDisabled true
+        managedDevices {
+            devices {
+                pixel2Api29(com.android.build.api.dsl.ManagedVirtualDevice) {
+                    device = "Pixel 2"
+                    apiLevel = 29
+                    systemImageSource = "aosp"
+                }
+            }
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_21
+        freeCompilerArgs.add("-Xannotation-default-target=param-property")
+    }
+}
+
+baselineProfile {
+    managedDevices = ["pixel2Api29"]
+    useConnectedDevices = false
+}
+
+dependencies {
+    implementation "androidx.benchmark:benchmark-macro-junit4:1.4.1"
+    implementation "androidx.test.ext:junit:1.3.0"
+    implementation "androidx.test:runner:1.7.0"
+    implementation "androidx.test.uiautomator:uiautomator:2.3.0"
+    implementation "junit:junit:4.13.2"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+}
