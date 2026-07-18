@@ -1,17 +1,19 @@
-name: PR 183 compile diagnostic
+name: PR 183 format and cleanup
 
 on:
   push:
     branches:
       - cx/incremental-library-pipeline
-    paths:
-      - .github/workflows/pr183-diagnostic.yml
 
 permissions:
   contents: write
 
+concurrency:
+  group: pr183-format-cleanup
+  cancel-in-progress: true
+
 jobs:
-  diagnose:
+  cleanup:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -38,25 +40,27 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Capture Standard debug compilation
+      - name: Apply repository formatting
         shell: bash
         run: |
-          set +e
-          log=.github/pr183-compile-failure.log
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug >"${log}" 2>&1
-          rc=$?
-          if ((rc == 0)); then
-            bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicDebug >>"${log}" 2>&1
-            rc=$?
-          fi
-          if ((rc == 0)); then
-            bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaDebug >>"${log}" 2>&1
-            rc=$?
-          fi
-          printf '\nDIAGNOSTIC_EXIT=%s\n' "${rc}" >>"${log}"
+          bash ./scripts/ci-gradle.sh spotlessApply
+          bash ./scripts/ci-gradle.sh spotlessCheck
+
+      - name: Remove temporary diagnostics and push cleanup
+        shell: bash
+        run: |
+          rm -f -- \
+            .github/workflows/pr183-diagnostic.yml \
+            .github/pr183-compile-failure.log \
+            .github/pr183-hardening-failure.log \
+            .github/pr183_patch.b64.* \
+            .github/pr183_patch2.b64.*
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "${log}"
-          git commit -m 'ci: record PR 183 compile diagnostic'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No cleanup changes to commit.'
+            exit 0
+          fi
+          git commit -m 'chore: format and clean PR 183 branch'
           git push origin HEAD:cx/incremental-library-pipeline
-          exit 0
