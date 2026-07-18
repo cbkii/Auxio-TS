@@ -23,12 +23,32 @@ import java.nio.file.Path
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ImmediateLaneArchitectureTest {
     private val root =
         Path.of(System.getProperty("user.dir")).let { cwd ->
             if (Files.exists(cwd.resolve("settings.gradle"))) cwd else cwd.parent
         }
+
+    @Test
+    fun `playback prefers platform decoding before the FFmpeg fallback`() {
+        val source =
+            root.resolve(
+                    "app/src/main/java/org/oxycblt/auxio/playback/service/" +
+                        "ExoPlaybackStateHolder.kt"
+                )
+                .readText()
+        val platformRenderer = source.indexOf("MediaCodecAudioRenderer(")
+        val ffmpegRenderer = source.indexOf("FfmpegAudioRenderer(")
+
+        assertTrue(platformRenderer >= 0, "platform renderer is missing")
+        assertTrue(ffmpegRenderer > platformRenderer, "FFmpeg must remain a fallback renderer")
+        assertTrue(source.contains(".setAudioProcessors(arrayOf(replayGainProcessor))"))
+        assertTrue(
+            source.contains("FfmpegAudioRenderer(handler, audioListener, replayGainProcessor)")
+        )
+    }
 
     @Test
     fun `fast interaction consumers never materialise the complete graph`() {
