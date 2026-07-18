@@ -7,6 +7,7 @@ plugins {
     id "dagger.hilt.android.plugin"
     id "com.google.devtools.ksp"
     id "io.github.takahirom.roborazzi"
+    id "androidx.baselineprofile"
 }
 
 android {
@@ -239,8 +240,10 @@ dependencies {
     ksp "androidx.room:room-compiler:$room_version"
     implementation "androidx.room:room-ktx:$room_version"
 
-    // Build
+    // Build and profile installation
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$desugaring_version"
+    implementation "androidx.profileinstaller:profileinstaller:1.4.1"
+    baselineProfile project(":startup-benchmark")
 
     // --- SECOND PARTY ---
 
@@ -295,6 +298,12 @@ dependencies {
     kspTest "com.google.dagger:hilt-android-compiler:$hilt_version"
     testImplementation "io.github.takahirom.roborazzi:roborazzi:1.64.0"
     testImplementation "io.github.takahirom.roborazzi:roborazzi-junit-rule:1.64.0"
+}
+
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    mergeIntoMain = true
+    saveInSrc = true
 }
 
 
