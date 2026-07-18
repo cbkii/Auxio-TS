@@ -255,8 +255,7 @@ internal class IncrementalScanStore(
         if (sourceKey !in plan.scanSourceKeys) return false
         val audio = cachedFile.audio
         val tags = audio?.tags
-        val durableCoverId =
-            audio?.coverId ?: readDao.selectSongByUri(cachedFile.file.uri)?.coverId
+        val durableCoverId = audio?.coverId ?: readDao.selectSongByUri(cachedFile.file.uri)?.coverId
         dao.upsertPending(
             PendingCachedFileData(
                 scanId = plan.scanId,

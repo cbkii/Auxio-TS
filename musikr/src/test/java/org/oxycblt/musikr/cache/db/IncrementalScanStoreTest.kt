@@ -296,17 +296,29 @@ class IncrementalScanStoreTest {
         store.stage(cachedFile("alpha.mp3", 1L))
         store.commitScan()
 
-        val interrupted = store.planScan(listOf(source.copy(fingerprint = "v2")), false, MetadataProfile.FULL, 1L)
+        val interrupted =
+            store.planScan(listOf(source.copy(fingerprint = "v2")), false, MetadataProfile.FULL, 1L)
         store.beginScan(interrupted)
         store.stage(cachedFile("alpha.mp3", 2L))
 
         val restarted = IncrementalScanStore(db, db.readDao(), db.writeDao(), db.incrementalDao())
-        val restartPlan = restarted.planScan(listOf(source.copy(fingerprint = "v2")), false, MetadataProfile.FULL, 1L)
+        val restartPlan =
+            restarted.planScan(
+                listOf(source.copy(fingerprint = "v2")),
+                false,
+                MetadataProfile.FULL,
+                1L,
+            )
         assertTrue(restartPlan.hasWork)
         restarted.beginScan(restartPlan)
         restarted.abortScan(CancellationException("simulated process restart"))
 
-        assertEquals(1L, db.readDao().selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))?.modifiedMs)
+        assertEquals(
+            1L,
+            db.readDao()
+                .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+                ?.modifiedMs,
+        )
     }
 
     @Test
@@ -317,7 +329,12 @@ class IncrementalScanStoreTest {
         store.stage(cachedFile("alpha.mp3", 1L))
         store.commitScan()
 
-        store.planScan(listOf(source.copy(available = false, fingerprint = null)), false, MetadataProfile.LEAN, 1L)
+        store.planScan(
+            listOf(source.copy(available = false, fingerprint = null)),
+            false,
+            MetadataProfile.LEAN,
+            1L,
+        )
         val reinserted = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
 
         assertFalse(reinserted.hasWork)
@@ -334,8 +351,19 @@ class IncrementalScanStoreTest {
         store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
         store.commitScan()
 
-        store.planScan(listOf(usb1, usb0.copy(available = false, fingerprint = null)), false, MetadataProfile.LEAN, 1L)
-        val reinserted = store.planScan(listOf(usb1, usb0.copy(fingerprint = "usb0-v2")), false, MetadataProfile.LEAN, 1L)
+        store.planScan(
+            listOf(usb1, usb0.copy(available = false, fingerprint = null)),
+            false,
+            MetadataProfile.LEAN,
+            1L,
+        )
+        val reinserted =
+            store.planScan(
+                listOf(usb1, usb0.copy(fingerprint = "usb0-v2")),
+                false,
+                MetadataProfile.LEAN,
+                1L,
+            )
 
         assertEquals(setOf(usb0.sourceKey), reinserted.scanSourceKeys)
         assertEquals(setOf(usb1.sourceKey), reinserted.reuseSourceKeys)
