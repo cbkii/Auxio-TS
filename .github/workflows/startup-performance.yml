@@ -150,7 +150,10 @@ jobs:
         run: |
           mkdir -p build/reports/startup-performance
           set +e
-          bash ./scripts/ci-gradle.sh :startup-benchmark:assembleStandardBenchmark 2>&1 |
+          bash ./scripts/ci-gradle.sh \
+            :startup-benchmark:assembleStandardBenchmarkBenchmark \
+            :startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark \
+            :startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark 2>&1 |
             tee build/reports/startup-performance/benchmark-compile.log
           status=${PIPESTATUS[0]}
           set -e
@@ -220,7 +223,7 @@ jobs:
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Includes workflow/shell/Python syntax, structural contracts, formatting, unit tests, lint, head-unit safety, benchmark/profile compilation, all maintained debug/release variants, Baseline Profile packaging, R8 startup DEX metadata, TS18 APK contracts and DoFun/Topway source contracts."
+            echo "- Includes workflow/shell/Python syntax, structural contracts, formatting, unit tests, lint, head-unit safety, all three benchmark/profile instrumentation flavours, all maintained debug/release variants, Baseline Profile packaging, R8 startup DEX metadata, TS18 APK contracts and DoFun/Topway source contracts."
             echo "- No hosted-runner wall-clock threshold or exact-device latency claim is produced."
             echo "- Exact TS18 runtime behaviour: Requires device validation."
           } >> "${GITHUB_STEP_SUMMARY}"
