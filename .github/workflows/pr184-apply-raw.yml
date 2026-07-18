@@ -1,0 +1,105 @@
+name: PR 184 Apply Raw Audited Patch
+
+on:
+  push:
+    branches:
+      - cx/startup-profiles-benchmarks
+    paths:
+      - ".github/workflows/pr184-apply-raw.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr184-apply-raw-audited-patch
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout latest branch head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/startup-profiles-benchmarks
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply patch and always publish the result
+        shell: bash
+        run: |
+          set +e
+          log_file="${RUNNER_TEMP}/pr184-hardening.log"
+          {
+            audited_base=95ecb314d4fb1c72e9dbd4049fe406768eebf1c4
+            payload_commit=6548a4df9c8fd87e18f0161db3e603383a691de5
+            target_paths=(
+              .github/workflows/android.yml
+              .github/workflows/lint.yml
+              app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
+              app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt
+              app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt
+              app/src/main/java/org/oxycblt/auxio/music/StartupLibraryPolicy.kt
+              app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt
+              app/src/test/java/org/oxycblt/auxio/music/MusicSettingsIndexingTriggerTest.kt
+              app/src/test/java/org/oxycblt/auxio/music/StartupLibraryPolicyTest.kt
+              docs/architecture/STARTUP_PROFILES_BENCHMARKS.md
+              docs/architecture/database-first-library.md
+              scripts/check-startup-performance-contracts.sh
+            )
+            git checkout "${audited_base}" -- "${target_paths[@]}"
+            source_workflow="${RUNNER_TEMP}/pr184-original-hardening.yml"
+            patch_script="${RUNNER_TEMP}/pr184-final-hardening.py"
+            git show "${payload_commit}:.github/workflows/pr184-final-hardening.yml" > "${source_workflow}"
+            python3 - "${source_workflow}" "${patch_script}" <<'EXTRACT'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+          start = next(index for index, line in enumerate(source) if line.strip() == "python3 - <<'PY'")
+          end = next(index for index in range(start + 1, len(source)) if source[index].strip() == "PY")
+          indent = " " * 10
+          payload = [line[len(indent) :] if line.startswith(indent) else line for line in source[start + 1 : end]]
+          Path(sys.argv[2]).write_text("\n".join(payload) + "\n", encoding="utf-8")
+          EXTRACT
+            python3 -m py_compile "${patch_script}"
+            python3 "${patch_script}"
+          } >"${log_file}" 2>&1
+          status=$?
+          set -e
+          cat "${log_file}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f -- \
+            .github/workflows/pr184-apply-raw.yml \
+            .github/workflows/pr184-apply-hardening.yml \
+            .github/workflows/pr184-final-hardening.yml 2>/dev/null || true
+
+          if ((status != 0)); then
+            cp "${log_file}" .github/pr184-hardening-error.txt
+            git add -- .github/pr184-hardening-error.txt .github/workflows
+            git commit -m "ci: capture PR 184 hardening patch failure"
+            git push origin HEAD:cx/startup-profiles-benchmarks
+            exit 0
+          fi
+
+          rm -f -- .github/pr184-hardening-error.txt
+          git add -- \
+            .github/workflows/android.yml \
+            .github/workflows/lint.yml \
+            app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt \
+            app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt \
+            app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt \
+            app/src/main/java/org/oxycblt/auxio/music/StartupLibraryPolicy.kt \
+            app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt \
+            app/src/test/java/org/oxycblt/auxio/music/MusicSettingsIndexingTriggerTest.kt \
+            app/src/test/java/org/oxycblt/auxio/music/StartupLibraryPolicyTest.kt \
+            docs/architecture/STARTUP_PROFILES_BENCHMARKS.md \
+            docs/architecture/database-first-library.md \
+            scripts/check-startup-performance-contracts.sh \
+            .github/workflows
+          git diff --cached --check
+          git commit -m "fix: apply audited startup hardening patch"
+          git push origin HEAD:cx/startup-profiles-benchmarks
