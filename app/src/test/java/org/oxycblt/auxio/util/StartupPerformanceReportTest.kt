@@ -43,10 +43,12 @@ class StartupPerformanceReportTest {
                     ),
                 events = events,
                 bootId = "boot-test",
+                reportElapsedRealtimeMs = 2_000,
             )
 
         assertContains(report, "authority=unit-test")
         assertContains(report, "bootId=boot-test")
+        assertContains(report, "reportElapsedRealtimeMs=2000")
         assertContains(report, "fixtureSongCount=5000")
         assertContains(report, "t+125ms label=queue_ready durationMs=7")
     }
@@ -62,6 +64,7 @@ class StartupPerformanceReportTest {
                 StartupPerformanceReport.CaptureContext(authority = "unit-test"),
                 events,
                 bootId = null,
+                reportElapsedRealtimeMs = 300,
             )
 
         assertContains(report, "eventCount=256")
