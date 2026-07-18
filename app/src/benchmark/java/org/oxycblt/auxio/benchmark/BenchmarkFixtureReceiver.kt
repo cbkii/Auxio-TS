@@ -91,7 +91,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         require(databaseFile.isFile) {
             "${databaseFile.path} does not exist; launch the benchmark target once before seeding"
         }
-        val playableFiles = preparePlayableFixtures(context)
+        val playableFiles = preparePlayableFixtures(context, sourceMode)
         SQLiteDatabase.openDatabase(
                 databaseFile.path,
                 null,
@@ -102,8 +102,13 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                 try {
                     clearFixtureTables(database)
                     insertLedgers(database, sourceMode)
-                    insertRepresentativeLibraryRows(database, songCount, playableFiles)
-                    insertSongs(database, songCount, playableFiles)
+                    insertRepresentativeLibraryRows(
+                        database,
+                        songCount,
+                        playableFiles,
+                        sourceMode,
+                    )
+                    insertSongs(database, songCount, playableFiles, sourceMode)
                     database.setTransactionSuccessful()
                 } finally {
                     database.endTransaction()
@@ -174,8 +179,11 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         database: SQLiteDatabase,
         songCount: Int,
         playableFiles: Map<Int, File>,
+        sourceMode: String,
     ) {
         SOURCE_KEYS.forEachIndexed { index, sourceKey ->
+            val available = sourceMode != SOURCE_MODE_USB1_ABSENT || index != 1
+            val pending = sourceMode == SOURCE_MODE_PENDING && index == 0
             val values =
                 ContentValues().apply {
                     put("stableSourceKey", sourceKey)
@@ -183,9 +191,10 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                     put("sourceType", SOURCE_TYPE)
                     putNull("rootUri")
                     put("rootPath", "/storage/usbdisk$index")
-                    put("available", 1)
+                    put("available", available)
                     put("lastCommittedGeneration", FIXTURE_GENERATION)
-                    putNull("pendingGeneration")
+                    if (pending) put("pendingGeneration", FIXTURE_GENERATION + 1)
+                    else putNull("pendingGeneration")
                     put("lastSuccessfulScanMs", FIXTURE_EPOCH_MS)
                     put("lastSeenMs", FIXTURE_EPOCH_MS)
                     put("configurationRevision", 1)
@@ -259,6 +268,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         database: SQLiteDatabase,
         songCount: Int,
         playableFiles: Map<Int, File>,
+        sourceMode: String,
     ) {
         val songStatement =
             database.compileStatement(
@@ -273,18 +283,21 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             database.compileStatement(
                 "INSERT OR REPLACE INTO IndexedUriStateData " +
                     "(sourceKey, uri, available, lastGeneration, metadataProfile) " +
-                    "VALUES (?, ?, 1, ?, ?)"
+                    "VALUES (?, ?, ?, ?, ?)"
             )
         try {
             repeat(songCount) { index ->
                 val row = fixtureRow(index, songCount, playableFiles)
+                val available =
+                    sourceMode != SOURCE_MODE_USB1_ABSENT || row.sourceKey != SOURCE_KEYS[1]
                 bindSong(songStatement, row)
                 songStatement.executeInsert()
                 stateStatement.clearBindings()
                 stateStatement.bindString(1, row.sourceKey)
                 stateStatement.bindString(2, row.uri)
-                stateStatement.bindLong(3, FIXTURE_GENERATION)
-                stateStatement.bindString(4, "LEAN")
+                stateStatement.bindLong(3, if (available) 1 else 0)
+                stateStatement.bindLong(4, FIXTURE_GENERATION)
+                stateStatement.bindString(5, "LEAN")
                 stateStatement.executeInsert()
             }
         } finally {
@@ -349,10 +362,19 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         )
     }
 
-    private fun preparePlayableFixtures(context: Context): Map<Int, File> {
+    private fun preparePlayableFixtures(
+        context: Context,
+        sourceMode: String,
+    ): Map<Int, File> {
         val files = linkedMapOf<Int, File>()
         SOURCE_KEYS.indices.forEach { sourceIndex ->
             val root = FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)
+            if (sourceMode == SOURCE_MODE_USB1_ABSENT && sourceIndex == 1) {
+                check(!root.exists() || root.deleteRecursively()) {
+                    "Unable to remove unavailable fixture root ${root.absolutePath}"
+                }
+                return@forEach
+            }
             check(root.mkdirs() || root.isDirectory) { "Unable to create ${root.absolutePath}" }
             root.listFiles()?.forEach { child ->
                 if (child.name.startsWith("benchmark-tone-")) child.delete()
