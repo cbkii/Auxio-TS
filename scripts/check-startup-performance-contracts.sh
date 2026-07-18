@@ -61,7 +61,7 @@ done
 require_contains settings.gradle "include ':startup-benchmark'"
 require_contains build.gradle 'id "androidx.baselineprofile" version "1.4.1" apply false'
 require_contains build.gradle 'minifyEnabled false'
-require_contains build.gradle 'baselineProfile project(":startup-benchmark")'
+require_contains build.gradle 'dependencies.add("baselineProfile", project(":startup-benchmark"))'
 require_contains app/build.gradle 'implementation "androidx.profileinstaller:profileinstaller:1.4.1"'
 require_contains startup-benchmark/build.gradle 'id "com.android.test"'
 require_contains startup-benchmark/build.gradle 'id "androidx.baselineprofile"'
