@@ -36,7 +36,6 @@ import org.oxycblt.musikr.fs.RootGate
 import org.oxycblt.musikr.fs.SourceAwareFS
 import org.oxycblt.musikr.library.MetadataProfile
 import org.oxycblt.musikr.pipeline.shim.FilteredFS
-import org.oxycblt.musikr.playlist.m3u.M3U
 import org.oxycblt.musikr.util.mapParallel
 import org.oxycblt.musikr.util.merge
 import org.oxycblt.musikr.util.tryAsync
@@ -206,6 +205,4 @@ internal object FileClassification {
                 .orEmpty()
         return extension in supportedAudioExtensions || extension in playlistExtensions
     }
-
-    fun isPlaylist(file: File): Boolean = M3U.isPlaylist(file)
 }
