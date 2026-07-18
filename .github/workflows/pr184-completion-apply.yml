@@ -10,8 +10,6 @@ on:
 permissions:
   contents: write
 
-actions:
-
 concurrency:
   group: pr184-completion-apply
   cancel-in-progress: false
