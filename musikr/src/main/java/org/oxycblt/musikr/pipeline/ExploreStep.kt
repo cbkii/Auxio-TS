@@ -39,6 +39,7 @@ import org.oxycblt.musikr.pipeline.shim.FilteredFS
 import org.oxycblt.musikr.playlist.m3u.M3U
 import org.oxycblt.musikr.util.mapParallel
 import org.oxycblt.musikr.util.merge
+import org.oxycblt.musikr.util.tryAsync
 import org.oxycblt.musikr.util.tryAsyncWith
 
 internal interface ExploreStep {
@@ -130,8 +131,8 @@ private class ExploreStepImpl(
                 for (item in finalized) it.send(item.explored)
 
                 // Unchanged sources never touch their provider or metadata extractor. Their
-                // complete
-                // committed cache rows are streamed into the compatibility graph in bounded pages.
+                // complete committed cache rows are streamed into the compatibility graph in
+                // bounded pages.
                 val incremental = storage.cache as? IncrementalCache
                 if (incremental != null && reuseSourceKeys.isNotEmpty()) {
                     incremental.reusedCachedFiles(reuseSourceKeys).collect { cached ->
@@ -178,39 +179,33 @@ internal object FileClassification {
             "3gp",
             "aac",
             "alac",
+            "amr",
+            "ape",
+            "dsf",
             "flac",
             "m4a",
             "m4b",
-            "m4p",
+            "mid",
+            "midi",
+            "mka",
             "mp3",
             "mp4",
-            "oga",
             "ogg",
             "opus",
             "wav",
+            "wma",
         )
 
+    private val playlistExtensions = setOf("m3u", "m3u8")
+
     fun isPotentialMusicFile(file: File): Boolean {
-        val name = file.path.name ?: file.uri.lastPathSegment?.substringAfterLast('/')
-        return isPotentialMusicFileNameMime(name, file.mimeType)
-    }
-
-    fun isPotentialMusicFileNameMime(name: String?, mimeType: String?): Boolean {
-        val normalisedMimeType = mimeType?.lowercase(Locale.US).orEmpty()
-        if (normalisedMimeType == M3U.MIME_TYPE) return false
-        if (normalisedMimeType.startsWith("audio/")) return true
-        if (normalisedMimeType == "application/ogg" || normalisedMimeType == "application/x-ogg") {
-            return true
-        }
-        if (normalisedMimeType != "application/octet-stream" && normalisedMimeType.isNotEmpty()) {
-            return false
-        }
-
         val extension =
-            name
+            file.uri.lastPathSegment
                 ?.substringAfterLast('.', missingDelimiterValue = "")
-                ?.lowercase(Locale.US)
+                ?.lowercase(Locale.ROOT)
                 .orEmpty()
-        return extension in supportedAudioExtensions
+        return extension in supportedAudioExtensions || extension in playlistExtensions
     }
+
+    fun isPlaylist(file: File): Boolean = M3U.isPlaylist(file)
 }
