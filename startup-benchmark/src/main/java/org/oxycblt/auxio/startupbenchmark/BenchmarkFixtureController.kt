@@ -22,6 +22,7 @@ import android.util.Base64
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import java.util.concurrent.TimeUnit
 
 /** Seeds deterministic committed state and retrieves bounded app-process timing evidence. */
 internal object BenchmarkFixtureController {
@@ -31,6 +32,7 @@ internal object BenchmarkFixtureController {
     const val SOURCE_MODE_NORMAL = "normal"
     const val SOURCE_MODE_USB1_ABSENT = "usb1_absent"
     const val SOURCE_MODE_PENDING = "pending_generation"
+    private const val REPORT_POLL_MS = 250L
     private val supportedPackages = setOf("org.oxycblt.auxio", "com.tw.music", "com.tw.media")
 
     val requestedSongCount: Int
@@ -76,6 +78,31 @@ internal object BenchmarkFixtureController {
         requiredLabels: Set<String> =
             setOf("Application.onCreate:start", "Application.onCreate:end"),
     ): String {
+        val report = captureRawStartupReport(device)
+        requiredLabels.forEach { label -> check(report.contains("label=$label")) { report } }
+        return report
+    }
+
+    fun awaitStartupReport(
+        device: UiDevice,
+        requiredLabels: Set<String>,
+        timeoutMs: Long = 60_000L,
+    ): String {
+        require(timeoutMs > 0L)
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+        var lastReport = ""
+        while (System.nanoTime() < deadline) {
+            lastReport = captureRawStartupReport(device)
+            if (requiredLabels.all { lastReport.contains("label=$it") }) return lastReport
+            Thread.sleep(REPORT_POLL_MS)
+        }
+        error(
+            "Startup report did not contain ${requiredLabels.sorted()} within ${timeoutMs}ms. " +
+                "Last report:\n$lastReport"
+        )
+    }
+
+    private fun captureRawStartupReport(device: UiDevice): String {
         val packageName = BuildConfig.TARGET_PACKAGE
         val component = "$packageName/$RECEIVER"
         val output =
@@ -91,7 +118,6 @@ internal object BenchmarkFixtureController {
         val report = String(Base64.decode(encoded, Base64.DEFAULT), Charsets.UTF_8)
         check(report.contains("authority=benchmark-ordered-broadcast")) { report }
         check(Regex("eventCount=([1-9][0-9]*)").containsMatchIn(report)) { report }
-        requiredLabels.forEach { label -> check(report.contains("label=$label")) { report } }
         return report
     }
 }
