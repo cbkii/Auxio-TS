@@ -41,7 +41,8 @@ class BaselineProfileGenerator {
         ) {
             BenchmarkFixtureController.run { seedCommittedFixture() }
             CriticalJourneys.run {
-                launchFastStart()
+                // Cover the real cold saved-session path through primitive queue restore and audio.
+                exerciseSavedSessionResume()
                 exerciseProcessDeathRelaunch()
             }
         }
