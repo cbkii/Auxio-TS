@@ -25,6 +25,7 @@ import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore as AOSPMediaStore
 import androidx.annotation.RequiresApi
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -64,49 +65,54 @@ private constructor(
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         withContext(Dispatchers.IO) {
-            query.source.distinctBy(SourceIdentity::forLocation).map { location ->
-                val sourceKey = SourceIdentity.forLocation(location)
-                try {
-                    val documentId = DocumentsContract.getTreeDocumentId(location.uri)
-                    val documentUri =
-                        DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
-                    var modified = 0L
-                    var size = 0L
-                    var name = ""
-                    context.contentResolverSafe.useQuery(
-                        documentUri,
-                        arrayOf(
-                            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
-                            DocumentsContract.Document.COLUMN_SIZE,
-                        ),
-                    ) { cursor ->
-                        if (cursor.moveToFirst()) {
-                            name = cursor.getString(0).orEmpty()
-                            modified = cursor.getLong(1)
-                            size = cursor.getLong(2)
+            query.source.groupBy(SourceIdentity::forLocation).map { (sourceKey, locations) ->
+                val fingerprints = mutableListOf<String>()
+                var available = locations.isNotEmpty()
+                for (location in locations) {
+                    try {
+                        val documentId = DocumentsContract.getTreeDocumentId(location.uri)
+                        val documentUri =
+                            DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
+                        var modified = 0L
+                        var size = 0L
+                        var name = ""
+                        var found = false
+                        context.contentResolverSafe.useQuery(
+                            documentUri,
+                            arrayOf(
+                                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                                DocumentsContract.Document.COLUMN_SIZE,
+                            ),
+                        ) { cursor ->
+                            if (cursor.moveToFirst()) {
+                                found = true
+                                name = cursor.getString(0).orEmpty()
+                                modified = cursor.getLong(1)
+                                size = cursor.getLong(2)
+                            }
                         }
+                        check(found) { "SAF root returned no document row" }
+                        fingerprints +=
+                            "${location.uri}|$documentId|$name|$modified|$size|${query.hashCode()}"
+                    } catch (_: Exception) {
+                        available = false
                     }
-                    SourceSnapshot(
-                        sourceKey = sourceKey,
-                        sourceType = SOURCE_TYPE,
-                        rootUri = location.uri.toString(),
-                        rootPath = location.path.components.unixString,
-                        available = true,
-                        fingerprint = "$documentId:$name:$modified:$size:${query.hashCode()}",
-                        fingerprintStrength = SourceFingerprintStrength.ADVISORY,
-                    )
-                } catch (_: Exception) {
-                    SourceSnapshot(
-                        sourceKey = sourceKey,
-                        sourceType = SOURCE_TYPE,
-                        rootUri = location.uri.toString(),
-                        rootPath = location.path.components.unixString,
-                        available = false,
-                        fingerprint = null,
-                        fingerprintStrength = SourceFingerprintStrength.NONE,
-                    )
                 }
+                val first = locations.firstOrNull()
+                SourceSnapshot(
+                    sourceKey = sourceKey,
+                    sourceType = SOURCE_TYPE,
+                    // A volume-scoped source may include several selected SAF roots. The
+                    // first root is display metadata; every root contributes to the token.
+                    rootUri = first?.uri?.toString(),
+                    rootPath = first?.path?.components?.unixString,
+                    available = available,
+                    fingerprint = if (available) combineRootFingerprints(fingerprints) else null,
+                    fingerprintStrength =
+                        if (available) SourceFingerprintStrength.ADVISORY
+                        else SourceFingerprintStrength.NONE,
+                )
             }
         }
 
@@ -226,6 +232,15 @@ private constructor(
             }
             recursive?.tryAwaitAll()
         }
+
+    private fun combineRootFingerprints(fingerprints: List<String>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        fingerprints.sorted().forEach { fingerprint ->
+            digest.update(fingerprint.toByteArray(Charsets.UTF_8))
+            digest.update(0)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
 
     data class Query(
         val source: List<Location.Opened>,

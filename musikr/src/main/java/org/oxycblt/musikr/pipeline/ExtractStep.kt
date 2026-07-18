@@ -31,6 +31,7 @@ import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.covers.MutableCovers
+import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.library.MetadataWorkPolicy
 import org.oxycblt.musikr.metadata.Metadata
 import org.oxycblt.musikr.metadata.MetadataExtractor
@@ -90,7 +91,18 @@ private class ExtractStepImpl(
                                     ?: Finalized(InvalidSong)
                             MetadataResult.NoMetadata -> Finalized(InvalidSong)
                             MetadataResult.NotAudio -> Finalized(NotAudio)
-                            MetadataResult.ProviderFailed -> Finalized(InvalidSong)
+                            MetadataResult.ProviderFailed -> {
+                                // A transient provider/open failure is not evidence that a
+                                // previously
+                                // committed song was deleted. Fail only this source generation so
+                                // its
+                                // last-known-good rows remain visible after the provider recovers.
+                                (cache as? IncrementalCache)?.markSourceFailed(
+                                    SourceIdentity.forFile(item.file),
+                                    "Metadata provider failed for ${item.file.uri}",
+                                )
+                                Finalized(InvalidSong)
+                            }
                         }
                     }
                     is NotAudio -> Finalized(NotAudio)

@@ -66,9 +66,19 @@ internal class IncrementalScanStore(
         val reuse = linkedSetOf<String>()
         val unavailable = linkedSetOf<String>()
         val now = System.currentTimeMillis()
+        val distinctSnapshots = snapshots.distinctBy { it.sourceKey }
+        val currentSourceKeys = distinctSnapshots.mapTo(linkedSetOf()) { it.sourceKey }
 
         db.withTransaction {
-            for (snapshot in snapshots.distinctBy { it.sourceKey }) {
+            // A source omitted from the complete configured snapshot set is no longer active.
+            // Retain its last-known-good rows for rollback/re-add, but hide them immediately.
+            for (ledger in dao.sourceLedgers()) {
+                if (ledger.sourceKey !in currentSourceKeys && ledger.available) {
+                    dao.upsertSourceLedger(ledger.copy(available = false, lastSeenMs = now))
+                    unavailable += ledger.sourceKey
+                }
+            }
+            for (snapshot in distinctSnapshots) {
                 val previous = dao.sourceLedger(snapshot.sourceKey)
                 val observed =
                     (previous
@@ -183,7 +193,7 @@ internal class IncrementalScanStore(
         if (sourceKey !in plan.scanSourceKeys) return
         val profile =
             dao.uriState(sourceKey, file.uri.toString())?.metadataProfile
-                ?: if (cachedFile != null) MetadataProfile.FULL.name else plan.metadataProfile.name
+                ?: plan.metadataProfile.name
         upsertSeen(plan, sourceKey, file, cachedFile, profile)
     }
 
@@ -229,7 +239,9 @@ internal class IncrementalScanStore(
         if (plan.force) return false
         val sourceKey = SourceIdentity.forFile(file)
         if (sourceKey !in plan.scanSourceKeys) return true
-        val state = dao.uriState(sourceKey, file.uri.toString()) ?: return true
+        val state =
+            dao.uriState(sourceKey, file.uri.toString())
+                ?: return plan.metadataProfile == MetadataProfile.LEAN
         val cachedProfile =
             runCatching { MetadataProfile.valueOf(state.metadataProfile) }.getOrNull()
         return cachedProfile != null &&

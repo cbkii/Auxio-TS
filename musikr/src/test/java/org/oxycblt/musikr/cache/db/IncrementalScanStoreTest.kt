@@ -33,6 +33,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.oxycblt.musikr.cache.CacheResult
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Components
@@ -154,6 +155,59 @@ class IncrementalScanStoreTest {
                 ?.modifiedMs,
         )
         assertTrue(db.incrementalDao().sourceLedger(snapshot("v1").sourceKey)?.incomplete == true)
+    }
+
+    @Test
+    fun `changed file that no longer validates is removed only after successful commit`() =
+        runBlocking {
+            val first = store.planScan(listOf(snapshot("v1")), false, MetadataProfile.LEAN, 1L)
+            store.beginScan(first)
+            store.stage(cachedFile("alpha.mp3", modifiedMs = 1L))
+            store.commitScan()
+
+            val changed = store.planScan(listOf(snapshot("v2")), false, MetadataProfile.LEAN, 1L)
+            store.beginScan(changed)
+            val result = DBCache.from(db, store).read(cachedFile("alpha.mp3", modifiedMs = 2L).file)
+            assertTrue(result is CacheResult.Stale)
+            store.commitScan()
+
+            assertEquals(0, db.incrementalLibraryDao().songCount())
+            assertNull(
+                db.readDao().selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+            )
+        }
+
+    @Test
+    fun `unknown legacy profile never satisfies full enrichment`() = runBlocking {
+        MutableDBCache.from(db).write(cachedFile("legacy.mp3", modifiedMs = 1L))
+        val plan = store.planScan(listOf(snapshot("v1")), false, MetadataProfile.FULL, 1L)
+        store.beginScan(plan)
+
+        val result = DBCache.from(db, store).read(cachedFile("legacy.mp3", modifiedMs = 1L).file)
+        assertTrue(result is CacheResult.Stale)
+        store.abortScan()
+    }
+
+    @Test
+    fun `removed configured source becomes unavailable without deleting its cache`() = runBlocking {
+        val usb0 = snapshot("usb0", "/storage/usbdisk0")
+        val usb1 = snapshot("usb1", "/storage/usbdisk1")
+        val first = store.planScan(listOf(usb0, usb1), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L, "/storage/usbdisk0"))
+        store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
+        store.commitScan()
+
+        val next = store.planScan(listOf(usb1), false, MetadataProfile.LEAN, 1L)
+
+        assertEquals(setOf(usb0.sourceKey), next.unavailableSourceKeys)
+        assertEquals(setOf(usb1.sourceKey), next.reuseSourceKeys)
+        assertFalse(db.incrementalDao().sourceLedger(usb0.sourceKey)?.available ?: true)
+        assertEquals(
+            listOf("file:///storage/usbdisk1/beta.mp3"),
+            store.compatibilityCachedFiles().toList().map { it.file.uri.toString() },
+        )
+        assertEquals(2, db.readDao().selectAllSongs().size)
     }
 
     @Test

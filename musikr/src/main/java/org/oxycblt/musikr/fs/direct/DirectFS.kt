@@ -135,7 +135,20 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         sourceKey: String,
     ): Deferred<Result<Unit>> =
         tryAsync(Dispatchers.IO) {
-            if (depth > MAX_DEPTH || !isAllowedRoot(directory)) return@tryAsync
+            if (depth > MAX_DEPTH) {
+                sourceFailures.putIfAbsent(
+                    sourceKey,
+                    "DirectFS maximum depth exceeded at ${directory.path}",
+                )
+                return@tryAsync
+            }
+            if (!isAllowedRoot(directory)) {
+                sourceFailures.putIfAbsent(
+                    sourceKey,
+                    "DirectFS traversal left the allowed source at ${directory.path}",
+                )
+                return@tryAsync
+            }
             val directoryDeferred = CompletableDeferred<Directory>()
             val children = mutableListOf<File>()
             val recursive = mutableListOf<Deferred<Result<Unit>>>()

@@ -38,13 +38,12 @@ internal class CategorySubscriptionGate(initial: MusicType) {
 
     @Synchronized
     fun invalidate(type: MusicType): Boolean {
-        dirty += type
-        return if (type == active) {
+        if (type == active) {
             dirty.remove(type)
-            true
-        } else {
-            false
+            return true
         }
+        dirty += type
+        return false
     }
 
     @Synchronized

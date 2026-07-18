@@ -82,8 +82,6 @@ private constructor(
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
 
-    private data class IndexRequest(val withCache: Boolean, val metadataProfile: MetadataProfile?)
-
     private var currentIndexJob: Job? = null
     private var pendingIndexRequest: IndexRequest? = null
     private var startupJob: Job? = null
@@ -197,27 +195,7 @@ private constructor(
 
     @Synchronized
     private fun coalescePendingIndex(request: IndexRequest) {
-        val current = pendingIndexRequest
-        pendingIndexRequest =
-            if (current == null) {
-                request
-            } else {
-                IndexRequest(
-                    // A cache-bypassing request is stronger, so false wins.
-                    withCache = current.withCache && request.withCache,
-                    // Full enrichment is stronger than Lean; explicit beats automatic policy.
-                    metadataProfile =
-                        when {
-                            current.metadataProfile == MetadataProfile.FULL ||
-                                request.metadataProfile == MetadataProfile.FULL ->
-                                MetadataProfile.FULL
-                            current.metadataProfile == MetadataProfile.LEAN ||
-                                request.metadataProfile == MetadataProfile.LEAN ->
-                                MetadataProfile.LEAN
-                            else -> null
-                        },
-                )
-            }
+        pendingIndexRequest = IndexRequestCoalescer.merge(pendingIndexRequest, request)
     }
 
     @Synchronized

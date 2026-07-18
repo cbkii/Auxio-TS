@@ -51,7 +51,8 @@ private constructor(
         }
         val cachedFile = dbSong.toCachedFile(file)
         if (dbSong.modifiedMs != file.modifiedMs || !incrementalStore.cachedProfileAccepts(file)) {
-            incrementalStore.markSeen(file, cachedFile)
+            // Changed files are published only after extraction succeeds. Recording the old
+            // metadata here would let a now-invalid file survive reconciliation.
             return CacheResult.Stale(file, dbSong.addedMs)
         }
         incrementalStore.markSeen(file, cachedFile)
