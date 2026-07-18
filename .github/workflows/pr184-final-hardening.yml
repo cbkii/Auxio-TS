@@ -1,6 +1,6 @@
 name: PR 184 One-Shot Final Hardening
 
-# Apply, format and commit the audited patch; canonical workflows provide full evidence.
+# Apply, format, validate and commit the audited patch; canonical workflows provide full evidence.
 on:
   push:
     branches:
@@ -18,13 +18,13 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - name: Checkout latest branch head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: cx/startup-profiles-benchmarks
-          fetch-depth: 4
+          fetch-depth: 0
           persist-credentials: true
 
       - name: Set up JDK 21
@@ -55,9 +55,27 @@ jobs:
       - name: Recover and apply the audited hardening patch
         shell: bash
         run: |
+          audited_base=95ecb314d4fb1c72e9dbd4049fe406768eebf1c4
+          payload_commit=6548a4df9c8fd87e18f0161db3e603383a691de5
+          target_paths=(
+            .github/workflows/android.yml
+            .github/workflows/lint.yml
+            app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
+            app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt
+            app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt
+            app/src/main/java/org/oxycblt/auxio/music/StartupLibraryPolicy.kt
+            app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt
+            app/src/test/java/org/oxycblt/auxio/music/MusicSettingsIndexingTriggerTest.kt
+            app/src/test/java/org/oxycblt/auxio/music/StartupLibraryPolicyTest.kt
+            docs/architecture/STARTUP_PROFILES_BENCHMARKS.md
+            docs/architecture/database-first-library.md
+            scripts/check-startup-performance-contracts.sh
+          )
+          git checkout "${audited_base}" -- "${target_paths[@]}"
+
           source_workflow="${RUNNER_TEMP}/pr184-original-hardening.yml"
           patch_script="${RUNNER_TEMP}/pr184-final-hardening.py"
-          git show HEAD^^^:.github/workflows/pr184-final-hardening.yml > "${source_workflow}"
+          git show "${payload_commit}:.github/workflows/pr184-final-hardening.yml" > "${source_workflow}"
           python3 - "${source_workflow}" "${patch_script}" <<'EXTRACT'
           from pathlib import Path
           import sys
@@ -76,13 +94,24 @@ jobs:
         shell: bash
         run: bash ./scripts/ci-gradle.sh spotlessApply
 
+      - name: Validate focused hardening
+        shell: bash
+        run: |
+          bash ./scripts/check-startup-performance-contracts.sh
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+          bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+          status=0
+          while IFS= read -r -d '' script; do
+            bash -n "${script}" || status=1
+          done < <(find scripts -type f -name '*.sh' -print0)
+          exit "${status}"
+
       - name: Commit patch and remove one-shot workflow
         shell: bash
         run: |
           git rm -- .github/workflows/pr184-final-hardening.yml
           git diff --check
-          bash -n scripts/check-startup-performance-contracts.sh
-          python3 scripts/summarize-startup-benchmarks.py --self-test
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- \
