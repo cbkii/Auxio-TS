@@ -58,8 +58,8 @@ android {
     testOptions {
         animationsDisabled true
         managedDevices {
-            devices {
-                pixel2Api29(com.android.build.api.dsl.ManagedVirtualDevice) {
+            localDevices {
+                pixel2Api29 {
                     device = "Pixel 2"
                     apiLevel = 29
                     systemImageSource = "aosp"
