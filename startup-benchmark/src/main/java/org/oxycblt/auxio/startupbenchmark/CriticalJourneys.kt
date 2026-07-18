@@ -140,10 +140,7 @@ internal object CriticalJourneys {
     fun MacrobenchmarkScope.exercisePagedLibrary() {
         traceSection(TRACE_FIRST_SONGS_PAGE) {
             clickRequired(By.textContains("Songs"), "Songs tab")
-            requireObject(
-                By.res(BuildConfig.TARGET_PACKAGE, "song_name"),
-                "first paged Songs row",
-            )
+            requireObject(By.res(BuildConfig.TARGET_PACKAGE, "song_name"), "first paged Songs row")
             scrollPageTwice()
         }
         traceSection(TRACE_FIRST_ALBUMS_PAGE) {
