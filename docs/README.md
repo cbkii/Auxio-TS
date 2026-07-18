@@ -15,6 +15,9 @@ Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed 
 - [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
 - [`LAUNCH_TO_CURRENTLY_PLAYING.md`](LAUNCH_TO_CURRENTLY_PLAYING.md) — durable startup-panel routing contract and TS18 validation matrix.
 - [`architecture/FAST_INTERACTION_STARTUP.md`](architecture/FAST_INTERACTION_STARTUP.md) — PR 1 staged startup readiness, bounded startup projections, fast MediaBrowser/search, and DirectFS Fast Start constraints.
+- [`architecture/INCREMENTAL_LIBRARY_PIPELINE.md`](architecture/INCREMENTAL_LIBRARY_PIPELINE.md) — PR 2 source generations, changed-file indexing, metadata profiles and deferred enrichment.
+- [`architecture/STARTUP_PROFILES_BENCHMARKS.md`](architecture/STARTUP_PROFILES_BENCHMARKS.md) — PR 3 profile, fixture, benchmark, trace and regression-gate implementation.
+- [`validation/EXACT_TS18_STARTUP_VALIDATION.md`](validation/EXACT_TS18_STARTUP_VALIDATION.md) — bounded exact-device test procedures, evidence, pass/fail criteria and rollback.
 - [`TS18_COMPATIBILITY_AUDIT.md`](TS18_COMPATIBILITY_AUDIT.md) — repo-wide TS18/Topway/DoFun compatibility surface classification.
 - [`topway/README.md`](topway/README.md) — local Topway decompile/source-led compatibility notes.
 
@@ -67,6 +70,8 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
 
 - `.github/workflows/android.yml` builds standard and Topway/DoFun variants and runs APK/reference compatibility checks on relevant PR and `dev` changes.
 - `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety guardrails.
+- `.github/workflows/startup-performance.yml` compiles the benchmark/profile stack, runs startup architecture gates, builds all maintained debug/release variants and verifies compiled profile artefacts plus TS18/DoFun contracts.
+- `.github/workflows/startup-benchmarks.yml` provides bounded manual API 29 managed-emulator profile generation and benchmark evidence for selected flavour, fixture size and iteration count.
 - `.github/workflows/manual-release.yml` builds, signs, verifies, and publishes selected standard/`com.tw.media` APKs and the systemless `com.tw.music` Magisk ZIP.
 - `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshot/report bundles for UI review.
 
@@ -76,12 +81,13 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
 
 - `.github/workflows/upstream-auxio-monitor.yml` checks `OxygenCobalt/Auxio` monthly and opens an issue only when upstream has new commits to review.
 
-There is no separate weekly dependency-build workflow or branch-mutating formatter workflow. Dependabot update PRs pass through the canonical Android Build and Android Quality checks, and formatting remains a required check fixed on the originating branch.
+There is no permanent branch-mutating formatter workflow. Dependabot update PRs pass through the canonical Android Build and Android Quality checks, and formatting remains a required check fixed on the originating branch.
 
 Local preflight:
 
 ```bash
 bash scripts/bootstrap-dependencies.sh --profile full-build
+bash scripts/check-startup-performance-contracts.sh
 bash scripts/check-ts18-apk-reference-contracts.sh
 bash scripts/check-dofun-topway-compat.sh
 bash scripts/check-headunit-compat-safety.sh
