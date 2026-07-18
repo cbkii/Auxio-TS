@@ -76,6 +76,12 @@ require_contains "$baseline_generator" 'includeInStartupProfile = false'
 require_contains "$baseline_generator" 'filterPredicate = ::isProductionRule'
 require_contains "$baseline_generator" 'rule.contains("/benchmark/")'
 require_contains "$baseline_generator" 'rule.contains("/startupbenchmark/")'
+require_contains "$baseline_generator" 'exerciseSavedSessionResume()'
+require_contains "$baseline_generator" 'exercisePlaybackControls()'
+require_contains "$baseline_generator" 'exerciseUsbFolder(sourceIndex = 0)'
+require_contains "$baseline_generator" 'exerciseUsbFolder(sourceIndex = 1)'
+require_contains "$baseline_generator" 'exercisePagedLibrary()'
+require_contains "$baseline_generator" 'exerciseEarlyMediaBrowser()'
 
 for count in 500 5_000 20_000; do
   require_contains "$fixture" "$count"
