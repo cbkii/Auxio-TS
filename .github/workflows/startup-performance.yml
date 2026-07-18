@@ -57,7 +57,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     steps:
       - name: Checkout repository
@@ -72,17 +72,18 @@ jobs:
         run: |
           ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
 
-      - name: Validate shell script syntax
+      - name: Validate shell and Python script syntax
         shell: bash
         run: |
-          set -euo pipefail
           status=0
           while IFS= read -r -d '' script; do
             printf 'Checking %s\n' "${script}"
-            if ! bash -n "${script}"; then
-              status=1
-            fi
+            if ! bash -n "${script}"; then status=1; fi
           done < <(find scripts -type f -name '*.sh' -print0)
+          while IFS= read -r -d '' script; do
+            printf 'Compiling %s\n' "${script}"
+            if ! python3 -m py_compile "${script}"; then status=1; fi
+          done < <(find scripts -type f -name '*.py' -print0)
           exit "${status}"
 
       - name: Set up JDK 21
@@ -94,7 +95,6 @@ jobs:
       - name: Write local.properties for Android SDK
         shell: bash
         run: |
-          set -euo pipefail
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           if [[ -z "${sdk_dir}" ]]; then
             echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
@@ -110,10 +110,10 @@ jobs:
       - name: Ensure native and profile inspection tools are present
         shell: bash
         run: |
-          set -euo pipefail
           missing=()
           command -v ninja >/dev/null 2>&1 || missing+=(ninja-build)
           command -v unzip >/dev/null 2>&1 || missing+=(unzip)
+          command -v jq >/dev/null 2>&1 || missing+=(jq)
           if ((${#missing[@]})); then
             sudo apt-get update
             sudo apt-get install -y "${missing[@]}"
@@ -156,24 +156,29 @@ jobs:
           bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicDebug
           bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
 
-      - name: Build maintained release variants
+      - name: Build maintained release variants and standard bundle
         shell: bash
         run: |
           bash ./scripts/ci-gradle.sh :app:assembleStandardRelease
           bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicRelease
           bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
+          bash ./scripts/ci-gradle.sh :app:bundleStandardRelease
 
-      - name: Validate compiled profile artefacts
+      - name: Validate compiled profile and startup-layout artefacts
         shell: bash
         run: |
-          set -euo pipefail
           mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
+          mapfile -t aabs < <(find app/build/outputs/bundle -type f -name '*.aab' | sort)
           if ((${#apks[@]} != 3)); then
             printf 'Expected three release APKs, found %s\n' "${#apks[@]}" >&2
             printf '%s\n' "${apks[@]:-}" >&2
             exit 1
           fi
-          bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}"
+          if ((${#aabs[@]} < 1)); then
+            echo 'Expected at least the standard release AAB' >&2
+            exit 1
+          fi
+          bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}" "${aabs[0]}"
 
       - name: Validate TS18 APK reference contracts
         shell: bash
@@ -208,6 +213,7 @@ jobs:
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Workflow/shell syntax, static architecture contracts, formatting, unit tests, lint, head-unit safety, benchmark/profile compilation, all maintained debug/release variants, compiled profile artefacts, TS18 APK contracts and DoFun/Topway source contracts were included."
-            echo "- No emulator or exact-device latency claim is produced by this workflow."
+            echo "- Includes workflow/shell/Python syntax, structural contracts, formatting, unit tests, lint, head-unit safety, benchmark/profile compilation, all maintained debug/release variants, Baseline Profile packaging, R8 startup DEX metadata, TS18 APK contracts and DoFun/Topway source contracts."
+            echo "- No hosted-runner wall-clock threshold or exact-device latency claim is produced."
+            echo "- Exact TS18 runtime behaviour: Requires device validation."
           } >> "${GITHUB_STEP_SUMMARY}"

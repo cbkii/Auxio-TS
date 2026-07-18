@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "${repo_root}"
+# Structural and artefact gates for the startup/profile programme.
+# Failure policy is explicit: every failed contract exits through fail().
+
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd -P) || {
+  printf 'startup-performance contract: cannot resolve repository root\n' >&2
+  exit 1
+}
+cd -- "$repo_root" || {
+  printf 'startup-performance contract: cannot enter repository root\n' >&2
+  exit 1
+}
 
 fail() {
   printf 'startup-performance contract: %s\n' "$*" >&2
@@ -11,42 +19,98 @@ fail() {
 
 require_file() {
   local path=$1
-  [[ -s "${path}" ]] || fail "required non-empty file is missing: ${path}"
+  [[ -s $path ]] || fail "required non-empty file is missing: $path"
 }
 
 require_contains() {
   local path=$1 pattern=$2
-  grep -Fq -- "${pattern}" "${path}" || fail "${path} does not contain required contract: ${pattern}"
+  grep -Fq -- "$pattern" "$path" || fail "$path does not contain required contract: $pattern"
 }
 
 require_absent() {
   local path=$1 pattern=$2
-  if grep -Fq -- "${pattern}" "${path}"; then
-    fail "${path} contains forbidden startup contract: ${pattern}"
+  if grep -Fq -- "$pattern" "$path"; then
+    fail "$path contains forbidden startup contract: $pattern"
   fi
 }
 
-require_file app/src/main/baseline-prof.txt
-require_file app/src/main/startup-prof.txt
-require_file startup-benchmark/build.gradle
-require_file startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BaselineProfileGenerator.kt
-require_file startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/StartupMacrobenchmark.kt
-require_file startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt
-require_file docs/architecture/STARTUP_PROFILES_BENCHMARKS.md
+baseline_generator=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BaselineProfileGenerator.kt
+macrobenchmark=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/StartupMacrobenchmark.kt
+journeys=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/CriticalJourneys.kt
+fixture=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt
+fixture_receiver=app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
+browser=app/src/main/java/org/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser.kt
+perf_timer=app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt
+
+for path in \
+  app/src/main/baseline-prof.txt \
+  app/src/main/startup-prof.txt \
+  startup-benchmark/build.gradle \
+  "$baseline_generator" \
+  "$macrobenchmark" \
+  "$journeys" \
+  "$fixture" \
+  "$fixture_receiver" \
+  "$browser" \
+  "$perf_timer" \
+  scripts/summarize-startup-benchmarks.py \
+  docs/architecture/STARTUP_PROFILES_BENCHMARKS.md; do
+  require_file "$path"
+done
 
 require_contains settings.gradle "include ':startup-benchmark'"
+require_contains build.gradle 'id "androidx.baselineprofile" version "1.4.1" apply false'
+require_contains build.gradle 'minifyEnabled false'
+require_contains build.gradle 'baselineProfile project(":startup-benchmark")'
 require_contains app/build.gradle 'implementation "androidx.profileinstaller:profileinstaller:1.4.1"'
-require_contains app/build.gradle 'benchmark {'
 require_contains startup-benchmark/build.gradle 'id "com.android.test"'
-require_contains startup-benchmark/build.gradle 'benchmark {'
-require_contains startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BaselineProfileGenerator.kt 'BaselineProfileRule'
+require_contains startup-benchmark/build.gradle 'id "androidx.baselineprofile"'
+require_contains startup-benchmark/build.gradle 'pixel2Api29'
+require_contains startup-benchmark/build.gradle 'pixel6Api35'
+require_contains startup-benchmark/build.gradle 'managedDevices = ["pixel6Api35"]'
+
+require_contains "$baseline_generator" '@RunWith(AndroidJUnit4::class)'
+require_contains "$baseline_generator" 'includeInStartupProfile = true'
+require_contains "$baseline_generator" 'includeInStartupProfile = false'
+require_contains "$baseline_generator" 'filterPredicate = ::isProductionRule'
+require_contains "$baseline_generator" 'rule.contains("/benchmark/")'
+require_contains "$baseline_generator" 'rule.contains("/startupbenchmark/")'
 
 for count in 500 5_000 20_000; do
-  require_contains startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt "${count}"
+  require_contains "$fixture" "$count"
 done
-require_contains startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt '"direct:usb0"'
-require_contains startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt '"direct:usb1"'
-require_contains startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt '"/storage/usbdisk$sourceIndex"'
+require_contains "$fixture" 'const val SCHEMA_VERSION = 2'
+require_contains "$fixture" '"direct:usb0"'
+require_contains "$fixture" '"direct:usb1"'
+require_contains "$fixture_receiver" 'SOURCE_MODE_USB1_ABSENT'
+require_contains "$fixture_receiver" 'SOURCE_MODE_PENDING'
+require_contains "$fixture_receiver" 'LibraryGenreData'
+require_contains "$fixture_receiver" 'LibraryPlaylistData'
+require_contains "$fixture_receiver" 'writeSilenceWave'
+require_contains "$fixture_receiver" 'ACTION_REPORT'
+require_contains "$browser" 'benchmarkRoot(context, 0)'
+require_contains "$browser" 'playbackPath'
+require_contains "$perf_timer" 'BuildConfig.BUILD_TYPE == "benchmark"'
+
+for journey in \
+  coldStartupWithoutProfiles \
+  coldStartupWithBaselineProfile \
+  warmStartupWithBaselineProfile \
+  hotStartupWithBaselineProfile \
+  savedSessionColdStartupWithBaselineProfile \
+  findAndPlayJourney \
+  usbFolderPlaybackJourney \
+  pagedLibraryJourney \
+  earlyMediaBrowserJourney \
+  coldStartupWithUnavailableSecondUsb \
+  coldStartupWithInterruptedPendingGeneration; do
+  require_contains "$macrobenchmark" "$journey"
+done
+require_contains "$journeys" 'exerciseEarlyMediaBrowser'
+require_contains "$journeys" 'waitForAudioPlayback'
+require_contains "$journeys" 'Required UI object not found'
+require_absent "$journeys" 'if (!clickIfPresent'
+require_absent "$journeys" ') return'
 
 for required_class in \
   'Lorg/oxycblt/auxio/Auxio;' \
@@ -55,33 +119,62 @@ for required_class in \
   'Lorg/oxycblt/auxio/music/service/MusicBrowser;' \
   'Lorg/oxycblt/auxio/search/SearchViewModel;' \
   'Lorg/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser;'; do
-  require_contains app/src/main/baseline-prof.txt "${required_class}"
-  require_contains app/src/main/startup-prof.txt "${required_class}"
+  require_contains app/src/main/baseline-prof.txt "$required_class"
+  require_contains app/src/main/startup-prof.txt "$required_class"
 done
 
 for forbidden in \
-  'DBCache' \
+  DBCache \
   'Musikr;' \
-  'MusicGraph' \
-  'LibraryFactory' \
-  'EvaluateStep' \
-  'ExtractStep' \
-  'TagParser' \
-  'MetadataExtractor' \
-  'Artwork'; do
-  require_absent app/src/main/startup-prof.txt "${forbidden}"
+  MusicGraph \
+  LibraryFactory \
+  EvaluateStep \
+  ExtractStep \
+  TagParser \
+  MetadataExtractor \
+  Artwork \
+  '/benchmark/' \
+  '/startupbenchmark/'; do
+  require_absent app/src/main/startup-prof.txt "$forbidden"
 done
 
 if find app/src/main musikr/src/main -type f -path '*startupbenchmark*' -print -quit | grep -q .; then
   fail 'benchmark-only classes leaked into production source sets'
 fi
 
-for apk in "$@"; do
-  [[ -f "${apk}" ]] || fail "APK does not exist: ${apk}"
-  if ! unzip -Z1 "${apk}" | grep -Eq '^assets/dexopt/baseline\.(prof|profm)$'; then
-    fail "compiled Baseline Profile is missing from ${apk}"
-  fi
-  printf 'profile present: %s\n' "${apk}"
+if ! python3 scripts/summarize-startup-benchmarks.py --self-test; then
+  fail 'benchmark result summarizer self-test failed'
+fi
+
+for artifact in "$@"; do
+  [[ -f $artifact ]] || fail "artefact does not exist: $artifact"
+  case $artifact in
+    *.apk)
+      if ! unzip -Z1 "$artifact" | grep -Eq '^assets/dexopt/baseline\.(prof|profm)$'; then
+        fail "compiled Baseline Profile is missing from $artifact"
+      fi
+      printf 'compiled profile present: %s\n' "$artifact"
+      ;;
+    *.aab)
+      if ! unzip -Z1 "$artifact" | grep -Eq '(^|/)BUNDLE-METADATA/com\.android\.tools/r8\.json$'; then
+        fail "R8 startup metadata is missing from $artifact"
+      fi
+      if ! unzip -p "$artifact" '*/BUNDLE-METADATA/com.android.tools/r8.json' 2>/dev/null | grep -Fq '"startup":true' &&
+         ! unzip -p "$artifact" 'BUNDLE-METADATA/com.android.tools/r8.json' 2>/dev/null | grep -Eq '"startup"[[:space:]]*:[[:space:]]*true'; then
+        fail "R8 metadata does not confirm startup DEX layout in $artifact"
+      fi
+      printf 'startup DEX metadata present: %s\n' "$artifact"
+      ;;
+    *baseline-prof.txt|*startup-prof.txt)
+      require_file "$artifact"
+      require_absent "$artifact" '/benchmark/'
+      require_absent "$artifact" '/startupbenchmark/'
+      printf 'generated profile validated: %s\n' "$artifact"
+      ;;
+    *)
+      fail "unsupported startup-performance artefact: $artifact"
+      ;;
+  esac
 done
 
 printf 'startup-performance contracts: PASS\n'

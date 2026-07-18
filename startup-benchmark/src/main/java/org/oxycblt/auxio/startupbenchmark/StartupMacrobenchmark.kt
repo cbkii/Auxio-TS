@@ -21,26 +21,33 @@ package org.oxycblt.auxio.startupbenchmark
 import androidx.benchmark.macro.BaselineProfileMode
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.FrameTimingMetric
+import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
 
 /** Repeatable 0–60 second journey benchmarks for the corrected two-lane startup architecture. */
+@RunWith(AndroidJUnit4::class)
+@LargeTest
 class StartupMacrobenchmark {
     @get:Rule val benchmarkRule = MacrobenchmarkRule()
 
     private val iterations: Int
-        get() =
-            InstrumentationRegistry.getArguments()
-                .getString("auxio.iterations")
-                ?.toIntOrNull()
-                ?.coerceIn(3, 30) ?: 7
+        get() = BenchmarkFixtureController.requestedIterations
 
     private val fixtureSongCount: Int
         get() = BenchmarkFixtureController.requestedSongCount
+
+    private val device: UiDevice by lazy {
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+    }
 
     @Test
     fun coldStartupWithoutProfiles() = startupBenchmark(CompilationMode.None(), StartupMode.COLD)
@@ -58,6 +65,40 @@ class StartupMacrobenchmark {
             CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
             StartupMode.WARM,
         )
+
+    @Test
+    fun hotStartupWithBaselineProfile() =
+        startupBenchmark(
+            CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
+            StartupMode.HOT,
+        )
+
+    @Test
+    fun savedSessionColdStartupWithBaselineProfile() {
+        var prepared = false
+        benchmarkRule.measureRepeated(
+            packageName = BuildConfig.TARGET_PACKAGE,
+            metrics = startupMetrics(),
+            compilationMode =
+                CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
+            startupMode = StartupMode.COLD,
+            iterations = iterations,
+            setupBlock = {
+                if (!prepared) {
+                    BenchmarkFixtureController.run { seedCommittedFixture(fixtureSongCount) }
+                    CriticalJourneys.run {
+                        launchFastStart()
+                        exerciseQuickFind()
+                    }
+                    device.executeShellCommand("am force-stop ${BuildConfig.TARGET_PACKAGE}")
+                    prepared = true
+                }
+                pressHome()
+            },
+            measureBlock = { startActivityAndWait() },
+        )
+        captureReport()
+    }
 
     @Test
     fun findAndPlayJourney() = journeyBenchmark {
@@ -84,42 +125,85 @@ class StartupMacrobenchmark {
         }
     }
 
-    private fun startupBenchmark(compilationMode: CompilationMode, startupMode: StartupMode) {
+    @Test
+    fun earlyMediaBrowserJourney() = journeyBenchmark {
+        CriticalJourneys.run {
+            launchFastStart()
+            exerciseEarlyMediaBrowser()
+        }
+    }
+
+    @Test
+    fun coldStartupWithUnavailableSecondUsb() =
+        startupBenchmark(
+            CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
+            StartupMode.COLD,
+            BenchmarkFixtureController.SOURCE_MODE_USB1_ABSENT,
+        )
+
+    @Test
+    fun coldStartupWithInterruptedPendingGeneration() =
+        startupBenchmark(
+            CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
+            StartupMode.COLD,
+            BenchmarkFixtureController.SOURCE_MODE_PENDING,
+        )
+
+    private fun startupBenchmark(
+        compilationMode: CompilationMode,
+        startupMode: StartupMode,
+        sourceMode: String = BenchmarkFixtureController.SOURCE_MODE_NORMAL,
+    ) {
         var seeded = false
         benchmarkRule.measureRepeated(
             packageName = BuildConfig.TARGET_PACKAGE,
-            metrics = listOf(StartupTimingMetric(), FrameTimingMetric()),
+            metrics = startupMetrics(),
             compilationMode = compilationMode,
             startupMode = startupMode,
             iterations = iterations,
             setupBlock = {
                 if (!seeded) {
-                    BenchmarkFixtureController.run { seedCommittedFixture(fixtureSongCount) }
+                    BenchmarkFixtureController.run {
+                        seedCommittedFixture(fixtureSongCount, sourceMode)
+                    }
                     seeded = true
                 }
                 pressHome()
             },
             measureBlock = { startActivityAndWait() },
         )
+        captureReport()
     }
 
-    private fun journeyBenchmark(journey: androidx.benchmark.macro.MacrobenchmarkScope.() -> Unit) {
+    private fun journeyBenchmark(
+        sourceMode: String = BenchmarkFixtureController.SOURCE_MODE_NORMAL,
+        journey: MacrobenchmarkScope.() -> Unit,
+    ) {
         var seeded = false
         benchmarkRule.measureRepeated(
             packageName = BuildConfig.TARGET_PACKAGE,
-            metrics = listOf(StartupTimingMetric(), FrameTimingMetric()),
+            metrics = startupMetrics(),
             compilationMode =
                 CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
             startupMode = StartupMode.COLD,
             iterations = iterations,
             setupBlock = {
                 if (!seeded) {
-                    BenchmarkFixtureController.run { seedCommittedFixture(fixtureSongCount) }
+                    BenchmarkFixtureController.run {
+                        seedCommittedFixture(fixtureSongCount, sourceMode)
+                    }
                     seeded = true
                 }
                 pressHome()
             },
             measureBlock = journey,
         )
+        captureReport()
     }
+
+    private fun captureReport() {
+        BenchmarkFixtureController.captureStartupReport(device)
+    }
+
+    private fun startupMetrics() = listOf(StartupTimingMetric(), FrameTimingMetric())
 }

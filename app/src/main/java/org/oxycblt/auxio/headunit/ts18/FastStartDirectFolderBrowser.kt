@@ -18,8 +18,10 @@
 
 package org.oxycblt.auxio.headunit.ts18
 
+import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.nio.file.Files
 import java.util.Locale
@@ -29,6 +31,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import org.oxycblt.auxio.BuildConfig
 
 /**
  * Bounded one-level DirectFS browser for the startup/Fast Start surface.
@@ -37,11 +40,21 @@ import kotlinx.coroutines.withContext
  * canonicalises trusted roots and candidates, rejects traversal/symlink escapes, processes a hard
  * bounded number of visible entries, and returns reconstructed `/storage/...` paths even when the
  * kernel canonical path resolves through `/mnt/media_rw/...` on TS18 firmware.
+ *
+ * The benchmark build maps those same logical roots to app-private fixture directories. This keeps
+ * production path and containment policy unchanged while allowing the managed-emulator USB journey
+ * to enumerate and play a real bounded audio fixture.
  */
-class FastStartDirectFolderBrowser @Inject constructor() {
-    constructor(roots: Map<String, File>) : this() {
-        configuredRoots = roots
-    }
+class FastStartDirectFolderBrowser private constructor(
+    private val configuredRoots: Map<String, File>,
+    private val exposePhysicalPlaybackPath: Boolean,
+) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context
+    ) : this(defaultRoots(context), BuildConfig.BUILD_TYPE == BENCHMARK_BUILD_TYPE)
+
+    internal constructor(roots: Map<String, File>) : this(roots, false)
 
     data class Page(val entries: List<Entry>, val truncated: Boolean)
 
@@ -50,9 +63,8 @@ class FastStartDirectFolderBrowser @Inject constructor() {
         val name: String,
         val directory: Boolean,
         val playable: Boolean,
+        val playbackPath: String = path,
     )
-
-    private var configuredRoots: Map<String, File> = DEFAULT_ROOTS
 
     suspend fun usbRoots(limit: Int = DEFAULT_LIMIT): Page =
         withContext(Dispatchers.IO) {
@@ -63,7 +75,13 @@ class FastStartDirectFolderBrowser @Inject constructor() {
             val boundedLimit = limit.coerceIn(1, MAX_LIMIT)
             val entries =
                 validRoots.take(boundedLimit).map { candidate ->
-                    Entry(candidate.appPath, candidate.file.name, true, false)
+                    Entry(
+                        path = candidate.appPath,
+                        name = candidate.appPath.substringAfterLast('/'),
+                        directory = true,
+                        playable = false,
+                        playbackPath = candidate.file.absolutePath,
+                    )
                 }
             Page(entries, truncated = validRoots.size > boundedLimit)
         }
@@ -130,7 +148,13 @@ class FastStartDirectFolderBrowser @Inject constructor() {
     }
 
     private fun ResolvedCandidate.toEntry(): Entry =
-        Entry(appPath, file.name, file.isDirectory, file.isFile && isAudioLike(file.name))
+        Entry(
+            path = appPath,
+            name = file.name,
+            directory = file.isDirectory,
+            playable = file.isFile && isAudioLike(file.name),
+            playbackPath = if (exposePhysicalPlaybackPath) file.absolutePath else appPath,
+        )
 
     internal fun resolveCandidate(rawPath: String): ResolvedCandidate? {
         val normalized = normalize(rawPath) ?: return null
@@ -182,14 +206,26 @@ class FastStartDirectFolderBrowser @Inject constructor() {
     companion object {
         const val USB0 = "/storage/usbdisk0"
         const val USB1 = "/storage/usbdisk1"
+        private const val BENCHMARK_BUILD_TYPE = "benchmark"
         private const val MEDIA_RW_USB_PREFIX = "/mnt/media_rw/usbdisk"
         private const val DEFAULT_LIMIT = 30
         private const val MAX_LIMIT = 100
         private const val MAX_PROCESSED_ENTRIES = 512
-        private val DEFAULT_ROOTS = mapOf(USB0 to File(USB0), USB1 to File(USB1))
         private val AUDIO_EXTENSIONS =
             listOf(".mp3", ".flac", ".m4a", ".ogg", ".opus", ".wav", ".aac")
         private val ENTRY_ORDER =
             compareBy<Entry>({ !it.directory }, { it.name.lowercase(Locale.ROOT) }, { it.path })
+
+        internal fun benchmarkRoot(context: Context, sourceIndex: Int): File {
+            val base = context.getExternalFilesDir(null) ?: context.filesDir
+            return File(base, "benchmark-usb$sourceIndex")
+        }
+
+        private fun defaultRoots(context: Context): Map<String, File> =
+            if (BuildConfig.BUILD_TYPE == BENCHMARK_BUILD_TYPE) {
+                mapOf(USB0 to benchmarkRoot(context, 0), USB1 to benchmarkRoot(context, 1))
+            } else {
+                mapOf(USB0 to File(USB0), USB1 to File(USB1))
+            }
     }
 }

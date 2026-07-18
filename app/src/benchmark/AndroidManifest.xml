@@ -12,6 +12,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="org.oxycblt.auxio.action.SEED_BENCHMARK_FIXTURE" />
+                <action android:name="org.oxycblt.auxio.action.EXPORT_BENCHMARK_REPORT" />
             </intent-filter>
         </receiver>
     </application>

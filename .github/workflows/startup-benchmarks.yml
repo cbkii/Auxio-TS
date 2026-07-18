@@ -1,4 +1,4 @@
-# Runs bounded API 29 managed-emulator profile generation or startup/interaction benchmarks.
+# Runs bounded profile generation on API 35 or runtime-compatible macrobenchmarks on API 29.
 # Results are repository/emulator evidence only; exact TS18 behaviour requires device validation.
 name: Startup Benchmarks
 
@@ -41,13 +41,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: startup-benchmarks-${{ github.ref }}-${{ inputs.flavour }}
+  group: startup-benchmarks-${{ github.ref }}-${{ inputs.flavour }}-${{ inputs.suite }}
   cancel-in-progress: false
 
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 180
 
     steps:
       - name: Checkout repository
@@ -66,9 +66,11 @@ jobs:
       - name: Write local.properties for Android SDK
         shell: bash
         run: |
-          set -euo pipefail
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          [[ -n "${sdk_dir}" ]]
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not set" >&2
+            exit 1
+          fi
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
       - name: Set up Gradle
@@ -79,7 +81,6 @@ jobs:
       - name: Enable KVM
         shell: bash
         run: |
-          set -euo pipefail
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
             sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -89,13 +90,12 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Validate benchmark inputs and contracts
+      - name: Validate inputs and structural contracts
         shell: bash
         env:
           FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
           ITERATIONS: ${{ inputs.iterations }}
         run: |
-          set -euo pipefail
           case "${FIXTURE_SONG_COUNT}" in
             500|5000|20000) ;;
             *) echo "Unsupported fixture size: ${FIXTURE_SONG_COUNT}" >&2; exit 1 ;;
@@ -113,7 +113,6 @@ jobs:
           FLAVOUR: ${{ inputs.flavour }}
           SUITE: ${{ inputs.suite }}
         run: |
-          set -euo pipefail
           tasks_file="${RUNNER_TEMP}/startup-benchmark-tasks.txt"
           bash ./scripts/ci-gradle.sh :startup-benchmark:tasks --all --console=plain > "${tasks_file}"
           case "${FLAVOUR}" in
@@ -124,22 +123,27 @@ jobs:
           esac
           case "${SUITE}" in
             baseline-profile)
+              device_token='pixel6Api35'
+              device_label='Pixel 6 API 35 AOSP managed emulator'
               test_class='org.oxycblt.auxio.startupbenchmark.BaselineProfileGenerator'
               ;;
             macrobenchmark)
+              device_token='pixel2Api29'
+              device_label='Pixel 2 API 29 AOSP managed emulator'
               test_class='org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark'
               ;;
             *) echo "Unsupported suite: ${SUITE}" >&2; exit 1 ;;
           esac
-          pattern="pixel2Api29.*${flavour_token}.*AndroidTest"
+          pattern="${device_token}.*${flavour_token}.*AndroidTest"
           task_name="$(awk '{print $1}' "${tasks_file}" | grep -Ei "^${pattern}$" | head -n 1 || true)"
           if [[ -z "${task_name}" ]]; then
             echo "No task matched ${pattern}. Available managed-device tasks:" >&2
-            grep -Ei 'pixel2Api29|AndroidTest' "${tasks_file}" >&2 || true
+            grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest' "${tasks_file}" >&2 || true
             exit 1
           fi
           echo "name=${task_name}" >> "${GITHUB_OUTPUT}"
           echo "class=${test_class}" >> "${GITHUB_OUTPUT}"
+          echo "device=${device_label}" >> "${GITHUB_OUTPUT}"
           echo "Resolved :startup-benchmark:${task_name} (${test_class})"
 
       - name: Run bounded managed-device suite
@@ -147,62 +151,94 @@ jobs:
         env:
           TASK_NAME: ${{ steps.task.outputs.name }}
           TEST_CLASS: ${{ steps.task.outputs.class }}
+          DEVICE_LABEL: ${{ steps.task.outputs.device }}
           FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
           ITERATIONS: ${{ inputs.iterations }}
           FLAVOUR: ${{ inputs.flavour }}
           SUITE: ${{ inputs.suite }}
         run: |
-          set -euo pipefail
           bash ./scripts/ci-gradle.sh \
             ":startup-benchmark:${TASK_NAME}" \
             -Pandroid.testInstrumentationRunnerArguments.class="${TEST_CLASS}" \
             -Pandroid.testInstrumentationRunnerArguments.auxio.fixtureSongCount="${FIXTURE_SONG_COUNT}" \
             -Pandroid.testInstrumentationRunnerArguments.auxio.iterations="${ITERATIONS}"
+          mkdir -p startup-benchmark/build/reports/startup-performance
           {
             echo "commit=${GITHUB_SHA}"
-            echo "flavour=${FLAVOUR}"
+            echo "variant=${FLAVOUR}Benchmark"
             echo "suite=${SUITE}"
             echo "testClass=${TEST_CLASS}"
             echo "fixtureSongCount=${FIXTURE_SONG_COUNT}"
+            echo "sourceCount=2"
+            echo "fixtureSchema=2"
+            echo "fixtureSeed=18022026"
             echo "iterations=${ITERATIONS}"
-            echo "device=pixel2Api29-aosp"
+            echo "device=${DEVICE_LABEL}"
+            echo "compilationModes=None,Partial(BaselineProfile Require)"
             echo "evidence=Observed on managed emulator only"
             echo "exactTs18=Requires device validation"
           } > startup-benchmark/build/benchmark-context.txt
+
+      - name: Validate generated profile output
+        if: inputs.suite == 'baseline-profile'
+        shell: bash
+        run: |
+          mapfile -t profiles < <(
+            find startup-benchmark/build/outputs -type f \
+              \( -name '*baseline-prof.txt' -o -name '*startup-prof.txt' \) | sort
+          )
+          if ((${#profiles[@]} < 2)); then
+            echo "Expected generated baseline and startup profile files" >&2
+            find startup-benchmark/build/outputs -type f -maxdepth 8 -print >&2 || true
+            exit 1
+          fi
+          bash ./scripts/check-startup-performance-contracts.sh "${profiles[@]}"
+
+      - name: Summarise macrobenchmark metrics
+        if: inputs.suite == 'macrobenchmark'
+        shell: bash
+        run: |
+          python3 scripts/summarize-startup-benchmarks.py \
+            --input-root startup-benchmark/build/outputs \
+            --context startup-benchmark/build/benchmark-context.txt \
+            --output startup-benchmark/build/reports/startup-performance/summary.md \
+            --require-results
+          cat startup-benchmark/build/reports/startup-performance/summary.md >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload benchmark evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: startup-benchmark-${{ inputs.flavour }}-${{ inputs.fixture_song_count }}-${{ github.run_number }}
+          name: startup-benchmark-${{ inputs.suite }}-${{ inputs.flavour }}-${{ inputs.fixture_song_count }}-${{ github.run_number }}
           path: |
             startup-benchmark/build/outputs/**
             startup-benchmark/build/reports/**
             startup-benchmark/build/benchmark-context.txt
             app/src/main/baseline-prof.txt
             app/src/main/startup-prof.txt
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
-      - name: Write benchmark summary
+      - name: Write run context summary
         if: always()
         shell: bash
         env:
           JOB_STATUS: ${{ job.status }}
+          DEVICE_LABEL: ${{ steps.task.outputs.device }}
           FLAVOUR: ${{ inputs.flavour }}
           FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
           ITERATIONS: ${{ inputs.iterations }}
           SUITE: ${{ inputs.suite }}
         run: |
           {
-            echo "## Startup benchmark"
+            echo "## Startup benchmark run"
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Flavour: \`${FLAVOUR}\`"
             echo "- Suite: \`${SUITE}\`"
-            echo "- Fixture songs: \`${FIXTURE_SONG_COUNT}\`"
+            echo "- Fixture songs: \`${FIXTURE_SONG_COUNT}\` across two independent sources"
             echo "- Iterations: \`${ITERATIONS}\`"
-            echo "- Environment: Pixel 2 API 29 AOSP managed emulator"
+            echo "- Environment: ${DEVICE_LABEL:-not resolved}"
             echo "- Evidence confidence: Observed on this managed emulator only"
             echo "- Exact TS18 latency and runtime behaviour: Requires device validation"
           } >> "${GITHUB_STEP_SUMMARY}"

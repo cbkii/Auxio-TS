@@ -20,33 +20,49 @@ package org.oxycblt.auxio.benchmark
 
 import android.app.Activity
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteStatement
+import android.util.Base64
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.Locale
 import kotlin.concurrent.thread
+import kotlin.math.min
+import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser
+import org.oxycblt.auxio.util.StartupPerformanceReport
 
-/** Benchmark-build-only receiver that transactionally seeds committed bounded-library rows. */
+/** Benchmark-build-only authority for deterministic fixtures and bounded timing export. */
 class BenchmarkFixtureReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION_SEED) {
-            resultCode = Activity.RESULT_CANCELED
-            return
+        when (intent.action) {
+            ACTION_SEED -> seedAsync(context, intent)
+            ACTION_REPORT -> exportReport(context)
+            else -> {
+                resultCode = Activity.RESULT_CANCELED
+                resultData = "Unsupported benchmark action"
+            }
         }
+    }
+
+    private fun seedAsync(context: Context, intent: Intent) {
         val songCount = intent.getIntExtra(EXTRA_SONG_COUNT, DEFAULT_SONG_COUNT)
-        if (songCount !in SUPPORTED_SONG_COUNTS) {
+        val sourceMode = intent.getStringExtra(EXTRA_SOURCE_MODE) ?: SOURCE_MODE_NORMAL
+        if (songCount !in SUPPORTED_SONG_COUNTS || sourceMode !in SUPPORTED_SOURCE_MODES) {
             resultCode = Activity.RESULT_CANCELED
-            resultData = "Unsupported fixture size: $songCount"
+            resultData = "Unsupported fixture request: songs=$songCount sourceMode=$sourceMode"
             return
         }
 
         val pending = goAsync()
         thread(name = "auxio-benchmark-fixture") {
             try {
-                seed(context.applicationContext, songCount)
+                seed(context.applicationContext, songCount, sourceMode)
                 pending.resultCode = Activity.RESULT_OK
-                pending.resultData = "Seeded $songCount committed rows"
+                pending.resultData = "Seeded $songCount committed rows ($sourceMode)"
             } catch (error: Throwable) {
                 pending.resultCode = Activity.RESULT_CANCELED
                 pending.resultData = error.stackTraceToString().take(MAX_RESULT_LENGTH)
@@ -56,11 +72,26 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun seed(context: Context, songCount: Int) {
+    private fun exportReport(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val report =
+            StartupPerformanceReport.render(
+                StartupPerformanceReport.CaptureContext(
+                    authority = "benchmark-ordered-broadcast",
+                    sourceState = prefs.getString(KEY_SOURCE_MODE, "not-seeded") ?: "not-seeded",
+                    fixtureSongCount = prefs.getInt(KEY_SONG_COUNT, 0).takeIf { it > 0 },
+                )
+            )
+        resultCode = Activity.RESULT_OK
+        resultData = Base64.encodeToString(report.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+    }
+
+    private fun seed(context: Context, songCount: Int, sourceMode: String) {
         val databaseFile = context.getDatabasePath(DATABASE_NAME)
         require(databaseFile.isFile) {
             "${databaseFile.path} does not exist; launch the benchmark target once before seeding"
         }
+        val playableFiles = preparePlayableFixtures(context)
         SQLiteDatabase.openDatabase(
                 databaseFile.path,
                 null,
@@ -69,12 +100,10 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             .use { database ->
                 database.beginTransaction()
                 try {
-                    database.execSQL("DELETE FROM IndexedUriStateData")
-                    database.execSQL("DELETE FROM IndexedSongData")
-                    database.execSQL("DELETE FROM SourceLedgerData")
-                    database.execSQL("DELETE FROM LibrarySongData")
-                    insertLedgers(database)
-                    insertSongs(database, songCount)
+                    clearFixtureTables(database)
+                    insertLedgers(database, sourceMode)
+                    insertRepresentativeLibraryRows(database, songCount, playableFiles)
+                    insertSongs(database, songCount, playableFiles)
                     database.setTransactionSuccessful()
                 } finally {
                     database.endTransaction()
@@ -86,39 +115,151 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             .putInt(KEY_SONG_COUNT, songCount)
             .putInt(KEY_SCHEMA_VERSION, FIXTURE_SCHEMA_VERSION)
             .putLong(KEY_SEED, FIXTURE_SEED)
-            .apply()
+            .putString(KEY_SOURCE_MODE, sourceMode)
+            .commit()
     }
 
-    private fun insertLedgers(database: SQLiteDatabase) {
-        val statement =
-            database.compileStatement(
-                "INSERT OR REPLACE INTO SourceLedgerData " +
-                    "(sourceKey, sourceType, rootUri, rootPath, fingerprint, fingerprintStrength, " +
-                    "available, lastSeenMs, lastCommittedGeneration, pendingGeneration, " +
-                    "lastSuccessfulScanMs, configurationRevision, invalidationVersion, " +
-                    "committedInvalidationVersion, committedProfile, enrichmentRevision, incomplete) " +
-                    "VALUES (?, ?, NULL, ?, ?, ?, 1, ?, ?, NULL, ?, 1, 1, 1, ?, 1, 0)"
+    private fun clearFixtureTables(database: SQLiteDatabase) {
+        listOf(
+                "PlaylistItemData",
+                "SongArtistCrossRefData",
+                "SongGenreCrossRefData",
+                "AlbumArtistCrossRefData",
+                "LibraryPlaylistData",
+                "LibraryGenreData",
+                "LibraryArtistData",
+                "LibraryAlbumData",
+                "LibrarySongData",
+                "LibraryVolumeData",
+                "IndexedUriStateData",
+                "IndexedSongData",
+                "SourceScanGenerationData",
+                "ScanSeenData",
+                "PendingCachedFileData",
+                "SourceLedgerData",
             )
-        try {
-            SOURCE_KEYS.forEachIndexed { index, sourceKey ->
-                statement.clearBindings()
-                statement.bindString(1, sourceKey)
-                statement.bindString(2, SOURCE_TYPE)
-                statement.bindString(3, "/storage/usbdisk$index")
-                statement.bindString(4, "fixture:$FIXTURE_SCHEMA_VERSION:$FIXTURE_SEED:$index")
-                statement.bindString(5, "STRONG")
-                statement.bindLong(6, FIXTURE_EPOCH_MS)
-                statement.bindLong(7, FIXTURE_GENERATION)
-                statement.bindLong(8, FIXTURE_EPOCH_MS)
-                statement.bindString(9, "LEAN")
-                statement.executeInsert()
-            }
-        } finally {
-            statement.close()
+            .forEach { table -> database.execSQL("DELETE FROM $table") }
+    }
+
+    private fun insertLedgers(database: SQLiteDatabase, sourceMode: String) {
+        SOURCE_KEYS.forEachIndexed { index, sourceKey ->
+            val available = !(sourceMode == SOURCE_MODE_USB1_ABSENT && index == 1)
+            val pending = sourceMode == SOURCE_MODE_PENDING && index == 0
+            val values =
+                ContentValues().apply {
+                    put("sourceKey", sourceKey)
+                    put("sourceType", SOURCE_TYPE)
+                    putNull("rootUri")
+                    put("rootPath", "/storage/usbdisk$index")
+                    put("fingerprint", "fixture:$FIXTURE_SCHEMA_VERSION:$FIXTURE_SEED:$index")
+                    put("fingerprintStrength", "AUTHORITATIVE")
+                    put("available", available)
+                    put("lastSeenMs", FIXTURE_EPOCH_MS)
+                    put("lastCommittedGeneration", FIXTURE_GENERATION)
+                    if (pending) put("pendingGeneration", FIXTURE_GENERATION + 1)
+                    else putNull("pendingGeneration")
+                    put("lastSuccessfulScanMs", FIXTURE_EPOCH_MS)
+                    put("configurationRevision", 1)
+                    put("invalidationVersion", 1)
+                    put("committedInvalidationVersion", 1)
+                    put("committedProfile", "LEAN")
+                    put("enrichmentRevision", 1)
+                    put("incomplete", pending)
+                }
+            check(database.insertOrThrow("SourceLedgerData", null, values) != -1L)
         }
     }
 
-    private fun insertSongs(database: SQLiteDatabase, songCount: Int) {
+    private fun insertRepresentativeLibraryRows(
+        database: SQLiteDatabase,
+        songCount: Int,
+        playableFiles: Map<Int, File>,
+    ) {
+        SOURCE_KEYS.forEachIndexed { index, sourceKey ->
+            val values =
+                ContentValues().apply {
+                    put("stableSourceKey", sourceKey)
+                    put("displayName", "USB $index")
+                    put("sourceType", SOURCE_TYPE)
+                    putNull("rootUri")
+                    put("rootPath", "/storage/usbdisk$index")
+                    put("available", 1)
+                    put("lastCommittedGeneration", FIXTURE_GENERATION)
+                    putNull("pendingGeneration")
+                    put("lastSuccessfulScanMs", FIXTURE_EPOCH_MS)
+                    put("lastSeenMs", FIXTURE_EPOCH_MS)
+                    put("configurationRevision", 1)
+                }
+            database.insertOrThrow("LibraryVolumeData", null, values)
+        }
+
+        val albumCount = min(2_000, maxOf(1, songCount / 10))
+        repeat(albumCount) { index ->
+            insertNamedLibraryRow(database, "LibraryAlbumData", "title", "Fixture Album $index")
+        }
+        val artistCount = min(1_000, maxOf(1, songCount / 25))
+        repeat(artistCount) { index ->
+            insertNamedLibraryRow(database, "LibraryArtistData", "name", "Fixture Artist $index")
+        }
+        repeat(GENRE_COUNT) { index ->
+            insertNamedLibraryRow(database, "LibraryGenreData", "name", "Fixture Genre $index")
+        }
+        repeat(PLAYLIST_COUNT) { index ->
+            val values =
+                ContentValues().apply {
+                    put("stableUid", "fixture-playlist-$index")
+                    put("name", "Fixture Playlist $index")
+                    put("nameSort", "fixture playlist ${index.toString().padStart(2, '0')}")
+                    putNull("sourceUri")
+                    put("scanGeneration", FIXTURE_GENERATION)
+                    put("metadataRevision", 1)
+                    put("available", 1)
+                }
+            val playlistId = database.insertOrThrow("LibraryPlaylistData", null, values)
+            repeat(PLAYLIST_ITEM_COUNT) { position ->
+                val songIndex = (index * PLAYLIST_ITEM_COUNT + position) % songCount
+                val row = fixtureRow(songIndex, songCount, playableFiles)
+                database.insertOrThrow(
+                    "PlaylistItemData",
+                    null,
+                    ContentValues().apply {
+                        put("playlistId", playlistId)
+                        put("position", position)
+                        putNull("songId")
+                        put("stableSongUid", row.stableUid)
+                        put("uri", row.uri)
+                        put("titleFallback", row.title)
+                    },
+                )
+            }
+        }
+    }
+
+    private fun insertNamedLibraryRow(
+        database: SQLiteDatabase,
+        table: String,
+        nameColumn: String,
+        value: String,
+    ) {
+        val sortColumn = if (nameColumn == "title") "titleSort" else "nameSort"
+        database.insertOrThrow(
+            table,
+            null,
+            ContentValues().apply {
+                put(nameColumn, value)
+                put(sortColumn, value.lowercase(Locale.ROOT))
+                put("scanGeneration", FIXTURE_GENERATION)
+                put("metadataRevision", 1)
+                put("available", 1)
+            },
+        )
+    }
+
+    private fun insertSongs(
+        database: SQLiteDatabase,
+        songCount: Int,
+        playableFiles: Map<Int, File>,
+    ) {
         val songStatement =
             database.compileStatement(
                 "INSERT INTO IndexedSongData " +
@@ -136,7 +277,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             )
         try {
             repeat(songCount) { index ->
-                val row = fixtureRow(index, songCount)
+                val row = fixtureRow(index, songCount, playableFiles)
                 bindSong(songStatement, row)
                 songStatement.executeInsert()
                 stateStatement.clearBindings()
@@ -172,23 +313,32 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         statement.bindLong(16, row.sizeBytes)
         statement.bindLong(17, row.modifiedTimeMs)
         statement.bindLong(18, row.dateAddedMs)
-        statement.bindString(19, "audio/flac")
+        statement.bindString(19, row.mimeType)
         statement.bindString(20, "LEAN")
         statement.bindLong(21, 1)
     }
 
-    private fun fixtureRow(index: Int, songCount: Int): FixtureRow {
+    private fun fixtureRow(
+        index: Int,
+        songCount: Int,
+        playableFiles: Map<Int, File>,
+    ): FixtureRow {
         val sourceIndex = index % SOURCE_KEYS.size
         val albumCount = maxOf(1, songCount / 10)
         val artistCount = maxOf(1, songCount / 25)
         val folderCount = maxOf(2, songCount / 50)
-        val fileName = "track-${index.toString().padStart(5, '0')}.flac"
+        val playableFile = playableFiles[index]
+        val fileName = playableFile?.name ?: "track-${index.toString().padStart(5, '0')}.flac"
         val displayPath =
-            "/storage/usbdisk$sourceIndex/Music/folder-${index % folderCount}/$fileName"
+            if (playableFile != null) {
+                "/storage/usbdisk$sourceIndex/$fileName"
+            } else {
+                "/storage/usbdisk$sourceIndex/Music/folder-${index % folderCount}/$fileName"
+            }
         return FixtureRow(
             sourceKey = SOURCE_KEYS[sourceIndex],
             stableUid = "fixture-$FIXTURE_SEED-$index",
-            uri = "file://$displayPath",
+            uri = playableFile?.toURI()?.toString() ?: "file://$displayPath",
             displayPath = displayPath,
             fileName = fileName,
             title = "Fixture Track ${index.toString().padStart(5, '0')}",
@@ -196,10 +346,48 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             album = "Fixture Album ${index % albumCount}",
             trackNumber = (index % 99) + 1,
             durationMs = 120_000L + ((index * 997L) % 240_000L),
-            sizeBytes = 4_000_000L + index,
+            sizeBytes = playableFile?.length() ?: (4_000_000L + index),
             modifiedTimeMs = FIXTURE_EPOCH_MS + index * 1_000L,
             dateAddedMs = FIXTURE_EPOCH_MS + index * 1_000L,
+            mimeType = if (playableFile != null) "audio/wav" else "audio/flac",
         )
+    }
+
+    private fun preparePlayableFixtures(context: Context): Map<Int, File> {
+        val files = linkedMapOf<Int, File>()
+        SOURCE_KEYS.indices.forEach { sourceIndex ->
+            val root = FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)
+            check(root.mkdirs() || root.isDirectory) { "Unable to create ${root.absolutePath}" }
+            root.listFiles()?.forEach { child ->
+                if (child.name.startsWith("benchmark-tone-")) child.delete()
+            }
+            val index = PLAYABLE_INDICES[sourceIndex]
+            val file = File(root, "benchmark-tone-$sourceIndex.wav")
+            writeSilenceWave(file)
+            files[index] = file
+        }
+        return files
+    }
+
+    private fun writeSilenceWave(file: File) {
+        val sampleCount = WAVE_SAMPLE_RATE * WAVE_DURATION_SECONDS
+        val dataSize = sampleCount * 2
+        val buffer = ByteBuffer.allocate(44 + dataSize).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.put("RIFF".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(36 + dataSize)
+        buffer.put("WAVE".toByteArray(Charsets.US_ASCII))
+        buffer.put("fmt ".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(16)
+        buffer.putShort(1.toShort())
+        buffer.putShort(1.toShort())
+        buffer.putInt(WAVE_SAMPLE_RATE)
+        buffer.putInt(WAVE_SAMPLE_RATE * 2)
+        buffer.putShort(2.toShort())
+        buffer.putShort(16.toShort())
+        buffer.put("data".toByteArray(Charsets.US_ASCII))
+        buffer.putInt(dataSize)
+        repeat(sampleCount) { buffer.putShort(0.toShort()) }
+        file.writeBytes(buffer.array())
     }
 
     private data class FixtureRow(
@@ -216,24 +404,39 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         val sizeBytes: Long,
         val modifiedTimeMs: Long,
         val dateAddedMs: Long,
+        val mimeType: String,
     )
 
     companion object {
         const val ACTION_SEED = "org.oxycblt.auxio.action.SEED_BENCHMARK_FIXTURE"
+        const val ACTION_REPORT = "org.oxycblt.auxio.action.EXPORT_BENCHMARK_REPORT"
         const val EXTRA_SONG_COUNT = "song_count"
+        const val EXTRA_SOURCE_MODE = "source_mode"
+        const val SOURCE_MODE_NORMAL = "normal"
+        const val SOURCE_MODE_USB1_ABSENT = "usb1_absent"
+        const val SOURCE_MODE_PENDING = "pending_generation"
         private const val DATABASE_NAME = "music_cache.db"
         private const val PREFS_NAME = "auxio_benchmark_fixture"
         private const val KEY_SONG_COUNT = "song_count"
         private const val KEY_SCHEMA_VERSION = "schema_version"
         private const val KEY_SEED = "seed"
+        private const val KEY_SOURCE_MODE = "source_mode"
         private const val SOURCE_TYPE = "BENCHMARK_FIXTURE"
-        private const val FIXTURE_SCHEMA_VERSION = 1
+        private const val FIXTURE_SCHEMA_VERSION = 2
         private const val FIXTURE_SEED = 18_022_026L
         private const val FIXTURE_GENERATION = 1L
         private const val FIXTURE_EPOCH_MS = 1_700_000_000_000L
         private const val DEFAULT_SONG_COUNT = 5_000
         private const val MAX_RESULT_LENGTH = 8_000
+        private const val GENRE_COUNT = 20
+        private const val PLAYLIST_COUNT = 12
+        private const val PLAYLIST_ITEM_COUNT = 20
+        private const val WAVE_SAMPLE_RATE = 8_000
+        private const val WAVE_DURATION_SECONDS = 10
         private val SUPPORTED_SONG_COUNTS = setOf(500, 5_000, 20_000)
+        private val SUPPORTED_SOURCE_MODES =
+            setOf(SOURCE_MODE_NORMAL, SOURCE_MODE_USB1_ABSENT, SOURCE_MODE_PENDING)
         private val SOURCE_KEYS = listOf("direct:usb0", "direct:usb1")
+        private val PLAYABLE_INDICES = listOf(10, 11)
     }
 }

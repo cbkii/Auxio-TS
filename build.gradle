@@ -28,6 +28,7 @@ plugins {
     id "com.android.application" version "$agp_version" apply false
     //noinspection GradlePluginVersion
     id "com.android.test" version "$agp_version" apply false
+    id "androidx.baselineprofile" version "1.4.1" apply false
     id "androidx.navigation.safeargs.kotlin" version "$navigation_version" apply false
     //noinspection GradlePluginVersion
     id 'com.android.library' version "$agp_version" apply false
@@ -37,6 +38,28 @@ plugins {
     id "com.diffplug.spotless" version "8.6.0" apply true
     // Roborazzi plugin registers recordRoborazziDebug/verifyRoborazziDebug/etc tasks.
     id "io.github.takahirom.roborazzi" version "1.64.0" apply false
+}
+
+// Keep profile generation reproducible while retaining the hand-reviewed profile sources committed
+// by this PR. The profile-generation target must be unminified; release variants remain minified.
+project(":app") {
+    apply plugin: "androidx.baselineprofile"
+
+    plugins.withId("com.android.application") {
+        android.buildTypes.named("benchmark").configure {
+            minifyEnabled false
+        }
+    }
+
+    dependencies {
+        baselineProfile project(":startup-benchmark")
+    }
+
+    baselineProfile {
+        mergeIntoMain true
+        saveInSrc false
+        automaticGenerationDuringBuild false
+    }
 }
 
 spotless {

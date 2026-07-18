@@ -19,23 +19,57 @@
 package org.oxycblt.auxio.startupbenchmark
 
 import androidx.benchmark.macro.junit4.BaselineProfileRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
 
-/** Generates the production Baseline Profile from the real immediate-interaction journeys. */
+/** Generates production profiles from verified immediate-interaction journeys. */
+@RunWith(AndroidJUnit4::class)
+@LargeTest
 class BaselineProfileGenerator {
     @get:Rule val baselineProfileRule = BaselineProfileRule()
 
     @Test
-    fun generate() =
-        baselineProfileRule.collect(packageName = BuildConfig.TARGET_PACKAGE) {
+    fun startupPaths() =
+        baselineProfileRule.collect(
+            packageName = BuildConfig.TARGET_PACKAGE,
+            outputFilePrefix = "auxio-startup",
+            includeInStartupProfile = true,
+            filterPredicate = ::isProductionRule,
+        ) {
             BenchmarkFixtureController.run { seedCommittedFixture() }
             CriticalJourneys.run {
                 launchFastStart()
-                exercisePlaybackControls()
-                exerciseQuickFind()
-                exerciseUsbFolder()
-                exercisePagedLibrary()
+                exerciseProcessDeathRelaunch()
             }
         }
+
+    @Test
+    fun immediateInteractionPaths() =
+        baselineProfileRule.collect(
+            packageName = BuildConfig.TARGET_PACKAGE,
+            outputFilePrefix = "auxio-interactions",
+            includeInStartupProfile = false,
+            filterPredicate = ::isProductionRule,
+        ) {
+            BenchmarkFixtureController.run { seedCommittedFixture() }
+            CriticalJourneys.run {
+                launchFastStart()
+                exerciseQuickFind()
+                exercisePlaybackControls()
+                exerciseUsbFolder()
+                exercisePagedLibrary()
+                exerciseEarlyMediaBrowser()
+            }
+        }
+
+    private fun isProductionRule(rule: String): Boolean {
+        val productionPackage =
+            rule.contains("Lorg/oxycblt/auxio/") || rule.contains("Lorg/oxycblt/musikr/")
+        val benchmarkPackage =
+            rule.contains("/benchmark/") || rule.contains("/startupbenchmark/")
+        return productionPackage && !benchmarkPackage
+    }
 }
