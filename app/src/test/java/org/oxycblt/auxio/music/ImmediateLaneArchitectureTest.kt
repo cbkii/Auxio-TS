@@ -34,7 +34,8 @@ class ImmediateLaneArchitectureTest {
     @Test
     fun `playback prefers platform decoding before the FFmpeg fallback`() {
         val source =
-            root.resolve(
+            root
+                .resolve(
                     "app/src/main/java/org/oxycblt/auxio/playback/service/" +
                         "ExoPlaybackStateHolder.kt"
                 )

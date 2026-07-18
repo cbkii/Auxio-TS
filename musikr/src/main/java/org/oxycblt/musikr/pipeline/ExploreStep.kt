@@ -204,12 +204,7 @@ internal object FileClassification {
             "audio/x-mpegurl",
         )
     private val applicationAudioMimeTypes =
-        setOf(
-            "application/flac",
-            "application/ogg",
-            "application/x-flac",
-            "application/x-ogg",
-        )
+        setOf("application/flac", "application/ogg", "application/x-flac", "application/x-ogg")
     private val genericMimeTypes = setOf("application/octet-stream", "binary/octet-stream")
 
     fun isPotentialMusicFile(file: File): Boolean =

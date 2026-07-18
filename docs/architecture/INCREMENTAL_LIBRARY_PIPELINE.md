@@ -103,7 +103,7 @@ Full uses the existing TagLib path and enables configured rich dimensions. It ru
 
 Artwork creation is disabled during Lean and Full indexing. Existing cover IDs remain durable references and visible/current, widget and explicit detail surfaces resolve artwork on demand. Ordinary incremental scans neither eagerly extract complete-library artwork nor globally clear the cover store.
 
-ReplayGain metadata extraction is a Full-profile dimension. The existing playback processor remains the single standards-compatible audio processor and stays dormant when ReplayGain mode is disabled. FFmpeg remains a playback compatibility renderer rather than an indexing/enrichment component; this PR does not add a second renderer pipeline or player.
+ReplayGain metadata extraction is a Full-profile dimension. The existing playback processor remains the single standards-compatible audio processor and stays dormant when ReplayGain mode is disabled. Android's platform MediaCodec renderer is ordered first for normal formats. FFmpeg remains a fallback playback compatibility renderer rather than an indexing/enrichment component; this PR does not add a second renderer pipeline or player.
 
 ## Subscriber-driven categories
 
