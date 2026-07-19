@@ -1,3 +1,4 @@
+# Trigger the registered bounded workflow after its YAML was repaired.
 from pathlib import Path
 
 
