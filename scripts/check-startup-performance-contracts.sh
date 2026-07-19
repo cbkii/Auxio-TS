@@ -115,7 +115,7 @@ require_contains "$baseline_generator" 'exerciseEarlyMediaBrowser()'
 for count in 500 5_000 20_000; do
   require_contains "$fixture" "$count"
 done
-require_contains "$fixture" 'const val SCHEMA_VERSION = 2'
+require_contains "$fixture" 'const val SCHEMA_VERSION = 3'
 require_contains "$fixture" '"direct:usb0"'
 require_contains "$fixture" '"direct:usb1"'
 require_contains "$fixture_receiver" 'SOURCE_MODE_USB1_ABSENT'
