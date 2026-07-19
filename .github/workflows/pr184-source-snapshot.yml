@@ -67,7 +67,13 @@ jobs:
             git apply --check --whitespace=error-all "${filtered_patch}"
             git apply --index --whitespace=error-all "${filtered_patch}"
 
-            rm -f -- .github/pr184-hardening-error.txt .github/pr184-finalise-error.txt
+            rm -f -- \
+              .github/pr184-hardening-error.txt \
+              .github/pr184-finalise-error.txt \
+              .github/workflows/pr184-apply-corrected.yml \
+              .github/workflows/pr184-apply-final.yml \
+              .github/workflows/pr184-hardening-v4.yml \
+              .github/workflows/pr184-source-snapshot.yml
             rm -rf -- .github/pr184-patch
             git add --all
             git diff --cached --check
