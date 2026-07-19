@@ -1,0 +1,77 @@
+name: PR 184 Apply Final Audited Patch
+
+on:
+  push:
+    branches:
+      - cx/startup-profiles-benchmarks
+    paths:
+      - .github/workflows/pr184-apply-final.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr184-apply-final-audited-patch
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout latest branch head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/startup-profiles-benchmarks
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Apply, validate and publish final tree
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin dev
+          head_sha="$(git rev-parse HEAD)"
+          dev_sha="$(git rev-parse origin/dev)"
+          patch_file="${RUNNER_TEMP}/pr184-final.patch"
+
+          cat .github/pr184-patch/part-* > "${patch_file}"
+          printf '%s  %s\n' \
+            d03aa4494eb99a104eefd8176c36d3d6ab00d202e88248a226a6c18b2b765ec7 \
+            "${patch_file}" | sha256sum --check -
+
+          git apply --index "${patch_file}"
+
+          git rm -f -- .github/workflows/pr184-source-snapshot.yml
+          git rm -rf -- .github/pr184-patch
+          git rm -f -- .github/workflows/pr184-apply-final.yml
+
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+
+          status=0
+          while IFS= read -r -d '' script; do
+            bash -n "${script}" || status=1
+          done < <(find scripts -type f -name '*.sh' -print0)
+          ((status == 0))
+
+          while IFS= read -r -d '' script; do
+            python3 -m py_compile "${script}"
+          done < <(find scripts -type f -name '*.py' -print0)
+
+          bash scripts/check-manual-release-workflow.sh
+          bash scripts/check-startup-performance-contracts.sh
+          git diff --cached --check
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tree_sha="$(git write-tree)"
+          commit_sha="$(printf '%s\n' 'fix: finalise startup profiles and release validation' | git commit-tree "${tree_sha}" -p "${head_sha}" -p "${dev_sha}")"
+
+          gh auth setup-git
+          git push origin "${commit_sha}:refs/heads/cx/startup-profiles-benchmarks"
+          echo "Published final commit ${commit_sha} with parents ${head_sha} and ${dev_sha}."
