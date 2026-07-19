@@ -1,0 +1,297 @@
++                            )
++                        )
++                        requestCompatibilityRecoveryIfNeeded(
++                            worker,
++                            priorState,
++                            decision,
++                            sourceConfigured,
++                        )
++                    }
+                 }
+             }
+     }
+ 
++    private fun requestCompatibilityRecoveryIfNeeded(
++        worker: IndexingWorker,
++        priorState: LibraryState,
++        decision: StartupLibraryPolicy.Decision,
++        sourceConfigured: Boolean,
++    ) {
++        if (
++            priorState == LibraryState.USABLE &&
++                decision.requestScan &&
++                sourceConfigured &&
++                !BuildConfig.TOPWAY_COMPAT_FLAVOR
++        ) {
++            worker.requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
++        }
++    }
++
+     private suspend fun loadCachedLibrary(): MutableLibrary {
+         val revision = musicSettings.revision ?: UUID.randomUUID()
+         // Use a lightweight config for cached startup: no filesystem construction needed
+@@ -770,66 +843,6 @@ constructor(
+         )
+     }
+ 
+-    private suspend fun readTwStorageSwitch(): String? =
+-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+-            val process =
+-                try {
+-                    ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
+-                } catch (e: Exception) {
+-                    if (e is kotlinx.coroutines.CancellationException) throw e
+-                    L.w(e, "Unable to start TS18 storage switch diagnostic read")
+-                    return@withContext null
+-                }
+-            try {
+-                return@withContext if (!process.waitForCompat(500)) {
+-                    process.destroyCompat()
+-                    null
+-                } else {
+-                    process.inputStream
+-                        .bufferedReader()
+-                        .use { it.readText().trim() }
+-                        .takeIf { it.isNotEmpty() }
+-                }
+-            } catch (e: Exception) {
+-                if (e is kotlinx.coroutines.CancellationException) throw e
+-                L.w(e, "Unable to read TS18 storage switch diagnostic value")
+-                return@withContext null
+-            } finally {
+-                process.inputStream.closeQuietly()
+-                process.errorStream.closeQuietly()
+-                process.outputStream.closeQuietly()
+-                process.destroy()
+-            }
+-        }
+-
+-    private suspend fun Process.waitForCompat(timeoutMs: Long): Boolean {
+-        val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
+-        while (true) {
+-            try {
+-                exitValue()
+-                return true
+-            } catch (_: IllegalThreadStateException) {}
+-
+-            if (System.nanoTime() >= deadlineNanos) return false
+-
+-            val remainingMs = ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+-            kotlinx.coroutines.delay(minOf(remainingMs, 25L))
+-        }
+-    }
+-
+-    private fun Process.destroyCompat() {
+-        destroy()
+-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+-            destroyForcibly()
+-        }
+-    }
+-
+-    private fun Closeable.closeQuietly() {
+-        try {
+-            close()
+-        } catch (_: Exception) {}
+-    }
+-
+     private suspend fun createConfig(
+         revision: UUID,
+         cache: MutableCache,
+diff --git a/app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt b/app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt
+index 43b5b06..705c465 100644
+--- a/app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt
++++ b/app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt
+@@ -114,6 +114,12 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
+ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val context: Context) :
+     Settings.Impl<MusicSettings.Listener>(context), MusicSettings {
+ 
++    init {
++        // Restore the explicit release-build capture policy after process recreation. Debug and
++        // benchmark builds remain enabled by their build type and still use the same bounded ring.
++        PerfTimer.configure(performanceCaptureEnabled)
++    }
++
+     override var revision: UUID?
+         get() =
+             sharedPreferences
+diff --git a/docs/README.md b/docs/README.md
+index fd5be5c..39ef855 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -72,7 +72,7 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
+ - `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety guardrails.
+ - `.github/workflows/startup-performance.yml` compiles the benchmark/profile stack, runs startup architecture gates, builds all maintained debug/release variants and verifies compiled profile artefacts plus TS18/DoFun contracts.
+ - `.github/workflows/startup-benchmarks.yml` provides bounded manual Baseline Profile generation on an API 35 managed emulator and runtime-compatible macrobenchmark evidence on an API 29 managed emulator, with selectable flavour, fixture size and iteration count.
+-- `.github/workflows/manual-release.yml` builds, signs, verifies, and publishes selected standard/`com.tw.media` APKs and the systemless `com.tw.music` Magisk ZIP.
++- `.github/workflows/manual-release.yml` builds, signs, profile-checks and publishes selected standard/`com.tw.media` APKs or the systemless `com.tw.music` Magisk ZIP, with SHA-256 and signing/package metadata sidecars.
+ - `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshot/report bundles for UI review.
+ 
+ [Evidence confidence: Observed workflow configuration] [Porting decision: CI/release artefact coverage only; requires separate TS18 runtime validation]
+diff --git a/docs/RELEASE_WORKFLOW.md b/docs/RELEASE_WORKFLOW.md
+index 4b4f9df..d8828ea 100644
+--- a/docs/RELEASE_WORKFLOW.md
++++ b/docs/RELEASE_WORKFLOW.md
+@@ -1,39 +1,68 @@
+ # Release workflow
+ 
+-Build release APKs with the shared CI preparation step first:
++The maintained manual release workflow is `.github/workflows/manual-release.yml`. It runs only from the current `dev` branch, builds only the selected variants, signs them with repository secrets, validates the resulting packages, records checksums and signing/package metadata, and creates or updates a GitHub release.
+ 
+-```sh
+-bash ./scripts/prepare-ci-environment.sh
+-./gradlew :app:assembleStandardRelease
+-
+-# Topway/DoFun exact com.tw.music variant
+-./gradlew :app:assembleTopwayTwMusicRelease
+-
+-# Topway/DoFun alternate com.tw.media variant
+-./gradlew :app:assembleTopwayTwMediaRelease
+-```
+-
+-The manual release workflow (`.github/workflows/manual-release.yml`) uses repository secrets:
++## Required repository secrets
+ 
+ - `KEYSTORE_BASE64`
+ - `KEYSTORE_PASSWORD`
+ - `KEY_ALIAS`
+ - `KEY_PASSWORD`
+ 
+-It builds, signs, verifies, renames, and uploads three APK assets:
++The workflow fails closed when any signing secret is missing. Checkout credentials are not persisted while repository-controlled build scripts run; the GitHub token is exposed to Git only in the final publication or rollback step.
++
++## Selectable install assets
++
++| Selection | Published install asset | Package inside | Intended lane | Installation constraint |
++| --- | --- | --- | --- | --- |
++| Standard APK | `Auxio-TS-vX.Y.Z-standard-release.apk` | `org.oxycblt.auxio` | Standalone Auxio-TS and comparison testing | Does not replace a stock TS18 music package |
++| Topway `twmedia` APK | `Auxio-TS-vX.Y.Z-topway-twmedia-release.apk` | `com.tw.media` | DoFun alternate fixed entry exposing `com.tw.music.MusicActivity` | Install/update succeeds only when package state and signing authority permit it |
++| Topway `twmusic` Magisk module | `Auxio-TS-vX.Y.Z-topway-twmusic-magisk.zip` | signed `com.tw.music` APK overlaid systemlessly | Exact stock-package replacement test lane | Requires Magisk, verified stock path, uninstall/rollback media and boot-loop recovery; a raw `com.tw.music` APK is deliberately not published |
++
++Every install asset is accompanied by:
++
++- `<asset>.sha256` — SHA-256 digest using the published filename;
++- `<asset>.metadata.txt` — source commit, release tag, application ID, version, min/target SDK, ABI set and `apksigner` certificate output.
++
++Release APKs are also checked for compiled Baseline Profile data before publication. The workflow runs the TS18 APK-reference and DoFun/Topway compatibility checks after building.
++
++## Manual local validation
++
++Prepare the exact pinned dependencies before any Gradle task:
+ 
+-| Asset                                        | Package             | Audience                                                               | Installation constraint                                                                     |
+-| -------------------------------------------- | ------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+-| `Auxio-TS-vX.Y.Z-standard-release.apk`       | `org.oxycblt.auxio` | Normal Auxio-TS users and baseline validation                          | Does not replace stock TS18 music packages                                                  |
+-| `Auxio-TS-vX.Y.Z-topway-twmusic-release.apk` | `com.tw.music`      | Exact Topway/DoFun stock replacement target                            | Conflicts with stock `com.tw.music` system priv-app unless package state/signing is managed |
+-| `Auxio-TS-vX.Y.Z-topway-twmedia-release.apk` | `com.tw.media`      | DoFun alternate fixed entry, `com.tw.media/com.tw.music.MusicActivity` | Not a guaranteed no-root bypass; `com.tw.media` may conflict on some firmware               |
++```sh
++bash ./scripts/bootstrap-dependencies.sh --profile release
++```
++
++Build the desired variant with release-signing Gradle properties supplied through a secure environment:
+ 
+-Do not publish or document either Topway-compatible APK as universally installable on locked stock firmware. See `docs/TS18_INSTALLATION_CONSTRAINTS.md` for package-state recovery and install-lane details.
++```sh
++bash ./scripts/ci-gradle.sh :app:assembleStandardRelease
++bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
++bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicRelease
++```
+ 
+-Before tagging a release, run the compatibility guardrails:
++Then run the repository gates against each APK:
+ 
+ ```sh
++bash scripts/check-startup-performance-contracts.sh path/to/release.apk
+ bash scripts/check-ts18-apk-reference-contracts.sh
+ bash scripts/check-dofun-topway-compat.sh
+ bash scripts/check-headunit-compat-safety.sh
+ ```
++
++For `topwayTwMusic`, package the signed APK with the maintained helper rather than publishing the APK directly:
++
++```sh
++bash scripts/package-topway-twmusic-magisk-module.sh \
++  --apk path/to/topwayTwMusic-release.apk \
++  --output Auxio-TS-vX.Y.Z-topway-twmusic-magisk.zip \
++  --version X.Y.Z \
++  --version-code N
++```
++
++## Release invocation
++
++In GitHub Actions, run **Manual Release** from `dev` and normally leave **Create release as draft** enabled for the first validation build. Select only the assets required for the current test lane. The workflow auto-increments the patch tag when `version_tag` is blank, or accepts an explicit `vMAJOR.MINOR.PATCH` value.
++
++Do not publish either Topway-compatible lane as universally installable. Root, package name, signing certificate, privileged placement and launcher recognition are separate authorities. See `docs/TS18_INSTALLATION_CONSTRAINTS.md` and `docs/validation/EXACT_TS18_STARTUP_VALIDATION.md` before installing.
+diff --git a/docs/architecture/STARTUP_PROFILES_BENCHMARKS.md b/docs/architecture/STARTUP_PROFILES_BENCHMARKS.md
+index 6a3766b..51b63c5 100644
+--- a/docs/architecture/STARTUP_PROFILES_BENCHMARKS.md
++++ b/docs/architecture/STARTUP_PROFILES_BENCHMARKS.md
+@@ -2,9 +2,9 @@
+ 
+ Status: implemented PR 3 architecture for the Auxio-TS 0–60 second startup programme. Repository validation is automated; managed-emulator measurements and exact-device TS18 validation remain separate evidence classes.
+ 
+-Base: final review-ready PR 2 branch `cx/incremental-library-pipeline`.
++Base: merged PR #183 on the default `dev` branch.
+ 
+-Tracking issue: #181.
++Tracking issues: #179 and #181.
+ 
+ ## Goal
+ 
+@@ -60,6 +60,7 @@ Fixture contract:
+ - deterministic titles, stable IDs, paths, dates and source assignment;
+ - a deterministic primitive queue session anchored at logical item 10;
+ - queue rows written transactionally in bounded 500-row batches rather than materialising one unbounded insert;
++- deterministic startup preferences for library revision/state, successful prior scan, DirectFS mode and both logical USB roots;
+ - real app-private WAV references for managed-emulator playback while preserving logical TS18 display paths and metadata.
+ 
+ For managed-emulator USB interaction only, the benchmark build maps the same logical roots to app-private fixture directories and creates real bounded WAV files. Production builds continue using only the exact app-facing `/storage/usbdiskN` paths. UI rows retain logical TS18 paths while benchmark playback receives the private physical fixture path. The mapping cannot ship in maintained debug or release variants.
+@@ -120,7 +121,7 @@ AndroidX JSON is retained as machine evidence. `scripts/summarize-startup-benchm
+ 
+ ## Timing and trace contract
+ 
+-`PerfTimer` retains at most 256 monotonic in-memory events. It is active by default in debug and benchmark builds; maintained release builds require explicit user opt-in. Benchmark capture therefore records the measured app process without enabling production diagnostics.
++`PerfTimer` retains at most 256 monotonic in-memory events. It is active by default in debug and benchmark builds; maintained release builds require explicit user opt-in. `MusicSettingsImpl` restores that persisted opt-in after process recreation. Benchmark capture therefore records the measured app process without silently enabling production diagnostics.
+ 
+ `StartupPerformanceReport` exports a bounded local report containing authority, application/variant, boot ID where readable, fixture/source context, process/thread identity and monotonic events. The benchmark receiver returns the report through an explicit ordered broadcast encoded as Base64; tests verify non-empty application-start events. The user-facing settings export remains explicit and local-only.
+ 
+@@ -232,3 +233,29 @@ STOP and preserve evidence when build identity, playback authority, source ident
+ - Remove the benchmark build type/source set to remove fixture seeding and app-private USB mapping; maintained production variants are unaffected.
+ - Revert report export independently; `PerfTimer` remains bounded.
+ - Any production optimisation discovered by measurements requires a focused commit, executable regression test and documented rollback.
++
++
++## Integrated completion audit
++
++- **Evidence confidence:** Observed for repository source and each explicitly recorded CI or managed-emulator run; exact-device behaviour remains **Requires TS18 validation**.
++- **Porting decision:** Directly reusable for the maintained Auxio-TS standard and Topway variants; no exact TS18 latency claim is portable without the device runbook.
++
++The final integrated audit corrected production startup before profiles were accepted:
++
++1. the real repository startup path now preserves persisted `USABLE`/`EMPTY` state and explicitly defers complete cached-graph loading;
++2. asynchronous compatibility hydration is revision/generation guarded and may request a bounded recovery scan only when the policy and variant permit it;
++3. release performance-capture opt-in is restored after process recreation;
++4. benchmark source, library, primitive queue and startup preferences are all deterministic;
++5. the direct Topway property process probe was removed from core repository orchestration;
++6. release publication verifies compiled profile data and emits per-asset SHA-256 plus package/signing metadata sidecars.
++
++### Issue #179 startup-surface mapping
++
++- **Resume queue / recent playback context:** the persisted primitive queue and current item are the single canonical authority; no duplicate recent-history store is introduced.
++- **Recently added:** bounded committed `recentlyAdded()` projection.
++- **Favourites:** retained through the existing playlist authority after rich compatibility readiness; it is not allowed to gate queue, search or direct playback.
++- **USB 0 / USB 1 / Folders:** bounded one-level direct-folder paths under `/storage/usbdisk0` and `/storage/usbdisk1`.
++- **Quick Find:** cancellable, stale-suppressed bounded Room search with primitive direct playback.
++- **Playback controls and early MediaBrowser:** remain independent of complete graph hydration.
++
++This mapping completes the useful-first-interaction requirement without creating another player, queue, service, session, notification or history authority.
+diff --git a/docs/architecture/database-first-library.md b/docs/architecture/database-first-library.md
+index 1b96db8..3e5b234 100644
+--- a/docs/architecture/database-first-library.md
++++ b/docs/architecture/database-first-library.md
+@@ -1,11 +1,11 @@
+ # Database-first library architecture migration map
+ 
+-The database-first programme now has two deliberately separate lanes:
++The database-first programme has two deliberately separate lanes:
+ 
+ 1. **Immediate interaction** reads bounded committed rows for Fast Start, Quick Find, direct-folder playback and pre-hydration MediaBrowser responses.
