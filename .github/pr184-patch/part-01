@@ -1,0 +1,364 @@
+-      - ".github/workflows/pr184-hardening-v4.yml"
+-
+-permissions:
+-  contents: write
+-
+-jobs:
+-  harden:
+-    runs-on: ubuntu-latest
+-    timeout-minutes: 120
+-    steps:
+-      - name: Checkout latest branch head
+-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+-        with:
+-          ref: cx/startup-profiles-benchmarks
+-          fetch-depth: 0
+-          persist-credentials: true
+-
+-      - name: Set up JDK 21
+-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+-        with:
+-          distribution: temurin
+-          java-version: "21"
+-
+-      - name: Write local.properties
+-        shell: bash
+-        run: |
+-          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+-          [[ -n "${sdk_dir}" ]] || { echo "Android SDK unavailable" >&2; exit 1; }
+-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+-
+-      - name: Set up Gradle
+-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+-        with:
+-          cache-read-only: false
+-
+-      - name: Prepare dependencies
+-        shell: bash
+-        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+-
+-      - name: Apply focused production and regression hardening
+-        shell: bash
+-        run: |
+-          python3 - <<'PY'
+-          from pathlib import Path
+-          import re
+-
+-          def read(path: str) -> str:
+-              return Path(path).read_text(encoding="utf-8")
+-
+-          def write(path: str, text: str) -> None:
+-              target = Path(path)
+-              target.parent.mkdir(parents=True, exist_ok=True)
+-              target.write_text(text, encoding="utf-8", newline="\n")
+-
+-          def replace_regex(path: str, pattern: str, replacement: str, marker: str, flags: int = 0) -> None:
+-              text = read(path)
+-              if marker in text:
+-                  return
+-              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+-              if count != 1:
+-                  raise SystemExit(f"{path}: expected one match for {pattern!r}, found {count}")
+-              write(path, updated)
+-
+-          # The immediate lane preserves persisted state and defers complete graph construction.
+-          repo = "app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt"
+-          text = read(repo)
+-          if "deferCachedLoad = true" not in text:
+-              text, count = re.subn(
+-                  r"(\n\s*priorState = musicSettings\.libraryState,\n)(\s*)(lastScanFailed = \{ musicSettings\.lastScanFailed \},)",
+-                  lambda m: m.group(1) + m.group(2) + "deferCachedLoad = true,\n" + m.group(2) + m.group(3),
+-                  text,
+-                  count=1,
+-              )
+-              if count != 1:
+-                  raise SystemExit("MusicRepository.kt: unable to insert deferCachedLoad")
+-          text = text.replace("        startCompatibilityHydration()", "        startCompatibilityHydration(worker)", 1)
+-          hydration_pattern = re.compile(
+-              r"    private fun startCompatibilityHydration\(\) \{.*?(?=    private suspend fun loadCachedLibrary\(\): MutableLibrary \{)",
+-              re.S,
+-          )
+-          hydration = '''    private fun startCompatibilityHydration(worker: IndexingWorker) {
+-              compatibilityHydrationJob?.cancel()
+-              val startingDeviceGeneration = deviceLibraryGeneration.get()
+-              val startingRevision = musicSettings.revision
+-              val priorState = musicSettings.libraryState
+-              val sourceConfigured =
+-                  StartupLibraryPolicy.isMusicSourceConfigured(
+-                      musicSettings.locationMode,
+-                      musicSettings.configuredSourceCount,
+-                  )
+-              compatibilityHydrationJob =
+-                  compatibilityHydrationScope.launch {
+-                      try {
+-                          val cached = loadCachedLibrary()
+-                          val songCount = cached.songs.size
+-                          val decision =
+-                              StartupLibraryPolicy.onCachedLoadSucceeded(
+-                                  priorState,
+-                                  songCount,
+-                                  musicSettings.lastScanFailed,
+-                              )
+-                          withContext(Dispatchers.Main) {
+-                              val publishLibrary =
+-                                  songCount > 0 || decision.libraryState == LibraryState.EMPTY
+-                              val accepted =
+-                                  synchronized(this@MusicRepositoryImpl) {
+-                                      val superseded =
+-                                          deviceLibraryGeneration.get() != startingDeviceGeneration ||
+-                                              musicSettings.revision != startingRevision
+-                                      if (superseded) {
+-                                          false
+-                                      } else {
+-                                          if (publishLibrary) library = cached
+-                                          true
+-                                      }
+-                                  }
+-                              if (!accepted) {
+-                                  L.d("Skipping compatibility hydration superseded by a newer scan")
+-                                  return@withContext
+-                              }
+-                              musicSettings.libraryState = decision.libraryState
+-                              if (publishLibrary) {
+-                                  dispatchLibraryChange(device = true, user = true)
+-                              }
+-                              emitStartupLibraryStatus(
+-                                  StartupLibraryPolicy.startupReadinessAfterDecision(
+-                                      decision,
+-                                      sourceConfigured,
+-                                      songCount,
+-                                  )
+-                              )
+-                              if (songCount > 0) {
+-                                  emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+-                              }
+-                              requestCompatibilityRecoveryIfNeeded(
+-                                  worker,
+-                                  priorState,
+-                                  decision,
+-                                  sourceConfigured,
+-                              )
+-                          }
+-                      } catch (e: CancellationException) {
+-                          throw e
+-                      } catch (e: Exception) {
+-                          L.w(e, "Compatibility cached-library hydration failed")
+-                          val decision =
+-                              StartupLibraryPolicy.onCachedLoadFailed(
+-                                  priorState,
+-                                  musicSettings.lastScanFailed,
+-                              )
+-                          withContext(Dispatchers.Main) {
+-                              val superseded =
+-                                  synchronized(this@MusicRepositoryImpl) {
+-                                      deviceLibraryGeneration.get() != startingDeviceGeneration ||
+-                                          musicSettings.revision != startingRevision
+-                                  }
+-                              if (superseded) {
+-                                  L.d("Skipping compatibility recovery superseded by a newer scan")
+-                                  return@withContext
+-                              }
+-                              musicSettings.libraryState = decision.libraryState
+-                              emitStartupLibraryStatus(
+-                                  StartupLibraryPolicy.startupReadinessAfterDecision(
+-                                      decision,
+-                                      sourceConfigured,
+-                                      cachedSongCount = null,
+-                                  )
+-                              )
+-                              requestCompatibilityRecoveryIfNeeded(
+-                                  worker,
+-                                  priorState,
+-                                  decision,
+-                                  sourceConfigured,
+-                              )
+-                          }
+-                      }
+-                  }
+-          }
+-
+-          private fun requestCompatibilityRecoveryIfNeeded(
+-              worker: IndexingWorker,
+-              priorState: LibraryState,
+-              decision: StartupLibraryPolicy.Decision,
+-              sourceConfigured: Boolean,
+-          ) {
+-              if (
+-                  priorState == LibraryState.USABLE &&
+-                      decision.requestScan &&
+-                      sourceConfigured &&
+-                      !BuildConfig.TOPWAY_COMPAT_FLAVOR
+-              ) {
+-                  worker.requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
+-              }
+-          }
+-
+-'''
+-          if "requestCompatibilityRecoveryIfNeeded(" not in text:
+-              text, count = hydration_pattern.subn(hydration, text, count=1)
+-              if count != 1:
+-                  raise SystemExit("MusicRepository.kt: unable to replace compatibility hydration")
+-          write(repo, text)
+-
+-          # Persisted diagnostics opt-in is restored when the process is recreated.
+-          perf = "app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt"
+-          text = read(perf)
+-          if "import androidx.annotation.VisibleForTesting" not in text:
+-              text = text.replace(
+-                  "import android.os.SystemClock\n",
+-                  "import android.os.SystemClock\nimport androidx.annotation.VisibleForTesting\n",
+-                  1,
+-              )
+-          if "isExplicitlyConfigured" not in text:
+-              text = text.replace(
+-                  "    fun isEnabled(): Boolean = BuildConfig.DEBUG || isBenchmarkBuild() || explicitlyEnabled.get()\n",
+-                  "    fun isEnabled(): Boolean = BuildConfig.DEBUG || isBenchmarkBuild() || explicitlyEnabled.get()\n\n"
+-                  "    @VisibleForTesting\n"
+-                  "    internal fun isExplicitlyConfigured(): Boolean = explicitlyEnabled.get()\n",
+-                  1,
+-              )
+-          write(perf, text)
+-
+-          settings = "app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt"
+-          text = read(settings)
+-          if "PerfTimer.configure(performanceCaptureEnabled)" not in text:
+-              text, count = re.subn(
+-                  r"(class MusicSettingsImpl[^\{]+\{\n)",
+-                  r"\1\n    init {\n        PerfTimer.configure(performanceCaptureEnabled)\n    }\n",
+-                  text,
+-                  count=1,
+-                  flags=re.S,
+-              )
+-              if count != 1:
+-                  raise SystemExit("MusicSettings.kt: unable to add performance capture initialisation")
+-          write(settings, text)
+-
+-          # Benchmark startup decisions use committed deterministic settings, not the developer's state.
+-          fixture = "app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt"
+-          text = read(fixture)
+-          if "import androidx.preference.PreferenceManager" not in text:
+-              text = text.replace("import androidx.room.Room\n", "import androidx.preference.PreferenceManager\nimport androidx.room.Room\n", 1)
+-          for anchor, addition in [
+-              ("import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser\n", "import org.oxycblt.auxio.IntegerTable\nimport org.oxycblt.auxio.R\nimport org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser\nimport org.oxycblt.auxio.music.LibraryState\n"),
+-          ]:
+-              if "import org.oxycblt.auxio.IntegerTable" not in text:
+-                  text = text.replace(anchor, addition, 1)
+-          if "seedBenchmarkStartupPreferences(context)" not in text:
+-              text = text.replace(
+-                  "        seedPlaybackQueue(context, songCount, playableFiles)\n",
+-                  "        seedPlaybackQueue(context, songCount, playableFiles)\n        seedBenchmarkStartupPreferences(context)\n",
+-                  1,
+-              )
+-          if "private fun seedBenchmarkStartupPreferences" not in text:
+-              method = '''    private fun seedBenchmarkStartupPreferences(context: Context) {
+-              check(
+-                  PreferenceManager.getDefaultSharedPreferences(context)
+-                      .edit()
+-                      .putString(
+-                          context.getString(R.string.set_key_library_revision),
+-                          FIXTURE_LIBRARY_REVISION,
+-                      )
+-                      .putString(
+-                          context.getString(R.string.set_key_library_state),
+-                          LibraryState.USABLE.name,
+-                      )
+-                      .putBoolean(
+-                          context.getString(R.string.set_key_library_last_scan_failed),
+-                          false,
+-                      )
+-                      .putInt(
+-                          context.getString(R.string.set_key_locations_mode),
+-                          IntegerTable.LOCATION_MODE_DIRECT_FS,
+-                      )
+-                      .putString(
+-                          context.getString(R.string.set_key_music_locations),
+-                          "file:///storage/usbdisk0;file:///storage/usbdisk1",
+-                      )
+-                      .commit()
+-              ) {
+-                  "Unable to persist deterministic benchmark startup settings"
+-              }
+-          }
+-
+-'''
+-              text = text.replace("    private fun clearFixtureTables(database: SQLiteDatabase) {", method + "    private fun clearFixtureTables(database: SQLiteDatabase) {", 1)
+-          if "FIXTURE_LIBRARY_REVISION" not in text:
+-              text = text.replace(
+-                  "        private const val FIXTURE_GENERATION = 1L\n",
+-                  "        private const val FIXTURE_GENERATION = 1L\n"
+-                  "        private const val FIXTURE_LIBRARY_REVISION =\n"
+-                  "            \"00000000-0000-0000-0000-000000000002\"\n",
+-                  1,
+-              )
+-          write(fixture, text)
+-
+-          write(
+-              "app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt",
+-              '''/*
+-           * Copyright (c) 2026 Auxio Project
+-           * DeferredStartupHydrationTest.kt is part of Auxio.
+-           */
+-          package org.oxycblt.auxio.music
+-
+-          import kotlinx.coroutines.runBlocking
+-          import org.junit.Assert.assertEquals
+-          import org.junit.Test
+-
+-          class DeferredStartupHydrationTest {
+-              @Test
+-              fun `prior usable cache is preserved without synchronous graph hydration`() = runBlocking {
+-                  var loadAttempts = 0
+-                  val scanRequests = mutableListOf<Boolean>()
+-                  var libraryState: LibraryState? = null
+-                  var startupStatus: StartupLibraryStatus? = null
+-
+-                  val decision =
+-                      StartupLibraryStartup.run(
+-                          hasInMemoryLibrary = false,
+-                          revisionKnown = true,
+-                          priorState = LibraryState.USABLE,
+-                          deferCachedLoad = true,
+-                          lastScanFailed = { false },
+-                          isTopwayCompat = false,
+-                          loadCachedLibrary = { loadAttempts += 1; 42 },
+-                          cachedSongCount = { it },
+-                          emitCachedLibrary = {},
+-                          emitCachedLoadFailure = {},
+-                          setLibraryState = { libraryState = it },
+-                          requestIndex = { scanRequests += it },
+-                          setStartupLibraryStatus = { startupStatus = it },
+-                      )
+-
+-                  assertEquals("cached-library-hydration-deferred", decision.reason)
+-                  assertEquals(LibraryState.USABLE, libraryState)
+-                  assertEquals(StartupLibraryStatus.Usable, startupStatus)
+-                  assertEquals(0, loadAttempts)
+-                  assertEquals(emptyList<Boolean>(), scanRequests)
+-              }
+-
+-              @Test
+-              fun `first launch still requests the standard initial scan`() = runBlocking {
+-                  var loadAttempts = 0
+-                  val scanRequests = mutableListOf<Boolean>()
+-
+-                  val decision =
+-                      StartupLibraryStartup.run(
+-                          hasInMemoryLibrary = false,
+-                          revisionKnown = false,
+-                          priorState = LibraryState.NEVER,
+-                          deferCachedLoad = true,
+-                          lastScanFailed = { false },
+-                          isTopwayCompat = false,
+-                          loadCachedLibrary = { loadAttempts += 1; 0 },
+-                          cachedSongCount = { it },
+-                          emitCachedLibrary = {},
+-                          emitCachedLoadFailure = {},
+-                          setLibraryState = {},
+-                          requestIndex = { scanRequests += it },
+-                      )
+-
+-                  assertEquals(LibraryState.NEVER, decision.libraryState)
+-                  assertEquals(0, loadAttempts)
+-                  assertEquals(listOf(MusicScanRequestMode.REFRESH_WITH_CACHE), scanRequests)
+-              }
+-          }
