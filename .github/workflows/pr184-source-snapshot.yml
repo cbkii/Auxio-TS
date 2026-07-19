@@ -116,15 +116,22 @@ jobs:
       - name: Commit and publish final tree
         shell: bash
         run: |
-          set -euo pipefail
-          rm -f -- pr184-finalise.log
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --all
-          git diff --cached --check
-          git commit -m "fix: finalise startup profiles and release validation"
-          git push origin HEAD:cx/startup-profiles-benchmarks
-          echo "Published final commit $(git rev-parse HEAD)."
+          log_file="${GITHUB_WORKSPACE}/pr184-finalise.log"
+          set +e
+          {
+            set -euo pipefail
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add --all
+            git diff --cached --check
+            git commit -m "fix: finalise startup profiles and release validation"
+            git push origin HEAD:cx/startup-profiles-benchmarks
+            echo "Published final commit $(git rev-parse HEAD)."
+          } >>"${log_file}" 2>&1
+          status=$?
+          set -e
+          tail -n 80 "${log_file}"
+          exit "${status}"
 
       - name: Upload finalisation log
         if: always()
@@ -132,5 +139,5 @@ jobs:
         with:
           name: pr184-finalisation-log-${{ github.run_number }}
           path: pr184-finalise.log
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 2
