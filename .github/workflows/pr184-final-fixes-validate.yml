@@ -1,0 +1,61 @@
+name: PR 184 Final Fixes Validation
+
+on:
+  push:
+    branches:
+      - automation/pr184-final-fixes
+    paths:
+      - .github/workflows/pr184-final-fixes-validate.yml
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: automation/pr184-final-fixes
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate workflow YAML
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]] || { echo "Android SDK unavailable" >&2; exit 1; }
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Validate static contracts and exact managed-device tasks
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/check-startup-performance-contracts.sh
+          for task in \
+            pixel2Api29StandardBenchmarkBenchmarkAndroidTest \
+            pixel2Api29TopwayTwMusicBenchmarkBenchmarkAndroidTest \
+            pixel2Api29TopwayTwMediaBenchmarkBenchmarkAndroidTest \
+            pixel6Api35StandardNonMinifiedReleaseAndroidTest \
+            pixel6Api35TopwayTwMusicNonMinifiedReleaseAndroidTest \
+            pixel6Api35TopwayTwMediaNonMinifiedReleaseAndroidTest; do
+            ./gradlew --no-daemon --console=plain ":startup-benchmark:${task}" --dry-run
+          done
+          bash ./scripts/ci-gradle.sh spotlessCheck
