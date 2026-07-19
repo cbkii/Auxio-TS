@@ -125,7 +125,7 @@ internal object CriticalJourneys {
                 )
             }
         traceSection(TRACE_SEARCH_RESULT_TO_FIRST_AUDIO) {
-            result.click()
+            result.clickClickableAncestor("Quick Find result beginning '$query'")
             device.waitForIdle()
             waitForAudioPlayback()
         }
@@ -191,12 +191,10 @@ internal object CriticalJourneys {
             )
             scrollPageTwice()
         }
-        requireObject(
-                By.res(BuildConfig.TARGET_PACKAGE, "parent_name"),
-                "visible Album row after paging",
-            )
-            .click()
-        device.waitForIdle()
+        clickRequired(
+            By.res(BuildConfig.TARGET_PACKAGE, "parent_name"),
+            "visible Album row after paging",
+        )
         clickRequired(By.res(BuildConfig.TARGET_PACKAGE, "song_name"), "first Album track")
         waitForAudioPlayback()
     }
@@ -418,7 +416,7 @@ internal object CriticalJourneys {
     }
 
     private fun MacrobenchmarkScope.clickRequired(selector: BySelector, description: String) {
-        requireObject(selector, description).click()
+        requireObject(selector, description).clickClickableAncestor(description)
         device.waitForIdle()
     }
 
@@ -429,12 +427,26 @@ internal object CriticalJourneys {
         for (selector in selectors) {
             val candidate = device.wait(Until.findObject(selector), 1_500L)
             if (candidate != null) {
-                candidate.click()
+                candidate.clickClickableAncestor(description)
                 device.waitForIdle()
                 return
             }
         }
         error("Required UI object not found: $description")
+    }
+
+    private fun UiObject2.clickClickableAncestor(description: String) {
+        var candidate: UiObject2? = this
+        var depth = 0
+        while (candidate != null && depth < 8) {
+            if (candidate.isClickable) {
+                candidate.click()
+                return
+            }
+            candidate = candidate.parent
+            depth += 1
+        }
+        error("Required UI object has no clickable ancestor: $description")
     }
 
     private fun MacrobenchmarkScope.requireObject(
