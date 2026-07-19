@@ -1,4 +1,4 @@
-# Temporary bounded evidence run for PR #184. Remove after all matrix jobs and artefacts are inspected.
+# Temporary bounded evidence rerun for PR #184. Remove after all matrix jobs and artefacts are inspected.
 name: Startup Evidence
 
 on:
@@ -7,6 +7,8 @@ on:
       - cx/startup-profiles-benchmarks
     paths:
       - ".github/workflows/startup-evidence.yml"
+      - "app/src/benchmark/AndroidManifest.xml"
+      - "startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/**"
 
 permissions:
   contents: read
