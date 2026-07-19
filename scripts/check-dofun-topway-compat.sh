@@ -377,14 +377,19 @@ def require_topway_receiver(application, label):
     else:
         ok(f"{label} Topway receiver exposes expected command actions")
 
-def require_single_launcher(application, expected_name, label):
+def require_launcher_entries(application, expected_names, label):
     matches = components_with_filter(application, "activity", "android.intent.action.MAIN", "android.intent.category.LAUNCHER")
     matches += components_with_filter(application, "activity-alias", "android.intent.action.MAIN", "android.intent.category.LAUNCHER")
     names = [attr(component, "name") for component in matches]
-    if names == [expected_name]:
-        ok(f"{label} single MAIN/LAUNCHER entry is {expected_name}")
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    expected = set(expected_names)
+    actual = set(names)
+    if duplicates:
+        fail(f"{label} has duplicate MAIN/LAUNCHER entries: {duplicates}")
+    elif actual == expected and len(names) == len(expected):
+        ok(f"{label} MAIN/LAUNCHER entries are {sorted(expected)}")
     else:
-        fail(f"{label} MAIN/LAUNCHER entries expected [{expected_name}], got {names}")
+        fail(f"{label} MAIN/LAUNCHER entries expected {sorted(expected)}, got {names}")
 
 def require_topway_alias(application, label, debug=False):
     aliases = [alias for alias in application.findall("activity-alias") if attr(alias, "name") == "com.tw.music.MusicActivity"]
@@ -444,7 +449,7 @@ topway_media_debug_app = topway_media_debug.find("application")
 topway_media_release_app = topway_media_release.find("application")
 
 require_package(standard, "org.oxycblt.auxio.debug", "standardDebug")
-require_single_launcher(standard_app, "org.oxycblt.auxio.MainActivity", "standardDebug")
+require_launcher_entries(standard_app, {"org.oxycblt.auxio.MainActivity"}, "standardDebug")
 require_provider(standard_app, "org.oxycblt.auxio.debug.image.CoverProvider", "standardDebug")
 require_media_browser(standard_app, "standardDebug")
 require_topway_receiver(standard_app, "standardDebug")
@@ -454,7 +459,7 @@ else:
     ok("standardDebug has no com.tw.music.MusicActivity alias")
 
 require_package(topway_debug, "com.tw.music.debug", "topwayTwMusicDebug")
-require_single_launcher(topway_debug_app, "com.tw.music.MusicActivity", "topwayTwMusicDebug")
+require_launcher_entries(topway_debug_app, {"com.tw.music.MusicActivity", "org.oxycblt.auxio.car.overlay.CarOverlayActivity"}, "topwayTwMusicDebug")
 require_topway_alias(topway_debug_app, "topwayTwMusicDebug", debug=True)
 require_topway_main_activity_minimized(topway_debug_app, "topwayTwMusicDebug")
 require_provider(topway_debug_app, "com.tw.music.debug.image.CoverProvider", "topwayTwMusicDebug")
@@ -462,7 +467,7 @@ require_media_browser(topway_debug_app, "topwayTwMusicDebug")
 require_topway_receiver(topway_debug_app, "topwayTwMusicDebug")
 
 require_package(topway_release, "com.tw.music", "topwayTwMusicRelease")
-require_single_launcher(topway_release_app, "com.tw.music.MusicActivity", "topwayTwMusicRelease")
+require_launcher_entries(topway_release_app, {"com.tw.music.MusicActivity", "org.oxycblt.auxio.car.overlay.CarOverlayActivity"}, "topwayTwMusicRelease")
 require_topway_alias(topway_release_app, "topwayTwMusicRelease")
 require_topway_main_activity_minimized(topway_release_app, "topwayTwMusicRelease")
 require_provider(topway_release_app, "com.tw.music.image.CoverProvider", "topwayTwMusicRelease")
@@ -470,7 +475,7 @@ require_media_browser(topway_release_app, "topwayTwMusicRelease")
 require_topway_receiver(topway_release_app, "topwayTwMusicRelease")
 
 require_package(topway_media_debug, "com.tw.media.debug", "topwayTwMediaDebug")
-require_single_launcher(topway_media_debug_app, "com.tw.music.MusicActivity", "topwayTwMediaDebug")
+require_launcher_entries(topway_media_debug_app, {"com.tw.music.MusicActivity", "org.oxycblt.auxio.car.overlay.CarOverlayActivity"}, "topwayTwMediaDebug")
 require_topway_alias(topway_media_debug_app, "topwayTwMediaDebug", debug=True)
 require_topway_main_activity_minimized(topway_media_debug_app, "topwayTwMediaDebug")
 require_provider(topway_media_debug_app, "com.tw.media.debug.image.CoverProvider", "topwayTwMediaDebug")
@@ -478,7 +483,7 @@ require_media_browser(topway_media_debug_app, "topwayTwMediaDebug")
 require_topway_receiver(topway_media_debug_app, "topwayTwMediaDebug")
 
 require_package(topway_media_release, "com.tw.media", "topwayTwMediaRelease")
-require_single_launcher(topway_media_release_app, "com.tw.music.MusicActivity", "topwayTwMediaRelease")
+require_launcher_entries(topway_media_release_app, {"com.tw.music.MusicActivity", "org.oxycblt.auxio.car.overlay.CarOverlayActivity"}, "topwayTwMediaRelease")
 require_topway_alias(topway_media_release_app, "topwayTwMediaRelease")
 require_topway_main_activity_minimized(topway_media_release_app, "topwayTwMediaRelease")
 require_provider(topway_media_release_app, "com.tw.media.image.CoverProvider", "topwayTwMediaRelease")

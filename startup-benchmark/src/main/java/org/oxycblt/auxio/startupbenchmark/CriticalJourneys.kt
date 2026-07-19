@@ -174,27 +174,28 @@ internal object CriticalJourneys {
             val context = InstrumentationRegistry.getInstrumentation().context
             val connected = CountDownLatch(1)
             val failed = CountDownLatch(1)
-            lateinit var browser: MediaBrowserCompat
-            browser =
-                MediaBrowserCompat(
-                    context,
-                    serviceComponent(),
-                    object : MediaBrowserCompat.ConnectionCallback() {
-                        override fun onConnected() {
-                            connected.countDown()
-                        }
+            val browser =
+                mainThreadValue {
+                    MediaBrowserCompat(
+                        context,
+                        serviceComponent(),
+                        object : MediaBrowserCompat.ConnectionCallback() {
+                            override fun onConnected() {
+                                connected.countDown()
+                            }
 
-                        override fun onConnectionFailed() {
-                            failed.countDown()
-                        }
+                            override fun onConnectionFailed() {
+                                failed.countDown()
+                            }
 
-                        override fun onConnectionSuspended() {
-                            failed.countDown()
-                        }
-                    },
-                    null,
-                )
-            browser.connect()
+                            override fun onConnectionSuspended() {
+                                failed.countDown()
+                            }
+                        },
+                        null,
+                    )
+                }
+            runOnMainSync { browser.connect() }
             try {
                 check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {
                     "MediaBrowser root did not connect before full-library hydration"
@@ -225,14 +226,14 @@ internal object CriticalJourneys {
                             childrenReady.countDown()
                         }
                     }
-                browser.subscribe(browser.root, callback)
+                runOnMainSync { browser.subscribe(browser.root, callback) }
                 check(childrenReady.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                     "MediaBrowser first page timed out"
                 }
                 check(childrenCount >= 0) { "MediaBrowser first page returned an error" }
-                browser.unsubscribe(browser.root, callback)
+                runOnMainSync { browser.unsubscribe(browser.root, callback) }
             } finally {
-                browser.disconnect()
+                runOnMainSync { browser.disconnect() }
             }
         }
     }
@@ -293,36 +294,48 @@ internal object CriticalJourneys {
         val context = InstrumentationRegistry.getInstrumentation().context
         val connected = CountDownLatch(1)
         val failed = CountDownLatch(1)
-        lateinit var browser: MediaBrowserCompat
-        browser =
-            MediaBrowserCompat(
-                context,
-                serviceComponent(),
-                object : MediaBrowserCompat.ConnectionCallback() {
-                    override fun onConnected() {
-                        connected.countDown()
-                    }
+        val browser =
+            mainThreadValue {
+                MediaBrowserCompat(
+                    context,
+                    serviceComponent(),
+                    object : MediaBrowserCompat.ConnectionCallback() {
+                        override fun onConnected() {
+                            connected.countDown()
+                        }
 
-                    override fun onConnectionFailed() {
-                        failed.countDown()
-                    }
+                        override fun onConnectionFailed() {
+                            failed.countDown()
+                        }
 
-                    override fun onConnectionSuspended() {
-                        failed.countDown()
-                    }
-                },
-                null,
-            )
-        browser.connect()
+                        override fun onConnectionSuspended() {
+                            failed.countDown()
+                        }
+                    },
+                    null,
+                )
+            }
+        runOnMainSync { browser.connect() }
         try {
             check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {
                 "MediaController connection failed"
             }
             check(browser.isConnected) { "MediaBrowser disconnected before controller creation" }
-            return block(MediaControllerCompat(context, browser.sessionToken))
+            val controller = mainThreadValue { MediaControllerCompat(context, browser.sessionToken) }
+            return block(controller)
         } finally {
-            browser.disconnect()
+            runOnMainSync { browser.disconnect() }
         }
+    }
+
+    private fun runOnMainSync(block: () -> Unit) {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { block() }
+    }
+
+    private fun <T> mainThreadValue(block: () -> T): T {
+        var result: Result<T>? = null
+        runOnMainSync { result = runCatching(block) }
+        return requireNotNull(result) { "Main-thread benchmark operation did not complete" }.getOrThrow()
     }
 
     private inline fun <T> traceSection(name: String, block: () -> T): T {

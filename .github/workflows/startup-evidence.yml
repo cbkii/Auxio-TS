@@ -118,11 +118,18 @@ jobs:
         run: |
           mkdir -p startup-benchmark/build/reports/startup-performance
           set -o pipefail
-          bash ./scripts/ci-gradle.sh \
-            ":startup-benchmark:${TASK_NAME}" \
-            -Pandroid.testInstrumentationRunnerArguments.class="${TEST_CLASS}" \
-            -Pandroid.testInstrumentationRunnerArguments.auxio.fixtureSongCount="${FIXTURE_SONG_COUNT}" \
-            -Pandroid.testInstrumentationRunnerArguments.auxio.iterations=3 2>&1 |
+          gradle_args=(
+            ":startup-benchmark:${TASK_NAME}"
+            "-Pandroid.testInstrumentationRunnerArguments.class=${TEST_CLASS}"
+            "-Pandroid.testInstrumentationRunnerArguments.auxio.fixtureSongCount=${FIXTURE_SONG_COUNT}"
+            "-Pandroid.testInstrumentationRunnerArguments.auxio.iterations=3"
+          )
+          if [[ "${SUITE}" == "baseline-profile" ]]; then
+            gradle_args+=(
+              "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile"
+            )
+          fi
+          bash ./scripts/ci-gradle.sh "${gradle_args[@]}" 2>&1 |
             tee startup-benchmark/build/reports/startup-performance/managed-device.log
           {
             echo "commit=${GITHUB_SHA}"
@@ -131,7 +138,7 @@ jobs:
             echo "testClass=${TEST_CLASS}"
             echo "fixtureSongCount=${FIXTURE_SONG_COUNT}"
             echo "sourceCount=2"
-            echo "fixtureSchema=2"
+            echo "fixtureSchema=3"
             echo "fixtureSeed=18022026"
             echo "iterations=3"
             echo "warmups=AndroidX framework-managed"

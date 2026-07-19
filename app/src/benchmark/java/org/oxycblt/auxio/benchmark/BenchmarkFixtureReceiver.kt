@@ -241,6 +241,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                 "LibraryAlbumData",
                 "LibrarySongData",
                 "LibraryVolumeData",
+                "CachedFileData",
                 "IndexedUriStateData",
                 "IndexedSongData",
                 "SourceScanGenerationData",
@@ -390,6 +391,18 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                     "(sourceKey, uri, available, lastGeneration, metadataProfile) " +
                     "VALUES (?, ?, ?, ?, ?)"
             )
+        val cacheStatement =
+            database.compileStatement(
+                "INSERT OR REPLACE INTO CachedFileData " +
+                    "(uri, modifiedMs, addedMs, mimeType, durationMs, bitrateKbps, sampleRateHz, " +
+                    "musicBrainzId, name, sortName, track, disc, subtitle, date, albumMusicBrainzId, " +
+                    "albumName, albumSortName, releaseTypes, artistMusicBrainzIds, artistNames, " +
+                    "artistSortNames, albumArtistMusicBrainzIds, albumArtistNames, " +
+                    "albumArtistSortNames, genreNames, replayGainTrackAdjustment, " +
+                    "replayGainAlbumAdjustment, coverId) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, " +
+                    "NULL, NULL, ?, ?, NULL, ?, ?, ?, NULL, NULL, NULL)"
+            )
         try {
             repeat(songCount) { index ->
                 val row = fixtureRow(index, songCount, playableFiles)
@@ -397,6 +410,8 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                     sourceMode != SOURCE_MODE_USB1_ABSENT || row.sourceKey != SOURCE_KEYS[1]
                 bindSong(songStatement, row)
                 songStatement.executeInsert()
+                bindCompatibilityCache(cacheStatement, row)
+                cacheStatement.executeInsert()
                 stateStatement.clearBindings()
                 stateStatement.bindString(1, row.sourceKey)
                 stateStatement.bindString(2, row.uri)
@@ -408,6 +423,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         } finally {
             songStatement.close()
             stateStatement.close()
+            cacheStatement.close()
         }
     }
 
@@ -434,6 +450,28 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         statement.bindString(19, row.mimeType)
         statement.bindString(20, "LEAN")
         statement.bindLong(21, 1)
+    }
+
+    private fun bindCompatibilityCache(statement: SQLiteStatement, row: FixtureRow) {
+        statement.clearBindings()
+        statement.bindString(1, row.uri)
+        statement.bindLong(2, row.modifiedTimeMs)
+        statement.bindLong(3, row.dateAddedMs)
+        statement.bindString(4, row.mimeType)
+        statement.bindLong(5, row.durationMs)
+        statement.bindLong(6, 128)
+        statement.bindLong(7, WAVE_SAMPLE_RATE.toLong())
+        statement.bindString(8, row.title)
+        statement.bindString(9, row.title.lowercase(Locale.ROOT))
+        statement.bindLong(10, row.trackNumber.toLong())
+        statement.bindLong(11, 1)
+        statement.bindString(12, row.album)
+        statement.bindString(13, row.album.lowercase(Locale.ROOT))
+        statement.bindString(14, row.artist)
+        statement.bindString(15, row.artist.lowercase(Locale.ROOT))
+        statement.bindString(16, row.artist)
+        statement.bindString(17, row.artist.lowercase(Locale.ROOT))
+        statement.bindString(18, "Fixture Genre ${row.trackNumber % GENRE_COUNT}")
     }
 
     private fun fixtureRow(index: Int, songCount: Int, playableFiles: Map<Int, File>): FixtureRow {
@@ -543,7 +581,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         private const val KEY_SEED = "seed"
         private const val KEY_SOURCE_MODE = "source_mode"
         private const val SOURCE_TYPE = "BENCHMARK_FIXTURE"
-        private const val FIXTURE_SCHEMA_VERSION = 2
+        private const val FIXTURE_SCHEMA_VERSION = 3
         private const val FIXTURE_SEED = 18_022_026L
         private const val FIXTURE_GENERATION = 1L
         private const val FIXTURE_LIBRARY_REVISION = "00000000-0000-0000-0000-000000000002"
