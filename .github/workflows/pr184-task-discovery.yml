@@ -49,20 +49,34 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Record managed-device task names
+      - name: Capture managed-device task evidence
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
+          output=.github/pr184-all-startup-benchmark-tasks.txt
+          filtered=.github/pr184-managed-tasks.txt
+          result=.github/pr184-task-discovery-result.txt
+          set +e
           bash ./scripts/ci-gradle.sh :startup-benchmark:tasks --all --console=plain \
-            > .github/pr184-all-startup-benchmark-tasks.txt
-          grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest|managed' \
-            .github/pr184-all-startup-benchmark-tasks.txt \
-            > .github/pr184-managed-tasks.txt || true
-          cat .github/pr184-managed-tasks.txt
+            > "${output}" 2>&1
+          rc=$?
+          set -e
+          grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest|managed|FAILURE|error' \
+            "${output}" > "${filtered}" || true
+          {
+            echo "gradle_rc=${rc}"
+            echo "head=$(git rev-parse HEAD)"
+            echo
+            cat "${filtered}"
+            echo
+            echo '--- tail ---'
+            tail -n 120 "${output}"
+          } > "${result}"
+          cat "${result}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/pr184-all-startup-benchmark-tasks.txt .github/pr184-managed-tasks.txt
-          git commit -m "ci: record managed-device task names"
+          git add "${output}" "${filtered}" "${result}"
+          git commit -m "ci: record managed-device task evidence"
           git fetch origin automation/pr184-task-discovery
           git rebase origin/automation/pr184-task-discovery
           git push origin HEAD:automation/pr184-task-discovery
