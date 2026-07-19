@@ -56,6 +56,7 @@ class PerformanceCapturePreferenceRestoreTest {
         val key = context.getString(R.string.set_key_performance_capture)
         preferences.edit().putBoolean(key, true).commit()
 
+        // Reconstruct settings for both persisted values to model process recreation.
         MusicSettingsImpl(context)
         assertTrue(PerfTimer.isExplicitlyConfigured())
 
