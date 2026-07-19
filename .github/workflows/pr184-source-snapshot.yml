@@ -22,7 +22,7 @@ concurrency:
 jobs:
   finalise:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout latest branch head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -47,37 +47,36 @@ jobs:
               d03aa4494eb99a104eefd8176c36d3d6ab00d202e88248a226a6c18b2b765ec7 \
               "${original_patch}" | sha256sum --check -
 
-            python3 - "${original_patch}" "${filtered_patch}" <<'PY'
-            from pathlib import Path
-            import sys
+            awk '
+              /^diff --git a\// {
+                path = $0
+                sub(/^diff --git a\//, "", path)
+                sub(/ b\/.*/, "", path)
+                skip = \
+                  path == ".github/workflows/android.yml" || \
+                  path == ".github/workflows/lint.yml" || \
+                  path == ".github/workflows/pr184-source-snapshot.yml" || \
+                  path == "app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt" || \
+                  path == "app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt" || \
+                  path == "app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt"
+              }
+              !skip { print }
+            ' "${original_patch}" > "${filtered_patch}"
 
-            source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines(keepends=True)
-            excluded = {
-                ".github/workflows/android.yml",
-                ".github/workflows/lint.yml",
-                ".github/workflows/pr184-source-snapshot.yml",
-                "app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt",
-                "app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt",
-                "app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt",
-            }
-            output = []
-            skip = False
-            seen = set()
-            for line in source:
-                if line.startswith("diff --git a/"):
-                    path = line[len("diff --git a/") :].split(" b/", 1)[0]
-                    skip = path in excluded
-                    if skip:
-                        seen.add(path)
-                if not skip:
-                    output.append(line)
+            for excluded in \
+              .github/workflows/android.yml \
+              .github/workflows/lint.yml \
+              .github/workflows/pr184-source-snapshot.yml \
+              app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt \
+              app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt \
+              app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt; do
+              if grep -Fq -- "diff --git a/${excluded} b/${excluded}" "${filtered_patch}"; then
+                echo "::error::Excluded patch section remained: ${excluded}"
+                exit 1
+              fi
+            done
 
-            missing = excluded - seen
-            if missing:
-                raise SystemExit(f"Expected excluded patch sections were not found: {sorted(missing)}")
-            Path(sys.argv[2]).write_text("".join(output), encoding="utf-8")
-            PY
-
+            git apply --check --whitespace=error-all "${filtered_patch}"
             git apply --index --whitespace=error-all "${filtered_patch}"
 
             rm -f -- \
