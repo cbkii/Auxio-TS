@@ -1,0 +1,47 @@
+name: PR 184 Profile Diagnostic Run Identifier
+
+on:
+  push:
+    branches:
+      - automation/pr184-profile-diagnostic
+    paths:
+      - .github/workflows/pr184-profile-run-id.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: automation/pr184-profile-diagnostic
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Record workflow run identifier
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sleep 10
+          gh run list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --branch automation/pr184-profile-diagnostic \
+            --workflow "PR 184 Profile Artefact Diagnostic" \
+            --limit 5 \
+            --json databaseId,status,conclusion,headSha,createdAt,updatedAt,url \
+            > .github/pr184-profile-runs.json
+          cat .github/pr184-profile-runs.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/pr184-profile-runs.json
+          git commit -m "ci: record profile diagnostic run identifier"
+          git fetch origin automation/pr184-profile-diagnostic
+          git rebase origin/automation/pr184-profile-diagnostic
+          git push origin HEAD:automation/pr184-profile-diagnostic
