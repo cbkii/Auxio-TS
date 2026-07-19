@@ -8,7 +8,7 @@ on:
       - .github/workflows/pr184-source-snapshot.yml
   pull_request:
     branches:
-      - cx/incremental-library-pipeline
+      - dev
     paths:
       - .github/workflows/pr184-source-snapshot.yml
 
@@ -28,20 +28,20 @@ jobs:
           submodules: false
           persist-credentials: false
 
-      - name: Create source archive
+      - name: Record Git tree metadata
         shell: bash
         run: |
           set -euo pipefail
-          tar \
-            --exclude=.git \
-            --exclude='**/build' \
-            --exclude='**/.gradle' \
-            -czf "${RUNNER_TEMP}/auxio-ts-pr184-source.tar.gz" .
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "tree=$(git rev-parse HEAD^{tree})"
+          } > "${RUNNER_TEMP}/tree-metadata.txt"
+          cat "${RUNNER_TEMP}/tree-metadata.txt"
 
-      - name: Upload source archive
+      - name: Upload tree metadata
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: auxio-ts-pr184-source-${{ github.sha }}
-          path: ${{ runner.temp }}/auxio-ts-pr184-source.tar.gz
+          name: auxio-ts-pr184-tree-${{ github.sha }}
+          path: ${{ runner.temp }}/tree-metadata.txt
           if-no-files-found: error
-          retention-days: 2
+          retention-days: 1
