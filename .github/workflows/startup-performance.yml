@@ -177,18 +177,47 @@ jobs:
       - name: Validate compiled profile and startup-layout artefacts
         shell: bash
         run: |
-          mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
-          mapfile -t aabs < <(find app/build/outputs/bundle -type f -name '*.aab' | sort)
-          if ((${#apks[@]} != 3)); then
-            printf 'Expected three release APKs, found %s\n' "${#apks[@]}" >&2
-            printf '%s\n' "${apks[@]:-}" >&2
-            exit 1
-          fi
-          if ((${#aabs[@]} < 1)); then
-            echo 'Expected at least the standard release AAB' >&2
-            exit 1
-          fi
-          bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}" "${aabs[0]}"
+          set -o pipefail
+          report=build/reports/startup-performance/compiled-profile-validation.log
+          mkdir -p "$(dirname "${report}")"
+          set +e
+          {
+            set -u
+            mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
+            mapfile -t aabs < <(find app/build/outputs/bundle -type f -name '*.aab' | sort)
+
+            printf 'Release APK count: %s\n' "${#apks[@]}"
+            printf '%s\n' "${apks[@]:-}"
+            printf 'Release AAB count: %s\n' "${#aabs[@]}"
+            printf '%s\n' "${aabs[@]:-}"
+
+            for apk in "${apks[@]}"; do
+              printf '\n[%s]\n' "${apk}"
+              unzip -Z1 "${apk}" | grep -E '^assets/dexopt/baseline\.(prof|profm)$' || true
+            done
+            for aab in "${aabs[@]}"; do
+              printf '\n[%s]\n' "${aab}"
+              unzip -Z1 "${aab}" | grep -E '(^|/)BUNDLE-METADATA/.+(r8|profile|dexopt)' || true
+              while IFS= read -r entry; do
+                [[ -n "${entry}" ]] || continue
+                printf '%s: ' "${entry}"
+                unzip -p "${aab}" "${entry}" 2>/dev/null | grep -Eo '"startup"[[:space:]]*:[[:space:]]*(true|false)' | head -n 3 || true
+              done < <(unzip -Z1 "${aab}" | grep -E '(^|/)BUNDLE-METADATA/.+\.json$' || true)
+            done
+
+            if ((${#apks[@]} != 3)); then
+              printf 'Expected three release APKs, found %s\n' "${#apks[@]}" >&2
+              exit 1
+            fi
+            if ((${#aabs[@]} < 1)); then
+              echo 'Expected at least the standard release AAB' >&2
+              exit 1
+            fi
+            bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}" "${aabs[0]}"
+          } 2>&1 | tee "${report}"
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "${status}"
 
       - name: Validate TS18 APK reference contracts
         shell: bash
