@@ -225,7 +225,15 @@ jobs:
 
       - name: Validate DoFun and Topway compatibility sources
         shell: bash
-        run: bash ./scripts/check-dofun-topway-compat.sh
+        run: |
+          set -o pipefail
+          report=build/reports/startup-performance/dofun-topway-compat.log
+          mkdir -p "$(dirname "${report}")"
+          set +e
+          bash ./scripts/check-dofun-topway-compat.sh 2>&1 | tee "${report}"
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "${status}"
 
       - name: Upload failure reports
         if: failure()
