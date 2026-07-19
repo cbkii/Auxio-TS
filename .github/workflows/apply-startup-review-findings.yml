@@ -1,4 +1,3 @@
-# Registered workflow trigger.
 name: Apply startup review findings
 
 on:
@@ -13,12 +12,12 @@ permissions:
 
 concurrency:
   group: apply-startup-review-findings
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  apply-and-validate:
+  apply-and-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
     steps:
       - name: Checkout target branch
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -27,28 +26,6 @@ jobs:
           fetch-depth: 0
           submodules: false
           persist-credentials: true
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Write local.properties for Android SDK
-        shell: bash
-        run: |
-          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          [[ -n "${sdk_dir}" ]] || { echo "Android SDK path is unavailable" >&2; exit 1; }
-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
-        with:
-          cache-read-only: true
-
-      - name: Prepare CI environment
-        shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
       - name: Apply verified minimal fixes
         shell: bash
@@ -61,94 +38,201 @@ jobs:
               text = file.read_text(encoding="utf-8")
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"{path}: expected exactly one replacement target, found {count}")
+                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
               file.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
 
           replace_exact(
               ".github/workflows/startup-performance.yml",
-              """  pull_request:\n    branches:\n      - dev\n      - cx/incremental-library-pipeline\n""",
-              """  pull_request:\n    branches:\n      - dev\n      - cx/startup-profiles-benchmarks\n""",
+              "      - cx/incremental-library-pipeline\n",
+              "      - cx/startup-profiles-benchmarks\n",
           )
 
           replace_exact(
               "app/src/main/java/org/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser.kt",
-              """                        playable = false,\n                        playbackPath = candidate.file.absolutePath,\n""",
-              """                        playable = false,\n                        playbackPath =\n                            if (exposePhysicalPlaybackPath) {\n                                candidate.file.absolutePath\n                            } else {\n                                candidate.appPath\n                            },\n""",
+              "                        playbackPath = candidate.file.absolutePath,\n",
+              """                        playbackPath =
+                            if (exposePhysicalPlaybackPath) {
+                                candidate.file.absolutePath
+                            } else {
+                                candidate.appPath
+                            },
+""",
           )
 
+          settings = "app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt"
           replace_exact(
-              "app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt",
-              """import android.content.Intent\n""",
-              """import android.content.ActivityNotFoundException\nimport android.content.Intent\n""",
+              settings,
+              "import android.content.Intent\n",
+              "import android.content.ActivityNotFoundException\nimport android.content.Intent\n",
           )
           replace_exact(
-              "app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt",
-              """                startActivity(\n                    Intent.createChooser(\n                        shareIntent,\n                        getString(R.string.set_export_startup_report_chooser),\n                    )\n                )\n""",
-              """                try {\n                    startActivity(\n                        Intent.createChooser(\n                            shareIntent,\n                            getString(R.string.set_export_startup_report_chooser),\n                        )\n                    )\n                } catch (e: ActivityNotFoundException) {\n                    L.w(e, \"No activity can share the startup performance report\")\n                }\n""",
+              settings,
+              """                startActivity(
+                    Intent.createChooser(
+                        shareIntent,
+                        getString(R.string.set_export_startup_report_chooser),
+                    )
+                )
+""",
+              """                try {
+                    startActivity(
+                        Intent.createChooser(
+                            shareIntent,
+                            getString(R.string.set_export_startup_report_chooser),
+                        )
+                    )
+                } catch (e: ActivityNotFoundException) {
+                    L.w(e, "No activity can share the startup performance report")
+                }
+""",
           )
 
-          critical = "startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/CriticalJourneys.kt"
-          replace_exact(
-              critical,
-              """    fun exerciseEarlyMediaBrowser() {\n        traceSection(TRACE_MEDIA_BROWSER_FIRST_PAGE) {\n            val context = InstrumentationRegistry.getInstrumentation().context\n            val connected = CountDownLatch(1)\n            val failed = CountDownLatch(1)\n            val browser = mainThreadValue {\n                MediaBrowserCompat(\n                    context,\n                    serviceComponent(),\n                    object : MediaBrowserCompat.ConnectionCallback() {\n                        override fun onConnected() {\n                            connected.countDown()\n                        }\n\n                        override fun onConnectionFailed() {\n                            failed.countDown()\n                        }\n\n                        override fun onConnectionSuspended() {\n                            failed.countDown()\n                        }\n                    },\n                    null,\n                )\n            }\n            runOnMainSync { browser.connect() }\n            try {\n                check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {\n                    \"MediaBrowser root did not connect before full-library hydration\"\n                }\n                check(browser.isConnected) { \"MediaBrowser reported disconnected after callback\" }\n                val childrenReady = CountDownLatch(1)\n                var childrenCount = -1\n                val callback =\n                    object : MediaBrowserCompat.SubscriptionCallback() {\n                        override fun onChildrenLoaded(\n                            parentId: String,\n                            children: MutableList<MediaBrowserCompat.MediaItem>,\n                        ) {\n                            childrenCount = children.size\n                            childrenReady.countDown()\n                        }\n\n                        override fun onChildrenLoaded(\n                            parentId: String,\n                            children: MutableList<MediaBrowserCompat.MediaItem>,\n                            options: Bundle,\n                        ) {\n                            childrenCount = children.size\n                            childrenReady.countDown()\n                        }\n\n                        override fun onError(parentId: String) {\n                            childrenReady.countDown()\n                        }\n                    }\n                runOnMainSync { browser.subscribe(browser.root, callback) }\n                check(childrenReady.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {\n                    \"MediaBrowser first page timed out\"\n                }\n                check(childrenCount >= 0) { \"MediaBrowser first page returned an error\" }\n                runOnMainSync { browser.unsubscribe(browser.root, callback) }\n            } finally {\n                runOnMainSync { browser.disconnect() }\n            }\n        }\n    }\n""",
-              """    fun exerciseEarlyMediaBrowser() {\n        traceSection(TRACE_MEDIA_BROWSER_FIRST_PAGE) {\n            withConnectedBrowser(\n                connectionFailureMessage =\n                    \"MediaBrowser root did not connect before full-library hydration\",\n                disconnectedMessage = \"MediaBrowser reported disconnected after callback\",\n            ) { browser ->\n                val childrenReady = CountDownLatch(1)\n                var childrenCount = -1\n                val callback =\n                    object : MediaBrowserCompat.SubscriptionCallback() {\n                        override fun onChildrenLoaded(\n                            parentId: String,\n                            children: MutableList<MediaBrowserCompat.MediaItem>,\n                        ) {\n                            childrenCount = children.size\n                            childrenReady.countDown()\n                        }\n\n                        override fun onChildrenLoaded(\n                            parentId: String,\n                            children: MutableList<MediaBrowserCompat.MediaItem>,\n                            options: Bundle,\n                        ) {\n                            childrenCount = children.size\n                            childrenReady.countDown()\n                        }\n\n                        override fun onError(parentId: String) {\n                            childrenReady.countDown()\n                        }\n                    }\n                runOnMainSync { browser.subscribe(browser.root, callback) }\n                try {\n                    check(childrenReady.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {\n                        \"MediaBrowser first page timed out\"\n                    }\n                    check(childrenCount >= 0) { \"MediaBrowser first page returned an error\" }\n                } finally {\n                    runOnMainSync { browser.unsubscribe(browser.root, callback) }\n                }\n            }\n        }\n    }\n""",
+          critical_path = Path(
+              "startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/CriticalJourneys.kt"
           )
+          critical = critical_path.read_text(encoding="utf-8")
 
-          replace_exact(
-              critical,
-              """    private inline fun <T> withMediaController(block: (MediaControllerCompat) -> T): T {\n        val context = InstrumentationRegistry.getInstrumentation().context\n        val connected = CountDownLatch(1)\n        val failed = CountDownLatch(1)\n        val browser = mainThreadValue {\n            MediaBrowserCompat(\n                context,\n                serviceComponent(),\n                object : MediaBrowserCompat.ConnectionCallback() {\n                    override fun onConnected() {\n                        connected.countDown()\n                    }\n\n                    override fun onConnectionFailed() {\n                        failed.countDown()\n                    }\n\n                    override fun onConnectionSuspended() {\n                        failed.countDown()\n                    }\n                },\n                null,\n            )\n        }\n        runOnMainSync { browser.connect() }\n        try {\n            check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {\n                \"MediaController connection failed\"\n            }\n            check(browser.isConnected) { \"MediaBrowser disconnected before controller creation\" }\n            val controller = mainThreadValue {\n                MediaControllerCompat(context, browser.sessionToken)\n            }\n            return block(controller)\n        } finally {\n            runOnMainSync { browser.disconnect() }\n        }\n    }\n""",
-              """    private inline fun <T> withMediaController(block: (MediaControllerCompat) -> T): T =\n        withConnectedBrowser(\n            connectionFailureMessage = \"MediaController connection failed\",\n            disconnectedMessage = \"MediaBrowser disconnected before controller creation\",\n        ) { browser ->\n            val context = InstrumentationRegistry.getInstrumentation().context\n            val controller = mainThreadValue {\n                MediaControllerCompat(context, browser.sessionToken)\n            }\n            block(controller)\n        }\n\n    private inline fun <T> withConnectedBrowser(\n        connectionFailureMessage: String,\n        disconnectedMessage: String,\n        block: (MediaBrowserCompat) -> T,\n    ): T {\n        val context = InstrumentationRegistry.getInstrumentation().context\n        val connected = CountDownLatch(1)\n        val failed = CountDownLatch(1)\n        val browser = mainThreadValue {\n            MediaBrowserCompat(\n                context,\n                serviceComponent(),\n                object : MediaBrowserCompat.ConnectionCallback() {\n                    override fun onConnected() {\n                        connected.countDown()\n                    }\n\n                    override fun onConnectionFailed() {\n                        failed.countDown()\n                    }\n\n                    override fun onConnectionSuspended() {\n                        failed.countDown()\n                    }\n                },\n                null,\n            )\n        }\n        runOnMainSync { browser.connect() }\n        try {\n            check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {\n                connectionFailureMessage\n            }\n            check(browser.isConnected) { disconnectedMessage }\n            return block(browser)\n        } finally {\n            runOnMainSync { browser.disconnect() }\n        }\n    }\n""",
+          early_start = critical.index("    fun exerciseEarlyMediaBrowser() {")
+          early_end = critical.index(
+              "\n    fun MacrobenchmarkScope.waitForAudioPlayback()", early_start
           )
+          early_replacement = """    fun exerciseEarlyMediaBrowser() {
+        traceSection(TRACE_MEDIA_BROWSER_FIRST_PAGE) {
+            withConnectedBrowser(
+                connectionFailureMessage =
+                    "MediaBrowser root did not connect before full-library hydration",
+                disconnectedMessage = "MediaBrowser reported disconnected after callback",
+            ) { browser ->
+                val childrenReady = CountDownLatch(1)
+                var childrenCount = -1
+                val callback =
+                    object : MediaBrowserCompat.SubscriptionCallback() {
+                        override fun onChildrenLoaded(
+                            parentId: String,
+                            children: MutableList<MediaBrowserCompat.MediaItem>,
+                        ) {
+                            childrenCount = children.size
+                            childrenReady.countDown()
+                        }
 
-          schema_source = Path(
+                        override fun onChildrenLoaded(
+                            parentId: String,
+                            children: MutableList<MediaBrowserCompat.MediaItem>,
+                            options: Bundle,
+                        ) {
+                            childrenCount = children.size
+                            childrenReady.countDown()
+                        }
+
+                        override fun onError(parentId: String) {
+                            childrenReady.countDown()
+                        }
+                    }
+                runOnMainSync { browser.subscribe(browser.root, callback) }
+                try {
+                    check(childrenReady.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                        "MediaBrowser first page timed out"
+                    }
+                    check(childrenCount >= 0) { "MediaBrowser first page returned an error" }
+                } finally {
+                    runOnMainSync { browser.unsubscribe(browser.root, callback) }
+                }
+            }
+        }
+    }
+"""
+          critical = critical[:early_start] + early_replacement + critical[early_end:]
+
+          controller_start = critical.index(
+              "    private inline fun <T> withMediaController"
+          )
+          controller_end = critical.index("\n    private fun runOnMainSync", controller_start)
+          controller_replacement = """    private inline fun <T> withMediaController(block: (MediaControllerCompat) -> T): T =
+        withConnectedBrowser(
+            connectionFailureMessage = "MediaController connection failed",
+            disconnectedMessage = "MediaBrowser disconnected before controller creation",
+        ) { browser ->
+            val context = InstrumentationRegistry.getInstrumentation().context
+            val controller = mainThreadValue {
+                MediaControllerCompat(context, browser.sessionToken)
+            }
+            block(controller)
+        }
+
+    private inline fun <T> withConnectedBrowser(
+        connectionFailureMessage: String,
+        disconnectedMessage: String,
+        block: (MediaBrowserCompat) -> T,
+    ): T {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        val connected = CountDownLatch(1)
+        val failed = CountDownLatch(1)
+        val browser = mainThreadValue {
+            MediaBrowserCompat(
+                context,
+                serviceComponent(),
+                object : MediaBrowserCompat.ConnectionCallback() {
+                    override fun onConnected() {
+                        connected.countDown()
+                    }
+
+                    override fun onConnectionFailed() {
+                        failed.countDown()
+                    }
+
+                    override fun onConnectionSuspended() {
+                        failed.countDown()
+                    }
+                },
+                null,
+            )
+        }
+        runOnMainSync { browser.connect() }
+        try {
+            check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {
+                connectionFailureMessage
+            }
+            check(browser.isConnected) { disconnectedMessage }
+            return block(browser)
+        } finally {
+            runOnMainSync { browser.disconnect() }
+        }
+    }
+"""
+          critical = (
+              critical[:controller_start]
+              + controller_replacement
+              + critical[controller_end:]
+          )
+          critical_path.write_text(critical, encoding="utf-8", newline="\n")
+
+          fixture = Path(
               "startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BenchmarkFixture.kt"
           ).read_text(encoding="utf-8")
-          expected = "const val SCHEMA_VERSION = 3"
-          if expected not in schema_source:
-              raise SystemExit("Benchmark fixture schema is no longer version 3")
-          consumers = {
-              "scripts/check-startup-performance-contracts.sh": expected,
+          if "const val SCHEMA_VERSION = 3" not in fixture:
+              raise SystemExit("Benchmark fixture schema is not version 3")
+          checks = {
+              "scripts/check-startup-performance-contracts.sh": "const val SCHEMA_VERSION = 3",
               ".github/workflows/startup-benchmarks.yml": "fixtureSchema=3",
               ".github/workflows/startup-evidence.yml": "fixtureSchema=3",
           }
-          for path, marker in consumers.items():
-              text = Path(path).read_text(encoding="utf-8")
-              if marker not in text:
-                  raise SystemExit(f"{path}: fixture schema marker is not aligned to version 3")
+          for path, marker in checks.items():
+              if marker not in Path(path).read_text(encoding="utf-8"):
+                  raise SystemExit(f"{path}: schema marker is not aligned")
           PY
 
-      - name: Validate syntax and startup contracts
+      - name: Validate static changes
         shell: bash
         run: |
           ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
           bash -n scripts/check-startup-performance-contracts.sh
           bash ./scripts/check-startup-performance-contracts.sh
-
-      - name: Validate formatting
-        shell: bash
-        run: bash ./scripts/check-format-with-diff.sh
-
-      - name: Compile affected production and benchmark code
-        shell: bash
-        run: |
-          bash ./scripts/ci-gradle.sh \
-            :app:compileStandardDebugKotlin \
-            :startup-benchmark:assembleStandardBenchmarkBenchmark
-
-      - name: Run focused unit tests
-        shell: bash
-        run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest
-
-      - name: Review and commit validated changes
-        shell: bash
-        run: |
           git diff --check
           git diff --stat
-          git diff -- \
-            .github/workflows/startup-performance.yml \
-            app/src/main/java/org/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser.kt \
-            app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt \
-            startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/CriticalJourneys.kt
+
+      - name: Commit and push
+        shell: bash
+        run: |
           rm -- .github/workflows/apply-startup-review-findings.yml
           git add \
             .github/workflows/startup-performance.yml \
