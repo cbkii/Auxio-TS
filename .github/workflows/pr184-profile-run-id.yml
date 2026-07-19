@@ -11,6 +11,10 @@ permissions:
   actions: read
   contents: write
 
+concurrency:
+  group: pr184-profile-run-id
+  cancel-in-progress: true
+
 jobs:
   record:
     runs-on: ubuntu-latest
