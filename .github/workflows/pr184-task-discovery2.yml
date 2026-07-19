@@ -1,0 +1,79 @@
+name: PR 184 Direct Managed Device Task Discovery
+
+on:
+  push:
+    branches:
+      - automation/pr184-task-discovery2
+    paths:
+      - .github/workflows/pr184-task-discovery2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: automation/pr184-task-discovery2
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]] || { echo "Android SDK unavailable" >&2; exit 1; }
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Capture task output and candidate dry-runs
+        shell: bash
+        run: |
+          set -u
+          output=.github/pr184-task-discovery2.txt
+          : > "${output}"
+          set +e
+          ./gradlew --no-daemon --console=plain :startup-benchmark:tasks --all >> "${output}" 2>&1
+          tasks_rc=$?
+          {
+            echo
+            echo "tasks_rc=${tasks_rc}"
+            echo
+            echo '=== managed-device task lines ==='
+            grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest|managed' "${output}" || true
+            echo
+            echo '=== candidate dry-runs ==='
+          } >> "${output}"
+          for task in \
+            pixel2Api29StandardBenchmarkAndroidTest \
+            pixel2Api29StandardBenchmarkBenchmarkAndroidTest \
+            pixel2Api29TopwayTwMusicBenchmarkAndroidTest \
+            pixel2Api29TopwayTwMusicBenchmarkBenchmarkAndroidTest \
+            pixel2Api29TopwayTwMediaBenchmarkAndroidTest \
+            pixel2Api29TopwayTwMediaBenchmarkBenchmarkAndroidTest \
+            pixel6Api35StandardBenchmarkAndroidTest \
+            pixel6Api35StandardBenchmarkBenchmarkAndroidTest; do
+            ./gradlew --no-daemon --console=plain ":startup-benchmark:${task}" --dry-run \
+              >> "${output}" 2>&1
+            echo "candidate=${task} rc=$?" >> "${output}"
+          done
+          set -e
+          tail -n 320 "${output}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${output}"
+          git commit -m "ci: record direct managed-device task evidence"
+          git push origin HEAD:automation/pr184-task-discovery2
