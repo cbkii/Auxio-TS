@@ -38,45 +38,62 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          log_file="${RUNNER_TEMP}/pr184-apply-final.log"
+          set +e
+          {
+            set -euo pipefail
 
-          git fetch origin dev
-          head_sha="$(git rev-parse HEAD)"
-          dev_sha="$(git rev-parse origin/dev)"
-          patch_file="${RUNNER_TEMP}/pr184-final.patch"
+            git fetch origin dev
+            head_sha="$(git rev-parse HEAD)"
+            dev_sha="$(git rev-parse origin/dev)"
+            patch_file="${RUNNER_TEMP}/pr184-final.patch"
 
-          cat .github/pr184-patch/part-* > "${patch_file}"
-          printf '%s  %s\n' \
-            d03aa4494eb99a104eefd8176c36d3d6ab00d202e88248a226a6c18b2b765ec7 \
-            "${patch_file}" | sha256sum --check -
+            cat .github/pr184-patch/part-* > "${patch_file}"
+            printf '%s  %s\n' \
+              d03aa4494eb99a104eefd8176c36d3d6ab00d202e88248a226a6c18b2b765ec7 \
+              "${patch_file}" | sha256sum --check -
 
-          git apply --index "${patch_file}"
+            git apply --index "${patch_file}"
 
-          git rm -f -- .github/workflows/pr184-source-snapshot.yml
-          git rm -rf -- .github/pr184-patch
-          git rm -f -- .github/workflows/pr184-apply-final.yml
+            git rm -f -- .github/workflows/pr184-source-snapshot.yml
+            git rm -rf -- .github/pr184-patch
+            git rm -f -- .github/workflows/pr184-apply-final.yml
 
-          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+            ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
 
-          status=0
-          while IFS= read -r -d '' script; do
-            bash -n "${script}" || status=1
-          done < <(find scripts -type f -name '*.sh' -print0)
-          ((status == 0))
+            status=0
+            while IFS= read -r -d '' script; do
+              bash -n "${script}" || status=1
+            done < <(find scripts -type f -name '*.sh' -print0)
+            ((status == 0))
 
-          while IFS= read -r -d '' script; do
-            python3 -m py_compile "${script}"
-          done < <(find scripts -type f -name '*.py' -print0)
+            while IFS= read -r -d '' script; do
+              python3 -m py_compile "${script}"
+            done < <(find scripts -type f -name '*.py' -print0)
 
-          bash scripts/check-manual-release-workflow.sh
-          bash scripts/check-startup-performance-contracts.sh
-          git diff --cached --check
+            bash scripts/check-manual-release-workflow.sh
+            bash scripts/check-startup-performance-contracts.sh
+            git diff --cached --check
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          tree_sha="$(git write-tree)"
-          commit_sha="$(printf '%s\n' 'fix: finalise startup profiles and release validation' | git commit-tree "${tree_sha}" -p "${head_sha}" -p "${dev_sha}")"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            tree_sha="$(git write-tree)"
+            commit_sha="$(printf '%s\n' 'fix: finalise startup profiles and release validation' | git commit-tree "${tree_sha}" -p "${head_sha}" -p "${dev_sha}")"
 
-          gh auth setup-git
-          git push origin "${commit_sha}:refs/heads/cx/startup-profiles-benchmarks"
-          echo "Published final commit ${commit_sha} with parents ${head_sha} and ${dev_sha}."
+            gh auth setup-git
+            git push origin "${commit_sha}:refs/heads/cx/startup-profiles-benchmarks"
+            echo "Published final commit ${commit_sha} with parents ${head_sha} and ${dev_sha}."
+          } >"${log_file}" 2>&1
+          status=$?
+          set -e
+          cat "${log_file}"
+          exit "${status}"
+
+      - name: Upload patch evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr184-apply-final-${{ github.run_number }}
+          path: ${{ runner.temp }}/pr184-apply-final.log
+          if-no-files-found: error
+          retention-days: 2
