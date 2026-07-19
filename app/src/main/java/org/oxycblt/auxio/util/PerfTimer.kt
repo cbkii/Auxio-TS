@@ -58,8 +58,7 @@ object PerfTimer {
     /** Whether instrumentation is currently active. */
     fun isEnabled(): Boolean = BuildConfig.DEBUG || isBenchmarkBuild() || explicitlyEnabled.get()
 
-    @VisibleForTesting
-    internal fun isExplicitlyConfigured(): Boolean = explicitlyEnabled.get()
+    @VisibleForTesting internal fun isExplicitlyConfigured(): Boolean = explicitlyEnabled.get()
 
     private fun isBenchmarkBuild(): Boolean = BuildConfig.BUILD_TYPE == "benchmark"
 

@@ -214,10 +214,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                     context.getString(R.string.set_key_library_state),
                     LibraryState.USABLE.name,
                 )
-                .putBoolean(
-                    context.getString(R.string.set_key_library_last_scan_failed),
-                    false,
-                )
+                .putBoolean(context.getString(R.string.set_key_library_last_scan_failed), false)
                 .putInt(
                     context.getString(R.string.set_key_locations_mode),
                     IntegerTable.LOCATION_MODE_DIRECT_FS,
@@ -549,8 +546,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         private const val FIXTURE_SCHEMA_VERSION = 2
         private const val FIXTURE_SEED = 18_022_026L
         private const val FIXTURE_GENERATION = 1L
-        private const val FIXTURE_LIBRARY_REVISION =
-            "00000000-0000-0000-0000-000000000002"
+        private const val FIXTURE_LIBRARY_REVISION = "00000000-0000-0000-0000-000000000002"
         private const val FIXTURE_EPOCH_MS = 1_700_000_000_000L
         private const val PLAYBACK_SESSION_ID = 1L
         private const val PLAYBACK_ANCHOR_INDEX = 10
