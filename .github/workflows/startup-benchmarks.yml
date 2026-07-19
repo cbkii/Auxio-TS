@@ -113,8 +113,6 @@ jobs:
           FLAVOUR: ${{ inputs.flavour }}
           SUITE: ${{ inputs.suite }}
         run: |
-          tasks_file="${RUNNER_TEMP}/startup-benchmark-tasks.txt"
-          bash ./scripts/ci-gradle.sh :startup-benchmark:tasks --all --console=plain > "${tasks_file}"
           case "${FLAVOUR}" in
             standard) flavour_token='Standard' ;;
             topwayTwMusic) flavour_token='TopwayTwMusic' ;;
@@ -134,13 +132,7 @@ jobs:
               ;;
             *) echo "Unsupported suite: ${SUITE}" >&2; exit 1 ;;
           esac
-          pattern="${device_token}.*${flavour_token}.*AndroidTest"
-          task_name="$(awk '{print $1}' "${tasks_file}" | grep -Ei "^${pattern}$" | head -n 1 || true)"
-          if [[ -z "${task_name}" ]]; then
-            echo "No task matched ${pattern}. Available managed-device tasks:" >&2
-            grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest' "${tasks_file}" >&2 || true
-            exit 1
-          fi
+          task_name="${device_token}${flavour_token}BenchmarkAndroidTest"
           echo "name=${task_name}" >> "${GITHUB_OUTPUT}"
           echo "class=${test_class}" >> "${GITHUB_OUTPUT}"
           echo "device=${device_label}" >> "${GITHUB_OUTPUT}"
