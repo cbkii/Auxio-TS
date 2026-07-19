@@ -34,6 +34,8 @@ require_absent() {
   fi
 }
 
+baseline_profile=app/src/main/baseline-prof.txt
+startup_profile=app/src/main/generated/baselineProfiles/startup-prof.txt
 baseline_generator=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/BaselineProfileGenerator.kt
 macrobenchmark=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/StartupMacrobenchmark.kt
 journeys=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/CriticalJourneys.kt
@@ -51,8 +53,8 @@ quality_workflow=.github/workflows/lint.yml
 release_workflow=.github/workflows/manual-release.yml
 
 for path in \
-  app/src/main/baseline-prof.txt \
-  app/src/main/startup-prof.txt \
+  "$baseline_profile" \
+  "$startup_profile" \
   startup-benchmark/build.gradle \
   "$baseline_generator" \
   "$macrobenchmark" \
@@ -73,6 +75,9 @@ for path in \
   docs/architecture/STARTUP_PROFILES_BENCHMARKS.md; do
   require_file "$path"
 done
+
+[[ ! -e app/src/main/startup-prof.txt ]] ||
+  fail 'obsolete Startup Profile path remains: app/src/main/startup-prof.txt'
 
 require_contains settings.gradle "include ':startup-benchmark'"
 require_contains build.gradle 'id "androidx.baselineprofile" version "1.5.0-alpha07" apply false'
@@ -192,6 +197,8 @@ require_contains "$journeys" 'waitForAudioPlayback'
 require_contains "$journeys" 'Required UI object not found'
 require_contains "$journeys" 'TRACE_NEXT_COMMAND_TO_NEXT_AUDIO'
 require_contains "$journeys" 'TRACE_MEDIA_BROWSER_FIRST_PAGE'
+require_contains "$journeys" 'Next after Quick Find'
+require_contains "$journeys" 'first Album track'
 # Public journeys must fail when a required control or row is unavailable. Do not
 # use optional-click helpers that silently turn a missing interaction into a pass.
 # Helper polling loops may legitimately return once their required condition is met.
@@ -204,8 +211,8 @@ for required_class in \
   'Lorg/oxycblt/auxio/music/service/MusicBrowser;' \
   'Lorg/oxycblt/auxio/search/SearchViewModel;' \
   'Lorg/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser;'; do
-  require_contains app/src/main/baseline-prof.txt "$required_class"
-  require_contains app/src/main/startup-prof.txt "$required_class"
+  require_contains "$baseline_profile" "$required_class"
+  require_contains "$startup_profile" "$required_class"
 done
 
 for forbidden in \
@@ -220,7 +227,7 @@ for forbidden in \
   Artwork \
   '/benchmark/' \
   '/startupbenchmark/'; do
-  require_absent app/src/main/startup-prof.txt "$forbidden"
+  require_absent "$startup_profile" "$forbidden"
 done
 
 if find app/src/main musikr/src/main -type f -path '*startupbenchmark*' -print -quit | grep -q .; then
