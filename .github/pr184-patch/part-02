@@ -1,0 +1,361 @@
+-          '''.replace("          ", ""),
+-          )
+-
+-          write(
+-              "app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt",
+-              '''/*
+-           * Copyright (c) 2026 Auxio Project
+-           * PerformanceCapturePreferenceRestoreTest.kt is part of Auxio.
+-           */
+-          package org.oxycblt.auxio.music
+-
+-          import android.content.Context
+-          import androidx.preference.PreferenceManager
+-          import androidx.test.core.app.ApplicationProvider
+-          import org.junit.After
+-          import org.junit.Assert.assertFalse
+-          import org.junit.Assert.assertTrue
+-          import org.junit.Before
+-          import org.junit.Test
+-          import org.junit.runner.RunWith
+-          import org.oxycblt.auxio.R
+-          import org.oxycblt.auxio.util.PerfTimer
+-          import org.robolectric.RobolectricTestRunner
+-          import org.robolectric.annotation.Config
+-
+-          @RunWith(RobolectricTestRunner::class)
+-          @Config(sdk = [29])
+-          class PerformanceCapturePreferenceRestoreTest {
+-              private lateinit var context: Context
+-
+-              @Before
+-              fun setUp() {
+-                  context = ApplicationProvider.getApplicationContext()
+-                  PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
+-                  PerfTimer.configure(false)
+-              }
+-
+-              @After
+-              fun tearDown() {
+-                  PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
+-                  PerfTimer.configure(false)
+-              }
+-
+-              @Test
+-              fun `settings construction restores persisted performance capture preference`() {
+-                  val preferences = PreferenceManager.getDefaultSharedPreferences(context)
+-                  val key = context.getString(R.string.set_key_performance_capture)
+-                  preferences.edit().putBoolean(key, true).commit()
+-
+-                  MusicSettingsImpl(context)
+-                  assertTrue(PerfTimer.isExplicitlyConfigured())
+-
+-                  preferences.edit().putBoolean(key, false).commit()
+-                  PerfTimer.configure(true)
+-                  MusicSettingsImpl(context)
+-                  assertFalse(PerfTimer.isExplicitlyConfigured())
+-              }
+-          }
+-          '''.replace("          ", ""),
+-          )
+-
+-          # Canonical CI must cover stacked branches and benchmark-module changes.
+-          for workflow in (".github/workflows/android.yml", ".github/workflows/lint.yml"):
+-              text = read(workflow)
+-              text = text.replace("uses: actions/setup-java@v5", "uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95")
+-              text = text.replace("uses: gradle/actions/setup-gradle@v5", "uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c")
+-              if '      - "cx/**"' not in text:
+-                  text = text.replace("  pull_request:\n    branches:\n      - dev\n", "  pull_request:\n    branches:\n      - dev\n      - \"cx/**\"\n", 1)
+-              blocks = text.split("  pull_request:", 1)
+-              for index, block in enumerate(blocks):
+-                  if '      - "musikr/**"' in block and '      - "startup-benchmark/**"' not in block:
+-                      blocks[index] = block.replace('      - "musikr/**"\n', '      - "musikr/**"\n      - "startup-benchmark/**"\n', 1)
+-              text = "  pull_request:".join(blocks)
+-              write(workflow, text)
+-
+-          # Record the final architecture audit without claiming exact-device proof.
+-          doc = "docs/architecture/database-first-library.md"
+-          text = read(doc)
+-          marker = "## PR #184 final startup audit"
+-          if marker not in text:
+-              text += '''
+-
+-          ## PR #184 final startup audit
+-
+-          The production startup path now publishes bounded projections and restores the primitive queue before complete Musikr graph hydration. Complete cached-graph construction remains an asynchronous compatibility bridge for legacy consumers and is guarded against superseding a newer scan. Persisted optional performance capture is restored on process creation; benchmark builds seed deterministic committed library, source and queue state.
+-
+-          MediaCodec remains the normal renderer, FFmpeg remains a compatibility fallback, ReplayGain processing remains governed by its runtime setting, and no second player, MediaSession, service or notification stack is introduced.
+-
+-          **Requires TS18 validation:** cold boot, saved-session first audio, dual-USB removal/reinsertion, DoFun metadata/key routing, active-playback enrichment, ACC sleep/wake and CPU/memory/I/O/thermal behaviour on `s9863a1h10_Natv`.
+-          '''.replace("          ", "")
+-          write(doc, text)
+-
+-          gate = "scripts/check-startup-performance-contracts.sh"
+-          text = read(gate)
+-          marker = "# PR184_FINAL_HARDENING_CONTRACTS"
+-          if marker not in text:
+-              checks = '''
+-          # PR184_FINAL_HARDENING_CONTRACTS
+-          require_contains app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt 'deferCachedLoad = true'
+-          require_contains app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt 'startCompatibilityHydration(worker)'
+-          require_contains app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt 'requestCompatibilityRecoveryIfNeeded('
+-          require_contains app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt 'PerfTimer.configure(performanceCaptureEnabled)'
+-          require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences(context)'
+-          require_contains "$fixture_receiver" 'FIXTURE_LIBRARY_REVISION'
+-          require_contains .github/workflows/android.yml '      - "cx/**"'
+-          require_contains .github/workflows/lint.yml '      - "cx/**"'
+-          require_contains .github/workflows/android.yml '      - "startup-benchmark/**"'
+-          require_contains .github/workflows/lint.yml '      - "startup-benchmark/**"'
+-
+-          '''.replace("          ", "")
+-              text = text.replace("for artifact in \"$@\"; do", checks + "for artifact in \"$@\"; do", 1)
+-          write(gate, text)
+-          PY
+-
+-      - name: Apply formatting
+-        shell: bash
+-        run: bash ./scripts/ci-gradle.sh spotlessApply
+-
+-      - name: Validate focused changes
+-        shell: bash
+-        run: |
+-          bash ./scripts/check-startup-performance-contracts.sh
+-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+-          bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+-          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+-          git diff --check
+-
+-      - name: Commit and remove temporary evidence
+-        shell: bash
+-        run: |
+-          git config user.name "github-actions[bot]"
+-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+-          rm -f -- .github/pr184-hardening-error.txt
+-          git rm -f -- .github/workflows/pr184-hardening-v4.yml 2>/dev/null || true
+-          git add --all
+-          git diff --cached --check
+-          git commit -m "fix: finalise deferred startup hydration and validation"
+-          git push origin HEAD:cx/startup-profiles-benchmarks
+diff --git a/.github/workflows/ui-screenshots.yml b/.github/workflows/ui-screenshots.yml
+index 9619559..bea8cc2 100644
+--- a/.github/workflows/ui-screenshots.yml
++++ b/.github/workflows/ui-screenshots.yml
+@@ -54,13 +54,13 @@ jobs:
+           persist-credentials: false
+ 
+       - name: Set up JDK 21
+-        uses: actions/setup-java@v5
++        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+         with:
+           distribution: temurin
+           java-version: "21"
+ 
+       - name: Set up Gradle
+-        uses: gradle/actions/setup-gradle@v5
++        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+         with:
+           cache-read-only: true
+ 
+diff --git a/app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt b/app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
+index 725b494..9fc64a5 100644
+--- a/app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
++++ b/app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
+@@ -26,6 +26,7 @@ import android.content.Intent
+ import android.database.sqlite.SQLiteDatabase
+ import android.database.sqlite.SQLiteStatement
+ import android.util.Base64
++import androidx.preference.PreferenceManager
+ import androidx.room.Room
+ import androidx.room.withTransaction
+ import java.io.File
+@@ -35,7 +36,10 @@ import java.util.Locale
+ import kotlin.concurrent.thread
+ import kotlin.math.min
+ import kotlinx.coroutines.runBlocking
++import org.oxycblt.auxio.IntegerTable
++import org.oxycblt.auxio.R
+ import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser
++import org.oxycblt.auxio.music.LibraryState
+ import org.oxycblt.auxio.playback.persist.PersistenceDatabase
+ import org.oxycblt.auxio.playback.persist.QueueItemRefEntity
+ import org.oxycblt.auxio.playback.persist.QueueSessionEntity
+@@ -119,6 +123,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
+                 }
+             }
+         seedPlaybackQueue(context, songCount, playableFiles)
++        seedBenchmarkStartupPreferences(context)
+         context
+             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+             .edit()
+@@ -197,6 +202,36 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
+         }
+     }
+ 
++    private fun seedBenchmarkStartupPreferences(context: Context) {
++        check(
++            PreferenceManager.getDefaultSharedPreferences(context)
++                .edit()
++                .putString(
++                    context.getString(R.string.set_key_library_revision),
++                    FIXTURE_LIBRARY_REVISION,
++                )
++                .putString(
++                    context.getString(R.string.set_key_library_state),
++                    LibraryState.USABLE.name,
++                )
++                .putBoolean(
++                    context.getString(R.string.set_key_library_last_scan_failed),
++                    false,
++                )
++                .putInt(
++                    context.getString(R.string.set_key_locations_mode),
++                    IntegerTable.LOCATION_MODE_DIRECT_FS,
++                )
++                .putString(
++                    context.getString(R.string.set_key_music_locations),
++                    "file:///storage/usbdisk0;file:///storage/usbdisk1",
++                )
++                .commit()
++        ) {
++            "Unable to persist deterministic benchmark startup settings"
++        }
++    }
++
+     private fun clearFixtureTables(database: SQLiteDatabase) {
+         listOf(
+                 "PlaylistItemData",
+@@ -514,6 +549,8 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
+         private const val FIXTURE_SCHEMA_VERSION = 2
+         private const val FIXTURE_SEED = 18_022_026L
+         private const val FIXTURE_GENERATION = 1L
++        private const val FIXTURE_LIBRARY_REVISION =
++            "00000000-0000-0000-0000-000000000002"
+         private const val FIXTURE_EPOCH_MS = 1_700_000_000_000L
+         private const val PLAYBACK_SESSION_ID = 1L
+         private const val PLAYBACK_ANCHOR_INDEX = 10
+diff --git a/app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt b/app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt
+index a8cb7af..8f5ab19 100644
+--- a/app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt
++++ b/app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt
+@@ -20,7 +20,6 @@ package org.oxycblt.auxio.music
+ 
+ import android.content.Context
+ import dagger.hilt.android.qualifiers.ApplicationContext
+-import java.io.Closeable
+ import java.util.UUID
+ import java.util.concurrent.CopyOnWriteArrayList
+ import java.util.concurrent.atomic.AtomicLong
+@@ -473,6 +472,7 @@ constructor(
+                     hasInMemoryLibrary = synchronized(this) { library != null },
+                     revisionKnown = musicSettings.revision != null,
+                     priorState = musicSettings.libraryState,
++                    deferCachedLoad = true,
+                     lastScanFailed = { musicSettings.lastScanFailed },
+                     isTopwayCompat = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                     loadCachedLibrary = { 0 },
+@@ -506,7 +506,7 @@ constructor(
+             L.w(e, "Bounded startup projection seed failed; continuing legacy hydration")
+             emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
+         }
+-        startCompatibilityHydration()
++        startCompatibilityHydration(worker)
+         startCompatibilityBackfill()
+     }
+ 
+@@ -693,15 +693,30 @@ constructor(
+         }
+     }
+ 
+-    private fun startCompatibilityHydration() {
++    private fun startCompatibilityHydration(worker: IndexingWorker) {
+         compatibilityHydrationJob?.cancel()
+         val startingDeviceGeneration = deviceLibraryGeneration.get()
+         val startingRevision = musicSettings.revision
++        val priorState = musicSettings.libraryState
++        val sourceConfigured =
++            StartupLibraryPolicy.isMusicSourceConfigured(
++                musicSettings.locationMode,
++                musicSettings.configuredSourceCount,
++            )
+         compatibilityHydrationJob =
+             compatibilityHydrationScope.launch {
+                 try {
+                     val cached = loadCachedLibrary()
++                    val songCount = cached.songs.size
++                    val decision =
++                        StartupLibraryPolicy.onCachedLoadSucceeded(
++                            priorState,
++                            songCount,
++                            musicSettings.lastScanFailed,
++                        )
+                     withContext(Dispatchers.Main) {
++                        val publishLibrary =
++                            songCount > 0 || decision.libraryState == LibraryState.EMPTY
+                         val accepted =
+                             synchronized(this@MusicRepositoryImpl) {
+                                 val superseded =
+@@ -710,7 +725,7 @@ constructor(
+                                 if (superseded) {
+                                     false
+                                 } else {
+-                                    library = cached
++                                    if (publishLibrary) library = cached
+                                     true
+                                 }
+                             }
+@@ -718,23 +733,81 @@ constructor(
+                             L.d("Skipping compatibility hydration superseded by a newer scan")
+                             return@withContext
+                         }
+-                        dispatchLibraryChange(device = true, user = true)
+-                        if (cached.songs.isEmpty()) {
+-                            emitStartupLibraryStatus(StartupLibraryStatus.Empty)
+-                        } else {
+-                            emitStartupLibraryStatus(StartupLibraryStatus.Usable)
++                        musicSettings.libraryState = decision.libraryState
++                        if (publishLibrary) {
++                            dispatchLibraryChange(device = true, user = true)
++                        }
++                        emitStartupLibraryStatus(
++                            StartupLibraryPolicy.startupReadinessAfterDecision(
++                                decision,
++                                sourceConfigured,
++                                songCount,
++                            )
++                        )
++                        if (songCount > 0) {
+                             emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                         }
++                        requestCompatibilityRecoveryIfNeeded(
++                            worker,
++                            priorState,
++                            decision,
++                            sourceConfigured,
++                        )
+                     }
+                 } catch (e: CancellationException) {
+                     throw e
+                 } catch (e: Exception) {
+                     L.w(e, "Compatibility cached-library hydration failed")
+-                    emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
++                    val decision =
++                        StartupLibraryPolicy.onCachedLoadFailed(
++                            priorState,
++                            musicSettings.lastScanFailed,
++                        )
++                    withContext(Dispatchers.Main) {
++                        val superseded =
++                            synchronized(this@MusicRepositoryImpl) {
++                                deviceLibraryGeneration.get() != startingDeviceGeneration ||
++                                    musicSettings.revision != startingRevision
++                            }
++                        if (superseded) {
++                            L.d("Skipping compatibility recovery superseded by a newer scan")
++                            return@withContext
++                        }
++                        musicSettings.libraryState = decision.libraryState
++                        emitStartupLibraryStatus(
++                            StartupLibraryPolicy.startupReadinessAfterDecision(
++                                decision,
++                                sourceConfigured,
++                                cachedSongCount = null,
