@@ -89,7 +89,7 @@ internal object CriticalJourneys {
         }
     }
 
-    fun MacrobenchmarkScope.exerciseQuickFind(query: String = "Fixture Track 00010") {
+    fun MacrobenchmarkScope.exerciseQuickFind(query: String = "Fixture Track 000") {
         clickRequired(By.res(BuildConfig.TARGET_PACKAGE, "action_search"), "Quick Find action")
         val input = requireObject(By.clazz("android.widget.EditText"), "Quick Find input")
         val result =
@@ -99,14 +99,22 @@ internal object CriticalJourneys {
                 device.waitForIdle()
                 Thread.sleep(SETTLE_MS)
                 requireObject(
-                    By.res(BuildConfig.TARGET_PACKAGE, "song_name").text(query),
-                    "Quick Find result '$query'",
+                    By.res(BuildConfig.TARGET_PACKAGE, "song_name").textStartsWith(query),
+                    "Quick Find result beginning '$query'",
                 )
             }
         traceSection(TRACE_SEARCH_RESULT_TO_FIRST_AUDIO) {
             result.click()
             device.waitForIdle()
             waitForAudioPlayback()
+        }
+        withMediaController { controller ->
+            val first = waitForMediaFingerprint(controller)
+            traceSection(TRACE_NEXT_COMMAND_TO_NEXT_AUDIO) {
+                dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, "Next after Quick Find")
+                waitForMediaFingerprint(controller, excluded = first)
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            }
         }
     }
 
@@ -151,6 +159,14 @@ internal object CriticalJourneys {
             )
             scrollPageTwice()
         }
+        requireObject(
+                By.res(BuildConfig.TARGET_PACKAGE, "parent_name"),
+                "visible Album row after paging",
+            )
+            .click()
+        device.waitForIdle()
+        clickRequired(By.res(BuildConfig.TARGET_PACKAGE, "song_name"), "first Album track")
+        waitForAudioPlayback()
     }
 
     fun exerciseEarlyMediaBrowser() {
