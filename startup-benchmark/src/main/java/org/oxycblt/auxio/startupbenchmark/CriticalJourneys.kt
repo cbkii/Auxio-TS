@@ -34,6 +34,7 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Shared critical user journeys for profile generation and macrobenchmarks. */
 internal object CriticalJourneys {
@@ -66,30 +67,50 @@ internal object CriticalJourneys {
     /** Exercises the seeded primitive queue through the public MediaSession media-key authority. */
     fun MacrobenchmarkScope.exercisePlaybackControls() {
         withMediaController { controller ->
-            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PLAY, "Play")
-            waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            dispatchMediaKey(
+                controller,
+                KeyEvent.KEYCODE_MEDIA_PLAY,
+                "Play",
+                PlaybackStateCompat.STATE_PLAYING,
+            )
 
-            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PAUSE, "Pause")
-            waitForPlaybackState(controller, PlaybackStateCompat.STATE_PAUSED)
+            dispatchMediaKey(
+                controller,
+                KeyEvent.KEYCODE_MEDIA_PAUSE,
+                "Pause",
+                PlaybackStateCompat.STATE_PAUSED,
+            )
 
-            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PLAY, "Play")
-            waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+            dispatchMediaKey(
+                controller,
+                KeyEvent.KEYCODE_MEDIA_PLAY,
+                "Play",
+                PlaybackStateCompat.STATE_PLAYING,
+            )
             val first = waitForMediaFingerprint(controller)
 
             traceSection(TRACE_NEXT_COMMAND_TO_NEXT_AUDIO) {
-                dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_NEXT, "Next")
+                dispatchMediaKey(
+                    controller,
+                    KeyEvent.KEYCODE_MEDIA_NEXT,
+                    "Next",
+                    PlaybackStateCompat.STATE_PLAYING,
+                )
                 waitForMediaFingerprint(controller, excluded = first)
-                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
             }
             val second = waitForMediaFingerprint(controller, excluded = first)
 
-            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PREVIOUS, "Previous")
+            dispatchMediaKey(
+                controller,
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                "Previous",
+                PlaybackStateCompat.STATE_PLAYING,
+            )
             waitForMediaFingerprint(controller, excluded = second)
-            waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
         }
     }
 
-    fun MacrobenchmarkScope.exerciseQuickFind(query: String = "Fixture Track 000") {
+    fun MacrobenchmarkScope.exerciseQuickFind(query: String = "Fixture Track 00010") {
         clickRequired(By.res(BuildConfig.TARGET_PACKAGE, "action_search"), "Quick Find action")
         val input = requireObject(By.clazz("android.widget.EditText"), "Quick Find input")
         val result =
@@ -111,9 +132,13 @@ internal object CriticalJourneys {
         withMediaController { controller ->
             val first = waitForMediaFingerprint(controller)
             traceSection(TRACE_NEXT_COMMAND_TO_NEXT_AUDIO) {
-                dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_NEXT, "Next after Quick Find")
+                dispatchMediaKey(
+                    controller,
+                    KeyEvent.KEYCODE_MEDIA_NEXT,
+                    "Next after Quick Find",
+                    PlaybackStateCompat.STATE_PLAYING,
+                )
                 waitForMediaFingerprint(controller, excluded = first)
-                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
             }
         }
     }
@@ -122,8 +147,12 @@ internal object CriticalJourneys {
         traceSection(TRACE_SAVED_SESSION_TO_FIRST_AUDIO) {
             startActivityAndWait()
             withMediaController { controller ->
-                dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PLAY, "Play saved session")
-                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+                dispatchMediaKey(
+                    controller,
+                    KeyEvent.KEYCODE_MEDIA_PLAY,
+                    "Play saved session",
+                    PlaybackStateCompat.STATE_PLAYING,
+                )
                 waitForMediaFingerprint(controller)
             }
         }
@@ -251,15 +280,41 @@ internal object CriticalJourneys {
         controller: MediaControllerCompat,
         keyCode: Int,
         description: String,
+        expectedState: Int,
     ) {
-        // UiDevice.pressKeyCode() proved nondeterministic on hosted managed emulators: the key was
-        // injected into the device but was not routed to Auxio's active session. Dispatching the
-        // same public media-key event through the explicitly connected controller keeps the journey
-        // scoped to the target session without bypassing MediaSessionCompat.Callback handling.
-        val accepted = mainThreadValue {
-            controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        val observedState = CountDownLatch(1)
+        val lastState =
+            AtomicInteger(controller.playbackState?.state ?: PlaybackStateCompat.STATE_NONE)
+        val callback =
+            object : MediaControllerCompat.Callback() {
+                override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
+                    val currentState = state?.state ?: PlaybackStateCompat.STATE_NONE
+                    lastState.set(currentState)
+                    if (currentState == expectedState) observedState.countDown()
+                }
+            }
+        runOnMainSync { controller.registerCallback(callback) }
+        try {
+            // UiDevice.pressKeyCode() proved nondeterministic on hosted managed emulators: the key
+            // was injected into the device but was not routed to Auxio's active session.
+            // Dispatching it through the explicitly connected controller keeps the journey scoped
+            // to the target session without bypassing MediaSessionCompat.Callback.
+            val accepted = mainThreadValue {
+                controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            }
+            check(accepted) { "$description media key was rejected by the connected MediaSession" }
+            val currentState = controller.playbackState?.state ?: PlaybackStateCompat.STATE_NONE
+            lastState.set(currentState)
+            val reachedExpectedState =
+                currentState == expectedState ||
+                    observedState.await(AUDIO_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            check(reachedExpectedState) {
+                "$description did not reach playback state $expectedState; " +
+                    "last state=${lastState.get()}"
+            }
+        } finally {
+            runOnMainSync { controller.unregisterCallback(callback) }
         }
-        check(accepted) { "$description media key was rejected by the connected MediaSession" }
         device.waitForIdle()
     }
 
