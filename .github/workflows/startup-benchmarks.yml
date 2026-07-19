@@ -113,8 +113,6 @@ jobs:
           FLAVOUR: ${{ inputs.flavour }}
           SUITE: ${{ inputs.suite }}
         run: |
-          tasks_file="${RUNNER_TEMP}/startup-benchmark-tasks.txt"
-          bash ./scripts/ci-gradle.sh :startup-benchmark:tasks --all --console=plain > "${tasks_file}"
           case "${FLAVOUR}" in
             standard) flavour_token='Standard' ;;
             topwayTwMusic) flavour_token='TopwayTwMusic' ;;
@@ -123,27 +121,23 @@ jobs:
           esac
           case "${SUITE}" in
             baseline-profile)
-              device_token='pixel6Api35'
+              task_name="pixel6Api35${flavour_token}NonMinifiedReleaseAndroidTest"
               device_label='Pixel 6 API 35 AOSP managed emulator'
               test_class='org.oxycblt.auxio.startupbenchmark.BaselineProfileGenerator'
+              variant_label="${FLAVOUR}NonMinifiedRelease"
               ;;
             macrobenchmark)
-              device_token='pixel2Api29'
+              task_name="pixel2Api29${flavour_token}BenchmarkBenchmarkAndroidTest"
               device_label='Pixel 2 API 29 AOSP managed emulator'
               test_class='org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark'
+              variant_label="${FLAVOUR}Benchmark"
               ;;
             *) echo "Unsupported suite: ${SUITE}" >&2; exit 1 ;;
           esac
-          pattern="${device_token}.*${flavour_token}.*AndroidTest"
-          task_name="$(awk '{print $1}' "${tasks_file}" | grep -Ei "^${pattern}$" | head -n 1 || true)"
-          if [[ -z "${task_name}" ]]; then
-            echo "No task matched ${pattern}. Available managed-device tasks:" >&2
-            grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest' "${tasks_file}" >&2 || true
-            exit 1
-          fi
           echo "name=${task_name}" >> "${GITHUB_OUTPUT}"
           echo "class=${test_class}" >> "${GITHUB_OUTPUT}"
           echo "device=${device_label}" >> "${GITHUB_OUTPUT}"
+          echo "variant=${variant_label}" >> "${GITHUB_OUTPUT}"
           echo "Resolved :startup-benchmark:${task_name} (${test_class})"
 
       - name: Run bounded managed-device suite
@@ -152,20 +146,29 @@ jobs:
           TASK_NAME: ${{ steps.task.outputs.name }}
           TEST_CLASS: ${{ steps.task.outputs.class }}
           DEVICE_LABEL: ${{ steps.task.outputs.device }}
+          VARIANT_LABEL: ${{ steps.task.outputs.variant }}
           FIXTURE_SONG_COUNT: ${{ inputs.fixture_song_count }}
           ITERATIONS: ${{ inputs.iterations }}
           FLAVOUR: ${{ inputs.flavour }}
           SUITE: ${{ inputs.suite }}
         run: |
-          bash ./scripts/ci-gradle.sh \
-            ":startup-benchmark:${TASK_NAME}" \
-            -Pandroid.testInstrumentationRunnerArguments.class="${TEST_CLASS}" \
-            -Pandroid.testInstrumentationRunnerArguments.auxio.fixtureSongCount="${FIXTURE_SONG_COUNT}" \
+          gradle_args=(
+            ":startup-benchmark:${TASK_NAME}"
+            -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+            -Pandroid.testInstrumentationRunnerArguments.class="${TEST_CLASS}"
+            -Pandroid.testInstrumentationRunnerArguments.auxio.fixtureSongCount="${FIXTURE_SONG_COUNT}"
             -Pandroid.testInstrumentationRunnerArguments.auxio.iterations="${ITERATIONS}"
+          )
+          if [[ "${SUITE}" == baseline-profile ]]; then
+            gradle_args+=(
+              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile
+            )
+          fi
+          bash ./scripts/ci-gradle.sh "${gradle_args[@]}"
           mkdir -p startup-benchmark/build/reports/startup-performance
           {
             echo "commit=${GITHUB_SHA}"
-            echo "variant=${FLAVOUR}Benchmark"
+            echo "variant=${VARIANT_LABEL}"
             echo "suite=${SUITE}"
             echo "testClass=${TEST_CLASS}"
             echo "fixtureSongCount=${FIXTURE_SONG_COUNT}"
@@ -193,7 +196,7 @@ jobs:
           )
           if ((${#profiles[@]} < 2)); then
             echo "Expected generated baseline and startup profile files" >&2
-            find startup-benchmark/build/outputs -type f -maxdepth 8 -print >&2 || true
+            find startup-benchmark/build/outputs -maxdepth 10 -type f -print >&2 || true
             exit 1
           fi
           bash ./scripts/check-startup-performance-contracts.sh "${profiles[@]}"
