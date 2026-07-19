@@ -20,6 +20,7 @@ package org.oxycblt.auxio.util
 
 import android.os.Process
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import org.oxycblt.auxio.BuildConfig
@@ -56,6 +57,9 @@ object PerfTimer {
 
     /** Whether instrumentation is currently active. */
     fun isEnabled(): Boolean = BuildConfig.DEBUG || isBenchmarkBuild() || explicitlyEnabled.get()
+
+    @VisibleForTesting
+    internal fun isExplicitlyConfigured(): Boolean = explicitlyEnabled.get()
 
     private fun isBenchmarkBuild(): Boolean = BuildConfig.BUILD_TYPE == "benchmark"
 
