@@ -1,0 +1,42 @@
+name: PR 184 Source Snapshot
+
+on:
+  push:
+    branches:
+      - cx/startup-profiles-benchmarks
+    paths:
+      - .github/workflows/pr184-source-snapshot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: cx/startup-profiles-benchmarks
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
+      - name: Create source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude=.git \
+            --exclude='**/build' \
+            --exclude='**/.gradle' \
+            -czf "${RUNNER_TEMP}/auxio-ts-pr184-source.tar.gz" .
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: auxio-ts-pr184-source-${{ github.sha }}
+          path: ${{ runner.temp }}/auxio-ts-pr184-source.tar.gz
+          if-no-files-found: error
+          retention-days: 2
