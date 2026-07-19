@@ -11,6 +11,8 @@ on:
       - dev
     paths:
       - .github/workflows/pr184-apply-final.yml
+      - app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt
+      - app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt
 
 permissions:
   contents: write
