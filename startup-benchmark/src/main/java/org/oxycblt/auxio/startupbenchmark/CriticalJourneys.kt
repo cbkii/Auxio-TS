@@ -177,27 +177,26 @@ internal object CriticalJourneys {
             val context = InstrumentationRegistry.getInstrumentation().context
             val connected = CountDownLatch(1)
             val failed = CountDownLatch(1)
-            val browser =
-                mainThreadValue {
-                    MediaBrowserCompat(
-                        context,
-                        serviceComponent(),
-                        object : MediaBrowserCompat.ConnectionCallback() {
-                            override fun onConnected() {
-                                connected.countDown()
-                            }
+            val browser = mainThreadValue {
+                MediaBrowserCompat(
+                    context,
+                    serviceComponent(),
+                    object : MediaBrowserCompat.ConnectionCallback() {
+                        override fun onConnected() {
+                            connected.countDown()
+                        }
 
-                            override fun onConnectionFailed() {
-                                failed.countDown()
-                            }
+                        override fun onConnectionFailed() {
+                            failed.countDown()
+                        }
 
-                            override fun onConnectionSuspended() {
-                                failed.countDown()
-                            }
-                        },
-                        null,
-                    )
-                }
+                        override fun onConnectionSuspended() {
+                            failed.countDown()
+                        }
+                    },
+                    null,
+                )
+            }
             runOnMainSync { browser.connect() }
             try {
                 check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {
@@ -257,10 +256,9 @@ internal object CriticalJourneys {
         // injected into the device but was not routed to Auxio's active session. Dispatching the
         // same public media-key event through the explicitly connected controller keeps the journey
         // scoped to the target session without bypassing MediaSessionCompat.Callback handling.
-        val accepted =
-            mainThreadValue {
-                controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-            }
+        val accepted = mainThreadValue {
+            controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        }
         check(accepted) { "$description media key was rejected by the connected MediaSession" }
         device.waitForIdle()
     }
@@ -309,34 +307,35 @@ internal object CriticalJourneys {
         val context = InstrumentationRegistry.getInstrumentation().context
         val connected = CountDownLatch(1)
         val failed = CountDownLatch(1)
-        val browser =
-            mainThreadValue {
-                MediaBrowserCompat(
-                    context,
-                    serviceComponent(),
-                    object : MediaBrowserCompat.ConnectionCallback() {
-                        override fun onConnected() {
-                            connected.countDown()
-                        }
+        val browser = mainThreadValue {
+            MediaBrowserCompat(
+                context,
+                serviceComponent(),
+                object : MediaBrowserCompat.ConnectionCallback() {
+                    override fun onConnected() {
+                        connected.countDown()
+                    }
 
-                        override fun onConnectionFailed() {
-                            failed.countDown()
-                        }
+                    override fun onConnectionFailed() {
+                        failed.countDown()
+                    }
 
-                        override fun onConnectionSuspended() {
-                            failed.countDown()
-                        }
-                    },
-                    null,
-                )
-            }
+                    override fun onConnectionSuspended() {
+                        failed.countDown()
+                    }
+                },
+                null,
+            )
+        }
         runOnMainSync { browser.connect() }
         try {
             check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {
                 "MediaController connection failed"
             }
             check(browser.isConnected) { "MediaBrowser disconnected before controller creation" }
-            val controller = mainThreadValue { MediaControllerCompat(context, browser.sessionToken) }
+            val controller = mainThreadValue {
+                MediaControllerCompat(context, browser.sessionToken)
+            }
             return block(controller)
         } finally {
             runOnMainSync { browser.disconnect() }
@@ -350,7 +349,8 @@ internal object CriticalJourneys {
     private fun <T> mainThreadValue(block: () -> T): T {
         var result: Result<T>? = null
         runOnMainSync { result = runCatching(block) }
-        return requireNotNull(result) { "Main-thread benchmark operation did not complete" }.getOrThrow()
+        return requireNotNull(result) { "Main-thread benchmark operation did not complete" }
+            .getOrThrow()
     }
 
     private inline fun <T> traceSection(name: String, block: () -> T): T {
