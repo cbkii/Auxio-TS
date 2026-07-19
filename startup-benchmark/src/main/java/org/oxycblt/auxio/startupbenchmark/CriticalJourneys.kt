@@ -63,27 +63,27 @@ internal object CriticalJourneys {
         launchFastStart()
     }
 
-    /** Exercises the seeded primitive queue through the public media-key authority. */
+    /** Exercises the seeded primitive queue through the public MediaSession media-key authority. */
     fun MacrobenchmarkScope.exercisePlaybackControls() {
         withMediaController { controller ->
-            dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "Play")
+            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PLAY, "Play")
             waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
 
-            dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE, "Pause")
+            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PAUSE, "Pause")
             waitForPlaybackState(controller, PlaybackStateCompat.STATE_PAUSED)
 
-            dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "Play")
+            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PLAY, "Play")
             waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
             val first = waitForMediaFingerprint(controller)
 
             traceSection(TRACE_NEXT_COMMAND_TO_NEXT_AUDIO) {
-                dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, "Next")
+                dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_NEXT, "Next")
                 waitForMediaFingerprint(controller, excluded = first)
                 waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
             }
             val second = waitForMediaFingerprint(controller, excluded = first)
 
-            dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS, "Previous")
+            dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PREVIOUS, "Previous")
             waitForMediaFingerprint(controller, excluded = second)
             waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
         }
@@ -111,7 +111,7 @@ internal object CriticalJourneys {
         withMediaController { controller ->
             val first = waitForMediaFingerprint(controller)
             traceSection(TRACE_NEXT_COMMAND_TO_NEXT_AUDIO) {
-                dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT, "Next after Quick Find")
+                dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_NEXT, "Next after Quick Find")
                 waitForMediaFingerprint(controller, excluded = first)
                 waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
             }
@@ -121,8 +121,11 @@ internal object CriticalJourneys {
     fun MacrobenchmarkScope.exerciseSavedSessionResume() {
         traceSection(TRACE_SAVED_SESSION_TO_FIRST_AUDIO) {
             startActivityAndWait()
-            dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY, "Play saved session")
-            waitForAudioPlayback()
+            withMediaController { controller ->
+                dispatchMediaKey(controller, KeyEvent.KEYCODE_MEDIA_PLAY, "Play saved session")
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+                waitForMediaFingerprint(controller)
+            }
         }
     }
 
@@ -245,8 +248,20 @@ internal object CriticalJourneys {
         }
     }
 
-    private fun MacrobenchmarkScope.dispatchMediaKey(keyCode: Int, description: String) {
-        check(device.pressKeyCode(keyCode)) { "$description media key was not dispatched" }
+    private fun MacrobenchmarkScope.dispatchMediaKey(
+        controller: MediaControllerCompat,
+        keyCode: Int,
+        description: String,
+    ) {
+        // UiDevice.pressKeyCode() proved nondeterministic on hosted managed emulators: the key was
+        // injected into the device but was not routed to Auxio's active session. Dispatching the
+        // same public media-key event through the explicitly connected controller keeps the journey
+        // scoped to the target session without bypassing MediaSessionCompat.Callback handling.
+        val accepted =
+            mainThreadValue {
+                controller.dispatchMediaButtonEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+            }
+        check(accepted) { "$description media key was rejected by the connected MediaSession" }
         device.waitForIdle()
     }
 
