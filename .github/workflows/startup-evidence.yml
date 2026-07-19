@@ -28,25 +28,25 @@ jobs:
         include:
           - label: profile-api35-500
             suite: baseline-profile
-            task_name: pixel6Api35StandardBenchmarkAndroidTest
+            task_name: pixel6Api35StandardBenchmarkBenchmarkAndroidTest
             device_label: Pixel 6 API 35 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.BaselineProfileGenerator
             fixture_song_count: "500"
           - label: macro-api29-500
             suite: macrobenchmark
-            task_name: pixel2Api29StandardBenchmarkAndroidTest
+            task_name: pixel2Api29StandardBenchmarkBenchmarkAndroidTest
             device_label: Pixel 2 API 29 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark
             fixture_song_count: "500"
           - label: macro-api29-5000
             suite: macrobenchmark
-            task_name: pixel2Api29StandardBenchmarkAndroidTest
+            task_name: pixel2Api29StandardBenchmarkBenchmarkAndroidTest
             device_label: Pixel 2 API 29 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark
             fixture_song_count: "5000"
           - label: macro-api29-20000
             suite: macrobenchmark
-            task_name: pixel2Api29StandardBenchmarkAndroidTest
+            task_name: pixel2Api29StandardBenchmarkBenchmarkAndroidTest
             device_label: Pixel 2 API 29 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark
             fixture_song_count: "20000"
