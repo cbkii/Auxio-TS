@@ -219,7 +219,7 @@ jobs:
             startup-benchmark/build/reports/**
             startup-benchmark/build/benchmark-context.txt
             app/src/main/baseline-prof.txt
-            app/src/main/startup-prof.txt
+            app/src/main/generated/baselineProfiles/startup-prof.txt
           if-no-files-found: error
           retention-days: 14
 
