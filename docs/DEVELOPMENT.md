@@ -59,16 +59,20 @@ Fully wiring the catalogue (adding a `[libraries]` section and migrating build s
 
 ## Key Gradle tasks
 
-| Task                                | Description                                                 |
-| ----------------------------------- | ----------------------------------------------------------- |
-| `:app:assembleStandardDebug`        | Standard Auxio-TS debug APK                                 |
-| `:app:assembleTopwayTwMusicDebug`   | DoFun-compatible debug APK (`com.tw.music.debug`)           |
-| `:app:assembleTopwayTwMusicRelease` | Exact DoFun/Topway replacement release APK (`com.tw.music`) |
-| `:app:assembleTopwayTwMediaDebug`   | DoFun alternate-entry debug APK (`com.tw.media.debug`)      |
-| `:app:assembleTopwayTwMediaRelease` | DoFun alternate-entry release APK (`com.tw.media`)          |
-| `:app:testStandardDebugUnitTest`    | Unit tests                                                  |
-| `:app:lintStandardDebug`            | Android lint                                                |
-| `spotlessCheck`                     | Code formatting check                                       |
+| Task                                                        | Description                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ |
+| `:app:assembleStandardDebug`                                | Standard Auxio-TS debug APK                                        |
+| `:app:assembleTopwayTwMusicDebug`                           | DoFun-compatible debug APK (`com.tw.music.debug`)                  |
+| `:app:assembleTopwayTwMusicRelease`                         | Exact DoFun/Topway replacement release APK (`com.tw.music`)        |
+| `:app:assembleTopwayTwMediaDebug`                           | DoFun alternate-entry debug APK (`com.tw.media.debug`)             |
+| `:app:assembleTopwayTwMediaRelease`                         | DoFun alternate-entry release APK (`com.tw.media`)                 |
+| `:app:testStandardDebugUnitTest`                            | Unit tests                                                         |
+| `:app:lintStandardDebug`                                    | Android lint                                                       |
+| `spotlessCheck`                                             | Code formatting check                                              |
+| `:startup-benchmark:tasks --all`                            | List generated managed-device/profile tasks                        |
+| `:startup-benchmark:assembleStandardBenchmarkBenchmark`     | Compile standard benchmark/profile instrumentation                 |
+| `:startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark`| Compile `com.tw.music` benchmark/profile instrumentation           |
+| `:startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark`| Compile `com.tw.media` benchmark/profile instrumentation           |
 
 ## Repository layout
 
@@ -82,6 +86,8 @@ app/                          Android app module
   src/topwayTwMediaDebug/     Topway media debug resources
 musikr/                       Music indexing library
 media/                        Media playback submodule
+startup-benchmark/            Macrobenchmark and Baseline/Startup Profile instrumentation
+                              (never packaged into maintained production variants)
 gradle/                       Gradle wrapper
 scripts/                      CI/validation scripts
 docs/                         Minimal focused documentation
@@ -89,21 +95,29 @@ docs/                         Minimal focused documentation
 
 ## Startup library loading and scans
 
-Auxio-TS startup must expose the existing library, playback queue, MediaSession, and MediaBrowser surfaces before any slow storage scan. Normal launches rebuild the in-memory library from the persisted Musikr cache/database first and skip automatic rescans when a usable or known-empty library state is already recorded.
+Auxio-TS startup has two intentionally separate lanes. The immediate lane restores the single primitive queue/playback authority and exposes bounded Room-backed Fast Start, Quick Find, direct-folder and early MediaBrowser surfaces. It does **not** wait for complete `Musikr.loadCached()` graph reconstruction, complete category sorting or a storage scan. The compatibility lane may hydrate the complete in-memory Musikr graph asynchronously when a legacy consumer still requires it; readiness, revision and generation guards prevent that work from replacing the queue or blocking first interaction.
 
-Filesystem scans are reserved for first install/no-library startup, explicit user refresh actions (**Refresh music** / **Rescan music** in settings or the home retry action), or recovery cases where persisted library data cannot be used. Manual refreshes run in the background and keep the currently visible library/playback surfaces alive until replacement data is ready.
+Filesystem scans are reserved for first install/no-library startup, explicit user refresh actions (**Refresh music** / **Rescan music** in settings or the home retry action), or bounded recovery cases where persisted library data cannot be used. Manual refreshes run in the background and keep the currently visible library/playback surfaces alive until replacement data is committed. Temporary unmounts preserve the last-known-good committed source generation rather than being treated as confirmed deletion.
 
-For Topway/DoFun validation, confirm the `AuxioService` creates its MediaSession and MediaBrowser root promptly and that `TopwayMusicBridgeReceiver` commands still route while any scan notification/progress is active. Static/build validation is not a substitute for real TS18 head-unit widget testing.
+For Topway/DoFun validation, confirm the `AuxioService` creates its one MediaSession and MediaBrowser root promptly, primitive commands work before rich hydration, and `TopwayMusicBridgeReceiver` commands still route while scan or enrichment progress is active. Static/build and managed-emulator validation are not substitutes for real TS18 widget, USB or ACC testing.
+
+The checked-in profile sources are:
+
+- `app/src/main/baseline-prof.txt` for the broader Baseline Profile;
+- `app/src/main/generated/baselineProfiles/startup-prof.txt` for startup DEX layout.
+
+Use `scripts/check-startup-performance-contracts.sh` to guard these paths and prevent complete graph, extraction, artwork or benchmark-only classes entering the Startup Profile.
 
 ## Compatibility check scripts
 
 ```sh
 bash scripts/check-ts18-apk-reference-contracts.sh # TS18 APK reference evidence/contract baseline
-bash scripts/check-dofun-topway-compat.sh       # DoFun/Topway source+manifest validation
-bash scripts/check-headunit-compat-safety.sh     # Safety guardrails (forbidden hooks, isolation)
+bash scripts/check-dofun-topway-compat.sh           # DoFun/Topway source+manifest validation
+bash scripts/check-headunit-compat-safety.sh        # Safety guardrails (forbidden hooks, isolation)
+bash scripts/check-startup-performance-contracts.sh # Startup/profile architecture and artefact gates
 ```
 
-All three are run by CI on every PR (`android.yml` and/or `lint.yml` guardrail jobs).
+These checks are run by the Android and startup CI workflows. A skipped or cancelled check is not a passing result.
 
 ## Product flavours
 
@@ -135,12 +149,14 @@ Baseline PNGs live adjacent to the test source (committed to the repo). They are
 
 ## CI and workflow coverage
 
-| Workflow             | Trigger                                               | Responsibility                                                                                                                      |
-| -------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `android.yml`        | push/PR to dev, app/build paths                       | Standard + `topwayTwMusic` + `topwayTwMedia` debug/release builds; DoFun compat checks; APK artifacts                               |
-| `lint.yml`           | push/PR to dev, app/build/scripts/docs/workflow paths | Workflow YAML syntax; shell script syntax; formatting (spotless); unit tests; Android lint; head-unit safety + DoFun compat scripts |
-| `manual-release.yml` | manual dispatch                                       | Signed standard, `topwayTwMusic`, and `topwayTwMedia` release APKs; package identity verification                                   |
-| `ui-screenshots.yml` | manual dispatch                                       | Roborazzi UI regression screenshots; PNG + HTML report artifacts                                                                    |
+| Workflow                  | Trigger                                               | Responsibility                                                                                                                       |
+| ------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `android.yml`             | push/PR to dev and stacked `cx/**` branches           | Standard + `topwayTwMusic` + `topwayTwMedia` debug/release builds; DoFun compatibility checks; APK artefacts                         |
+| `lint.yml`                | push/PR to dev and stacked `cx/**` branches           | Workflow/shell syntax; formatting; unit tests; Android lint; head-unit safety; startup-benchmark path coverage                       |
+| `startup-performance.yml` | startup-related push/PR paths                         | Structural startup contracts; tests/lint; all benchmark configurations and maintained variants; profile/R8/TS18/DoFun artefact gates |
+| `startup-benchmarks.yml`  | bounded manual dispatch                               | API 35 profile generation or API 29 Macrobenchmark execution with selectable flavour, fixture size and iterations; evidence artefacts |
+| `manual-release.yml`      | manual dispatch                                       | Signed standard, `topwayTwMusic`, and `topwayTwMedia` APKs; package/signing/profile verification and release sidecars                |
+| `ui-screenshots.yml`      | manual dispatch                                       | Roborazzi UI regression screenshots; PNG + HTML report artefacts                                                                     |
 
 ### Branch protection / required checks
 
@@ -152,6 +168,7 @@ If GitHub branch protection is enabled, required status checks should match the 
 - `Android Quality / Unit tests`
 - `Android Quality / Android lint`
 - `Android Quality / Head-unit safety`
+- `Startup Performance Validation / validate` when startup/profile paths change
 
 Remove stale required checks for deleted workflows such as `Manual Roborazzi`, `Manual UI Screenshots`, `ts18-guardrails`, or `ts18-validation-tools`; their active coverage is replaced by `ui-screenshots.yml` and the Android Quality guardrail jobs above.
 
@@ -168,4 +185,4 @@ Remove stale required checks for deleted workflows such as `Manual Roborazzi`, `
 
 Music Source values are persisted as backend-compatible URI strings rather than display labels. SAF/File Picker mode preserves usable document tree `content://` URIs, DirectFS mode normalises saved values to safe local `file://` storage roots before creating the scanner, and MediaStore mode keeps filter locations as matchable filter values rather than recursive DirectFS roots. On load, duplicated Android storage-root paths are repaired only for known storage aliases; values that cannot be safely repaired or converted for the active backend are skipped individually so remaining sources can continue to load.
 
-DirectFS intentionally remains strict: it accepts only `file://` roots under approved storage mount points and logs/skips non-file or unsafe roots. Physical TS18 validation is still required for reboot, ACC sleep/wake, USB remove/remount, missing DocumentsUI, SAF permission loss, and large-library scan behavior.
+DirectFS intentionally remains strict: it accepts only `file://` roots under approved storage mount points and logs/skips non-file or unsafe roots. Physical TS18 validation is still required for reboot, ACC sleep/wake, USB remove/remount, missing DocumentsUI, SAF permission loss, and large-library scan behaviour.
