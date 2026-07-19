@@ -1,0 +1,62 @@
+name: PR 184 Managed Device Task Discovery
+
+on:
+  push:
+    branches:
+      - automation/pr184-task-discovery
+    paths:
+      - .github/workflows/pr184-task-discovery.yml
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: automation/pr184-task-discovery
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]] || { echo "Android SDK unavailable" >&2; exit 1; }
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Record managed-device task names
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh :startup-benchmark:tasks --all --console=plain \
+            > .github/pr184-all-startup-benchmark-tasks.txt
+          grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest|managed' \
+            .github/pr184-all-startup-benchmark-tasks.txt \
+            > .github/pr184-managed-tasks.txt || true
+          cat .github/pr184-managed-tasks.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/pr184-all-startup-benchmark-tasks.txt .github/pr184-managed-tasks.txt
+          git commit -m "ci: record managed-device task names"
+          git push origin HEAD:automation/pr184-task-discovery
