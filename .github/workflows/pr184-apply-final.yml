@@ -6,13 +6,6 @@ on:
       - cx/startup-profiles-benchmarks
     paths:
       - .github/workflows/pr184-apply-final.yml
-  pull_request:
-    branches:
-      - dev
-    paths:
-      - .github/workflows/pr184-apply-final.yml
-      - app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt
-      - app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt
 
 permissions:
   contents: write
@@ -24,7 +17,7 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 120
     steps:
       - name: Checkout latest branch head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -34,68 +27,147 @@ jobs:
           submodules: false
           persist-credentials: false
 
-      - name: Apply, validate and publish final tree
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: false
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply remaining audited patch and remove temporary machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          original_patch="${RUNNER_TEMP}/pr184-final.patch"
+          filtered_patch="${RUNNER_TEMP}/pr184-final-filtered.patch"
+
+          cat .github/pr184-patch/part-* > "${original_patch}"
+          printf '%s  %s\n' \
+            d03aa4494eb99a104eefd8176c36d3d6ab00d202e88248a226a6c18b2b765ec7 \
+            "${original_patch}" | sha256sum --check -
+
+          python3 - "${original_patch}" "${filtered_patch}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines(keepends=True)
+          excluded = {
+              ".github/workflows/android.yml",
+              ".github/workflows/lint.yml",
+              ".github/workflows/pr184-source-snapshot.yml",
+              "app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt",
+              "app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt",
+              "app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt",
+          }
+          output = []
+          skip = False
+          seen = set()
+          for line in source:
+              if line.startswith("diff --git a/"):
+                  path = line[len("diff --git a/") :].split(" b/", 1)[0]
+                  skip = path in excluded
+                  if skip:
+                      seen.add(path)
+              if not skip:
+                  output.append(line)
+
+          missing = excluded - seen
+          if missing:
+              raise SystemExit(f"Expected excluded patch sections were not found: {sorted(missing)}")
+          Path(sys.argv[2]).write_text("".join(output), encoding="utf-8")
+          PY
+
+          git apply --index --whitespace=error-all "${filtered_patch}"
+
+          rm -f -- \
+            .github/pr184-hardening-error.txt \
+            .github/workflows/pr184-apply-corrected.yml \
+            .github/workflows/pr184-hardening-v4.yml \
+            .github/workflows/pr184-source-snapshot.yml \
+            .github/workflows/pr184-apply-final.yml
+          rm -rf -- .github/pr184-patch
+          git add --all
+          git diff --cached --check
+
+      - name: Apply repository formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git add --all
+          git diff --cached --check
+
+      - name: Validate final source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+
+          status=0
+          while IFS= read -r -d '' script; do
+            bash -n "${script}" || status=1
+          done < <(find scripts -type f -name '*.sh' -print0)
+          while IFS= read -r -d '' script; do
+            python3 -m py_compile "${script}" || status=1
+          done < <(find scripts -type f -name '*.py' -print0)
+          ((status == 0))
+
+          bash ./scripts/check-manual-release-workflow.sh
+          bash ./scripts/check-startup-performance-contracts.sh
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+          bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+          bash ./scripts/check-format-with-diff.sh
+          git diff --cached --check
+
+      - name: Commit and publish final tree
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          log_file="${RUNNER_TEMP}/pr184-apply-final.log"
-          set +e
-          {
-            set -euo pipefail
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "::error::Final audited patch produced no commit."
+            exit 1
+          fi
+          git commit -m "fix: finalise startup profiles and release validation"
+          gh auth setup-git
+          git push origin HEAD:cx/startup-profiles-benchmarks
+          echo "Published final commit $(git rev-parse HEAD)."
 
-            git fetch origin dev
-            head_sha="$(git rev-parse HEAD)"
-            dev_sha="$(git rev-parse origin/dev)"
-            patch_file="${RUNNER_TEMP}/pr184-final.patch"
-
-            cat .github/pr184-patch/part-* > "${patch_file}"
-            printf '%s  %s\n' \
-              d03aa4494eb99a104eefd8176c36d3d6ab00d202e88248a226a6c18b2b765ec7 \
-              "${patch_file}" | sha256sum --check -
-
-            git apply --index "${patch_file}"
-
-            git rm -f -- .github/workflows/pr184-source-snapshot.yml
-            git rm -rf -- .github/pr184-patch
-            git rm -f -- .github/workflows/pr184-apply-final.yml
-
-            ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
-
-            status=0
-            while IFS= read -r -d '' script; do
-              bash -n "${script}" || status=1
-            done < <(find scripts -type f -name '*.sh' -print0)
-            ((status == 0))
-
-            while IFS= read -r -d '' script; do
-              python3 -m py_compile "${script}"
-            done < <(find scripts -type f -name '*.py' -print0)
-
-            bash scripts/check-manual-release-workflow.sh
-            bash scripts/check-startup-performance-contracts.sh
-            git diff --cached --check
-
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            tree_sha="$(git write-tree)"
-            commit_sha="$(printf '%s\n' 'fix: finalise startup profiles and release validation' | git commit-tree "${tree_sha}" -p "${head_sha}" -p "${dev_sha}")"
-
-            gh auth setup-git
-            git push origin "${commit_sha}:refs/heads/cx/startup-profiles-benchmarks"
-            echo "Published final commit ${commit_sha} with parents ${head_sha} and ${dev_sha}."
-          } >"${log_file}" 2>&1
-          status=$?
-          set -e
-          cat "${log_file}"
-          exit "${status}"
-
-      - name: Upload patch evidence
-        if: always()
+      - name: Upload failure evidence
+        if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: pr184-apply-final-${{ github.run_number }}
-          path: ${{ runner.temp }}/pr184-apply-final.log
-          if-no-files-found: error
+          path: |
+            app/build/reports/**
+            musikr/build/reports/**
+            build/reports/**
+          if-no-files-found: ignore
           retention-days: 2
