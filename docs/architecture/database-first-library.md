@@ -24,6 +24,9 @@ The normalized Room schema is upgraded non-destructively through `MIGRATION_70_7
 
 ### Requires device validation
 
+- **Evidence confidence:** Requires exact-device TS18 validation.
+- **Porting decision:** The architecture and bounded validation constraints are reusable; runtime behaviour requires validation on `s9863a1h10_Natv`.
+
 Cold boot, process death, launcher restart, Bluetooth/media-button launch, real FAT timestamp behaviour, USB removal/reinsertion, two-volume mount-order changes and ACC sleep/wake remain exact-device tests on `s9863a1h10_Natv`.
 
 ## Routine-consumer migration audit
