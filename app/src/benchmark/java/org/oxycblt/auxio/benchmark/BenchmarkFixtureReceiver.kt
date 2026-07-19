@@ -26,6 +26,7 @@ import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteStatement
 import android.util.Base64
+import androidx.preference.PreferenceManager
 import androidx.room.Room
 import androidx.room.withTransaction
 import java.io.File
@@ -35,7 +36,10 @@ import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.min
 import kotlinx.coroutines.runBlocking
+import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.ts18.FastStartDirectFolderBrowser
+import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.playback.persist.PersistenceDatabase
 import org.oxycblt.auxio.playback.persist.QueueItemRefEntity
 import org.oxycblt.auxio.playback.persist.QueueSessionEntity
@@ -119,6 +123,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                 }
             }
         seedPlaybackQueue(context, songCount, playableFiles)
+        seedBenchmarkStartupPreferences(context)
         context
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -194,6 +199,36 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
             }
         } finally {
             database.close()
+        }
+    }
+
+    private fun seedBenchmarkStartupPreferences(context: Context) {
+        check(
+            PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putString(
+                    context.getString(R.string.set_key_library_revision),
+                    FIXTURE_LIBRARY_REVISION,
+                )
+                .putString(
+                    context.getString(R.string.set_key_library_state),
+                    LibraryState.USABLE.name,
+                )
+                .putBoolean(
+                    context.getString(R.string.set_key_library_last_scan_failed),
+                    false,
+                )
+                .putInt(
+                    context.getString(R.string.set_key_locations_mode),
+                    IntegerTable.LOCATION_MODE_DIRECT_FS,
+                )
+                .putString(
+                    context.getString(R.string.set_key_music_locations),
+                    "file:///storage/usbdisk0;file:///storage/usbdisk1",
+                )
+                .commit()
+        ) {
+            "Unable to persist deterministic benchmark startup settings"
         }
     }
 
@@ -514,6 +549,8 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         private const val FIXTURE_SCHEMA_VERSION = 2
         private const val FIXTURE_SEED = 18_022_026L
         private const val FIXTURE_GENERATION = 1L
+        private const val FIXTURE_LIBRARY_REVISION =
+            "00000000-0000-0000-0000-000000000002"
         private const val FIXTURE_EPOCH_MS = 1_700_000_000_000L
         private const val PLAYBACK_SESSION_ID = 1L
         private const val PLAYBACK_ANCHOR_INDEX = 10

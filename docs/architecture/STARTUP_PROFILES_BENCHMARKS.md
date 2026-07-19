@@ -2,9 +2,9 @@
 
 Status: implemented PR 3 architecture for the Auxio-TS 0–60 second startup programme. Repository validation is automated; managed-emulator measurements and exact-device TS18 validation remain separate evidence classes.
 
-Base: final review-ready PR 2 branch `cx/incremental-library-pipeline`.
+Base: merged PR #183 on the default `dev` branch.
 
-Tracking issue: #181.
+Tracking issues: #179 and #181.
 
 ## Goal
 
@@ -60,6 +60,7 @@ Fixture contract:
 - deterministic titles, stable IDs, paths, dates and source assignment;
 - a deterministic primitive queue session anchored at logical item 10;
 - queue rows written transactionally in bounded 500-row batches rather than materialising one unbounded insert;
+- deterministic startup preferences for library revision/state, successful prior scan, DirectFS mode and both logical USB roots;
 - real app-private WAV references for managed-emulator playback while preserving logical TS18 display paths and metadata.
 
 For managed-emulator USB interaction only, the benchmark build maps the same logical roots to app-private fixture directories and creates real bounded WAV files. Production builds continue using only the exact app-facing `/storage/usbdiskN` paths. UI rows retain logical TS18 paths while benchmark playback receives the private physical fixture path. The mapping cannot ship in maintained debug or release variants.
@@ -120,7 +121,7 @@ AndroidX JSON is retained as machine evidence. `scripts/summarize-startup-benchm
 
 ## Timing and trace contract
 
-`PerfTimer` retains at most 256 monotonic in-memory events. It is active by default in debug and benchmark builds; maintained release builds require explicit user opt-in. Benchmark capture therefore records the measured app process without enabling production diagnostics.
+`PerfTimer` retains at most 256 monotonic in-memory events. It is active by default in debug and benchmark builds; maintained release builds require explicit user opt-in. `MusicSettingsImpl` restores that persisted opt-in after process recreation. Benchmark capture therefore records the measured app process without silently enabling production diagnostics.
 
 `StartupPerformanceReport` exports a bounded local report containing authority, application/variant, boot ID where readable, fixture/source context, process/thread identity and monotonic events. The benchmark receiver returns the report through an explicit ordered broadcast encoded as Base64; tests verify non-empty application-start events. The user-facing settings export remains explicit and local-only.
 
@@ -232,3 +233,29 @@ STOP and preserve evidence when build identity, playback authority, source ident
 - Remove the benchmark build type/source set to remove fixture seeding and app-private USB mapping; maintained production variants are unaffected.
 - Revert report export independently; `PerfTimer` remains bounded.
 - Any production optimisation discovered by measurements requires a focused commit, executable regression test and documented rollback.
+
+
+## Integrated completion audit
+
+- **Evidence confidence:** Observed for repository source and each explicitly recorded CI or managed-emulator run; exact-device behaviour remains **Requires TS18 validation**.
+- **Porting decision:** Directly reusable for the maintained Auxio-TS standard and Topway variants; no exact TS18 latency claim is portable without the device runbook.
+
+The final integrated audit corrected production startup before profiles were accepted:
+
+1. the real repository startup path now preserves persisted `USABLE`/`EMPTY` state and explicitly defers complete cached-graph loading;
+2. asynchronous compatibility hydration is revision/generation guarded and may request a bounded recovery scan only when the policy and variant permit it;
+3. release performance-capture opt-in is restored after process recreation;
+4. benchmark source, library, primitive queue and startup preferences are all deterministic;
+5. the direct Topway property process probe was removed from core repository orchestration;
+6. release publication verifies compiled profile data and emits per-asset SHA-256 plus package/signing metadata sidecars.
+
+### Issue #179 startup-surface mapping
+
+- **Resume queue / recent playback context:** the persisted primitive queue and current item are the single canonical authority; no duplicate recent-history store is introduced.
+- **Recently added:** bounded committed `recentlyAdded()` projection.
+- **Favourites:** retained through the existing playlist authority after rich compatibility readiness; it is not allowed to gate queue, search or direct playback.
+- **USB 0 / USB 1 / Folders:** bounded one-level direct-folder paths under `/storage/usbdisk0` and `/storage/usbdisk1`.
+- **Quick Find:** cancellable, stale-suppressed bounded Room search with primitive direct playback.
+- **Playback controls and early MediaBrowser:** remain independent of complete graph hydration.
+
+This mapping completes the useful-first-interaction requirement without creating another player, queue, service, session, notification or history authority.

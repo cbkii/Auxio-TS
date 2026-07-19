@@ -72,7 +72,7 @@ A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed
 - `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety guardrails.
 - `.github/workflows/startup-performance.yml` compiles the benchmark/profile stack, runs startup architecture gates, builds all maintained debug/release variants and verifies compiled profile artefacts plus TS18/DoFun contracts.
 - `.github/workflows/startup-benchmarks.yml` provides bounded manual Baseline Profile generation on an API 35 managed emulator and runtime-compatible macrobenchmark evidence on an API 29 managed emulator, with selectable flavour, fixture size and iteration count.
-- `.github/workflows/manual-release.yml` builds, signs, verifies, and publishes selected standard/`com.tw.media` APKs and the systemless `com.tw.music` Magisk ZIP.
+- `.github/workflows/manual-release.yml` builds, signs, profile-checks and publishes selected standard/`com.tw.media` APKs or the systemless `com.tw.music` Magisk ZIP, with SHA-256 and signing/package metadata sidecars.
 - `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshot/report bundles for UI review.
 
 [Evidence confidence: Observed workflow configuration] [Porting decision: CI/release artefact coverage only; requires separate TS18 runtime validation]

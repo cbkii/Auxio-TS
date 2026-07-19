@@ -41,7 +41,14 @@ fixture=startup-benchmark/src/main/java/org/oxycblt/auxio/startupbenchmark/Bench
 fixture_receiver=app/src/benchmark/java/org/oxycblt/auxio/benchmark/BenchmarkFixtureReceiver.kt
 browser=app/src/main/java/org/oxycblt/auxio/headunit/ts18/FastStartDirectFolderBrowser.kt
 perf_timer=app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt
+music_repository=app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt
+music_settings=app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt
+deferred_startup_test=app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt
+capture_restore_test=app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt
 startup_validation=.github/workflows/startup-performance.yml
+android_workflow=.github/workflows/android.yml
+quality_workflow=.github/workflows/lint.yml
+release_workflow=.github/workflows/manual-release.yml
 
 for path in \
   app/src/main/baseline-prof.txt \
@@ -54,7 +61,14 @@ for path in \
   "$fixture_receiver" \
   "$browser" \
   "$perf_timer" \
+  "$music_repository" \
+  "$music_settings" \
+  "$deferred_startup_test" \
+  "$capture_restore_test" \
   "$startup_validation" \
+  "$android_workflow" \
+  "$quality_workflow" \
+  "$release_workflow" \
   scripts/summarize-startup-benchmarks.py \
   docs/architecture/STARTUP_PROFILES_BENCHMARKS.md; do
   require_file "$path"
@@ -117,6 +131,42 @@ require_contains "$fixture_receiver" 'private const val QUEUE_INSERT_BATCH_SIZE 
 require_contains "$browser" 'benchmarkRoot(context, 0)'
 require_contains "$browser" 'playbackPath'
 require_contains "$perf_timer" 'BuildConfig.BUILD_TYPE == "benchmark"'
+
+# The production launch lane must defer complete graph construction, restore persisted capture
+# policy, and keep TS18 probes outside the repository orchestration layer.
+require_contains "$music_repository" 'deferCachedLoad = true'
+require_contains "$music_repository" 'startCompatibilityHydration(worker)'
+require_contains "$music_repository" 'requestCompatibilityRecoveryIfNeeded('
+require_absent "$music_repository" 'readTwStorageSwitch'
+require_absent "$music_repository" 'persist.tw.storage.switch'
+require_contains "$music_settings" 'PerfTimer.configure(performanceCaptureEnabled)'
+require_contains "$deferred_startup_test" 'cached-library-hydration-deferred'
+require_contains "$capture_restore_test" 'settings construction restores persisted performance capture preference'
+
+# Benchmark decisions must be seeded independently of a developer/emulator preference state.
+require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences(context)'
+require_contains "$fixture_receiver" 'FIXTURE_LIBRARY_REVISION'
+require_contains "$fixture_receiver" 'LibraryState.USABLE.name'
+require_contains "$fixture_receiver" 'IntegerTable.LOCATION_MODE_DIRECT_FS'
+require_contains "$fixture_receiver" 'file:///storage/usbdisk0;file:///storage/usbdisk1'
+
+# Canonical stacked-branch checks must see benchmark module changes and use immutable actions.
+for workflow in "$android_workflow" "$quality_workflow"; do
+  require_contains "$workflow" '      - "cx/**"'
+  require_contains "$workflow" '      - "startup-benchmark/**"'
+  require_contains "$workflow" 'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95'
+  require_contains "$workflow" 'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c'
+done
+require_contains "$release_workflow" 'persist-credentials: false'
+require_contains "$release_workflow" 'bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"'
+require_contains "$release_workflow" '.sha256'
+require_contains "$release_workflow" '.metadata.txt'
+
+if find .github -maxdepth 2 -type f \
+  \( -name 'pr184-*' -o -name 'pr183-*' -o -name '*hardening-error*' \) \
+  -print -quit | grep -q .; then
+  fail 'temporary PR repair/finaliser artefacts remain in the source tree'
+fi
 
 for journey in \
   coldStartupWithoutProfiles \

@@ -60,6 +60,21 @@ if text.find('gh release delete-asset') < text.find('Build, verify, and stage se
     raise SystemExit('Release asset deletion appears before rebuilt assets are staged')
 if 'path: ${{ steps.assets.outputs.artifact_dir }}/*' not in text:
     raise SystemExit('Upload artifact step must use the selected-asset artifact directory, not all possible asset names')
+if 'persist-credentials: false' not in text:
+    raise SystemExit('Checkout must not persist the contents:write credential')
+for pinned in (
+    'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
+    'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
+):
+    if pinned not in text:
+        raise SystemExit(f'Missing immutable action pin: {pinned}')
+if 'bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"' not in text:
+    raise SystemExit('Release APKs are not checked for compiled Baseline Profile data')
+for suffix in ('.sha256', '.metadata.txt'):
+    if suffix not in text:
+        raise SystemExit(f'Missing release evidence sidecar: {suffix}')
+if 'apksigner certificates' not in text or 'asset_sha256=' not in text:
+    raise SystemExit('Release metadata does not record signing and checksum evidence')
 print('OK manual-release selectable asset invariants')
 PY
 

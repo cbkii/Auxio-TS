@@ -2,6 +2,9 @@
 
 Status: **Requires device validation**. Repository, JVM and managed-emulator results do not prove the timings or runtime behaviour below.
 
+- **Evidence confidence:** Requires TS18 validation.
+- **Porting decision:** Reusable validation procedure; runtime results apply only to the recorded exact build, APK, source layout and power state.
+
 ## Exact target identity
 
 - Product/build identity: `s9863a1h10_Natv`
@@ -12,12 +15,12 @@ Status: **Requires device validation**. Repository, JVM and managed-emulator res
 - Display: physical 1280×720; stable app content approximately 1225×665
 - App-facing removable storage: `/storage/usbdisk0` and `/storage/usbdisk1`
 
-STOP if the build, board, panel, launcher package, test APK/commit, playback authority, storage identities or rollback path cannot be confirmed.
+STOP if the build, board, panel, launcher package, test asset/commit, package-signing lane, playback authority, storage identities or rollback path cannot be confirmed. A standalone APK, `com.tw.media` APK and `com.tw.music` Magisk overlay are separate installation authorities and must not be substituted for one another.
 
 ## Common prerequisites
 
-1. Preserve the installed known-good APK and the test APK for every maintained flavour being exercised.
-2. Record the exact commit, application ID, version code/name, DoFun version, boot ID and wall-clock start time.
+1. Preserve the installed known-good APK/module and the test asset for every maintained flavour being exercised.
+2. Verify the matching `.sha256` and `.metadata.txt` sidecars. Record the exact commit, application ID, version code/name, min/target SDK, ABI set, signing-certificate SHA-256, DoFun version, boot ID and wall-clock start time.
 3. Confirm which app owns playback and that only one Auxio player, media session, playback service and notification exist.
 4. Confirm the dedicated music sources and map their current mount paths and stable source identities.
 5. Enable Auxio's bounded performance capture explicitly. Clear the prior event ring before each scenario.
