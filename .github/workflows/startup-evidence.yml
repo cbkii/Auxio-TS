@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: startup-evidence-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   managed-device-evidence:
@@ -28,25 +28,25 @@ jobs:
         include:
           - label: profile-api35-500
             suite: baseline-profile
-            device_token: pixel6Api35
+            task_name: pixel6Api35StandardBenchmarkAndroidTest
             device_label: Pixel 6 API 35 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.BaselineProfileGenerator
             fixture_song_count: "500"
           - label: macro-api29-500
             suite: macrobenchmark
-            device_token: pixel2Api29
+            task_name: pixel2Api29StandardBenchmarkAndroidTest
             device_label: Pixel 2 API 29 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark
             fixture_song_count: "500"
           - label: macro-api29-5000
             suite: macrobenchmark
-            device_token: pixel2Api29
+            task_name: pixel2Api29StandardBenchmarkAndroidTest
             device_label: Pixel 2 API 29 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark
             fixture_song_count: "5000"
           - label: macro-api29-20000
             suite: macrobenchmark
-            device_token: pixel2Api29
+            task_name: pixel2Api29StandardBenchmarkAndroidTest
             device_label: Pixel 2 API 29 AOSP managed emulator
             test_class: org.oxycblt.auxio.startupbenchmark.StartupMacrobenchmark
             fixture_song_count: "20000"
@@ -107,28 +107,10 @@ jobs:
         shell: bash
         run: bash ./scripts/check-startup-performance-contracts.sh
 
-      - name: Resolve managed-device task
-        id: task
-        shell: bash
-        env:
-          DEVICE_TOKEN: ${{ matrix.device_token }}
-        run: |
-          tasks_file="${RUNNER_TEMP}/startup-evidence-tasks.txt"
-          bash ./scripts/ci-gradle.sh :startup-benchmark:tasks --all --console=plain > "${tasks_file}"
-          pattern="${DEVICE_TOKEN}.*Standard.*AndroidTest"
-          task_name="$(awk '{print $1}' "${tasks_file}" | grep -Ei "^${pattern}$" | head -n 1 || true)"
-          if [[ -z "${task_name}" ]]; then
-            echo "No managed-device task matched ${pattern}" >&2
-            grep -Ei 'pixel2Api29|pixel6Api35|AndroidTest' "${tasks_file}" >&2 || true
-            exit 1
-          fi
-          echo "name=${task_name}" >> "${GITHUB_OUTPUT}"
-          echo "Resolved :startup-benchmark:${task_name}"
-
       - name: Run managed-device suite
         shell: bash
         env:
-          TASK_NAME: ${{ steps.task.outputs.name }}
+          TASK_NAME: ${{ matrix.task_name }}
           TEST_CLASS: ${{ matrix.test_class }}
           FIXTURE_SONG_COUNT: ${{ matrix.fixture_song_count }}
           SUITE: ${{ matrix.suite }}
