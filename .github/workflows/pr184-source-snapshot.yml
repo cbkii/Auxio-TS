@@ -6,6 +6,11 @@ on:
       - cx/startup-profiles-benchmarks
     paths:
       - .github/workflows/pr184-source-snapshot.yml
+  pull_request:
+    branches:
+      - cx/incremental-library-pipeline
+    paths:
+      - .github/workflows/pr184-source-snapshot.yml
 
 permissions:
   contents: read
