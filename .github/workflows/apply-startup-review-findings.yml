@@ -1,3 +1,4 @@
+# Registered workflow trigger.
 name: Apply startup review findings
 
 on:
