@@ -132,7 +132,7 @@ jobs:
               ;;
             *) echo "Unsupported suite: ${SUITE}" >&2; exit 1 ;;
           esac
-          task_name="${device_token}${flavour_token}BenchmarkAndroidTest"
+          task_name="${device_token}${flavour_token}BenchmarkBenchmarkAndroidTest"
           echo "name=${task_name}" >> "${GITHUB_OUTPUT}"
           echo "class=${test_class}" >> "${GITHUB_OUTPUT}"
           echo "device=${device_label}" >> "${GITHUB_OUTPUT}"
