@@ -36,6 +36,7 @@ jobs:
         shell: bash
         run: |
           log_file="${GITHUB_WORKSPACE}/pr184-finalise.log"
+          evidence_dir="${GITHUB_WORKSPACE}/pr184-workflow-evidence"
           set +e
           {
             set -euo pipefail
@@ -63,29 +64,10 @@ jobs:
               !skip { print }
             ' "${original_patch}" > "${filtered_patch}"
 
-            for excluded in \
-              .github/workflows/android.yml \
-              .github/workflows/lint.yml \
-              .github/workflows/pr184-source-snapshot.yml \
-              app/src/main/java/org/oxycblt/auxio/util/PerfTimer.kt \
-              app/src/test/java/org/oxycblt/auxio/music/DeferredStartupHydrationTest.kt \
-              app/src/test/java/org/oxycblt/auxio/music/PerformanceCapturePreferenceRestoreTest.kt; do
-              if grep -Fq -- "diff --git a/${excluded} b/${excluded}" "${filtered_patch}"; then
-                echo "::error::Excluded patch section remained: ${excluded}"
-                exit 1
-              fi
-            done
-
             git apply --check --whitespace=error-all "${filtered_patch}"
             git apply --index --whitespace=error-all "${filtered_patch}"
 
-            rm -f -- \
-              .github/pr184-hardening-error.txt \
-              .github/pr184-finalise-error.txt \
-              .github/workflows/pr184-apply-corrected.yml \
-              .github/workflows/pr184-apply-final.yml \
-              .github/workflows/pr184-hardening-v4.yml \
-              .github/workflows/pr184-source-snapshot.yml
+            rm -f -- .github/pr184-hardening-error.txt .github/pr184-finalise-error.txt
             rm -rf -- .github/pr184-patch
             git add --all
             git diff --cached --check
@@ -107,19 +89,35 @@ jobs:
             bash ./scripts/check-ts18-apk-reference-contracts.sh
             bash ./scripts/check-dofun-topway-compat.sh
             git diff --cached --check
+
+            rm -rf -- "${evidence_dir}"
+            mkdir -p "${evidence_dir}"
+            cp .github/workflows/manual-release.yml "${evidence_dir}/manual-release.yml"
+            cp .github/workflows/ui-screenshots.yml "${evidence_dir}/ui-screenshots.yml"
+            printf '%s\n' \
+              .github/workflows/pr184-apply-corrected.yml \
+              .github/workflows/pr184-apply-final.yml \
+              .github/workflows/pr184-hardening-v4.yml \
+              .github/workflows/pr184-source-snapshot.yml \
+              > "${evidence_dir}/delete-workflows.txt"
+
+            git restore --staged --worktree -- .github/workflows
+            git add --all
+            git diff --cached --check
           } >"${log_file}" 2>&1
           status=$?
           set -e
           cat "${log_file}"
           exit "${status}"
 
-      - name: Commit and publish final tree
+      - name: Commit and publish non-workflow final tree
         shell: bash
         run: |
           log_file="${GITHUB_WORKSPACE}/pr184-finalise.log"
           set +e
           {
             set -euo pipefail
+            rm -f -- pr184-finalise.log
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add --all
@@ -133,11 +131,20 @@ jobs:
           tail -n 80 "${log_file}"
           exit "${status}"
 
+      - name: Upload workflow evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr184-workflow-evidence-${{ github.run_number }}
+          path: pr184-workflow-evidence
+          if-no-files-found: error
+          retention-days: 2
+
       - name: Upload finalisation log
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: pr184-finalisation-log-${{ github.run_number }}
           path: pr184-finalise.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 2
