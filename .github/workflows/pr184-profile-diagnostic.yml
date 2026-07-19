@@ -1,0 +1,102 @@
+name: PR 184 Profile Artefact Diagnostic
+
+on:
+  push:
+    branches:
+      - automation/pr184-profile-diagnostic
+    paths:
+      - .github/workflows/pr184-profile-diagnostic.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: 666e03f1acb229415404927893e4da0e8df34ebd
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]] || { echo "Android SDK unavailable" >&2; exit 1; }
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Build release profile artefacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh \
+            :app:assembleStandardRelease \
+            :app:assembleTopwayTwMusicRelease \
+            :app:assembleTopwayTwMediaRelease \
+            :app:bundleStandardRelease
+
+      - name: Record exact profile artefact evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=.github/pr184-profile-diagnostic.txt
+          : > "${report}"
+          {
+            echo "source=666e03f1acb229415404927893e4da0e8df34ebd"
+            echo
+            find app/build/outputs/apk -type f -path '*/release/*.apk' -print | sort
+            find app/build/outputs/bundle -type f -name '*.aab' -print | sort
+            echo
+          } >> "${report}"
+          while IFS= read -r artifact; do
+            [[ -n "${artifact}" ]] || continue
+            {
+              echo "===== ${artifact} ====="
+              echo "profile entries:"
+              unzip -Z1 "${artifact}" | grep -E 'baseline\.(prof|profm)$|r8\.json$' || true
+              if [[ "${artifact}" == *.aab ]]; then
+                echo "r8.json:"
+                unzip -p "${artifact}" 'BUNDLE-METADATA/com.android.tools/r8.json' 2>/dev/null || true
+                echo
+              fi
+              echo "contract result:"
+            } >> "${report}"
+            set +e
+            bash ./scripts/check-startup-performance-contracts.sh "${artifact}" >> "${report}" 2>&1
+            rc=$?
+            set -e
+            echo "contract_rc=${rc}" >> "${report}"
+            echo >> "${report}"
+          done < <(
+            {
+              find app/build/outputs/apk -type f -path '*/release/*.apk'
+              find app/build/outputs/bundle -type f -name '*.aab'
+            } | sort
+          )
+          cat "${report}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout automation/pr184-profile-diagnostic
+          git add "${report}"
+          git commit -m "ci: record PR 184 profile artefact evidence"
+          git push origin HEAD:automation/pr184-profile-diagnostic
