@@ -23,7 +23,7 @@ import java.util.Locale
 
 /** Deterministic logical fixtures used by startup and first-minute benchmarks. */
 internal object BenchmarkFixtures {
-    const val SCHEMA_VERSION = 2
+    const val SCHEMA_VERSION = 3
     const val SEED = 18_022_026L
     val supportedSongCounts = setOf(500, 5_000, 20_000)
     val sourceKeys = listOf("direct:usb0", "direct:usb1")
