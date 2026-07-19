@@ -20,8 +20,10 @@ package org.oxycblt.musikr.fs.mediastore
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore as AOSPMediaStore
 import androidx.core.database.getStringOrNull
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,12 +32,18 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.withContext
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.Location
+import org.oxycblt.musikr.fs.SourceAwareFS
+import org.oxycblt.musikr.fs.SourceFingerprintStrength
+import org.oxycblt.musikr.fs.SourceIdentity
+import org.oxycblt.musikr.fs.SourceSnapshot
 import org.oxycblt.musikr.fs.StoragePathAliasPolicy
+import org.oxycblt.musikr.fs.Volume
 import org.oxycblt.musikr.fs.path.MediaStorePathInterpreter
 import org.oxycblt.musikr.fs.path.VolumeManager
 import org.oxycblt.musikr.fs.saf.contentResolverSafe
@@ -43,102 +51,88 @@ import org.oxycblt.musikr.fs.saf.useQuery
 import org.oxycblt.musikr.fs.track.LocationObserver
 import org.oxycblt.musikr.util.tryAsyncWith
 
-/**
- * MediaStore implementation of [FS] that queries the Android MediaStore database for audio files
- * and yields them as [File] instances.
- */
+/** MediaStore adapter with source-scoped, cheap invalidation planning. */
 class MediaStore
 private constructor(
     private val context: Context,
     private val volumeManager: VolumeManager,
     private val query: Query,
-) : FS {
+    private val selectedSourceKeys: Set<String>? = null,
+) : SourceAwareFS {
     private val pathInterpreterFactory = MediaStorePathInterpreter.Factory.from(volumeManager)
+    private val sourceFailures = ConcurrentHashMap<String, String>()
+
+    override suspend fun sourceSnapshots(): List<SourceSnapshot> =
+        withContext(Dispatchers.IO) {
+            val volumes = recognizedVolumes()
+            volumeNames().mapNotNull { volumeName ->
+                val volume = volumes.firstOrNull { it.mediaStoreName == volumeName }
+                val sourceKey = volume?.let(SourceIdentity::forVolume) ?: "media-store:$volumeName"
+                if (selectedSourceKeys != null && sourceKey !in selectedSourceKeys) {
+                    return@mapNotNull null
+                }
+                val uri = contentUri(volumeName)
+                try {
+                    val version =
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            AOSPMediaStore.getVersion(context, volumeName)
+                        } else {
+                            AOSPMediaStore.getVersion(context)
+                        }
+                    SourceSnapshot(
+                        sourceKey = sourceKey,
+                        sourceType = SOURCE_TYPE,
+                        rootUri = uri.toString(),
+                        rootPath = volume?.components?.unixString?.let { "/$it" },
+                        available = version != null && volume?.isAccessible() != false,
+                        fingerprint = version?.let { "$it:${query.hashCode()}" },
+                        // Android 10 exposes an opaque volume version but not per-row generation
+                        // counters. ContentObserver invalidations cover live changes and the ledger
+                        // periodically refreshes advisory snapshots after process death.
+                        fingerprintStrength =
+                            if (version != null) SourceFingerprintStrength.ADVISORY
+                            else SourceFingerprintStrength.NONE,
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w(
+                        TAG,
+                        "Unable to read MediaStore version for volume $volumeName",
+                        e,
+                    )
+                    SourceSnapshot(
+                        sourceKey = sourceKey,
+                        sourceType = SOURCE_TYPE,
+                        rootUri = uri.toString(),
+                        rootPath = volume?.components?.unixString?.let { "/$it" },
+                        available = false,
+                        fingerprint = null,
+                        fingerprintStrength = SourceFingerprintStrength.NONE,
+                    )
+                }
+            }
+        }
+
+    override fun selectSources(sourceKeys: Set<String>): FS =
+        MediaStore(context, volumeManager, query, sourceKeys)
+
+    override fun drainSourceFailures(): Map<String, String> =
+        sourceFailures.toMap().also { sourceFailures.clear() }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
             val projection = BASE_PROJECTION + pathInterpreterFactory.projection
-            var selector = BASE_SELECTOR
-            val args = mutableListOf<String>()
-
-            // Filter out audio that is not music, if enabled
-            if (query.excludeNonMusic) {
-                selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
-            }
-
-            // TS18/head-unit optimization: restrict to likely-audio directories.
-            // SQLite LIKE is case-insensitive for ASCII, so only 3 clauses needed.
-            // Use substring matching (no slash boundaries) to align with
-            // TopwaySourcePolicy.matchesSystemSourceFilter Kotlin-side behaviour.
-            if (query.useDefaultSystemFilter) {
-                selector +=
-                    " AND (" +
-                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%music%' OR " +
-                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%download%' OR " +
-                        "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%media%')"
-            }
-
-            // Handle include/exclude directories
-            when (query.mode) {
-                FilterMode.INCLUDE -> {
-                    val pathSelector =
-                        pathInterpreterFactory.createSelector(query.filtered.map { it.path })
-                    if (pathSelector != null) {
-                        selector += " AND (${pathSelector.template})"
-                        args.addAll(pathSelector.args)
-                    }
-                }
-                FilterMode.EXCLUDE -> {
-                    val pathSelector =
-                        pathInterpreterFactory.createSelector(query.filtered.map { it.path })
-                    if (pathSelector != null) {
-                        selector += " AND NOT (${pathSelector.template})"
-                        args.addAll(pathSelector.args)
-                    }
-                }
-            }
-
-            // Track identities to deduplicate files reached via multiple mount aliases.
+            val (selector, args) = buildSelector()
             val seenIdentities = mutableSetOf<String>()
-
-            val volumeNames = mutableSetOf<String>()
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val volumes = recognizedVolumes()
+            for (volumeName in volumeNames()) {
+                val volume = volumes.firstOrNull { it.mediaStoreName == volumeName }
+                val sourceKey = volume?.let(SourceIdentity::forVolume) ?: "media-store:$volumeName"
+                if (selectedSourceKeys != null && sourceKey !in selectedSourceKeys) continue
+                val contentUri = contentUri(volumeName)
                 try {
-                    volumeNames.addAll(AOSPMediaStore.getExternalVolumeNames(context))
-                } catch (e: Exception) {
-                    android.util.Log.e(TAG, "Failed to enumerate external volumes", e)
-                }
-                // Some devices/ROMs return an empty set; always scan the primary volume.
-                if (volumeNames.isEmpty()) {
-                    volumeNames.add(AOSPMediaStore.VOLUME_EXTERNAL)
-                }
-            } else {
-                volumeNames.add(AOSPMediaStore.VOLUME_EXTERNAL)
-            }
-
-            var anyVolumeSucceeded = false
-            var lastVolumeError: Exception? = null
-
-            for (volumeName in volumeNames) {
-                val contentUri =
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        try {
-                            AOSPMediaStore.Audio.Media.getContentUri(volumeName)
-                        } catch (e: Exception) {
-                            AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                        }
-                    } else {
-                        AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-                    }
-
-                try {
-                    context.contentResolverSafe.useQuery(
-                        contentUri,
-                        projection,
-                        selector,
-                        args.toTypedArray(),
-                    ) { cursor ->
+                    context.contentResolverSafe.useQuery(contentUri, projection, selector, args) {
+                        cursor ->
                         val pathInterpreter = pathInterpreterFactory.wrap(cursor)
                         val idIndex =
                             cursor.getColumnIndexOrThrow(AOSPMediaStore.Audio.AudioColumns._ID)
@@ -156,41 +150,25 @@ private constructor(
                             cursor.getColumnIndexOrThrow(
                                 AOSPMediaStore.Audio.AudioColumns.DATE_MODIFIED
                             )
-
                         while (cursor.moveToNext()) {
                             val path = pathInterpreter.extract() ?: continue
-
                             val id = cursor.getLong(idIndex)
                             val uri = Uri.withAppendedPath(contentUri, id.toString())
                             val mimeType = cursor.getStringOrNull(mimeTypeIndex) ?: "audio/*"
                             val size = cursor.getLong(sizeIndex)
-                            val dateAdded =
-                                cursor.getLong(dateAddedIndex) * 1000 // Convert to milliseconds
-                            val dateModified =
-                                cursor.getLong(dateModifiedIndex) * 1000 // Convert to milliseconds
-
-                            // Alias deduplication: collapse the same physical file reached via
-                            // different mount aliases. Identity is derived from the path string
-                            // (no per-file disk I/O) plus size.
+                            val dateAdded = cursor.getLong(dateAddedIndex) * 1000
+                            val dateModified = cursor.getLong(dateModifiedIndex) * 1000
                             val volumeComponents = path.volume.components
                             val pathIdentity =
                                 if (volumeComponents != null) {
-                                    val absolutePath =
+                                    StoragePathAliasPolicy.normalize(
                                         "/${volumeComponents.unixString}/${path.components.unixString}"
-                                    StoragePathAliasPolicy.normalize(absolutePath)
+                                    )
                                 } else {
-                                    // No filesystem mount root (e.g. a SAF-backed volume); qualify
-                                    // by the volume so identical relative paths on different
-                                    // volumes are not collapsed.
                                     "${path.volume}/${path.components.unixString}"
                                 }
-                            val identity = "${pathIdentity}_$size"
-                            if (!seenIdentities.add(identity)) {
-                                continue // Skip duplicate
-                            }
-
-                            // Create file with empty deferred parent
-                            val deviceFile =
+                            if (!seenIdentities.add("${pathIdentity}_$size")) continue
+                            it.send(
                                 File(
                                     uri = uri,
                                     path = path,
@@ -200,24 +178,13 @@ private constructor(
                                     addedMs = ForwardDateAdded(dateAdded),
                                     parent = null,
                                 )
-
-                            it.send(deviceFile)
+                            )
                         }
                     }
-                    anyVolumeSucceeded = true
                 } catch (e: Exception) {
-                    // Tolerate a single failing/slow volume, but remember the failure so a scan
-                    // where every volume fails is not reported as an empty success (which would
-                    // wipe the cached library).
-                    lastVolumeError = e
                     android.util.Log.e(TAG, "Failed to query volume: $volumeName", e)
+                    sourceFailures[sourceKey] = e.message ?: e.javaClass.simpleName
                 }
-            }
-
-            // If every volume query failed, surface the failure instead of returning an empty
-            // (but "successful") library.
-            if (!anyVolumeSucceeded) {
-                lastVolumeError?.let { throw it }
             }
         }
     }
@@ -230,15 +197,61 @@ private constructor(
         awaitClose { observer.release() }
     }
 
+    private fun buildSelector(): Pair<String, Array<String>> {
+        var selector = BASE_SELECTOR
+        val args = mutableListOf<String>()
+        if (query.excludeNonMusic) {
+            selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
+        }
+        if (query.useDefaultSystemFilter) {
+            selector +=
+                " AND (" +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%music%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%download%' OR " +
+                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%media%')"
+        }
+        when (query.mode) {
+            FilterMode.INCLUDE -> {
+                pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
+                    selector += " AND (${it.template})"
+                    args.addAll(it.args)
+                }
+            }
+            FilterMode.EXCLUDE -> {
+                pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
+                    selector += " AND NOT (${it.template})"
+                    args.addAll(it.args)
+                }
+            }
+        }
+        return selector to args.toTypedArray()
+    }
+
+    private fun recognizedVolumes(): List<Volume> =
+        (volumeManager.getVolumes() + volumeManager.getInternalVolume()).distinct()
+
+    private fun volumeNames(): Set<String> {
+        val names = linkedSetOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching { names.addAll(AOSPMediaStore.getExternalVolumeNames(context)) }
+                .onFailure { android.util.Log.e(TAG, "Failed to enumerate external volumes", it) }
+        }
+        if (names.isEmpty()) names += AOSPMediaStore.VOLUME_EXTERNAL
+        return names
+    }
+
+    private fun contentUri(volumeName: String): Uri =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching { AOSPMediaStore.Audio.Media.getContentUri(volumeName) }
+                .getOrDefault(AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+        } else {
+            AOSPMediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+
     data class Query(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
-        /**
-         * Restrict MediaStore scan to paths containing /Music/, /Download/, or /Media/. This
-         * dramatically reduces query time on slow TS18 head units with large USB storage. SQLite
-         * LIKE is case-insensitive for ASCII so only 3 clauses are needed.
-         */
         val useDefaultSystemFilter: Boolean = false,
     )
 
@@ -253,21 +266,13 @@ private constructor(
 
     companion object {
         private const val TAG = "MediaStore"
+        private const val SOURCE_TYPE = "MEDIA_STORE"
 
         fun from(context: Context, query: Query) =
-            MediaStore(
-                context = context,
-                volumeManager = VolumeManager.from(context),
-                query = query,
-            )
+            MediaStore(context, VolumeManager.from(context), query)
 
-        /**
-         * The base selector that works across all versions of android. Excludes files with zero
-         * size.
-         */
         private const val BASE_SELECTOR = "NOT ${AOSPMediaStore.Audio.Media.SIZE}=0"
 
-        /** The base projection that works across all versions of android. */
         private val BASE_PROJECTION =
             arrayOf(
                 AOSPMediaStore.Audio.AudioColumns._ID,

@@ -25,6 +25,8 @@ import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.MediaStore as AOSPMediaStore
 import androidx.annotation.RequiresApi
+import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -35,6 +37,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.withContext
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Directory
 import org.oxycblt.musikr.fs.FS
@@ -42,6 +45,10 @@ import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.Path
+import org.oxycblt.musikr.fs.SourceAwareFS
+import org.oxycblt.musikr.fs.SourceFingerprintStrength
+import org.oxycblt.musikr.fs.SourceIdentity
+import org.oxycblt.musikr.fs.SourceSnapshot
 import org.oxycblt.musikr.fs.track.LocationObserver
 import org.oxycblt.musikr.util.tryAsync
 import org.oxycblt.musikr.util.tryAsyncWith
@@ -53,19 +60,94 @@ private constructor(
     private val context: Context,
     private val contentResolver: ContentResolver,
     private val query: Query,
-) : FS {
+) : SourceAwareFS {
+    private val sourceFailures = ConcurrentHashMap<String, String>()
+
+    override suspend fun sourceSnapshots(): List<SourceSnapshot> =
+        withContext(Dispatchers.IO) {
+            query.source.groupBy(SourceIdentity::forLocation).map { (sourceKey, locations) ->
+                val fingerprints = mutableListOf<String>()
+                var available = locations.isNotEmpty()
+                for (location in locations) {
+                    try {
+                        val documentId = DocumentsContract.getTreeDocumentId(location.uri)
+                        val documentUri =
+                            DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
+                        var modified = 0L
+                        var size = 0L
+                        var name = ""
+                        var found = false
+                        context.contentResolverSafe.useQuery(
+                            documentUri,
+                            arrayOf(
+                                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                                DocumentsContract.Document.COLUMN_SIZE,
+                            ),
+                        ) { cursor ->
+                            if (cursor.moveToFirst()) {
+                                found = true
+                                name = cursor.getString(0).orEmpty()
+                                modified = cursor.getLong(1)
+                                size = cursor.getLong(2)
+                            }
+                        }
+                        check(found) { "SAF root returned no document row" }
+                        fingerprints +=
+                            "${location.uri}|$documentId|$name|$modified|$size|${query.hashCode()}"
+                    } catch (_: Exception) {
+                        available = false
+                    }
+                }
+                val first = locations.firstOrNull()
+                SourceSnapshot(
+                    sourceKey = sourceKey,
+                    sourceType = SOURCE_TYPE,
+                    // A volume-scoped source may include several selected SAF roots. The
+                    // first root is display metadata; every root contributes to the token.
+                    rootUri = first?.uri?.toString(),
+                    rootPath = first?.path?.components?.unixString,
+                    available = available,
+                    fingerprint = if (available) combineRootFingerprints(fingerprints) else null,
+                    fingerprintStrength =
+                        if (available) SourceFingerprintStrength.ADVISORY
+                        else SourceFingerprintStrength.NONE,
+                )
+            }
+        }
+
+    override fun selectSources(sourceKeys: Set<String>): FS =
+        SAF(
+            context,
+            contentResolver,
+            query.copy(
+                source = query.source.filter { SourceIdentity.forLocation(it) in sourceKeys }
+            ),
+        )
+
+    override fun drainSourceFailures(): Map<String, String> =
+        sourceFailures.toMap().also { sourceFailures.clear() }
+
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
         tryAsyncWith(files, Dispatchers.IO) {
             query.source
                 .map { location ->
-                    exploreDirectoryImpl(
-                        location.uri,
-                        DocumentsContract.getTreeDocumentId(location.uri),
-                        location.path,
-                        null,
-                        query.exclude.mapTo(mutableSetOf()) { it.path },
-                        files,
-                    )
+                    val sourceKey = SourceIdentity.forLocation(location)
+                    tryAsync(Dispatchers.IO) {
+                        val result =
+                            exploreDirectoryImpl(
+                                    location.uri,
+                                    DocumentsContract.getTreeDocumentId(location.uri),
+                                    location.path,
+                                    null,
+                                    query.exclude.mapTo(mutableSetOf()) { it.path },
+                                    files,
+                                )
+                                .await()
+                        result.exceptionOrNull()?.let { error ->
+                            sourceFailures[sourceKey] = error.message ?: error.javaClass.simpleName
+                        }
+                    }
                 }
                 .tryAwaitAll()
         }
@@ -73,7 +155,6 @@ private constructor(
 
     override fun track(): Flow<FSUpdate> = callbackFlow {
         val observers = mutableListOf<LocationObserver>()
-
         query.source.forEach { location ->
             val observer =
                 LocationObserver(context, location.uri) {
@@ -81,8 +162,7 @@ private constructor(
                 }
             observers.add(observer)
         }
-
-        awaitClose { observers.forEach { observer -> observer.release() } }
+        awaitClose { observers.forEach(LocationObserver::release) }
     }
 
     private fun CoroutineScope.exploreDirectoryImpl(
@@ -94,7 +174,6 @@ private constructor(
         files: Channel<File>,
     ): Deferred<Result<Unit>> =
         tryAsync(Dispatchers.IO) {
-            // Make a kotlin future
             val uri = DocumentsContract.buildChildDocumentsUriUsingTree(rootUri, treeDocumentId)
             val directoryDeferred = CompletableDeferred<Directory>()
             val recursive = mutableListOf<Deferred<Result<Unit>>>().takeIf { query.multithread }
@@ -109,27 +188,15 @@ private constructor(
                 val sizeIndex = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
                 val lastModifiedIndex =
                     cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
-
                 while (cursor.moveToNext()) {
                     val childId = cursor.getString(childUriIndex)
                     val displayName = cursor.getString(displayNameIndex)
-
-                    // Skip hidden files/directories if ignoreHidden is true
-                    if (!query.withHidden && displayName.startsWith(".")) {
-                        continue
-                    }
-
+                    if (!query.withHidden && displayName.startsWith(".")) continue
                     val newPath = relativePath.file(displayName)
                     val mimeType = cursor.getString(mimeTypeIndex)
                     val lastModified = cursor.getLong(lastModifiedIndex)
                     val childUri = DocumentsContract.buildDocumentUriUsingTree(rootUri, childId)
-
-                    // We can check for direct equality as if we block out an excluded directory we
-                    // will by proxy block out it's children.
-                    if (newPath in exclude) {
-                        continue
-                    }
-
+                    if (newPath in exclude) continue
                     if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                         val subtask =
                             exploreDirectoryImpl(
@@ -140,20 +207,14 @@ private constructor(
                                 exclude,
                                 files,
                             )
-                        if (recursive != null) {
-                            recursive.add(subtask)
-                        } else {
-                            // cannot pool, single-thread it
-                            subtask.await()
-                        }
+                        if (recursive != null) recursive.add(subtask) else subtask.await()
                     } else {
-                        val size = cursor.getLong(sizeIndex)
                         val file =
                             File(
                                 uri = childUri,
                                 mimeType = mimeType,
                                 path = newPath,
-                                size = size,
+                                size = cursor.getLong(sizeIndex),
                                 modifiedMs = lastModified,
                                 parent = directoryDeferred,
                                 addedMs =
@@ -172,6 +233,15 @@ private constructor(
             recursive?.tryAwaitAll()
         }
 
+    private fun combineRootFingerprints(fingerprints: List<String>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        fingerprints.sorted().forEach { fingerprint ->
+            digest.update(fingerprint.toByteArray(Charsets.UTF_8))
+            digest.update(0)
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     data class Query(
         val source: List<Location.Opened>,
         val exclude: List<Location.Unopened>,
@@ -185,7 +255,7 @@ private constructor(
             val mediaUri =
                 try {
                     AOSPMediaStore.getMediaUri(context, uri) ?: return null
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     return null
                 }
             return context.contentResolverSafe.useQuery(
@@ -208,6 +278,8 @@ private constructor(
     }
 
     companion object {
+        private const val SOURCE_TYPE = "SAF"
+
         fun from(context: Context, query: Query) = SAF(context, context.contentResolverSafe, query)
 
         private val PROJECTION =

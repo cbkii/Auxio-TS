@@ -1,85 +1,86 @@
 # Database-first library architecture migration map
 
-The consolidated implementation establishes the Room schema, the non-destructive `MIGRATION_70_71`
-upgrade, a bounded restart-safe backfill from the legacy cache into the normalized tables, and a
-bounded query surface for the remaining consumer migration. The legacy `CachedFileData` table
-remains the active import/source cache until startup, UI, search and MediaBrowser callers move to the
-normalized projections; it is never deleted by migration or backfill.
+The database-first programme now has two deliberately separate lanes:
 
-## Implementation status
+1. **Immediate interaction** reads bounded committed rows for Fast Start, Quick Find, direct-folder playback and pre-hydration MediaBrowser responses.
+2. **Rich compatibility** reconstructs the complete Musikr graph only after startup capabilities are available, for relationship-heavy screens and playlist mutation that have not yet been converted to row/detail models.
 
-- **Implemented:** normalized Room schema (`MIGRATION_70_71`, no destructive fallback),
-  database-scoped `@TypeConverters`, reverse-direction relationship indexes,
-  `LibraryBackfill` (bounded batches, transactional writes, idempotent restart-safe resume via
-  unique URI identity), runtime wiring via `MutableCache.populateNormalizedLibrary()` invoked at
-  the end of `MusicRepositoryImpl.startup()` on the indexing scope, executable Room migration and
-  backfill tests (`CacheMigrationAndBackfillTest`).
-- **Scaffold only:** `LibraryReadDao` paged projections are not yet consumed by ViewModels/adapters;
-  generation columns exist but incremental generation-safe scanning is not yet implemented.
-- **Implemented as a prerequisite for the fast-interaction startup PR:** database-backed song search
-  via `LibraryReadDao.searchSongs` escapes user `LIKE` metacharacters (`%`, `_`, `\`) with an
-  `ESCAPE '\'` clause, is strictly bounded and paged (`limit`/`offset`), and is deterministically
-  ordered (`titleSort, id`). `LikeQuery` provides the escaping helper and `LibrarySearcher` adds
-  cancellation, obsolete-query suppression, page-size caps, and overflow-safe offsets. Paged
-  song/album/artist projections also use an `id` tie-breaker so offset paging cannot skip or repeat
-  rows across equal sort keys. Covered by `LibrarySearchTest`.
-- **Not yet wired to normal runtime consumers:** the app Search UI still uses the complete in-memory
-  `SearchEngine` path. Leading-wildcard `LIKE` is database-backed and bounded but is not represented
-  as index-backed; the fast-interaction PR should introduce the final indexed Quick Find design or
-  a measured bounded fallback before switching the runtime UI.
-- **Not yet implemented:** Paging 3 end-to-end UI conversion, bounded asynchronous MediaBrowser,
-  startup decoupling from complete `Musikr.loadCached()` reconstruction, source-scoped committed
-  scan generations, changed-file-only extraction, real Lean/Full metadata work differentiation,
-  and the domain-model bridge that lets routine consumers stop constructing the complete in-memory
-  `Library` graph.
+The normalized Room schema is upgraded non-destructively through `MIGRATION_70_71` and `MIGRATION_71_72`. The legacy `CachedFileData` table remains an import and compatibility source; no migration deletes it or falls back to destructive recreation.
 
-## Three-part completion programme
+## Current implementation
 
-The remaining architecture is deliberately split so the search/schema foundation does not become an
-unreviewable catch-all change. The authoritative tracking issues are #179, #180 and #181:
+### Observed
 
-1. **Fast interaction startup**
-   - staged startup readiness;
-   - Fast Start bounded projections;
-   - indexed, cancellable Quick Find runtime wiring;
-   - direct-folder playback;
-   - bounded asynchronous MediaBrowser;
-   - useful startup independent from complete library hydration.
-2. **Incremental library pipeline**
-   - source-version ledgers and observation coalescing;
-   - pending/committed generations;
-   - unchanged-file fingerprint skips;
-   - database-side missing-file reconciliation;
-   - subscriber-driven categories;
-   - real Lean/Full enrichment and bounded artwork work.
-3. **Startup profiles and benchmarks**
-   - Baseline and Startup Profiles;
-   - startup/interaction macrobenchmarks;
-   - conservative performance regression gates;
-   - exact-device TS18 validation plan.
+- `CacheReadDao.selectSongByUri(uri)` performs point cache lookup without `selectAllSongs()` or a process-wide URI map.
+- `LibraryBackfill` migrates legacy rows in bounded, transactional, restart-safe batches.
+- Fast Start song, album, artist, folder and search projections are bounded and deterministically ordered.
+- Quick Find escapes `LIKE` metacharacters, caps page sizes, cancels obsolete searches and suppresses stale results.
+- `SourceLedgerData`, pending generations and committed generations isolate every MediaStore volume, SAF tree and DirectFS source.
+- Pending rows are invisible to normal readers and are published only by a successful Room transaction.
+- Cancellation, process restart, provider failure and removable-source loss retain the last committed generation.
+- Lean and Full metadata profiles change real extractor work. Lean skips TagLib-rich metadata, artwork, ReplayGain, MusicBrainz, genres, relationship expansion and rich dates.
+- Category invalidation is subscriber-driven: inactive Home categories accumulate one dirty marker rather than eagerly rebuilding every category.
+- The complete graph cannot be reached from the guarded immediate-lane source files.
 
-| Legacy producer | Legacy consumer | Database-first replacement | Projection | Paging | Removal point |
-| --- | --- | --- | --- | --- | --- |
-| `DBCache.read()` building a URI map with `selectAllSongs()` | Musikr scan cache lookup | `CacheReadDao.selectSongByUri(uri)` | `CachedFileData` single row | No, point lookup | Complete now |
-| `DBCache.snapshot()` | One-time legacy import only | `selectSongsPage(limit, offset)` batches, then normalized `LibrarySongData` | Lean song columns first | Yes, bounded batches | Remove after import migrates all users |
-| `Musikr.loadCached()` | Startup library publication | `LibraryReadDao.songsPage/albumsPage/artistsPage` | `SongListRow`, `AlbumListRow`, `ArtistListRow` | Yes | Fast-interaction startup conversion |
-| `MusicGraph.build()` | Category relationships | `SongArtistCrossRefData`, `SongGenreCrossRefData`, `AlbumArtistCrossRefData` | ID-based refs | Yes | Incremental relationship enrichment |
-| `LibraryFactory.create()` / `MutableLibrary` | UI, search, MediaBrowser | DB projections and bounded details | Row/detail DTOs | Yes | Per-consumer migration |
-| Full-library search | Search UI | indexed Quick Find or measured bounded DB fallback | lightweight result rows | Yes | Fast-interaction search migration |
+### Requires device validation
+
+- **Evidence confidence:** Requires exact-device TS18 validation.
+- **Porting decision:** The architecture and bounded validation constraints are reusable; runtime behaviour requires validation on `s9863a1h10_Natv`.
+
+Cold boot, process death, launcher restart, Bluetooth/media-button launch, real FAT timestamp behaviour, USB removal/reinsertion, two-volume mount-order changes and ACC sleep/wake remain exact-device tests on `s9863a1h10_Natv`.
+
+## Routine-consumer migration audit
+
+| Consumer | Startup authority | Complete graph allowed? | Current classification |
+| --- | --- | --- | --- |
+| Fast Start Home surface | bounded Room projections | No | Routine immediate-lane consumer; migrated |
+| Quick Find | bounded Room search projections | No | Routine immediate-lane consumer; migrated |
+| MediaBrowser root and early pages | bounded asynchronous Room/direct-folder results | No | Routine immediate-lane consumer; migrated |
+| Direct USB folder navigation/playback | one-level filesystem projection and primitive playback refs | No | Routine immediate-lane consumer; migrated |
+| Saved queue and first-audio restore | bounded primitive queue window / raw resume snapshot | No | Routine immediate-lane consumer; migrated |
+| Rich Album/Artist/Genre/Playlist details | compatibility Musikr graph after `FullLibraryReady` | Yes | Relationship-heavy compatibility consumer |
+| Playlist mutation and legacy detail decisions | compatibility `MutableLibrary` | Yes | Compatibility consumer pending a future row/detail mutation API |
+
+This satisfies the roadmap requirement for routine startup and first-minute consumers: they no longer wait for or construct the complete graph. It does **not** claim that the rich Musikr domain model has been removed. Removing that model requires replacement relationship-detail and playlist-mutation contracts and is outside the immediate interaction lane.
+
+## Compatibility-bridge boundaries
+
+The allowed complete-graph entry points are deliberately narrow:
+
+- `MusicRepositoryImpl.startCompatibilityHydration()` invokes `Musikr.loadCached()` on an IO supervisor only after bounded startup projections are prepared.
+- The hydration result is discarded when a newer device-library generation or revision supersedes it.
+- A source-local scan failure may rebuild the rich graph from committed, available rows so partially explored data is never published.
+- Rich relationship screens receive the graph only after library readiness; Fast Start, Quick Find, direct folders, primitive playback and early MediaBrowser responses do not depend on it.
+
+`DBCache.snapshot()` and `Musikr.loadCached()` are therefore compatibility bridges, not startup authorities. Architecture tests must fail if they are referenced from the guarded immediate-lane consumers.
+
+## Producer and consumer migration map
+
+| Legacy producer | Legacy consumer | Database-first replacement | State |
+| --- | --- | --- | --- |
+| `DBCache.read()` with a full URI map | scan cache lookup | `CacheReadDao.selectSongByUri(uri)` | Complete |
+| `DBCache.snapshot()` | startup and routine browsing | bounded committed projections | Removed from routine startup; compatibility-only |
+| `Musikr.loadCached()` | startup publication | Fast Start, Quick Find and MediaBrowser projections | Removed from immediate lane; compatibility-only |
+| `MusicGraph.build()` | eager category relationships | normalized song/album/artist/genre tables and cross-references | Persisted; rich graph still used only after readiness |
+| `LibraryFactory.create()` / `MutableLibrary` | all UI and playback decisions | bounded row/detail DTOs plus primitive playback refs | Routine startup migrated; rich detail/mutation bridge retained |
+| full-library in-memory search | Search UI | cancellable bounded Quick Find | Complete for pre-hydration and first-minute use |
 
 ## Generation model
 
-`LibraryVolumeData` stores availability plus committed and pending generations. `LibrarySongData`,
-`LibraryAlbumData`, `LibraryArtistData`, `LibraryGenreData` and playlist rows carry generation and
-metadata revision columns. Normal browsing must query available committed rows; failed or cancelled
-pending generations do not replace the last committed generation. The legacy backfill writes rows
-with `scanGeneration = 0` and `metadataRevision = 0`; the first real incremental scan will re-home
-provisional `legacy:<uri>` identities onto durable source identity.
+`SourceLedgerData` records source identity, availability, committed fingerprint, invalidation versions, configuration revision, committed metadata profile and pending/committed generation state. Candidate fingerprints do not become committed during observation or planning.
 
-## TS18 claim labels
+For a selected source, the pipeline allocates a pending generation, stages validated changed rows, records seen cache hits, reconciles missing rows in SQL and advances the ledger only after a successful transaction. Failed sources discard pending rows and preserve their previous committed generation while healthy sibling sources may still commit.
 
-- **Observed:** Room migration, backfill, bounded query and JVM/Room test behaviour proven by CI.
-- **Inferred:** the three-part architecture should reduce startup contention based on the current
-  code paths and Android-standard database behaviour.
-- **Requires device validation:** cold boot, process death, DoFun browsing, USB removal/reinsertion,
-  Bluetooth/media-key starts, and real ACC sleep/wake on `s9863a1h10_Natv`.
+Normal projections read only committed, currently available rows. Legacy rows remain readable until claimed by a durable source identity.
+
+## Optional playback components
+
+ReplayGain metadata extraction belongs to the Full metadata profile, but the single playback processor remains attached so changing the playback setting at runtime does not require a second player or unsafe player rebuild. It is a unity-gain pass when ReplayGain is disabled or no adjustment exists.
+
+The platform `MediaCodecAudioRenderer` is the preferred renderer for normal Android-supported formats. FFmpeg remains a fallback renderer for compatibility formats; it is not an indexing component and does not create a second playback pipeline.
+
+## Completion programme
+
+1. **Fast interaction startup — PR #182:** staged readiness, bounded Fast Start and Quick Find, direct-folder playback, asynchronous MediaBrowser and primitive service-first playback.
+2. **Incremental library pipeline — PR #183:** source generations, changed-file extraction, failure isolation, Lean/Full enrichment, subscriber-driven categories and compatibility-bridge containment.
+3. **Startup profiles and benchmarks — stacked next PR:** named Baseline/Startup profiles, benchmark fixtures, regression gates and exact-device TS18 validation evidence.

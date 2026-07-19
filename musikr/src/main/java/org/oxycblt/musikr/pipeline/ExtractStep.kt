@@ -26,10 +26,13 @@ import kotlinx.coroutines.channels.Channel
 import org.oxycblt.musikr.Config
 import org.oxycblt.musikr.cache.Audio
 import org.oxycblt.musikr.cache.CachedFile
+import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.covers.MutableCovers
+import org.oxycblt.musikr.fs.SourceIdentity
+import org.oxycblt.musikr.library.MetadataWorkPolicy
 import org.oxycblt.musikr.metadata.Metadata
 import org.oxycblt.musikr.metadata.MetadataExtractor
 import org.oxycblt.musikr.metadata.MetadataResult
@@ -48,10 +51,12 @@ internal interface ExtractStep {
     companion object {
         fun from(context: Context, config: Config): ExtractStep =
             ExtractStepImpl(
-                MetadataExtractor.from(context),
-                TagParser.new(),
+                MetadataExtractor.from(context, config.metadataProfile),
+                TagParser.new(config.metadataProfile, config.dimensionPolicy),
                 config.storage.cache,
                 config.storage.covers,
+                MetadataWorkPolicy.forProfile(config.metadataProfile).extractArtwork &&
+                    config.artworkPolicy == org.oxycblt.musikr.library.ArtworkPolicy.FULL_INDEXING,
                 config.indexingWorkerCount,
             )
     }
@@ -62,6 +67,7 @@ private class ExtractStepImpl(
     private val tagParser: TagParser,
     private val cache: MutableCache,
     private val covers: MutableCovers<out Cover>,
+    private val extractArtwork: Boolean,
     workerCount: Int,
 ) : ExtractStep {
     private val parallelism = workerCount.coerceAtLeast(1)
@@ -85,7 +91,18 @@ private class ExtractStepImpl(
                                     ?: Finalized(InvalidSong)
                             MetadataResult.NoMetadata -> Finalized(InvalidSong)
                             MetadataResult.NotAudio -> Finalized(NotAudio)
-                            MetadataResult.ProviderFailed -> Finalized(InvalidSong)
+                            MetadataResult.ProviderFailed -> {
+                                // A transient provider/open failure is not evidence that a
+                                // previously
+                                // committed song was deleted. Fail only this source generation so
+                                // its
+                                // last-known-good rows remain visible after the provider recovers.
+                                (cache as? IncrementalCache)?.markSourceFailed(
+                                    SourceIdentity.forFile(item.file),
+                                    "Metadata provider failed for ${item.file.uri}",
+                                )
+                                Finalized(InvalidSong)
+                            }
                         }
                     }
                     is NotAudio -> Finalized(NotAudio)
@@ -99,9 +116,15 @@ private class ExtractStepImpl(
                     is NeedsParsing -> {
                         val tags = tagParser.parse(item.metadata)
                         val cover =
-                            when (val result = covers.create(item.newSong.file, item.metadata)) {
-                                is CoverResult.Hit -> result.cover
-                                else -> null
+                            if (extractArtwork) {
+                                when (
+                                    val result = covers.create(item.newSong.file, item.metadata)
+                                ) {
+                                    is CoverResult.Hit -> result.cover
+                                    else -> null
+                                }
+                            } else {
+                                null
                             }
                         NeedsCaching(
                             RawSong(
@@ -109,14 +132,6 @@ private class ExtractStepImpl(
                                 item.metadata.properties,
                                 tags,
                                 cover,
-                                // The thing about date added is that it's resolution can
-                                // actually be expensive in some modes (ex. saf backend), so
-                                // we resolve this by moving date added extraction as an
-                                // extraction operation rather than doing the redundant work
-                                // during exploration (well, kind of, MediaStore's date
-                                // added query is basically free, it's only saf that has
-                                // it's slow hacky workaround that we must accommodate
-                                // here.)
                                 item.newSong.file.addedMs.resolve() ?: addingMs,
                             )
                         )
@@ -125,31 +140,30 @@ private class ExtractStepImpl(
             }
         val finalizedTask =
             scope.tryAsyncWith(extracted, Dispatchers.IO) {
-                val exclude = mutableListOf<CachedFile>()
+                // Legacy caches still require the complete exclusion list. Incremental caches
+                // record
+                // every discovered row directly and reconcile missing rows in SQL at commit time.
+                val legacyExclude =
+                    mutableListOf<CachedFile>().takeUnless { cache is IncrementalCache }
                 for (item in parsed) {
                     val result =
                         when (item) {
                             is Finalized -> {
                                 if (item.extracted is RawSong) {
-                                    // Cache-hit songs have no CachedFile instance in scope
-                                    // anymore; the conversion is a plain field copy, so
-                                    // rebuilding it here is cheap.
-                                    exclude.add(item.extracted.toCachedFile())
+                                    legacyExclude?.add(item.extracted.toCachedFile())
                                 }
                                 item
                             }
                             is NeedsCaching -> {
-                                // Convert once and reuse for both the cache write and the
-                                // cleanup exclude list to avoid duplicate per-song allocations.
                                 val cachedFile = item.rawSong.toCachedFile()
                                 cache.write(cachedFile)
-                                exclude.add(cachedFile)
+                                legacyExclude?.add(cachedFile)
                                 Finalized(item.rawSong)
                             }
                         }
                     it.send(result.extracted)
                 }
-                cache.cleanup(exclude)
+                legacyExclude?.let { cache.cleanup(it) }
             }
 
         return scope.merge(extractTask, parsedTask, finalizedTask)

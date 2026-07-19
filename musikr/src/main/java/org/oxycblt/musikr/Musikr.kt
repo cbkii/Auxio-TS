@@ -22,7 +22,9 @@ import android.content.Context
 import android.util.Log
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -30,6 +32,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.oxycblt.musikr.cache.CachedFile
+import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.pipeline.EvaluateStep
@@ -43,40 +46,11 @@ import org.oxycblt.musikr.pipeline.RawSong
 import org.oxycblt.musikr.util.merge
 import org.oxycblt.musikr.util.tryAsyncWith
 
-/**
- * A highly opinionated, multi-threaded device music library.
- *
- * Use this to load music with [run].
- *
- * Note the following:
- * 1. Musikr's API surface is intended to be primarily "stateless", with side-effects mostly
- *    contained within [Storage]. It's your job to manage long-term state.
- * 2. There are no "defaults" in Musikr. You should think carefully about the parameters you are
- *    specifying and know consider they are desirable or not.
- * 3. Musikr is currently not extendable, so if you're embedding this elsewhere you should be ready
- *    to fork and modify the source code.
- */
+/** A highly opinionated, multi-threaded device music library. */
 interface Musikr {
-    /**
-     * Start loading music using the given config and the configuration provided earlier.
-     *
-     * @param onProgress Optional callback to receive progress on the current status of the music
-     *   pipeline. Warning: These events will be rapid-fire.
-     * @return A handle to the newly created library alongside further cleanup.
-     */
     suspend fun run(onProgress: suspend (IndexingProgress) -> Unit = {}): LibraryResult
 
     companion object {
-        /**
-         * Create a new instance from the given configuration.
-         *
-         * @param context The context to use for loading resources.
-         * @param config Side-effect laden storage for use within the music loader **and** when
-         *   mutating [MutableLibrary]. You should take responsibility for managing their long-term
-         *   state.
-         * @param interpretation The configuration to use for interpreting certain vague tags. This
-         *   should be configured by the user, if possible.
-         */
         fun new(
             context: Context,
             config: Config,
@@ -91,16 +65,7 @@ interface Musikr {
                 EvaluateStep.new(context, config, config.interpretation),
             )
 
-        /**
-         * Rebuild the last indexed library from persisted cache rows without exploring storage.
-         *
-         * This gives callers a fast startup path: the returned library can be displayed and used by
-         * media/session code immediately while any explicit or first-run scan happens later.
-         *
-         * Cover hydration is intentionally skipped during cached startup to avoid blocking first UI
-         * availability on cover storage I/O. Covers are referenced by ID and can be loaded lazily
-         * by image loaders when needed.
-         */
+        /** Compatibility-only rich graph reconstruction from persisted cache rows. */
         suspend fun loadCached(context: Context, config: Config): MutableLibrary = coroutineScope {
             val start = System.currentTimeMillis()
             val extracted = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
@@ -139,59 +104,27 @@ interface Musikr {
             }
         }
 
-        /**
-         * Fast conversion from [CachedFile] to [RawSong] that skips cover hydration (obtain). The
-         * cover ID is preserved as a stub so image loaders can resolve it lazily.
-         */
         private fun CachedFile.toRawSongFast(storage: Storage): RawSong? {
             val audio = audio ?: return null
-            // Create a lightweight cover reference without doing I/O to verify it exists.
-            // The image loader will call covers.obtain(id) lazily when the art is displayed.
             val cover = audio.coverId?.let { id -> LazyIdCover(id, storage) }
-            return RawSong(file, audio.properties, audio.tags, cover, addedMs)
-        }
-
-        private suspend fun CachedFile.toRawSong(storage: Storage): RawSong? {
-            val audio = audio ?: return null
-            val cover =
-                when (val result = audio.coverId?.let { storage.covers.obtain(it) }) {
-                    is CoverResult.Hit -> result.cover
-                    else -> null
-                }
             return RawSong(file, audio.properties, audio.tags, cover, addedMs)
         }
     }
 }
 
-/** Simple library handle returned by [Musikr.run]. */
 interface LibraryResult {
     val library: MutableLibrary
 
-    /**
-     * Clean up expired resources. This should be done as soon as possible after music loading to
-     * reduce storage use.
-     *
-     * This may have unexpected results if previous [Library]s are in circulation across your app,
-     * so use it once you've fully updated your state.
-     */
+    val failedSources: Map<String, String>
+        get() = emptyMap()
+
+    /** Delete only resources proven expired by the successfully published generation. */
     suspend fun cleanup()
 }
 
-/** Music loading progress as reported by the music pipeline. */
 sealed interface IndexingProgress {
-    /**
-     * Currently indexing and extracting tags from device music.
-     *
-     * @param explored The amount of music currently found from the given [Query].
-     * @param loaded The amount of music that has had metadata extracted and parsed.
-     */
     data class Songs(val loaded: Int, val explored: Int) : IndexingProgress
 
-    /**
-     * Currently creating the music graph alongside I/O finalization.
-     *
-     * There is no way to measure progress on these events.
-     */
     data object Indeterminate : IndexingProgress
 }
 
@@ -205,67 +138,103 @@ private class MusikrImpl(
         suspend fun emitProgress(progress: IndexingProgress) {
             withContext(Dispatchers.Main) { onProgress(progress) }
         }
-        emitProgress(IndexingProgress.Songs(0, 0))
-        val start = System.currentTimeMillis()
-        val explored = AtomicInteger(0)
-        val loaded = AtomicInteger(0)
-        val exploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
-        val exploredTask = exploreStep.explore(this, exploredChannel)
-        val trackedExploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
-        val trackedExploredTask =
-            tryAsyncWith(trackedExploredChannel, Dispatchers.Default) {
-                var lastEmitMs = 0L
-                for (item in exploredChannel) {
-                    val exploredCount = explored.incrementAndGet()
-                    // Emitting per-item progress floods the main thread with state updates
-                    // (notification/UI refreshes) on large libraries; throttle to a humane rate.
-                    val now = System.currentTimeMillis()
-                    if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
-                        lastEmitMs = now
-                        emitProgress(IndexingProgress.Songs(loaded.get(), exploredCount))
+
+        val incremental = config.storage.cache as? IncrementalCache
+        val plan = config.scanPlan
+        if (plan != null) {
+            requireNotNull(incremental) { "An incremental scan plan requires an IncrementalCache" }
+            incremental.beginScan(plan)
+        }
+
+        try {
+            emitProgress(IndexingProgress.Songs(0, 0))
+            val start = System.currentTimeMillis()
+            val explored = AtomicInteger(0)
+            val loaded = AtomicInteger(0)
+            val exploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
+            val exploredTask = exploreStep.explore(this, exploredChannel)
+            val trackedExploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
+            val trackedExploredTask =
+                tryAsyncWith(trackedExploredChannel, Dispatchers.Default) {
+                    var lastEmitMs = 0L
+                    for (item in exploredChannel) {
+                        val exploredCount = explored.incrementAndGet()
+                        val now = System.currentTimeMillis()
+                        if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
+                            lastEmitMs = now
+                            emitProgress(IndexingProgress.Songs(loaded.get(), exploredCount))
+                        }
+                        trackedExploredChannel.send(item)
                     }
-                    trackedExploredChannel.send(item)
+                    emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
                 }
-                emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
-            }
-        val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
-        val extractedTask = extractStep.extract(this, trackedExploredChannel, extractedChannel)
-        val trackedExtractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
-        val trackedExtractedTask =
-            tryAsyncWith(trackedExtractedChannel, Dispatchers.Default) {
-                var lastEmitMs = 0L
-                for (item in extractedChannel) {
-                    val loadedCount = loaded.incrementAndGet()
-                    val now = System.currentTimeMillis()
-                    if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
-                        lastEmitMs = now
-                        emitProgress(IndexingProgress.Songs(loadedCount, explored.get()))
+            val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
+            val extractedTask = extractStep.extract(this, trackedExploredChannel, extractedChannel)
+            val trackedExtractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
+            val trackedExtractedTask =
+                tryAsyncWith(trackedExtractedChannel, Dispatchers.Default) {
+                    var lastEmitMs = 0L
+                    for (item in extractedChannel) {
+                        val loadedCount = loaded.incrementAndGet()
+                        val now = System.currentTimeMillis()
+                        if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
+                            lastEmitMs = now
+                            emitProgress(IndexingProgress.Songs(loadedCount, explored.get()))
+                        }
+                        trackedExtractedChannel.send(item)
                     }
-                    trackedExtractedChannel.send(item)
+                    emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
+                    emitProgress(IndexingProgress.Indeterminate)
                 }
-                emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
-                emitProgress(IndexingProgress.Indeterminate)
+            val library = evaluateStep.evaluate(trackedExtractedChannel)
+            merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
+
+            val commit = if (plan != null) incremental?.commitScan() else null
+            if (commit != null) {
+                Log.d(
+                    "Musikr",
+                    "Committed ${commit.committedSources.size} source generation(s), " +
+                        "${commit.changedRows} changed and ${commit.removedRows} removed rows",
+                )
             }
-        val library = evaluateStep.evaluate(trackedExtractedChannel)
-        merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
-        Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
-        LibraryResultImpl(config, library)
+            Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
+            LibraryResultImpl(config, library, commit?.failedSources.orEmpty())
+        } catch (e: CancellationException) {
+            abortIncremental(plan, incremental, e)
+            throw e
+        } catch (e: Throwable) {
+            abortIncremental(plan, incremental, e)
+            throw e
+        }
+    }
+
+    private suspend fun abortIncremental(
+        plan: org.oxycblt.musikr.cache.IncrementalScanPlan?,
+        incremental: IncrementalCache?,
+        original: Throwable,
+    ) {
+        if (plan == null || incremental == null) return
+        try {
+            withContext(NonCancellable) { incremental.abortScan(original) }
+        } catch (abortFailure: Throwable) {
+            original.addSuppressed(abortFailure)
+        }
     }
 }
 
-private class LibraryResultImpl(private val config: Config, override val library: MutableLibrary) :
-    LibraryResult {
+private class LibraryResultImpl(
+    private val config: Config,
+    override val library: MutableLibrary,
+    override val failedSources: Map<String, String>,
+) : LibraryResult {
     override suspend fun cleanup() {
-        config.storage.covers.cleanup(library.songs.mapNotNull { it.cover })
+        if (config.cleanupCovers) {
+            config.storage.covers.cleanup(library.songs.mapNotNull { it.cover })
+        }
     }
 }
 
-/**
- * A lightweight [Cover] stub that only holds an ID for deferred resolution.
- *
- * Used during cached startup to avoid blocking library emission on cover I/O. Image loaders resolve
- * the actual cover data lazily via [Covers.obtain].
- */
+/** Lightweight ID-only cover reference resolved on first visible use. */
 internal class LazyIdCover(override val id: String, private val storage: Storage) : Cover {
     private sealed interface Resolution {
         data object Unresolved : Resolution
@@ -300,8 +269,6 @@ internal class LazyIdCover(override val id: String, private val storage: Storage
                             result.cover
                         }
                         is CoverResult.Miss -> {
-                            // A miss is memoised only for this lightweight object. A later cache or
-                            // library generation creates a fresh LazyIdCover and can resolve again.
                             resolution = Resolution.Missing
                             null
                         }

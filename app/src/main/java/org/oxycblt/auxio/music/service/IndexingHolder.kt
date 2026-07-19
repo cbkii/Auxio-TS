@@ -24,6 +24,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
@@ -39,9 +40,11 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.getSystemServiceCompat
 import org.oxycblt.musikr.fs.FSUpdate
+import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
+import org.oxycblt.musikr.library.MetadataProfile
 import timber.log.Timber as L
 
 class IndexingHolder
@@ -79,8 +82,9 @@ private constructor(
 
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
+
     private var currentIndexJob: Job? = null
-    private var pendingIndexWithCache: Boolean? = null
+    private var pendingIndexRequest: IndexRequest? = null
     private var startupJob: Job? = null
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
@@ -92,6 +96,8 @@ private constructor(
                 BuildConfig.APPLICATION_ID + ":IndexingComponent",
             )
     private var trackingJob: Job? = null
+    private var observationRequestJob: Job? = null
+    private val observationBurstGate = ObservationBurstGate()
 
     fun attach() {
         musicSettings.registerListener(this)
@@ -99,18 +105,20 @@ private constructor(
         musicRepository.addIndexingListener(this)
         musicRepository.registerWorker(this)
         playbackManager.addListener(this)
-        // Delay storage tracking until the cached library is emitted (or first index completes).
-        // On TS18 firmware, SAF/MediaStore tracking setup can trigger slow provider queries that
-        // compete with the cached startup path. Tracking will begin once onMusicChanges fires.
+        // Observer attachment is cheap: it registers notifications only. Provider enumeration and
+        // extraction remain planner-controlled and notification bursts are conflated below.
+        if (musicSettings.shouldBeObserving) startTracking()
     }
 
     fun release() {
         startupJob?.cancel()
         startupJob = null
         stopTracking()
+        observationRequestJob?.cancel()
+        observationRequestJob = null
         currentIndexJob?.cancel()
         currentIndexJob = null
-        pendingIndexWithCache = null
+        pendingIndexRequest = null
         indexJob.cancel()
         wakeLock.releaseSafe()
         musicRepository.unregisterWorker(this)
@@ -163,45 +171,67 @@ private constructor(
 
     @Synchronized
     override fun requestIndex(withCache: Boolean) {
+        requestIndexLocked(IndexRequest(withCache, null))
+    }
+
+    @Synchronized
+    override fun requestIndex(withCache: Boolean, metadataProfile: MetadataProfile) {
+        requestIndexLocked(IndexRequest(withCache, metadataProfile))
+    }
+
+    private fun requestIndexLocked(request: IndexRequest) {
         if (currentIndexJob?.isActive == true) {
-            coalescePendingIndex(withCache)
-            L.i("Coalesced indexing request while scan is running [cache=$withCache]")
+            coalescePendingIndex(request)
+            L.i("Coalesced indexing request while scan is running [request=$request]")
             return
         }
-        if (
-            musicSettings.observationMode == ObservationMode.WHEN_IDLE && playbackActiveSnapshot()
-        ) {
-            coalescePendingIndex(withCache)
-            L.i("Deferred indexing request until playback is idle [cache=$withCache]")
+        val playbackActive = playbackActiveSnapshot()
+        val mustWaitForIdle =
+            playbackActive &&
+                (request.metadataProfile == MetadataProfile.FULL ||
+                    musicSettings.observationMode == ObservationMode.WHEN_IDLE)
+        if (mustWaitForIdle) {
+            coalescePendingIndex(request)
+            L.i("Deferred indexing/enrichment until playback is idle [request=$request]")
             return
         }
-        startIndexLocked(withCache)
+        startIndexLocked(request)
     }
 
     @Synchronized
-    private fun coalescePendingIndex(withCache: Boolean) {
-        // A cache-bypassing rescan is stronger than a cached refresh, so false wins.
-        pendingIndexWithCache = pendingIndexWithCache?.and(withCache) ?: withCache
+    private fun coalescePendingIndex(request: IndexRequest) {
+        pendingIndexRequest = IndexRequestCoalescer.merge(pendingIndexRequest, request)
     }
 
     @Synchronized
-    private fun startIndexLocked(withCache: Boolean) {
-        L.i("Starting new indexing job [cache=$withCache]")
+    private fun startIndexLocked(request: IndexRequest) {
+        L.i("Starting new indexing job [request=$request]")
         currentIndexJob =
             indexScope.launch {
                 try {
-                    musicRepository.index(this@IndexingHolder, withCache)
+                    if (request.metadataProfile != null) {
+                        musicRepository.index(
+                            this@IndexingHolder,
+                            request.withCache,
+                            request.metadataProfile,
+                        )
+                    } else {
+                        musicRepository.index(this@IndexingHolder, request.withCache)
+                    }
                 } finally {
                     synchronized(this@IndexingHolder) {
                         currentIndexJob = null
-                        val pending = pendingIndexWithCache
-                        if (
-                            pending != null &&
-                                !(musicSettings.observationMode == ObservationMode.WHEN_IDLE &&
-                                    playbackActiveSnapshot())
-                        ) {
-                            pendingIndexWithCache = null
-                            startIndexLocked(pending)
+                        val pending = pendingIndexRequest
+                        if (pending != null) {
+                            val playbackActive = playbackActiveSnapshot()
+                            val mustWaitForIdle =
+                                playbackActive &&
+                                    (pending.metadataProfile == MetadataProfile.FULL ||
+                                        musicSettings.observationMode == ObservationMode.WHEN_IDLE)
+                            if (!mustWaitForIdle) {
+                                pendingIndexRequest = null
+                                startIndexLocked(pending)
+                            }
                         }
                     }
                 }
@@ -211,9 +241,9 @@ private constructor(
     override fun onProgressionChanged(progression: org.oxycblt.auxio.playback.state.Progression) {
         if (!progression.isPlaying) {
             synchronized(this) {
-                val pending = pendingIndexWithCache
+                val pending = pendingIndexRequest
                 if (pending != null && currentIndexJob?.isActive != true) {
-                    pendingIndexWithCache = null
+                    pendingIndexRequest = null
                     startIndexLocked(pending)
                 }
             }
@@ -231,11 +261,8 @@ private constructor(
     }
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
-        if (musicRepository.library == null) return
         L.d("Music changed [device=${changes.deviceLibrary}, user=${changes.userLibrary}]")
-        if (musicSettings.shouldBeObserving && trackingJob == null) {
-            startTracking()
-        }
+        if (musicSettings.shouldBeObserving && trackingJob == null) startTracking()
         // Playback owns its persistent primitive queue. Rich metadata reconciliation is bounded
         // by the playback holder and must not clear all artwork or reapply a complete Song queue.
     }
@@ -259,24 +286,29 @@ private constructor(
         trackingJob =
             indexScope.launch {
                 fs.track().collect { update ->
+                    val location = (update as? FSUpdate.LocationChanged)?.location
+                    musicRepository.invalidateSource(location?.let(SourceIdentity::forLocation))
                     if (update is FSUpdate.LocationChanged) {
-                        val location = update.location
                         // Check if the location that changed is still accessible
                         if (location != null && !location.path.volume.isAccessible()) {
                             L.i("Source became inaccessible (unmounted?): ${location.uri}")
                             cancelCurrentIndex()
-                            // Skip this inaccessible update without stopping the tracker; keeping
-                            // it alive lets later remount/accessibility events trigger a real scan.
-                            return@collect
+                            // Keep the tracker alive and continue to the debounced planner so the
+                            // source ledger records unavailability without publishing an empty
+                            // generation.
                         }
                     }
 
-                    if (musicRepository.library == null) {
-                        L.i("Ignoring storage change before cached/startup library is available")
-                    } else {
-                        L.i("Storage change observed; refreshing library with cache")
-                        requestIndex(true)
-                    }
+                    val token = observationBurstGate.nextToken()
+                    observationRequestJob?.cancel()
+                    observationRequestJob =
+                        indexScope.launch {
+                            delay(OBSERVATION_DEBOUNCE_MS)
+                            if (observationBurstGate.isLatest(token)) {
+                                L.i("Storage notification burst settled; planning cached refresh")
+                                requestIndex(true)
+                            }
+                        }
                 }
             }
     }
@@ -284,6 +316,8 @@ private constructor(
     private fun stopTracking() {
         trackingJob?.cancel()
         trackingJob = null
+        observationRequestJob?.cancel()
+        observationRequestJob = null
     }
 
     @Synchronized
@@ -299,7 +333,10 @@ private constructor(
     override fun onMusicLocationsChanged() {
         super.onMusicLocationsChanged()
         if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
-        musicRepository.requestIndex(true)
+        indexScope.launch {
+            musicRepository.invalidateSource()
+            musicRepository.requestIndex(true)
+        }
     }
 
     override fun onIndexingSettingChanged() {
@@ -343,5 +380,6 @@ private constructor(
 
     companion object {
         const val WAKELOCK_TIMEOUT_MS = 60 * 1000L
+        internal const val OBSERVATION_DEBOUNCE_MS = 750L
     }
 }

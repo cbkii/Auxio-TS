@@ -1862,17 +1862,23 @@ class ExoPlaybackStateHolder(
             // Since Auxio is a music player, only specify an audio renderer to save
             // battery/apk size/cache size]
             val audioRenderer = RenderersFactory { handler, _, audioListener, _, _ ->
-                arrayOf<BaseRenderer>(
-                    FfmpegAudioRenderer(handler, audioListener, replayGainProcessor),
+                // Prefer Android's platform decoder for normal formats. FFmpeg remains a fallback
+                // compatibility renderer instead of loading first for every supported track.
+                val platformRenderer =
                     MediaCodecAudioRenderer(
                         context,
                         MediaCodecSelector.DEFAULT,
                         handler,
                         audioListener,
                         DefaultAudioSink.Builder(context)
+                            // Keep one processor available for runtime ReplayGain setting changes;
+                            // it remains at unity gain while disabled or when metadata is absent.
                             .setAudioProcessors(arrayOf(replayGainProcessor))
                             .build(),
-                    ),
+                    )
+                arrayOf<BaseRenderer>(
+                    platformRenderer,
+                    FfmpegAudioRenderer(handler, audioListener, replayGainProcessor),
                 )
             }
 

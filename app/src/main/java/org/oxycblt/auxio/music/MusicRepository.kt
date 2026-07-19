@@ -55,12 +55,15 @@ import org.oxycblt.musikr.MutableLibrary
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.Storage
+import org.oxycblt.musikr.cache.IncrementalCache
+import org.oxycblt.musikr.cache.IncrementalScanPlan
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.direct.DirectFS
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
+import org.oxycblt.musikr.library.MetadataProfile
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
 import org.oxycblt.musikr.tag.interpret.Naming
 import org.oxycblt.musikr.tag.interpret.Separators
@@ -193,6 +196,14 @@ interface MusicRepository {
      */
     fun requestIndex(withCache: Boolean)
 
+    /** Request a scan with an explicit metadata-work profile. */
+    fun requestIndex(withCache: Boolean, metadataProfile: MetadataProfile) {
+        requestIndex(withCache)
+    }
+
+    /** Persist a source invalidation without performing a provider query. */
+    suspend fun invalidateSource(sourceKey: String? = null) = Unit
+
     /**
      * Start the music system. This should be called by the application at startup.
      *
@@ -208,6 +219,14 @@ interface MusicRepository {
      * @param withCache Whether to use the file-system cache for improved loading times.
      */
     suspend fun index(worker: IndexingWorker, withCache: Boolean)
+
+    suspend fun index(
+        worker: IndexingWorker,
+        withCache: Boolean,
+        metadataProfile: MetadataProfile,
+    ) {
+        index(worker, withCache)
+    }
 
     /** Data regarding the current changes in the music library. */
     data class Changes(
@@ -248,6 +267,10 @@ interface MusicRepository {
          * @param withCache Whether to use the file-system cache for improved loading times.
          */
         fun requestIndex(withCache: Boolean)
+
+        fun requestIndex(withCache: Boolean, metadataProfile: MetadataProfile) {
+            requestIndex(withCache)
+        }
     }
 }
 
@@ -433,6 +456,14 @@ constructor(
         indexingWorker?.requestIndex(withCache)
     }
 
+    override fun requestIndex(withCache: Boolean, metadataProfile: MetadataProfile) {
+        indexingWorker?.requestIndex(withCache, metadataProfile)
+    }
+
+    override suspend fun invalidateSource(sourceKey: String?) {
+        (cache as? IncrementalCache)?.invalidateSource(sourceKey)
+    }
+
     override suspend fun startup(worker: IndexingWorker) {
         PerfTimer.traceSuspend("MusicRepository.startup") {
             val start = System.currentTimeMillis()
@@ -480,62 +511,99 @@ constructor(
     }
 
     override suspend fun index(worker: IndexingWorker, withCache: Boolean) =
-        PerfTimer.traceSuspend("MusicRepository.index(cache=$withCache)") {
+        indexWithProfile(worker, withCache, metadataProfile = null)
+
+    override suspend fun index(
+        worker: IndexingWorker,
+        withCache: Boolean,
+        metadataProfile: MetadataProfile,
+    ) = indexWithProfile(worker, withCache, metadataProfile)
+
+    private suspend fun indexWithProfile(
+        worker: IndexingWorker,
+        withCache: Boolean,
+        metadataProfile: MetadataProfile?,
+    ) =
+        PerfTimer.traceSuspend("MusicRepository.index(cache=$withCache profile=$metadataProfile)") {
             yield()
             if (indexingWorker !== worker) {
                 L.w("Index requested from unregistered worker; ignoring")
                 return@traceSuspend
             }
 
-            // TS18 runtime observability: log persistent storage switch value during scan
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                val twStorageSwitch = readTwStorageSwitch()
-                if (!twStorageSwitch.isNullOrEmpty()) {
-                    L.d("TS18 diagnostic: persist.tw.storage.switch=$twStorageSwitch")
-                }
-            }
-
+            val playbackActive = worker.playbackActiveSnapshot()
+            val resolvedProfile =
+                DrivingStartupPolicy.metadataProfile(
+                    explicit = metadataProfile,
+                    scanPriority = musicSettings.scanPriority,
+                    playbackActive = playbackActive,
+                    isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                )
             val currentRevision = musicSettings.revision
             val newRevision = currentRevision?.takeIf { withCache } ?: UUID.randomUUID()
             val workerCount =
                 DefaultIndexingResourcePolicy.resolveWorkerCount(
                     scanPriority = musicSettings.scanPriority,
-                    playbackActive = worker.playbackActiveSnapshot(),
+                    playbackActive = playbackActive,
                     isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     availableProcessors = Runtime.getRuntime().availableProcessors(),
                 )
-            L.d("Resolved Musikr worker count: $workerCount")
+            val rawFs = createFileSystem()
+            val prepared =
+                IncrementalIndexPlanner.prepare(
+                    fs = rawFs,
+                    cache = cache,
+                    withCache = withCache,
+                    profile = resolvedProfile,
+                    configurationRevision = sourceConfigurationRevision(),
+                    legacyWriteOnly = ::WriteOnlyMutableCache,
+                )
+            val plan = prepared.plan
+            L.i(
+                "Resolved scan policy [workers=$workerCount profile=$resolvedProfile " +
+                    "scan=${plan?.scanSourceKeys} reuse=${plan?.reuseSourceKeys} " +
+                    "unavailable=${plan?.unavailableSourceKeys}]"
+            )
+
+            if (
+                plan != null &&
+                    !plan.hasWork &&
+                    plan.unavailableSourceKeys.isEmpty() &&
+                    synchronized(this) { library != null }
+            ) {
+                L.i("All configured sources are unchanged; skipping provider scan and extraction")
+                if (resolvedProfile == MetadataProfile.FULL) {
+                    emitStartupReadinessState(StartupReadinessState.EnrichmentComplete)
+                } else {
+                    worker.requestIndex(true, MetadataProfile.FULL)
+                }
+                emitIndexingCompletion(null)
+                return@traceSuspend
+            }
+
             val config =
                 createConfig(
-                    newRevision,
-                    if (withCache) cache else WriteOnlyMutableCache(cache),
-                    workerCount,
+                    revision = newRevision,
+                    cache = prepared.cache,
+                    workerCount = workerCount,
+                    fs = prepared.fs,
+                    metadataProfile = resolvedProfile,
+                    scanPlan = plan,
                 )
 
-            // Check accessibility before starting
             val locations =
                 when (musicSettings.locationMode) {
                     LocationMode.SAF,
                     LocationMode.DIRECT_FS -> musicSettings.safQuery.source
-                    LocationMode.MEDIA_STORE ->
-                        emptyList() // MediaStore is always "accessible" as a provider
+                    LocationMode.MEDIA_STORE -> emptyList()
                 }
-
-            if (locations.any { !it.path.volume.isAccessible() }) {
-                L.w("One or more music sources are inaccessible. Aborting scan to preserve cache.")
-                // Mark last scan failed but keep library state USABLE if it was,
-                // or RECOVERY if it needs a scan.
+            if (plan == null && locations.any { !it.path.volume.isAccessible() }) {
+                L.w("One or more legacy music sources are inaccessible. Preserving cache.")
                 musicSettings.lastScanFailed = true
                 emitIndexingCompletion(Exception("Music source inaccessible"))
                 return@traceSuspend
             }
 
-            L.d("Running index...")
-            val start = System.currentTimeMillis()
-            // When ts18SystemSourceFilter is enabled, the path restriction is now applied at the
-            // SQL level in the MediaStore query (useDefaultSystemFilter). For SAF mode, the
-            // FilteredFS pathKeywords still serve as the filtering mechanism since there is no
-            // SQL query to augment.
             val pathKeywords =
                 if (
                     musicSettings.ts18SystemSourceFilter &&
@@ -545,49 +613,69 @@ constructor(
                 } else {
                     emptyList()
                 }
-            val result =
-                Musikr.new(
-                        context = context,
-                        config = config,
-                        noisyDirs = TopwaySourcePolicy.NOISY_DIRS,
-                        pathKeywords = pathKeywords,
-                        rootGate = rootGate,
-                    )
-                    .run(::emitIndexingProgress)
-            L.d("Index finished in ${System.currentTimeMillis() - start}ms")
+            try {
+                val start = System.currentTimeMillis()
+                val result =
+                    Musikr.new(
+                            context = context,
+                            config = config,
+                            noisyDirs = TopwaySourcePolicy.NOISY_DIRS,
+                            pathKeywords = pathKeywords,
+                            rootGate = rootGate,
+                        )
+                        .run(::emitIndexingProgress)
+                L.d("Index finished in ${System.currentTimeMillis() - start}ms")
 
-            // Final accessibility check before committing empty state
-            if (result.library.songs.isEmpty()) {
-                if (locations.any { !it.path.volume.isAccessible() }) {
-                    L.w("Scan returned empty but sources became inaccessible. Preserving cache.")
-                    musicSettings.lastScanFailed = true
-                    emitIndexingCompletion(Exception("Source became inaccessible during scan"))
-                    return@traceSuspend
+                if (plan == null && result.library.songs.isEmpty()) {
+                    if (locations.any { !it.path.volume.isAccessible() }) {
+                        L.w("Legacy scan became inaccessible. Preserving cache.")
+                        musicSettings.lastScanFailed = true
+                        emitIndexingCompletion(Exception("Source became inaccessible during scan"))
+                        return@traceSuspend
+                    }
                 }
-            }
 
-            // Music loading completed, update the revision right now so we re-use this work
-            // later.
-            L.d("Revisioning from $currentRevision -> $newRevision")
-            musicSettings.revision = newRevision
-            // Deliver the library to the rest of the app
-            // This will more or less block until all required item translation and
-            // cleanup finishes.
-            L.d("Emitting new library")
-            emitLibrary(result.library)
-            // Clean up old data that is now impossible for the app to be using.
-            L.d("Cleanup")
-            result.cleanup()
-            // Finish up loading.
-            val isEmpty = result.library.songs.isEmpty()
-            musicSettings.libraryState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
-            musicSettings.lastScanFailed = false
-            emitStartupLibraryStatus(
-                if (isEmpty) StartupLibraryStatus.Empty else StartupLibraryStatus.Usable
-            )
-            if (!isEmpty) emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
-            L.i("Indexing complete [state=${musicSettings.libraryState}]")
-            emitIndexingCompletion(null)
+                musicSettings.revision = newRevision
+                val publishedLibrary =
+                    if (result.failedSources.isEmpty()) {
+                        result.library
+                    } else {
+                        L.w(
+                            "Source-local failures preserved prior generations: " +
+                                result.failedSources.keys
+                        )
+                        Musikr.loadCached(
+                            context,
+                            config.copy(scanPlan = null, cleanupCovers = false),
+                        )
+                    }
+                emitLibrary(publishedLibrary)
+                result.cleanup()
+                val isEmpty = publishedLibrary.songs.isEmpty()
+                musicSettings.libraryState =
+                    if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
+                musicSettings.lastScanFailed = false
+                emitStartupLibraryStatus(
+                    if (isEmpty) StartupLibraryStatus.Empty else StartupLibraryStatus.Usable
+                )
+                if (!isEmpty) emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                if (resolvedProfile == MetadataProfile.FULL) {
+                    emitStartupReadinessState(StartupReadinessState.EnrichmentComplete)
+                }
+                emitIndexingCompletion(null)
+
+                if (resolvedProfile == MetadataProfile.LEAN && !isEmpty) {
+                    // The worker defers this while playback is active, so rich extraction cannot
+                    // compete with first audio or driving interaction.
+                    worker.requestIndex(true, MetadataProfile.FULL)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                musicSettings.lastScanFailed = true
+                L.w(e, "Indexing failed; committed source generations remain readable")
+                emitIndexingCompletion(e)
+            }
         }
 
     private fun startCompatibilityBackfill() {
@@ -745,48 +833,58 @@ constructor(
     private suspend fun createConfig(
         revision: UUID,
         cache: MutableCache,
-        workerCount: Int = 2,
+        workerCount: Int,
+        fs: FS,
+        metadataProfile: MetadataProfile,
+        scanPlan: IncrementalScanPlan?,
     ): Config {
         val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
         val nameFactory =
-            if (musicSettings.intelligentSorting) {
-                Naming.intelligent()
-            } else {
-                Naming.simple()
-            }
+            if (musicSettings.intelligentSorting) Naming.intelligent() else Naming.simple()
         val covers = settingCovers.mutate(context, revision)
         L.d("Config: covers init ${System.currentTimeMillis() - configStart}ms")
-        val fsStart = System.currentTimeMillis()
-        val fs =
-            when (musicSettings.locationMode) {
-                LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
-                LocationMode.MEDIA_STORE -> {
-                    // Merge TS18 system source filter into the MediaStore query so the SQL
-                    // WHERE clause limits rows before cursor iteration.
-                    val query =
-                        musicSettings.mediaStoreQuery.copy(
-                            useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
-                        )
-                    MediaStore.from(context, query)
-                }
-                LocationMode.DIRECT_FS ->
-                    DirectFS(
-                        musicSettings.safQuery.source,
-                        rootGate.takeIf {
-                            musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND
-                        },
-                    )
-            }
-        L.d(
-            "Config: FS construction ${System.currentTimeMillis() - fsStart}ms [mode=${musicSettings.locationMode}]"
-        )
         return Config(
-            fs,
-            Storage(cache, covers, storedPlaylists),
-            Interpretation(nameFactory, separators),
+            fs = fs,
+            storage = Storage(cache, covers, storedPlaylists),
+            interpretation = Interpretation(nameFactory, separators),
             indexingWorkerCount = workerCount,
+            metadataProfile = metadataProfile,
+            dimensionPolicy = DrivingStartupPolicy.dimensions(metadataProfile),
+            artworkPolicy = DrivingStartupPolicy.artworkPolicy(metadataProfile),
+            scanPlan = scanPlan,
+            cleanupCovers = scanPlan == null && metadataProfile == MetadataProfile.FULL,
         )
+    }
+
+    private fun createFileSystem(): FS =
+        when (musicSettings.locationMode) {
+            LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
+            LocationMode.MEDIA_STORE -> {
+                val query =
+                    musicSettings.mediaStoreQuery.copy(
+                        useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
+                    )
+                MediaStore.from(context, query)
+            }
+            LocationMode.DIRECT_FS ->
+                DirectFS(
+                    musicSettings.safQuery.source,
+                    rootGate.takeIf { musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND },
+                )
+        }
+
+    private fun sourceConfigurationRevision(): Long {
+        val material = buildString {
+            append(musicSettings.locationMode)
+            append('|').append(musicSettings.safQuery)
+            append('|').append(musicSettings.mediaStoreQuery)
+            append('|').append(musicSettings.rootAccessPolicy)
+            append('|').append(musicSettings.ts18SystemSourceFilter)
+            append('|').append(musicSettings.separators)
+            append('|').append(musicSettings.intelligentSorting)
+        }
+        return material.hashCode().toLong() and 0xffffffffL
     }
 
     private fun emitStartupReadinessState(state: StartupReadinessState) {
