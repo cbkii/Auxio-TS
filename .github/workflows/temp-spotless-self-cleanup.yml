@@ -1,0 +1,62 @@
+name: Temporary Spotless Self-Cleanup
+
+on:
+  push:
+    branches:
+      - feature/floating-controls-track-ticker
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-spotless-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feature/floating-controls-track-ticker
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+
+      - name: Prepare formatting environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "${sdk_dir}"
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+          bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply Spotless and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh spotlessApply
+          rm -- .github/workflows/temp-spotless-self-cleanup.yml
+          git diff --check
+
+      - name: Commit formatting result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style: apply Spotless formatting"
+          git push origin HEAD:feature/floating-controls-track-ticker
