@@ -270,7 +270,7 @@ private constructor(
 
     override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) = update(force = true)
 
-    override fun onSessionEnded() = update(force = true)
+    override fun onSessionEnded() = FloatingTrackMetadataBus.clear()
 
     // Respond to settings changes that will affect the widget
     override fun onRoundModeChanged() = update()
