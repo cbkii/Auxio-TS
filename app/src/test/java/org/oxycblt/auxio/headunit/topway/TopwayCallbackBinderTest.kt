@@ -34,11 +34,7 @@ class TopwayCallbackBinderTest {
     fun `music callback binder dispatches all four playback controls`() {
         val controls = mutableListOf<TopwayMusicControl>()
         val binder =
-            TopwayMusicCallbackBinder(
-                onControl = controls::add,
-                onMode = {},
-                onExtended = {},
-            )
+            TopwayMusicCallbackBinder(onControl = controls::add, onMode = {}, onExtended = {})
 
         for (code in 1..4) {
             transact(
@@ -74,7 +70,9 @@ class TopwayCallbackBinderTest {
             binder = binder,
             descriptor = TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR,
             code = TopwayCommandServiceContract.MusicCallbackTransaction.MODE,
-        ) { writeInt(7) }
+        ) {
+            writeInt(7)
+        }
         transact(
             binder = binder,
             descriptor = TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR,
@@ -92,10 +90,7 @@ class TopwayCallbackBinderTest {
     fun `command callback binder unmarshals source response`() {
         var extended: Bundle? = null
         val binder =
-            TopwayCommandCallbackBinder(
-                onStatus = { _, _ -> },
-                onExtended = { extended = it },
-            )
+            TopwayCommandCallbackBinder(onStatus = { _, _ -> }, onExtended = { extended = it })
         val sourceBundle =
             Bundle().apply {
                 putString(
