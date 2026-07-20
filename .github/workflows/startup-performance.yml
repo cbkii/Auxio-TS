@@ -27,7 +27,7 @@ on:
   pull_request:
     branches:
       - dev
-      - cx/incremental-library-pipeline
+      - cx/startup-profiles-benchmarks
     paths:
       - ".github/workflows/**"
       - "app/**"
