@@ -169,7 +169,7 @@ jobs:
             echo "testClass=${TEST_CLASS}"
             echo "fixtureSongCount=${FIXTURE_SONG_COUNT}"
             echo "sourceCount=2"
-            echo "fixtureSchema=3"
+            echo "fixtureSchema=2"
             echo "fixtureSeed=18022026"
             echo "iterations=${ITERATIONS}"
             echo "warmups=AndroidX framework-managed; no separately configured warm-up iterations"
