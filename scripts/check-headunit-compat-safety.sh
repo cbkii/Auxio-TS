@@ -110,6 +110,7 @@ if [ -n "${identity_hits}" ]; then
 fi
 
 vendor_hits="$(search_matches 'com\.tw\.[A-Za-z0-9_.]+|com\.android\.launcher\.widget_music_progress' "${product_code_sources[@]}")"
+vendor_failures=0
 if [ -n "${vendor_hits}" ]; then
   while IFS= read -r line; do
     [ -z "${line}" ] && continue
@@ -121,7 +122,7 @@ if [ -n "${vendor_hits}" ]; then
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in the isolated command-service bridge" >&2
-            exit 1
+            vendor_failures=$((vendor_failures + 1))
             ;;
         esac
         ;;
@@ -131,7 +132,7 @@ if [ -n "${vendor_hits}" ]; then
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in WidgetComponent" >&2
-            exit 1
+            vendor_failures=$((vendor_failures + 1))
             ;;
         esac
         ;;
@@ -141,17 +142,21 @@ if [ -n "${vendor_hits}" ]; then
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in isolated Topway bridge/test path" >&2
-            exit 1
+            vendor_failures=$((vendor_failures + 1))
             ;;
         esac
         ;;
       *)
         echo "${line}" >&2
         echo "Vendor strings must stay in the isolated Topway bridge/test paths" >&2
-        exit 1
+        vendor_failures=$((vendor_failures + 1))
         ;;
     esac
   done <<< "${vendor_hits}"
+fi
+if (( vendor_failures > 0 )); then
+  printf 'Found %d unexpected vendor string(s)\n' "${vendor_failures}" >&2
+  exit 1
 fi
 
 if [ -f "${manifest_path}" ]; then
