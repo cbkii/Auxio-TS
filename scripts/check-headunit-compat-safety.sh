@@ -56,7 +56,8 @@ if [ -n "${hard_forbidden_hits}" ]; then
 fi
 
 # The exact-device command Binder contract is permitted only in its two isolated implementation
-# files and their focused tests. Any spread into core playback/UI or another adapter fails closed.
+# files, their focused tests, and the Topway-only package-visibility declaration. Any spread into
+# core playback/UI or another adapter fails closed.
 command_bridge_hits="$(search_matches 'com\.tw\.service\.xt|ITWCommandAidl|ITWCommandCallbackAidl|IMusicCallBack' "${product_sources[@]}")"
 if [ -n "${command_bridge_hits}" ]; then
   while IFS= read -r line; do
@@ -64,6 +65,16 @@ if [ -n "${command_bridge_hits}" ]; then
     path="${line%%:*}"
     case "${path}" in
       "${command_bridge_contract}"|"${command_bridge_client}"|"${command_bridge_contract_test}"|"${command_bridge_binder_test}")
+        ;;
+      "${topway_flavour_manifest}")
+        case "${line}" in
+          *'<package android:name="com.tw.service.xt" />'*) ;;
+          *)
+            echo "${line}" >&2
+            echo "Unexpected command-service contract in Topway manifest" >&2
+            exit 1
+            ;;
+        esac
         ;;
       *)
         echo "${line}" >&2
@@ -166,6 +177,7 @@ if [ -f "${topway_flavour_manifest}" ]; then
   require_topway_identity 'org.oxycblt.auxio.AuxioService' 'Topway base service override'
   require_topway_identity 'org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY' 'Topway overlay restore action'
   require_topway_identity 'tools:node="remove"' 'Topway base service browse-filter removal'
+  require_topway_identity 'com.tw.service.xt' 'Topway command-service package visibility'
   # Manifest MUST declare modern specialUse compatibility for the overlay service (required by
   # Android 14+; safely ignored on Android 10). Runtime code API-gates the constant to API 34+.
   if ! grep -Fq 'android:foregroundServiceType="specialUse"' "${topway_flavour_manifest}"; then
