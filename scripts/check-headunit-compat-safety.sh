@@ -133,8 +133,10 @@ if [ -n "${vendor_hits}" ]; then
 fi
 
 if [ -f "${manifest_path}" ]; then
-  manifest_tw_hits="$(search_matches 'com\.tw\.[A-Za-z0-9_.]+' "${manifest_path}")"
-  if [ -n "${manifest_tw_hits}" ]; then
+  # Package-visibility declarations are expected and harmless here. Restrict this check to exported
+  # Topway intent actions so queries such as com.tw.eq/com.tw.dsp are not mistaken for receivers.
+  manifest_tw_action_hits="$(search_matches '<action[[:space:]]+android:name="com\.tw\.[A-Za-z0-9_.]+"' "${manifest_path}")"
+  if [ -n "${manifest_tw_action_hits}" ]; then
     while IFS= read -r line; do
       [ -z "${line}" ] && continue
       case "${line}" in
@@ -145,7 +147,7 @@ if [ -f "${manifest_path}" ]; then
           exit 1
           ;;
       esac
-    done <<< "${manifest_tw_hits}"
+    done <<< "${manifest_tw_action_hits}"
   fi
 fi
 
