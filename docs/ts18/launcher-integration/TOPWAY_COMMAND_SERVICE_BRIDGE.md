@@ -143,8 +143,8 @@ PR #185 repository evidence includes:
 - release-build step in #1053: skipped, not claimed as passing;
 - all current inline review threads: resolved before the final audit patch.
 
-The final audit patch must obtain fresh canonical checks on its own final head before the PR
-is marked ready for code review.
+Fresh canonical Android Build and Android Quality checks must pass on the final
+human/API-triggered head before the PR is marked ready for code review.
 
 ## Exact-device acceptance still required
 
