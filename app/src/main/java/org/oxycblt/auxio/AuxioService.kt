@@ -34,6 +34,7 @@ import androidx.media.utils.MediaConstants
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceClient
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.service.MusicServiceFragment
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
@@ -50,6 +51,7 @@ open class AuxioService :
     private lateinit var musicFragment: MusicServiceFragment
 
     @Inject lateinit var journal: DiagnosticJournal
+    @Inject lateinit var topwayCommandServiceClient: TopwayCommandServiceClient
 
     @SuppressLint("WrongConstant")
     override fun onCreate() {
@@ -61,6 +63,7 @@ open class AuxioService :
             musicFragment = musicFragmentFactory.create(this, this, this)
             sessionToken = playbackFragment.attach()
             musicFragment.attach()
+            topwayCommandServiceClient.attach(this::class.java)
             Timber.d("Service Created")
             journal.log(DiagnosticJournal.CAT_LIFECYCLE, "AuxioService onCreate")
         }
@@ -106,6 +109,7 @@ open class AuxioService :
 
     override fun onDestroy() {
         isForeground = false
+        topwayCommandServiceClient.release()
         super.onDestroy()
         musicFragment.release()
         playbackFragment.release()
@@ -230,7 +234,7 @@ abstract class ForegroundServiceNotification(context: Context, info: ChannelInfo
      * Reduced representation of a [NotificationChannelCompat].
      *
      * @param id The ID of the channel.
-     * @param nameRes A string resource ID corresponding to the human-readable name of this channel.
+     * @param nameRes A string resource ID corresponding to the human-readable name.
      */
     data class ChannelInfo(val id: String, @StringRes val nameRes: Int)
 }

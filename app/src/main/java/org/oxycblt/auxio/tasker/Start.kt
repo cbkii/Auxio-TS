@@ -34,6 +34,7 @@ import com.joaomgcd.taskerpluginlibrary.runner.TaskerPluginResultSucess
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import timber.log.Timber as L
 
 class StartActionHelper(config: TaskerPluginConfig<Unit>) :
@@ -60,9 +61,10 @@ class ActivityConfigStartAction : Activity(), TaskerPluginConfigNoInput {
 
 class StartActionRunner : TaskerPluginRunnerActionNoOutputOrInput() {
     override fun run(context: Context, input: TaskerInput<Unit>): TaskerPluginResult<Unit> {
+        val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
         ContextCompat.startForegroundService(
             context,
-            Intent(context, AuxioService::class.java)
+            Intent(context, serviceClass)
                 .setAction(AuxioService.ACTION_START)
                 .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TASKER),
         )

@@ -25,6 +25,7 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import timber.log.Timber as L
 
 /**
@@ -48,7 +49,9 @@ class BluetoothHeadsetReceiver : BroadcastReceiver() {
                 val headsetAutoplay = sharedPreferences.getBoolean(autoplayKey, false)
                 if (headsetAutoplay) {
                     L.d("Bluetooth headset connected, initializing service")
-                    val serviceIntent = Intent(context, AuxioService::class.java)
+                    val serviceClass =
+                        TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
+                    val serviceIntent = Intent(context, serviceClass)
                     serviceIntent.action = AuxioService.ACTION_START
                     serviceIntent.putExtra(
                         AuxioService.INTENT_KEY_START_ID,

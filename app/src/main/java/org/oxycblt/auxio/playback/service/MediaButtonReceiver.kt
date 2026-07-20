@@ -29,6 +29,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import timber.log.Timber as L
 
@@ -69,7 +70,8 @@ class MediaButtonReceiver : BroadcastReceiver() {
         }
 
         L.d("Delivering media button intent $intent")
-        intent.component = ComponentName(context, AuxioService::class.java)
+        val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
+        intent.component = ComponentName(context, serviceClass)
         intent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
         ContextCompat.startForegroundService(context, intent)
     }
