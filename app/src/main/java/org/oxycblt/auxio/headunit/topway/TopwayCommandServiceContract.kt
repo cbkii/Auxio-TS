@@ -127,8 +127,7 @@ internal enum class TopwayMusicControl(val transactionCode: Int, val mediaKeyCod
     );
 
     companion object {
-        fun fromTransaction(code: Int): TopwayMusicControl? = entries.firstOrNull {
-            it.transactionCode == code
-        }
+        fun fromTransaction(code: Int): TopwayMusicControl? =
+            entries.firstOrNull { it.transactionCode == code }
     }
 }
