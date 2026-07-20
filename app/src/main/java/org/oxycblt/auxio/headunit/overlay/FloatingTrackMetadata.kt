@@ -18,8 +18,6 @@
 
 package org.oxycblt.auxio.headunit.overlay
 
-import java.util.concurrent.CopyOnWriteArrayList
-
 /** Primitive track metadata safe to share with optional head-unit UI surfaces. */
 data class FloatingTrackMetadata private constructor(
     val artist: String?,
@@ -48,31 +46,40 @@ data class FloatingTrackMetadata private constructor(
  * In-process metadata bus for the optional floating-controls ticker.
  *
  * This does not create another playback, MediaSession, notification, or command authority. It only
- * mirrors primitive text already owned by Auxio's canonical playback state.
+ * mirrors primitive text already owned by Auxio's canonical playback state. State transitions and
+ * listener delivery are serialized so concurrent playback callbacks cannot publish stale text last.
  */
 object FloatingTrackMetadataBus {
-    private val listeners = CopyOnWriteArrayList<(FloatingTrackMetadata?) -> Unit>()
-
-    @Volatile private var currentMetadata: FloatingTrackMetadata? = null
+    private val lock = Any()
+    private val listeners = mutableListOf<(FloatingTrackMetadata?) -> Unit>()
+    private var currentMetadata: FloatingTrackMetadata? = null
 
     val current: FloatingTrackMetadata?
-        get() = currentMetadata
+        get() = synchronized(lock) { currentMetadata }
 
     fun publish(artist: String?, title: String?) {
         val next = FloatingTrackMetadata.from(artist, title)
-        if (next == currentMetadata) return
-        currentMetadata = next
-        listeners.forEach { it(next) }
+        synchronized(lock) {
+            if (next == currentMetadata) return
+            currentMetadata = next
+            // Notify while holding the serializing lock so concurrent publishers cannot deliver an
+            // older snapshot after a newer one. Listeners must remain bounded and non-blocking.
+            listeners.toList().forEach { it(next) }
+        }
     }
 
     fun clear() = publish(null, null)
 
     fun addListener(listener: (FloatingTrackMetadata?) -> Unit) {
-        listeners.addIfAbsent(listener)
-        listener(currentMetadata)
+        synchronized(lock) {
+            if (!listeners.contains(listener)) {
+                listeners.add(listener)
+            }
+            listener(currentMetadata)
+        }
     }
 
     fun removeListener(listener: (FloatingTrackMetadata?) -> Unit) {
-        listeners.remove(listener)
+        synchronized(lock) { listeners.remove(listener) }
     }
 }
