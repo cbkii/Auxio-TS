@@ -536,8 +536,7 @@ internal class TopwayMusicCallbackBinder(
         if (
             control == null &&
                 code != TopwayCommandServiceContract.MusicCallbackTransaction.MODE &&
-                code !=
-                    TopwayCommandServiceContract.MusicCallbackTransaction.EXTENDED_INTERFACE
+                code != TopwayCommandServiceContract.MusicCallbackTransaction.EXTENDED_INTERFACE
         ) {
             return super.onTransact(code, data, reply, flags)
         }
@@ -594,15 +593,14 @@ internal class TopwayCommandCallbackBinder(
                     readRequiredString()
                     onStatus("Bluetooth call status", status.toString())
                 }
-                TopwayCommandServiceContract.CommandCallbackTransaction
-                    .BT_CONNECTED_STATUS ->
+                TopwayCommandServiceContract.CommandCallbackTransaction.BT_CONNECTED_STATUS ->
                     onStatus("Bluetooth connected status", readRequiredInt().toString())
                 TopwayCommandServiceContract.CommandCallbackTransaction.REVERSE_STATUS ->
                     onStatus("Reverse status", readRequiredInt().toString())
                 TopwayCommandServiceContract.CommandCallbackTransaction.SLEEP_STATUS ->
                     onStatus("Sleep status", readRequiredInt().toString())
-                TopwayCommandServiceContract.CommandCallbackTransaction
-                    .EXTENDED_INTERFACE -> onExtended(readNullableBundle())
+                TopwayCommandServiceContract.CommandCallbackTransaction.EXTENDED_INTERFACE ->
+                    onExtended(readNullableBundle())
             }
         }
     }

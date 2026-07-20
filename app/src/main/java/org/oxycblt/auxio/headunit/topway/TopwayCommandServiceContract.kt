@@ -82,8 +82,7 @@ object TopwayCommandServiceContract {
         try {
             val action = bundle?.get(EXTRA_ACTION)
             val value = bundle?.get(EXTRA_SOURCE_VALUE)
-            if (action != ACTION_SOURCE_RECEIVE || value !is Int) null
-            else TopwaySourceState(value)
+            if (action != ACTION_SOURCE_RECEIVE || value !is Int) null else TopwaySourceState(value)
         } catch (_: RuntimeException) {
             // External Bundles are lazily unmarshalled and may contain unavailable Parcelables.
             null
