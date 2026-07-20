@@ -141,8 +141,7 @@ object RawFastResumeValidator {
         if (path.isNullOrBlank()) return invalid(Reason.BLANK_SOURCE, "direct path is blank")
         val normalized = path.trim()
         if (
-            !isAllowedDirectPath(normalized) &&
-                !isAllowedBenchmarkFixturePath(context, normalized)
+            !isAllowedDirectPath(normalized) && !isAllowedBenchmarkFixturePath(context, normalized)
         ) {
             return invalid(Reason.UNSAFE_PATH, normalized)
         }
@@ -179,8 +178,7 @@ object RawFastResumeValidator {
             val candidate = File(path).canonicalFile
             (0..1).any { sourceIndex ->
                 candidate.isInside(
-                    FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex)
-                        .canonicalFile
+                    FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex).canonicalFile
                 )
             }
         } catch (_: Exception) {

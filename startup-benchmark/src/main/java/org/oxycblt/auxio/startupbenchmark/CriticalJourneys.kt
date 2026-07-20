@@ -172,10 +172,7 @@ internal object CriticalJourneys {
         traceSection(traceName) {
             clickAnyAtCenterRequired(rootSelectors, "Fast Start USB $sourceIndex root")
             device.waitForIdle()
-            clickAtCenterRequired(
-                By.textStartsWith("▶"),
-                "playable USB $sourceIndex fixture",
-            )
+            clickAtCenterRequired(By.textStartsWith("▶"), "playable USB $sourceIndex fixture")
             waitForAudioPlayback()
         }
     }
