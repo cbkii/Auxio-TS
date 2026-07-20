@@ -81,7 +81,12 @@ private constructor(
                         name = candidate.appPath.substringAfterLast('/'),
                         directory = true,
                         playable = false,
-                        playbackPath = candidate.file.absolutePath,
+                        playbackPath =
+                            if (exposePhysicalPlaybackPath) {
+                                candidate.file.absolutePath
+                            } else {
+                                candidate.appPath
+                            },
                     )
                 }
             Page(entries, truncated = validRoots.size > boundedLimit)
