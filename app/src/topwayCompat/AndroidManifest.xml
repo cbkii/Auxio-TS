@@ -9,6 +9,11 @@
          Android 10 safely ignores this declaration. Runtime code API-gates the service type. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!-- Android 11+ package visibility for the optional exact-device command-service adapter. -->
+    <queries>
+        <package android:name="com.tw.service.xt" />
+    </queries>
+
     <application>
         <!--
         Topway-compatible APKs keep Auxio's normal service for explicit in-app starts only. External
