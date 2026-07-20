@@ -78,11 +78,15 @@ object TopwayCommandServiceContract {
             putString(EXTRA_ACTION, ACTION_SOURCE_REQUEST)
         }
 
-    fun parseSource(bundle: Bundle?): TopwaySourceState? {
-        if (bundle?.getString(EXTRA_ACTION) != ACTION_SOURCE_RECEIVE) return null
-        if (!bundle.containsKey(EXTRA_SOURCE_VALUE)) return null
-        return TopwaySourceState(bundle.getInt(EXTRA_SOURCE_VALUE))
-    }
+    fun parseSource(bundle: Bundle?): TopwaySourceState? =
+        try {
+            if (bundle?.getString(EXTRA_ACTION) != ACTION_SOURCE_RECEIVE) null
+            else if (!bundle.containsKey(EXTRA_SOURCE_VALUE)) null
+            else TopwaySourceState(bundle.getInt(EXTRA_SOURCE_VALUE))
+        } catch (_: RuntimeException) {
+            // External Bundles are lazily unmarshalled and may contain unavailable Parcelables.
+            null
+        }
 }
 
 /** Exact source values observed in `CommandService.sendSystemFunction`. */
