@@ -27,6 +27,8 @@ The bridge is limited to the dedicated `topwayTwMusic` and `topwayTwMedia` varia
 
 - **Evidence confidence: Observed.** `IMusicCallBack` uses transactions `1..6` for next, previous, play, pause, mode, and extended interface. `CommandService.sendSystemFunction` routes local-music source value `3` to this callback instead of Android media-key fallback.
 - **Porting decision: Directly reusable requirement.** Convert transactions `1..4` to Android `KEYCODE_MEDIA_NEXT`, `KEYCODE_MEDIA_PREVIOUS`, `KEYCODE_MEDIA_PLAY`, and `KEYCODE_MEDIA_PAUSE`, then send the media-button intent to the concrete, already-running Auxio service component. Mode and unknown bundles are observed/logged only.
+- **Evidence confidence: Observed.** The service stores music callbacks in Android's `RemoteCallbackList`, so more than one client can be registered at the same time.
+- **Porting decision: Requires device validation.** Auxio does not disable or replace the stock client. Exact-device testing must confirm that each DoFun button produces one Auxio playback change and no parallel stock reaction. If duplicate routing occurs, select `AndroidMediaSessionOnly` or `DiagnosticsOnly`, retain the logs, and revise the routing design rather than modifying stock services.
 
 ### Source state
 
@@ -83,7 +85,7 @@ Install the `topwayTwMedia` build matching the existing `com.tw.media` lane, the
 
 1. Start Auxio playback and return to DoFun Home.
 2. Verify logs show `Service connected`, descriptor acceptance, and `Music callback registered`.
-3. Press DoFun previous, play, pause, and next. Each press must log one matching `Music callback` and cause exactly one playback change.
+3. Press DoFun previous, play, pause, and next. Each press must log one matching `Music callback` and cause exactly one playback change, with no simultaneous stock-client reaction.
 4. Verify source response is logged as value `3` / `LOCAL_MUSIC` when Topway considers Auxio local music.
 5. Verify Android notification controls, hardware media keys, Bluetooth controls, and MediaSession controllers still work.
 6. Pause and leave the app idle; confirm no repeated binds, callback loops, duplicate services, duplicate sessions, or duplicate notifications.
