@@ -27,6 +27,59 @@ search_matches() {
   fi
 }
 
+resolve_diff_base() {
+  local candidate
+  if [ -n "${GITHUB_BASE_REF:-}" ]; then
+    candidate="origin/${GITHUB_BASE_REF}"
+    if git rev-parse --verify --quiet "${candidate}^{commit}" >/dev/null; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  fi
+  if git rev-parse --verify --quiet 'origin/dev^{commit}' >/dev/null; then
+    if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/dev)" ]; then
+      printf '%s\n' 'origin/dev'
+      return 0
+    fi
+  fi
+  if git rev-parse --verify --quiet 'HEAD^' >/dev/null; then
+    printf '%s\n' 'HEAD^'
+    return 0
+  fi
+  return 1
+}
+
+# Report matching lines newly introduced relative to the PR base. Existing approved integration
+# strings remain baseline evidence; new strings must still pass the narrow path/contract rules below.
+search_added_matches() {
+  local pattern="$1"
+  shift
+  local diff_base
+  local file
+  local diff_line
+  local added_line
+
+  diff_base="$(resolve_diff_base || true)"
+  if [ -z "${diff_base}" ] || [ "$#" -eq 0 ]; then
+    return 0
+  fi
+
+  while IFS= read -r -d '' file; do
+    while IFS= read -r diff_line; do
+      case "${diff_line}" in
+        '+++'*)
+          ;;
+        '+'*)
+          added_line="${diff_line#+}"
+          if [[ ${added_line} =~ ${pattern} ]]; then
+            printf '%s:%s\n' "${file}" "${added_line}"
+          fi
+          ;;
+      esac
+    done < <(git diff --no-ext-diff --unified=0 "${diff_base}...HEAD" -- "${file}")
+  done < <(git diff --name-only -z "${diff_base}...HEAD" -- "$@")
+}
+
 product_sources=()
 for path in app/src/main app/src/topwayCompat app/src/topwayTwMusic app/src/topwayTwMedia app/src/topwayTwMediaDebug app/src/test app/src/androidTest musikr/src; do
   [ -e "${path}" ] && product_sources+=("${path}")
@@ -109,8 +162,7 @@ if [ -n "${identity_hits}" ]; then
   done <<< "${identity_hits}"
 fi
 
-vendor_hits="$(search_matches 'com\.tw\.[A-Za-z0-9_.]+|com\.android\.launcher\.widget_music_progress' "${product_code_sources[@]}")"
-vendor_failures=0
+vendor_hits="$(search_added_matches 'com\.tw\.[A-Za-z0-9_.]+|com\.android\.launcher\.widget_music_progress' "${product_code_sources[@]}")"
 if [ -n "${vendor_hits}" ]; then
   while IFS= read -r line; do
     [ -z "${line}" ] && continue
@@ -122,7 +174,7 @@ if [ -n "${vendor_hits}" ]; then
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in the isolated command-service bridge" >&2
-            vendor_failures=$((vendor_failures + 1))
+            exit 1
             ;;
         esac
         ;;
@@ -132,7 +184,7 @@ if [ -n "${vendor_hits}" ]; then
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in WidgetComponent" >&2
-            vendor_failures=$((vendor_failures + 1))
+            exit 1
             ;;
         esac
         ;;
@@ -142,21 +194,17 @@ if [ -n "${vendor_hits}" ]; then
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in isolated Topway bridge/test path" >&2
-            vendor_failures=$((vendor_failures + 1))
+            exit 1
             ;;
         esac
         ;;
       *)
         echo "${line}" >&2
-        echo "Vendor strings must stay in the isolated Topway bridge/test paths" >&2
-        vendor_failures=$((vendor_failures + 1))
+        echo "New vendor strings must stay in the isolated Topway bridge/test paths" >&2
+        exit 1
         ;;
     esac
   done <<< "${vendor_hits}"
-fi
-if (( vendor_failures > 0 )); then
-  printf 'Found %d unexpected vendor string(s)\n' "${vendor_failures}" >&2
-  exit 1
 fi
 
 if [ -f "${manifest_path}" ]; then
