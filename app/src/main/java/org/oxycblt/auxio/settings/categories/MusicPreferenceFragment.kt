@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.settings.categories
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.viewModels
@@ -103,12 +104,16 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                             getString(R.string.set_export_startup_report),
                         )
                         .putExtra(Intent.EXTRA_TEXT, report)
-                startActivity(
-                    Intent.createChooser(
-                        shareIntent,
-                        getString(R.string.set_export_startup_report_chooser),
+                try {
+                    startActivity(
+                        Intent.createChooser(
+                            shareIntent,
+                            getString(R.string.set_export_startup_report_chooser),
+                        )
                     )
-                )
+                } catch (e: ActivityNotFoundException) {
+                    L.w(e, "No activity can share the startup performance report")
+                }
                 true
             }
         }
