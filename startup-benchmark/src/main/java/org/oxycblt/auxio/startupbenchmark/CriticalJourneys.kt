@@ -201,35 +201,11 @@ internal object CriticalJourneys {
 
     fun exerciseEarlyMediaBrowser() {
         traceSection(TRACE_MEDIA_BROWSER_FIRST_PAGE) {
-            val context = InstrumentationRegistry.getInstrumentation().context
-            val connected = CountDownLatch(1)
-            val failed = CountDownLatch(1)
-            val browser = mainThreadValue {
-                MediaBrowserCompat(
-                    context,
-                    serviceComponent(),
-                    object : MediaBrowserCompat.ConnectionCallback() {
-                        override fun onConnected() {
-                            connected.countDown()
-                        }
-
-                        override fun onConnectionFailed() {
-                            failed.countDown()
-                        }
-
-                        override fun onConnectionSuspended() {
-                            failed.countDown()
-                        }
-                    },
-                    null,
-                )
-            }
-            runOnMainSync { browser.connect() }
-            try {
-                check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {
-                    "MediaBrowser root did not connect before full-library hydration"
-                }
-                check(browser.isConnected) { "MediaBrowser reported disconnected after callback" }
+            withConnectedBrowser(
+                connectionFailureMessage =
+                    "MediaBrowser root did not connect before full-library hydration",
+                disconnectedMessage = "MediaBrowser reported disconnected after callback",
+            ) { browser ->
                 val childrenReady = CountDownLatch(1)
                 var childrenCount = -1
                 val callback =
@@ -256,13 +232,14 @@ internal object CriticalJourneys {
                         }
                     }
                 runOnMainSync { browser.subscribe(browser.root, callback) }
-                check(childrenReady.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                    "MediaBrowser first page timed out"
+                try {
+                    check(childrenReady.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                        "MediaBrowser first page timed out"
+                    }
+                    check(childrenCount >= 0) { "MediaBrowser first page returned an error" }
+                } finally {
+                    runOnMainSync { browser.unsubscribe(browser.root, callback) }
                 }
-                check(childrenCount >= 0) { "MediaBrowser first page returned an error" }
-                runOnMainSync { browser.unsubscribe(browser.root, callback) }
-            } finally {
-                runOnMainSync { browser.disconnect() }
             }
         }
     }
@@ -356,7 +333,23 @@ internal object CriticalJourneys {
         error("Media metadata did not change to a usable item; last=$last excluded=$excluded")
     }
 
-    private inline fun <T> withMediaController(block: (MediaControllerCompat) -> T): T {
+    private inline fun <T> withMediaController(block: (MediaControllerCompat) -> T): T =
+        withConnectedBrowser(
+            connectionFailureMessage = "MediaController connection failed",
+            disconnectedMessage = "MediaBrowser disconnected before controller creation",
+        ) { browser ->
+            val context = InstrumentationRegistry.getInstrumentation().context
+            val controller = mainThreadValue {
+                MediaControllerCompat(context, browser.sessionToken)
+            }
+            block(controller)
+        }
+
+    private inline fun <T> withConnectedBrowser(
+        connectionFailureMessage: String,
+        disconnectedMessage: String,
+        block: (MediaBrowserCompat) -> T,
+    ): T {
         val context = InstrumentationRegistry.getInstrumentation().context
         val connected = CountDownLatch(1)
         val failed = CountDownLatch(1)
@@ -383,13 +376,10 @@ internal object CriticalJourneys {
         runOnMainSync { browser.connect() }
         try {
             check(connected.await(UI_TIMEOUT_MS, TimeUnit.MILLISECONDS) && failed.count == 1L) {
-                "MediaController connection failed"
+                connectionFailureMessage
             }
-            check(browser.isConnected) { "MediaBrowser disconnected before controller creation" }
-            val controller = mainThreadValue {
-                MediaControllerCompat(context, browser.sessionToken)
-            }
-            return block(controller)
+            check(browser.isConnected) { disconnectedMessage }
+            return block(browser)
         } finally {
             runOnMainSync { browser.disconnect() }
         }
