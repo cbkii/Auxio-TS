@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.car.overlay
 
 import android.content.Context
+import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -35,6 +36,7 @@ class CarOverlayPrefsTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
+        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
     }
 
     @Test
@@ -48,5 +50,16 @@ class CarOverlayPrefsTest {
         CarOverlayPrefs.from(context)
 
         assertFalse(prefs.contains("car_overlay_suppressed_auxio_fg"))
+    }
+
+    @Test
+    fun trackTickerIsOptionalAndDisabledByDefault() {
+        val overlayPrefs = CarOverlayPrefs.from(context)
+
+        assertFalse(overlayPrefs.showTrackTicker)
+
+        overlayPrefs.showTrackTicker = true
+
+        assertTrue(CarOverlayPrefs.from(context).showTrackTicker)
     }
 }
