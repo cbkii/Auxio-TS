@@ -19,8 +19,11 @@
 package org.oxycblt.auxio.headunit.topway
 
 import android.os.Bundle
+import android.os.IBinder
 import android.os.Parcel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -87,6 +90,54 @@ class TopwayCallbackBinderTest {
     }
 
     @Test
+    fun `music callback binder rejects malformed and unknown transactions`() {
+        val controls = mutableListOf<TopwayMusicControl>()
+        var mode: Int? = null
+        var extended: Bundle? = null
+        val binder =
+            TopwayMusicCallbackBinder(
+                onControl = controls::add,
+                onMode = { mode = it },
+                onExtended = { extended = it },
+            )
+
+        assertFalse(
+            transactResult(
+                binder,
+                "wrong.descriptor",
+                TopwayCommandServiceContract.MusicCallbackTransaction.NEXT,
+            )
+        )
+        assertFalse(
+            transactResult(
+                binder,
+                TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR,
+                TopwayCommandServiceContract.MusicCallbackTransaction.MODE,
+            )
+        )
+        assertFalse(
+            transactResult(
+                binder,
+                TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR,
+                TopwayCommandServiceContract.MusicCallbackTransaction.EXTENDED_INTERFACE,
+            ) {
+                writeInt(1)
+            }
+        )
+        assertFalse(
+            transactResult(
+                binder,
+                TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR,
+                UNKNOWN_TRANSACTION,
+            )
+        )
+
+        assertTrue(controls.isEmpty())
+        assertNull(mode)
+        assertNull(extended)
+    }
+
+    @Test
     fun `command callback binder unmarshals source response`() {
         var extended: Bundle? = null
         val binder =
@@ -117,8 +168,41 @@ class TopwayCallbackBinderTest {
         assertEquals(TopwaySourceState.Kind.LOCAL_MUSIC, source?.kind)
     }
 
+    @Test
+    fun `command callback binder rejects truncated fields and bundles`() {
+        val statuses = mutableListOf<Pair<String, String>>()
+        var extended: Bundle? = null
+        val binder =
+            TopwayCommandCallbackBinder(
+                onStatus = { event, value -> statuses += event to value },
+                onExtended = { extended = it },
+            )
+
+        assertFalse(
+            transactResult(
+                binder,
+                TopwayCommandServiceContract.COMMAND_CALLBACK_DESCRIPTOR,
+                TopwayCommandServiceContract.CommandCallbackTransaction.BT_CALL_STATUS,
+            ) {
+                writeInt(1)
+            }
+        )
+        assertFalse(
+            transactResult(
+                binder,
+                TopwayCommandServiceContract.COMMAND_CALLBACK_DESCRIPTOR,
+                TopwayCommandServiceContract.CommandCallbackTransaction.EXTENDED_INTERFACE,
+            ) {
+                writeInt(1)
+            }
+        )
+
+        assertTrue(statuses.isEmpty())
+        assertNull(extended)
+    }
+
     private fun transact(
-        binder: android.os.IBinder,
+        binder: IBinder,
         descriptor: String,
         code: Int,
         writeArguments: Parcel.() -> Unit = {},
@@ -134,5 +218,27 @@ class TopwayCallbackBinderTest {
             reply.recycle()
             data.recycle()
         }
+    }
+
+    private fun transactResult(
+        binder: IBinder,
+        descriptor: String,
+        code: Int,
+        writeArguments: Parcel.() -> Unit = {},
+    ): Boolean {
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        return try {
+            data.writeInterfaceToken(descriptor)
+            data.writeArguments()
+            binder.transact(code, data, reply, 0)
+        } finally {
+            reply.recycle()
+            data.recycle()
+        }
+    }
+
+    private companion object {
+        const val UNKNOWN_TRANSACTION = 99
     }
 }

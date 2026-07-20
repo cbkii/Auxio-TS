@@ -1,105 +1,178 @@
 # TS18 Topway command-service playback bridge
 
-## Scope and approval
+## Scope and acceptance boundary
 
-This document is the design and production-eligibility record for the narrow Binder adapter added by this PR. The change was explicitly requested after exact-device APK analysis showed that Android MediaSession and the existing Topway broadcast bridge do not cover the TS18 local-music source path.
+This document records the repository design and production-eligibility evidence for the
+narrow Binder adapter introduced by PR #185. It does not claim that the physical TS18 has
+accepted a normal-app callback, assigned Auxio the local-music source, or delivered DoFun
+fixed-widget commands.
 
-The bridge is limited to the dedicated `topwayTwMusic` and `topwayTwMedia` variants. The standard Auxio variant returns before binding and retains Android-standard behaviour only.
+The adapter is limited at runtime to the dedicated `topwayTwMusic` and `topwayTwMedia`
+compatibility variants. `standard` returns before creating a worker thread or requesting a
+vendor-service bind.
 
-## Evidence and porting decision
+## Exact APK evidence
 
-### Exact-device service identity
+The retained reference analysed for this contract is:
 
-- **Evidence confidence: Observed.** The supplied `com.tw.service.xt` APK declares exported service `com.tw.service.xt.CommandService`, process `:remote`, and action `com.tw.service.xt.CommandService.Bind`, without a manifest binding permission.
-- **Porting decision: Directly reusable requirement.** Bind explicitly and verify the runtime Binder descriptor before sending any transaction.
+```text
+file: com.tw.service.xt uid_1000(1).apk
+SHA-256: 341af03ccbaeb6a7debe1929153eaadf9ced421d64a4933016010e0e7aa77267
+package: com.tw.service.xt
+versionName/versionCode: 2022.02.17 / 2
+compile/min/target SDK: 29 / 29 / 22
+shared UID: android.uid.system
+```
 
-### Command interface subset
+**Observed:** its manifest declares persistent exported service
+`com.tw.service.xt.CommandService`, process `:remote`, action
+`com.tw.service.xt.CommandService.Bind`, and no service binding permission. This is static
+manifest evidence only; firmware policy, SELinux and Binder-side caller checks still require
+exact-device validation.
 
-- **Evidence confidence: Observed.** Decompilation of the supplied APK established descriptor `com.tw.service.xt.aidl.ITWCommandAidl` and these transaction codes:
-  - `1`: register `ITWCommandCallbackAidl`
-  - `2`: unregister `ITWCommandCallbackAidl`
-  - `5`: register `IMusicCallBack`
-  - `6`: unregister `IMusicCallBack`
-  - `67`: `extendedInterface(Bundle)`
-- **Porting decision: Directly reusable requirement.** Implement only these transactions with local Binder objects. Do not copy decompiled source or smali.
+## Verified Binder subset
 
-### Music callback routing
+### Command interface
 
-- **Evidence confidence: Observed.** `IMusicCallBack` uses transactions `1..6` for next, previous, play, pause, mode, and extended interface. `CommandService.sendSystemFunction` routes local-music source value `3` to this callback instead of Android media-key fallback.
-- **Porting decision: Directly reusable requirement.** Convert transactions `1..4` to Android `KEYCODE_MEDIA_NEXT`, `KEYCODE_MEDIA_PREVIOUS`, `KEYCODE_MEDIA_PLAY`, and `KEYCODE_MEDIA_PAUSE`, then send the media-button intent to the concrete, already-running Auxio service component. Mode and unknown bundles are observed/logged only.
-- **Evidence confidence: Observed.** The service stores music callbacks in Android's `RemoteCallbackList`, so more than one client can be registered at the same time.
-- **Porting decision: Requires device validation.** Auxio does not disable or replace the stock client. Exact-device testing must confirm that each DoFun button produces one Auxio playback change and no parallel stock reaction. If duplicate routing occurs, select `AndroidMediaSessionOnly` or `DiagnosticsOnly`, retain the logs, and revise the routing design rather than modifying stock services.
+Descriptor: `com.tw.service.xt.aidl.ITWCommandAidl`
 
-### Source state
+| Transaction | Code | Request parcel after interface token |
+|---|---:|---|
+| register command callback | 1 | one strong Binder |
+| unregister command callback | 2 | one strong Binder |
+| register music callback | 5 | one strong Binder |
+| unregister music callback | 6 | one strong Binder |
+| extended interface | 67 | presence `int`, then `Bundle` when present |
 
-- **Evidence confidence: Observed.** A source request uses `project=system`, `action=source_request`; the response uses the exact misspelling `action=Source_recieve` and integer `SourceValue`. Observed routing values are radio `1`, local music `3`, Bluetooth `8`, and video `9`.
-- **Porting decision: Useful as evidence only.** The adapter requests and records the source. It never forces a source and never writes TW/MCU commands.
+The exact generated proxy uses synchronous transactions, a reply parcel and
+`readException()`. Auxio mirrors that order. Unknown descriptors or rejected/malformed
+replies fail closed.
 
-### DoFun and Android paths
+### Music callback
 
-- **Evidence confidence: Observed.** DoFun recognises `com.tw.media/com.tw.music.MusicActivity` and `com.tw.music/com.tw.music.MusicActivity`, while runtime captures show an active Auxio MediaSession was insufficient for the fixed DoFun music controls.
-- **Porting decision: Directly reusable requirement.** Keep MediaSession, MediaBrowser, media notification, stock-name wrapper, Topway broadcasts, and the command-service callback as parallel isolated paths. Do not replace one with another.
+Descriptor: `com.tw.service.xt.aidl.IMusicCallBack`
+
+| Code | Callback | Request fields after interface token |
+|---:|---|---|
+| 1 | `musicNext()` | none |
+| 2 | `musicPre()` | none |
+| 3 | `musicPlay()` | none |
+| 4 | `musicPause()` | none |
+| 5 | `musicMode(int)` | one `int` |
+| 6 | `extendedInterface(Bundle)` | presence `int`, then `Bundle` when present |
+
+### General command callback
+
+Descriptor: `com.tw.service.xt.aidl.ITWCommandCallbackAidl`
+
+Codes `1..8` are respectively system volume, volume status, Bluetooth phone status,
+Bluetooth call status (`int`, `String`, `String`), Bluetooth connection status, reverse
+status, sleep status, and extended `Bundle`.
+
+Auxio registers this callback only to observe the source reply. It does not use volume,
+Bluetooth, reverse or sleep values as authority.
+
+## Source observation
+
+The verified request is:
+
+```text
+project = system
+action = source_request
+```
+
+The service responds through the general callback with:
+
+```text
+action = Source_recieve
+SourceValue = <int>
+```
+
+The misspelling `Source_recieve` is exact. Static routing values observed in
+`CommandService.sendSystemFunction` are radio `1`, local music `3`, Bluetooth `8`, video
+`9`, and Android media-key fallback for other values.
+
+**Important:** requesting or observing the source does not make Auxio source `3`. Callback
+registration does not prove DoFun command delivery. Auxio does not force source state or
+write TWUtil/MCU commands.
 
 ## Runtime design
 
-`TopwayCommandServiceClient` is created through Hilt and attached to `AuxioService` lifecycle:
-
-1. Standard builds exit without creating a worker or binding.
-2. Topway builds create one bounded worker thread and request a service bind.
-3. Action resolution is attempted first; the exact component is retained as a fallback.
-4. The remote descriptor must equal `ITWCommandAidl`. A mismatch stops this adapter for the service lifetime.
-5. The music callback is required. The general callback and source query are optional enhancements.
-6. Binder transactions run off the main thread. Playback callbacks are posted to the main thread as media-button service intents.
-7. Existing `Ts18LauncherIntegrationMode` gates command execution. `DiagnosticsOnly`, media-session-only, broadcast-only, and disabled modes do not execute callback controls.
-8. Reconnection is bounded to delays of 500 ms, 1.5 s, and 3 s. There is no infinite polling.
-9. Service destruction unregisters callbacks, unlinks death notification, unbinds, and quits the owned worker.
+1. `standard` returns from `attach()` before worker creation or binding.
+2. A compatibility build creates one bounded worker while the concrete Auxio service lives.
+3. Action resolution is attempted first, with the exact component as fallback.
+4. The runtime Binder descriptor must match before registration.
+5. Music callback registration is required; the general callback/source query is optional.
+6. Binder transactions run off the main thread.
+7. Playback callbacks post Android media-button intents to the concrete existing Auxio
+   service component. `PlaybackServiceFragment` then passes them to the one canonical
+   `MediaSessionCompat`; no second player, queue, service, session or notification is added.
+8. Known callback parcels require the exact descriptor and minimum verified fields.
+   Truncated fields, wrong descriptors, wrong source value types and unparcelable Bundles
+   are rejected without escaping the Binder callback.
+9. Reconnection is bounded to 500 ms, 1.5 s and 3 s. There is no infinite polling.
+10. Release defers rapid reattachment until callback cleanup and old unbind complete, then
+    either starts the pending session or shuts down the worker.
 
 ## Safety boundaries
 
-The implementation deliberately does **not**:
+The implementation does **not**:
 
-- import vendor Java classes;
-- require platform signing, shared UID, root, Magisk, or SELinux changes;
-- impersonate stock package identity outside the existing dedicated compatibility flavours;
+- import or copy vendor Java classes, AIDL source, smali or native libraries;
+- require platform signing, UID 1000, shared UID, signature permissions, root or SELinux
+  changes;
 - call `TWUtil`, force source state, or write MCU/CAN/radio commands;
-- implement or fake Cardoor services;
-- create a second playback service, MediaSession, notification, or playback state owner;
-- keep retrying indefinitely when the service or contract is unavailable.
+- implement fake Cardoor services;
+- replace the existing playback service, player, queue, MediaSession or notification stack;
+- modify the separate systemless Magisk-only exact-`com.tw.music` replacement contract.
 
-A descriptor mismatch, registration rejection, missing service, `SecurityException`, or binder death degrades to the existing MediaSession/broadcast paths. Auxio playback remains available.
+`topwayTwMedia` and `topwayTwMusic` remain distinct. The latter is not an ordinary
+side-by-side replacement for the platform-signed stock package.
 
-## Required validation
+Missing, rejected or descriptor-mismatched vendor services leave Auxio's existing Android
+MediaSession, media-button and Topway broadcast paths intact. That is not a claim that the
+DoFun fixed widget will successfully fall back to those paths.
 
-### CI proof
+## Repository validation
 
-The PR must pass:
+PR #185 repository evidence includes:
 
-- standard, `topwayTwMusic`, and `topwayTwMedia` debug compilation;
-- standard unit tests, including callback Parcel unmarshalling and exact transaction constants;
-- formatting, Android lint, and head-unit compatibility safety checks;
-- existing TS18 APK-reference and DoFun/Topway contract checks.
+- Android Quality #1049: successful;
+- Android Build #1053: successful configured PR job;
+- maintained debug builds and TS18 APK-reference/DoFun checks: successful;
+- release-build step in #1053: skipped, not claimed as passing;
+- all current inline review threads: resolved before the final audit patch.
 
-### Exact TS18 runtime proof
+The final audit patch must obtain fresh canonical checks on its own final head before the PR
+is marked ready for code review.
 
-Install the `topwayTwMedia` build matching the existing `com.tw.media` lane, then validate after a cold launch, process restart, reboot, and real ACC sleep/wake:
+## Exact-device acceptance still required
 
-1. Start Auxio playback and return to DoFun Home.
-2. Verify logs show `Service connected`, descriptor acceptance, and `Music callback registered`.
-3. Press DoFun previous, play, pause, and next. Each press must log one matching `Music callback` and cause exactly one playback change, with no simultaneous stock-client reaction.
-4. Verify source response is logged as value `3` / `LOCAL_MUSIC` when Topway considers Auxio local music.
-5. Verify Android notification controls, hardware media keys, Bluetooth controls, and MediaSession controllers still work.
-6. Pause and leave the app idle; confirm no repeated binds, callback loops, duplicate services, duplicate sessions, or duplicate notifications.
-7. Kill or restart `com.tw.service.xt` once in a controlled diagnostic window and confirm bounded reconnection without an app crash.
-8. Change integration mode to `AndroidMediaSessionOnly` or `DiagnosticsOnly`; callbacks may be observed but must not alter playback.
+Install the `topwayTwMedia` build first and validate:
 
-DoFun fixed-widget identity selection remains separately device-dependent. Successful callback registration proves the playback-control path, not platform signing or full stock-widget replacement.
+1. normal-app bind and music callback registration;
+2. observed source value and whether the ordinary launcher/playback flow reaches source `3`;
+3. one previous/play/pause/next callback and exactly one Auxio playback change per press;
+4. no simultaneous stock-music action or duplicate callback reaction;
+5. fixed-widget launch target, metadata and progress separately from command delivery;
+6. Android notification, hardware-key, Bluetooth and MediaSession controls remain intact;
+7. Auxio process death/recreation;
+8. controlled `com.tw.service.xt` death/restart and bounded reconnect;
+9. reboot and real ACC sleep/wake;
+10. diagnostics-only, media-session-only and disabled-mode gating;
+11. missing, rejected and descriptor-mismatched service behaviour.
+
+If registration succeeds but source `3` or DoFun delivery is not achieved, the remaining
+blocker is a Topway source/routing authority boundary. Do not invent source-forcing calls or
+claim complete DoFun integration.
 
 ## Rollback
 
-Application rollback is one of:
+Use one of:
 
-- select `AndroidMediaSessionOnly` or `Disabled` in TS18 launcher integration settings;
+- select `AndroidMediaSessionOnly` or `Disabled` in TS18 launcher-integration settings;
 - install the previous Auxio-TS APK;
-- install the standard flavour, which never activates the adapter.
+- install `standard`, which never activates the adapter.
 
-No system partition, Topway package, launcher database, MCU, CAN configuration, or persistent root state is modified.
+No system partition, Topway package, launcher database, MCU/CAN configuration or persistent
+root state is modified by this PR.

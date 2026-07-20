@@ -536,19 +536,24 @@ internal class TopwayMusicCallbackBinder(
         if (
             control == null &&
                 code != TopwayCommandServiceContract.MusicCallbackTransaction.MODE &&
-                code != TopwayCommandServiceContract.MusicCallbackTransaction.EXTENDED_INTERFACE
+                code !=
+                    TopwayCommandServiceContract.MusicCallbackTransaction.EXTENDED_INTERFACE
         ) {
             return super.onTransact(code, data, reply, flags)
         }
-        data.enforceInterface(TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR)
-        when {
-            control != null -> onControl(control)
-            code == TopwayCommandServiceContract.MusicCallbackTransaction.MODE ->
-                onMode(data.readInt())
-            else -> onExtended(data.readNullableBundle())
+        return handleVendorCallbackTransaction(
+            descriptor = TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR,
+            code = code,
+            data = data,
+            reply = reply,
+        ) {
+            when {
+                control != null -> onControl(control)
+                code == TopwayCommandServiceContract.MusicCallbackTransaction.MODE ->
+                    onMode(readRequiredInt())
+                else -> onExtended(readNullableBundle())
+            }
         }
-        reply?.writeNoException()
-        return true
     }
 }
 
@@ -570,33 +575,73 @@ internal class TopwayCommandCallbackBinder(
         ) {
             return super.onTransact(code, data, reply, flags)
         }
-        data.enforceInterface(TopwayCommandServiceContract.COMMAND_CALLBACK_DESCRIPTOR)
-        when (code) {
-            TopwayCommandServiceContract.CommandCallbackTransaction.SYSTEM_VOLUME ->
-                onStatus("System volume", data.readInt().toString())
-            TopwayCommandServiceContract.CommandCallbackTransaction.VOLUME_STATUS ->
-                onStatus("Volume status", data.readInt().toString())
-            TopwayCommandServiceContract.CommandCallbackTransaction.BT_PHONE_STATUS ->
-                onStatus("Bluetooth phone status", data.readInt().toString())
-            TopwayCommandServiceContract.CommandCallbackTransaction.BT_CALL_STATUS -> {
-                val status = data.readInt()
-                data.readString()
-                data.readString()
-                onStatus("Bluetooth call status", status.toString())
+        return handleVendorCallbackTransaction(
+            descriptor = TopwayCommandServiceContract.COMMAND_CALLBACK_DESCRIPTOR,
+            code = code,
+            data = data,
+            reply = reply,
+        ) {
+            when (code) {
+                TopwayCommandServiceContract.CommandCallbackTransaction.SYSTEM_VOLUME ->
+                    onStatus("System volume", readRequiredInt().toString())
+                TopwayCommandServiceContract.CommandCallbackTransaction.VOLUME_STATUS ->
+                    onStatus("Volume status", readRequiredInt().toString())
+                TopwayCommandServiceContract.CommandCallbackTransaction.BT_PHONE_STATUS ->
+                    onStatus("Bluetooth phone status", readRequiredInt().toString())
+                TopwayCommandServiceContract.CommandCallbackTransaction.BT_CALL_STATUS -> {
+                    val status = readRequiredInt()
+                    readRequiredString()
+                    readRequiredString()
+                    onStatus("Bluetooth call status", status.toString())
+                }
+                TopwayCommandServiceContract.CommandCallbackTransaction
+                    .BT_CONNECTED_STATUS ->
+                    onStatus("Bluetooth connected status", readRequiredInt().toString())
+                TopwayCommandServiceContract.CommandCallbackTransaction.REVERSE_STATUS ->
+                    onStatus("Reverse status", readRequiredInt().toString())
+                TopwayCommandServiceContract.CommandCallbackTransaction.SLEEP_STATUS ->
+                    onStatus("Sleep status", readRequiredInt().toString())
+                TopwayCommandServiceContract.CommandCallbackTransaction
+                    .EXTENDED_INTERFACE -> onExtended(readNullableBundle())
             }
-            TopwayCommandServiceContract.CommandCallbackTransaction.BT_CONNECTED_STATUS ->
-                onStatus("Bluetooth connected status", data.readInt().toString())
-            TopwayCommandServiceContract.CommandCallbackTransaction.REVERSE_STATUS ->
-                onStatus("Reverse status", data.readInt().toString())
-            TopwayCommandServiceContract.CommandCallbackTransaction.SLEEP_STATUS ->
-                onStatus("Sleep status", data.readInt().toString())
-            TopwayCommandServiceContract.CommandCallbackTransaction.EXTENDED_INTERFACE ->
-                onExtended(data.readNullableBundle())
         }
-        reply?.writeNoException()
-        return true
     }
 }
 
-private fun Parcel.readNullableBundle(): Bundle? =
-    if (readInt() != 0) Bundle.CREATOR.createFromParcel(this) else null
+private inline fun handleVendorCallbackTransaction(
+    descriptor: String,
+    code: Int,
+    data: Parcel,
+    reply: Parcel?,
+    operation: Parcel.() -> Unit,
+): Boolean =
+    try {
+        data.enforceInterface(descriptor)
+        data.operation()
+        reply?.writeNoException()
+        true
+    } catch (e: RuntimeException) {
+        // The peer is outside Auxio's trust boundary. Reject malformed descriptors,
+        // truncated fields, wrong value encodings and unparcelable vendor payloads without
+        // allowing them to escape through Auxio's Binder thread.
+        L.w(e, "Rejecting malformed Topway callback transaction descriptor=$descriptor code=$code")
+        false
+    }
+
+private fun Parcel.readRequiredInt(): Int {
+    require(dataAvail() >= PARCEL_MIN_FIELD_BYTES) { "Missing integer field" }
+    return readInt()
+}
+
+private fun Parcel.readRequiredString(): String? {
+    require(dataAvail() >= PARCEL_MIN_FIELD_BYTES) { "Missing string field" }
+    return readString()
+}
+
+private fun Parcel.readNullableBundle(): Bundle? {
+    if (readRequiredInt() == 0) return null
+    require(dataAvail() > 0) { "Missing Bundle payload" }
+    return Bundle.CREATOR.createFromParcel(this)
+}
+
+private const val PARCEL_MIN_FIELD_BYTES = 4

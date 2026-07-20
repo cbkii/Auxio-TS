@@ -93,5 +93,16 @@ class TopwayCommandServiceContractTest {
         assertEquals(TopwaySourceState.Kind.VIDEO, source(9)?.kind)
         assertEquals(TopwaySourceState.Kind.OTHER, source(42)?.kind)
         assertNull(TopwayCommandServiceContract.parseSource(Bundle()))
+        assertNull(
+            TopwayCommandServiceContract.parseSource(
+                Bundle().apply {
+                    putString(
+                        TopwayCommandServiceContract.EXTRA_ACTION,
+                        TopwayCommandServiceContract.ACTION_SOURCE_RECEIVE,
+                    )
+                    putString(TopwayCommandServiceContract.EXTRA_SOURCE_VALUE, "3")
+                }
+            )
+        )
     }
 }

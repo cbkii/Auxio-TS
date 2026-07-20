@@ -80,9 +80,10 @@ object TopwayCommandServiceContract {
 
     fun parseSource(bundle: Bundle?): TopwaySourceState? =
         try {
-            if (bundle?.getString(EXTRA_ACTION) != ACTION_SOURCE_RECEIVE) null
-            else if (!bundle.containsKey(EXTRA_SOURCE_VALUE)) null
-            else TopwaySourceState(bundle.getInt(EXTRA_SOURCE_VALUE))
+            val action = bundle?.get(EXTRA_ACTION)
+            val value = bundle?.get(EXTRA_SOURCE_VALUE)
+            if (action != ACTION_SOURCE_RECEIVE || value !is Int) null
+            else TopwaySourceState(value)
         } catch (_: RuntimeException) {
             // External Bundles are lazily unmarshalled and may contain unavailable Parcelables.
             null
