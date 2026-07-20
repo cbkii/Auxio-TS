@@ -263,5 +263,9 @@ private constructor(
         }
     }
 
+    override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) = update(force = true)
+
+    override fun onSessionEnded() = update(force = true)
+
     override fun onRepeatModeChanged(repeatMode: RepeatMode) = update()
 }
