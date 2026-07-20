@@ -148,12 +148,15 @@ private constructor(
                 override fun onConfigRequest(builder: ImageRequest.Builder): ImageRequest.Builder {
                     val cornerRadius =
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            // Android 12, always round the cover with the widget's inner radius
                             L.d("Using android 12 corner radius")
                             context.getDimenPixels(android.R.dimen.system_app_widget_inner_radius)
                         } else if (uiSettings.roundMode) {
+                            // < Android 12, but the user still enabled round mode.
                             L.d("Using default corner radius")
                             context.getDimenPixels(R.dimen.m3_shape_corners_large)
                         } else {
+                            // User did not enable round mode.
                             L.d("Using no corner radius")
                             0
                         }
@@ -263,9 +266,92 @@ private constructor(
         }
     }
 
+    override fun onRepeatModeChanged(repeatMode: RepeatMode) = update()
+
     override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) = update(force = true)
 
     override fun onSessionEnded() = update(force = true)
 
-    override fun onRepeatModeChanged(repeatMode: RepeatMode) = update()
+    // Respond to settings changes that will affect the widget
+    override fun onRoundModeChanged() = update()
+
+    override fun onImageSettingsChanged() = update()
+
+    /**
+     * A condensed form of the playback state that is safe to use in AppWidgets.
+     *
+     * @param song [PlaybackStateManager.currentSong]
+     * @param cover A pre-loaded album cover [Bitmap] for [song].
+     * @param cover A pre-loaded album cover [Bitmap] for [song], with rounded corners.
+     * @param isPlaying [PlaybackStateManager.progression]
+     * @param repeatMode [PlaybackStateManager.repeatMode]
+     * @param isShuffled [PlaybackStateManager.isShuffled]
+     */
+    data class PlaybackState(
+        val song: Song?,
+        val title: CharSequence,
+        val artist: CharSequence,
+        val albumTitle: CharSequence?,
+        val mediaId: String,
+        val mediaUri: String,
+        val durationMs: Long,
+        val cover: Bitmap?,
+        val isPlaying: Boolean,
+        val repeatMode: RepeatMode,
+        val isShuffled: Boolean,
+        val positionMs: Long,
+    ) {
+        companion object {
+            fun fromSong(
+                context: Context,
+                song: Song,
+                cover: Bitmap?,
+                isPlaying: Boolean,
+                repeatMode: RepeatMode,
+                isShuffled: Boolean,
+                positionMs: Long,
+            ): PlaybackState {
+                val title = song.name.resolve(context)
+                val artist = song.artists.resolveNames(context)
+                val albumTitle = song.album.name.resolve(context)
+                return PlaybackState(
+                    song = song,
+                    title = title,
+                    artist = artist,
+                    albumTitle = albumTitle,
+                    mediaId = song.uid.toString(),
+                    mediaUri = song.uri.toString(),
+                    durationMs = song.durationMs,
+                    cover = cover,
+                    isPlaying = isPlaying,
+                    repeatMode = repeatMode,
+                    isShuffled = isShuffled,
+                    positionMs = positionMs,
+                )
+            }
+
+            fun fromRaw(
+                metadata: RawPlaybackMetadata,
+                isPlaying: Boolean,
+                repeatMode: RepeatMode,
+                isShuffled: Boolean,
+                positionMs: Long,
+            ): PlaybackState {
+                return PlaybackState(
+                    song = null,
+                    title = metadata.displayTitle,
+                    artist = metadata.displayArtist,
+                    albumTitle = metadata.album,
+                    mediaId = metadata.uriString,
+                    mediaUri = metadata.uriString,
+                    durationMs = metadata.durationMs,
+                    cover = null,
+                    isPlaying = isPlaying,
+                    repeatMode = repeatMode,
+                    isShuffled = isShuffled,
+                    positionMs = positionMs,
+                )
+            }
+        }
+    }
 }
