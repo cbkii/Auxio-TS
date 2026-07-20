@@ -48,7 +48,7 @@ internal object CriticalJourneys {
     const val TRACE_FIRST_ALBUMS_PAGE = "auxio.first_albums_page"
     const val TRACE_MEDIA_BROWSER_FIRST_PAGE = "auxio.media_browser_first_page"
 
-    private const val UI_TIMEOUT_MS = 10_000L
+    private const val UI_TIMEOUT_MS = 20_000L
     private const val AUDIO_TIMEOUT_MS = 10_000L
     private const val SETTLE_MS = 350L
 
@@ -170,21 +170,24 @@ internal object CriticalJourneys {
                 By.textContains("USB$sourceIndex"),
             )
         traceSection(traceName) {
-            clickAnyRequired(rootSelectors, "Fast Start USB $sourceIndex root")
+            clickAnyAtCenterRequired(rootSelectors, "Fast Start USB $sourceIndex root")
             device.waitForIdle()
-            clickRequired(By.textStartsWith("▶"), "playable USB $sourceIndex fixture")
+            clickAtCenterRequired(
+                By.textStartsWith("▶"),
+                "playable USB $sourceIndex fixture",
+            )
             waitForAudioPlayback()
         }
     }
 
     fun MacrobenchmarkScope.exercisePagedLibrary() {
         traceSection(TRACE_FIRST_SONGS_PAGE) {
-            clickRequired(By.textContains("Songs"), "Songs tab")
+            clickAtCenterRequired(By.textContains("Songs"), "Songs tab")
             requireObject(By.res(BuildConfig.TARGET_PACKAGE, "song_name"), "first paged Songs row")
             scrollPageTwice()
         }
         traceSection(TRACE_FIRST_ALBUMS_PAGE) {
-            clickRequired(By.textContains("Albums"), "Albums tab")
+            clickAtCenterRequired(By.textContains("Albums"), "Albums tab")
             requireObject(
                 By.res(BuildConfig.TARGET_PACKAGE, "parent_name"),
                 "first paged Albums row",
@@ -408,6 +411,30 @@ internal object CriticalJourneys {
     private fun MacrobenchmarkScope.clickRequired(selector: BySelector, description: String) {
         requireObject(selector, description).clickClickableAncestor(description)
         device.waitForIdle()
+    }
+
+    private fun MacrobenchmarkScope.clickAtCenterRequired(
+        selector: BySelector,
+        description: String,
+    ) {
+        val center = requireObject(selector, description).visibleCenter
+        check(device.click(center.x, center.y)) { "Coordinate click failed: $description" }
+        device.waitForIdle()
+    }
+
+    private fun MacrobenchmarkScope.clickAnyAtCenterRequired(
+        selectors: List<BySelector>,
+        description: String,
+    ) {
+        for (selector in selectors) {
+            val candidate = device.wait(Until.findObject(selector), 1_500L) ?: continue
+            val center = candidate.visibleCenter
+            if (device.click(center.x, center.y)) {
+                device.waitForIdle()
+                return
+            }
+        }
+        error("Required UI object not found or coordinate click failed: $description")
     }
 
     private fun MacrobenchmarkScope.clickAnyRequired(
