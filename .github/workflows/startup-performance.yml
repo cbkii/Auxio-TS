@@ -1,0 +1,266 @@
+name: Startup Performance Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+      - cx/startup-profiles-benchmarks
+    paths:
+      - ".github/workflows/**"
+      - "app/**"
+      - "musikr/**"
+      - "startup-benchmark/**"
+      - "scripts/**"
+      - "docs/architecture/**"
+      - "docs/validation/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "NOTICE"
+      - "media"
+      - "media/**"
+      - ".gitmodules"
+      - "ci/dependencies/**"
+  pull_request:
+    branches:
+      - dev
+      - cx/startup-profiles-benchmarks
+    paths:
+      - ".github/workflows/**"
+      - "app/**"
+      - "musikr/**"
+      - "startup-benchmark/**"
+      - "scripts/**"
+      - "docs/architecture/**"
+      - "docs/validation/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "NOTICE"
+      - "media"
+      - "media/**"
+      - ".gitmodules"
+      - "ci/dependencies/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Validate workflow YAML
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+
+      - name: Validate shell and Python script syntax
+        shell: bash
+        run: |
+          status=0
+          while IFS= read -r -d '' script; do
+            printf 'Checking %s\n' "${script}"
+            if ! bash -n "${script}"; then status=1; fi
+          done < <(find scripts -type f -name '*.sh' -print0)
+          while IFS= read -r -d '' script; do
+            printf 'Compiling %s\n' "${script}"
+            if ! python3 -m py_compile "${script}"; then status=1; fi
+          done < <(find scripts -type f -name '*.py' -print0)
+          exit "${status}"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Ensure native and profile inspection tools are present
+        shell: bash
+        run: |
+          missing=()
+          command -v ninja >/dev/null 2>&1 || missing+=(ninja-build)
+          command -v unzip >/dev/null 2>&1 || missing+=(unzip)
+          command -v jq >/dev/null 2>&1 || missing+=(jq)
+          if ((${#missing[@]})); then
+            sudo apt-get update
+            sudo apt-get install -y "${missing[@]}"
+          fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Validate static startup contracts
+        shell: bash
+        run: bash ./scripts/check-startup-performance-contracts.sh
+
+      - name: Check formatting
+        shell: bash
+        run: bash ./scripts/check-format-with-diff.sh
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest
+          bash ./scripts/ci-gradle.sh :musikr:testDebugUnitTest
+
+      - name: Run Android lint
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+
+      - name: Run head-unit safety checks
+        shell: bash
+        run: bash ./scripts/check-headunit-compat-safety.sh
+
+      - name: Compile benchmark and profile instrumentation
+        shell: bash
+        run: |
+          mkdir -p build/reports/startup-performance
+          set +e
+          bash ./scripts/ci-gradle.sh \
+            :startup-benchmark:assembleStandardBenchmarkBenchmark \
+            :startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark \
+            :startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark 2>&1 |
+            tee build/reports/startup-performance/benchmark-compile.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "${status}"
+
+      - name: Build maintained debug variants
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh :app:assembleStandardDebug
+          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicDebug
+          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
+
+      - name: Build maintained release variants and standard bundle
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh :app:assembleStandardRelease
+          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicRelease
+          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
+          bash ./scripts/ci-gradle.sh :app:bundleStandardRelease
+
+      - name: Validate compiled profile and startup-layout artefacts
+        shell: bash
+        run: |
+          set -o pipefail
+          report=build/reports/startup-performance/compiled-profile-validation.log
+          mkdir -p "$(dirname "${report}")"
+          set +e
+          {
+            set -u
+            mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
+            mapfile -t aabs < <(find app/build/outputs/bundle -type f -name '*.aab' | sort)
+
+            printf 'Release APK count: %s\n' "${#apks[@]}"
+            printf '%s\n' "${apks[@]:-}"
+            printf 'Release AAB count: %s\n' "${#aabs[@]}"
+            printf '%s\n' "${aabs[@]:-}"
+
+            for apk in "${apks[@]}"; do
+              printf '\n[%s]\n' "${apk}"
+              unzip -Z1 "${apk}" | grep -E '^assets/dexopt/baseline\.(prof|profm)$' || true
+            done
+            for aab in "${aabs[@]}"; do
+              printf '\n[%s]\n' "${aab}"
+              unzip -Z1 "${aab}" | grep -E '(^|/)BUNDLE-METADATA/.+(r8|profile|dexopt)' || true
+              while IFS= read -r entry; do
+                [[ -n "${entry}" ]] || continue
+                printf '%s: ' "${entry}"
+                unzip -p "${aab}" "${entry}" 2>/dev/null | grep -Eo '"startup"[[:space:]]*:[[:space:]]*(true|false)' | head -n 3 || true
+              done < <(unzip -Z1 "${aab}" | grep -E '(^|/)BUNDLE-METADATA/.+\.json$' || true)
+            done
+
+            if ((${#apks[@]} != 3)); then
+              printf 'Expected three release APKs, found %s\n' "${#apks[@]}" >&2
+              exit 1
+            fi
+            if ((${#aabs[@]} < 1)); then
+              echo 'Expected at least the standard release AAB' >&2
+              exit 1
+            fi
+            bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}" "${aabs[0]}"
+          } 2>&1 | tee "${report}"
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "${status}"
+
+      - name: Validate TS18 APK reference contracts
+        shell: bash
+        run: bash ./scripts/check-ts18-apk-reference-contracts.sh
+
+      - name: Validate DoFun and Topway compatibility sources
+        shell: bash
+        run: |
+          set -o pipefail
+          report=build/reports/startup-performance/dofun-topway-compat.log
+          mkdir -p "$(dirname "${report}")"
+          set +e
+          bash ./scripts/check-dofun-topway-compat.sh 2>&1 | tee "${report}"
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "${status}"
+
+      - name: Upload failure reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: startup-performance-failure-reports
+          path: |
+            app/build/reports/**
+            musikr/build/reports/**
+            startup-benchmark/build/reports/**
+            build/reports/problems/**
+            build/reports/startup-performance/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Write validation summary
+        if: always()
+        shell: bash
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## Startup Performance Validation"
+            echo
+            echo "- Result: \`${JOB_STATUS}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Includes workflow/shell/Python syntax, structural contracts, formatting, unit tests, lint, head-unit safety, all three benchmark/profile instrumentation flavours, all maintained debug/release variants, Baseline Profile packaging, R8 startup DEX metadata, TS18 APK contracts and DoFun/Topway source contracts."
+            echo "- No hosted-runner wall-clock threshold or exact-device latency claim is produced."
+            echo "- Exact TS18 runtime behaviour: Requires device validation."
+          } >> "${GITHUB_STEP_SUMMARY}"

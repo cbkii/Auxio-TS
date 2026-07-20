@@ -26,6 +26,10 @@ plugins {
     // Android studio doesn't understand this syntax
     //noinspection GradlePluginVersion
     id "com.android.application" version "$agp_version" apply false
+    //noinspection GradlePluginVersion
+    id "com.android.test" version "$agp_version" apply false
+    // Baseline Profile Gradle Plugin 1.5 adds AGP 9 new-DSL support.
+    id "androidx.baselineprofile" version "1.5.0-alpha07" apply false
     id "androidx.navigation.safeargs.kotlin" version "$navigation_version" apply false
     //noinspection GradlePluginVersion
     id 'com.android.library' version "$agp_version" apply false

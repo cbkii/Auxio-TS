@@ -26,6 +26,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import java.io.File
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.playback.persist.FastResumeSnapshot
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 
@@ -81,7 +82,7 @@ object RawFastResumeValidator {
                 }
                 "file" -> {
                     val path = parsedUri.path ?: pathText
-                    val fileCheck = validateDirectPath(path)
+                    val fileCheck = validateDirectPath(context, path)
                     if (fileCheck != null) return fileCheck
                     resolvedPath = path
                     Uri.fromFile(File(path!!))
@@ -89,7 +90,7 @@ object RawFastResumeValidator {
                 null,
                 "" -> {
                     val path = pathText ?: uriText
-                    val fileCheck = validateDirectPath(path)
+                    val fileCheck = validateDirectPath(context, path)
                     if (fileCheck != null) return fileCheck
                     resolvedPath = path
                     Uri.fromFile(File(path))
@@ -136,10 +137,12 @@ object RawFastResumeValidator {
         }
     }
 
-    private fun validateDirectPath(path: String?): Result.Invalid? {
+    private fun validateDirectPath(context: Context, path: String?): Result.Invalid? {
         if (path.isNullOrBlank()) return invalid(Reason.BLANK_SOURCE, "direct path is blank")
         val normalized = path.trim()
-        if (!isAllowedDirectPath(normalized)) {
+        if (
+            !isAllowedDirectPath(normalized) && !isAllowedBenchmarkFixturePath(context, normalized)
+        ) {
             return invalid(Reason.UNSAFE_PATH, normalized)
         }
         if (!hasAudioExtension(normalized)) {
@@ -167,6 +170,29 @@ object RawFastResumeValidator {
     fun hasAudioExtension(path: String): Boolean {
         val ext = path.substringAfterLast('.', missingDelimiterValue = "").lowercase()
         return ext in audioExtensions
+    }
+
+    private fun isAllowedBenchmarkFixturePath(context: Context, path: String): Boolean {
+        if (BuildConfig.BUILD_TYPE != "benchmark") return false
+        return try {
+            val candidate = File(path).canonicalFile
+            (0..1).any { sourceIndex ->
+                candidate.isInside(
+                    FastStartDirectFolderBrowser.benchmarkRoot(context, sourceIndex).canonicalFile
+                )
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun File.isInside(root: File): Boolean {
+        var cursor: File? = this
+        while (cursor != null) {
+            if (cursor == root) return true
+            cursor = cursor.parentFile
+        }
+        return false
     }
 
     private fun invalid(reason: Reason, detail: String) = Result.Invalid(reason, detail)

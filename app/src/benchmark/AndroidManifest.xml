@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- The larger heap is benchmark-variant-only; production variants remain unchanged. -->
+    <application android:largeHeap="true">
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+
+        <receiver
+            android:name=".benchmark.BenchmarkFixtureReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.oxycblt.auxio.action.SEED_BENCHMARK_FIXTURE" />
+                <action android:name="org.oxycblt.auxio.action.EXPORT_BENCHMARK_REPORT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

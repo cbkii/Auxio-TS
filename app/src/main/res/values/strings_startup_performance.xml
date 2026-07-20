@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="set_key_export_startup_report" translatable="false">auxio_export_startup_report</string>
+    <string name="set_export_startup_report">Export startup report</string>
+    <string name="set_export_startup_report_desc">Share the current bounded, local performance capture for review. No report is uploaded automatically.</string>
+    <string name="set_export_startup_report_chooser">Share startup report</string>
+</resources>

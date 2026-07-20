@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.headunit.ts18
 
 import android.os.SystemClock
+import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber as L
 
 /** Lightweight local-only first-audio latency markers for TS18 validation. */
@@ -27,6 +28,7 @@ object Ts18FirstAudioLatency {
 
     fun mark(stage: String) {
         val elapsed = SystemClock.elapsedRealtime() - startMs
+        PerfTimer.point("startup.audio.$stage")
         L.i("TS18 first-audio latency: ${stage} at ${elapsed}ms")
     }
 }

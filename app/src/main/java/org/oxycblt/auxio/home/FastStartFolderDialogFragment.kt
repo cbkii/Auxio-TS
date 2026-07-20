@@ -96,7 +96,7 @@ class FastStartFolderDialogFragment : DialogFragment() {
             return
         }
         if (!entry.playable) return
-        playbackModel.playDeferred(DeferredPlayback.Open(Uri.fromFile(File(entry.path))))
+        playbackModel.playDeferred(DeferredPlayback.Open(Uri.fromFile(File(entry.playbackPath))))
         playbackModel.openPlayback()
         dismissAllowingStateLoss()
     }

@@ -60,6 +60,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: false
+          persist-credentials: false
 
       - name: Verify branch release context
         shell: bash
@@ -108,13 +109,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
           cache-cleanup: always
 
@@ -235,7 +236,12 @@ jobs:
           asset_names=()
           while IFS= read -r variant; do
             [[ -z "${variant}" ]] && continue
-            asset_names+=("${names[$variant]}")
+            base_name="${names[$variant]}"
+            asset_names+=(
+              "${base_name}"
+              "${base_name}.sha256"
+              "${base_name}.metadata.txt"
+            )
           done <<< "${SELECTED_VARIANTS}"
           {
             echo "release_tag=${RELEASE_TAG}"
@@ -383,8 +389,13 @@ jobs:
           set -euo pipefail
           BUILD_TOOLS_DIR="$(find "${ANDROID_HOME}"/build-tools -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
           APKSIGNER="${BUILD_TOOLS_DIR}/apksigner"
+          AAPT="${BUILD_TOOLS_DIR}/aapt"
           if [[ ! -x "${APKSIGNER}" ]]; then
             echo "::error::apksigner was not found under ANDROID_HOME build-tools."
+            exit 1
+          fi
+          if [[ ! -x "${AAPT}" ]]; then
+            echo "::error::aapt was not found under ANDROID_HOME build-tools."
             exit 1
           fi
           find_one_apk() {
@@ -402,6 +413,57 @@ jobs:
             fi
             printf '%s\n' "${apks[0]}"
           }
+          write_release_sidecars() {
+            local published_path=$1
+            local published_name=$2
+            local source_apk=$3
+            local asset_kind=$4
+            local checksum_path="${RUNNER_TEMP}/${published_name}.sha256"
+            local metadata_path="${RUNNER_TEMP}/${published_name}.metadata.txt"
+            local digest
+            local badging
+            local package_id
+            local version_code
+            local version_name
+            local min_sdk
+            local target_sdk
+            local abis
+
+            digest="$(sha256sum "${published_path}" | awk '{print $1}')"
+            printf '%s  %s\n' "${digest}" "${published_name}" > "${checksum_path}"
+
+            badging="$("${AAPT}" dump badging "${source_apk}")"
+            package_id="$(sed -n -E "s/^package: name='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+            version_code="$(sed -n -E "s/^package:.*versionCode='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+            version_name="$(sed -n -E "s/^package:.*versionName='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+            min_sdk="$(sed -n -E "s/^sdkVersion:'([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+            target_sdk="$(sed -n -E "s/^targetSdkVersion:'([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+            abis="$(unzip -Z1 "${source_apk}" | sed -n -E 's#^lib/([^/]+)/.*#\1#p' | sort -u | paste -sd, -)"
+            [[ -n "${abis}" ]] || abis='none'
+
+            {
+              echo "asset=${published_name}"
+              echo "asset_kind=${asset_kind}"
+              echo "asset_sha256=${digest}"
+              echo "source_commit=$(git rev-parse HEAD)"
+              echo "release_tag=${RELEASE_TAG}"
+              echo "application_id=${package_id}"
+              echo "version_name=${version_name}"
+              echo "version_code=${version_code}"
+              echo "min_sdk=${min_sdk}"
+              echo "target_sdk=${target_sdk}"
+              echo "abis=${abis}"
+              echo
+              echo '[apksigner certificates]'
+              "${APKSIGNER}" verify --verbose --print-certs "${source_apk}"
+            } > "${metadata_path}"
+
+            cp "${checksum_path}" "${artifact_dir}/${published_name}.sha256"
+            cp "${metadata_path}" "${artifact_dir}/${published_name}.metadata.txt"
+            asset_paths+=("${checksum_path}" "${metadata_path}")
+            asset_names+=("${published_name}.sha256" "${published_name}.metadata.txt")
+          }
+
           artifact_dir="${RUNNER_TEMP}/selected-release-assets"
           rm -rf -- "${artifact_dir}"
           mkdir -p -- "${artifact_dir}"
@@ -447,10 +509,22 @@ jobs:
                 exit 1
                 ;;
             esac
+            if [[ -f ./scripts/check-startup-performance-contracts.sh ]]; then
+              bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"
+            else
+              echo "::warning::This existing release tag predates startup-profile validation."
+            fi
+
             artifact_path="${artifact_dir}/${asset_name}"
             cp "${asset_path}" "${artifact_path}"
             asset_paths+=("${asset_path}")
             asset_names+=("${asset_name}")
+            if [[ "${variant}" == topway_twmusic_magisk ]]; then
+              asset_kind='magisk-systemless-overlay'
+            else
+              asset_kind='signed-apk'
+            fi
+            write_release_sidecars "${asset_path}" "${asset_name}" "${apk_path}" "${asset_kind}"
           done <<< "${SELECTED_VARIANTS}"
           {
             printf 'asset_paths<<EOF\n'
@@ -492,6 +566,7 @@ jobs:
           RELEASE_COMMIT_SHA: ${{ steps.version_commit.outputs.release_commit_sha }}
         run: |
           set -euo pipefail
+          gh auth setup-git
           git fetch --tags origin "${GITHUB_REF_NAME}"
           REMOTE_HEAD="$(git rev-parse "origin/${GITHUB_REF_NAME}")"
           RELEASE_PARENT_SHA="$(git rev-parse "${RELEASE_COMMIT_SHA}^")"
@@ -549,6 +624,8 @@ jobs:
                 *standard-release.apk) printf -- "- \`%s\` keeps the normal Auxio-TS package identity (\`org.oxycblt.auxio\`).\n" "${asset}" ;;
                 *topway-twmedia-release.apk) printf -- "- \`%s\` targets DoFun/Topway alternate entry (\`com.tw.media\`) while exposing \`com.tw.music.MusicActivity\`; TS18 validation is still required.\n" "${asset}" ;;
                 *topway-twmusic-magisk.zip) printf -- "- \`%s\` is a Magisk module that systemlessly overlays the signed \`com.tw.music\` APK at \`/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk\`; no raw topwayTwMusic APK asset is published.\n" "${asset}" ;;
+                *.sha256) printf -- "- \`%s\` records the SHA-256 digest of its matching install asset.\n" "${asset}" ;;
+                *.metadata.txt) printf -- "- \`%s\` records package/version/SDK/ABI/signing-certificate evidence for its matching install asset.\n" "${asset}" ;;
               esac
             done <<< "${ASSET_NAMES}"
           } > "${NOTES_FILE}"
@@ -612,6 +689,7 @@ jobs:
           RELEASE_COMMIT_SHA: ${{ steps.version_commit.outputs.release_commit_sha }}
         run: |
           set -euo pipefail
+          gh auth setup-git
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             echo "Release ${RELEASE_TAG} exists; keeping remote tag."
             exit 0

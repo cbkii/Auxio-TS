@@ -20,7 +20,6 @@ package org.oxycblt.auxio.music
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.Closeable
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
@@ -473,6 +472,7 @@ constructor(
                     hasInMemoryLibrary = synchronized(this) { library != null },
                     revisionKnown = musicSettings.revision != null,
                     priorState = musicSettings.libraryState,
+                    deferCachedLoad = true,
                     lastScanFailed = { musicSettings.lastScanFailed },
                     isTopwayCompat = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     loadCachedLibrary = { 0 },
@@ -506,7 +506,7 @@ constructor(
             L.w(e, "Bounded startup projection seed failed; continuing legacy hydration")
             emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
         }
-        startCompatibilityHydration()
+        startCompatibilityHydration(worker)
         startCompatibilityBackfill()
     }
 
@@ -693,15 +693,30 @@ constructor(
         }
     }
 
-    private fun startCompatibilityHydration() {
+    private fun startCompatibilityHydration(worker: IndexingWorker) {
         compatibilityHydrationJob?.cancel()
         val startingDeviceGeneration = deviceLibraryGeneration.get()
         val startingRevision = musicSettings.revision
+        val priorState = musicSettings.libraryState
+        val sourceConfigured =
+            StartupLibraryPolicy.isMusicSourceConfigured(
+                musicSettings.locationMode,
+                musicSettings.configuredSourceCount,
+            )
         compatibilityHydrationJob =
             compatibilityHydrationScope.launch {
                 try {
                     val cached = loadCachedLibrary()
+                    val songCount = cached.songs.size
+                    val decision =
+                        StartupLibraryPolicy.onCachedLoadSucceeded(
+                            priorState,
+                            songCount,
+                            musicSettings.lastScanFailed,
+                        )
                     withContext(Dispatchers.Main) {
+                        val publishLibrary =
+                            songCount > 0 || decision.libraryState == LibraryState.EMPTY
                         val accepted =
                             synchronized(this@MusicRepositoryImpl) {
                                 val superseded =
@@ -710,7 +725,7 @@ constructor(
                                 if (superseded) {
                                     false
                                 } else {
-                                    library = cached
+                                    if (publishLibrary) library = cached
                                     true
                                 }
                             }
@@ -718,21 +733,79 @@ constructor(
                             L.d("Skipping compatibility hydration superseded by a newer scan")
                             return@withContext
                         }
-                        dispatchLibraryChange(device = true, user = true)
-                        if (cached.songs.isEmpty()) {
-                            emitStartupLibraryStatus(StartupLibraryStatus.Empty)
-                        } else {
-                            emitStartupLibraryStatus(StartupLibraryStatus.Usable)
+                        musicSettings.libraryState = decision.libraryState
+                        if (publishLibrary) {
+                            dispatchLibraryChange(device = true, user = true)
+                        }
+                        emitStartupLibraryStatus(
+                            StartupLibraryPolicy.startupReadinessAfterDecision(
+                                decision,
+                                sourceConfigured,
+                                songCount,
+                            )
+                        )
+                        if (songCount > 0) {
                             emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
                         }
+                        requestCompatibilityRecoveryIfNeeded(
+                            worker,
+                            priorState,
+                            decision,
+                            sourceConfigured,
+                        )
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     L.w(e, "Compatibility cached-library hydration failed")
-                    emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
+                    val decision =
+                        StartupLibraryPolicy.onCachedLoadFailed(
+                            priorState,
+                            musicSettings.lastScanFailed,
+                        )
+                    withContext(Dispatchers.Main) {
+                        val superseded =
+                            synchronized(this@MusicRepositoryImpl) {
+                                deviceLibraryGeneration.get() != startingDeviceGeneration ||
+                                    musicSettings.revision != startingRevision
+                            }
+                        if (superseded) {
+                            L.d("Skipping compatibility recovery superseded by a newer scan")
+                            return@withContext
+                        }
+                        musicSettings.libraryState = decision.libraryState
+                        emitStartupLibraryStatus(
+                            StartupLibraryPolicy.startupReadinessAfterDecision(
+                                decision,
+                                sourceConfigured,
+                                cachedSongCount = null,
+                            )
+                        )
+                        requestCompatibilityRecoveryIfNeeded(
+                            worker,
+                            priorState,
+                            decision,
+                            sourceConfigured,
+                        )
+                    }
                 }
             }
+    }
+
+    private fun requestCompatibilityRecoveryIfNeeded(
+        worker: IndexingWorker,
+        priorState: LibraryState,
+        decision: StartupLibraryPolicy.Decision,
+        sourceConfigured: Boolean,
+    ) {
+        if (
+            priorState == LibraryState.USABLE &&
+                decision.requestScan &&
+                sourceConfigured &&
+                !BuildConfig.TOPWAY_COMPAT_FLAVOR
+        ) {
+            worker.requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
+        }
     }
 
     private suspend fun loadCachedLibrary(): MutableLibrary {
@@ -768,66 +841,6 @@ constructor(
             Interpretation(nameFactory, separators),
             indexingWorkerCount = 1,
         )
-    }
-
-    private suspend fun readTwStorageSwitch(): String? =
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val process =
-                try {
-                    ProcessBuilder("/system/bin/getprop", "persist.tw.storage.switch").start()
-                } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
-                    L.w(e, "Unable to start TS18 storage switch diagnostic read")
-                    return@withContext null
-                }
-            try {
-                return@withContext if (!process.waitForCompat(500)) {
-                    process.destroyCompat()
-                    null
-                } else {
-                    process.inputStream
-                        .bufferedReader()
-                        .use { it.readText().trim() }
-                        .takeIf { it.isNotEmpty() }
-                }
-            } catch (e: Exception) {
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                L.w(e, "Unable to read TS18 storage switch diagnostic value")
-                return@withContext null
-            } finally {
-                process.inputStream.closeQuietly()
-                process.errorStream.closeQuietly()
-                process.outputStream.closeQuietly()
-                process.destroy()
-            }
-        }
-
-    private suspend fun Process.waitForCompat(timeoutMs: Long): Boolean {
-        val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
-        while (true) {
-            try {
-                exitValue()
-                return true
-            } catch (_: IllegalThreadStateException) {}
-
-            if (System.nanoTime() >= deadlineNanos) return false
-
-            val remainingMs = ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
-            kotlinx.coroutines.delay(minOf(remainingMs, 25L))
-        }
-    }
-
-    private fun Process.destroyCompat() {
-        destroy()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            destroyForcibly()
-        }
-    }
-
-    private fun Closeable.closeQuietly() {
-        try {
-            close()
-        } catch (_: Exception) {}
     }
 
     private suspend fun createConfig(

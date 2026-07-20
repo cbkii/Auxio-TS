@@ -114,6 +114,12 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
 class MusicSettingsImpl @Inject constructor(@ApplicationContext private val context: Context) :
     Settings.Impl<MusicSettings.Listener>(context), MusicSettings {
 
+    init {
+        // Restore the explicit release-build capture policy after process recreation. Debug and
+        // benchmark builds remain enabled by their build type and still use the same bounded ring.
+        PerfTimer.configure(performanceCaptureEnabled)
+    }
+
     override var revision: UUID?
         get() =
             sharedPreferences

@@ -20,6 +20,7 @@ package org.oxycblt.auxio.util
 
 import android.os.Process
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import org.oxycblt.auxio.BuildConfig
@@ -28,8 +29,8 @@ import timber.log.Timber
 /**
  * Low-overhead bounded performance instrumentation.
  *
- * Debug builds record by default. Release builds record only after an explicit user setting calls
- * [configure]. The in-memory ring never writes files and is capped to [MAX_EVENTS].
+ * Debug and benchmark builds record by default. Release builds record only after an explicit user
+ * setting calls [configure]. The in-memory ring never writes files and is capped to [MAX_EVENTS].
  */
 object PerfTimer {
     @PublishedApi internal const val TAG = "AuxioPerf"
@@ -51,11 +52,15 @@ object PerfTimer {
     /** Enable or disable bounded detailed capture in non-debug builds. */
     fun configure(enabled: Boolean) {
         explicitlyEnabled.set(enabled)
-        if (!enabled && !BuildConfig.DEBUG) clear()
+        if (!enabled && !BuildConfig.DEBUG && !isBenchmarkBuild()) clear()
     }
 
     /** Whether instrumentation is currently active. */
-    fun isEnabled(): Boolean = BuildConfig.DEBUG || explicitlyEnabled.get()
+    fun isEnabled(): Boolean = BuildConfig.DEBUG || isBenchmarkBuild() || explicitlyEnabled.get()
+
+    @VisibleForTesting internal fun isExplicitlyConfigured(): Boolean = explicitlyEnabled.get()
+
+    private fun isBenchmarkBuild(): Boolean = BuildConfig.BUILD_TYPE == "benchmark"
 
     /** Return a stable snapshot of the bounded in-memory event ring. */
     fun snapshot(): List<Event> = synchronized(lock) { events.toList() }
