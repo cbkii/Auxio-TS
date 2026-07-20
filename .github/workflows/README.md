@@ -11,7 +11,7 @@ These are the canonical routine CI workflows. A new workflow must not repeat the
 
 ## Manual workflows
 
-- `startup-performance.yml` — full startup/profile/release validation before a release or after profile-infrastructure changes.
+- `startup-performance.yml` — **Startup Release Validation (manual)** before a release or after profile-infrastructure changes. The established file path is retained so GitHub keeps one workflow identity and history.
 - `startup-benchmarks.yml` — bounded managed-emulator Macrobenchmark or Baseline Profile collection.
 - `ui-screenshots.yml` — Roborazzi screenshot recording and verification.
 - `manual-release.yml` — version, tag and release-asset publication.
