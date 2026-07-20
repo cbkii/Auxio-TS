@@ -4,6 +4,10 @@ set -euo pipefail
 allowed_topway_main='app/src/main/java/org/oxycblt/auxio/headunit/topway/'
 allowed_topway_test='app/src/test/java/org/oxycblt/auxio/headunit/topway/'
 allowed_topway_flavour='app/src/topwayCompat/java/com/tw/music/'
+command_bridge_contract="${allowed_topway_main}TopwayCommandServiceContract.kt"
+command_bridge_client="${allowed_topway_main}TopwayCommandServiceClient.kt"
+command_bridge_contract_test="${allowed_topway_test}TopwayCommandServiceContractTest.kt"
+command_bridge_binder_test="${allowed_topway_test}TopwayCallbackBinderTest.kt"
 manifest_path='app/src/main/AndroidManifest.xml'
 topway_flavour_manifest='app/src/topwayCompat/AndroidManifest.xml'
 topway_media_res='app/src/topwayTwMedia/res/values/donottranslate.xml'
@@ -42,18 +46,37 @@ if [ "${#product_sources[@]}" -eq 0 ] && [ "${#identity_files[@]}" -eq 0 ]; then
   exit 0
 fi
 
-# Private/vendor implementation hooks are forbidden in product code. Cardoor remote media
-# services are observed in DoFun but must not be faked without a proven binder/AIDL protocol.
-forbidden_hits="$(search_matches 'android\\.tw\\.john|com\\.tw\\.service\\.xt|ITWCommandAidl|ITWCommandCallbackAidl|android:sharedUserId=|android\\.uid\\.system|cn\\.cardoor\\.libs\\.media\\.RemoteMediaService|cn\\.cardoor\\.libs\\.media\\.impl\\.MediaSourceService|cn\\.cardoor\\.basic\\.media\\.NotifyService' "${product_sources[@]}" "${identity_files[@]}")"
-if [ -n "${forbidden_hits}" ]; then
-  echo "${forbidden_hits}" >&2
+# These remain forbidden everywhere in product code. The approved command bridge below does not use
+# TWUtil, platform/shared UID identity, copied vendor classes, or fake Cardoor services.
+hard_forbidden_hits="$(search_matches 'android\.tw\.john|android:sharedUserId=|android\.uid\.system|cn\.cardoor\.libs\.media\.RemoteMediaService|cn\.cardoor\.libs\.media\.impl\.MediaSourceService|cn\.cardoor\.basic\.media\.NotifyService' "${product_sources[@]}" "${identity_files[@]}")"
+if [ -n "${hard_forbidden_hits}" ]; then
+  echo "${hard_forbidden_hits}" >&2
   echo "Forbidden private/vendor hooks found in product code" >&2
   exit 1
 fi
 
+# The exact-device command Binder contract is permitted only in its two isolated implementation
+# files and their focused tests. Any spread into core playback/UI or another adapter fails closed.
+command_bridge_hits="$(search_matches 'com\.tw\.service\.xt|ITWCommandAidl|ITWCommandCallbackAidl|IMusicCallBack' "${product_sources[@]}")"
+if [ -n "${command_bridge_hits}" ]; then
+  while IFS= read -r line; do
+    [ -z "${line}" ] && continue
+    path="${line%%:*}"
+    case "${path}" in
+      "${command_bridge_contract}"|"${command_bridge_client}"|"${command_bridge_contract_test}"|"${command_bridge_binder_test}")
+        ;;
+      *)
+        echo "${line}" >&2
+        echo "Topway command-service Binder strings escaped the isolated verified bridge" >&2
+        exit 1
+        ;;
+    esac
+  done <<< "${command_bridge_hits}"
+fi
+
 # Standard package identity must not be replaced. Dedicated Topway/DoFun flavours are
 # allowed to install as com.tw.music or com.tw.media because DoFun Variety uses fixed entries.
-identity_hits="$(search_matches 'package="com\\.tw\\.(music|media)"|applicationId[[:space:]]+"com\\.tw\\.(music|media)"|namespace[[:space:]]+"com\\.tw\\.(music|media)"' "${identity_files[@]}")"
+identity_hits="$(search_matches 'package="com\.tw\.(music|media)"|applicationId[[:space:]]+"com\.tw\.(music|media)"|namespace[[:space:]]+"com\.tw\.(music|media)"' "${identity_files[@]}")"
 if [ -n "${identity_hits}" ]; then
   while IFS= read -r line; do
     [ -z "${line}" ] && continue
@@ -74,12 +97,22 @@ if [ -n "${identity_hits}" ]; then
   done <<< "${identity_hits}"
 fi
 
-vendor_hits="$(search_matches 'com\\.tw\\.[A-Za-z0-9_.]+|com\\.android\\.launcher\\.widget_music_progress' "${product_code_sources[@]}")"
+vendor_hits="$(search_matches 'com\.tw\.[A-Za-z0-9_.]+|com\.android\.launcher\.widget_music_progress' "${product_code_sources[@]}")"
 if [ -n "${vendor_hits}" ]; then
   while IFS= read -r line; do
     [ -z "${line}" ] && continue
     path="${line%%:*}"
     case "${path}" in
+      "${command_bridge_contract}"|"${command_bridge_client}"|"${command_bridge_contract_test}"|"${command_bridge_binder_test}")
+        case "${line}" in
+          *"com.tw.service.xt"*) ;;
+          *)
+            echo "${line}" >&2
+            echo "Unexpected vendor string in the isolated command-service bridge" >&2
+            exit 1
+            ;;
+        esac
+        ;;
       ${allowed_topway_main}*|${allowed_topway_test}*|${allowed_topway_flavour}*)
         case "${line}" in
           *"com.tw.music.action.cmd"*|*"com.tw.music.action.prev"*|*"com.tw.music.action.next"*|*"com.tw.music.action.pp"*|*"com.tw.music.info"*|*"com.tw.launcher.music_progress_duration"*|*"com.android.launcher.widget_music_progress"*|*"com.tw.music.MusicActivity"*|*"com.tw.music.MusicService"*|*"com.tw.music.view.MusicWidgetProvider"*) ;;
@@ -100,7 +133,7 @@ if [ -n "${vendor_hits}" ]; then
 fi
 
 if [ -f "${manifest_path}" ]; then
-  manifest_tw_hits="$(search_matches 'com\\.tw\\.[A-Za-z0-9_.]+' "${manifest_path}")"
+  manifest_tw_hits="$(search_matches 'com\.tw\.[A-Za-z0-9_.]+' "${manifest_path}")"
   if [ -n "${manifest_tw_hits}" ]; then
     while IFS= read -r line; do
       [ -z "${line}" ] && continue
