@@ -27,6 +27,7 @@ import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.overlay.TopwayOverlayRestoreBridge
 import org.oxycblt.auxio.headunit.root.RootStateHolder
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
 
@@ -103,8 +104,10 @@ class BootReceiver : BroadcastReceiver() {
         }
         if (shouldStartPlaybackService) {
             try {
+                val serviceClass =
+                    TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
                 val serviceIntent =
-                    Intent(context, AuxioService::class.java)
+                    Intent(context, serviceClass)
                         .setAction(AuxioService.ACTION_START)
                         .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
                 ContextCompat.startForegroundService(context, serviceIntent)
