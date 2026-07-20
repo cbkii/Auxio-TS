@@ -20,8 +20,10 @@ package org.oxycblt.auxio.car.overlay
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -29,6 +31,10 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.preference.PreferenceManager
+import org.oxycblt.auxio.R
+import org.oxycblt.auxio.headunit.overlay.FloatingTrackMetadata
+import org.oxycblt.auxio.headunit.overlay.FloatingTrackMetadataBus
 
 /**
  * Programmatic overlay view for car floating media controls. Uses large, TS18/head-unit friendly
@@ -36,7 +42,7 @@ import android.widget.TextView
  */
 @SuppressLint("ViewConstructor")
 class CarFloatingControlsView(context: Context, private val callbacks: Callbacks) :
-    LinearLayout(context) {
+    LinearLayout(context), SharedPreferences.OnSharedPreferenceChangeListener {
 
     interface Callbacks {
         fun onDrag(deltaX: Int, deltaY: Int)
@@ -54,44 +60,151 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
         fun onStopRequested()
     }
 
+    private val preferences =
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
     private val buttonSizePx: Int
+    private val rowWidthPx: Int
+    private val rowHeightPx: Int
+    private val controlsRow: LinearLayout
+    private var tickerView: TextView? = null
     private var dragStartX = 0f
     private var dragStartY = 0f
     private var dragging = false
     private var lastTapTime = 0L
     private var tapCount = 0
     private val dragThresholdSq: Int
+    private val trackMetadataListener: (FloatingTrackMetadata?) -> Unit = { metadata ->
+        post { updateTrackTicker(metadata) }
+    }
 
     init {
         val density = context.resources.displayMetrics.density
         buttonSizePx = (BUTTON_SIZE_DP * density).toInt()
         val paddingPx = (PADDING_DP * density).toInt()
+        rowWidthPx = buttonSizePx * CONTROL_COUNT + paddingPx * 2
+        rowHeightPx = buttonSizePx + paddingPx * 2
 
         // Use system touch slop for density-aware drag threshold.
         val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
         dragThresholdSq = touchSlop * touchSlop
 
-        orientation = HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
+        orientation = VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
 
-        val bg = GradientDrawable()
-        bg.setColor(BG_COLOR)
-        bg.cornerRadius = CORNER_RADIUS_DP * density
-        background = bg
+        controlsRow =
+            LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(paddingPx, paddingPx, paddingPx, paddingPx)
+                background = createBackground(density)
+                layoutParams = LayoutParams(rowWidthPx, rowHeightPx)
 
-        addView(createDragHandle(context))
-        addView(createButton(context, LABEL_PREV, DESC_PREV) { callbacks.onPrevious() })
-        addView(
-            createButton(context, LABEL_PLAY_PAUSE, DESC_PLAY_PAUSE) { callbacks.onPlayPause() }
-        )
-        addView(createButton(context, LABEL_NEXT, DESC_NEXT) { callbacks.onNext() })
-        addView(createButton(context, LABEL_OPEN, DESC_OPEN) { callbacks.onOpenAuxio() })
+                addView(createDragHandle(context))
+                addView(createButton(context, LABEL_PREV, DESC_PREV) { callbacks.onPrevious() })
+                addView(
+                    createButton(context, LABEL_PLAY_PAUSE, DESC_PLAY_PAUSE) {
+                        callbacks.onPlayPause()
+                    }
+                )
+                addView(createButton(context, LABEL_NEXT, DESC_NEXT) { callbacks.onNext() })
+                addView(createButton(context, LABEL_OPEN, DESC_OPEN) { callbacks.onOpenAuxio() })
+            }
+        addView(controlsRow)
+
+        updateTickerVisibility(CarOverlayPrefs.from(context).showTrackTicker)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        preferences.registerOnSharedPreferenceChangeListener(this)
+        FloatingTrackMetadataBus.addListener(trackMetadataListener)
+    }
+
+    override fun onDetachedFromWindow() {
+        FloatingTrackMetadataBus.removeListener(trackMetadataListener)
+        preferences.unregisterOnSharedPreferenceChangeListener(this)
+        tickerView?.isSelected = false
+        super.onDetachedFromWindow()
+    }
+
+    override fun onSharedPreferenceChanged(
+        sharedPreferences: SharedPreferences,
+        key: String?,
+    ) {
+        if (key != CarOverlayPrefs.KEY_SHOW_TRACK_TICKER) return
+        post {
+            updateTickerVisibility(
+                sharedPreferences.getBoolean(CarOverlayPrefs.KEY_SHOW_TRACK_TICKER, false)
+            )
+        }
     }
 
     fun applyOpacity(percent: Int) {
         alpha = percent.coerceIn(CarOverlayPrefs.MIN_OPACITY, CarOverlayPrefs.MAX_OPACITY) / 100f
     }
+
+    private fun updateTickerVisibility(enabled: Boolean) {
+        if (enabled) {
+            if (tickerView != null) return
+            val ticker = createTicker(context)
+            tickerView = ticker
+            addView(ticker, 0)
+            updateTrackTicker(FloatingTrackMetadataBus.current)
+        } else {
+            val ticker = tickerView ?: return
+            ticker.isSelected = false
+            removeView(ticker)
+            tickerView = null
+        }
+    }
+
+    private fun createTicker(context: Context): TextView {
+        val density = context.resources.displayMetrics.density
+        val horizontalPadding = (TICKER_HORIZONTAL_PADDING_DP * density).toInt()
+        val gap = (ROW_GAP_DP * density).toInt()
+        return TextView(context).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, TICKER_TEXT_SP)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER_VERTICAL
+            includeFontPadding = false
+            isSingleLine = true
+            ellipsize = TextUtils.TruncateAt.MARQUEE
+            marqueeRepeatLimit = -1
+            setHorizontallyScrolling(true)
+            setPadding(horizontalPadding, 0, horizontalPadding, 0)
+            background = createBackground(density)
+            layoutParams =
+                LayoutParams(rowWidthPx, rowHeightPx).apply { bottomMargin = gap }
+            text = context.getString(R.string.car_overlay_track_ticker_idle)
+            contentDescription =
+                context.getString(R.string.car_overlay_track_ticker_content_description, text)
+            isSelected = true
+        }
+    }
+
+    private fun updateTrackTicker(metadata: FloatingTrackMetadata?) {
+        val ticker = tickerView ?: return
+        val nextText =
+            metadata?.displayText?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.car_overlay_track_ticker_idle)
+        if (ticker.text.toString() == nextText) return
+
+        ticker.isSelected = false
+        ticker.text = nextText
+        ticker.contentDescription =
+            context.getString(R.string.car_overlay_track_ticker_content_description, nextText)
+        ticker.post {
+            if (tickerView === ticker) {
+                ticker.isSelected = true
+            }
+        }
+    }
+
+    private fun createBackground(density: Float): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(BG_COLOR)
+            cornerRadius = CORNER_RADIUS_DP * density
+        }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createDragHandle(context: Context): View {
@@ -182,10 +295,14 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
     }
 
     private companion object {
+        const val CONTROL_COUNT = 5
         const val BUTTON_SIZE_DP = 64f
         const val PADDING_DP = 8f
+        const val ROW_GAP_DP = 4f
+        const val TICKER_HORIZONTAL_PADDING_DP = 16f
         const val CORNER_RADIUS_DP = 12f
         const val BUTTON_TEXT_SP = 24f
+        const val TICKER_TEXT_SP = 20f
         const val BG_COLOR = 0xCC1B1B1B.toInt()
         const val TRIPLE_TAP_WINDOW_MS = 600L
         const val TRIPLE_TAP_COUNT = 3
