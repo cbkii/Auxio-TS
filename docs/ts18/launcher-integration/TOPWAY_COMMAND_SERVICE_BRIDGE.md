@@ -144,7 +144,7 @@ PR #185 repository evidence includes:
 - all current inline review threads: resolved before the final audit patch.
 
 Fresh canonical Android Build and Android Quality checks must pass on the final
-human/API-triggered head before the PR is marked ready for code review.
+non-workflow-token head before the PR is marked ready for code review.
 
 ## Exact-device acceptance still required
 
