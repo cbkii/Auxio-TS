@@ -64,6 +64,8 @@ constructor(
     @Volatile private var attached = false
     @Volatile private var ownerServiceClass: Class<out AuxioService>? = null
 
+    private var releaseInProgress = false
+    private var pendingServiceClass: Class<out AuxioService>? = null
     private var bindRequested = false
     private var retryScheduled = false
     private var retryCount = 0
@@ -77,32 +79,36 @@ constructor(
     private val musicCallback =
         TopwayMusicCallbackBinder(
             onControl = ::onMusicControl,
-            onMode = { mode -> log("Music mode", mode.toString()) },
-            onExtended = { bundle -> logBundle("Music extended callback", bundle) },
+            onMode = { mode -> postWorker { log("Music mode", mode.toString()) } },
+            onExtended = { bundle ->
+                postWorker { logBundle("Music extended callback", bundle) }
+            },
         )
 
     private val commandCallback =
         TopwayCommandCallbackBinder(
-            onStatus = { event, value -> log(event, value) },
-            onExtended = ::onCommandExtended,
+            onStatus = { event, value -> postWorker { log(event, value) } },
+            onExtended = { bundle -> postWorker { onCommandExtended(bundle) } },
         )
 
-    private val retryRunnable =
-        Runnable {
-            retryScheduled = false
-            attemptBind()
-        }
+    private val retryRunnable = Runnable {
+        retryScheduled = false
+        attemptBind()
+    }
 
     private val connection =
         object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName, service: IBinder) {
                 log("Service connected", name.flattenToShortString())
-                workerHandler?.post { establishRemote(service) }
+                val worker = workerHandler
+                if (worker == null || !worker.post { establishRemote(service) }) {
+                    disconnectAndRetry("worker unavailable")
+                }
             }
 
             override fun onServiceDisconnected(name: ComponentName) {
                 log("Service disconnected", name.flattenToShortString())
-                workerHandler?.post {
+                postWorker {
                     clearRemote(unregister = false)
                     mainHandler.post { disconnectAndRetry("service disconnected") }
                 }
@@ -110,7 +116,7 @@ constructor(
 
             override fun onBindingDied(name: ComponentName) {
                 log("Binding died", name.flattenToShortString())
-                workerHandler?.post {
+                postWorker {
                     clearRemote(unregister = false)
                     mainHandler.post { disconnectAndRetry("binding died") }
                 }
@@ -126,14 +132,21 @@ constructor(
     @Synchronized
     fun attach(serviceClass: Class<out AuxioService>) {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
-        ownerServiceClass = serviceClass
-        if (attached) return
-
-        attached = true
-        retryCount = 0
-        ensureWorker()
-        log("Attach", serviceClass.name)
-        mainHandler.post(::attemptBind)
+        if (attached) {
+            if (ownerServiceClass != serviceClass) {
+                log(
+                    "Attach ignored",
+                    "active=${ownerServiceClass?.name}; requested=${serviceClass.name}",
+                )
+            }
+            return
+        }
+        if (releaseInProgress) {
+            pendingServiceClass = serviceClass
+            log("Attach deferred", serviceClass.name)
+            return
+        }
+        startAttach(serviceClass)
     }
 
     /** Unregisters callbacks and releases only resources owned by this adapter. */
@@ -142,24 +155,42 @@ constructor(
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !attached) return
         attached = false
         ownerServiceClass = null
+        releaseInProgress = true
         mainHandler.removeCallbacks(retryRunnable)
         retryScheduled = false
         log("Release")
 
         val worker = workerHandler
-        if (worker == null) {
-            mainHandler.post {
-                unbindIfNeeded()
-                stopWorker()
+        if (worker == null ||
+            !worker.post {
+                clearRemote(unregister = true)
+                mainHandler.post(::finishRelease)
             }
-            return
+        ) {
+            mainHandler.post(::finishRelease)
         }
-        worker.post {
-            clearRemote(unregister = true)
-            mainHandler.post {
-                unbindIfNeeded()
-                stopWorker()
-            }
+    }
+
+    @Synchronized
+    private fun startAttach(serviceClass: Class<out AuxioService>) {
+        ownerServiceClass = serviceClass
+        attached = true
+        retryCount = 0
+        ensureWorker()
+        log("Attach", serviceClass.name)
+        mainHandler.post(::attemptBind)
+    }
+
+    @Synchronized
+    private fun finishRelease() {
+        unbindIfNeeded()
+        releaseInProgress = false
+        val pending = pendingServiceClass
+        pendingServiceClass = null
+        if (pending != null) {
+            startAttach(pending)
+        } else {
+            stopWorker()
         }
     }
 
@@ -179,8 +210,15 @@ constructor(
         workerThread = null
     }
 
+    private fun postWorker(block: () -> Unit) {
+        val worker = workerHandler
+        if (worker == null || !worker.post(block)) {
+            mainHandler.post(block)
+        }
+    }
+
     private fun attemptBind() {
-        if (!attached || bindRequested) return
+        if (!attached || releaseInProgress || bindRequested) return
 
         val actionIntent =
             Intent(TopwayCommandServiceContract.ACTION_BIND)
@@ -194,21 +232,23 @@ constructor(
                     )
                 )
 
-        val candidates =
-            buildList {
-                try {
-                    val resolved = context.packageManager.resolveService(actionIntent, 0)?.serviceInfo
-                    if (resolved != null) {
-                        add(Intent(actionIntent).setComponent(ComponentName(resolved.packageName, resolved.name)))
-                    } else {
-                        add(actionIntent)
-                    }
-                } catch (e: RuntimeException) {
-                    L.w(e, "Unable to resolve Topway command service; using explicit fallback")
+        val candidates = buildList {
+            try {
+                val resolved = context.packageManager.resolveService(actionIntent, 0)?.serviceInfo
+                if (resolved != null) {
+                    add(
+                        Intent(actionIntent)
+                            .setComponent(ComponentName(resolved.packageName, resolved.name))
+                    )
+                } else {
                     add(actionIntent)
                 }
-                if (none { it.component == explicitIntent.component }) add(explicitIntent)
+            } catch (e: RuntimeException) {
+                L.w(e, "Unable to resolve Topway command service; using explicit fallback")
+                add(actionIntent)
             }
+            if (none { it.component == explicitIntent.component }) add(explicitIntent)
+        }
 
         for (intent in candidates) {
             try {
@@ -229,7 +269,7 @@ constructor(
     }
 
     private fun establishRemote(service: IBinder) {
-        if (!attached) {
+        if (!attached || releaseInProgress) {
             mainHandler.post(::unbindIfNeeded)
             return
         }
@@ -255,7 +295,7 @@ constructor(
         remote = service
         val recipient =
             IBinder.DeathRecipient {
-                workerHandler?.post {
+                postWorker {
                     log("Binder died")
                     clearRemote(unregister = false)
                     mainHandler.post { disconnectAndRetry("binder died") }
@@ -285,6 +325,11 @@ constructor(
         }
         musicCallbackRegistered = true
         log("Music callback registered")
+        mainHandler.post {
+            mainHandler.removeCallbacks(retryRunnable)
+            retryScheduled = false
+            retryCount = 0
+        }
 
         commandCallbackRegistered =
             transactCallback(
@@ -388,7 +433,7 @@ constructor(
 
     private fun disconnectAndRetry(reason: String) {
         unbindIfNeeded()
-        if (attached) scheduleRetry(reason)
+        if (attached && !releaseInProgress) scheduleRetry(reason)
     }
 
     private fun unbindIfNeeded() {
@@ -404,7 +449,7 @@ constructor(
     }
 
     private fun scheduleRetry(reason: String) {
-        if (!attached || retryScheduled) return
+        if (!attached || releaseInProgress || retryScheduled) return
         if (retryCount >= RETRY_DELAYS_MS.size) {
             log("Reconnect exhausted", reason)
             return
@@ -499,7 +544,8 @@ internal class TopwayMusicCallbackBinder(
         data.enforceInterface(TopwayCommandServiceContract.MUSIC_CALLBACK_DESCRIPTOR)
         when {
             control != null -> onControl(control)
-            code == TopwayCommandServiceContract.MusicCallbackTransaction.MODE -> onMode(data.readInt())
+            code == TopwayCommandServiceContract.MusicCallbackTransaction.MODE ->
+                onMode(data.readInt())
             else -> onExtended(data.readNullableBundle())
         }
         reply?.writeNoException()
@@ -519,8 +565,9 @@ internal class TopwayCommandCallbackBinder(
         }
         if (
             code !in
-                TopwayCommandServiceContract.CommandCallbackTransaction.SYSTEM_VOLUME..
-                    TopwayCommandServiceContract.CommandCallbackTransaction.EXTENDED_INTERFACE
+                TopwayCommandServiceContract.CommandCallbackTransaction
+                    .SYSTEM_VOLUME..TopwayCommandServiceContract.CommandCallbackTransaction
+                        .EXTENDED_INTERFACE
         ) {
             return super.onTransact(code, data, reply, flags)
         }
