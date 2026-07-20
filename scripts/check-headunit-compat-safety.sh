@@ -8,6 +8,7 @@ command_bridge_contract="${allowed_topway_main}TopwayCommandServiceContract.kt"
 command_bridge_client="${allowed_topway_main}TopwayCommandServiceClient.kt"
 command_bridge_contract_test="${allowed_topway_test}TopwayCommandServiceContractTest.kt"
 command_bridge_binder_test="${allowed_topway_test}TopwayCallbackBinderTest.kt"
+widget_component='app/src/main/java/org/oxycblt/auxio/widgets/WidgetComponent.kt'
 manifest_path='app/src/main/AndroidManifest.xml'
 topway_flavour_manifest='app/src/topwayCompat/AndroidManifest.xml'
 topway_media_res='app/src/topwayTwMedia/res/values/donottranslate.xml'
@@ -120,6 +121,16 @@ if [ -n "${vendor_hits}" ]; then
           *)
             echo "${line}" >&2
             echo "Unexpected vendor string in the isolated command-service bridge" >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      "${widget_component}")
+        case "${line}" in
+          *'Class.forName("com.tw.music.view.MusicWidgetProvider")'*) ;;
+          *)
+            echo "${line}" >&2
+            echo "Unexpected vendor string in WidgetComponent" >&2
             exit 1
             ;;
         esac
