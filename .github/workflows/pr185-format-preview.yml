@@ -1,25 +1,24 @@
-name: PR 185 Format Preview
+name: PR 185 Diagnostics Preview
 
 on:
   pull_request:
     branches:
       - dev
     paths:
-      - "app/src/**/*.kt"
-      - "build.gradle"
-      - "NOTICE"
+      - "app/**"
+      - "scripts/**"
       - ".github/workflows/pr185-format-preview.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr185-format-preview-${{ github.event.pull_request.number || github.ref }}
+  group: pr185-diagnostics-preview-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  format-preview:
-    name: Generate Spotless patch
+  format-check:
+    name: Verify Spotless formatting
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -66,27 +65,58 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Apply repository formatter
+      - name: Verify repository formatting
         shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessApply
+        run: bash ./scripts/ci-gradle.sh spotlessCheck
 
-      - name: Capture formatting patch
+  safety-diagnostics:
+    name: Capture head-unit safety diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run each safety check with complete output
         shell: bash
         run: |
-          set -euo pipefail
-          mkdir -p format-preview
-          git diff --binary -- app/src > format-preview/spotless.patch
-          git diff --name-only -- app/src > format-preview/changed-files.txt
-          if [[ ! -s format-preview/spotless.patch ]]; then
-            echo "::error::Spotless produced no patch although spotlessCheck failed on the preceding head."
-            exit 1
-          fi
-          cat format-preview/changed-files.txt
+          set -u
+          mkdir -p safety-diagnostics
+          overall=0
+          for script in \
+            check-ts18-apk-reference-contracts.sh \
+            check-headunit-compat-safety.sh \
+            check-dofun-topway-compat.sh \
+            check-native-keep-rules.sh; do
+            output="safety-diagnostics/${script%.sh}.log"
+            printf '=== %s ===\n' "${script}" | tee "${output}"
+            bash "./scripts/${script}" >> "${output}" 2>&1
+            rc=$?
+            printf '\nexit_status=%d\n' "${rc}" | tee -a "${output}"
+            cat "${output}"
+            if (( rc != 0 )); then
+              overall=1
+            fi
+          done
+          printf '%d\n' "${overall}" > safety-diagnostics/overall-status.txt
 
-      - name: Upload formatting patch
+      - name: Upload safety diagnostics
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr185-spotless-patch
-          path: format-preview/**
+          name: pr185-headunit-safety-diagnostics
+          path: safety-diagnostics/**
           if-no-files-found: error
           retention-days: 2
+
+      - name: Fail when a safety check failed
+        shell: bash
+        run: |
+          status="$(cat safety-diagnostics/overall-status.txt)"
+          if [[ "${status}" != "0" ]]; then
+            echo "::error::One or more head-unit safety checks failed; inspect the uploaded diagnostic artifact."
+            exit 1
+          fi
