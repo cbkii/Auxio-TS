@@ -127,10 +127,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
         super.onDetachedFromWindow()
     }
 
-    override fun onSharedPreferenceChanged(
-        sharedPreferences: SharedPreferences,
-        key: String?,
-    ) {
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
         if (key != CarOverlayPrefs.KEY_SHOW_TRACK_TICKER) return
         post {
             updateTickerVisibility(
@@ -173,8 +170,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
             setHorizontallyScrolling(true)
             setPadding(horizontalPadding, 0, horizontalPadding, 0)
             background = createBackground(density)
-            layoutParams =
-                LayoutParams(rowWidthPx, rowHeightPx).apply { bottomMargin = gap }
+            layoutParams = LayoutParams(rowWidthPx, rowHeightPx).apply { bottomMargin = gap }
             text = context.getString(R.string.car_overlay_track_ticker_idle)
             contentDescription =
                 context.getString(R.string.car_overlay_track_ticker_content_description, text)
