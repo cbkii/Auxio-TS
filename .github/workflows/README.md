@@ -30,7 +30,7 @@ It is the only scheduled workflow. Changes to its direct-write or issue-creation
 2. Temporary repair workflows must be removed in the same PR before merge.
 3. Do not add merged feature-branch names to workflow triggers. Routine pull requests target `dev`.
 4. Pin third-party actions to immutable commit SHAs.
-5. Keep artifact retention explicit and short unless an artefact is release evidence.
+5. Keep artifact retention explicit and short unless an artifact is release evidence.
 6. Use concurrency cancellation for routine validation; do not cancel bounded benchmark evidence runs.
 7. Delete obsolete workflow files rather than leaving disabled copies in the default branch.
 8. Historical Actions runs and merged PR branches are repository administration data, not source files; clean them separately with the GitHub UI or CLI.
