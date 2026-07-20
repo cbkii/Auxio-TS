@@ -1,57 +1,15 @@
-name: Startup Performance Validation
+# Full release/profile validation is intentionally manual.
+# Routine pull requests use Android Build and Android Quality instead.
+name: Startup Release Validation (manual)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - dev
-      - cx/startup-profiles-benchmarks
-    paths:
-      - ".github/workflows/**"
-      - "app/**"
-      - "musikr/**"
-      - "startup-benchmark/**"
-      - "scripts/**"
-      - "docs/architecture/**"
-      - "docs/validation/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle/**"
-      - "gradlew"
-      - "gradlew.bat"
-      - "NOTICE"
-      - "media"
-      - "media/**"
-      - ".gitmodules"
-      - "ci/dependencies/**"
-  pull_request:
-    branches:
-      - dev
-      - cx/startup-profiles-benchmarks
-    paths:
-      - ".github/workflows/**"
-      - "app/**"
-      - "musikr/**"
-      - "startup-benchmark/**"
-      - "scripts/**"
-      - "docs/architecture/**"
-      - "docs/validation/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle/**"
-      - "gradlew"
-      - "gradlew.bat"
-      - "NOTICE"
-      - "media"
-      - "media/**"
-      - ".gitmodules"
-      - "ci/dependencies/**"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: startup-release-validation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -105,7 +63,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
+          cache-read-only: true
 
       - name: Ensure native and profile inspection tools are present
         shell: bash
@@ -239,7 +197,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: startup-performance-failure-reports
+          name: startup-release-validation-failure-reports
           path: |
             app/build/reports/**
             musikr/build/reports/**
@@ -256,11 +214,12 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: |
           {
-            echo "## Startup Performance Validation"
+            echo "## Startup Release Validation"
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Includes workflow/shell/Python syntax, structural contracts, formatting, unit tests, lint, head-unit safety, all three benchmark/profile instrumentation flavours, all maintained debug/release variants, Baseline Profile packaging, R8 startup DEX metadata, TS18 APK contracts and DoFun/Topway source contracts."
+            echo "- Trigger: manual only; routine pull requests use Android Build and Android Quality."
+            echo "- Includes workflow/shell/Python syntax, startup contracts, formatting, unit tests, lint, head-unit safety, benchmark/profile instrumentation, maintained debug/release variants, Baseline Profile packaging, R8 startup DEX metadata, TS18 APK contracts and DoFun/Topway source contracts."
             echo "- No hosted-runner wall-clock threshold or exact-device latency claim is produced."
             echo "- Exact TS18 runtime behaviour: Requires device validation."
           } >> "${GITHUB_STEP_SUMMARY}"
