@@ -80,9 +80,7 @@ constructor(
         TopwayMusicCallbackBinder(
             onControl = ::onMusicControl,
             onMode = { mode -> postWorker { log("Music mode", mode.toString()) } },
-            onExtended = { bundle ->
-                postWorker { logBundle("Music extended callback", bundle) }
-            },
+            onExtended = { bundle -> postWorker { logBundle("Music extended callback", bundle) } },
         )
 
     private val commandCallback =
@@ -161,11 +159,12 @@ constructor(
         log("Release")
 
         val worker = workerHandler
-        if (worker == null ||
-            !worker.post {
-                clearRemote(unregister = true)
-                mainHandler.post(::finishRelease)
-            }
+        if (
+            worker == null ||
+                !worker.post {
+                    clearRemote(unregister = true)
+                    mainHandler.post(::finishRelease)
+                }
         ) {
             mainHandler.post(::finishRelease)
         }
