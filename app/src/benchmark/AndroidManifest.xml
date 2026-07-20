@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
+    <!-- The larger heap is confined to the benchmark target variant; production variants are unchanged. -->
     <application android:largeHeap="true">
         <profileable
             android:shell="true"
