@@ -1,0 +1,92 @@
+name: PR 185 Format Preview
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - "app/src/**/*.kt"
+      - "build.gradle"
+      - "NOTICE"
+      - ".github/workflows/pr185-format-preview.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr185-format-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format-preview:
+    name: Generate Spotless patch
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+
+      - name: Ensure native build tools are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply repository formatter
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessApply
+
+      - name: Capture formatting patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p format-preview
+          git diff --binary -- app/src > format-preview/spotless.patch
+          git diff --name-only -- app/src > format-preview/changed-files.txt
+          if [[ ! -s format-preview/spotless.patch ]]; then
+            echo "::error::Spotless produced no patch although spotlessCheck failed on the preceding head."
+            exit 1
+          fi
+          cat format-preview/changed-files.txt
+
+      - name: Upload formatting patch
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr185-spotless-patch
+          path: format-preview/**
+          if-no-files-found: error
+          retention-days: 2
