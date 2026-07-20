@@ -30,6 +30,7 @@ data class FloatingTrackMetadata private constructor(val artist: String?, val ti
             }
 
     companion object {
+        /** Normalizes optional fields and returns null when neither has displayable text. */
         fun from(artist: String?, title: String?): FloatingTrackMetadata? {
             val normalizedArtist = artist?.trim()?.takeIf(String::isNotEmpty)
             val normalizedTitle = title?.trim()?.takeIf(String::isNotEmpty)
