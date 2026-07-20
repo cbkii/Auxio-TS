@@ -25,10 +25,10 @@ import androidx.preference.PreferenceManager
 
 /**
  * SharedPreferences wrapper for car floating controls overlay configuration. Manages enablement,
- * position, opacity, and visibility settings.
+ * position, opacity, visibility, and the optional current-track ticker.
  *
  * Uses [PreferenceManager.getDefaultSharedPreferences] so that the `car_overlay_enabled` key is
- * shared with the AndroidX `SwitchPreferenceCompat` declared in `preferences_ui.xml`. This avoids
+ * shared with the AndroidX `SwitchPreferenceCompat` declared in `preferences_car.xml`. This avoids
  * split-brain between the preference UI and runtime state.
  */
 class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) {
@@ -59,10 +59,11 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
         get() = prefs.getBoolean(KEY_HIDE_WHILE_AUXIO_FG, false)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_WHILE_AUXIO_FG, value) }
 
-    /**
-     * Runtime suppression marker used to avoid sticky service restarts re-showing the overlay over
-     * Auxio's own UI when "hide while Auxio foreground" is enabled.
-     */
+    /** Whether the current-track ticker row is shown above the unchanged controls row. */
+    var showTrackTicker: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_TRACK_TICKER, false)
+        set(value) = prefs.edit { putBoolean(KEY_SHOW_TRACK_TICKER, value) }
+
     var positionX: Int
         get() = prefs.getInt(KEY_POSITION_X, DEFAULT_X)
         set(value) = prefs.edit { putInt(KEY_POSITION_X, value) }
@@ -98,6 +99,7 @@ class CarOverlayPrefs private constructor(private val prefs: SharedPreferences) 
 
     companion object {
         const val KEY_ENABLED = "car_overlay_enabled"
+        const val KEY_SHOW_TRACK_TICKER = "car_overlay_show_track_ticker"
         private const val KEY_PENDING_ENABLE = "car_overlay_pending_enable"
         private const val KEY_HIDE_WHILE_AUXIO_FG = "car_overlay_hide_auxio_fg"
         private const val KEY_PERSISTENCE_DEFAULT_MIGRATED =
