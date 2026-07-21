@@ -1,0 +1,816 @@
+[jules-setup] Repo: /app
+[jules-setup] System
+Linux devbox 6.8.0 #1 SMP PREEMPT_DYNAMIC Fri Feb 20 20:38:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+uid=1001(jules) gid=1001(jules) groups=1001(jules),27(sudo),103(docker)
+[jules-setup] Preinstalled tool summary
+-------------------------------------
+Environment check starting...
+
+--------- Python ---------
+✅  python3: Python 3.12.13
+✅  python: Python 3.12.13
+✅  pip: pip 26.0.1 from /home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/pip (python 3.12)
+✅  pipx: 1.4.3
+✅  poetry: Poetry (version 2.3.2)
+✅  uv: uv 0.10.8
+✅  black: black, 26.1.0 (compiled: yes)
+Python (CPython) 3.12.3
+✅  mypy: mypy 1.19.1 (compiled: yes)
+✅  pytest: pytest 9.0.2
+✅  ruff: ruff 0.15.5
+✅  pyenv: available
+  system
+  3.10.20
+* 3.12.13 (set by /home/jules/.pyenv/version)
+
+--------- NodeJS ---------
+✅  node: v22.22.1
+/opt/environment_summary.sh: line 64: nvm: command not found
+❌  nvm: not found
+✅  npm: 11.11.0
+✅  yarn: 1.22.22
+✅  pnpm: 10.30.3
+✅  eslint: v10.0.2
+✅  prettier: 3.8.1
+✅  chromedriver: ChromeDriver 146.0.7680.66 (8074df26380b9303d287ee8ae2abec0b73bef9d7-refs/branch-heads/7680@{#1899})
+
+--------- Java ---------
+✅  java: openjdk version "21.0.10" 2026-01-20
+OpenJDK Runtime Environment (build 21.0.10+7-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.10+7-Ubuntu-124.04, mixed mode, sharing)
+✅  mvn: Apache Maven 3.9.12 (848fbb4bf2d427b72bdb2471c22fced7ebd9a7a1)
+Maven home: /usr/share/maven
+Java version: 21.0.10, vendor: Ubuntu, runtime: /usr/lib/jvm/java-21-openjdk-amd64
+Default locale: en, platform encoding: UTF-8
+OS name: "linux", version: "6.8.0", arch: "amd64", family: "unix"
+✅  gradle: Gradle 8.8
+
+--------- Go ---------
+✅  go: go version go1.24.3 linux/amd64
+
+--------- Rust ---------
+✅  rustc: rustc 1.94.0 (4a4ef493e 2026-03-02)
+✅  cargo: cargo 1.94.0 (85eff7c80 2026-01-15)
+
+--------- Bun ---------
+✅  bun: 1.2.14
+
+--------- C/C++ Compilers ---------
+✅  clang: Ubuntu clang version 18.1.3 (1ubuntu1)
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/bin
+✅  gcc: gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+Copyright (C) 2023 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+✅  cmake: cmake version 3.28.3
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+✅  ninja: 1.11.1
+✅  conan: Conan version 2.26.2
+
+--------- Android ---------
+✅  sdkmanager: Loading package information...                                                  Loading local repository...                                                     [=========                              ] 25% Loading local repository...       [=========                              ] 25% Fetch remote repository...        [=======================================] 100% Fetch remote repository...
+Installed packages:
+  Path                 | Version | Description                    | Location
+  -------              | ------- | -------                        | -------
+  build-tools;33.0.2   | 33.0.2  | Android SDK Build-Tools 33.0.2 | build-tools/33.0.2
+  build-tools;34.0.0   | 34.0.0  | Android SDK Build-Tools 34     | build-tools/34.0.0
+  build-tools;35.0.0   | 35.0.0  | Android SDK Build-Tools 35     | build-tools/35.0.0
+  platform-tools       | 36.0.2  | Android SDK Platform-Tools     | platform-tools
+  platforms;android-34 | 3       | Android SDK Platform 34        | platforms/android-34
+  platforms;android-35 | 2       | Android SDK Platform 35        | platforms/android-35
+
+--------- Flutter ---------
+✅  flutter: Flutter 3.41.2 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision 90673a4eef (5 months ago) • 2026-02-18 13:54:59 -0800
+Engine • hash d96704abcce17ff165bbef9d77123407ef961017 (revision 6c0baaebf7) (4 months ago) • 2026-02-18 19:22:23.000Z
+Tools • Dart 3.11.0 • DevTools 2.54.1
+
+--------- PHP ---------
+✅  php: PHP 8.3.6 (cli) (built: Jan  7 2026 08:40:32) (NTS)
+Copyright (c) The PHP Group
+Zend Engine v4.3.6, Copyright (c) Zend Technologies
+    with Zend OPcache v8.3.6, Copyright (c), by Zend Technologies
+✅  composer: PHP version 8.3.6 (/usr/bin/php8.3)
+Run the "diagnose" command to get more detailed diagnostics output.
+Composer version 2.9.5 2026-01-29 11:40:53
+
+--------- Ruby ---------
+✅  ruby: ruby 3.2.3 (2024-01-18 revision 52bb2ac0a6) [x86_64-linux-gnu]
+✅  gem: 3.4.20
+✅  bundle: 4.0.7
+
+--------- .NET ---------
+✅  dotnet: 8.0.124 [/usr/lib/dotnet/sdk]
+10.0.103 [/usr/lib/dotnet/sdk]
+
+--------- Docker ---------
+✅  docker: Docker version 29.2.1, build a5c7197
+✅  docker: Docker Compose version v5.1.0
+
+--------- PlayWright ---------
+✅  playwright: Version 1.58.0
+
+--------- Other Utilities ---------
+✅  awk: GNU Awk 5.2.1, API 3.2, PMA Avon 8-g1, (GNU MPFR 4.2.1, GNU MP 6.3.0)
+Copyright (C) 1989, 1991-2022 Free Software Foundation.
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+✅  curl: curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.10
+Release-Date: 2023-12-06, security patched: 8.5.0-2ubuntu10.7
+Protocols: dict file ftp ftps gopher gophers http https imap imaps ldap ldaps mqtt pop3 pop3s rtmp rtsp scp sftp smb smbs smtp smtps telnet tftp
+Features: alt-svc AsynchDNS brotli GSS-API HSTS HTTP2 HTTPS-proxy IDN IPv6 Kerberos Largefile libz NTLM PSL SPNEGO SSL threadsafe TLS-SRP UnixSockets zstd
+✅  git: git version 2.53.0
+✅  grep: grep (GNU grep) 3.11
+Copyright (C) 2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Written by Mike Haertel and others; see
+<https://git.savannah.gnu.org/cgit/grep.git/tree/AUTHORS>.
+
+grep -P uses PCRE2 10.42 2022-12-11
+✅  gzip: gzip 1.12
+Copyright (C) 2018 Free Software Foundation, Inc.
+Copyright (C) 1993 Jean-loup Gailly.
+This is free software.  You may redistribute copies of it under the terms of
+the GNU General Public License <https://www.gnu.org/licenses/gpl.html>.
+There is NO WARRANTY, to the extent permitted by law.
+
+Written by Jean-loup Gailly.
+✅  jq: jq-1.7
+✅  make: GNU Make 4.3
+Built for x86_64-pc-linux-gnu
+Copyright (C) 1988-2020 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+✅  rg: ripgrep 14.1.0
+
+features:-simd-accel,+pcre2
+simd(compile):+SSE2,-SSSE3,-AVX2
+simd(runtime):+SSE2,+SSSE3,+AVX2
+
+PCRE2 10.42 is available (JIT is available)
+✅  sed: sed (GNU sed) 4.9
+Packaged by Debian
+Copyright (C) 2022 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Written by Jay Fenlason, Tom Lord, Ken Pizzini,
+Paolo Bonzini, Jim Meyering, and Assaf Gordon.
+
+✅  tar: tar (GNU tar) 1.35
+Copyright (C) 2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Written by John Gilmore and Jay Fenlason.
+✅  tmux: tmux 3.4
+✅  yq: yq 0.0.0
+
+-------------------------------------
+Environment check complete.
+[jules-setup] FOUND: git -> /usr/bin/git
+[jules-setup] FOUND: bash -> /usr/bin/bash
+[jules-setup] FOUND: curl -> /usr/bin/curl
+[jules-setup] FOUND: unzip -> /usr/bin/unzip
+[jules-setup] FOUND: zip -> /usr/bin/zip
+[jules-setup] FOUND: python3 -> /home/jules/.pyenv/shims/python3
+[jules-setup] FOUND: java -> /usr/bin/java
+[jules-setup] FOUND: javac -> /usr/bin/javac
+[jules-setup] FOUND: cmake -> /usr/bin/cmake
+[jules-setup] FOUND: ninja -> /usr/bin/ninja
+openjdk version "21.0.10" 2026-01-20
+OpenJDK Runtime Environment (build 21.0.10+7-Ubuntu-124.04)
+OpenJDK 64-Bit Server VM (build 21.0.10+7-Ubuntu-124.04, mixed mode, sharing)
+javac 21.0.10
+[jules-setup] ANDROID_HOME=/opt/android-sdk
+[jules-setup] ANDROID_SDK_ROOT=/opt/android-sdk
+[jules-setup] GRADLE_USER_HOME=/home/jules/.gradle
+[jules-setup] --- install Android command-line tools ---
+[jules-setup] OK: install Android command-line tools
+[jules-setup] --- accept Android SDK licences ---
+Loading local repository...                                                     [=========                              ] 25% Loading local repository...       [=========                              ] 25% Fetch remote repository...        [==========                             ] 26% Fetch remote repository...        [============                           ] 31% Fetch remote repository...        [============                           ] 32% Fetch remote repository...        [=============                          ] 33% Fetch remote repository...        [=============                          ] 35% Fetch remote repository...        [==============                         ] 36% Fetch remote repository...        [==============                         ] 37% Fetch remote repository...        [===============                        ] 38% Fetch remote repository...        [===============                        ] 39% Fetch remote repository...        [================                       ] 40% Fetch remote repository...        [================                       ] 41% Fetch remote repository...        [================                       ] 42% Fetch remote repository...        [=================                      ] 44% Fetch remote repository...        [=================                      ] 45% Fetch remote repository...        [==================                     ] 46% Fetch remote repository...        [==================                     ] 47% Fetch remote repository...        [===================                    ] 48% Fetch remote repository...        [===================                    ] 49% Fetch remote repository...        [====================                   ] 50% Fetch remote repository...        [====================                   ] 51% Fetch remote repository...        [====================                   ] 53% Fetch remote repository...        [=====================                  ] 54% Fetch remote repository...        [=====================                  ] 55% Fetch remote repository...        [======================                 ] 56% Fetch remote repository...        [======================                 ] 57% Fetch remote repository...        [=======================                ] 58% Fetch remote repository...        [=======================                ] 59% Fetch remote repository...        [========================               ] 60% Fetch remote repository...        [========================               ] 61% Fetch remote repository...        [=========================              ] 63% Fetch remote repository...        [=========================              ] 64% Fetch remote repository...        [=========================              ] 65% Fetch remote repository...        [==========================             ] 66% Fetch remote repository...        [==========================             ] 67% Fetch remote repository...        [===========================            ] 68% Fetch remote repository...        [===========================            ] 69% Fetch remote repository...        [============================           ] 70% Fetch remote repository...        [============================           ] 72% Fetch remote repository...        [=============================          ] 73% Fetch remote repository...        [=============================          ] 74% Fetch remote repository...        [=============================          ] 75% Fetch remote repository...        [=============================          ] 75% Computing updates...              [=======================================] 100% Computing updates...
+All SDK package licenses accepted.
+
+[jules-setup] OK: accept Android SDK licences
+[jules-setup] --- install Android SDK packages ---
+Loading package information...                                                  Loading local repository...                                                     [                                       ] 3% Loading local repository...        [                                       ] 3% Fetch remote repository...         [=                                      ] 3% Fetch remote repository...         [=                                      ] 4% Fetch remote repository...         [=                                      ] 5% Fetch remote repository...         [==                                     ] 5% Fetch remote repository...         [==                                     ] 6% Fetch remote repository...         [==                                     ] 7% Fetch remote repository...         [==                                     ] 7% Computing updates...               [===                                    ] 8% Computing updates...               [===                                    ] 10% Computing updates...              [===                                    ] 10% Installing NDK (Side by side) 28.2[===                                    ] 10% Downloading android-ndk-r28c-linux[====                                   ] 10% Downloading android-ndk-r28c-linux[====                                   ] 11% Downloading android-ndk-r28c-linux[====                                   ] 12% Downloading android-ndk-r28c-linux[=====                                  ] 13% Downloading android-ndk-r28c-linux[=====                                  ] 14% Downloading android-ndk-r28c-linux[=====                                  ] 15% Downloading android-ndk-r28c-linux[======                                 ] 15% Downloading android-ndk-r28c-linux[======                                 ] 16% Downloading android-ndk-r28c-linux[======                                 ] 16% Unzipping...                      [======                                 ] 16% Unzipping... android-ndk-r28c/    [======                                 ] 16% Unzipping... android-ndk-r28c/READ[======                                 ] 16% Unzipping... android-ndk-r28c/meta[======                                 ] 16% Unzipping... android-ndk-r28c/shad[======                                 ] 16% Unzipping... android-ndk-r28c/ndk-[======                                 ] 16% Unzipping... android-ndk-r28c/wrap[======                                 ] 16% Unzipping... android-ndk-r28c/ndk-[======                                 ] 16% Unzipping... android-ndk-r28c/tool[======                                 ] 17% Unzipping... android-ndk-r28c/tool[=======                                ] 18% Unzipping... android-ndk-r28c/tool[=======                                ] 19% Unzipping... android-ndk-r28c/tool[=======                                ] 20% Unzipping... android-ndk-r28c/tool[========                               ] 20% Unzipping... android-ndk-r28c/tool[========                               ] 21% Unzipping... android-ndk-r28c/tool[========                               ] 21% Unzipping... android-ndk-r28c/buil[========                               ] 21% Unzipping... android-ndk-r28c/sour[========                               ] 21% Unzipping... android-ndk-r28c/NOTI[========                               ] 21% Unzipping... android-ndk-r28c/ndk-[========                               ] 21% Unzipping... android-ndk-r28c/NOTI[========                               ] 21% Unzipping... android-ndk-r28c/pyth[========                               ] 21% Unzipping... android-ndk-r28c/preb[========                               ] 21% Unzipping... android-ndk-r28c/ndk-[========                               ] 21% Unzipping... android-ndk-r28c/sour[========                               ] 21% Unzipping... android-ndk-r28c/simp[========                               ] 21% Unzipping... android-ndk-r28c/CHAN[============                           ] 33% Unzipping... android-ndk-r28c/CHAN[============                           ] 33% Installing CMake 3.22.1 android-nd[============                           ] 33% Downloading cmake-3.22.1-linux.zip[=============                          ] 33% Downloading cmake-3.22.1-linux.zip[=============                          ] 34% Downloading cmake-3.22.1-linux.zip[=============                          ] 35% Downloading cmake-3.22.1-linux.zip[==============                         ] 35% Downloading cmake-3.22.1-linux.zip[==============                         ] 36% Downloading cmake-3.22.1-linux.zip[==============                         ] 37% Downloading cmake-3.22.1-linux.zip[===============                        ] 38% Downloading cmake-3.22.1-linux.zip[===============                        ] 38% Unzipping... android-ndk-r28c/CHAN[===============                        ] 38% Unzipping... bin/cmake            [===============                        ] 39% Unzipping... bin/cmake            [===============                        ] 40% Unzipping... bin/cmake            [===============                        ] 40% Unzipping... bin/ctest            [================                       ] 40% Unzipping... bin/ctest            [================                       ] 41% Unzipping... bin/ctest            [================                       ] 41% Unzipping... bin/cpack            [================                       ] 42% Unzipping... bin/cpack            [=================                      ] 43% Unzipping... bin/cpack            [=================                      ] 43% Unzipping... share/vim/vimfiles/in[=================                      ] 43% Unzipping... share/vim/vimfiles/sy[=================                      ] 43% Unzipping... share/aclocal/cmake.m[=================                      ] 43% Unzipping... share/emacs/site-lisp[=================                      ] 43% Unzipping... share/cmake-3.22/incl[=================                      ] 43% Unzipping... share/cmake-3.22/Help[=================                      ] 43% Unzipping... share/cmake-3.22/Temp[=================                      ] 43% Unzipping... share/cmake-3.22/Modu[=================                      ] 44% Unzipping... share/cmake-3.22/Modu[=================                      ] 44% Unzipping... share/bash-completion[=================                      ] 44% Unzipping... doc/cmake-3.22/Copyri[=================                      ] 44% Unzipping... doc/cmake-3.22/cmzlib[=================                      ] 44% Unzipping... doc/cmake-3.22/cmzstd[=================                      ] 44% Unzipping... doc/cmake-3.22/cmnght[=================                      ] 44% Unzipping... doc/cmake-3.22/cmsys/[=================                      ] 44% Unzipping... doc/cmake-3.22/cmcurl[=================                      ] 44% Unzipping... doc/cmake-3.22/cmlibr[=================                      ] 44% Unzipping... doc/cmake-3.22/cmliba[=================                      ] 44% Unzipping... doc/cmake-3.22/cmlibl[=================                      ] 44% Unzipping... doc/cmake-3.22/cmlibu[=================                      ] 44% Unzipping... doc/openssl-1.1.1l/LI[=================                      ] 44% Unzipping... source.properties    [=================                      ] 44% Unzipping... bin/ninja            [=================                      ] 44% Unzipping... doc/ninja/LICENSE    [=================                      ] 44% Unzipping... share/cmake-3.22/Modu[=====================                  ] 55% Unzipping... share/cmake-3.22/Modu[=====================                  ] 55% Installing Android SDK Build-Tools[=====================                  ] 55% Downloading build-tools_r36_linux.[======================                 ] 55% Downloading build-tools_r36_linux.[======================                 ] 56% Downloading build-tools_r36_linux.[======================                 ] 57% Downloading build-tools_r36_linux.[=======================                ] 58% Downloading build-tools_r36_linux.[=======================                ] 59% Downloading build-tools_r36_linux.[=======================                ] 60% Downloading build-tools_r36_linux.[========================               ] 60% Downloading build-tools_r36_linux.[========================               ] 61% Downloading build-tools_r36_linux.[========================               ] 61% Unzipping... share/cmake-3.22/Modu[========================               ] 61% Unzipping... android-16/NOTICE.txt[========================               ] 61% Unzipping... android-16/aapt      [========================               ] 61% Unzipping... android-16/aapt2     [========================               ] 61% Unzipping... android-16/aarch64-li[========================               ] 61% Unzipping... android-16/aidl      [========================               ] 61% Unzipping... android-16/apksigner [========================               ] 61% Unzipping... android-16/arm-linux-[========================               ] 61% Unzipping... android-16/bcc_compat[========================               ] 61% Unzipping... android-16/core-lambd[========================               ] 61% Unzipping... android-16/d8        [========================               ] 61% Unzipping... android-16/dexdump   [========================               ] 61% Unzipping... android-16/i686-linux[========================               ] 61% Unzipping... android-16/lld       [========================               ] 61% Unzipping... android-16/llvm-rs-cc[========================               ] 61% Unzipping... android-16/mipsel-lin[========================               ] 61% Unzipping... android-16/runtime.pr[========================               ] 61% Unzipping... android-16/source.pro[========================               ] 61% Unzipping... android-16/split-sele[========================               ] 61% Unzipping... android-16/x86_64-lin[========================               ] 61% Unzipping... android-16/zipalign  [========================               ] 61% Unzipping... android-16/lib/apksig[========================               ] 61% Unzipping... android-16/lib/d8.jar[========================               ] 62% Unzipping... android-16/lib/d8.jar[=========================              ] 63% Unzipping... android-16/lib/d8.jar[=========================              ] 63% Unzipping... android-16/lib64/libL[=========================              ] 64% Unzipping... android-16/lib64/libL[=========================              ] 64% Unzipping... android-16/lib64/libb[=========================              ] 64% Unzipping... android-16/lib64/libc[=========================              ] 64% Unzipping... android-16/lld-bin/ll[=========================              ] 65% Unzipping... android-16/lld-bin/ll[==========================             ] 65% Unzipping... android-16/lld-bin/ll[==========================             ] 66% Unzipping... android-16/lld-bin/ll[==========================             ] 66% Unzipping... android-16/renderscri[==============================         ] 78% Unzipping... android-16/renderscri[==============================         ] 78% Installing Android SDK Platform-To[==============================         ] 78% Downloading platform-tools_r37.0.0[===============================        ] 78% Downloading platform-tools_r37.0.0[===============================        ] 79% Downloading platform-tools_r37.0.0[===============================        ] 80% Downloading platform-tools_r37.0.0[================================       ] 80% Downloading platform-tools_r37.0.0[================================       ] 81% Downloading platform-tools_r37.0.0[================================       ] 82% Downloading platform-tools_r37.0.0[=================================      ] 83% Downloading platform-tools_r37.0.0[=================================      ] 83% Unzipping... android-16/renderscri[=================================      ] 83% Unzipping... platform-tools/NOTICE[=================================      ] 83% Unzipping... platform-tools/adb   [=================================      ] 84% Unzipping... platform-tools/adb   [=================================      ] 85% Unzipping... platform-tools/adb   [==================================     ] 85% Unzipping... platform-tools/adb   [==================================     ] 86% Unzipping... platform-tools/adb   [==================================     ] 86% Unzipping... platform-tools/etc1to[==================================     ] 86% Unzipping... platform-tools/fastbo[==================================     ] 87% Unzipping... platform-tools/fastbo[==================================     ] 87% Unzipping... platform-tools/hprof-[==================================     ] 87% Unzipping... platform-tools/lib64/[==================================     ] 87% Unzipping... platform-tools/make_f[==================================     ] 87% Unzipping... platform-tools/mke2fs[===================================    ] 88% Unzipping... platform-tools/mke2fs[===================================    ] 88% Unzipping... platform-tools/source[===================================    ] 88% Unzipping... platform-tools/sqlite[===================================    ] 89% Unzipping... platform-tools/sqlite[=======================================] 100% Unzipping... platform-tools/sqlit
+
+[jules-setup] OK: install Android SDK packages
+[jules-setup] Wrote local.properties
+[jules-setup] --- bootstrap static-review dependencies ---
+--- Auxio-TS dependency bootstrap ---
+profile=static-review
+--- Configuring approved git URL fallback policy ---
+Synchronizing submodule url for 'media'
+Synchronizing submodule url for 'media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg'
+Synchronizing submodule url for 'musikr/src/main/cpp/taglib'
+Synchronizing submodule url for 'musikr/src/main/cpp/taglib/3rdparty/utfcpp'
+--- Verifying pinned submodule SHAs ---
+--- git submodule status --recursive ---
+ 71d3c18df8dc96d984c2a5d788dce56289eb588b media (remotes/origin/auxio-ts/add-common-ktx-proguard-stub)
+ 7cd3450def6a8e8c7aa187755574b909b7e9eabe media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg (7cd3450de)
+ a27dca557e85db1e23de33d2118cde87c8f32770 musikr/src/main/cpp/taglib (a27dca5)
+ 63d64de49fd6b829f7c8694df5ab2ee625cb7134 musikr/src/main/cpp/taglib/3rdparty/utfcpp (v4.0.9)
+READY: dependency bootstrap completed for profile static-review.
+[jules-setup] OK: bootstrap static-review dependencies
+[jules-setup] --- bootstrap full-build dependencies ---
+--- Auxio-TS dependency bootstrap ---
+profile=full-build
+--- Configuring approved git URL fallback policy ---
+Synchronizing submodule url for 'media'
+Synchronizing submodule url for 'media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg'
+Synchronizing submodule url for 'musikr/src/main/cpp/taglib'
+Synchronizing submodule url for 'musikr/src/main/cpp/taglib/3rdparty/utfcpp'
+--- Updating submodule media ---
+--- Updating submodule media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg ---
+--- Updating submodule musikr/src/main/cpp/taglib ---
+--- Updating submodule musikr/src/main/cpp/taglib/3rdparty/utfcpp ---
+--- Verifying pinned submodule SHAs ---
+OK media: 71d3c18df8dc96d984c2a5d788dce56289eb588b
+OK media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg: 7cd3450def6a8e8c7aa187755574b909b7e9eabe
+OK musikr/src/main/cpp/taglib: a27dca557e85db1e23de33d2118cde87c8f32770
+OK musikr/src/main/cpp/taglib/3rdparty/utfcpp: 63d64de49fd6b829f7c8694df5ab2ee625cb7134
+OK Android SDK: /opt/android-sdk
+--- git submodule status --recursive ---
+ 71d3c18df8dc96d984c2a5d788dce56289eb588b media (remotes/origin/auxio-ts/add-common-ktx-proguard-stub)
+ 7cd3450def6a8e8c7aa187755574b909b7e9eabe media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg (7cd3450de)
+ a27dca557e85db1e23de33d2118cde87c8f32770 musikr/src/main/cpp/taglib (a27dca5)
+ 63d64de49fd6b829f7c8694df5ab2ee625cb7134 musikr/src/main/cpp/taglib/3rdparty/utfcpp (v4.0.9)
+READY: dependency bootstrap completed for profile full-build.
+[jules-setup] OK: bootstrap full-build dependencies
+[jules-setup] --- check full-build submodules ---
+--- Submodule pin validation (full-build) ---
+OK media: 71d3c18df8dc96d984c2a5d788dce56289eb588b
+OK media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg: 7cd3450def6a8e8c7aa187755574b909b7e9eabe
+OK musikr/src/main/cpp/taglib: a27dca557e85db1e23de33d2118cde87c8f32770
+OK musikr/src/main/cpp/taglib/3rdparty/utfcpp: 63d64de49fd6b829f7c8694df5ab2ee625cb7134
+READY: submodule pins validated for profile full-build.
+ 71d3c18df8dc96d984c2a5d788dce56289eb588b media (remotes/origin/auxio-ts/add-common-ktx-proguard-stub)
+ 7cd3450def6a8e8c7aa187755574b909b7e9eabe media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg (7cd3450de)
+ a27dca557e85db1e23de33d2118cde87c8f32770 musikr/src/main/cpp/taglib (a27dca5)
+ 63d64de49fd6b829f7c8694df5ab2ee625cb7134 musikr/src/main/cpp/taglib/3rdparty/utfcpp (v4.0.9)
+[jules-setup] OK: check full-build submodules
+[jules-setup] --- shell syntax check ---
+scripts/setup-codex-android-env.sh
+scripts/prepare-ci-environment.sh
+scripts/check-ts18-installed-topway-media.sh
+scripts/check-manual-release-workflow.sh
+scripts/check-pr117-ts18-fastpath.sh
+scripts/ci-gradle.sh
+scripts/dependency-lib.sh
+scripts/check-native-keep-rules.sh
+scripts/check-ts18-apk-reference-contracts.sh
+scripts/check-format-with-diff.sh
+scripts/check-logging-silence.sh
+scripts/check-headunit-compat-safety.sh
+scripts/check-dofun-topway-compat.sh
+scripts/check-submodules.sh
+scripts/evidence/collect-ts18-dofun-runtime-validation-v2.sh
+scripts/evidence/collect-ts18-launcher-media-integration.sh
+scripts/evidence/compare-evidence-contract.sh
+scripts/evidence/collect-ts18-dofun-runtime-validation-v3.sh
+scripts/evidence/grep-topway-contract.sh
+scripts/check-topway-manifest-components.sh
+scripts/setup-jules-env.sh
+scripts/check-startup-performance-contracts.sh
+scripts/monitor-upstream-auxio.sh
+scripts/bootstrap-dependencies.sh
+scripts/package-topway-twmusic-magisk-module.sh
+scripts/check-version-catalog-sync.sh
+scripts/collect-ts18-evidence.sh
+scripts/check-ts18-installed-topway-music.sh
+[jules-setup] OK: shell syntax check
+[jules-setup] --- version catalogue sync ---
+--- Version catalogue / build.gradle sync (12 keys) ---
+OK agp: 9.2.1
+OK kotlin: 2.3.10
+OK kotlinCoroutines: 1.11.0
+OK navigation: 2.9.8
+OK hilt: 2.59.2
+OK room: 2.8.4
+OK androidxCore: 1.17.0
+OK desugarJdkLibs: 2.1.5
+OK ksp: 2.3.6
+OK spotless: 8.6.0
+OK roborazzi: 1.64.0
+OK dokka: 2.2.0
+READY: version catalogue matches authoritative build.gradle declarations.
+[jules-setup] OK: version catalogue sync
+[jules-setup] --- TS18 APK reference contracts ---
+OK: found docs/DOFUN_VARIETY_COMPATIBILITY.md
+OK: found docs/TS18_APK_REFERENCE.md
+OK: found docs/reference/ts18-apk/README.md
+OK: found docs/reference/ts18-apk/reference-contracts.json
+OK: found docs/reference/ts18-apk/dofun-variety/apps_match_config.music-excerpts.json
+OK: found docs/reference/ts18-apk/dofun-variety/apps_config.music-excerpts.json
+OK: found docs/reference/ts18-apk/dofun-variety/manifest.string-hits.txt
+OK: found docs/reference/ts18-apk/twmusic/manifest.string-hits.txt
+OK: found docs/reference/ts18-apk/twmusic/classes.string-hits.txt
+OK: DoFun package reference: "package": "com.dofun.variety"
+OK: DoFun music hotseat package reference: "package_name": "com.tw.music"
+OK: DoFun music activity reference: "class_name": "com.tw.music.MusicActivity"
+OK: Topway metadata broadcast reference: "com.tw.music.info"
+OK: Topway progress broadcast reference: "com.tw.launcher.music_progress_duration"
+OK: Topway play/pause command reference: "com.tw.music.action.pp"
+OK: Cardoor remote service evidence reference: "cn.cardoor.libs.media.RemoteMediaService"
+OK: forbidden TWUtil reference: "android.tw.john.TWUtil"
+OK: forbidden ITWCommandAidl reference: "com.tw.service.xt.aidl.ITWCommandAidl"
+OK: agent DoFun/twmusic authority section: DoFun Variety / stock twmusic compatibility authority
+OK: agent package-identity exception: only dedicated, clearly named Topway/DoFun compatibility variants may install as those package IDs
+OK: Copilot DoFun/twmusic authority section: DoFun Variety / stock twmusic compatibility authority
+OK: docs index reference section: DoFun Variety / TS18 APK reference baseline
+Result: PASS
+[jules-setup] OK: TS18 APK reference contracts
+[jules-setup] --- DoFun/Topway compatibility guardrail ---
+Checking source-level DoFun/Topway compatibility expectations...
+
+OK: Gradle standard product flavour contains standard
+OK: Gradle topwayTwMusic product flavour contains topwayTwMusic
+OK: Gradle topwayTwMedia product flavour contains topwayTwMedia
+OK: Gradle standard applicationId contains applicationId namespace
+OK: Gradle topwayTwMusic applicationId contains applicationId "com.tw.music"
+OK: Gradle topwayTwMedia applicationId contains applicationId "com.tw.media"
+OK: Gradle topwayTwMedia shared Java source set contains src/topwayCompat/java
+OK: Gradle topwayTwMedia shared manifest contains src/topwayCompat/AndroidManifest.xml
+OK: found flavour manifest: app/src/topwayCompat/AndroidManifest.xml
+OK: Topway activity alias contains com.tw.music.MusicActivity
+OK: Topway alias router target contains org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity
+OK: Topway full-player activity contains org.oxycblt.auxio.MainActivity
+OK: Topway MusicService component fallback contains com.tw.music.MusicService
+OK: Topway canonical external service override contains org.oxycblt.auxio.AuxioService
+OK: Topway base service browser filters removed contains tools:node="remove"
+OK: Topway MusicWidgetProvider component fallback contains com.tw.music.view.MusicWidgetProvider
+OK: Topway alias main action contains android.intent.action.MAIN
+OK: Topway alias music action contains android.intent.action.MUSIC_PLAYER
+OK: Topway alias launcher category contains android.intent.category.LAUNCHER
+OK: Topway alias default category contains android.intent.category.DEFAULT
+OK: Topway alias app music category contains android.intent.category.APP_MUSIC
+OK: Topway flavour fallback provider must not duplicate command receiver does not contain com.tw.music.action.cmd
+OK: Topway flavour fallback provider must not duplicate previous receiver does not contain com.tw.music.action.prev
+OK: Topway flavour fallback provider must not duplicate next receiver does not contain com.tw.music.action.next
+OK: Topway flavour fallback provider must not duplicate play-pause receiver does not contain com.tw.music.action.pp
+OK: Topway flavour fallback provider must not duplicate widget progress receiver does not contain com.android.launcher.widget_music_progress
+OK: manifest applicationId-scoped CoverProvider authority contains ${applicationId}.image.CoverProvider
+OK: base media browser service contains android.media.browse.MediaBrowserService
+OK: base Topway command receiver contains .headunit.topway.TopwayMusicBridgeReceiver
+OK: Topway CoverProvider authority resource contains com.tw.music.image.CoverProvider
+OK: Topway shared label resource contains >Music<
+OK: Topway debug CoverProvider authority resource contains com.tw.music.debug.image.CoverProvider
+OK: Topway media CoverProvider authority resource contains com.tw.media.image.CoverProvider
+OK: Topway media debug CoverProvider authority resource contains com.tw.media.debug.image.CoverProvider
+OK: Topway contract string: com.tw.music.info contains com.tw.music.info
+OK: Topway contract string: com.tw.launcher.music_progress_duration contains com.tw.launcher.music_progress_duration
+OK: Topway contract string: com.tw.music.action.cmd contains com.tw.music.action.cmd
+OK: Topway contract string: com.tw.music.action.prev contains com.tw.music.action.prev
+OK: Topway contract string: com.tw.music.action.next contains com.tw.music.action.next
+OK: Topway contract string: com.tw.music.action.pp contains com.tw.music.action.pp
+OK: Topway contract string: com.android.launcher.widget_music_progress contains com.android.launcher.widget_music_progress
+OK: Topway contract string: musicTitle contains musicTitle
+OK: Topway contract string: musicaArtist contains musicaArtist
+OK: Topway contract string: musicAlbum contains musicAlbum
+OK: Topway contract string: musicPath contains musicPath
+OK: Topway contract string: msg_music_progress contains msg_music_progress
+OK: Topway contract string: msg_music_duration contains msg_music_duration
+OK: Topway contract string: music_progress contains music_progress
+OK: central Topway launcher integration coordinator contains class TopwayLauncherIntegrationCoordinator
+OK: coordinator metadata publisher contains fun publishMetadata
+OK: coordinator progress publisher contains fun publishProgress
+OK: coordinator incoming command handler contains fun handle
+OK: coordinator DoFun-targeted broadcast path contains context.sendBroadcast(Intent(intent).setPackage(DOFUN_PACKAGE))
+OK: coordinator avoids PackageManager visibility gate for DoFun targeted broadcasts does not contain getLaunchIntentForPackage(DOFUN_PACKAGE)
+OK: coordinator always attempts safe DoFun targeted broadcasts does not contain isDoFunInstalled
+OK: coordinator delegates widget seek conversion contains TopwaySeekPolicyConverter.convert
+OK: coordinator outgoing mode gate contains mode.sendsTopwayBroadcasts
+OK: coordinator incoming mode gate contains mode.handlesTopwayCommands
+OK: coordinator diagnostic journal logging contains journal.log
+OK: playback service injects coordinator contains TopwayLauncherIntegrationCoordinator
+OK: playback service state-driven Topway publisher contains publishTopwayState
+OK: playback service publishes Topway metadata contains topwayCoordinator.publishMetadata
+OK: playback service publishes Topway progress contains topwayCoordinator.publishProgress
+OK: playback service periodic Topway progress ticker contains startTopwayProgressTicker
+OK: playback service delegates Topway commands contains topwayCoordinator.handle
+OK: Topway cmd=update forced republish path contains cmd-update
+OK: playback service clears Topway launcher state contains topwayCoordinator.clear
+OK: launcher integration auto/all-safe-paths mode contains AutoAllSafePaths
+OK: launcher integration diagnostics-only mode contains DiagnosticsOnly
+OK: launcher integration outgoing mode flag contains sendsTopwayBroadcasts
+OK: launcher integration incoming mode flag contains handlesTopwayCommands
+OK: Topway seek percent policy contains Percent0To100
+OK: Topway seek permille policy contains Permille0To1000
+OK: Topway seek auto policy contains private fun chooseAuto
+OK: Topway seek auto checks percent before milliseconds contains value <= 100L -> TopwaySeekUnitPolicy.Percent0To100
+OK: Topway seek auto checks permille before milliseconds contains value <= 1000L -> TopwaySeekUnitPolicy.Permille0To1000
+OK: Topway seek auto unit tests contains TopwaySeekUnitPolicy.Auto
+OK: Topway launcher mode gating tests contains AutoAllSafePaths
+OK: Topway coordinator tests assert DoFun-targeted broadcasts contains countDofunTargeted
+OK: Topway coordinator tests define implicit broadcast counter contains private fun List<Intent>.countImplicit
+OK: Topway coordinator tests define DoFun-targeted broadcast counter contains private fun List<Intent>.countDofunTargeted
+OK: Topway cmd=update republish test contains cmd update republishes without toggling playback
+OK: Topway ignored negative seek has null target assertion contains assertNull(negative.seekTargetMs)
+OK: playback service tracks Topway progress ticker job contains private var topwayProgressTickerJob: Job? = null
+OK: WidgetComponent is not the canonical launcher broadcast bridge does not contain TopwayMusicBroadcastBridge
+OK: WidgetComponent no longer owns launcher metadata broadcasts does not contain topwayBridge.publishMetadata
+OK: WidgetComponent no longer owns launcher progress broadcasts does not contain topwayBridge.publishProgress
+OK: Topway flavour build flag contains buildConfigField "boolean", "TOPWAY_TWMUSIC_FLAVOR", "true"
+OK: Topway media flavour build flag contains buildConfigField "boolean", "TOPWAY_TWMEDIA_FLAVOR", "true"
+OK: Topway shared compat build flag contains buildConfigField "boolean", "TOPWAY_COMPAT_FLAVOR", "true"
+OK: Topway compatible bridge always enabled contains BuildConfig.TOPWAY_COMPAT_FLAVOR
+OK: Topway widget provider wrapper policy contains com.tw.music.view.MusicWidgetProvider
+OK: Topway widget onUpdate starts stock-name service update path contains startTopwayWidgetUpdateService
+OK: Topway widget renders cold control layout before service restore contains renderColdWidgetControls
+OK: Topway widget preserves stock appWidgetIds extra contains EXTRA_APP_WIDGET_IDS = "appWidgetIds"
+OK: Topway widget album art opens stock activity alias contains STOCK_MUSIC_ACTIVITY_CLASS = "com.tw.music.MusicActivity"
+OK: Topway widget enforces stock artwork byte cap contains STOCK_WIDGET_ARTWORK_MAX_BYTES = 3_680_000
+OK: Topway widget album art PendingIntent opens activity contains PendingIntent.getActivity
+OK: System receiver handles Topway widget updates contains TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate
+OK: Topway bridge receiver sanitises malformed extras contains safelyExtractIncomingExtras
+OK: overlay special-use API gate contains Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+OK: overlay special-use foreground type contains ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+OK: overlay manifest declares specialUse for API 34+ forward compatibility contains android:foregroundServiceType="specialUse"
+OK: overlay manifest declares FOREGROUND_SERVICE_SPECIAL_USE for API 34+ forward compatibility contains FOREGROUND_SERVICE_SPECIAL_USE
+OK: overlay requests full-screen layout contains FLAG_LAYOUT_IN_SCREEN
+OK: overlay requests no-limits layout contains FLAG_LAYOUT_NO_LIMITS
+OK: overlay top-edge clamp contains DEFAULT_TOP_EDGE_Y = 0
+OK: overlay Android 10 full-display metrics fallback contains getRealSize
+OK: overlay service old status-bar inset clamp does not contain STATUS_BAR_INSET_PX
+OK: overlay service old right-nav inset clamp does not contain NAV_BAR_INSET_PX
+OK: overlay API 29 foreground-service type test contains foregroundServiceTypeForApi(29)
+OK: overlay dynamic top-center bounds test contains defaultTopCenterPosition
+OK: overlay top-edge y=0 test contains assertEquals(0, y)
+OK: Topway MusicService Hilt entry point contains AndroidEntryPoint
+OK: Topway MusicService delegates to AuxioService contains AuxioService
+OK: Topway MusicWidgetProvider update fallback contains CMD_UPDATE
+OK: Topway MusicWidgetProvider safe extras extraction contains safelyExtractIncomingExtras
+OK: Topway MusicWidgetProvider single appwidget update path contains AppWidgetManager.ACTION_APPWIDGET_UPDATE
+OK: Topway update bypasses AppWidget-only gate contains topwayVariantsServeUpdateEvenWithoutNormalAppWidgetInstance
+OK: manual release builds Topway music release contains assembleTopwayTwMusicRelease
+OK: manual release builds Topway media release contains assembleTopwayTwMediaRelease
+OK: manual release names Topway music APK asset contains topway-twmusic-release.apk
+OK: manual release names Topway media APK asset contains topway-twmedia-release.apk
+
+Checking generated merged manifests when present...
+WARN: one or more merged manifests are absent; run ./gradlew :app:processStandardDebugMainManifest :app:processTopwayTwMusicDebugMainManifest :app:processTopwayTwMusicReleaseMainManifest :app:processTopwayTwMediaDebugMainManifest :app:processTopwayTwMediaReleaseMainManifest for output-level checks
+
+Checking manifest-declared Topway component class packaging guardrail...
+Checking Topway manifest-declared component classes...
+
+WARN: no Topway merged manifests found; run :app:processTopwayTwMusicReleaseMainManifest and :app:processTopwayTwMediaReleaseMainManifest for output-level manifest checks
+WARN: no Topway APKs found; run Topway assemble tasks for APK DEX component checks
+OK: topwayCompat source manifest declares all required loadable wrapper/overlay classes
+OK: topwayCompat source manifest routes com.tw.music.MusicActivity through TopwayMusicEntryActivity
+OK: source exists for manifest loadable class com.tw.music.MusicService
+OK: source exists for manifest loadable class com.tw.music.view.MusicWidgetProvider
+OK: source exists for manifest loadable class org.oxycblt.auxio.MainActivity
+OK: source exists for manifest loadable class org.oxycblt.auxio.car.overlay.CarFloatingControlsService
+OK: source exists for manifest loadable class org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver
+OK: source exists for manifest loadable class org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity
+OK: source exists for manifest loadable class org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity
+
+Result: PASS with warnings (1 warning(s))
+
+Checking built APK presence when present...
+Running in full compatibility mode. All release APK variants are expected if any are built.
+WARN: debug APKs not found; run ./gradlew :app:assembleStandardDebug :app:assembleTopwayTwMusicDebug :app:assembleTopwayTwMediaDebug
+WARN: release APKs not found; run ./gradlew :app:assembleStandardRelease :app:assembleTopwayTwMusicRelease :app:assembleTopwayTwMediaRelease
+
+Result: PASS
+[jules-setup] OK: DoFun/Topway compatibility guardrail
+[jules-setup] --- head-unit safety guardrail ---
+headunit compat safety checks passed
+[jules-setup] OK: head-unit safety guardrail
+[jules-setup] --- Gradle smoke tasks ---
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+
+> Task :tasks
+
+------------------------------------------------------------
+Tasks runnable from root project 'Auxio'
+------------------------------------------------------------
+
+Android tasks
+-------------
+signingReport - Displays the signing info for the base and test modules
+
+Baseline Profile tasks
+----------------------
+collectStandardNonMinifiedBenchmarkBaselineProfile - Collects a baseline profile previously generated through integration tests.
+collectStandardNonMinifiedReleaseBaselineProfile - Collects a baseline profile previously generated through integration tests.
+collectTopwayTwMediaNonMinifiedBenchmarkBaselineProfile - Collects a baseline profile previously generated through integration tests.
+collectTopwayTwMediaNonMinifiedReleaseBaselineProfile - Collects a baseline profile previously generated through integration tests.
+collectTopwayTwMusicNonMinifiedBenchmarkBaselineProfile - Collects a baseline profile previously generated through integration tests.
+collectTopwayTwMusicNonMinifiedReleaseBaselineProfile - Collects a baseline profile previously generated through integration tests.
+generateBaselineProfile - Generates a baseline profile for the specified variants or dimensions.
+
+Build tasks
+-----------
+assemble - Assembles the outputs of this project.
+assembleAndroidTest - Assembles all the Test applications.
+assembleBenchmark - Assembles main outputs for all Benchmark variants.
+assembleBenchmarkBenchmark - Assembles main outputs for all BenchmarkBenchmark variants.
+assembleBenchmarkRelease - Assembles main outputs for all BenchmarkRelease variants.
+assembleDebug - Assembles main outputs for all Debug variants.
+assembleNonMinifiedBenchmark - Assembles main outputs for all NonMinifiedBenchmark variants.
+assembleNonMinifiedRelease - Assembles main outputs for all NonMinifiedRelease variants.
+assembleRelease - Assembles main outputs for all Release variants.
+assembleStandard - Assembles main outputs for all Standard variants.
+assembleTopwayTwMedia - Assembles main outputs for all TopwayTwMedia variants.
+assembleTopwayTwMusic - Assembles main outputs for all TopwayTwMusic variants.
+assembleUnitTest - Assembles all the unit test applications.
+build - Assembles and tests this project.
+buildDependents - Assembles and tests this project and all projects that depend on it.
+buildNeeded - Assembles and tests this project and all projects it depends on.
+bundle - Assemble bundles for all the variants.
+bundleBenchmark - Assembles bundles for all Benchmark variants.
+bundleBenchmarkRelease - Assembles bundles for all BenchmarkRelease variants.
+bundleDebug - Assembles bundles for all Debug variants.
+bundleNonMinifiedRelease - Assembles bundles for all NonMinifiedRelease variants.
+bundleRelease - Assembles bundles for all Release variants.
+bundleStandard - Assembles bundles for all Standard variants.
+bundleTopwayTwMedia - Assembles bundles for all TopwayTwMedia variants.
+bundleTopwayTwMusic - Assembles bundles for all TopwayTwMusic variants.
+clean - Deletes the build directory.
+compileDebugAndroidTestSources
+compileDebugSources
+compileDebugUnitTestSources
+compileReleaseSources
+compileStandardBenchmarkBenchmarkSources
+compileStandardBenchmarkReleaseSources
+compileStandardBenchmarkSources
+compileStandardDebugAndroidTestSources
+compileStandardDebugSources
+compileStandardDebugUnitTestSources
+compileStandardNonMinifiedBenchmarkSources
+compileStandardNonMinifiedReleaseSources
+compileStandardReleaseSources
+compileTopwayTwMediaBenchmarkBenchmarkSources
+compileTopwayTwMediaBenchmarkReleaseSources
+compileTopwayTwMediaBenchmarkSources
+compileTopwayTwMediaDebugAndroidTestSources
+compileTopwayTwMediaDebugSources
+compileTopwayTwMediaDebugUnitTestSources
+compileTopwayTwMediaNonMinifiedBenchmarkSources
+compileTopwayTwMediaNonMinifiedReleaseSources
+compileTopwayTwMediaReleaseSources
+compileTopwayTwMusicBenchmarkBenchmarkSources
+compileTopwayTwMusicBenchmarkReleaseSources
+compileTopwayTwMusicBenchmarkSources
+compileTopwayTwMusicDebugAndroidTestSources
+compileTopwayTwMusicDebugSources
+compileTopwayTwMusicDebugUnitTestSources
+compileTopwayTwMusicNonMinifiedBenchmarkSources
+compileTopwayTwMusicNonMinifiedReleaseSources
+compileTopwayTwMusicReleaseSources
+extractDebugAnnotations - Extracts Android annotations for the debug variant into the archive file
+extractReleaseAnnotations - Extracts Android annotations for the release variant into the archive file
+
+Build Setup tasks
+-----------------
+init - Initializes a new Gradle build.
+spotlessInstallGitPrePushHook - Installs Spotless Git pre-push hook.
+updateDaemonJvm - Generates or updates the Gradle Daemon JVM criteria.
+wrapper - Generates Gradle wrapper files.
+
+Dokka tasks
+-----------
+dokkaGenerate - Generates Dokka publications for all formats
+dokkaGenerateHtml - Generate Dokka html publication
+
+Help tasks
+----------
+artifactTransforms - Displays the Artifact Transforms that can be executed in root project 'Auxio'.
+buildEnvironment - Displays all buildscript dependencies declared in root project 'Auxio'.
+dependencies - Displays all dependencies declared in root project 'Auxio'.
+dependencyInsight - Displays the insight into a specific dependency in root project 'Auxio'.
+help - Displays a help message.
+javaToolchains - Displays the detected java toolchains.
+outgoingVariants - Displays the outgoing variants of root project 'Auxio'.
+projects - Displays the sub-projects of root project 'Auxio'.
+properties - Displays the properties of root project 'Auxio'.
+resolvableConfigurations - Displays the configurations that can be resolved in root project 'Auxio'.
+tasks - Displays the tasks runnable from root project 'Auxio' (some of the displayed tasks may belong to subprojects).
+
+Install tasks
+-------------
+installDebugAndroidTest - Installs the android (on device) tests for the Debug build.
+installStandardBenchmark - Installs the Benchmark build for flavor Standard.
+installStandardBenchmarkBenchmark - Installs the BenchmarkBenchmark build for flavor Standard.
+installStandardBenchmarkRelease - Installs the BenchmarkRelease build for flavor Standard.
+installStandardDebug - Installs the Debug build for flavor Standard.
+installStandardDebugAndroidTest - Installs the android (on device) tests for the StandardDebug build.
+installStandardNonMinifiedBenchmark - Installs the NonMinifiedBenchmark build for flavor Standard.
+installStandardNonMinifiedRelease - Installs the NonMinifiedRelease build for flavor Standard.
+installTopwayTwMediaBenchmark - Installs the Benchmark build for flavor TopwayTwMedia.
+installTopwayTwMediaBenchmarkBenchmark - Installs the BenchmarkBenchmark build for flavor TopwayTwMedia.
+installTopwayTwMediaBenchmarkRelease - Installs the BenchmarkRelease build for flavor TopwayTwMedia.
+installTopwayTwMediaDebug - Installs the Debug build for flavor TopwayTwMedia.
+installTopwayTwMediaDebugAndroidTest - Installs the android (on device) tests for the TopwayTwMediaDebug build.
+installTopwayTwMediaNonMinifiedBenchmark - Installs the NonMinifiedBenchmark build for flavor TopwayTwMedia.
+installTopwayTwMediaNonMinifiedRelease - Installs the NonMinifiedRelease build for flavor TopwayTwMedia.
+installTopwayTwMusicBenchmark - Installs the Benchmark build for flavor TopwayTwMusic.
+installTopwayTwMusicBenchmarkBenchmark - Installs the BenchmarkBenchmark build for flavor TopwayTwMusic.
+installTopwayTwMusicBenchmarkRelease - Installs the BenchmarkRelease build for flavor TopwayTwMusic.
+installTopwayTwMusicDebug - Installs the Debug build for flavor TopwayTwMusic.
+installTopwayTwMusicDebugAndroidTest - Installs the android (on device) tests for the TopwayTwMusicDebug build.
+installTopwayTwMusicNonMinifiedBenchmark - Installs the NonMinifiedBenchmark build for flavor TopwayTwMusic.
+installTopwayTwMusicNonMinifiedRelease - Installs the NonMinifiedRelease build for flavor TopwayTwMusic.
+uninstallAll - Uninstall all applications.
+uninstallDebugAndroidTest - Uninstalls the android (on device) tests for the Debug build.
+uninstallStandardBenchmark - Uninstalls the Benchmark build for flavor Standard.
+uninstallStandardBenchmarkBenchmark - Uninstalls the BenchmarkBenchmark build for flavor Standard.
+uninstallStandardBenchmarkRelease - Uninstalls the BenchmarkRelease build for flavor Standard.
+uninstallStandardDebug - Uninstalls the Debug build for flavor Standard.
+uninstallStandardDebugAndroidTest - Uninstalls the android (on device) tests for the StandardDebug build.
+uninstallStandardNonMinifiedBenchmark - Uninstalls the NonMinifiedBenchmark build for flavor Standard.
+uninstallStandardNonMinifiedRelease - Uninstalls the NonMinifiedRelease build for flavor Standard.
+uninstallStandardRelease - Uninstalls the Release build for flavor Standard.
+uninstallTopwayTwMediaBenchmark - Uninstalls the Benchmark build for flavor TopwayTwMedia.
+uninstallTopwayTwMediaBenchmarkBenchmark - Uninstalls the BenchmarkBenchmark build for flavor TopwayTwMedia.
+uninstallTopwayTwMediaBenchmarkRelease - Uninstalls the BenchmarkRelease build for flavor TopwayTwMedia.
+uninstallTopwayTwMediaDebug - Uninstalls the Debug build for flavor TopwayTwMedia.
+uninstallTopwayTwMediaDebugAndroidTest - Uninstalls the android (on device) tests for the TopwayTwMediaDebug build.
+uninstallTopwayTwMediaNonMinifiedBenchmark - Uninstalls the NonMinifiedBenchmark build for flavor TopwayTwMedia.
+uninstallTopwayTwMediaNonMinifiedRelease - Uninstalls the NonMinifiedRelease build for flavor TopwayTwMedia.
+uninstallTopwayTwMediaRelease - Uninstalls the Release build for flavor TopwayTwMedia.
+uninstallTopwayTwMusicBenchmark - Uninstalls the Benchmark build for flavor TopwayTwMusic.
+uninstallTopwayTwMusicBenchmarkBenchmark - Uninstalls the BenchmarkBenchmark build for flavor TopwayTwMusic.
+uninstallTopwayTwMusicBenchmarkRelease - Uninstalls the BenchmarkRelease build for flavor TopwayTwMusic.
+uninstallTopwayTwMusicDebug - Uninstalls the Debug build for flavor TopwayTwMusic.
+uninstallTopwayTwMusicDebugAndroidTest - Uninstalls the android (on device) tests for the TopwayTwMusicDebug build.
+uninstallTopwayTwMusicNonMinifiedBenchmark - Uninstalls the NonMinifiedBenchmark build for flavor TopwayTwMusic.
+uninstallTopwayTwMusicNonMinifiedRelease - Uninstalls the NonMinifiedRelease build for flavor TopwayTwMusic.
+uninstallTopwayTwMusicRelease - Uninstalls the Release build for flavor TopwayTwMusic.
+
+Publishing tasks
+----------------
+publish - Publishes all publications produced by this project.
+publishToMavenLocal - Publishes all Maven publications produced by this project to the local Maven cache.
+
+Verification tasks
+------------------
+allDevicesCheck - Runs all device checks on all managed devices defined in the TestOptions dsl.
+allDevicesStandardBenchmarkBenchmarkAndroidTest - Runs the tests for standardBenchmarkBenchmark on all managed devices in the dsl.
+allDevicesStandardBenchmarkReleaseAndroidTest - Runs the tests for standardBenchmarkRelease on all managed devices in the dsl.
+allDevicesStandardNonMinifiedBenchmarkAndroidTest - Runs the tests for standardNonMinifiedBenchmark on all managed devices in the dsl.
+allDevicesStandardNonMinifiedReleaseAndroidTest - Runs the tests for standardNonMinifiedRelease on all managed devices in the dsl.
+allDevicesTopwayTwMediaBenchmarkBenchmarkAndroidTest - Runs the tests for topwayTwMediaBenchmarkBenchmark on all managed devices in the dsl.
+allDevicesTopwayTwMediaBenchmarkReleaseAndroidTest - Runs the tests for topwayTwMediaBenchmarkRelease on all managed devices in the dsl.
+allDevicesTopwayTwMediaNonMinifiedBenchmarkAndroidTest - Runs the tests for topwayTwMediaNonMinifiedBenchmark on all managed devices in the dsl.
+allDevicesTopwayTwMediaNonMinifiedReleaseAndroidTest - Runs the tests for topwayTwMediaNonMinifiedRelease on all managed devices in the dsl.
+allDevicesTopwayTwMusicBenchmarkBenchmarkAndroidTest - Runs the tests for topwayTwMusicBenchmarkBenchmark on all managed devices in the dsl.
+allDevicesTopwayTwMusicBenchmarkReleaseAndroidTest - Runs the tests for topwayTwMusicBenchmarkRelease on all managed devices in the dsl.
+allDevicesTopwayTwMusicNonMinifiedBenchmarkAndroidTest - Runs the tests for topwayTwMusicNonMinifiedBenchmark on all managed devices in the dsl.
+allDevicesTopwayTwMusicNonMinifiedReleaseAndroidTest - Runs the tests for topwayTwMusicNonMinifiedRelease on all managed devices in the dsl.
+check - Runs all checks.
+checkJetifier - Checks whether Jetifier is needed for the current project
+compareRoborazziStandardDebug
+compareRoborazziTopwayTwMediaDebug
+compareRoborazziTopwayTwMusicDebug
+connectedAndroidTest - Installs and runs instrumentation tests for all flavors on connected devices.
+connectedCheck - Runs all device checks on currently connected devices.
+connectedDebugAndroidTest - Installs and runs the tests for debug on connected devices.
+connectedStandardBenchmarkBenchmarkAndroidTest - Installs and runs the tests for standardBenchmarkBenchmark on connected devices.
+connectedStandardBenchmarkReleaseAndroidTest - Installs and runs the tests for standardBenchmarkRelease on connected devices.
+connectedStandardDebugAndroidTest - Installs and runs the tests for standardDebug on connected devices.
+connectedStandardNonMinifiedBenchmarkAndroidTest - Installs and runs the tests for standardNonMinifiedBenchmark on connected devices.
+connectedStandardNonMinifiedReleaseAndroidTest - Installs and runs the tests for standardNonMinifiedRelease on connected devices.
+connectedTopwayTwMediaBenchmarkBenchmarkAndroidTest - Installs and runs the tests for topwayTwMediaBenchmarkBenchmark on connected devices.
+connectedTopwayTwMediaBenchmarkReleaseAndroidTest - Installs and runs the tests for topwayTwMediaBenchmarkRelease on connected devices.
+connectedTopwayTwMediaDebugAndroidTest - Installs and runs the tests for topwayTwMediaDebug on connected devices.
+connectedTopwayTwMediaNonMinifiedBenchmarkAndroidTest - Installs and runs the tests for topwayTwMediaNonMinifiedBenchmark on connected devices.
+connectedTopwayTwMediaNonMinifiedReleaseAndroidTest - Installs and runs the tests for topwayTwMediaNonMinifiedRelease on connected devices.
+connectedTopwayTwMusicBenchmarkBenchmarkAndroidTest - Installs and runs the tests for topwayTwMusicBenchmarkBenchmark on connected devices.
+connectedTopwayTwMusicBenchmarkReleaseAndroidTest - Installs and runs the tests for topwayTwMusicBenchmarkRelease on connected devices.
+connectedTopwayTwMusicDebugAndroidTest - Installs and runs the tests for topwayTwMusicDebug on connected devices.
+connectedTopwayTwMusicNonMinifiedBenchmarkAndroidTest - Installs and runs the tests for topwayTwMusicNonMinifiedBenchmark on connected devices.
+connectedTopwayTwMusicNonMinifiedReleaseAndroidTest - Installs and runs the tests for topwayTwMusicNonMinifiedRelease on connected devices.
+createDebugCoverageReport - Creates instrumentation test coverage reports for the debug variant.
+deviceAndroidTest - Installs and runs instrumentation tests using all Device Providers.
+deviceCheck - Runs all device checks using Device Providers and Test Servers.
+lint - Runs lint on the default variant.
+lintDebug - Print text output from the corresponding lint report task
+lintFix - Runs lint on the default variant and applies any safe suggestions to the source code.
+lintRelease - Print text output from the corresponding lint report task
+lintStandardBenchmark - Print text output from the corresponding lint report task
+lintStandardBenchmarkRelease - Print text output from the corresponding lint report task
+lintStandardDebug - Print text output from the corresponding lint report task
+lintStandardNonMinifiedRelease - Print text output from the corresponding lint report task
+lintStandardRelease - Print text output from the corresponding lint report task
+lintTopwayTwMediaBenchmark - Print text output from the corresponding lint report task
+lintTopwayTwMediaBenchmarkRelease - Print text output from the corresponding lint report task
+lintTopwayTwMediaDebug - Print text output from the corresponding lint report task
+lintTopwayTwMediaNonMinifiedRelease - Print text output from the corresponding lint report task
+lintTopwayTwMediaRelease - Print text output from the corresponding lint report task
+lintTopwayTwMusicBenchmark - Print text output from the corresponding lint report task
+lintTopwayTwMusicBenchmarkRelease - Print text output from the corresponding lint report task
+lintTopwayTwMusicDebug - Print text output from the corresponding lint report task
+lintTopwayTwMusicNonMinifiedRelease - Print text output from the corresponding lint report task
+lintTopwayTwMusicRelease - Print text output from the corresponding lint report task
+lintVitalStandardBenchmark - Print text output from the corresponding lint report task
+lintVitalStandardRelease - Print text output from the corresponding lint report task
+lintVitalTopwayTwMediaBenchmark - Print text output from the corresponding lint report task
+lintVitalTopwayTwMediaRelease - Print text output from the corresponding lint report task
+lintVitalTopwayTwMusicBenchmark - Print text output from the corresponding lint report task
+lintVitalTopwayTwMusicRelease - Print text output from the corresponding lint report task
+pixel2Api29Check - Runs all device checks on the managed device pixel2Api29.
+pixel2Api29StandardBenchmarkBenchmarkAndroidTest - Installs and runs the test for standardBenchmarkBenchmark  on the managed device pixel2Api29
+pixel2Api29StandardBenchmarkReleaseAndroidTest - Installs and runs the test for standardBenchmarkRelease  on the managed device pixel2Api29
+pixel2Api29StandardNonMinifiedBenchmarkAndroidTest - Installs and runs the test for standardNonMinifiedBenchmark  on the managed device pixel2Api29
+pixel2Api29StandardNonMinifiedReleaseAndroidTest - Installs and runs the test for standardNonMinifiedRelease  on the managed device pixel2Api29
+pixel2Api29TopwayTwMediaBenchmarkBenchmarkAndroidTest - Installs and runs the test for topwayTwMediaBenchmarkBenchmark  on the managed device pixel2Api29
+pixel2Api29TopwayTwMediaBenchmarkReleaseAndroidTest - Installs and runs the test for topwayTwMediaBenchmarkRelease  on the managed device pixel2Api29
+pixel2Api29TopwayTwMediaNonMinifiedBenchmarkAndroidTest - Installs and runs the test for topwayTwMediaNonMinifiedBenchmark  on the managed device pixel2Api29
+pixel2Api29TopwayTwMediaNonMinifiedReleaseAndroidTest - Installs and runs the test for topwayTwMediaNonMinifiedRelease  on the managed device pixel2Api29
+pixel2Api29TopwayTwMusicBenchmarkBenchmarkAndroidTest - Installs and runs the test for topwayTwMusicBenchmarkBenchmark  on the managed device pixel2Api29
+pixel2Api29TopwayTwMusicBenchmarkReleaseAndroidTest - Installs and runs the test for topwayTwMusicBenchmarkRelease  on the managed device pixel2Api29
+pixel2Api29TopwayTwMusicNonMinifiedBenchmarkAndroidTest - Installs and runs the test for topwayTwMusicNonMinifiedBenchmark  on the managed device pixel2Api29
+pixel2Api29TopwayTwMusicNonMinifiedReleaseAndroidTest - Installs and runs the test for topwayTwMusicNonMinifiedRelease  on the managed device pixel2Api29
+pixel6Api35Check - Runs all device checks on the managed device pixel6Api35.
+pixel6Api35StandardBenchmarkBenchmarkAndroidTest - Installs and runs the test for standardBenchmarkBenchmark  on the managed device pixel6Api35
+pixel6Api35StandardBenchmarkReleaseAndroidTest - Installs and runs the test for standardBenchmarkRelease  on the managed device pixel6Api35
+pixel6Api35StandardNonMinifiedBenchmarkAndroidTest - Installs and runs the test for standardNonMinifiedBenchmark  on the managed device pixel6Api35
+pixel6Api35StandardNonMinifiedReleaseAndroidTest - Installs and runs the test for standardNonMinifiedRelease  on the managed device pixel6Api35
+pixel6Api35TopwayTwMediaBenchmarkBenchmarkAndroidTest - Installs and runs the test for topwayTwMediaBenchmarkBenchmark  on the managed device pixel6Api35
+pixel6Api35TopwayTwMediaBenchmarkReleaseAndroidTest - Installs and runs the test for topwayTwMediaBenchmarkRelease  on the managed device pixel6Api35
+pixel6Api35TopwayTwMediaNonMinifiedBenchmarkAndroidTest - Installs and runs the test for topwayTwMediaNonMinifiedBenchmark  on the managed device pixel6Api35
+pixel6Api35TopwayTwMediaNonMinifiedReleaseAndroidTest - Installs and runs the test for topwayTwMediaNonMinifiedRelease  on the managed device pixel6Api35
+pixel6Api35TopwayTwMusicBenchmarkBenchmarkAndroidTest - Installs and runs the test for topwayTwMusicBenchmarkBenchmark  on the managed device pixel6Api35
+pixel6Api35TopwayTwMusicBenchmarkReleaseAndroidTest - Installs and runs the test for topwayTwMusicBenchmarkRelease  on the managed device pixel6Api35
+pixel6Api35TopwayTwMusicNonMinifiedBenchmarkAndroidTest - Installs and runs the test for topwayTwMusicNonMinifiedBenchmark  on the managed device pixel6Api35
+pixel6Api35TopwayTwMusicNonMinifiedReleaseAndroidTest - Installs and runs the test for topwayTwMusicNonMinifiedRelease  on the managed device pixel6Api35
+recordRoborazziStandardDebug
+recordRoborazziTopwayTwMediaDebug
+recordRoborazziTopwayTwMusicDebug
+spotlessApply - Applies code formatting steps to sourcecode in-place.
+spotlessCheck - Checks that sourcecode satisfies formatting steps.
+spotlessCpp
+spotlessCppApply
+spotlessCppCheck
+spotlessCppDiagnose
+spotlessDiagnose
+spotlessKotlin
+spotlessKotlinApply
+spotlessKotlinCheck
+spotlessKotlinDiagnose
+test - Run unit tests for all variants.
+testDebugUnitTest - Run unit tests for the debug build.
+testStandardDebugUnitTest - Run unit tests for the standardDebug build.
+testTopwayTwMediaDebugUnitTest - Run unit tests for the topwayTwMediaDebug build.
+testTopwayTwMusicDebugUnitTest - Run unit tests for the topwayTwMusicDebug build.
+updateLintBaseline - Updates the lint baseline using the default variant.
+verifyAndRecordRoborazziStandardDebug
+verifyAndRecordRoborazziTopwayTwMediaDebug
+verifyAndRecordRoborazziTopwayTwMusicDebug
+verifyRoborazziStandardDebug
+verifyRoborazziTopwayTwMediaDebug
+verifyRoborazziTopwayTwMusicDebug
+
+Other tasks
+-----------
+logLinkDokkaGeneratePublicationHtml
+
+Rules
+-----
+Pattern: clean<TaskName>: Cleans the output files of a task.
+Pattern: build<ConfigurationName>: Assembles the artifacts of a configuration.
+
+To see all tasks and more detail, run gradlew tasks --all
+
+To see more detail about a task, run gradlew help --task <task>
+
+[Incubating] Problems report is available at: file:///app/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 25s
+1 actionable task: 1 executed
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.1/userguide/configuration_cache_enabling.html
+[jules-setup] OK: Gradle smoke tasks
+[jules-setup] Setup status:
+AUXIO_JULES_READINESS=FULL_BUILD_READY
+AUXIO_JULES_SDK_READY=true
+AUXIO_JULES_SUBMODULES_READY=true
+AUXIO_JULES_GRADLE_READY=true
+AUXIO_JULES_NOTES=Jules\ snapshot\ has\ SDK\,\ submodules\,\ and\ Gradle\ smoke\ readiness.
+[jules-setup] Summary written to .jules/setup-summary.md
+[jules-setup] Detailed log written to .jules/logs/setup-jules-env.log

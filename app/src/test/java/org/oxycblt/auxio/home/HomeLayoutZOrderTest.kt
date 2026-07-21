@@ -41,21 +41,13 @@ class HomeLayoutZOrderTest {
 
         val homeContent = root.findViewById<FrameLayout>(R.id.home_content)
         val pager = root.findViewById<ViewPager2>(R.id.home_pager)
-        val shortcuts = root.findViewById<View>(R.id.home_head_unit_shortcuts)
         val indexingContainer = root.findViewById<View>(R.id.home_indexing_container)
 
         val pagerIndex = homeContent.indexOfChild(pager)
-        val shortcutsIndex = homeContent.indexOfChild(shortcuts)
         val indexingIndex = homeContent.indexOfChild(indexingContainer)
 
         assertTrue(
-            "Shortcuts ($shortcutsIndex) must be after Pager ($pagerIndex) in FrameLayout for top Z-order",
-            shortcutsIndex > pagerIndex,
+            "Indexing UI ($indexingIndex) must be after Pager ($pagerIndex) to avoid being blocked",
+            indexingIndex > pagerIndex,
         )
-
-        assertTrue(
-            "Indexing UI ($indexingIndex) must be after Shortcuts ($shortcutsIndex) to avoid being blocked",
-            indexingIndex > shortcutsIndex,
-        )
-    }
-}
+    }}

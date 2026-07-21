@@ -44,6 +44,12 @@ interface ListSettings : Settings<ListSettings.Listener> {
     /** The [Sort] mode used in a Genre's Song list. */
     var genreSongSort: Sort
 
+    var songSpanCount: Int
+    var albumSpanCount: Int
+    var artistSpanCount: Int
+    var genreSpanCount: Int
+    var playlistSpanCount: Int
+
     interface Listener {
         fun onSongSortChanged() {}
 
@@ -60,6 +66,8 @@ interface ListSettings : Settings<ListSettings.Listener> {
         fun onGenreSongSortChanged() {}
 
         fun onPlaylistSortChanged() {}
+
+        fun onSpanCountChanged() {}
     }
 }
 
@@ -170,6 +178,36 @@ class ListSettingsImpl @Inject constructor(@ApplicationContext val context: Cont
             }
         }
 
+    override var songSpanCount: Int
+        get() = sharedPreferences.getInt("set_key_song_span_count", 0)
+        set(value) {
+            sharedPreferences.edit { putInt("set_key_song_span_count", value) }
+        }
+
+    override var albumSpanCount: Int
+        get() = sharedPreferences.getInt("set_key_album_span_count", 0)
+        set(value) {
+            sharedPreferences.edit { putInt("set_key_album_span_count", value) }
+        }
+
+    override var artistSpanCount: Int
+        get() = sharedPreferences.getInt("set_key_artist_span_count", 0)
+        set(value) {
+            sharedPreferences.edit { putInt("set_key_artist_span_count", value) }
+        }
+
+    override var genreSpanCount: Int
+        get() = sharedPreferences.getInt("set_key_genre_span_count", 0)
+        set(value) {
+            sharedPreferences.edit { putInt("set_key_genre_span_count", value) }
+        }
+
+    override var playlistSpanCount: Int
+        get() = sharedPreferences.getInt("set_key_playlist_span_count", 0)
+        set(value) {
+            sharedPreferences.edit { putInt("set_key_playlist_span_count", value) }
+        }
+
     override fun onSettingChanged(key: String, listener: ListSettings.Listener) {
         when (key) {
             getString(R.string.set_key_songs_sort) -> listener.onSongSortChanged()
@@ -180,6 +218,11 @@ class ListSettingsImpl @Inject constructor(@ApplicationContext val context: Cont
             getString(R.string.set_key_genres_sort) -> listener.onGenreSortChanged()
             getString(R.string.set_key_genre_songs_sort) -> listener.onGenreSongSortChanged()
             getString(R.string.set_key_playlists_sort) -> listener.onPlaylistSortChanged()
+            "set_key_song_span_count" -> listener.onSpanCountChanged()
+            "set_key_album_span_count" -> listener.onSpanCountChanged()
+            "set_key_artist_span_count" -> listener.onSpanCountChanged()
+            "set_key_genre_span_count" -> listener.onSpanCountChanged()
+            "set_key_playlist_span_count" -> listener.onSpanCountChanged()
         }
     }
 }

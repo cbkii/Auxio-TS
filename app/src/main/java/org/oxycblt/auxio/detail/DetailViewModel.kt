@@ -431,6 +431,7 @@ constructor(
     /** Start a playlist editing session. Does nothing if a playlist is not being shown. */
     fun startPlaylistEdit() {
         val playlist = _currentPlaylist.value ?: return
+        if (playlist.origin == org.oxycblt.musikr.Playlist.Origin.GENERATED) return
         L.d("Starting playlist edit")
         _editedPlaylist.value = playlist.songs
         refreshPlaylist(playlist.uid)
@@ -635,7 +636,14 @@ constructor(
                 _playlistSongInstructions,
                 null,
             ) {
-                EditHeader(it)
+                if (
+                    playlist?.let { it as? org.oxycblt.musikr.Playlist }?.origin ==
+                        org.oxycblt.musikr.Playlist.Origin.GENERATED
+                ) {
+                    BasicHeader(it)
+                } else {
+                    EditHeader(it)
+                }
             }
             return
         }

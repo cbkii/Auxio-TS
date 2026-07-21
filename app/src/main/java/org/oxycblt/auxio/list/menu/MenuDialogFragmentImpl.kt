@@ -282,22 +282,28 @@ class PlaylistMenuDialogFragment : MenuDialogFragment<Menu.ForPlaylist>() {
     override val parcel
         get() = args.parcel
 
-    override fun getDisabledItemIds(menu: Menu.ForPlaylist) =
+    override fun getDisabledItemIds(menu: Menu.ForPlaylist): Set<Int> {
+        val disabled = mutableSetOf<Int>()
         if (menu.playlist.songs.isEmpty()) {
             // Disable any operations that require some kind of songs to work with, as there won't
             // be any in an empty playlist.
-            setOf(
-                R.id.action_play,
-                R.id.action_shuffle,
-                R.id.action_play_next,
-                R.id.action_queue_add,
-                R.id.action_playlist_add,
-                R.id.action_export,
-                R.id.action_share,
+            disabled.addAll(
+                setOf(
+                    R.id.action_play,
+                    R.id.action_shuffle,
+                    R.id.action_play_next,
+                    R.id.action_queue_add,
+                    R.id.action_playlist_add,
+                    R.id.action_export,
+                    R.id.action_share,
+                )
             )
-        } else {
-            setOf()
         }
+        if (menu.playlist.origin == org.oxycblt.musikr.Playlist.Origin.GENERATED) {
+            disabled.addAll(setOf(R.id.action_rename, R.id.action_delete, R.id.action_import))
+        }
+        return disabled
+    }
 
     override fun updateMenu(binding: DialogMenuBinding, menu: Menu.ForPlaylist) {
         val context = requireContext()

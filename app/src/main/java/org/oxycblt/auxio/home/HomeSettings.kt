@@ -40,12 +40,16 @@ interface HomeSettings : Settings<HomeSettings.Listener> {
     /** Whether to hide artists considered "collaborators" from the home UI. */
     val shouldHideCollaborators: Boolean
 
+    val defaultSpanCount: Int
+
     interface Listener {
         /** Called when the [homeTabs] configuration changes. */
         fun onTabsChanged() {}
 
         /** Called when the [shouldHideCollaborators] configuration changes. */
         fun onHideCollaboratorsChanged() {}
+
+        fun onDefaultSpanCountChanged() {}
     }
 }
 
@@ -68,6 +72,12 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
 
     override val shouldHideCollaborators: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_hide_collaborators), false)
+
+    override var defaultSpanCount: Int
+        get() = sharedPreferences.getInt("set_key_default_span_count", 2)
+        set(value) {
+            sharedPreferences.edit { putInt("set_key_default_span_count", value) }
+        }
 
     override fun migrate() {
         if (sharedPreferences.contains(OLD_KEY_LIB_TABS)) {
@@ -99,6 +109,10 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
             getString(R.string.set_key_hide_collaborators) -> {
                 L.d("Dispatching collaborator setting change")
                 listener.onHideCollaboratorsChanged()
+            }
+            "set_key_default_span_count" -> {
+                L.d("Dispatching default span count setting change")
+                listener.onDefaultSpanCountChanged()
             }
         }
     }

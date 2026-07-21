@@ -394,6 +394,13 @@ interface Genre : MusicParent {
  * @author Alexander Capehart (OxygenCobalt)
  */
 interface Playlist : MusicParent {
+    enum class Origin {
+        USER,
+        IMPORTED,
+        GENERATED,
+    }
+
+    val origin: Origin
     override val name: Name.Known
     override val songs: List<Song>
     /** The total duration of the songs in this genre, in milliseconds. */

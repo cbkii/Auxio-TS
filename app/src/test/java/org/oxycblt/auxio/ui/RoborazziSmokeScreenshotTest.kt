@@ -29,7 +29,6 @@ import androidx.core.view.isVisible
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
-import com.google.android.material.chip.ChipGroup
 import com.google.android.material.tabs.TabLayout
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -116,16 +115,6 @@ class RoborazziSmokeScreenshotTest {
                 listOf("Songs", "Albums", "Artists", "Playlists").forEach { label ->
                     addTab(newTab().setText(label))
                 }
-            }
-            view.findViewById<ChipGroup>(R.id.home_quick_picks).apply {
-                addView(chip(themed, "Shuffle all"))
-                addView(chip(themed, "Recently added"))
-                addView(chip(themed, "Head-unit mix"))
-            }
-            view.findViewById<ChipGroup>(R.id.home_metadata_chips).apply {
-                addView(chip(themed, "TS18"))
-                addView(chip(themed, "DoFun"))
-                addView(chip(themed, "Topway"))
             }
             view.findViewById<View>(R.id.home_indexing_container).isVisible = false
         }

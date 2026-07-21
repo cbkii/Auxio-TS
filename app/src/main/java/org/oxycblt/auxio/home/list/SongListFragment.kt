@@ -22,10 +22,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
+import androidx.recyclerview.widget.GridLayoutManager
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Calendar
+import javax.inject.Inject
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
+import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.home.HomeViewModel
 import org.oxycblt.auxio.list.ListFragment
 import org.oxycblt.auxio.list.ListViewModel
@@ -58,13 +61,42 @@ class SongListFragment :
     override val listModel: ListViewModel by activityViewModels()
     override val musicModel: MusicViewModel by activityViewModels()
     override val playbackModel: PlaybackViewModel by activityViewModels()
+    @Inject lateinit var homeSettings: HomeSettings
+    @Inject lateinit var listSettings: org.oxycblt.auxio.list.ListSettings
     private val songAdapter = SongAdapter(this)
+
+    private var listSettingsListener: org.oxycblt.auxio.list.ListSettings.Listener? = null
+    private var homeSettingsListener: org.oxycblt.auxio.home.HomeSettings.Listener? = null
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentHomeListBinding.inflate(inflater)
 
     override fun onBindingCreated(binding: FragmentHomeListBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
+
+        fun updateSpanCount() {
+            val spanCount = listSettings.songSpanCount
+            val finalSpanCount = if (spanCount == 0) homeSettings.defaultSpanCount else spanCount
+            val layoutManager = binding.homeRecycler.layoutManager as? GridLayoutManager
+            if (layoutManager != null && layoutManager.spanCount != finalSpanCount) {
+                layoutManager.spanCount = finalSpanCount
+            }
+        }
+        listSettingsListener =
+            object : org.oxycblt.auxio.list.ListSettings.Listener {
+                override fun onSpanCountChanged() {
+                    updateSpanCount()
+                }
+            }
+        homeSettingsListener =
+            object : org.oxycblt.auxio.home.HomeSettings.Listener {
+                override fun onDefaultSpanCountChanged() {
+                    updateSpanCount()
+                }
+            }
+        listSettings.registerListener(listSettingsListener!!)
+        homeSettings.registerListener(homeSettingsListener!!)
+        updateSpanCount()
 
         binding.homeRecycler.apply {
             id = R.id.home_song_recycler
@@ -98,6 +130,8 @@ class SongListFragment :
     }
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
+        listSettingsListener?.let { listSettings.unregisterListener(it) }
+        listSettingsListener = null
         super.onDestroyBinding(binding)
         binding.homeRecycler.apply {
             adapter = null
