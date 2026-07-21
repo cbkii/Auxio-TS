@@ -37,7 +37,6 @@ import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.showToast
-import org.oxycblt.musikr.Song
 
 /**
  * A [ViewBindingFragment] that shows the current playback state in a compact manner.
@@ -61,13 +60,6 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         val context = requireContext()
 
         // --- UI SETUP ---
-        binding.root.apply {
-            setOnClickListener { playbackModel.openPlayback() }
-            setOnLongClickListener {
-                playbackModel.song.value?.let(detailModel::showAlbum)
-                true
-            }
-        }
 
         // Set up marquee on song information
         binding.playbackSong.isSelected = true
@@ -111,7 +103,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         applyDriverSideLayout(binding)
 
         // -- VIEWMODEL SETUP ---
-        collectImmediately(playbackModel.song, ::updateSong)
+        collectImmediately(playbackModel.bannerState, ::updateBannerState)
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.positionDs, ::updatePosition)
         collectImmediately(playbackModel.repeatMode, ::updateRepeat)
@@ -126,18 +118,69 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         binding.playbackInfo.isSelected = false
     }
 
-    private fun updateSong(song: Song?) {
-        if (song == null) {
-            // Nothing to do.
-            return
-        }
-
+    private fun updateBannerState(state: BannerState) {
         val context = requireContext()
         val binding = requireBinding()
-        binding.playbackCover.bind(song)
-        binding.playbackSong.text = song.name.resolve(context)
-        binding.playbackInfo.text = song.artists.resolveNames(context)
-        binding.playbackProgressBar.max = song.durationMs.msToDs().toInt()
+
+        val isPlayable = state is BannerState.Rich || state is BannerState.Raw
+        binding.root.setOnClickListener {
+            if (isPlayable) {
+                playbackModel.openPlayback()
+            }
+        }
+        binding.root.setOnLongClickListener {
+            if (state is BannerState.Rich) {
+                detailModel.showAlbum(state.song)
+                true
+            } else {
+                false
+            }
+        }
+
+        // Enable or disable playback controls based on playability
+        binding.playbackPlayPause.isEnabled = isPlayable
+        binding.playbackSkipNext.isEnabled = isPlayable
+        binding.playbackSkipPrev.isEnabled = isPlayable
+        binding.playbackRepeat.isEnabled = isPlayable
+        binding.playbackShuffle.isEnabled = isPlayable
+
+        when (state) {
+            is BannerState.Rich -> {
+                binding.playbackCover.bind(state.song)
+                binding.playbackSong.text = state.song.name.resolve(context)
+                binding.playbackInfo.text = state.song.artists.resolveNames(context)
+                binding.playbackProgressBar.max = state.song.durationMs.msToDs().toInt()
+            }
+            is BannerState.Raw -> {
+                binding.playbackCover.bind(null) // Neutral artwork
+                binding.playbackSong.text = state.metadata.displayTitle
+                binding.playbackInfo.text = state.metadata.displayArtist
+                binding.playbackProgressBar.max = state.metadata.durationMs.msToDs().toInt()
+            }
+            is BannerState.Restoring -> {
+                binding.playbackCover.bind(null)
+                binding.playbackSong.text =
+                    context.getString(R.string.lbl_playback) // or custom "Restoring..."
+                binding.playbackInfo.text = ""
+                binding.playbackProgressBar.progress = 0
+                binding.playbackProgressBar.max = 1
+            }
+            is BannerState.Idle -> {
+                binding.playbackCover.bind(null)
+                binding.playbackSong.text = context.getString(R.string.def_playback)
+                binding.playbackInfo.text = ""
+                binding.playbackProgressBar.progress = 0
+                binding.playbackProgressBar.max = 1
+            }
+            is BannerState.Unavailable -> {
+                binding.playbackCover.bind(null)
+                binding.playbackSong.text = state.reason
+                binding.playbackInfo.text =
+                    context.getString(R.string.set_root_fs_status_unavailable)
+                binding.playbackProgressBar.progress = 0
+                binding.playbackProgressBar.max = 1
+            }
+        }
     }
 
     private fun updatePlaying(isPlaying: Boolean) {
