@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.music.ConfiguredSourcePolicy
 
 /**
  * Bounded one-level DirectFS browser for the startup/Fast Start surface.
@@ -52,8 +53,9 @@ private constructor(
 ) {
     @Inject
     constructor(
-        @ApplicationContext context: Context
-    ) : this(defaultRoots(context), BuildConfig.BUILD_TYPE == BENCHMARK_BUILD_TYPE)
+        @ApplicationContext context: Context,
+        policy: ConfiguredSourcePolicy,
+    ) : this(defaultRoots(context, policy), BuildConfig.BUILD_TYPE == BENCHMARK_BUILD_TYPE)
 
     internal constructor(roots: Map<String, File>) : this(roots, false)
 
@@ -227,11 +229,14 @@ private constructor(
             return File(base, "benchmark-usb$sourceIndex")
         }
 
-        private fun defaultRoots(context: Context): Map<String, File> =
+        private fun defaultRoots(
+            context: Context,
+            policy: ConfiguredSourcePolicy,
+        ): Map<String, File> =
             if (BuildConfig.BUILD_TYPE == BENCHMARK_BUILD_TYPE) {
                 mapOf(USB0 to benchmarkRoot(context, 0), USB1 to benchmarkRoot(context, 1))
             } else {
-                mapOf(USB0 to File(USB0), USB1 to File(USB1))
+                policy.getConfiguredRootsAsFiles()
             }
     }
 }

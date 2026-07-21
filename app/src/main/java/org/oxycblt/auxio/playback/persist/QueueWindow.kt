@@ -57,7 +57,7 @@ data class QueueItemRef(
                 ?: "Unavailable queue item"
 
     val displayArtist: String
-        get() = artistFallback?.takeIf { it.isNotBlank() } ?: "USB audio"
+        get() = artistFallback?.takeIf { it.isNotBlank() } ?: "External audio"
 
     val hasPlayableReference: Boolean
         get() = !uri.isNullOrBlank() || !pathFallback.isNullOrBlank()
