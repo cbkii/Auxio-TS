@@ -152,13 +152,13 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
                 binding.playbackProgressBar.max = state.song.durationMs.msToDs().toInt()
             }
             is BannerState.Raw -> {
-                binding.playbackCover.bind(null) // Neutral artwork
+                binding.playbackCover.clear() // Neutral artwork
                 binding.playbackSong.text = state.metadata.displayTitle
                 binding.playbackInfo.text = state.metadata.displayArtist
                 binding.playbackProgressBar.max = state.metadata.durationMs.msToDs().toInt()
             }
             is BannerState.Restoring -> {
-                binding.playbackCover.bind(null)
+                binding.playbackCover.clear()
                 binding.playbackSong.text =
                     context.getString(R.string.lbl_playback) // or custom "Restoring..."
                 binding.playbackInfo.text = ""
@@ -166,14 +166,14 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
                 binding.playbackProgressBar.max = 1
             }
             is BannerState.Idle -> {
-                binding.playbackCover.bind(null)
+                binding.playbackCover.clear()
                 binding.playbackSong.text = context.getString(R.string.def_playback)
                 binding.playbackInfo.text = ""
                 binding.playbackProgressBar.progress = 0
                 binding.playbackProgressBar.max = 1
             }
             is BannerState.Unavailable -> {
-                binding.playbackCover.bind(null)
+                binding.playbackCover.clear()
                 binding.playbackSong.text = state.reason
                 binding.playbackInfo.text =
                     context.getString(R.string.set_root_fs_status_unavailable)

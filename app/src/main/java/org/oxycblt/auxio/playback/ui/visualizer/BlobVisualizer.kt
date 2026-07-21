@@ -71,9 +71,13 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     fun updateState(state: VisualizerState) {
         when (state) {
-            is VisualizerState.Hidden,
-            is VisualizerState.WaitingForFrames,
-            is VisualizerState.Failed -> spectrumMapper.reset()
+            is VisualizerState.Disabled,
+            is VisualizerState.Paused,
+            is VisualizerState.AwaitingAudioSession,
+            is VisualizerState.PermissionRequired,
+            is VisualizerState.PermissionDenied,
+            is VisualizerState.Starting,
+            is VisualizerState.Unavailable -> spectrumMapper.reset()
             is VisualizerState.Live -> {
                 when (state.source) {
                     VisualizerState.FrameSource.FFT ->

@@ -43,18 +43,18 @@ import org.oxycblt.musikr.Song
  */
 class CoverPagerAdapter(
     private val listener: StepperOverlay.Listener,
-    private val playbackModel: PlaybackViewModel,
+    private val visualizerStateFlow: kotlinx.coroutines.flow.StateFlow<VisualizerState>,
     private val uiSettings: UISettings,
     lifecycleOwner: LifecycleOwner,
 ) : FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
 
     private val attachedHolders = linkedSetOf<CoverViewHolder>()
     private var activePosition = RecyclerView.NO_POSITION
-    private var latestState: VisualizerState = VisualizerState.Hidden
+    private var latestState: VisualizerState = VisualizerState.Disabled
 
     init {
         lifecycleOwner.lifecycleScope.launch {
-            playbackModel.visualizerState.collect { state ->
+            visualizerStateFlow.collect { state ->
                 latestState = sanitize(state)
                 dispatchVisualizerState()
             }
@@ -76,7 +76,7 @@ class CoverPagerAdapter(
     }
 
     override fun onViewDetachedFromWindow(holder: CoverViewHolder) {
-        holder.updateVisualizerState(VisualizerState.Hidden, uiSettings.visualizerMode)
+        holder.updateVisualizerState(VisualizerState.Disabled, uiSettings.visualizerMode)
         attachedHolders -= holder
         super.onViewDetachedFromWindow(holder)
     }
@@ -104,7 +104,7 @@ class CoverPagerAdapter(
     private fun updateHolder(holder: CoverViewHolder) {
         val state =
             if (holder.bindingAdapterPosition == activePosition) latestState
-            else VisualizerState.Hidden
+            else VisualizerState.Disabled
         holder.updateVisualizerState(state, uiSettings.visualizerMode)
     }
 
@@ -114,7 +114,7 @@ class CoverPagerAdapter(
         return if (ageMs in 0..LIVE_FRAME_FRESHNESS_MS) {
             state
         } else {
-            VisualizerState.Failed("Stale visualizer frame")
+            VisualizerState.Unavailable("Stale visualizer frame")
         }
     }
 
@@ -131,7 +131,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
 
     fun onViewRecycled() {
         song = null
-        binding.coverVisualizer.updateState(VisualizerState.Hidden)
+        binding.coverVisualizer.updateState(VisualizerState.Disabled)
         binding.coverVisualizer.visibility = View.GONE
         binding.cover.visibility = View.VISIBLE
     }
@@ -140,7 +140,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
         this.song = song
         binding.cover.bind(song)
         binding.coverFastSeekOverlay.listener = listener
-        updateVisualizerState(VisualizerState.Hidden, UISettings.VisualizerMode.OFF)
+        updateVisualizerState(VisualizerState.Disabled, UISettings.VisualizerMode.OFF)
     }
 
     fun updateVisualizerState(state: VisualizerState, mode: UISettings.VisualizerMode) {

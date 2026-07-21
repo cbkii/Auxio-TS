@@ -146,7 +146,7 @@ constructor(
     /** The current queue in a special bundled format suitable for the cover ViewPager2. */
     val pagerQueue: StateFlow<PagerQueue> = _pagerQueue
 
-    private val _visualizerState = MutableStateFlow<VisualizerState>(VisualizerState.Hidden)
+    private val _visualizerState = MutableStateFlow<VisualizerState>(VisualizerState.Disabled)
     /** The current state of the audio visualizer. */
     val visualizerState: StateFlow<VisualizerState> = _visualizerState
 
