@@ -146,9 +146,12 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Run API 29 compatibility smoke tests
+      - name: Run API 29 compatibility and Room migration tests
         shell: bash
-        run: bash ./scripts/ci-gradle.sh :app:connectedStandardDebugAndroidTest
+        run: |
+          bash ./scripts/ci-gradle.sh \
+            :app:connectedStandardDebugAndroidTest \
+            :musikr:connectedDebugAndroidTest
 
       - name: Upload API 29 failure reports
         if: failure()
@@ -158,6 +161,8 @@ jobs:
           path: |
             app/build/reports/androidTests/**
             app/build/outputs/androidTest-results/**
+            musikr/build/reports/androidTests/**
+            musikr/build/outputs/androidTest-results/**
             ${{ runner.temp }}/api29-emulator.log
           if-no-files-found: ignore
           retention-days: 7
