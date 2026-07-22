@@ -53,11 +53,16 @@ jobs:
                   "            // persisted file:/// root retains the same authority as its raw path.",
               "                candidates.addAll(discoveredRoots.filter { it.trimEnd('/') in savedRoots })":
                   "            candidates.addAll(discoveredRoots.filter { it.trimEnd('/') in savedRoots })",
+              "                            rootGate =": "                        rootGate =",
+              "                            // This is an explicit user-started picker, not background runtime probing.":
+                  "                        // This is an explicit user-started picker, not background runtime probing.",
+              "                            allowUnconfiguredUsb = true,":
+                  "                        allowUnconfiguredUsb = true,",
           }
           for old, new in replacements.items():
               if old not in text:
                   raise SystemExit(f"Embedded patch normalisation target missing: {old!r}")
-              text = text.replace(old, new, 1)
+              text = text.replace(old, new)
           path.write_text(text, encoding="utf-8", newline="\n")
           PATCH_FIX
 
