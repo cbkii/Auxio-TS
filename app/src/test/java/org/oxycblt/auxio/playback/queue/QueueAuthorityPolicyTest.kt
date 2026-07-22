@@ -17,6 +17,7 @@ import org.oxycblt.auxio.playback.persist.QueueDescriptor
 import org.oxycblt.auxio.playback.persist.QueueItemRef
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
+import org.oxycblt.musikr.Music
 
 class QueueAuthorityPolicyTest {
     @Test
@@ -95,7 +96,7 @@ class QueueAuthorityPolicyTest {
 
     @Test
     fun unresolvedStableItemIsNotMistakenForDatabaseHole() {
-        val unresolved = item(uri = null, stableUid = "stable-song")
+        val unresolved = item(uri = null, stableUid = STABLE_SONG_UID)
         assertFalse(QueueAuthorityPolicy.hasMissingRows(listOf(unresolved)))
     }
 
@@ -115,7 +116,7 @@ class QueueAuthorityPolicyTest {
         QueueItemRef(
             logicalPosition = 0,
             canonicalPosition = 0,
-            stableSongUid = stableUid?.let(org.oxycblt.musikr.Music.UID::fromString),
+            stableSongUid = stableUid?.let { requireNotNull(Music.UID.fromString(it)) },
             uri = uri,
             pathFallback = null,
             titleFallback = null,
@@ -123,4 +124,8 @@ class QueueAuthorityPolicyTest {
             albumFallback = null,
             durationMs = 0,
         )
+
+    private companion object {
+        const val STABLE_SONG_UID = "uas00000000-0000-0000-0000-000000000001"
+    }
 }
