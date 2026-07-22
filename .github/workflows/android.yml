@@ -208,11 +208,6 @@ jobs:
               device_ready=1
               break
             fi
-            if ! kill -0 "${emulator_pid}" 2>/dev/null; then
-              echo "::error::API 29 emulator exited before becoming available to adb."
-              tail -n 200 "${emulator_log}" || true
-              exit 1
-            fi
             sleep 2
           done
           if [[ "${device_ready}" -ne 1 ]]; then
@@ -226,11 +221,6 @@ jobs:
             if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
               booted=1
               break
-            fi
-            if ! kill -0 "${emulator_pid}" 2>/dev/null; then
-              echo "::error::API 29 emulator exited before Android completed booting."
-              tail -n 200 "${emulator_log}" || true
-              exit 1
             fi
             sleep 2
           done
