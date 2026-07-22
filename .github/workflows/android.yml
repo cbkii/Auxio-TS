@@ -148,6 +148,7 @@ jobs:
             echo "::error::Android emulator binary was not found after SDK installation."
             exit 1
           fi
+          printf '%s\n' "${sdk_root}/platform-tools" >> "${GITHUB_PATH}"
           printf 'SDKMANAGER_BIN=%s\n' "${sdkmanager_bin}" >> "${GITHUB_ENV}"
           printf 'AVDMANAGER_BIN=%s\n' "${avdmanager_bin}" >> "${GITHUB_ENV}"
           printf 'EMULATOR_BIN=%s\n' "${emulator_bin}" >> "${GITHUB_ENV}"
