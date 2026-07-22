@@ -82,11 +82,15 @@ jobs:
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           sdkmanager_bin="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
           avdmanager_bin="${sdk_root}/cmdline-tools/latest/bin/avdmanager"
+          emulator_bin="${sdk_root}/emulator/emulator"
           if [[ ! -x "${sdkmanager_bin}" ]]; then
             sdkmanager_bin="$(command -v sdkmanager || true)"
           fi
           if [[ ! -x "${avdmanager_bin}" ]]; then
             avdmanager_bin="$(command -v avdmanager || true)"
+          fi
+          if [[ ! -x "${emulator_bin}" ]]; then
+            emulator_bin="$(command -v emulator || true)"
           fi
           if [[ -z "${sdkmanager_bin}" || ! -x "${sdkmanager_bin}" ]]; then
             echo "::error::sdkmanager was not found in the hosted Android SDK."
@@ -96,8 +100,13 @@ jobs:
             echo "::error::avdmanager was not found in the hosted Android SDK."
             exit 1
           fi
+          if [[ -z "${emulator_bin}" || ! -x "${emulator_bin}" ]]; then
+            echo "::error::Android emulator binary was not found."
+            exit 1
+          fi
           printf 'SDKMANAGER_BIN=%s\n' "${sdkmanager_bin}" >> "${GITHUB_ENV}"
           printf 'AVDMANAGER_BIN=%s\n' "${avdmanager_bin}" >> "${GITHUB_ENV}"
+          printf 'EMULATOR_BIN=%s\n' "${emulator_bin}" >> "${GITHUB_ENV}"
 
           set +e
           yes | "${sdkmanager_bin}" --licenses >/dev/null 2>&1
@@ -134,37 +143,27 @@ jobs:
             "${AVDMANAGER_BIN}" list target 2>&1 | tee -a "${avd_log}" || true
             exit "${avd_status}"
           fi
-          avd_dir="${HOME}/.android/avd/${AVD_NAME}.avd"
-          if [[ ! -d "${avd_dir}" ]]; then
-            echo "::error::avdmanager reported success but ${avd_dir} was not created."
-            find "${HOME}/.android" -maxdepth 3 -print 2>&1 | tee -a "${avd_log}" || true
+          avd_names="$("${EMULATOR_BIN}" -list-avds 2>&1 | tee -a "${avd_log}")"
+          if ! grep -Fxq "${AVD_NAME}" <<<"${avd_names}"; then
+            echo "::error::avdmanager reported success but ${AVD_NAME} is not runnable."
+            "${AVDMANAGER_BIN}" list avd 2>&1 | tee -a "${avd_log}" || true
+            find "${HOME}" -maxdepth 4 -type f \( -name '*.ini' -o -name 'config.ini' \) \
+              -print 2>&1 | tee -a "${avd_log}" || true
             exit 1
           fi
-          cat >> "${avd_dir}/config.ini" <<'EOF'
-          hw.keyboard=yes
-          hw.gpu.enabled=yes
-          hw.gpu.mode=swiftshader_indirect
-          disk.dataPartition.size=2048M
-          EOF
 
       - name: Start emulator and wait for Android 10
         shell: bash
         run: |
           emulator_log="${RUNNER_TEMP}/api29-emulator.log"
-          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
-          emulator_bin="${sdk_root}/emulator/emulator"
-          if [[ ! -x "${emulator_bin}" ]]; then
-            emulator_bin="$(command -v emulator || true)"
-          fi
-          if [[ -z "${emulator_bin}" || ! -x "${emulator_bin}" ]]; then
-            echo "::error::Android emulator binary was not found."
-            exit 1
-          fi
-          nohup "${emulator_bin}" \
+          nohup "${EMULATOR_BIN}" \
             -avd "${AVD_NAME}" \
             -no-window \
             -no-audio \
             -no-boot-anim \
+            -no-snapshot-save \
+            -memory 2048 \
+            -partition-size 2048 \
             -gpu swiftshader_indirect \
             -camera-back none \
             -camera-front none \
