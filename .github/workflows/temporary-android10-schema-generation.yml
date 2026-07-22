@@ -16,7 +16,7 @@ jobs:
   generate:
     if: ${{ !contains(github.event.head_commit.message, '[schema-bot]') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     steps:
       - name: Checkout implementation branch
@@ -73,33 +73,39 @@ jobs:
           bash ./scripts/ci-gradle.sh :musikr:kspDebugKotlin
           test -f musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/72.json
 
-      - name: Generate historical v71 Room schema
+      - name: Generate historical v70 and v71 Room schemas
         shell: bash
         env:
+          V70_COMMIT: 5c5e7c48222a37c40598c4206c1a10836b5bdd5f
           V71_COMMIT: 65a99f2e30efc77107c9eaa007a7edb953a63b34
         run: |
-          worktree="${RUNNER_TEMP}/auxio-schema-v71"
-          git worktree add --detach "${worktree}" "${V71_COMMIT}"
-          cp local.properties "${worktree}/local.properties"
-          python3 - "${worktree}" <<'PY'
+          generate_schema() {
+            local version="$1"
+            local commit="$2"
+            local worktree="${RUNNER_TEMP}/auxio-schema-v${version}"
+            git worktree add --detach "${worktree}" "${commit}"
+            cp local.properties "${worktree}/local.properties"
+            python3 - "${worktree}" "${version}" <<'PY'
           from pathlib import Path
+          import re
           import sys
 
           root = Path(sys.argv[1])
+          version = sys.argv[2]
           database = root / "musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt"
           text = database.read_text(encoding="utf-8")
-          if text.count("    exportSchema = false,") != 1:
-              raise SystemExit("Unexpected v71 exportSchema declaration")
-          database.write_text(
-              text.replace("    exportSchema = false,", "    exportSchema = true,"),
-              encoding="utf-8",
-          )
+          updated, replacements = re.subn(r"exportSchema\s*=\s*false", "exportSchema = true", text)
+          if replacements != 1:
+              raise SystemExit(f"Unexpected v{version} exportSchema declaration: {replacements}")
+          if not re.search(rf"version\s*=\s*{re.escape(version)}(?:\D|$)", updated):
+              raise SystemExit(f"Historical schema version mismatch for v{version}")
+          database.write_text(updated, encoding="utf-8")
 
           build = root / "musikr/build.gradle"
           build_text = build.read_text(encoding="utf-8")
           marker = "\ndependencies {\n"
           if build_text.count(marker) != 1:
-              raise SystemExit("Unexpected v71 musikr build layout")
+              raise SystemExit(f"Unexpected v{version} musikr build layout")
           schema_block = '''
 
           ksp {
@@ -108,27 +114,30 @@ jobs:
           '''
           build.write_text(build_text.replace(marker, schema_block + marker), encoding="utf-8")
           PY
-          (
-            cd "${worktree}"
-            bash ./scripts/bootstrap-dependencies.sh --profile full-build
-            bash ./scripts/ci-gradle.sh :musikr:kspDebugKotlin
-            test -f musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/71.json
-          )
-          cp \
-            "${worktree}/musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/71.json" \
-            musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/71.json
-          git worktree remove --force "${worktree}"
+            (
+              cd "${worktree}"
+              bash ./scripts/bootstrap-dependencies.sh --profile full-build
+              bash ./scripts/ci-gradle.sh :musikr:kspDebugKotlin
+              test -f "musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/${version}.json"
+            )
+            cp \
+              "${worktree}/musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/${version}.json" \
+              "musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/${version}.json"
+            git worktree remove --force "${worktree}"
+          }
+
+          generate_schema 70 "${V70_COMMIT}"
+          generate_schema 71 "${V71_COMMIT}"
 
       - name: Format and verify generated changes
         shell: bash
         run: |
           bash ./scripts/ci-gradle.sh spotlessApply
-          python3 -m json.tool \
-            musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/71.json \
-            >/dev/null
-          python3 -m json.tool \
-            musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/72.json \
-            >/dev/null
+          for version in 70 71 72; do
+            python3 -m json.tool \
+              "musikr/schemas/org.oxycblt.musikr.cache.db.CacheDatabase/${version}.json" \
+              >/dev/null
+          done
           git diff --check
 
       - name: Commit generated schemas and patches
