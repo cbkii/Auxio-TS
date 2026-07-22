@@ -637,8 +637,7 @@ constructor(
                 null,
             ) {
                 if (
-                    playlist?.let { it as? org.oxycblt.musikr.Playlist }?.origin ==
-                        org.oxycblt.musikr.Playlist.Origin.GENERATED
+                    playlist?.parent?.origin == org.oxycblt.musikr.Playlist.Origin.GENERATED
                 ) {
                     BasicHeader(it)
                 } else {

@@ -376,9 +376,13 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     }
 
     private fun playRecentlyAdded(deferIfEmpty: Boolean = false): Boolean {
-        val songs = homeModel.songList.value // Use actual generated playlist instead in the future
-        if (songs.isEmpty()) {
-            L.d("Ignoring Recently Added generated playlist with no songs")
+        val playlist =
+            homeModel.playlistList.value.firstOrNull {
+                it.origin == Playlist.Origin.GENERATED &&
+                    it.name.raw == "Recently added"
+            }
+        if (playlist?.songs?.isNotEmpty() != true) {
+            L.d("Ignoring Recently Added generated playlist with no committed songs")
             if (deferIfEmpty) {
                 pendingEntryDestination = HeadUnitEntryPoints.EntryDestination.RECENTLY_ADDED
             } else {
@@ -386,8 +390,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             }
             return false
         }
-        playbackModel.play(songs)
-        openTab(MusicType.SONGS)
+        playbackModel.play(playlist)
+        openTab(MusicType.PLAYLISTS)
         return true
     }
 

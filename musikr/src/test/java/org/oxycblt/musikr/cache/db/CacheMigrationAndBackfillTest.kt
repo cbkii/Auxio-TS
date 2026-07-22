@@ -92,11 +92,7 @@ class CacheMigrationAndBackfillTest {
     private fun openMigrated(): CacheDatabase {
         val opened =
             Room.databaseBuilder(context, CacheDatabase::class.java, DB_NAME)
-                .addMigrations(
-                    CacheDatabase.MIGRATION_70_71,
-                    CacheDatabase.MIGRATION_71_72,
-                    CacheDatabase.MIGRATION_72_73,
-                )
+                .addMigrations(CacheDatabase.MIGRATION_70_71, CacheDatabase.MIGRATION_71_72)
                 .allowMainThreadQueries()
                 .build()
         // Force open so the migration and Room's schema validation actually run.

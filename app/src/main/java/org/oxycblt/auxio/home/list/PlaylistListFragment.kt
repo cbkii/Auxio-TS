@@ -22,7 +22,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
-import androidx.recyclerview.widget.GridLayoutManager
+import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
@@ -52,6 +52,7 @@ import org.oxycblt.musikr.Song
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
+@AndroidEntryPoint
 class PlaylistListFragment :
     ListFragment<Playlist, FragmentHomeListBinding>(),
     FastScrollRecyclerView.PopupProvider,
@@ -75,14 +76,14 @@ class PlaylistListFragment :
         super.onBindingCreated(binding, savedInstanceState)
 
         fun updateSpanCount() {
-            val spanCount = listSettings.playlistSpanCount
-            val finalSpanCount = if (spanCount == 0) homeSettings.defaultSpanCount else spanCount
-            val layoutManager = binding.homeRecycler.layoutManager as? GridLayoutManager
-            if (layoutManager != null && layoutManager.spanCount != finalSpanCount) {
-                layoutManager.spanCount = finalSpanCount
+                val finalSpanCount =
+                    LibraryGridPolicy.effective(
+                        defaultValue = homeSettings.defaultSpanCount,
+                        overrideValue = listSettings.playlistSpanCount,
+                    )
+                binding.homeRecycler.applyLibraryGridSpanCount(finalSpanCount)
             }
-        }
-        listSettingsListener =
+            listSettingsListener =
             object : org.oxycblt.auxio.list.ListSettings.Listener {
                 override fun onSpanCountChanged() {
                     updateSpanCount()

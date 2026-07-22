@@ -300,7 +300,15 @@ class PlaylistMenuDialogFragment : MenuDialogFragment<Menu.ForPlaylist>() {
             )
         }
         if (menu.playlist.origin == org.oxycblt.musikr.Playlist.Origin.GENERATED) {
-            disabled.addAll(setOf(R.id.action_rename, R.id.action_delete, R.id.action_import))
+            disabled.addAll(
+                setOf(
+                    R.id.action_rename,
+                    R.id.action_delete,
+                    R.id.action_import,
+                    R.id.action_export,
+                    R.id.action_share,
+                )
+            )
         }
         return disabled
     }

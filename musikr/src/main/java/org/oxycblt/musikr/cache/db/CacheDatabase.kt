@@ -51,7 +51,6 @@ import org.oxycblt.musikr.util.splitEscaped
             SongGenreCrossRefData::class,
             AlbumArtistCrossRefData::class,
             LibraryPlaylistData::class,
-            LibraryGeneratedPlaylistData::class,
             PlaylistItemData::class,
             ScanGenerationData::class,
             SourceStateData::class,
@@ -63,7 +62,7 @@ import org.oxycblt.musikr.util.splitEscaped
             IndexedUriStateData::class,
             MetadataRevisionData::class,
         ],
-    version = 73,
+    version = 72,
     exportSchema = false,
 )
 @TypeConverters(CachedFileData.Converters::class)
@@ -175,13 +174,6 @@ internal abstract class CacheDatabase : RoomDatabase() {
                 )
             }
 
-        val MIGRATION_72_73 =
-            Migration(72, 73) { database ->
-                database.execSQL(
-                    "CREATE TABLE IF NOT EXISTS LibraryGeneratedPlaylistData (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, stableUid TEXT NOT NULL, name TEXT NOT NULL, nameSort TEXT NOT NULL, available INTEGER NOT NULL)"
-                )
-            }
-
         val MIGRATION_71_72 =
             Migration(71, 72) { database ->
                 database.execSQL(
@@ -243,7 +235,7 @@ internal abstract class CacheDatabase : RoomDatabase() {
                     CacheDatabase::class.java,
                     "music_cache.db",
                 )
-                .addMigrations(MIGRATION_70_71, MIGRATION_71_72, MIGRATION_72_73)
+                .addMigrations(MIGRATION_70_71, MIGRATION_71_72)
                 .build()
     }
 }
@@ -450,15 +442,6 @@ internal data class LibraryPlaylistData(
     val sourceUri: String?,
     val scanGeneration: Long,
     val metadataRevision: Long,
-    val available: Boolean,
-)
-
-@Entity
-internal data class LibraryGeneratedPlaylistData(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val stableUid: String,
-    val name: String,
-    val nameSort: String,
     val available: Boolean,
 )
 

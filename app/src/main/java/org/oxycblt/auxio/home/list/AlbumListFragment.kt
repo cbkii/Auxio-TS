@@ -22,7 +22,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
-import androidx.recyclerview.widget.GridLayoutManager
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Calendar
 import javax.inject.Inject
@@ -78,14 +77,14 @@ class AlbumListFragment :
         super.onBindingCreated(binding, savedInstanceState)
 
         fun updateSpanCount() {
-            val spanCount = listSettings.albumSpanCount
-            val finalSpanCount = if (spanCount == 0) homeSettings.defaultSpanCount else spanCount
-            val layoutManager = binding.homeRecycler.layoutManager as? GridLayoutManager
-            if (layoutManager != null && layoutManager.spanCount != finalSpanCount) {
-                layoutManager.spanCount = finalSpanCount
+                val finalSpanCount =
+                    LibraryGridPolicy.effective(
+                        defaultValue = homeSettings.defaultSpanCount,
+                        overrideValue = listSettings.albumSpanCount,
+                    )
+                binding.homeRecycler.applyLibraryGridSpanCount(finalSpanCount)
             }
-        }
-        listSettingsListener =
+            listSettingsListener =
             object : org.oxycblt.auxio.list.ListSettings.Listener {
                 override fun onSpanCountChanged() {
                     updateSpanCount()
