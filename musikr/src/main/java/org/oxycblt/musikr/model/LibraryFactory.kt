@@ -9,22 +9,21 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.model
 
-import java.nio.ByteBuffer
-import java.util.UUID
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MutableLibrary
+import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import org.oxycblt.musikr.graph.AlbumVertex
 import org.oxycblt.musikr.graph.ArtistVertex
@@ -34,10 +33,12 @@ import org.oxycblt.musikr.graph.PlaylistVertex
 import org.oxycblt.musikr.graph.SongVertex
 import org.oxycblt.musikr.graph.Vertex
 import org.oxycblt.musikr.playlist.PlaylistHandle
+import org.oxycblt.musikr.playlist.db.StoredPlaylistHandle
 import org.oxycblt.musikr.playlist.db.StoredPlaylists
 import org.oxycblt.musikr.playlist.interpret.PlaylistInterpreter
 import org.oxycblt.musikr.playlist.interpret.PrePlaylistInfo
 import org.oxycblt.musikr.tag.Name
+import org.oxycblt.musikr.tag.Token
 
 internal interface LibraryFactory {
     fun create(
@@ -51,7 +52,7 @@ internal interface LibraryFactory {
     }
 }
 
-private class LibraryFactoryImpl() : LibraryFactory {
+private class LibraryFactoryImpl : LibraryFactory {
     override fun create(
         graph: MusicGraph,
         storedPlaylists: StoredPlaylists,
@@ -78,62 +79,33 @@ private class LibraryFactoryImpl() : LibraryFactory {
                 PlaylistImpl(PlaylistVertexCore(vertex))
             }
 
-        // Generate Recently Added playlist
-        val recentlyAddedSongs =
-            songs
-                .sortedWith(
-                    compareByDescending<Song> { it.addedMs }
-                        .thenBy { it.album.dates?.min?.year ?: 0 }
-                        .thenBy {
-                            (it.album.name as? Name.Known)?.sort
-                                ?: (it.album.name as? Name.Known)?.raw
-                                ?: ""
-                        }
-                        .thenBy { it.disc?.number ?: 0 }
-                        .thenBy { it.track ?: 0 }
-                        .thenBy {
-                            (it.name as? Name.Known)?.sort ?: (it.name as? Name.Known)?.raw ?: ""
-                        }
-                )
-                .take(500)
-
-        if (recentlyAddedSongs.isNotEmpty()) {
-            playlists.add(
-                PlaylistImpl(
-                    GeneratedPlaylistCore("recently-added", "Recently added", recentlyAddedSongs)
-                )
+        // Generated playlists are deterministic projections of this one committed rich library.
+        // They are rebuilt after both cached and scanned graph construction, so there is no second
+        // playlist database or partially committed generated state.
+        val generatedDefinitions =
+            GeneratedPlaylistCompiler.compile(
+                songs.map { song ->
+                    GeneratedPlaylistCompiler.Entry(
+                        value = song,
+                        stableKey = song.uid.toString(),
+                        addedMs = song.addedMs,
+                        year = song.album.dates?.min?.year,
+                        albumSort = song.album.name.sortKey(),
+                        disc = song.disc?.number ?: 0,
+                        track = song.track ?: 0,
+                        titleSort = song.name.sort ?: song.name.raw,
+                    )
+                }
             )
-        }
-
-        // Generate Decade playlists
-        val decadeMap = mutableMapOf<Int, MutableList<Song>>()
-        for (song in songs) {
-            val year = song.album.dates?.min?.year ?: continue
-            val decade = (year / 10) * 10
-            decadeMap.getOrPut(decade) { mutableListOf() }.add(song)
-        }
-
-        for ((decade, decadeSongs) in decadeMap) {
-            val sortedDecadeSongs =
-                decadeSongs.sortedWith(
-                    compareByDescending<Song> { it.album.dates?.min?.year ?: 0 }
-                        .thenByDescending { it.addedMs }
-                        .thenBy {
-                            (it.album.name as? Name.Known)?.sort
-                                ?: (it.album.name as? Name.Known)?.raw
-                                ?: ""
-                        }
-                        .thenBy { it.disc?.number ?: 0 }
-                        .thenBy { it.track ?: 0 }
-                        .thenBy {
-                            (it.name as? Name.Known)?.sort ?: (it.name as? Name.Known)?.raw ?: ""
-                        }
-                )
-            playlists.add(
+        generatedDefinitions.forEach { definition ->
+            playlists +=
                 PlaylistImpl(
-                    GeneratedPlaylistCore("decade:$decade", "${decade}s", sortedDecadeSongs)
+                    GeneratedPlaylistCore(
+                        id = definition.id,
+                        displayName = definition.name,
+                        songs = definition.values,
+                    )
                 )
-            )
         }
 
         return LibraryImpl(
@@ -186,72 +158,69 @@ private class LibraryFactoryImpl() : LibraryFactory {
 
     private class PlaylistVertexCore(vertex: PlaylistVertex) : PlaylistCore {
         override val origin =
-            org.oxycblt.musikr.Playlist.Origin
-                .USER // Imported playlists might also go through this path, will refine in next
-        // step if needed
+            if (vertex.prePlaylist.handle is StoredPlaylistHandle) {
+                Playlist.Origin.USER
+            } else {
+                Playlist.Origin.IMPORTED
+            }
         override val prePlaylist = vertex.prePlaylist
 
         override val songs: List<Song> =
-            vertex.songVertices.mapNotNull { vertex -> vertex?.let { tag(it) } }
+            vertex.songVertices.mapNotNull { songVertex -> songVertex?.let { tag(it) } }
     }
 
+    /** Defensive no-op handle; every public mutation path also rejects GENERATED origin. */
     private class GeneratedPlaylistHandle(override val uid: Music.UID) : PlaylistHandle {
-        override suspend fun rename(name: String) {}
+        override suspend fun rename(name: String) = Unit
 
-        override suspend fun add(songs: List<Song>) {}
+        override suspend fun add(songs: List<Song>) = Unit
 
-        override suspend fun rewrite(songs: List<Song>) {}
+        override suspend fun rewrite(songs: List<Song>) = Unit
 
-        override suspend fun delete() {}
+        override suspend fun delete() = Unit
     }
 
     private class GeneratedPrePlaylistInfo(
         override val name: Name.Known,
-        override val rawName: String?,
+        override val rawName: String,
         override val handle: PlaylistHandle,
     ) : PrePlaylistInfo
 
     private class GeneratedPlaylistCore(
-        val id: String,
-        val displayName: String,
+        id: String,
+        displayName: String,
         override val songs: List<Song>,
     ) : PlaylistCore {
-        override val origin = org.oxycblt.musikr.Playlist.Origin.GENERATED
+        override val origin = Playlist.Origin.GENERATED
         override val prePlaylist: PrePlaylistInfo
 
         init {
-            val digest =
-                java.security.MessageDigest.getInstance("MD5").digest("generated:$id".toByteArray())
-            val buffer = ByteBuffer.wrap(digest)
-            val uuid = UUID(buffer.long, buffer.long)
-
-            val uid =
-                Music.UID.auxio(Music.UID.Item.PLAYLIST) { update(uuid.toString().toByteArray()) }
-            val handle = GeneratedPlaylistHandle(uid)
-            val nameTokens =
+            val uid = GeneratedPlaylistCompiler.stableUid(id)
+            val tokens =
                 listOf(
-                    org.oxycblt.musikr.tag.Token(
+                    Token(
                         java.text.Collator.getInstance().getCollationKey(displayName),
-                        org.oxycblt.musikr.tag.Token.Type.LEXICOGRAPHIC,
+                        Token.Type.LEXICOGRAPHIC,
                     )
                 )
-
             val name =
                 object : Name.Known() {
                     override val raw: String = displayName
-                    override val sort: String? = null
-                    override val tokens: List<org.oxycblt.musikr.tag.Token> = nameTokens
+                    override val sort: String = displayName
+                    override val tokens: List<Token> = tokens
 
                     override fun hashCode() = displayName.hashCode()
 
                     override fun equals(other: Any?) = other is Name.Known && raw == other.raw
                 }
-
-            prePlaylist = GeneratedPrePlaylistInfo(name, displayName, handle)
+            prePlaylist = GeneratedPrePlaylistInfo(name, displayName, GeneratedPlaylistHandle(uid))
         }
     }
 
     private companion object {
+        fun Name.sortKey(): String =
+            (this as? Name.Known)?.let { it.sort ?: it.raw }.orEmpty()
+
         private inline fun <reified T : Music> tag(vertex: Vertex): T {
             val tag = vertex.tag
             check(tag is T) { "Dead Vertex Detected: $vertex" }
