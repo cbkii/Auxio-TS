@@ -23,18 +23,26 @@ import org.oxycblt.musikr.Song
 
 /** Represents the persistent UI state of the playback banner. */
 sealed interface BannerState {
+    /** Whether the banner has a playable item without inventing playback state. */
+    val playable: Boolean
+        get() = this is Rich || this is Raw
+
+    /** Whether queue-wide commands are known to be backed by a hydrated rich queue. */
+    val richQueueCommandsAvailable: Boolean
+        get() = this is Rich
+
     /** Rich library playback with a fully hydrated [Song]. */
     data class Rich(val song: Song) : BannerState
 
-    /** Raw primitive playback active before library hydration (e.g., TS18 fast resume). */
+    /** Raw primitive playback active before library hydration, such as TS18 fast resume. */
     data class Raw(val metadata: RawPlaybackMetadata) : BannerState
 
     /** A previous playback session is currently being restored. */
-    object Restoring : BannerState
+    data object Restoring : BannerState
 
     /** No playback is active or queued. */
-    object Idle : BannerState
+    data object Idle : BannerState
 
-    /** Playback is unavailable due to an error or missing dependencies. */
+    /** Playback is unavailable. [reason] is diagnostic and must not be rendered directly. */
     data class Unavailable(val reason: String) : BannerState
 }
