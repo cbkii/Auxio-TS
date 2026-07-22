@@ -23,6 +23,7 @@ import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.home.list.LibraryGridPolicy
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.settings.Settings
@@ -39,6 +40,8 @@ interface HomeSettings : Settings<HomeSettings.Listener> {
     var homeTabs: Array<Tab>
     /** Whether to hide artists considered "collaborators" from the home UI. */
     val shouldHideCollaborators: Boolean
+    /** Default grid columns used by tabs without an explicit override. */
+    var defaultSpanCount: Int
 
     interface Listener {
         /** Called when the [homeTabs] configuration changes. */
@@ -46,6 +49,9 @@ interface HomeSettings : Settings<HomeSettings.Listener> {
 
         /** Called when the [shouldHideCollaborators] configuration changes. */
         fun onHideCollaboratorsChanged() {}
+
+        /** Called when [defaultSpanCount] changes. */
+        fun onDefaultSpanCountChanged() {}
     }
 }
 
@@ -68,6 +74,23 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
 
     override val shouldHideCollaborators: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_hide_collaborators), false)
+
+    override var defaultSpanCount: Int
+        get() =
+            LibraryGridPolicy.normalizeDefault(
+                sharedPreferences.getInt(
+                    getString(R.string.set_key_default_span_count),
+                    LibraryGridPolicy.TWO_COLUMNS,
+                )
+            )
+        set(value) {
+            sharedPreferences.edit {
+                putInt(
+                    getString(R.string.set_key_default_span_count),
+                    LibraryGridPolicy.normalizeDefault(value),
+                )
+            }
+        }
 
     override fun migrate() {
         if (sharedPreferences.contains(OLD_KEY_LIB_TABS)) {
@@ -99,6 +122,10 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
             getString(R.string.set_key_hide_collaborators) -> {
                 L.d("Dispatching collaborator setting change")
                 listener.onHideCollaboratorsChanged()
+            }
+            getString(R.string.set_key_default_span_count) -> {
+                L.d("Dispatching default span count setting change")
+                listener.onDefaultSpanCountChanged()
             }
         }
     }

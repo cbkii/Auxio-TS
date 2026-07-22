@@ -77,7 +77,7 @@ constructor(
     private var fastStartJob: Job? = null
 
     private val _songList = MutableStateFlow(listOf<Song>())
-    /** A list of [Song]s, sorted by the preferred [Sort] and filtered by [decadeFilter]. */
+    /** A list of [Song]s, sorted by the preferred [Sort]. */
     val songList: StateFlow<List<Song>>
         get() = _songList
 
@@ -89,59 +89,6 @@ constructor(
     /** The current [Sort] used for [songList]. */
     val songSort: Sort
         get() = listSettings.songSort
-
-    /**
-     * Unfiltered sorted songs from the library. Used by the head-unit decade chips to derive the
-     * full decade list regardless of any active [decadeFilter].
-     */
-    private var _allSongs: List<Song> = emptyList()
-        set(value) {
-            field = value
-            // Invalidate the derived year list so allSongYears recomputes lazily.
-            _cachedSongYears = null
-            // Invalidate the decade queue cache.
-            _cachedSongsByDecade = null
-        }
-
-    private var _cachedSongYears: List<Int>? = null
-    private var _cachedSongsByDecade: Map<Int, List<Song>>? = null
-
-    private val songsByDecade: Map<Int, List<Song>>
-        get() =
-            _cachedSongsByDecade
-                ?: GeneratedPlaylistPolicy.songsByDecade(_allSongs).also {
-                    _cachedSongsByDecade = it
-                }
-
-    /**
-     * All valid release years in the unfiltered library, for computing available decade chips. This
-     * is always derived from the full library, independent of [decadeFilter]. Cached because it is
-     * read on every home header rebind and deriving it walks the entire library.
-     */
-    val allSongYears: List<Int>
-        get() =
-            _cachedSongYears
-                ?: _allSongs.mapNotNull { it.album.dates?.min?.year }.also { _cachedSongYears = it }
-
-    /** `true` if the library has at least one song, independent of any active [decadeFilter]. */
-    val hasAnySongs: Boolean
-        get() = _allSongs.isNotEmpty()
-
-    /**
-     * Generate a decade playlist from the full unfiltered library. This intentionally ignores
-     * [songList] so a currently active tab filter cannot shrink the playback queue.
-     */
-    fun songsForDecade(decade: Int): List<Song> = songsByDecade[decade].orEmpty()
-
-    /** Generate a newest-first playlist from the full unfiltered library. */
-    fun recentlyAddedSongs(): List<Song> = GeneratedPlaylistPolicy.recentlyAddedSongs(_allSongs)
-
-    private val _decadeFilter = MutableStateFlow<Int?>(null)
-    /**
-     * The currently active decade filter, expressed as the first year of the decade (e.g. `1990`
-     * for the 1990s). `null` means no filter is active.
-     */
-    val decadeFilter: StateFlow<Int?> = _decadeFilter
 
     /** The [PlaySong] instructions to use when playing a [Song]. */
     val playWith
@@ -321,9 +268,9 @@ constructor(
             viewModelScope.launch {
                 when (type) {
                     MusicType.SONGS -> {
-                        _allSongs = homeGenerator.songs()
+                        val songs = homeGenerator.songs()
                         _songInstructions.put(instructions)
-                        _songList.value = _allSongs.filteredByDecade(_decadeFilter.value)
+                        _songList.value = songs
                     }
                     MusicType.ALBUMS -> {
                         _albumInstructions.put(instructions)
@@ -360,23 +307,6 @@ constructor(
     fun applySongSort(sort: Sort) {
         listSettings.songSort = sort
     }
-
-    /**
-     * Apply or clear the decade filter on [songList].
-     *
-     * @param decade The first year of the decade to filter to (e.g. `1990`), or `null` to show all
-     *   songs.
-     */
-    fun applyDecadeFilter(decade: Int?) {
-        _decadeFilter.value = decade
-        // Replace(0) replaces the entire list in one visual pass (starting from position 0),
-        // which is smoother than Diff when the whole list content changes due to a new filter.
-        _songInstructions.put(UpdateInstructions.Replace(0))
-        _songList.value = _allSongs.filteredByDecade(decade)
-    }
-
-    private fun List<Song>.filteredByDecade(decade: Int?) =
-        GeneratedPlaylistPolicy.filterSongsForDecadePreservingOrder(this, decade)
 
     /**
      * Apply a new [Sort] to [albumList].

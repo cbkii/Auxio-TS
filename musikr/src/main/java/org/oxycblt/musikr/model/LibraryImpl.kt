@@ -71,6 +71,7 @@ internal data class LibraryImpl(
     }
 
     override suspend fun renamePlaylist(playlist: Playlist, name: String): MutableLibrary {
+        if (playlist.origin == Playlist.Origin.GENERATED) return this
         val playlistImpl =
             requireNotNull(playlistUidMap[playlist.uid]) {
                 "Playlist to rename is not in this library"
@@ -84,6 +85,7 @@ internal data class LibraryImpl(
     }
 
     override suspend fun addToPlaylist(playlist: Playlist, songs: List<Song>): MutableLibrary {
+        if (playlist.origin == Playlist.Origin.GENERATED) return this
         val playlistImpl =
             requireNotNull(playlistUidMap[playlist.uid]) {
                 "Playlist to add to is not in this library"
@@ -95,6 +97,7 @@ internal data class LibraryImpl(
     }
 
     override suspend fun rewritePlaylist(playlist: Playlist, songs: List<Song>): MutableLibrary {
+        if (playlist.origin == Playlist.Origin.GENERATED) return this
         val playlistImpl =
             requireNotNull(playlistUidMap[playlist.uid]) {
                 "Playlist to rewrite is not in this library"
@@ -106,6 +109,7 @@ internal data class LibraryImpl(
     }
 
     override suspend fun deletePlaylist(playlist: Playlist): MutableLibrary {
+        if (playlist.origin == Playlist.Origin.GENERATED) return this
         val playlistImpl =
             requireNotNull(playlistUidMap[playlist.uid]) {
                 "Playlist to delete is not in this library"
@@ -117,5 +121,7 @@ internal data class LibraryImpl(
     private class NewPlaylistCore(
         override val prePlaylist: PrePlaylistInfo,
         override val songs: List<Song>,
-    ) : PlaylistCore
+    ) : PlaylistCore {
+        override val origin = org.oxycblt.musikr.Playlist.Origin.USER
+    }
 }
