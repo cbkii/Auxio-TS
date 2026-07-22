@@ -378,8 +378,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private fun playRecentlyAdded(deferIfEmpty: Boolean = false): Boolean {
         val playlist =
             homeModel.playlistList.value.firstOrNull {
-                it.origin == Playlist.Origin.GENERATED &&
-                    it.name.raw == "Recently added"
+                it.origin == Playlist.Origin.GENERATED && it.name.raw == "Recently added"
             }
         if (playlist?.songs?.isNotEmpty() != true) {
             L.d("Ignoring Recently Added generated playlist with no committed songs")

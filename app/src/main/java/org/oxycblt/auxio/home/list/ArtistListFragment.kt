@@ -77,14 +77,14 @@ class ArtistListFragment :
         super.onBindingCreated(binding, savedInstanceState)
 
         fun updateSpanCount() {
-                val finalSpanCount =
-                    LibraryGridPolicy.effective(
-                        defaultValue = homeSettings.defaultSpanCount,
-                        overrideValue = listSettings.artistSpanCount,
-                    )
-                binding.homeRecycler.applyLibraryGridSpanCount(finalSpanCount)
-            }
-            listSettingsListener =
+            val finalSpanCount =
+                LibraryGridPolicy.effective(
+                    defaultValue = homeSettings.defaultSpanCount,
+                    overrideValue = listSettings.artistSpanCount,
+                )
+            binding.homeRecycler.applyLibraryGridSpanCount(finalSpanCount)
+        }
+        listSettingsListener =
             object : org.oxycblt.auxio.list.ListSettings.Listener {
                 override fun onSpanCountChanged() {
                     updateSpanCount()

@@ -9,11 +9,11 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.model
@@ -218,8 +218,7 @@ private class LibraryFactoryImpl : LibraryFactory {
     }
 
     private companion object {
-        fun Name.sortKey(): String =
-            (this as? Name.Known)?.let { it.sort ?: it.raw }.orEmpty()
+        fun Name.sortKey(): String = (this as? Name.Known)?.let { it.sort ?: it.raw }.orEmpty()
 
         private inline fun <reified T : Music> tag(vertex: Vertex): T {
             val tag = vertex.tag

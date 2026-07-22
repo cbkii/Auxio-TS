@@ -636,9 +636,7 @@ constructor(
                 _playlistSongInstructions,
                 null,
             ) {
-                if (
-                    playlist?.parent?.origin == org.oxycblt.musikr.Playlist.Origin.GENERATED
-                ) {
+                if (playlist?.parent?.origin == org.oxycblt.musikr.Playlist.Origin.GENERATED) {
                     BasicHeader(it)
                 } else {
                     EditHeader(it)

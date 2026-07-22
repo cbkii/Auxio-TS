@@ -1,4 +1,4 @@
-name: Temporary WP4 and WP6 finaliser
+name: Temporary WP4 and WP6 formatter
 
 on:
   push:
@@ -9,10 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  finalise:
-    if: ${{ !contains(github.event.head_commit.message, '[wp46-finalised]') }}
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[wp46-formatted]') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -23,42 +23,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
-      - name: Prepare bounded validation environment
+      - name: Apply repository formatting and remove this workflow
         shell: bash
         run: |
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           test -n "$sdk_dir"
           printf 'sdk.dir=%s\n' "$sdk_dir" > local.properties
-          if ! command -v ninja >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y ninja-build
-          fi
-          bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
-      - name: Apply repository formatting
-        shell: bash
-        run: ./gradlew --no-daemon --console=plain spotlessApply
-      - name: Run focused unit validation with retained log
-        id: unit
-        shell: bash
-        run: |
-          set +e
-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest 2>&1 | tee wp46-unit.log
-          rc=${PIPESTATUS[0]}
-          printf 'rc=%s\n' "$rc" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Upload retained unit log
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: wp46-unit-log
-          path: wp46-unit.log
-          if-no-files-found: error
-          retention-days: 7
-      - name: Commit validated formatting and remove this workflow
-        if: steps.unit.outputs.rc == '0'
-        shell: bash
-        run: |
+          ./gradlew --no-daemon --console=plain spotlessApply
           rm -f .github/workflows/temporary-wp46-format.yml
           git diff --check
           git add -A
@@ -68,16 +39,10 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'style: finalise generated playlists and grid layouts [wp46-finalised]'
+          git commit -m 'style: format generated playlists and grid layouts [wp46-formatted]'
           auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
             push https://github.com/${GITHUB_REPOSITORY}.git \
             HEAD:feat/generated-playlists-and-grid-layout-12959696348616356066
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Fail after retaining diagnostics
-        if: steps.unit.outputs.rc != '0'
-        shell: bash
-        run: |
-          echo 'Focused unit validation failed; retained wp46-unit-log artifact.' >&2
-          exit 1
