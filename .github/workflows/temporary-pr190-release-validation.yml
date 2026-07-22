@@ -50,11 +50,19 @@ jobs:
           bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicRelease
           bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaRelease
 
-          mapfile -d '' release_apks < <(find app/build/outputs/apk -type f -name '*-release.apk' -print0)
-          if (( ${#release_apks[@]} < 3 )); then
-            printf 'Expected at least three release APKs, found %d\n' "${#release_apks[@]}" >&2
-            exit 1
-          fi
+          release_apks=()
+          for apk_dir in \
+            app/build/outputs/apk/standard/release \
+            app/build/outputs/apk/topwayTwMusic/release \
+            app/build/outputs/apk/topwayTwMedia/release; do
+            mapfile -t variant_apks < <(find "${apk_dir}" -maxdepth 1 -type f -name '*.apk' | sort)
+            if (( ${#variant_apks[@]} != 1 )); then
+              printf 'Expected exactly one release APK in %s, found %d\n' "${apk_dir}" "${#variant_apks[@]}" >&2
+              printf '%s\n' "${variant_apks[@]:-}" >&2
+              exit 1
+            fi
+            release_apks+=("${variant_apks[0]}")
+          done
           for apk in "${release_apks[@]}"; do
             printf 'Validating startup contracts: %s\n' "${apk}"
             bash ./scripts/check-startup-performance-contracts.sh "${apk}"
