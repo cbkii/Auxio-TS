@@ -22,134 +22,70 @@ import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.metadata.Properties
 import org.oxycblt.musikr.tag.parse.ParsedTags
 
+/** Durable, ordered generated-playlist projection tied to one committed library generation. */
+data class GeneratedPlaylistSnapshot(
+    val stableKey: String,
+    val stableUid: String,
+    val name: String,
+    val generation: String,
+    val orderedSongUids: List<String>,
+)
+
 /**
  * An immutable repository for cached song metadata.
  *
- * Since file opening and metadata extraction sends to be quite slow on Android, a cache allows
- * up-to-date metadata to be read from a local database, which tends to be far faster.
- *
- * This is a read-only interface for reading cached metadata and isn't expected by Musikr's public
- * API, however there might be some use in external cache diagnostics by the client. For writing,
- * see [MutableCache].
+ * Since file opening and metadata extraction tends to be slow on Android, a cache allows up-to-date
+ * metadata to be read from a local database, which tends to be far faster.
  */
 interface Cache {
-    /**
-     * Read a [CachedFile] corresponding to the given [file] from the cache. This can result in
-     * several outcomes represented by [CacheResult].
-     *
-     * @param file the [File] to read from the cache
-     * @return a [CacheResult] representing the result of the operation.
-     */
     suspend fun read(file: File): CacheResult
 
-    /**
-     * Read every cached file without exploring storage.
-     *
-     * This is used to rebuild the last indexed library quickly during app startup, before any
-     * potentially slow filesystem scan is requested. Implementations may return cached metadata
-     * that is later validated by a full scan.
-     */
+    /** Read every cached file without exploring storage. */
     suspend fun snapshot(): List<CachedFile>
+
+    /** Read the last atomically committed generated-playlist projection. */
+    suspend fun readGeneratedPlaylists(): List<GeneratedPlaylistSnapshot> = emptyList()
 }
 
-/**
- * A mutable repository for cached song metadata.
- *
- * Since file opening and metadata extraction sends to be quite slow on Android, a cache allows
- * up-to-date metadata to be saved to a local database, which tends to be far faster.
- *
- * This is required by Musikr's public API for proper function.
- */
+/** A mutable repository for cached song metadata. */
 interface MutableCache : Cache {
-    /**
-     * Write a [CachedFile] to the cache.
-     *
-     * This should commit the metadata to the repository in such a way that it can be retrieved
-     * later by [read] using only the [File].
-     *
-     * @param cachedFile the [CachedFile] to write to the cache
-     */
     suspend fun write(cachedFile: CachedFile)
 
-    /**
-     * Cleanup the cache by removing all [CachedFile]s that are not in the provided [excluding]
-     * list.
-     *
-     * This is paramount for any long-term persistence to maintain correct Date added metadata and
-     * to avoid having space taken up by useless data.
-     *
-     * @param excluding a list of [CachedFile]s to exclude from cleanup, analogous to the library
-     *   created by the loader this cache is used with.
-     */
     suspend fun cleanup(excluding: List<CachedFile>)
 
+    /** Atomically replace only generated definitions and membership after a successful scan. */
+    suspend fun replaceGeneratedPlaylists(playlists: List<GeneratedPlaylistSnapshot>) {}
+
     /**
-     * Populate the implementation's normalized library model from any remaining legacy cache rows
-     * in bounded, restart-safe batches.
-     *
-     * Implementations without a normalized model may keep the default no-op. This must be safe to
-     * call repeatedly: reruns only process remaining rows and never duplicate data. The legacy
-     * cache remains untouched, so the last valid library stays available while backfill is
-     * incomplete.
-     *
-     * @return the number of entries backfilled by this invocation, or 0 when nothing remained.
+     * Populate the normalized library model from any remaining legacy cache rows in bounded,
+     * restart-safe batches.
      */
     suspend fun populateNormalizedLibrary(): Int = 0
 
-    /**
-     * Prepare at most one bounded batch of normalized rows for startup projections. Implementations
-     * must not drain a full legacy cache here; exhaustive compatibility backfill belongs in
-     * [populateNormalizedLibrary].
-     */
+    /** Prepare at most one bounded batch of normalized rows for startup projections. */
     suspend fun prepareStartupProjections(): Int = 0
 }
 
 /** A cached song entry containing the data needed by the rest of the loader. */
 data class CachedFile(
-    /** The file this song corresponds to. */
     val file: File,
     val audio: Audio?,
-    /**
-     * The time the song was added to the cache. Used for date added values. Should not be used for
-     * cleanup since it is unlikely to be monotonic.
-     */
+    /** The time the song was added to the cache. */
     val addedMs: Long,
 )
 
-/** Actual audio metadata if a [CachedFile] is an audio file */
+/** Actual audio metadata if a [CachedFile] is an audio file. */
 data class Audio(
-    /** The properties of the song. */
     val properties: Properties,
-    /** The parsed tags of the song. */
     val tags: ParsedTags,
-    /**
-     * The cover ID of the song. Should be understandable by the [org.oxycblt.musikr.covers.Covers]
-     * implementation used.
-     */
     val coverId: String?,
 )
 
 /** A result of a cache lookup. */
 sealed interface CacheResult {
-    /**
-     * A cache entry was found.
-     *
-     * @param file the [CachedFile] that was found.
-     */
     data class Hit(val file: CachedFile) : CacheResult
 
-    /**
-     * A cache entry was not found.
-     *
-     * @param file the [File] that could not be found in the cache.
-     */
     data class Miss(val file: File) : CacheResult
 
-    /**
-     * A cache entry was found, but it's out of date compared to the [file] given.
-     *
-     * @param file the [File] that was found in the cache.
-     * @param addedMs the time the song was added to the cache.
-     */
     data class Stale(val file: File, val addedMs: Long) : CacheResult
 }
