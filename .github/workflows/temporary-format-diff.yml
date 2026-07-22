@@ -1,0 +1,33 @@
+name: Temporary formatting diff
+
+on:
+  push:
+    branches:
+      - fix/playback-banner-and-visualizer-state-11316441362856201323
+
+permissions:
+  contents: read
+
+jobs:
+  format-diff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Write Android SDK location
+        run: printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+      - name: Apply formatting and capture patch
+        run: |
+          ./gradlew --no-daemon --console=plain spotlessApply
+          git diff --binary > formatted.patch
+          test -s formatted.patch || printf '# no formatting changes\n' > formatted.patch
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: temporary-formatting-diff
+          path: formatted.patch
+          if-no-files-found: error
+          retention-days: 1
