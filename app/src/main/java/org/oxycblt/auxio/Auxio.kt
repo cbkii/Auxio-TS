@@ -114,7 +114,9 @@ class Auxio : Application() {
         // Isolate each migration so a single failure doesn't block the rest.
         listOf(imageSettings, playbackSettings, uiSettings, homeSettings).forEach { settings ->
             try {
-                settings.migrate()
+                PerfTimer.trace("Settings.migrate:${settings.javaClass.simpleName}") {
+                    settings.migrate()
+                }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to migrate settings: ${settings.javaClass.simpleName}")
             }

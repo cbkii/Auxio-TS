@@ -1,0 +1,168 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 70,
+    "identityHash": "be5fc42b3c69716a78ae7e3df7dfe9b7",
+    "entities": [
+      {
+        "tableName": "CachedFileData",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`uri` TEXT NOT NULL, `modifiedMs` INTEGER NOT NULL, `addedMs` INTEGER NOT NULL, `mimeType` TEXT, `durationMs` INTEGER, `bitrateKbps` INTEGER, `sampleRateHz` INTEGER, `musicBrainzId` TEXT, `name` TEXT, `sortName` TEXT, `track` INTEGER, `disc` INTEGER, `subtitle` TEXT, `date` TEXT, `albumMusicBrainzId` TEXT, `albumName` TEXT, `albumSortName` TEXT, `releaseTypes` TEXT, `artistMusicBrainzIds` TEXT, `artistNames` TEXT, `artistSortNames` TEXT, `albumArtistMusicBrainzIds` TEXT, `albumArtistNames` TEXT, `albumArtistSortNames` TEXT, `genreNames` TEXT, `replayGainTrackAdjustment` REAL, `replayGainAlbumAdjustment` REAL, `coverId` TEXT, PRIMARY KEY(`uri`))",
+        "fields": [
+          {
+            "fieldPath": "uri",
+            "columnName": "uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedMs",
+            "columnName": "modifiedMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedMs",
+            "columnName": "addedMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "bitrateKbps",
+            "columnName": "bitrateKbps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sampleRateHz",
+            "columnName": "sampleRateHz",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "musicBrainzId",
+            "columnName": "musicBrainzId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sortName",
+            "columnName": "sortName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "track",
+            "columnName": "track",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "disc",
+            "columnName": "disc",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "subtitle",
+            "columnName": "subtitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumMusicBrainzId",
+            "columnName": "albumMusicBrainzId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumName",
+            "columnName": "albumName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumSortName",
+            "columnName": "albumSortName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseTypes",
+            "columnName": "releaseTypes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artistMusicBrainzIds",
+            "columnName": "artistMusicBrainzIds",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artistNames",
+            "columnName": "artistNames",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artistSortNames",
+            "columnName": "artistSortNames",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumArtistMusicBrainzIds",
+            "columnName": "albumArtistMusicBrainzIds",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumArtistNames",
+            "columnName": "albumArtistNames",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "albumArtistSortNames",
+            "columnName": "albumArtistSortNames",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "genreNames",
+            "columnName": "genreNames",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "replayGainTrackAdjustment",
+            "columnName": "replayGainTrackAdjustment",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "replayGainAlbumAdjustment",
+            "columnName": "replayGainAlbumAdjustment",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "coverId",
+            "columnName": "coverId",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "uri"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'be5fc42b3c69716a78ae7e3df7dfe9b7')"
+    ]
+  }
+}
