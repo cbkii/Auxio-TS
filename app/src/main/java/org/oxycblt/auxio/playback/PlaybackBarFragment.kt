@@ -37,6 +37,7 @@ import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.showToast
+import timber.log.Timber as L
 
 /**
  * A [ViewBindingFragment] that shows the current playback state in a compact manner.
@@ -49,6 +50,8 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
     private val detailModel: DetailViewModel by activityViewModels()
     @Inject lateinit var uiSettings: UISettings
 
+    private var currentBannerState: BannerState = BannerState.Idle
+
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackBarBinding.inflate(inflater)
 
@@ -59,13 +62,9 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         super.onBindingCreated(binding, savedInstanceState)
         val context = requireContext()
 
-        // --- UI SETUP ---
-
-        // Set up marquee on song information
         binding.playbackSong.isSelected = true
         binding.playbackInfo.isSelected = true
 
-        // Set up actions
         binding.playbackRepeat.setOnClickListener { playbackModel.toggleRepeatMode() }
         binding.playbackSkipPrev.setOnClickListener {
             playbackModel.prev()
@@ -102,7 +101,6 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         )
         applyDriverSideLayout(binding)
 
-        // -- VIEWMODEL SETUP ---
         collectImmediately(playbackModel.bannerState, ::updateBannerState)
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.positionDs, ::updatePosition)
@@ -111,22 +109,20 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
     }
 
     override fun onDestroyBinding(binding: FragmentPlaybackBarBinding) {
-        super.onDestroyBinding(binding)
         binding.playbackRepeat.clearPendingIcon()
-        // Marquee elements leak if they are not disabled when the views are destroyed.
         binding.playbackSong.isSelected = false
         binding.playbackInfo.isSelected = false
+        currentBannerState = BannerState.Idle
+        super.onDestroyBinding(binding)
     }
 
     private fun updateBannerState(state: BannerState) {
+        currentBannerState = state
         val context = requireContext()
         val binding = requireBinding()
 
-        val isPlayable = state is BannerState.Rich || state is BannerState.Raw
         binding.root.setOnClickListener {
-            if (isPlayable) {
-                playbackModel.openPlayback()
-            }
+            if (state.playable) playbackModel.openPlayback()
         }
         binding.root.setOnLongClickListener {
             if (state is BannerState.Rich) {
@@ -137,12 +133,11 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
             }
         }
 
-        // Enable or disable playback controls based on playability
-        binding.playbackPlayPause.isEnabled = isPlayable
-        binding.playbackSkipNext.isEnabled = isPlayable
-        binding.playbackSkipPrev.isEnabled = isPlayable
-        binding.playbackRepeat.isEnabled = isPlayable
-        binding.playbackShuffle.isEnabled = isPlayable
+        binding.playbackPlayPause.isEnabled = state.playable
+        binding.playbackSkipNext.isEnabled = state.richQueueCommandsAvailable
+        binding.playbackSkipPrev.isEnabled = state.richQueueCommandsAvailable
+        binding.playbackRepeat.isEnabled = state.richQueueCommandsAvailable
+        binding.playbackShuffle.isEnabled = state.richQueueCommandsAvailable
 
         when (state) {
             is BannerState.Rich -> {
@@ -152,48 +147,49 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
                 binding.playbackProgressBar.max = state.song.durationMs.msToDs().toInt()
             }
             is BannerState.Raw -> {
-                binding.playbackCover.clear() // Neutral artwork
+                binding.playbackCover.clear()
                 binding.playbackSong.text = state.metadata.displayTitle
                 binding.playbackInfo.text = state.metadata.displayArtist
                 binding.playbackProgressBar.max = state.metadata.durationMs.msToDs().toInt()
             }
-            is BannerState.Restoring -> {
-                binding.playbackCover.clear()
-                binding.playbackSong.text =
-                    context.getString(R.string.lbl_playback) // or custom "Restoring..."
-                binding.playbackInfo.text = ""
-                binding.playbackProgressBar.progress = 0
-                binding.playbackProgressBar.max = 1
+            BannerState.Restoring -> {
+                clearMediaState(binding)
+                binding.playbackSong.setText(R.string.lbl_playback_restoring)
             }
-            is BannerState.Idle -> {
-                binding.playbackCover.clear()
-                binding.playbackSong.text = context.getString(R.string.def_playback)
-                binding.playbackInfo.text = ""
-                binding.playbackProgressBar.progress = 0
-                binding.playbackProgressBar.max = 1
+            BannerState.Idle -> {
+                clearMediaState(binding)
+                binding.playbackSong.setText(R.string.lbl_playback_idle)
             }
             is BannerState.Unavailable -> {
-                binding.playbackCover.clear()
-                binding.playbackSong.text = state.reason
-                binding.playbackInfo.text =
-                    context.getString(R.string.set_root_fs_status_unavailable)
-                binding.playbackProgressBar.progress = 0
-                binding.playbackProgressBar.max = 1
+                L.w("Playback banner unavailable: ${state.reason}")
+                clearMediaState(binding)
+                binding.playbackSong.setText(R.string.lbl_playback_unavailable)
+                binding.playbackInfo.setText(R.string.msg_playback_restore_failed)
             }
         }
+        updatePlaying(playbackModel.isPlaying.value)
+        updatePosition(playbackModel.positionDs.value)
+    }
+
+    private fun clearMediaState(binding: FragmentPlaybackBarBinding) {
+        binding.playbackCover.clear()
+        binding.playbackInfo.text = ""
+        binding.playbackProgressBar.progress = 0
+        binding.playbackProgressBar.max = 1
     }
 
     private fun updatePlaying(isPlaying: Boolean) {
-        requireBinding().playbackPlayPause.isChecked = isPlaying
+        requireBinding().playbackPlayPause.isChecked = isPlaying && currentBannerState.playable
     }
 
     private fun updatePosition(positionDs: Long) {
-        requireBinding().playbackProgressBar.progress = positionDs.toInt()
+        requireBinding().playbackProgressBar.progress =
+            if (currentBannerState.playable) positionDs.toInt() else 0
     }
 
     private fun updateRepeat(repeatMode: RepeatMode) {
         requireBinding().playbackRepeat.apply {
-            isChecked = repeatMode != RepeatMode.NONE
+            isChecked = currentBannerState.richQueueCommandsAvailable && repeatMode != RepeatMode.NONE
             setIconResource(repeatMode.icon)
         }
     }
@@ -207,12 +203,12 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
                     contentDescription = context.getString(R.string.desc_shuffle_off)
                 }
                 ShuffleScope.ALL -> {
-                    isChecked = true
+                    isChecked = currentBannerState.richQueueCommandsAvailable
                     setIconResource(R.drawable.sel_shuffle_state_24)
                     contentDescription = context.getString(R.string.desc_shuffle_all_songs)
                 }
                 ShuffleScope.GENRE -> {
-                    isChecked = true
+                    isChecked = currentBannerState.richQueueCommandsAvailable
                     setIconResource(R.drawable.ic_shuffle_genre_state_24)
                     contentDescription = context.getString(R.string.desc_shuffle_current_genre)
                 }
@@ -221,48 +217,36 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
     }
 
     private fun applyDriverSideLayout(binding: FragmentPlaybackBarBinding) {
-        if (uiSettings.driverSide != UISettings.DriverSide.LEFT) {
-            return
-        }
-        val root = binding.root
+        if (uiSettings.driverSide != UISettings.DriverSide.LEFT) return
         ConstraintSet().apply {
-            clone(root)
+            clone(binding.root)
             clear(R.id.playback_cover, ConstraintSet.START)
+            clear(R.id.playback_cover, ConstraintSet.END)
             connect(
                 R.id.playback_cover,
                 ConstraintSet.END,
                 ConstraintSet.PARENT_ID,
                 ConstraintSet.END,
             )
-
-            clear(R.id.playback_controls_wrapper, ConstraintSet.END)
-            connect(
-                R.id.playback_controls_wrapper,
-                ConstraintSet.START,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.START,
-            )
-
             clear(R.id.playback_song, ConstraintSet.START)
             clear(R.id.playback_song, ConstraintSet.END)
             connect(
                 R.id.playback_song,
                 ConstraintSet.START,
-                R.id.playback_controls_wrapper,
-                ConstraintSet.END,
+                ConstraintSet.PARENT_ID,
+                ConstraintSet.START,
             )
             connect(R.id.playback_song, ConstraintSet.END, R.id.playback_cover, ConstraintSet.START)
-
             clear(R.id.playback_info, ConstraintSet.START)
             clear(R.id.playback_info, ConstraintSet.END)
             connect(
                 R.id.playback_info,
                 ConstraintSet.START,
-                R.id.playback_controls_wrapper,
-                ConstraintSet.END,
+                ConstraintSet.PARENT_ID,
+                ConstraintSet.START,
             )
             connect(R.id.playback_info, ConstraintSet.END, R.id.playback_cover, ConstraintSet.START)
-            applyTo(root)
+            applyTo(binding.root)
         }
     }
 }
