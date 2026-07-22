@@ -143,12 +143,13 @@ object TopwaySourcePolicy {
             .toList()
     }
 
+    /** Entry point used by the explicit source picker. Configured-only callers must pass false. */
     fun discoverMusicSourceCandidates(
         savedPaths: Collection<String> = emptyList(),
         mediaStoreParents: Collection<String> = emptyList(),
         storageRoots: Collection<String> = emptyList(),
         rootGate: RootGate? = null,
-        allowUnconfiguredUsb: Boolean = false,
+        allowUnconfiguredUsb: Boolean = true,
     ): List<String> =
         discoverMusicSourceCandidatesWithEvidence(
                 savedPaths,
@@ -162,7 +163,7 @@ object TopwaySourcePolicy {
     /**
      * Performs one bounded candidate-discovery operation.
      *
-     * Unconfigured removable roots are never walked unless the caller explicitly opts in. Saved
+     * Unconfigured removable roots are never walked when [allowUnconfiguredUsb] is false. Saved
      * paths are normalised once and used as a set so `/mnt/media_rw/usbdiskN` and the app-facing
      * `/storage/usbdiskN` form cannot drift into different priority decisions.
      */
@@ -171,7 +172,7 @@ object TopwaySourcePolicy {
         mediaStoreParents: Collection<String> = emptyList(),
         storageRoots: Collection<String> = emptyList(),
         rootGate: RootGate? = null,
-        allowUnconfiguredUsb: Boolean = false,
+        allowUnconfiguredUsb: Boolean = true,
     ): DiscoveryResult {
         val startedAt = System.currentTimeMillis()
         val saved =
