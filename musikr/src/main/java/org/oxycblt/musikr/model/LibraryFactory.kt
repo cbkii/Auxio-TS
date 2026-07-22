@@ -170,7 +170,7 @@ private class LibraryFactoryImpl : LibraryFactory {
     }
 
     /** Defensive no-op handle; every public mutation path also rejects GENERATED origin. */
-    private class GeneratedPlaylistHandle(override val uid: Music.UID) : PlaylistHandle {
+    private data class GeneratedPlaylistHandle(override val uid: Music.UID) : PlaylistHandle {
         override suspend fun rename(name: String) = Unit
 
         override suspend fun add(songs: List<Song>) = Unit
@@ -180,7 +180,7 @@ private class LibraryFactoryImpl : LibraryFactory {
         override suspend fun delete() = Unit
     }
 
-    private class GeneratedPrePlaylistInfo(
+    private data class GeneratedPrePlaylistInfo(
         override val name: Name.Known,
         override val rawName: String,
         override val handle: PlaylistHandle,
