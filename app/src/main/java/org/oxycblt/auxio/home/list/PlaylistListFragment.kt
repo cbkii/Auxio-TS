@@ -23,6 +23,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.GridLayoutManager
+import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
@@ -52,6 +53,7 @@ import org.oxycblt.musikr.Song
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
+@AndroidEntryPoint
 class PlaylistListFragment :
     ListFragment<Playlist, FragmentHomeListBinding>(),
     FastScrollRecyclerView.PopupProvider,
@@ -129,6 +131,8 @@ class PlaylistListFragment :
     }
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
+        homeSettingsListener?.let { homeSettings.unregisterListener(it) }
+        homeSettingsListener = null
         listSettingsListener?.let { listSettings.unregisterListener(it) }
         listSettingsListener = null
         super.onDestroyBinding(binding)
@@ -141,23 +145,15 @@ class PlaylistListFragment :
 
     override fun getPopupData(pos: Int): FastScrollRecyclerView.PopupProvider.PopupData? {
         val playlist = homeModel.playlistList.value.getOrNull(pos) ?: return null
-        // Change how we display the popup depending on the current sort mode.
         return when (homeModel.playlistSort.mode) {
-            // By Name -> Use Name
             is Sort.Mode.ByName ->
                 FastScrollRecyclerView.PopupProvider.PopupData(playlist.name.thumb() ?: "?")
-
-            // Duration -> Use compact bucket duration
             is Sort.Mode.ByDuration ->
                 FastScrollRecyclerView.PopupProvider.PopupData(
                     playlist.durationMs.formatDurationMsPopup()
                 )
-
-            // Count -> Use song count
             is Sort.Mode.ByCount ->
                 FastScrollRecyclerView.PopupProvider.PopupData(playlist.songs.size.toString())
-
-            // Unsupported sort, error gracefully
             else -> null
         }
     }
@@ -212,17 +208,10 @@ class PlaylistListFragment :
     }
 
     private fun updatePlayback(song: Song?, parent: MusicParent?, isPlaying: Boolean) {
-        // Only highlight the playlist if it is currently playing, and if the currently
-        // playing song is also contained within.
         val playlist = (parent as? Playlist)?.takeIf { it.songs.contains(song) }
         playlistAdapter.setPlaying(playlist, isPlaying)
     }
 
-    /**
-     * A [SelectionIndicatorAdapter] that shows a list of [Playlist]s using [PlaylistViewHolder].
-     *
-     * @param listener An [SelectableListListener] to bind interactions to.
-     */
     private class PlaylistAdapter(private val listener: SelectableListListener<Playlist>) :
         SelectionIndicatorAdapter<Playlist, PlaylistViewHolder>(PlaylistViewHolder.DIFF_CALLBACK) {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
