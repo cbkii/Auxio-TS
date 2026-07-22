@@ -151,7 +151,7 @@ object RawFastResumeValidator {
         val normalized = path.trim()
         val isAllowed =
             if (policy != null) {
-                policy.isConfiguredPath(normalized) ||
+                isConfiguredPath(normalized, policy) ||
                     isAllowedBenchmarkFixturePath(context, normalized)
             } else {
                 isAllowedDirectPath(normalized) ||
@@ -180,6 +180,12 @@ object RawFastResumeValidator {
     fun isAllowedDirectPath(path: String): Boolean {
         if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
         return allowedDirectRoots.any { path == it.removeSuffix("/") || path.startsWith(it) }
+    }
+
+    private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean {
+        if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
+        val roots = policy.getConfiguredRootsAsFiles().keys
+        return roots.any { root -> path == root.removeSuffix("/") || path.startsWith(root) }
     }
 
     fun hasAudioExtension(path: String): Boolean {

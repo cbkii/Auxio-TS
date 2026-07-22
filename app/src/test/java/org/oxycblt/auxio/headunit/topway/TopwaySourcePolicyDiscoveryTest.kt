@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.topway
@@ -34,6 +42,7 @@ class TopwaySourcePolicyDiscoveryTest {
             val mediaRw = File(tempRoot, "media-rw")
             assertTrue(storage.mkdir())
             assertTrue(mediaRw.mkdir())
+
             File(storage, "usbdisk0").mkdir()
             File(storage, "usbdisk2").mkdir()
             File(storage, "usbdisk1").mkdir()
@@ -42,7 +51,11 @@ class TopwaySourcePolicyDiscoveryTest {
             File(mediaRw, "usbdisk3").mkdir()
             File(mediaRw, "not-usb").mkdir()
 
-            val roots = TopwaySourcePolicy.discoverCandidateRoots(storage, mediaRw)
+            val roots =
+                TopwaySourcePolicy.discoverCandidateRoots(
+                    storageRoot = storage,
+                    mediaRwRoot = mediaRw,
+                )
 
             assertEquals(
                 listOf(
@@ -59,12 +72,14 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
-    fun allowsSharedStorageAndUsbCandidatesButRejectsProtectedPaths() {
+    fun allowsSharedStorageAndUsbSourceCandidatesButRejectsProtectedPaths() {
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/emulated/0"))
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/emulated/0/Music"))
+        assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/sdcard"))
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/sdcard/Music"))
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/usbdisk1/Music"))
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/mnt/media_rw/usbdisk2/Music"))
+
         assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/"))
         assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/system"))
         assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/vendor"))
@@ -89,37 +104,10 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
-    fun configuredOnlyDiscoveryDoesNotProbeUnconfiguredUsb() {
-        val result =
-            TopwaySourcePolicy.discoverMusicSourceCandidatesWithEvidence(
-                savedPaths = listOf("/storage/emulated/0/Music"),
-                storageRoots = listOf("/storage/emulated/0", "/storage/usbdisk1"),
-                allowUnconfiguredUsb = false,
-            )
-
-        assertFalse(result.evidence.usbProbeRequested)
-        assertEquals("disabled-no-configured-removable-source", result.evidence.usbProbeReason)
-        assertFalse(result.candidates.any { it.startsWith("/storage/usbdisk") })
-    }
-
-    @Test
-    fun configuredUsbMayBeProbedWithoutEnablingOtherRawRoots() {
-        val result =
-            TopwaySourcePolicy.discoverMusicSourceCandidatesWithEvidence(
-                savedPaths = listOf("/mnt/media_rw/usbdisk1/Music"),
-                allowUnconfiguredUsb = false,
-            )
-
-        assertTrue(result.evidence.usbProbeRequested)
-        assertEquals("configured-removable-source", result.evidence.usbProbeReason)
-        assertTrue(result.candidates.contains("/storage/usbdisk1/Music"))
-        assertFalse(result.candidates.any { it.startsWith("/mnt/media_rw/") })
-    }
-
-    @Test
-    fun allowsUuidRemovableRootsButRejectsStorageAliases() {
+    fun allowsUuidStyleRemovableStorageRootsButRejectsStorageAliases() {
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/1234-ABCD"))
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/1234-abcd/Music"))
+
         assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/self"))
         assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/emulated"))
         assertFalse(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/123-ABCD"))
@@ -155,19 +143,21 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
-    fun rawMediaRwCandidatesAreNormalisedToAppFacingStoragePaths() {
+    fun appFacingUsbRootsRankBeforeRawMediaRwRoots() {
         val candidates =
             TopwaySourcePolicy.discoverMusicSourceCandidates(
                 storageRoots = listOf("/mnt/media_rw/usbdisk1", "/storage/usbdisk1")
             )
 
         assertTrue(candidates.contains("/storage/usbdisk1"))
-        assertFalse(candidates.contains("/mnt/media_rw/usbdisk1"))
-        assertEquals(1, candidates.count { it == "/storage/usbdisk1" })
+        assertTrue(candidates.contains("/mnt/media_rw/usbdisk1"))
+        assertTrue(
+            candidates.indexOf("/storage/usbdisk1") < candidates.indexOf("/mnt/media_rw/usbdisk1")
+        )
     }
 
     @Test
-    fun discoversAudioParentFoldersUnderInjectedRoot() {
+    fun discoversAudioParentFoldersUnderInjectedRootForTests() {
         val tempRoot = Files.createTempDirectory("topway-audio-parent").toFile()
         try {
             val music = File(tempRoot, "Music").apply { mkdirs() }

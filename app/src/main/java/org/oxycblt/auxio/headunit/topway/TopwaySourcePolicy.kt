@@ -24,7 +24,7 @@ import java.util.ArrayDeque
 import org.oxycblt.musikr.fs.RootGate
 import timber.log.Timber as L
 
-/** Policy for identifying and prioritising TS18 music-source candidates. */
+/** Policy for identifying and prioritizing TS18-specific candidate music source roots. */
 object TopwaySourcePolicy {
     const val USB_DISK_0 = "/storage/usbdisk0"
     const val EMULATED_ROOT = "/storage/emulated/0"
@@ -71,18 +71,6 @@ object TopwaySourcePolicy {
 
     internal data class FileEntry(val file: File, val isDirectory: Boolean, val isFile: Boolean)
 
-    /** Bounded evidence for one explicit source-discovery operation. */
-    data class DiscoveryEvidence(
-        val configuredSourceCount: Int,
-        val rootsWalked: Int,
-        val visitedEntries: Int,
-        val elapsedMs: Long,
-        val usbProbeRequested: Boolean,
-        val usbProbeReason: String,
-    )
-
-    data class DiscoveryResult(val candidates: List<String>, val evidence: DiscoveryEvidence)
-
     fun matchesSystemSourceFilter(fullPath: String): Boolean {
         val lower = fullPath.lowercase()
         return SYSTEM_SOURCE_PATH_KEYWORDS.any { lower.contains(it) }
@@ -119,7 +107,7 @@ object TopwaySourcePolicy {
         discoverChildren(mediaRwRoot, removableOnly = true).filterTo(out) {
             isAccessibleCandidate(it)
         }
-        return preferAppFacingRoots(out)
+        return preferAppFacingRoots(out).toList()
     }
 
     private fun discoverChildren(root: File, removableOnly: Boolean): List<String> {
@@ -143,83 +131,40 @@ object TopwaySourcePolicy {
             .toList()
     }
 
-    /** Entry point used by the explicit source picker. */
     fun discoverMusicSourceCandidates(
         savedPaths: Collection<String> = emptyList(),
         mediaStoreParents: Collection<String> = emptyList(),
         storageRoots: Collection<String> = emptyList(),
         rootGate: RootGate? = null,
-        allowUnconfiguredUsb: Boolean = true,
-    ): List<String> =
-        discoverMusicSourceCandidatesWithEvidence(
-                savedPaths,
-                mediaStoreParents,
-                storageRoots,
-                rootGate,
-                allowUnconfiguredUsb,
-            )
-            .candidates
-
-    /**
-     * Performs one bounded candidate-discovery operation.
-     *
-     * Unconfigured removable roots are never walked when [allowUnconfiguredUsb] is false. Saved
-     * paths are normalised once so raw `/mnt/media_rw` and app-facing `/storage` forms cannot drift
-     * into different priority decisions.
-     */
-    fun discoverMusicSourceCandidatesWithEvidence(
-        savedPaths: Collection<String> = emptyList(),
-        mediaStoreParents: Collection<String> = emptyList(),
-        storageRoots: Collection<String> = emptyList(),
-        rootGate: RootGate? = null,
-        allowUnconfiguredUsb: Boolean = true,
-    ): DiscoveryResult {
-        val startedAt = System.currentTimeMillis()
+        allowUnconfiguredUsb: Boolean = false,
+    ): List<String> {
         val saved =
             savedPaths.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
-        val savedSet = saved.toSet()
         val media =
             mediaStoreParents
                 .mapNotNull(::normaliseCandidatePath)
                 .filter(::isAllowedSourceCandidate)
-        val configuredUsb = saved.any(::isUsbCandidate)
-        val shouldProbeUsb = allowUnconfiguredUsb || configuredUsb
-        val usbProbeReason =
-            when {
-                allowUnconfiguredUsb -> "explicit-user-source-discovery"
-                configuredUsb -> "configured-removable-source"
-                else -> "disabled-no-configured-removable-source"
-            }
-
         val candidates = mutableListOf<String>()
         candidates.addAll(SAFE_GENERIC_FALLBACKS)
-        candidates.addAll(
-            storageRoots
-                .mapNotNull(::normaliseCandidatePath)
-                .filter(::isAllowedSourceCandidate)
-                .filter { !isUsbCandidate(it) || allowUnconfiguredUsb || it in savedSet }
-        )
-        val discoveredRoots = if (shouldProbeUsb) discoverCandidateRoots() else emptyList()
-        candidates.addAll(
-            discoveredRoots.filter {
-                !isUsbCandidate(it) || allowUnconfiguredUsb || it in savedSet
-            }
-        )
-
+        candidates.addAll(storageRoots)
+        val discoveredRoots = discoverCandidateRoots()
+        if (allowUnconfiguredUsb) {
+            candidates.addAll(discoveredRoots)
+        } else {
+            // Only add discovered USB roots if they are already in the savedPaths
+            candidates.addAll(discoveredRoots.filter { it in savedPaths })
+        }
         val roots = preferAppFacingRoots(candidates).filter(::isAllowedSourceCandidate)
         val audioParents = linkedSetOf<String>()
-        val deadline = startedAt + MAX_SCAN_ELAPSED_MS
-        var visitedEntries = 0
-        var rootsWalked = 0
+        val deadline = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS
         for (root in roots) {
-            if (audioParents.size >= MAX_CANDIDATES || System.currentTimeMillis() > deadline) break
-            rootsWalked++
-            visitedEntries +=
-                discoverAudioParents(File(root), audioParents, rootGate, deadline = deadline)
+            if (audioParents.size >= MAX_CANDIDATES) break
+            if (System.currentTimeMillis() > deadline) break
+            discoverAudioParents(File(root), audioParents, rootGate, deadline = deadline)
         }
         val musicFolders =
             roots.mapNotNull {
-                musicChildIfAccessible(it) ?: it.takeIf { path -> path.endsWith("/Music", true) }
+                musicChildIfAccessible(it) ?: it.takeIf { p -> p.endsWith("/Music", true) }
             }
         val usb = roots.filter(::isUsbCandidate)
         val generic = roots.filterNot(::isUsbCandidate)
@@ -227,23 +172,8 @@ object TopwaySourcePolicy {
         listOf(saved, media, audioParents.toList(), musicFolders, usb, generic).forEach { group ->
             group.filterTo(ordered, ::isAllowedSourceCandidate)
         }
-        val result = ordered.take(MAX_CANDIDATES)
-        val evidence =
-            DiscoveryEvidence(
-                configuredSourceCount = saved.size,
-                rootsWalked = rootsWalked,
-                visitedEntries = visitedEntries,
-                elapsedMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0L),
-                usbProbeRequested = shouldProbeUsb,
-                usbProbeReason = usbProbeReason,
-            )
-        L.i(
-            "TS18 source discovery candidates=${result.size} configured=${evidence.configuredSourceCount} " +
-                "roots=${evidence.rootsWalked} visited=${evidence.visitedEntries} " +
-                "elapsedMs=${evidence.elapsedMs} usbProbe=${evidence.usbProbeRequested} " +
-                "reason=${evidence.usbProbeReason}"
-        )
-        return DiscoveryResult(result, evidence)
+        L.i("Discovered ${ordered.size} TS18 music source candidates")
+        return ordered.take(MAX_CANDIDATES)
     }
 
     internal fun discoverAudioParents(
@@ -252,14 +182,14 @@ object TopwaySourcePolicy {
         rootGate: RootGate? = null,
         enforceSafeRoot: Boolean = true,
         deadline: Long = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS,
-    ): Int {
-        if (enforceSafeRoot && !isAllowedSourceCandidate(root.absolutePath)) return 0
+    ) {
+        if (enforceSafeRoot && !isAllowedSourceCandidate(root.absolutePath)) return
         var visited = 0
         val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(root to 0)
         while (queue.isNotEmpty()) {
-            if (out.size >= MAX_CANDIDATES || visited >= MAX_VISITED_FILES) return visited
-            if (System.currentTimeMillis() > deadline) return visited
+            if (out.size >= MAX_CANDIDATES || visited >= MAX_VISITED_FILES) return
+            if (System.currentTimeMillis() > deadline) return
             val (dir, depth) = queue.removeFirst()
             val children = listFilesSafe(dir, rootGate) ?: continue
             var containsAudio = false
@@ -279,7 +209,6 @@ object TopwaySourcePolicy {
                 out.add(dir.absolutePath)
             }
         }
-        return visited
     }
 
     private fun listFilesSafe(dir: File, rootGate: RootGate?): List<FileEntry>? {
@@ -309,7 +238,7 @@ object TopwaySourcePolicy {
             "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
             "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
             "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
-            "printf '%s\\t%s\\t%s\\t%s\\t%s\\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
+            "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
             "done"
     }
 
@@ -335,9 +264,8 @@ object TopwaySourcePolicy {
         if (
             path.contains("/Android/", ignoreCase = true) ||
                 path.endsWith("/Android", ignoreCase = true)
-        ) {
+        )
             return false
-        }
         return !enforceSafeRoot || isAllowedSourceCandidate(path)
     }
 
@@ -347,19 +275,12 @@ object TopwaySourcePolicy {
     private fun musicChildIfAccessible(root: String): String? =
         File(root, "Music").absolutePath.takeIf { isAccessibleCandidate(it) }
 
-    internal fun normaliseCandidatePath(value: String): String? {
+    private fun normaliseCandidatePath(value: String): String? {
         val trimmed = value.trim()
         if (trimmed.isEmpty()) return null
-        val path =
-            when {
-                trimmed.startsWith("file://") -> runCatching { URI(trimmed).path }.getOrNull()
-                else -> trimmed
-            } ?: return null
-        val clean = path.replace('\\', '/').trimEnd('/')
-        return if (MEDIA_RW_USB_SOURCE_REGEX.matches(clean)) {
-            clean.replace("/mnt/media_rw/usbdisk", "/storage/usbdisk")
-        } else {
-            clean
+        return when {
+            trimmed.startsWith("file://") -> runCatching { URI(trimmed).path }.getOrNull()
+            else -> trimmed
         }
     }
 
@@ -374,9 +295,8 @@ object TopwaySourcePolicy {
         ) {
             return false
         }
-        if (BLOCKED_SOURCE_PREFIXES.any { clean == it || (it != "/" && clean.startsWith("$it/")) }) {
+        if (BLOCKED_SOURCE_PREFIXES.any { clean == it || (it != "/" && clean.startsWith("$it/")) })
             return false
-        }
         val syntacticallyAllowed =
             clean == SDCARD_ROOT ||
                 clean.startsWith("$SDCARD_ROOT/") ||
@@ -400,23 +320,34 @@ object TopwaySourcePolicy {
         return true
     }
 
-    internal fun isUsbCandidate(path: String): Boolean =
+    private fun isUsbCandidate(path: String): Boolean =
         USB_DISK_SOURCE_REGEX.matches(path) ||
             MEDIA_RW_USB_SOURCE_REGEX.matches(path) ||
             STORAGE_UUID_SOURCE_REGEX.matches(path)
 
     private fun preferAppFacingRoots(paths: Collection<String>): List<String> {
         val candidates = linkedSetOf<String>()
+        val raw = mutableListOf<String>()
         for (path in paths) {
-            normaliseCandidatePath(path)?.let(candidates::add)
+            val clean = path.replace('\\', '/').trimEnd('/')
+            if (MEDIA_RW_USB_SOURCE_REGEX.matches(clean)) {
+                val appFacing = clean.replace("/mnt/media_rw/usbdisk", "/storage/usbdisk")
+                if (isAllowedSourceCandidate(appFacing) && isAccessibleCandidate(appFacing)) {
+                    candidates.add(appFacing)
+                }
+                raw.add(clean)
+            } else {
+                candidates.add(clean)
+            }
         }
+        raw.forEach(candidates::add)
         return candidates.toList()
     }
 
     fun findFirstAccessibleCandidate(): String? = discoverCandidateRoots().firstOrNull()
 }
 
-/** Discovers removable USB storage volumes for explicit source selection only. */
+/** Discovers removable USB storage volumes on TS18 devices. */
 fun discoverUsbStorage(): List<String> {
     val storageRoot = File("/storage")
     if (!storageRoot.exists() || !storageRoot.isDirectory) return emptyList()
