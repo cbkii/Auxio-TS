@@ -47,7 +47,14 @@ internal object PrimitiveQueueAuthority {
     ): List<QueueDisplayItem> {
         require(maximumItems > 0) { "maximumItems must be positive" }
         val merged = current.associateByTo(linkedMapOf()) { it.globalPosition }
-        incoming.forEach { merged[it.globalPosition] = it }
+        incoming.forEach { candidate ->
+            val existing = merged[candidate.globalPosition]
+            // A range read may contain an unresolved row while richer state is already visible.
+            // Never downgrade a playable rich/primitive item to a non-targetable placeholder.
+            if (candidate.editable || existing == null || !existing.editable) {
+                merged[candidate.globalPosition] = candidate
+            }
+        }
         val sorted = merged.values.sortedBy { it.globalPosition }
         if (sorted.size <= maximumItems) return sorted
 
