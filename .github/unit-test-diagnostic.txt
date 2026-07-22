@@ -1,0 +1,802 @@
+Exit status: 1
+
+[ 83%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlelement.cpp.o
+[ 83%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmasterelement.cpp.o
+[ 84%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkattachments.cpp.o
+[ 85%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkchapters.cpp.o
+[ 86%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkcues.cpp.o
+[ 87%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkseekhead.cpp.o
+[ 88%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmksegment.cpp.o
+[ 88%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkinfo.cpp.o
+[ 89%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmktracks.cpp.o
+[ 90%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmktags.cpp.o
+[ 91%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlstringelement.cpp.o
+[ 92%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmluintelement.cpp.o
+[ 93%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlfloatelement.cpp.o
+[ 94%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlutils.cpp.o
+[ 94%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlvoidelement.cpp.o
+[ 95%] Building CXX object taglib/CMakeFiles/tag.dir/tag.cpp.o
+[ 96%] Building CXX object taglib/CMakeFiles/tag.dir/tagunion.cpp.o
+[ 97%] Building CXX object taglib/CMakeFiles/tag.dir/fileref.cpp.o
+[ 98%] Building CXX object taglib/CMakeFiles/tag.dir/audioproperties.cpp.o
+[INFO] Gradle still running: 4m 00s elapsed; no output for 0s
+[ 99%] Building CXX object taglib/CMakeFiles/tag.dir/tagutils.cpp.o
+[100%] Linking CXX static library libtag.a
+[100%] Built target tag
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/bin/taglib-config
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/pkgconfig/taglib.pc
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppTargets.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppConfig.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppConfigVersion.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/core.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/unchecked.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/checked.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp17.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp20.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp11.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/libtag.a
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/fileref.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/audioproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib_export.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib_config.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tstring.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tlist.tcc
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tstringlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevector.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevectorlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tvariant.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevectorstream.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tiostream.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tfilestream.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tmap.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tmap.tcc
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tpicturetype.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tpropertymap.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tdebuglistener.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tversionnumber.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/xingheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v1tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v1genres.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2extendedheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2frame.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2header.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2synchdata.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2footer.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2framefactory.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/attachedpictureframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/commentsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/eventtimingcodesframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/generalencapsulatedobjectframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/ownershipframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/popularimeterframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/privateframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/relativevolumeframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/synchronizedlyricsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/textidentificationframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/uniquefileidentifierframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/unknownframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/unsynchronizedlyricsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/urllinkframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/chapterframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tableofcontentsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/podcastframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggpage.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggpageheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/xiphcomment.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/vorbisfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/vorbisproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggflacfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/speexfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/speexproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/opusfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/opusproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacpicture.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacmetadatablock.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/rifffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/aifffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/aiffproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/wavfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/wavproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/infotag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4file.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4atom.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4item.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4properties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4coverart.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4stem.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4itemfactory.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4chapter.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4chapterholder.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4nerochapterlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4qtchapterlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsfproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdifffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdiffproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdiffdiintag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaattachedfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaattachments.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapter.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapteredition.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapters.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaelement.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskafile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskasimpletag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskatag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskawritestyle.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-targets.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-targets-release.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-config.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-config-version.cmake
+
+> Task :musikr:preBuild UP-TO-DATE
+> Task :musikr:preDebugBuild
+> Task :musikr:generateDebugResources FROM-CACHE
+> Task :musikr:packageDebugResources FROM-CACHE
+> Task :app:mergeStandardDebugResources FROM-CACHE
+> Task :app:packageStandardDebugResources FROM-CACHE
+> Task :media-lib-common:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-container:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-database:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-datasource:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-decoder:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-exoplayer:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-extractor:processDebugNavigationResources FROM-CACHE
+> Task :musikr:processDebugNavigationResources FROM-CACHE
+> Task :app:processStandardDebugNavigationResources FROM-CACHE
+> Task :app:parseStandardDebugLocalResources FROM-CACHE
+> Task :media-lib-common:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-common:generateDebugRFile FROM-CACHE
+> Task :media-lib-container:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-container:generateDebugRFile FROM-CACHE
+> Task :media-lib-database:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-database:generateDebugRFile FROM-CACHE
+> Task :media-lib-datasource:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-datasource:generateDebugRFile FROM-CACHE
+> Task :media-lib-decoder:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-decoder:generateDebugRFile FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:generateDebugRFile FROM-CACHE
+> Task :media-lib-exoplayer:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-exoplayer:generateDebugRFile FROM-CACHE
+> Task :media-lib-extractor:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-extractor:generateDebugRFile FROM-CACHE
+> Task :musikr:parseDebugLocalResources FROM-CACHE
+> Task :musikr:generateDebugRFile FROM-CACHE
+> Task :app:dataBindingGenBaseClassesStandardDebug FROM-CACHE
+> Task :app:generateSafeArgsStandardDebug FROM-CACHE
+> Task :app:generateStandardDebugBuildConfig FROM-CACHE
+> Task :app:generateStandardDebugRFile FROM-CACHE
+> Task :media-lib-common:compileDebugKotlin NO-SOURCE
+> Task :media-lib-common:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-common:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-container:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-database:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-datasource:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-decoder:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-extractor:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-exoplayer:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:javaPreCompileDebug FROM-CACHE
+> Task :musikr:generateDebugBuildConfig FROM-CACHE
+> Task :media-lib-common:bundleLibCompileToJarDebug
+> Task :musikr:kspDebugKotlin FROM-CACHE
+> Task :media-lib-container:compileDebugKotlin NO-SOURCE
+> Task :media-lib-container:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-container:bundleLibCompileToJarDebug
+> Task :media-lib-database:compileDebugKotlin NO-SOURCE
+> Task :media-lib-database:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-database:bundleLibCompileToJarDebug
+> Task :media-lib-decoder:compileDebugKotlin NO-SOURCE
+> Task :media-lib-datasource:compileDebugKotlin NO-SOURCE
+> Task :media-lib-datasource:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-datasource:bundleLibCompileToJarDebug
+> Task :media-lib-decoder:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-decoder:bundleLibCompileToJarDebug
+> Task :musikr:compileDebugKotlin FROM-CACHE
+> Task :media-lib-extractor:compileDebugKotlin NO-SOURCE
+> Task :media-lib-extractor:compileDebugJavaWithJavac FROM-CACHE
+> Task :musikr:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-extractor:bundleLibCompileToJarDebug
+> Task :musikr:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-exoplayer:compileDebugKotlin NO-SOURCE
+> Task :media-lib-exoplayer:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-exoplayer:bundleLibCompileToJarDebug
+> Task :musikr:bundleLibCompileToJarDebug
+> Task :media-lib-decoder-ffmpeg:compileDebugKotlin NO-SOURCE
+> Task :media-lib-decoder-ffmpeg:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:bundleLibCompileToJarDebug
+> Task :app:javaPreCompileStandardDebug FROM-CACHE
+> Task :musikr:bundleLibRuntimeToJarDebug
+> Task :media-lib-decoder-ffmpeg:bundleLibRuntimeToJarDebug
+> Task :media-lib-extractor:bundleLibRuntimeToJarDebug
+> Task :media-lib-container:bundleLibRuntimeToJarDebug
+> Task :media-lib-datasource:bundleLibRuntimeToJarDebug
+> Task :media-lib-decoder:bundleLibRuntimeToJarDebug
+> Task :media-lib-database:bundleLibRuntimeToJarDebug
+> Task :media-lib-common:bundleLibRuntimeToJarDebug
+> Task :media-lib-exoplayer:bundleLibRuntimeToJarDebug
+> Task :media-lib-common:writeDebugAarMetadata
+> Task :media-lib-container:writeDebugAarMetadata
+> Task :media-lib-database:writeDebugAarMetadata
+> Task :media-lib-datasource:writeDebugAarMetadata
+> Task :media-lib-decoder:writeDebugAarMetadata
+> Task :media-lib-decoder-ffmpeg:writeDebugAarMetadata
+> Task :media-lib-exoplayer:writeDebugAarMetadata
+> Task :media-lib-extractor:writeDebugAarMetadata
+> Task :musikr:writeDebugAarMetadata
+> Task :app:checkStandardDebugAarMetadata
+> Task :app:mapStandardDebugSourceSetPaths
+> Task :app:compileStandardDebugNavigationResources FROM-CACHE
+> Task :app:createStandardDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksStandardDebug FROM-CACHE
+> Task :media-lib-common:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-common:processDebugManifest FROM-CACHE
+> Task :media-lib-container:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-container:processDebugManifest FROM-CACHE
+> Task :media-lib-database:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-database:processDebugManifest FROM-CACHE
+> Task :media-lib-datasource:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-datasource:processDebugManifest FROM-CACHE
+> Task :media-lib-decoder:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-decoder:processDebugManifest FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:processDebugManifest FROM-CACHE
+> Task :media-lib-exoplayer:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-exoplayer:processDebugManifest FROM-CACHE
+> Task :media-lib-extractor:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-extractor:processDebugManifest FROM-CACHE
+> Task :musikr:extractDeepLinksDebug FROM-CACHE
+> Task :musikr:processDebugManifest FROM-CACHE
+> Task :app:processStandardDebugMainManifest FROM-CACHE
+> Task :app:processStandardDebugManifest FROM-CACHE
+> Task :app:processStandardDebugManifestForPackage FROM-CACHE
+> Task :media-lib-common:mapDebugSourceSetPaths
+> Task :media-lib-common:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-container:mapDebugSourceSetPaths
+> Task :media-lib-container:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-database:mapDebugSourceSetPaths
+> Task :media-lib-database:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-datasource:mapDebugSourceSetPaths
+> Task :media-lib-datasource:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-decoder:mapDebugSourceSetPaths
+> Task :media-lib-decoder:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:mapDebugSourceSetPaths
+> Task :media-lib-decoder-ffmpeg:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-exoplayer:mapDebugSourceSetPaths
+> Task :media-lib-exoplayer:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-extractor:mapDebugSourceSetPaths
+> Task :media-lib-extractor:compileDebugLibraryResources FROM-CACHE
+> Task :musikr:mapDebugSourceSetPaths
+> Task :musikr:compileDebugLibraryResources FROM-CACHE
+> Task :app:processStandardDebugResources FROM-CACHE
+> Task :app:generateStandardDebugAssets UP-TO-DATE
+> Task :media-lib-common:generateDebugAssets UP-TO-DATE
+> Task :media-lib-common:mergeDebugAssets
+> Task :media-lib-container:generateDebugAssets UP-TO-DATE
+> Task :media-lib-container:mergeDebugAssets
+> Task :media-lib-database:generateDebugAssets UP-TO-DATE
+> Task :media-lib-database:mergeDebugAssets
+> Task :media-lib-datasource:generateDebugAssets UP-TO-DATE
+> Task :media-lib-datasource:mergeDebugAssets
+> Task :media-lib-decoder:generateDebugAssets UP-TO-DATE
+> Task :media-lib-decoder:mergeDebugAssets
+> Task :media-lib-decoder-ffmpeg:generateDebugAssets UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:mergeDebugAssets
+> Task :media-lib-exoplayer:generateDebugAssets UP-TO-DATE
+> Task :media-lib-exoplayer:mergeDebugAssets
+> Task :media-lib-extractor:generateDebugAssets UP-TO-DATE
+> Task :media-lib-extractor:mergeDebugAssets
+> Task :musikr:generateDebugAssets UP-TO-DATE
+> Task :musikr:mergeDebugAssets
+> Task :app:mergeStandardDebugAssets
+> Task :app:preStandardDebugUnitTestBuild UP-TO-DATE
+> Task :app:packageStandardDebugUnitTestForUnitTest
+
+> Task :app:processStandardDebugUnitTestManifest
+/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/AndroidManifest.xml:25:5-27:31 Warning:
+	uses-permission#android.permission.ACCESS_NETWORK_STATE was tagged at AndroidManifest.xml:25 to remove other declarations but no other declaration present
+
+> Task :app:generateStandardDebugUnitTestConfig
+> Task :app:javaPreCompileStandardDebugUnitTest
+> Task :media-lib-common:processDebugJavaRes NO-SOURCE
+> Task :media-lib-container:processDebugJavaRes NO-SOURCE
+> Task :media-lib-database:processDebugJavaRes NO-SOURCE
+> Task :media-lib-datasource:processDebugJavaRes NO-SOURCE
+> Task :media-lib-decoder:processDebugJavaRes NO-SOURCE
+> Task :media-lib-decoder-ffmpeg:processDebugJavaRes NO-SOURCE
+> Task :media-lib-exoplayer:processDebugJavaRes NO-SOURCE
+> Task :media-lib-extractor:processDebugJavaRes NO-SOURCE
+> Task :musikr:processDebugJavaRes
+> Task :musikr:preDebugUnitTestBuild UP-TO-DATE
+> Task :musikr:generateDebugUnitTestStubRFile
+> Task :musikr:kspDebugUnitTestKotlin
+[INFO] Gradle still running: 4m 30s elapsed; no output for 5s
+> Task :app:kspStandardDebugKotlin
+> Task :musikr:compileDebugUnitTestKotlin
+> Task :musikr:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :musikr:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :musikr:processDebugUnitTestJavaRes
+[INFO] Gradle still running: 5m 00s elapsed; no output for 5s
+> Task :app:compileStandardDebugKotlin
+> Task :musikr:testDebugUnitTest
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+[INFO] Gradle still running: 5m 30s elapsed; no output for 3s
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+
+> Task :app:compileStandardDebugKotlin
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:26:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:32:8 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:33:8 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:46:5 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:123:8 'class BrowserRoot : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:127:53 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:127:60 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:131:59 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:131:78 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:138:17 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:138:36 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:145:67 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:145:86 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/AuxioService.kt:151:13 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/headunit/overlay/FloatingTrackMetadata.kt:22:34 Non-public primary constructor is exposed via the generated 'copy()' method of the 'data' class.
+
+The generated 'copy()' will change its visibility in future releases.
+
+To suppress the warning do one of the following:
+- Annotate the data class with the '@ConsistentCopyVisibility' annotation.
+- Use the '-Xconsistent-data-class-copy-visibility' compiler flag.
+- Annotate the data class with the '@ExposedCopyVisibility' annotation 
+  (Discouraged, but can be used to keep binary compatibility).
+
+To learn more, see the documentation of the '@ConsistentCopyVisibility' and '@ExposedCopyVisibility' annotations.
+
+This will become an error in language version 2.5. See https://youtrack.jetbrains.com/issue/KT-11914.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayBridgeExtrasPolicy.kt:68:77 'fun get(p0: String!): Any?' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayCommandServiceContract.kt:83:34 'fun get(p0: String!): Any?' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayCommandServiceContract.kt:84:33 'fun get(p0: String!): Any?' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/home/ThemedSpeedDialView.kt:434:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/image/CoverView.kt:650:22 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/image/coil/RoundedRectTransformation.kt:79:29 'fun computeSizeMultiplier(srcWidth: Int, srcHeight: Int, dstWidth: Int, dstHeight: Int, scale: Scale): Double' is deprecated. Migrate to the variant that accepts a 'maxSize'.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/image/coil/RoundedRectTransformation.kt:121:25 'fun computeSizeMultiplier(srcWidth: Int, srcHeight: Int, dstWidth: Int, dstHeight: Int, scale: Scale): Double' is deprecated. Migrate to the variant that accepts a 'maxSize'.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:25:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:26:8 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:28:8 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:90:9 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:96:15 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:104:12 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:111:44 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:115:19 'class MediaConstants : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:119:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:119:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:127:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:127:43 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:130:69 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:133:12 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:133:35 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:144:62 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:145:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:145:59 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:148:63 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:153:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:153:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:165:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:165:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:168:64 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:186:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:186:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:198:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:198:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:201:63 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:211:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:211:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:222:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:222:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:225:66 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:235:9 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:235:32 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:247:12 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MediaItemTranslation.kt:247:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:23:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:24:8 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:125:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:143:67 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:152:52 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:173:64 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:174:35 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:193:74 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:313:58 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:343:47 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:344:9 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:345:13 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:345:36 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:353:13 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:356:73 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:357:9 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:358:13 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:358:36 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:362:13 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:365:56 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:367:49 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:368:9 'constructor(p0: MediaDescriptionCompat, p1: Int): MediaBrowserCompat.MediaItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:369:13 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:369:36 'constructor(): MediaDescriptionCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicBrowser.kt:373:13 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:23:8 'class MediaBrowserCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:24:8 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:25:8 'class MediaBrowserServiceCompat : Service' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:100:21 'constructor(p0: String, p1: Bundle?): MediaBrowserServiceCompat.BrowserRoot' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:102:42 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:102:49 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:105:60 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:105:79 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:108:39 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:108:58 'class MediaItem : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:120:21 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt:133:21 'class Result<T : Any!> : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/replaygain/ReplayGainAudioProcessor.kt:57:13 'fun flush(): Unit' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:30:8 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:31:8 'class AudioFocusRequestCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:32:8 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:134:31 'class AudioFocusRequestCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:135:9 'class AudioFocusRequestCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:135:33 'constructor(p0: Int): AudioFocusRequestCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:135:41 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:137:17 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:137:39 'constructor(): AudioAttributesCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:138:31 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:139:37 'class AudioAttributesCompat : Any, VersionedParcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:1348:22 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/ExoPlaybackStateHolder.kt:1355:9 'class AudioManagerCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:26:8 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:27:8 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:28:8 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:32:8 'class NotificationCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:33:8 'class MediaButtonReceiver : BroadcastReceiver' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:98:32 'constructor(p0: Context, p1: String): MediaSessionCompat' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:99:35 'class Token : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:140:9 'class MediaButtonReceiver : BroadcastReceiver' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:190:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:192:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:239:36 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:240:37 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:241:35 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:308:17 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:308:37 'constructor(): MediaMetadataCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:309:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:310:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:311:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:313:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:316:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:317:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:318:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:320:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:324:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:328:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:332:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:335:32 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:337:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:340:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:357:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:361:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:365:35 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:366:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:396:47 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:397:47 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:402:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:406:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:410:33 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:450:17 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:450:37 'constructor(): MediaMetadataCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:451:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:452:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:453:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:455:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:458:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:460:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:464:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:468:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:471:32 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:473:25 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:476:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:509:21 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:509:40 'constructor(p0: MediaDescriptionCompat!, p1: Long): MediaSessionCompat.QueueItem' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:523:36 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:523:56 'constructor(): PlaybackStateCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:532:13 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:532:33 'class CustomAction : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:542:13 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:542:33 'class CustomAction : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:609:37 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:609:57 'constructor(): MediaMetadataCompat.Builder' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:622:38 'class Token : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:653:13 'constructor(p0: NotificationCompat.Builder!): NotificationCompat.MediaStyle' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:667:34 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:671:36 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:681:32 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:686:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:691:30 'class MediaMetadataCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:25:8 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:26:8 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:27:8 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:57:24 'class Callback : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:98:46 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:111:49 'class MediaDescriptionCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:167:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:168:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:169:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:177:28 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:178:32 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:303:13 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:304:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:305:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:306:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:307:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:308:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:309:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:310:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:311:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:312:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:313:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:314:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionInterface.kt:315:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackServiceFragment.kt:23:8 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackServiceFragment.kt:141:38 'class Token : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:23:8 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:372:56 'class Builder : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:372:86 'class Builder : Any' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:377:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/state/PlaybackStateHolder.kt:379:17 'class PlaybackStateCompat : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/ui/SquareMaskableFrameLayout.kt:57:23 'fun getPathForSize(p0: Int, p1: Int, p2: Path): Unit' is deprecated. Deprecated in Java.
+
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+> Task :app:compileStandardDebugJavaWithJavac
+
+> Task :app:hiltSyncStandardDebug
+> Task :app:hiltAggregateDepsStandardDebug FROM-CACHE
+[INFO] Gradle still running: 6m 00s elapsed; no output for 3s
+> Task :app:hiltJavaCompileStandardDebug
+> Task :app:processStandardDebugJavaRes
+> Task :app:bundleStandardDebugClassesToCompileJar
+> Task :app:transformStandardDebugClassesWithAsm
+> Task :app:bundleStandardDebugClassesToRuntimeJar
+> Task :app:kspStandardDebugUnitTestKotlin
+
+e: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwayMusicBroadcastBridgeTest.kt:105:13 Class 'TopwayMusicBroadcastBridgeTest.FakeUiSettings' is not abstract and does not implement abstract member:
+> Task :app:compileStandardDebugUnitTestKotlin FAILED
+var visualizerPermissionDenied: Boolean
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run-1784724576823.json
+
+[Incubating] Problems report is available at: file:///home/runner/work/Auxio-TS/Auxio-TS/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+
+* What went wrong:
+Execution failed for task ':app:compileStandardDebugUnitTestKotlin' (registered by plugin 'com.android.internal.application').
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+
+   > Compilation error. See log for more details
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+
+For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+* Try:
+183 actionable tasks: 72 executed, 111 from cache
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileStandardDebugUnitTestKotlin' (registered by plugin 'com.android.internal.application').
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:135)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:288)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:133)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:121)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.DefaultNodeExecutor.executeLocalTaskNode(DefaultNodeExecutor.java:55)
+	at org.gradle.execution.plan.DefaultNodeExecutor.execute(DefaultNodeExecutor.java:34)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:355)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:343)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:339)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:84)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:339)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:328)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:278)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:132)
+	at org.gradle.internal.Factories$1.create(Factories.java:30)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.lambda$withoutLocksBlocking$3(DefaultWorkerLeaseService.java:410)
+	at org.gradle.internal.work.ResourceLockStatistics$1.measure(ResourceLockStatistics.java:43)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocksBlocking(DefaultWorkerLeaseService.java:405)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.blocking(DefaultWorkerLeaseService.java:255)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.blocking(DefaultWorkerLeaseService.java:237)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$3(DefaultAsyncWorkTracker.java:128)
+	at org.gradle.internal.Factories$1.create(Factories.java:30)
+	at org.gradle.internal.resources.AbstractResourceLockRegistry.whileDisallowingLockChanges(AbstractResourceLockRegistry.java:50)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.whileDisallowingProjectLockChanges(DefaultWorkerLeaseService.java:260)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:127)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:93)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForAll(DefaultAsyncWorkTracker.java:79)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForCompletion(DefaultAsyncWorkTracker.java:67)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:267)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:244)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:227)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:210)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:176)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:167)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:47)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:137)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:134)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:134)
+	at org.gradle.internal.execution.steps.ExecuteStep$Mutable.execute(ExecuteStep.java:80)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:51)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:29)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.executeMutable(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.executeMutable(RemovePreviousOutputsStep.java:39)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:42)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:24)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.executeMutable(ResolveInputChangesStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.executeMutable(ResolveInputChangesStep.java:28)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeAndStoreInCache(BuildCacheStep.java:145)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$executeWithCache$4(BuildCacheStep.java:104)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$executeWithCache$5(BuildCacheStep.java:104)
+	at org.gradle.internal.Try$Success.map(Try.java:170)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithCache(BuildCacheStep.java:88)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$0(BuildCacheStep.java:75)
+	at org.gradle.internal.Either$Left.fold(Either.java:116)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:74)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:49)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.executeMutable(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.executeMutable(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveMutableCachingStateStep.executeDelegate(ResolveMutableCachingStateStep.java:70)
+	at org.gradle.internal.execution.steps.ResolveMutableCachingStateStep.executeDelegate(ResolveMutableCachingStateStep.java:32)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:69)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:37)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.executeMutable(ResolveChangesStep.java:63)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.executeMutable(ResolveChangesStep.java:34)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.ValidateStep$Mutable.executeDelegate(ValidateStep.java:79)
+	at org.gradle.internal.execution.steps.ValidateStep$Mutable.executeDelegate(ValidateStep.java:65)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:99)
+	at org.gradle.internal.execution.steps.ValidateStep$Mutable.execute(ValidateStep.java:65)
+	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.executeMutable(CaptureMutableStateBeforeExecutionStep.java:86)
+	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:65)
+	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:45)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeWithNonEmptySources(SkipEmptyMutableWorkStep.java:210)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:90)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:53)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.executeMutable(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.executeMutable(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.executeMutable(HandleStaleOutputsStep.java:77)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.executeMutable(HandleStaleOutputsStep.java:43)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$executeMutable$0(AssignMutableWorkspaceStep.java:34)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:305)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.executeMutable(AssignMutableWorkspaceStep.java:30)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.executeMutable(AssignMutableWorkspaceStep.java:21)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:56)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:38)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:68)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:132)
+	... 30 more
+Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilation error. See log for more details
+	at org.jetbrains.kotlin.gradle.tasks.TasksUtilsKt.throwExceptionIfCompilationFailed(tasksUtils.kt:21)
+	at org.jetbrains.kotlin.compilerRunner.GradleKotlinCompilerWork.run(GradleKotlinCompilerWork.kt:112)
+	at org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction.execute(GradleCompilerRunnerWithWorkers.kt:75)
+	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:68)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:64)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:61)
+	at org.gradle.internal.classloader.ClassLoaderUtils.executeInClassloader(ClassLoaderUtils.java:102)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.lambda$execute$0(NoIsolationWorkerFactory.java:61)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:44)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:41)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.workers.internal.AbstractWorker.executeWrappedInBuildOperation(AbstractWorker.java:41)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.execute(NoIsolationWorkerFactory.java:58)
+	at org.gradle.workers.internal.DefaultWorkerExecutor.lambda$submitWork$0(DefaultWorkerExecutor.java:174)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runExecution(DefaultConditionalExecutionQueue.java:191)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.access$500(DefaultConditionalExecutionQueue.java:112)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner$1.run(DefaultConditionalExecutionQueue.java:168)
+	at org.gradle.internal.Factories$1.create(Factories.java:30)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.lambda$runAndReleaseLocks$0(DefaultWorkerLeaseService.java:300)
+	at org.gradle.internal.work.ResourceLockStatistics$1.measure(ResourceLockStatistics.java:43)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAndReleaseLocks(DefaultWorkerLeaseService.java:298)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocksAcquired(DefaultWorkerLeaseService.java:294)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:286)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:130)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:135)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:163)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:125)
+	... 2 more
+
+
+BUILD FAILED in 6m 6s
+::error::Gradle failed with exit code 1 after 6m 07s.
