@@ -121,9 +121,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         val context = requireContext()
         val binding = requireBinding()
 
-        binding.root.setOnClickListener {
-            if (state.playable) playbackModel.openPlayback()
-        }
+        binding.root.setOnClickListener { if (state.playable) playbackModel.openPlayback() }
         binding.root.setOnLongClickListener {
             if (state is BannerState.Rich) {
                 detailModel.showAlbum(state.song)
@@ -189,7 +187,8 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
 
     private fun updateRepeat(repeatMode: RepeatMode) {
         requireBinding().playbackRepeat.apply {
-            isChecked = currentBannerState.richQueueCommandsAvailable && repeatMode != RepeatMode.NONE
+            isChecked =
+                currentBannerState.richQueueCommandsAvailable && repeatMode != RepeatMode.NONE
             setIconResource(repeatMode.icon)
         }
     }

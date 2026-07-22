@@ -29,21 +29,20 @@ import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
-import org.oxycblt.auxio.playback.ui.visualizer.VisualizerDisplayPolicy
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
 import org.oxycblt.musikr.Song
 
 /**
- * Hosts cover pages while keeping visualiser collection at adapter scope.
+ * Hosts cover pages while keeping visualizer collection at adapter scope.
  *
- * Only the current page receives state. Attached off-screen holders are reset to artwork, and stale
- * replayed frames are converted to an explicit unavailable state before display.
+ * Only the current page receives live frames. Attached off-screen holders are reset to artwork, and
+ * replayed StateFlow frames are rejected before they can briefly replace artwork after recreation.
  */
 class CoverPagerAdapter(
     private val listener: StepperOverlay.Listener,
-    visualizerStateFlow: kotlinx.coroutines.flow.StateFlow<VisualizerState>,
+    private val visualizerStateFlow: kotlinx.coroutines.flow.StateFlow<VisualizerState>,
     private val uiSettings: UISettings,
     lifecycleOwner: LifecycleOwner,
 ) : FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
@@ -55,8 +54,7 @@ class CoverPagerAdapter(
     init {
         lifecycleOwner.lifecycleScope.launch {
             visualizerStateFlow.collect { state ->
-                latestState =
-                    VisualizerDisplayPolicy.sanitizeLiveFrame(state, SystemClock.uptimeMillis())
+                latestState = sanitize(state)
                 dispatchVisualizerState()
             }
         }
@@ -108,9 +106,23 @@ class CoverPagerAdapter(
             else VisualizerState.Disabled
         holder.updateVisualizerState(state, uiSettings.visualizerMode)
     }
+
+    private fun sanitize(state: VisualizerState): VisualizerState {
+        if (state !is VisualizerState.Live) return state
+        val ageMs = SystemClock.uptimeMillis() - state.receivedAtUptimeMs
+        return if (ageMs in 0..LIVE_FRAME_FRESHNESS_MS) {
+            state
+        } else {
+            VisualizerState.Unavailable("Stale visualizer frame")
+        }
+    }
+
+    private companion object {
+        const val LIVE_FRAME_FRESHNESS_MS = 1_500L
+    }
 }
 
-/** A ViewHolder containing artwork, the visualiser surface, and fast-seek gestures. */
+/** A ViewHolder containing artwork, the visualizer surface, and fast-seek gestures. */
 class CoverViewHolder private constructor(private val binding: ItemCoverBinding) :
     RecyclerView.ViewHolder(binding.root) {
 
@@ -132,12 +144,12 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
 
     fun updateVisualizerState(state: VisualizerState, mode: UISettings.VisualizerMode) {
         binding.coverVisualizer.updateState(state)
+        val hasArtwork = song?.cover != null
         val shouldShow =
-            VisualizerDisplayPolicy.shouldShow(
-                state = state,
-                mode = mode,
-                hasArtwork = song?.cover != null,
-            )
+            state is VisualizerState.Live &&
+                (mode == UISettings.VisualizerMode.ALWAYS ||
+                    (mode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
+
         binding.coverVisualizer.visibility = if (shouldShow) View.VISIBLE else View.GONE
         binding.cover.visibility = if (shouldShow) View.INVISIBLE else View.VISIBLE
     }
