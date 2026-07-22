@@ -2,6 +2,7 @@
 """Apply the final reviewed PR #193 source-policy fixes."""
 
 from pathlib import Path
+import re
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -9,6 +10,13 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     if count != 1:
         raise SystemExit(f"STOP: expected exactly one {label} match, found {count}")
     return text.replace(old, new, 1)
+
+
+def substitute_once(text: str, pattern: str, replacement: str, label: str) -> str:
+    updated, count = re.subn(pattern, replacement, text, count=1, flags=re.DOTALL)
+    if count != 1:
+        raise SystemExit(f"STOP: expected exactly one {label} match, found {count}")
+    return updated
 
 
 def main() -> int:
@@ -19,9 +27,7 @@ def main() -> int:
 
     source = replace_once(
         source,
-        "        val discoveredRoots = if (allowUnconfiguredUsb) discoverCandidateRoots() else emptyList()\n"
         "        val candidates = saved + authorisedOptionalRoots + discoveredRoots\n",
-        "        val discoveredRoots = if (allowUnconfiguredUsb) discoverCandidateRoots() else emptyList()\n"
         "        val candidates = saved + authorisedOptionalRoots + discoveredRoots\n"
         "        val displayOptionalRoots = preferAppFacingRoots(authorisedOptionalRoots)\n",
         "optional-root display ordering",
@@ -33,41 +39,6 @@ def main() -> int:
         "candidate ordering",
     )
 
-    old_discovery = """    internal fun discoverAudioParents(
-        root: File,
-        out: LinkedHashSet<String>,
-        rootGate: RootGate? = null,
-        enforceSafeRoot: Boolean = true,
-        deadline: Long = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS,
-    ) {
-        if (enforceSafeRoot && !isAllowedSourceCandidate(root.absolutePath)) return
-        var visited = 0
-        val queue = ArrayDeque<Pair<File, Int>>()
-        queue.add(root to 0)
-        while (queue.isNotEmpty()) {
-            if (out.size >= MAX_CANDIDATES || visited >= MAX_VISITED_FILES) return
-            if (System.currentTimeMillis() > deadline) return
-            val (dir, depth) = queue.removeFirst()
-            val children = listFilesSafe(dir, rootGate) ?: continue
-            var containsAudio = false
-            for (child in children) {
-                visited++
-                if (visited >= MAX_VISITED_FILES) break
-                when {
-                    child.isFile && child.file.extension.lowercase() in AUDIO_EXTENSIONS ->
-                        containsAudio = true
-                    child.isDirectory &&
-                        depth < MAX_SCAN_DEPTH &&
-                        shouldDescend(child.file, enforceSafeRoot) ->
-                        queue.add(child.file to depth + 1)
-                }
-            }
-            if (containsAudio && (!enforceSafeRoot || isAllowedSourceCandidate(dir.absolutePath))) {
-                out.add(dir.absolutePath)
-            }
-        }
-    }
-"""
     new_discovery = """    internal fun discoverAudioParents(
         root: File,
         out: LinkedHashSet<String>,
@@ -117,28 +88,14 @@ def main() -> int:
                 out.add(dir.absolutePath)
             }
         }
-    }
-"""
-    source = replace_once(
+    }"""
+    source = substitute_once(
         source,
-        old_discovery,
-        new_discovery,
+        r"    internal fun discoverAudioParents\(.*?\n    }\n\n(?=    private fun listFilesSafe)",
+        new_discovery + "\n\n",
         "configured-root traversal",
     )
 
-    old_descend = """    private fun shouldDescend(dir: File, enforceSafeRoot: Boolean): Boolean {
-        val name = dir.name
-        if (name == "." || name == ".." || name.startsWith('.')) return false
-        if (isNoisyDir(name)) return false
-        val path = dir.absolutePath.replace('\\', '/')
-        if (
-            path.contains("/Android/", ignoreCase = true) ||
-                path.endsWith("/Android", ignoreCase = true)
-        )
-            return false
-        return !enforceSafeRoot || isAllowedSourceCandidate(path)
-    }
-"""
     new_descend = """    private fun shouldDescend(
         dir: File,
         enforceSafeRoot: Boolean,
@@ -157,9 +114,13 @@ def main() -> int:
         return canonicalRoot != null &&
             isAllowedSourceCandidate(path) &&
             isWithinCanonicalRoot(dir, canonicalRoot)
-    }
-"""
-    source = replace_once(source, old_descend, new_descend, "descent policy")
+    }"""
+    source = substitute_once(
+        source,
+        r"    private fun shouldDescend\(.*?\n    }\n\n(?=    internal fun isNoisyDir)",
+        new_descend + "\n\n",
+        "descent policy",
+    )
 
     containment_marker = """    private fun isContainedByAny(
         candidatePath: String,
@@ -183,7 +144,7 @@ def main() -> int:
         containment_helper,
         "canonical containment helper insertion",
     )
-    source_path.write_text(source, encoding="utf-8", newline="\n")
+    source_path.write_text(source, encoding="utf-8")
 
     test_path = Path(
         "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwaySourcePolicyDiscoveryTest.kt"
@@ -220,7 +181,7 @@ def main() -> int:
 
 """
     tests = replace_once(tests, marker, regression + marker, "regression-test insertion")
-    test_path.write_text(tests, encoding="utf-8", newline="\n")
+    test_path.write_text(tests, encoding="utf-8")
     return 0
 
 
