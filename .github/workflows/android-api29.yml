@@ -38,6 +38,7 @@ jobs:
       AVD_NAME: auxio-api29
       ANDROID_API: "29"
       SYSTEM_IMAGE: system-images;android-29;google_apis;x86_64
+      # Isolate AVD metadata from hosted-runner XDG defaults so avdmanager and emulator agree.
       ANDROID_USER_HOME: ${{ runner.temp }}/android-user-home
       ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd-home
 
