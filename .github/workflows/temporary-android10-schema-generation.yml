@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - perf/android10-code-health-20260723
+  pull_request:
+    branches:
+      - dev
 
 permissions:
   contents: write
@@ -14,7 +17,7 @@ concurrency:
 
 jobs:
   generate:
-    if: ${{ !contains(github.event.head_commit.message, '[schema-bot]') }}
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 150
 
@@ -22,6 +25,7 @@ jobs:
       - name: Checkout implementation branch
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          ref: perf/android10-code-health-20260723
           fetch-depth: 0
           submodules: false
           persist-credentials: true
