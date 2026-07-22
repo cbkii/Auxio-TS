@@ -117,19 +117,33 @@ jobs:
         shell: bash
         run: |
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
-          echo no | "${AVDMANAGER_BIN}" create avd \
+          mkdir -p "${HOME}/.android"
+          touch "${HOME}/.android/repositories.cfg"
+          set +e
+          printf 'no\n' | "${AVDMANAGER_BIN}" create avd \
             --force \
             --name "${AVD_NAME}" \
             --package "${SYSTEM_IMAGE}" \
             --device "pixel_2"
-          cat > "${HOME}/.android/avd/${AVD_NAME}.avd/config.ini.tmp" <<'EOF'
+          avd_status=${PIPESTATUS[1]}
+          set -e
+          if [[ "${avd_status}" -ne 0 ]]; then
+            echo "::error::avdmanager failed with status ${avd_status}."
+            "${AVDMANAGER_BIN}" list device || true
+            "${AVDMANAGER_BIN}" list target || true
+            exit "${avd_status}"
+          fi
+          avd_dir="${HOME}/.android/avd/${AVD_NAME}.avd"
+          if [[ ! -d "${avd_dir}" ]]; then
+            echo "::error::avdmanager reported success but ${avd_dir} was not created."
+            exit 1
+          fi
+          cat >> "${avd_dir}/config.ini" <<'EOF'
           hw.keyboard=yes
           hw.gpu.enabled=yes
           hw.gpu.mode=swiftshader_indirect
           disk.dataPartition.size=2048M
           EOF
-          cat "${HOME}/.android/avd/${AVD_NAME}.avd/config.ini.tmp" >> \
-            "${HOME}/.android/avd/${AVD_NAME}.avd/config.ini"
 
       - name: Start emulator and wait for Android 10
         shell: bash
