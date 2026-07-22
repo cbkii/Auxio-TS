@@ -244,7 +244,7 @@ class MainFragment :
         collectImmediately(homeModel.songList, homeModel.isFastScrolling, ::updateFab)
         collectImmediately(musicModel.indexingState, ::updateIndexerState)
         collectImmediately(listModel.selected, selectionBackCallback::invalidateEnabled)
-        collectImmediately(playbackModel.song, ::updateSong)
+        collectImmediately(playbackModel.bannerState, ::updateBannerVisibility)
         collectImmediately(playbackModel.openPanel.flow, ::handlePanel)
         collectImmediately(startupPanelCoordinator.routeEvaluation, ::handleStartupRoute)
 
@@ -255,9 +255,12 @@ class MainFragment :
     }
 
     private fun updateStartupPanelState() {
+        val bannerState = playbackModel.bannerState.value
+        val hasPlayableItem =
+            bannerState is org.oxycblt.auxio.playback.BannerState.Rich ||
+                bannerState is org.oxycblt.auxio.playback.BannerState.Raw
         startupPanelCoordinator.updateState(
-            hasPlayableItem =
-                playbackModel.song.value != null || playbackModel.rawPlaybackMetadata.value != null,
+            hasPlayableItem = hasPlayableItem,
             outcome = playbackModel.restoreOutcome.value,
             readiness = musicModel.startupReadinessState.value,
             libraryStatus = musicModel.startupLibraryStatus.value,
@@ -469,12 +472,6 @@ class MainFragment :
         // Prevent interactions when the queue content fully fades out.
         binding.queueFragment.isInvisible = binding.queueFragment.alpha == 0f
 
-        if (playbackModel.song.value == null) {
-            // Sometimes lingering drags can un-hide the playback sheet even when we intend to
-            // hide it, make sure we keep it hidden.
-            tryHideAllSheets()
-        }
-
         // Since the navigation listener is also reliant on the bottom sheets, we must also update
         // it every frame.
         requireNotNull(sheetBackCallback) { "SheetBackPressedCallback was not available" }
@@ -674,12 +671,51 @@ class MainFragment :
         homeModel.showOuter.consume()
     }
 
-    private fun updateSong(song: Song?) {
-        if (song != null) {
-            tryShowSheets()
-        } else {
-            tryHideAllSheets()
+    private fun updateBannerVisibility(state: org.oxycblt.auxio.playback.BannerState) {
+        val isExpandable =
+            state is org.oxycblt.auxio.playback.BannerState.Rich ||
+                state is org.oxycblt.auxio.playback.BannerState.Raw
+        val binding = requireBinding()
+        val playbackSheetBehavior =
+            binding.playbackSheet.coordinatorLayoutBehavior
+                as org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
+        val queueSheetBehavior =
+            binding.queueSheet.coordinatorLayoutBehavior
+                as org.oxycblt.auxio.playback.queue.QueueBottomSheetBehavior?
+
+        if (
+            playbackSheetBehavior.targetState ==
+                com.google.android.material.bottomsheet.BackportBottomSheetBehavior.STATE_HIDDEN
+        ) {
+            timber.log.Timber.d("Unhiding playback sheet for persistent banner")
+            playbackSheetBehavior.state =
+                com.google.android.material.bottomsheet.BackportBottomSheetBehavior.STATE_COLLAPSED
         }
+
+        playbackSheetBehavior.isDraggable = isExpandable
+        queueSheetBehavior?.isDraggable = isExpandable
+
+        if (!isExpandable) {
+            if (
+                playbackSheetBehavior.state ==
+                    com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                        .STATE_EXPANDED
+            ) {
+                playbackSheetBehavior.state =
+                    com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                        .STATE_COLLAPSED
+            }
+            if (
+                queueSheetBehavior?.state ==
+                    com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                        .STATE_EXPANDED
+            ) {
+                queueSheetBehavior.state =
+                    com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                        .STATE_COLLAPSED
+            }
+        }
+
         updateStartupPanelState()
     }
 
@@ -830,47 +866,6 @@ class MainFragment :
             queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
         }
         return false
-    }
-
-    private fun tryShowSheets() {
-        val binding = requireBinding()
-        val playbackSheetBehavior =
-            binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
-        if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_HIDDEN) {
-            L.d("Unhiding and enabling playback sheet")
-            val queueSheetBehavior =
-                binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
-            // Queue sheet behavior is either collapsed or expanded, no hiding needed
-            queueSheetBehavior?.isDraggable = true
-            playbackSheetBehavior.apply {
-                // Make sure the view is draggable, at least until the draw checks kick in.
-                isDraggable = true
-                state = BackportBottomSheetBehavior.STATE_COLLAPSED
-            }
-        }
-    }
-
-    private fun tryHideAllSheets() {
-        val binding = requireBinding()
-        val playbackSheetBehavior =
-            binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
-        if (playbackSheetBehavior.targetState != BackportBottomSheetBehavior.STATE_HIDDEN) {
-            val queueSheetBehavior =
-                binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
-
-            L.d("Hiding and disabling playback and queue sheets")
-
-            // Make both bottom sheets non-draggable so the user can't halt the hiding event.
-            queueSheetBehavior?.apply {
-                isDraggable = false
-                state = BackportBottomSheetBehavior.STATE_COLLAPSED
-            }
-
-            playbackSheetBehavior.apply {
-                isDraggable = false
-                state = BackportBottomSheetBehavior.STATE_HIDDEN
-            }
-        }
     }
 
     private class SheetBackPressedCallback(
