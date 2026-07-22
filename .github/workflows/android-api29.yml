@@ -82,15 +82,11 @@ jobs:
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           sdkmanager_bin="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
           avdmanager_bin="${sdk_root}/cmdline-tools/latest/bin/avdmanager"
-          emulator_bin="${sdk_root}/emulator/emulator"
           if [[ ! -x "${sdkmanager_bin}" ]]; then
             sdkmanager_bin="$(command -v sdkmanager || true)"
           fi
           if [[ ! -x "${avdmanager_bin}" ]]; then
             avdmanager_bin="$(command -v avdmanager || true)"
-          fi
-          if [[ ! -x "${emulator_bin}" ]]; then
-            emulator_bin="$(command -v emulator || true)"
           fi
           if [[ -z "${sdkmanager_bin}" || ! -x "${sdkmanager_bin}" ]]; then
             echo "::error::sdkmanager was not found in the hosted Android SDK."
@@ -100,13 +96,6 @@ jobs:
             echo "::error::avdmanager was not found in the hosted Android SDK."
             exit 1
           fi
-          if [[ -z "${emulator_bin}" || ! -x "${emulator_bin}" ]]; then
-            echo "::error::Android emulator binary was not found."
-            exit 1
-          fi
-          printf 'SDKMANAGER_BIN=%s\n' "${sdkmanager_bin}" >> "${GITHUB_ENV}"
-          printf 'AVDMANAGER_BIN=%s\n' "${avdmanager_bin}" >> "${GITHUB_ENV}"
-          printf 'EMULATOR_BIN=%s\n' "${emulator_bin}" >> "${GITHUB_ENV}"
 
           set +e
           yes | "${sdkmanager_bin}" --licenses >/dev/null 2>&1
@@ -121,6 +110,18 @@ jobs:
             "emulator" \
             "platforms;android-${ANDROID_API}" \
             "${SYSTEM_IMAGE}"
+
+          emulator_bin="${sdk_root}/emulator/emulator"
+          if [[ ! -x "${emulator_bin}" ]]; then
+            emulator_bin="$(command -v emulator || true)"
+          fi
+          if [[ -z "${emulator_bin}" || ! -x "${emulator_bin}" ]]; then
+            echo "::error::Android emulator binary was not found after SDK installation."
+            exit 1
+          fi
+          printf 'SDKMANAGER_BIN=%s\n' "${sdkmanager_bin}" >> "${GITHUB_ENV}"
+          printf 'AVDMANAGER_BIN=%s\n' "${avdmanager_bin}" >> "${GITHUB_ENV}"
+          printf 'EMULATOR_BIN=%s\n' "${emulator_bin}" >> "${GITHUB_ENV}"
 
       - name: Create API 29 emulator
         shell: bash
