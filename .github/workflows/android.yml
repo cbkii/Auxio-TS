@@ -61,8 +61,6 @@ jobs:
       AVD_NAME: auxio-api29
       ANDROID_API: "29"
       SYSTEM_IMAGE: system-images;android-29;google_apis;x86_64
-      ANDROID_USER_HOME: ${{ runner.temp }}/android-user-home
-      ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd-home
 
     steps:
       - name: Checkout repository
@@ -77,6 +75,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      - name: Configure isolated Android state
+        shell: bash
+        run: |
+          printf 'ANDROID_USER_HOME=%s\n' "${RUNNER_TEMP}/android-user-home" >> "${GITHUB_ENV}"
+          printf 'ANDROID_AVD_HOME=%s\n' "${RUNNER_TEMP}/android-avd-home" >> "${GITHUB_ENV}"
 
       - name: Write local.properties for Android SDK
         shell: bash
