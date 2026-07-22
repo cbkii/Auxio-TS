@@ -26,7 +26,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.list.ListSettings
@@ -81,6 +84,24 @@ constructor(
     /** Primitive metadata available before the rich Musikr Song has been hydrated. */
     val rawPlaybackMetadata: StateFlow<RawPlaybackMetadata?> = _rawPlaybackMetadata
 
+    private val _restoreOutcome = MutableStateFlow(playbackManager.restoreOutcome)
+    /** The outcome of a generic playback restore request. */
+    val restoreOutcome: StateFlow<RestoreOutcome> = _restoreOutcome
+
+    /** Persistent UI state of the bottom playback banner. */
+    val bannerState: StateFlow<BannerState> =
+        combine(_song, _rawPlaybackMetadata, _restoreOutcome) { song, raw, outcome ->
+                when {
+                    song != null -> BannerState.Rich(song)
+                    raw != null -> BannerState.Raw(raw)
+                    outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                        outcome == RestoreOutcome.WAITING_FOR_LIBRARY -> BannerState.Restoring
+                    outcome == RestoreOutcome.FAILED -> BannerState.Unavailable("Restore failed")
+                    else -> BannerState.Idle
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, BannerState.Idle)
+
     private val _parent = MutableStateFlow<MusicParent?>(null)
     /** The [MusicParent] currently being played. Null if playback is occurring from all songs. */
     val parent: StateFlow<MusicParent?> = _parent
@@ -104,10 +125,6 @@ constructor(
     val isShuffled: StateFlow<Boolean>
         get() = _isShuffled
 
-    private val _restoreOutcome = MutableStateFlow(playbackManager.restoreOutcome)
-    /** The outcome of a generic playback restore request. */
-    val restoreOutcome: StateFlow<RestoreOutcome> = _restoreOutcome
-
     private val _shuffleScope = MutableStateFlow(ShuffleScope.OFF)
     val shuffleScope: StateFlow<ShuffleScope>
         get() = _shuffleScope
@@ -129,7 +146,7 @@ constructor(
     /** The current queue in a special bundled format suitable for the cover ViewPager2. */
     val pagerQueue: StateFlow<PagerQueue> = _pagerQueue
 
-    private val _visualizerState = MutableStateFlow<VisualizerState>(VisualizerState.Hidden)
+    private val _visualizerState = MutableStateFlow<VisualizerState>(VisualizerState.Disabled)
     /** The current state of the audio visualizer. */
     val visualizerState: StateFlow<VisualizerState> = _visualizerState
 

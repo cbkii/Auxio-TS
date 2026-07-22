@@ -28,8 +28,8 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
-import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
+import org.oxycblt.auxio.playback.ui.visualizer.VisualizerDisplayPolicy
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
@@ -38,23 +38,24 @@ import org.oxycblt.musikr.Song
 /**
  * Hosts cover pages while keeping visualizer collection at adapter scope.
  *
- * Only the current page receives live frames. Attached off-screen holders are reset to artwork, and
- * replayed StateFlow frames are rejected before they can briefly replace artwork after recreation.
+ * Only the current page receives visualizer state. Attached off-screen holders are reset to
+ * artwork, and replayed stale frames are rejected before they can briefly replace artwork after
+ * recreation.
  */
 class CoverPagerAdapter(
     private val listener: StepperOverlay.Listener,
-    private val playbackModel: PlaybackViewModel,
+    private val visualizerStateFlow: kotlinx.coroutines.flow.StateFlow<VisualizerState>,
     private val uiSettings: UISettings,
     lifecycleOwner: LifecycleOwner,
 ) : FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
 
     private val attachedHolders = linkedSetOf<CoverViewHolder>()
     private var activePosition = RecyclerView.NO_POSITION
-    private var latestState: VisualizerState = VisualizerState.Hidden
+    private var latestState: VisualizerState = VisualizerState.Disabled
 
     init {
         lifecycleOwner.lifecycleScope.launch {
-            playbackModel.visualizerState.collect { state ->
+            visualizerStateFlow.collect { state ->
                 latestState = sanitize(state)
                 dispatchVisualizerState()
             }
@@ -76,7 +77,7 @@ class CoverPagerAdapter(
     }
 
     override fun onViewDetachedFromWindow(holder: CoverViewHolder) {
-        holder.updateVisualizerState(VisualizerState.Hidden, uiSettings.visualizerMode)
+        holder.updateVisualizerState(VisualizerState.Disabled, uiSettings.visualizerMode)
         attachedHolders -= holder
         super.onViewDetachedFromWindow(holder)
     }
@@ -104,7 +105,7 @@ class CoverPagerAdapter(
     private fun updateHolder(holder: CoverViewHolder) {
         val state =
             if (holder.bindingAdapterPosition == activePosition) latestState
-            else VisualizerState.Hidden
+            else VisualizerState.Disabled
         holder.updateVisualizerState(state, uiSettings.visualizerMode)
     }
 
@@ -114,7 +115,7 @@ class CoverPagerAdapter(
         return if (ageMs in 0..LIVE_FRAME_FRESHNESS_MS) {
             state
         } else {
-            VisualizerState.Failed("Stale visualizer frame")
+            VisualizerState.Unavailable("Stale visualizer frame")
         }
     }
 
@@ -131,7 +132,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
 
     fun onViewRecycled() {
         song = null
-        binding.coverVisualizer.updateState(VisualizerState.Hidden)
+        binding.coverVisualizer.updateState(VisualizerState.Disabled)
         binding.coverVisualizer.visibility = View.GONE
         binding.cover.visibility = View.VISIBLE
     }
@@ -140,17 +141,17 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
         this.song = song
         binding.cover.bind(song)
         binding.coverFastSeekOverlay.listener = listener
-        updateVisualizerState(VisualizerState.Hidden, UISettings.VisualizerMode.OFF)
+        updateVisualizerState(VisualizerState.Disabled, UISettings.VisualizerMode.OFF)
     }
 
     fun updateVisualizerState(state: VisualizerState, mode: UISettings.VisualizerMode) {
         binding.coverVisualizer.updateState(state)
-        val hasArtwork = song?.cover != null
         val shouldShow =
-            state is VisualizerState.Live &&
-                (mode == UISettings.VisualizerMode.ALWAYS ||
-                    (mode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
-
+            VisualizerDisplayPolicy.shouldShowVisualizer(
+                state = state,
+                mode = mode,
+                hasArtwork = song?.cover != null,
+            )
         binding.coverVisualizer.visibility = if (shouldShow) View.VISIBLE else View.GONE
         binding.cover.visibility = if (shouldShow) View.INVISIBLE else View.VISIBLE
     }

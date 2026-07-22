@@ -362,6 +362,15 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
      *
      * @param song The [Song] to bind to the view.
      */
+    fun clear() {
+        bindImpl(
+            { null },
+            context.getString(R.string.def_playback),
+            R.drawable.ic_album_24,
+            squareishShapeAppearance,
+        )
+    }
+
     fun bind(song: Song) =
         bindImpl(
             { song.cover },
