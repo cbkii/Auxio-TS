@@ -40,6 +40,11 @@ jobs:
             capture && /^[[:space:]]*PY$/ { exit }
             capture { sub(/^          /, ""); print }
           ' "${source_workflow}" > "${patch_script}"
+          sed -i \
+            -e 's/^                candidates.addAll(discoveredRoots.filter { it in savedPaths })$/            candidates.addAll(discoveredRoots.filter { it in savedPaths })/' \
+            -e 's/^                \/\/ persisted file:\/\/\/ root retains the same authority as its raw path\.$/            \/\/ persisted file:\/\/\/ root retains the same authority as its raw path./' \
+            -e 's/^                candidates.addAll(discoveredRoots.filter { it.trimEnd('\''\/'\'') in savedRoots })$/            candidates.addAll(discoveredRoots.filter { it.trimEnd('\''\/'\'') in savedRoots })/' \
+            "${patch_script}"
 
           patch_rc=0
           {
