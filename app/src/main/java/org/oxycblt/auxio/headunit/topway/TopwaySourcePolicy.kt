@@ -140,20 +140,33 @@ object TopwaySourcePolicy {
     ): List<String> {
         val saved =
             savedPaths.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
+        val savedSet = saved.map { it.trimEnd('/') }.toSet()
         val media =
             mediaStoreParents
                 .mapNotNull(::normaliseCandidatePath)
                 .filter(::isAllowedSourceCandidate)
+        val injectedRoots =
+            storageRoots.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
         val candidates = mutableListOf<String>()
+        // Configured roots are always authoritative and are scanned before optional suggestions.
+        candidates.addAll(saved)
         candidates.addAll(SAFE_GENERIC_FALLBACKS)
-        candidates.addAll(storageRoots)
-        val discoveredRoots = discoverCandidateRoots()
+        candidates.addAll(injectedRoots)
+
+        // Do not walk /storage or /mnt/media_rw during configured-only/background access. The
+        // explicit source picker opts in and remains the only caller allowed to discover new USBs.
+        val discoveredRoots =
+            if (allowUnconfiguredUsb) {
+                discoverCandidateRoots()
+            } else {
+                emptyList()
+            }
         if (allowUnconfiguredUsb) {
             candidates.addAll(discoveredRoots)
         } else {
-            // Only add discovered USB roots if they are already in the savedPaths
-            candidates.addAll(discoveredRoots.filter { it in savedPaths })
+            candidates.addAll(discoveredRoots.filter { it.trimEnd('/') in savedSet })
         }
+
         val roots = preferAppFacingRoots(candidates).filter(::isAllowedSourceCandidate)
         val audioParents = linkedSetOf<String>()
         val deadline = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS
@@ -172,7 +185,10 @@ object TopwaySourcePolicy {
         listOf(saved, media, audioParents.toList(), musicFolders, usb, generic).forEach { group ->
             group.filterTo(ordered, ::isAllowedSourceCandidate)
         }
-        L.i("Discovered ${ordered.size} TS18 music source candidates")
+        L.i(
+            "Discovered ${ordered.size} TS18 music source candidates " +
+                "(explicitUsb=$allowUnconfiguredUsb, configured=${saved.size}, injected=${injectedRoots.size})"
+        )
         return ordered.take(MAX_CANDIDATES)
     }
 
@@ -278,10 +294,13 @@ object TopwaySourcePolicy {
     private fun normaliseCandidatePath(value: String): String? {
         val trimmed = value.trim()
         if (trimmed.isEmpty()) return null
-        return when {
-            trimmed.startsWith("file://") -> runCatching { URI(trimmed).path }.getOrNull()
-            else -> trimmed
-        }
+        val path =
+            when {
+                trimmed.startsWith("file:", ignoreCase = true) ->
+                    runCatching { URI(trimmed).path }.getOrNull()
+                else -> trimmed
+            } ?: return null
+        return path.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
     }
 
     fun isAllowedSourceCandidate(path: String): Boolean {
