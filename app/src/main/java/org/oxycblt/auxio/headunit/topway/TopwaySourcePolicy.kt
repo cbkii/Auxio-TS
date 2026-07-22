@@ -280,11 +280,7 @@ object TopwaySourcePolicy {
         }
     }
 
-    private fun shouldDescend(
-        dir: File,
-        enforceSafeRoot: Boolean,
-        canonicalRoot: File?,
-    ): Boolean {
+    private fun shouldDescend(dir: File, enforceSafeRoot: Boolean, canonicalRoot: File?): Boolean {
         val name = dir.name
         if (name == "." || name == ".." || name.startsWith('.')) return false
         if (isNoisyDir(name)) return false

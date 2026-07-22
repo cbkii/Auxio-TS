@@ -193,10 +193,7 @@ class TopwaySourcePolicyDiscoveryTest {
                 )
             )
             assertFalse(
-                TopwaySourcePolicy.isWithinCanonicalRoot(
-                    escape,
-                    configuredRoot.canonicalFile,
-                )
+                TopwaySourcePolicy.isWithinCanonicalRoot(escape, configuredRoot.canonicalFile)
             )
         } finally {
             tempRoot.deleteRecursively()
