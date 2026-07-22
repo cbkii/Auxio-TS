@@ -1,26 +1,7 @@
 name: Android 10 Compatibility
 
 on:
-  pull_request:
-    branches: [dev]
-    paths:
-      - "app/**"
-      - "musikr/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle.properties"
-      - "scripts/bootstrap-dependencies.sh"
-      - ".github/workflows/android-api29.yml"
-  push:
-    branches: [dev]
-    paths:
-      - "app/**"
-      - "musikr/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle.properties"
-      - "scripts/bootstrap-dependencies.sh"
-      - ".github/workflows/android-api29.yml"
+  workflow_call:
   workflow_dispatch:
 
 permissions:
