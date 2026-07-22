@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="lbl_playback_restoring">Restoring playback…</string>
+    <string name="lbl_playback_idle">Nothing playing</string>
+    <string name="lbl_playback_unavailable">Playback unavailable</string>
+    <string name="msg_playback_restore_failed">Saved playback could not be restored</string>
+</resources>
