@@ -29,11 +29,11 @@ jobs:
           ./gradlew --no-daemon --console=plain spotlessApply
           rm -f .github/workflows/temporary-wp13-format.yml
           git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if git diff --cached --quiet; then
             git commit --allow-empty -m 'ci: refresh WorkPackage validation'
           else
             git commit -m 'style: apply repository formatting'
           fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git push origin HEAD:fix/queue-and-source-authority-18405081181736171814
