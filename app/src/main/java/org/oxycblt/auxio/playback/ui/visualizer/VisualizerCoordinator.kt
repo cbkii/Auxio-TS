@@ -271,26 +271,32 @@ class VisualizerCoordinator(
         }
         watchdogJob =
             scope.launch {
-                delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
-                if (currentGeneration != generation || currentSessionId != sessionId) return@launch
-                val currentState = _state.value
-                val now = android.os.SystemClock.uptimeMillis()
-                val hasFreshFrame =
-                    currentState is VisualizerState.Live &&
-                        now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
-                if (hasFreshFrame) return@launch
+                while (currentGeneration == generation && currentSessionId == sessionId) {
+                    delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
+                    if (currentGeneration != generation || currentSessionId != sessionId) {
+                        return@launch
+                    }
+                    val currentState = _state.value
+                    val now = android.os.SystemClock.uptimeMillis()
+                    val hasFreshFrame =
+                        currentState is VisualizerState.Live &&
+                            now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
+                    if (hasFreshFrame) continue
 
-                if (retryCount < MAX_VISUALIZER_RETRIES) {
-                    retryCount++
-                    L.w(
-                        "Visualizer produced no recent usable frame; retrying " +
-                            "session=$sessionId attempt=$retryCount"
-                    )
-                    releaseVisualizer()
-                    updateState()
-                } else {
-                    releaseVisualizer()
-                    _state.value = VisualizerState.Unavailable("No usable FFT or waveform frames")
+                    if (retryCount < MAX_VISUALIZER_RETRIES) {
+                        retryCount++
+                        L.w(
+                            "Visualizer produced no recent usable frame; retrying " +
+                                "session=$sessionId attempt=$retryCount"
+                        )
+                        releaseVisualizer()
+                        updateState()
+                    } else {
+                        releaseVisualizer()
+                        _state.value =
+                            VisualizerState.Unavailable("No usable FFT or waveform frames")
+                    }
+                    return@launch
                 }
             }
     }
