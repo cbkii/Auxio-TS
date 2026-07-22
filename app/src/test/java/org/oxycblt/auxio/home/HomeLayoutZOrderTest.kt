@@ -50,4 +50,5 @@ class HomeLayoutZOrderTest {
             "Indexing UI ($indexingIndex) must be after Pager ($pagerIndex) to avoid being blocked",
             indexingIndex > pagerIndex,
         )
-    }}
+    }
+}
