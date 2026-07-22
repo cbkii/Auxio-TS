@@ -1,0 +1,48 @@
+name: Temporary WP2 and WP5 formatter
+
+on:
+  push:
+    branches:
+      - fix/playback-banner-and-visualizer-state-11316441362856201323
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[wp25-formatted]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/playback-banner-and-visualizer-state-11316441362856201323
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply repository formatting and remove this workflow
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk_dir"
+          printf 'sdk.dir=%s\n' "$sdk_dir" > local.properties
+          ./gradlew --no-daemon --console=plain spotlessApply
+          rm -f .github/workflows/temporary-wp25-format.yml
+          git diff --check
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No formatting changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'style: format banner and visualizer work [wp25-formatted]'
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push https://github.com/${GITHUB_REPOSITORY}.git \
+            HEAD:fix/playback-banner-and-visualizer-state-11316441362856201323
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
