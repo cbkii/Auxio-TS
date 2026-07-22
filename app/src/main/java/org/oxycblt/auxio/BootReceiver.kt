@@ -6,14 +6,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio
@@ -26,7 +18,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.overlay.TopwayOverlayRestoreBridge
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
@@ -42,7 +33,6 @@ import timber.log.Timber as L
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var journal: DiagnosticJournal
-    @Inject lateinit var rootGate: RootStateHolder
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) {
@@ -57,31 +47,9 @@ class BootReceiver : BroadcastReceiver() {
 
         L.d("Autostart enabled, attempting to launch Auxio-TS on boot")
         journal.log(DiagnosticJournal.CAT_BOOT, "Boot Received", "Autostart enabled")
-
-        // TS18: Perform early root probe if autostart is enabled to speed up library readiness.
-        // Avoid starting any root-related worker for the standard APK; RootStateHolder also gates
-        // standard variants, but skipping the thread entirely keeps the standard boot path clean.
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            val pendingResult = goAsync()
-            val probeThread =
-                Thread(
-                    {
-                        try {
-                            val state = rootGate.probeSync()
-                            journal.log(
-                                DiagnosticJournal.CAT_BOOT,
-                                "Root probe completed",
-                                state.name,
-                            )
-                        } finally {
-                            pendingResult.finish()
-                        }
-                    },
-                    "AuxioTsRootProbe",
-                )
-            probeThread.isDaemon = true
-            probeThread.start()
-        }
+        // Do not start Magisk/su work in the cold boot receiver. Root-assisted DirectFS probes on
+        // demand only after playback/session restoration reaches a configured inaccessible source.
+        journal.log(DiagnosticJournal.CAT_BOOT, "Root probe deferred", "on_demand_direct_fs")
 
         // When autoplay is enabled, start the playback service first so that music can begin
         // even if the background activity start is blocked. The service start is only performed
