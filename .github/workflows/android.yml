@@ -54,6 +54,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  api29-runtime-smoke:
+    uses: ./.github/workflows/android-api29.yml
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
