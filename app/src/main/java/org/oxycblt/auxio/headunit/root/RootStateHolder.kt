@@ -6,14 +6,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.root
@@ -27,8 +19,12 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.musikr.fs.RootGate
 
 @Singleton
-class RootStateHolder @Inject constructor(@ApplicationContext private val context: Context) :
-    RootGate {
+class RootStateHolder
+@Inject
+constructor(
+    @ApplicationContext private val context: Context,
+    private val processRunner: RootProcessRunner,
+) : RootGate {
     enum class State {
         Unknown,
         Available,
@@ -69,54 +65,26 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
 
     fun runTs18ProbeSync(probe: org.oxycblt.auxio.headunit.root.dofun.Ts18RootProbe): String? {
         if (stateSnapshot() != State.Available) return null
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", probe.command))
-            process.outputStream.closeQuietly()
-            var stdout = ""
-            val outThread = Thread {
-                stdout = process.inputStream.bufferedReader().use { it.readText() }
-            }
-            val errThread = Thread { process.errorStream.bufferedReader().use { it.readText() } }
-            outThread.start()
-            errThread.start()
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-            } else {
-                process.waitFor()
-            }
-            outThread.join(1000)
-            errThread.join(1000)
-            return stdout.take(5000)
-        } catch (e: Exception) {
-            return null
-        }
+        return successfulStdout(
+            processRunner.runRootCommand(
+                probe.command,
+                timeoutMs = TS18_OPERATION_TIMEOUT_MS,
+                maxOutputBytes = TS18_OPERATION_OUTPUT_BYTES,
+            )
+        )
     }
 
     fun runTs18MutationSync(
         mutation: org.oxycblt.auxio.headunit.root.dofun.Ts18RootMutation
     ): String? {
         if (stateSnapshot() != State.Available) return null
-        try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", mutation.command))
-            process.outputStream.closeQuietly()
-            var stdout = ""
-            val outThread = Thread {
-                stdout = process.inputStream.bufferedReader().use { it.readText() }
-            }
-            val errThread = Thread { process.errorStream.bufferedReader().use { it.readText() } }
-            outThread.start()
-            errThread.start()
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-            } else {
-                process.waitFor()
-            }
-            outThread.join(1000)
-            errThread.join(1000)
-            return stdout.take(5000)
-        } catch (e: Exception) {
-            return null
-        }
+        return successfulStdout(
+            processRunner.runRootCommand(
+                mutation.command,
+                timeoutMs = TS18_OPERATION_TIMEOUT_MS,
+                maxOutputBytes = TS18_OPERATION_OUTPUT_BYTES,
+            )
+        )
     }
 
     fun probeSync(): State {
@@ -133,37 +101,29 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
             state = State.Unknown
         }
 
-        //
-        // process-wide permanent timeout would disable root-assisted DirectFS until restart.
+        // A timeout is retryable. Other resolved states are retained until process restart or the
+        // user disables/re-enables root-assisted storage.
         if (state != State.Unknown && state != State.TimedOut) return state
-        val process =
-            try {
-                Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-            } catch (e: Exception) {
-                state = State.Unavailable
-                return state
+        state =
+            when (
+                val result =
+                    processRunner.runRootCommand(
+                        "id",
+                        timeoutMs = ROOT_PROBE_TIMEOUT_MS,
+                        maxOutputBytes = ROOT_PROBE_OUTPUT_BYTES,
+                    )
+            ) {
+                is RootProcessResult.Success ->
+                    if (result.stdout.contains("uid=0")) State.Available else State.Denied
+                is RootProcessResult.NonZeroExit -> State.Denied
+                RootProcessResult.TimedOut -> State.TimedOut
+                RootProcessResult.OutputLimitExceeded -> State.Denied
+                is RootProcessResult.ExecutionFailure -> State.Unavailable
             }
-        try {
-            val finished = process.waitForCompat(2000)
-            if (!finished) {
-                process.destroyCompat()
-                state = State.TimedOut
-            } else {
-                val stdout = process.inputStream.bufferedReader().use { it.readText() }
-                state =
-                    if (process.exitValue() == 0 && stdout.contains("uid=0")) State.Available
-                    else State.Denied
-            }
-        } finally {
-            process.inputStream.closeQuietly()
-            process.errorStream.closeQuietly()
-            process.outputStream.closeQuietly()
-        }
         return state
     }
 
     // Prevent free-form shell execution. Only accept known-safe deterministic commands.
-
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
             state = State.UnsupportedForVariant
@@ -179,25 +139,59 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
 
         if (state == State.Unknown || state == State.TimedOut) probeSync()
         if (state != State.Available) return null
+        if (!isAllowedRootListCommand(command)) return null
 
-        // Validation: extract the path from the command and ensure the command matches exactly what
-        // we'd build for that path.
-        val prefix = "for p in '"
-        if (!command.startsWith(prefix)) return null
-
-        val pathEndIndex = command.indexOf("'", prefix.length)
-        if (pathEndIndex == -1) return null
-
-        val extractedPath = command.substring(prefix.length, pathEndIndex)
-
-        // Disallow path injection characters
-        if (
-            extractedPath.contains("\n") ||
-                extractedPath.contains(";") ||
-                extractedPath.contains("`") ||
-                extractedPath.contains("\$")
+        return when (
+            val result =
+                processRunner.runRootCommand(
+                    command,
+                    timeoutMs = timeoutMs,
+                    maxOutputBytes = ROOT_LIST_OUTPUT_BYTES,
+                )
         ) {
-            return null
+            is RootProcessResult.Success ->
+                result.stdout
+                    .lineSequence()
+                    .filter(String::isNotBlank)
+                    .take(MAX_ROOT_LIST_LINES)
+                    .toList()
+            RootProcessResult.TimedOut -> {
+                state = State.TimedOut
+                null
+            }
+            is RootProcessResult.NonZeroExit,
+            RootProcessResult.OutputLimitExceeded,
+            is RootProcessResult.ExecutionFailure -> null
+        }
+    }
+
+    private fun successfulStdout(result: RootProcessResult): String? =
+        when (result) {
+            is RootProcessResult.Success -> result.stdout.take(TS18_OPERATION_OUTPUT_BYTES)
+            RootProcessResult.TimedOut -> {
+                state = State.TimedOut
+                null
+            }
+            is RootProcessResult.NonZeroExit,
+            RootProcessResult.OutputLimitExceeded,
+            is RootProcessResult.ExecutionFailure -> null
+        }
+
+    private fun isAllowedRootListCommand(command: String): Boolean {
+        // Extract the path and reconstruct the only shell command RootGate accepts. Paths with shell
+        // metacharacters are rejected before reconstruction.
+        val prefix = "for p in '"
+        if (!command.startsWith(prefix)) return false
+        val pathEndIndex = command.indexOf("'", prefix.length)
+        if (pathEndIndex == -1) return false
+        val extractedPath = command.substring(prefix.length, pathEndIndex)
+        if (
+            extractedPath.contains('\n') ||
+                extractedPath.contains(';') ||
+                extractedPath.contains('`') ||
+                extractedPath.contains('$')
+        ) {
+            return false
         }
 
         val expectedCommand =
@@ -209,70 +203,17 @@ class RootStateHolder @Inject constructor(@ApplicationContext private val contex
                 "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
                 "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
                 "done"
-
-        if (command != expectedCommand) {
-            return null
-        }
-
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-            try {
-                if (!process.waitForCompat(timeoutMs)) {
-                    process.destroyCompat()
-                    null
-                } else {
-                    if (process.exitValue() != 0) null
-                    else
-                        process.inputStream.bufferedReader().use { reader ->
-                            reader.readLines().filter { it.isNotBlank() }
-                        }
-                }
-            } finally {
-                process.inputStream.closeQuietly()
-                process.errorStream.closeQuietly()
-                process.outputStream.closeQuietly()
-            }
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun Process.waitForCompat(timeoutMs: Long): Boolean {
-        val deadlineNanos = System.nanoTime() + timeoutMs * 1_000_000L
-        while (true) {
-            try {
-                exitValue()
-                return true
-            } catch (_: IllegalThreadStateException) {}
-
-            if (System.nanoTime() >= deadlineNanos) return false
-
-            try {
-                val remainingMs =
-                    ((deadlineNanos - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
-                Thread.sleep(minOf(remainingMs, 25L))
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
-        }
-    }
-
-    private fun Process.destroyCompat() {
-        destroy()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            destroyForcibly()
-        }
-    }
-
-    private fun java.io.Closeable.closeQuietly() {
-        try {
-            close()
-        } catch (_: Exception) {}
+        return command == expectedCommand
     }
 
     private companion object {
         const val KEY_USE_ROOT_FS = "auxio_use_root_fs"
+        const val ROOT_PROBE_TIMEOUT_MS = 2_000L
+        const val ROOT_PROBE_OUTPUT_BYTES = 4 * 1024
+        const val TS18_OPERATION_TIMEOUT_MS = 5_000L
+        const val TS18_OPERATION_OUTPUT_BYTES = 5_000
+        const val ROOT_LIST_OUTPUT_BYTES = 512 * 1024
+        const val MAX_ROOT_LIST_LINES = 5_000
     }
 }
 
