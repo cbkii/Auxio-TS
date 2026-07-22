@@ -10,14 +10,17 @@
 
 package org.oxycblt.auxio.playback.queue
 
+import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.oxycblt.auxio.playback.persist.QueueDescriptor
 import org.oxycblt.auxio.playback.persist.QueueItemRef
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
+import org.oxycblt.musikr.Song
 
 class PrimitiveQueueAuthorityTest {
     @Test
@@ -92,6 +95,39 @@ class PrimitiveQueueAuthorityTest {
         assertEquals(merged.map { it.globalPosition }.distinct(), merged.map { it.globalPosition })
     }
 
+    @Test
+    fun unresolvedIncomingRowCannotReplaceExistingRichSong() {
+        val richSong = fakeSong()
+        val rich = QueueDisplayItem(globalPosition = 20, song = richSong, primitive = null)
+
+        val merged =
+            PrimitiveQueueAuthority.mergeBounded(
+                current = listOf(rich),
+                incoming = listOf(unresolvedItem(20)),
+                anchorGlobalPosition = 20,
+                maximumItems = 10,
+            )
+
+        assertSame(richSong, merged.single().song)
+        assertTrue(merged.single().editable)
+    }
+
+    @Test
+    fun unresolvedIncomingRowCannotReplacePlayablePrimitive() {
+        val playable = displayItem(20)
+
+        val merged =
+            PrimitiveQueueAuthority.mergeBounded(
+                current = listOf(playable),
+                incoming = listOf(unresolvedItem(20)),
+                anchorGlobalPosition = 20,
+                maximumItems = 10,
+            )
+
+        assertEquals(playable, merged.single())
+        assertTrue(merged.single().editable)
+    }
+
     private fun descriptor(sessionId: Long, revision: Long) =
         QueueDescriptor(
             sessionId = sessionId,
@@ -121,4 +157,35 @@ class PrimitiveQueueAuthorityTest {
                     durationMs = 1_000,
                 ),
         )
+
+    private fun unresolvedItem(position: Int) =
+        QueueDisplayItem(
+            globalPosition = position,
+            song = null,
+            primitive =
+                QueueItemRef(
+                    logicalPosition = position,
+                    canonicalPosition = position,
+                    stableSongUid = null,
+                    uri = null,
+                    pathFallback = null,
+                    titleFallback = "Unavailable",
+                    artistFallback = null,
+                    albumFallback = null,
+                    durationMs = 0,
+                ),
+        )
+
+    private fun fakeSong(): Song =
+        Proxy.newProxyInstance(
+            Song::class.java.classLoader,
+            arrayOf(Song::class.java),
+        ) { _, method, _ ->
+            when (method.name) {
+                "toString" -> "FakeSong"
+                "hashCode" -> 1
+                "equals" -> false
+                else -> null
+            }
+        } as Song
 }
