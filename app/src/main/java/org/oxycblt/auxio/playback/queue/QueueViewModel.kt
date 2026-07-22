@@ -143,7 +143,7 @@ constructor(
             }
             return
         }
-        if (window.hasMissingRows()) {
+        if (QueueAuthorityPolicy.hasMissingRows(window.items)) {
             L.w(
                 "Rejecting incomplete primitive queue window " +
                     "session=${window.descriptor.sessionId} revision=${window.descriptor.revision}"
@@ -178,37 +178,24 @@ constructor(
         if (anchor == lastRequestedAnchor) return
         lastRequestedAnchor = anchor
 
-        val requestGeneration = queueGeneration
-        val requestDescriptor = activeWindow.descriptor
+        val request = QueueAuthorityPolicy.request(queueGeneration, activeWindow.descriptor)
         rangeJob =
             viewModelScope.launch {
                 val window =
                     withContext(Dispatchers.IO) {
-                        persistenceRepository.readQueueWindowAround(requestDescriptor, anchor)
+                        persistenceRepository.readQueueWindowAround(activeWindow.descriptor, anchor)
                     } ?: return@launch
 
-                val stillActive = activePrimitiveWindow
                 if (
-                    requestGeneration != queueGeneration ||
-                        stillActive == null ||
-                        stillActive.descriptor.sessionId != requestDescriptor.sessionId ||
-                        stillActive.descriptor.revision != requestDescriptor.revision
-                ) {
-                    L.d("Discarding stale primitive range result")
-                    return@launch
-                }
-                if (
-                    window.descriptor.sessionId != requestDescriptor.sessionId ||
-                        window.descriptor.revision != requestDescriptor.revision
-                ) {
-                    L.d("Discarding primitive range with mismatched session/revision")
-                    return@launch
-                }
-                if (window.hasMissingRows()) {
-                    L.w(
-                        "Discarding incomplete primitive range " +
-                            "session=${window.descriptor.sessionId} revision=${window.descriptor.revision}"
+                    !QueueAuthorityPolicy.accepts(
+                        request = request,
+                        currentGeneration = queueGeneration,
+                        activeDescriptor = activePrimitiveWindow?.descriptor,
+                        resultDescriptor = window.descriptor,
+                        resultItems = window.items,
                     )
+                ) {
+                    L.d("Discarding stale or incomplete primitive range result")
                     return@launch
                 }
 
@@ -267,13 +254,6 @@ constructor(
         rangeJob = null
         lastRequestedAnchor = null
     }
-
-    private fun QueueWindow.hasMissingRows(): Boolean =
-        items.any { item ->
-            item.stableSongUid == null &&
-                item.uri.isNullOrBlank() &&
-                item.pathFallback.isNullOrBlank()
-        }
 
     private fun QueueWindow.toDisplayItems() =
         items.map { item ->
