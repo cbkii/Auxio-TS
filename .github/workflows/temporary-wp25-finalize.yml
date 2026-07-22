@@ -24,43 +24,31 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           main = Path('app/src/main/java/org/oxycblt/auxio/MainFragment.kt')
-          text = main.read_text()
-          old = '''    private fun updateBannerVisibility(state: org.oxycblt.auxio.playback.BannerState) {
-                  val isExpandable =
-                      state is org.oxycblt.auxio.playback.BannerState.Rich ||
-                          state is org.oxycblt.auxio.playback.BannerState.Raw
+          text = main.read_text(encoding='utf-8')
+          pattern = re.compile(
+              r'''    private fun updateBannerVisibility\(state: org\.oxycblt\.auxio\.playback\.BannerState\) \{\n'''
+              r'''        val isExpandable =\n'''
+              r'''            state is org\.oxycblt\.auxio\.playback\.BannerState\.Rich \|\|\n'''
+              r'''                state is org\.oxycblt\.auxio\.playback\.BannerState\.Raw\n'''
+              r'''        val binding = requireBinding\(\)'''
+          )
+          replacement = '''    private fun updateBannerVisibility(state: org.oxycblt.auxio.playback.BannerState) {
                   val binding = requireBinding()'''
-          new = '''    private fun updateBannerVisibility(state: org.oxycblt.auxio.playback.BannerState) {
-                  val binding = requireBinding()'''
-          if old not in text:
-              raise SystemExit('MainFragment banner declaration anchor not found')
-          text = text.replace(old, new, 1)
-          old = '''        playbackSheetBehavior.isDraggable = isExpandable
-                  queueSheetBehavior?.isDraggable = isExpandable
-          
-                  if (!isExpandable) {
-                      if (
-                          playbackSheetBehavior.state ==
-                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                                  .STATE_EXPANDED
-                      ) {
-                          playbackSheetBehavior.state =
-                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                                  .STATE_COLLAPSED
-                      }
-                      if (
-                          queueSheetBehavior?.state ==
-                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                                  .STATE_EXPANDED
-                      ) {
-                          queueSheetBehavior.state =
-                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                                  .STATE_COLLAPSED
-                      }
-                  }'''
-          new = '''        playbackSheetBehavior.isDraggable = state.playable
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'MainFragment banner declaration replacements={count}')
+
+          pattern = re.compile(
+              r'''        playbackSheetBehavior\.isDraggable = isExpandable\n'''
+              r'''        queueSheetBehavior\?\.isDraggable = isExpandable\n\n'''
+              r'''        if \(!isExpandable\) \{\n'''
+              r'''(?:.|\n)*?'''
+              r'''        \}\n\n        updateStartupPanelState\(\)'''
+          )
+          replacement = '''        playbackSheetBehavior.isDraggable = state.playable
                   queueSheetBehavior?.isDraggable = state.richQueueCommandsAvailable
           
                   if (
@@ -82,38 +70,48 @@ jobs:
                       playbackSheetBehavior.state =
                           com.google.android.material.bottomsheet.BackportBottomSheetBehavior
                               .STATE_COLLAPSED
-                  }'''
-          if old not in text:
-              raise SystemExit('MainFragment sheet policy anchor not found')
-          main.write_text(text.replace(old, new, 1))
+                  }
+          
+                  updateStartupPanelState()'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'MainFragment sheet policy replacements={count}')
+          main.write_text(text, encoding='utf-8')
 
           panel = Path('app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt')
-          text = panel.read_text()
+          text = panel.read_text(encoding='utf-8')
           old = '''                    if (state is VisualizerState.PermissionRequired) {
                                       visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
                                   }'''
-          new = '''                    if (
+          # Normalize the actual source indentation rather than relying on a formatted diff preview.
+          pattern = re.compile(
+              r'''                    if \(state is VisualizerState\.PermissionRequired\) \{\n'''
+              r'''                        visualizerPermissionLauncher\?\.launch\(Manifest\.permission\.RECORD_AUDIO\)\n'''
+              r'''                    \}'''
+          )
+          replacement = '''                    if (
                                       state is VisualizerState.PermissionRequired &&
                                           visualizerCoordinator.claimPermissionRequest()
                                   ) {
                                       visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
                                   }'''
-          if old not in text:
-              raise SystemExit('PlaybackPanel permission anchor not found')
-          text = text.replace(old, new, 1)
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'PlaybackPanel permission replacements={count}')
           text = text.replace('        // releaseVisualizer()\n', '', 1)
-          old = '''    private companion object {
-                  const val FFT_PREFERENCE_WINDOW_MS = 300L
-                  const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L
-                  const val VISUALIZER_STALE_AFTER_MS = 2_000L
-                  const val MAX_VISUALIZER_RETRIES = 1
-                  const val MIN_WAVEFORM_RANGE = 4
-              }
-          
-          '''
-          if old not in text:
-              raise SystemExit('PlaybackPanel obsolete constants anchor not found')
-          panel.write_text(text.replace(old, '', 1))
+          pattern = re.compile(
+              r'''    private companion object \{\n'''
+              r'''        const val FFT_PREFERENCE_WINDOW_MS = 300L\n'''
+              r'''        const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L\n'''
+              r'''        const val VISUALIZER_STALE_AFTER_MS = 2_000L\n'''
+              r'''        const val MAX_VISUALIZER_RETRIES = 1\n'''
+              r'''        const val MIN_WAVEFORM_RANGE = 4\n'''
+              r'''    \}\n\n'''
+          )
+          text, count = pattern.subn('', text, count=1)
+          if count != 1:
+              raise SystemExit(f'PlaybackPanel obsolete constant replacements={count}')
+          panel.write_text(text, encoding='utf-8')
           PY
           rm -f .github/workflows/temporary-wp25-finalize.yml
           git diff --check
