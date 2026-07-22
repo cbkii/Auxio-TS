@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   apply:
-    if: ${{ github.head_ref == 'release-ready-fixes' }}
+    if: ${{ github.head_ref == 'release-ready-fixes' && !contains(github.event.pull_request.head.sha, 'release-ready-patch-error') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -28,16 +28,34 @@ jobs:
 
       - name: Extract and apply reviewed patch
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           patch_script="${RUNNER_TEMP}/release-ready-patch.py"
+          patch_log="${RUNNER_TEMP}/release-ready-patch.log"
           awk '
             /^[[:space:]]*python3 <<'\''PY'\''$/ { capture=1; next }
             capture && /^[[:space:]]*PY$/ { exit }
             capture { sub(/^          /, ""); print }
           ' .github/workflows/temporary-release-ready-patch.yml > "${patch_script}"
-          test -s "${patch_script}"
-          python3 -m py_compile "${patch_script}"
-          python3 "${patch_script}"
+          patch_rc=0
+          {
+            test -s "${patch_script}"
+            python3 -m py_compile "${patch_script}"
+            python3 "${patch_script}"
+          } >"${patch_log}" 2>&1 || patch_rc=$?
+          if ((patch_rc != 0)); then
+            cp "${patch_log}" .github/release-ready-patch-error.txt
+            git add .github/release-ready-patch-error.txt
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'ci: record release-ready patch failure [release-ready-patch-error]'
+            auth=$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+              push https://github.com/${GITHUB_REPOSITORY}.git HEAD:release-ready-fixes
+            cat "${patch_log}"
+            exit "${patch_rc}"
+          fi
 
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
@@ -66,6 +84,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -f \
+            .github/release-ready-patch-error.txt \
             .github/release-ready-patch-trigger.txt \
             .github/workflows/temporary-release-ready-patch.yml \
             .github/workflows/temporary-release-ready-pr-kick.yml
