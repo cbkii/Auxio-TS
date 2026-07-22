@@ -1,0 +1,55 @@
+name: Temporary PR191 pull-request kick
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+jobs:
+  apply-hardening:
+    if: ${{ github.head_ref == 'fix/pr191-review-hardening-20260722' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout hardening branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/pr191-review-hardening-20260722
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Extract and run reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_workflow='.github/workflows/temporary-pr191-review-hardening.yml'
+          patch_script="${RUNNER_TEMP}/pr191-review-hardening.py"
+          awk '
+            /^[[:space:]]*python3 <<'\''PY'\''$/ { capture=1; next }
+            capture && /^[[:space:]]*PY$/ { exit }
+            capture { sub(/^          /, ""); print }
+          ' "${source_workflow}" > "${patch_script}"
+          test -s "${patch_script}"
+          python3 "${patch_script}"
+          rm -f \
+            .github/workflows/temporary-pr191-review-hardening.yml \
+            .github/workflows/temporary-pr191-pr-kick.yml
+          git diff --check
+
+      - name: Commit and push final hardening
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch='fix/pr191-review-hardening-20260722'
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: harden playback and configured-source integration [pr191-hardening-finished]'
+          auth=$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+            push https://github.com/${GITHUB_REPOSITORY}.git HEAD:"${branch}"
