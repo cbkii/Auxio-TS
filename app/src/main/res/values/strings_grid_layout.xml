@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="set_grid_default_columns">Default library columns</string>
-    <string name="set_grid_default_columns_desc">Used by library tabs that do not have their own override.</string>
-    <string name="set_grid_song_columns">Song columns</string>
-    <string name="set_grid_album_columns">Album columns</string>
-    <string name="set_grid_artist_columns">Artist columns</string>
-    <string name="set_grid_genre_columns">Genre columns</string>
-    <string name="set_grid_playlist_columns">Playlist columns</string>
-    <string name="set_grid_tab_columns_desc">Use the library default or override this tab.</string>
-    <string name="set_grid_columns_inherit">Use default</string>
-    <string name="set_grid_columns_two">2 columns</string>
-    <string name="set_grid_columns_three">3 columns</string>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="set_grid_default_columns" tools:ignore="MissingTranslation">Default library columns</string>
+    <string name="set_grid_default_columns_desc" tools:ignore="MissingTranslation">Used by library tabs that do not have their own override.</string>
+    <string name="set_grid_song_columns" tools:ignore="MissingTranslation">Song columns</string>
+    <string name="set_grid_album_columns" tools:ignore="MissingTranslation">Album columns</string>
+    <string name="set_grid_artist_columns" tools:ignore="MissingTranslation">Artist columns</string>
+    <string name="set_grid_genre_columns" tools:ignore="MissingTranslation">Genre columns</string>
+    <string name="set_grid_playlist_columns" tools:ignore="MissingTranslation">Playlist columns</string>
+    <string name="set_grid_tab_columns_desc" tools:ignore="MissingTranslation">Use the library default or override this tab.</string>
+    <string name="set_grid_columns_inherit" tools:ignore="MissingTranslation">Use default</string>
+    <string name="set_grid_columns_two" tools:ignore="MissingTranslation">2 columns</string>
+    <string name="set_grid_columns_three" tools:ignore="MissingTranslation">3 columns</string>
 </resources>
