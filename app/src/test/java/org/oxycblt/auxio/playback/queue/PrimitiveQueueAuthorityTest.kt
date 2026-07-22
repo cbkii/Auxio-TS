@@ -98,15 +98,9 @@ class PrimitiveQueueAuthorityTest {
             )
 
         assertEquals(12, merged.size)
-        assertEquals(
-            merged.map { it.globalPosition }.sorted(),
-            merged.map { it.globalPosition },
-        )
+        assertEquals(merged.map { it.globalPosition }.sorted(), merged.map { it.globalPosition })
         assertTrue(merged.any { it.globalPosition == 20 })
-        assertEquals(
-            merged.map { it.globalPosition }.distinct(),
-            merged.map { it.globalPosition },
-        )
+        assertEquals(merged.map { it.globalPosition }.distinct(), merged.map { it.globalPosition })
     }
 
     @Test
@@ -191,10 +185,10 @@ class PrimitiveQueueAuthorityTest {
         )
 
     private fun fakeSong(): Song =
-        Proxy.newProxyInstance(
-            Song::class.java.classLoader,
-            arrayOf(Song::class.java),
-        ) { _, method, _ ->
+        Proxy.newProxyInstance(Song::class.java.classLoader, arrayOf(Song::class.java)) {
+            _,
+            method,
+            _ ->
             when (method.name) {
                 "toString" -> "FakeSong"
                 "hashCode" -> 1

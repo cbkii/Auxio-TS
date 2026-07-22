@@ -59,11 +59,10 @@ internal object PrimitiveQueueAuthority {
         if (sorted.size <= maximumItems) return sorted
 
         val anchorIndex =
-            sorted.indexOfFirst { it.globalPosition >= anchorGlobalPosition }.let { index ->
-                if (index >= 0) index else sorted.lastIndex
-            }
-        val start =
-            (anchorIndex - maximumItems / 2).coerceIn(0, sorted.size - maximumItems)
+            sorted
+                .indexOfFirst { it.globalPosition >= anchorGlobalPosition }
+                .let { index -> if (index >= 0) index else sorted.lastIndex }
+        val start = (anchorIndex - maximumItems / 2).coerceIn(0, sorted.size - maximumItems)
         return sorted.subList(start, start + maximumItems)
     }
 }
