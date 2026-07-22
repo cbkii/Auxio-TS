@@ -123,13 +123,12 @@ jobs:
           printf 'no\n' | "${AVDMANAGER_BIN}" create avd \
             --force \
             --name "${AVD_NAME}" \
-            --package "${SYSTEM_IMAGE}" \
-            --device "pixel_2"
+            --package "${SYSTEM_IMAGE}"
           avd_status=${PIPESTATUS[1]}
           set -e
           if [[ "${avd_status}" -ne 0 ]]; then
             echo "::error::avdmanager failed with status ${avd_status}."
-            "${AVDMANAGER_BIN}" list device || true
+            "${AVDMANAGER_BIN}" list avd || true
             "${AVDMANAGER_BIN}" list target || true
             exit "${avd_status}"
           fi
@@ -149,7 +148,16 @@ jobs:
         shell: bash
         run: |
           emulator_log="${RUNNER_TEMP}/api29-emulator.log"
-          nohup "${ANDROID_SDK_ROOT}/emulator/emulator" \
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          emulator_bin="${sdk_root}/emulator/emulator"
+          if [[ ! -x "${emulator_bin}" ]]; then
+            emulator_bin="$(command -v emulator || true)"
+          fi
+          if [[ -z "${emulator_bin}" || ! -x "${emulator_bin}" ]]; then
+            echo "::error::Android emulator binary was not found."
+            exit 1
+          fi
+          nohup "${emulator_bin}" \
             -avd "${AVD_NAME}" \
             -no-window \
             -no-audio \
