@@ -1,0 +1,424 @@
+name: Temporary PR191 review hardening
+
+on:
+  push:
+    branches:
+      - fix/pr191-review-hardening-20260722
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-pr191-review-hardening
+  cancel-in-progress: true
+
+jobs:
+  apply-fixes:
+    if: ${{ !contains(github.event.head_commit.message, '[pr191-hardening-finished]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout hardening branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/pr191-review-hardening-20260722
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Apply reviewed fixes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(
+                      f"Expected exactly one match in {path}, found {count}: {old[:100]!r}"
+                  )
+              target.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+
+          configured_source_policy = '''/*
+           * Copyright (c) 2026 Auxio Project
+           * ConfiguredSourcePolicy.kt is part of Auxio.
+           *
+           * This program is free software: you can redistribute it and/or modify
+           * it under the terms of the GNU General Public License as published by
+           * the Free Software Foundation, either version 3 of the License, or
+           * (at your option) any later version.
+           *
+           * This program is distributed in the hope that it will be useful,
+           * but WITHOUT ANY WARRANTY; without even the implied warranty of
+           * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+           * GNU General Public License for more details.
+           *
+           * You should have received a copy of the GNU General Public License
+           * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+           */
+
+          package org.oxycblt.auxio.music
+
+          import android.net.Uri
+          import java.io.File
+          import javax.inject.Inject
+          import javax.inject.Singleton
+          import org.oxycblt.auxio.music.locations.LocationMode
+
+          /** Immutable snapshot and policy for configured music sources. */
+          @Singleton
+          class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSettings) {
+
+              val locationMode: LocationMode
+                  get() = settings.locationMode
+
+              val isUsbConfigured: Boolean
+                  get() = settings.safQuery.source.any { isUsbUri(it.uri) }
+
+              val allowUnconfiguredUsbDiscovery: Boolean
+                  get() = false
+
+              /**
+               * Returns only configured local filesystem roots, keyed by their canonical raw paths.
+               *
+               * SAF/content roots deliberately remain outside this map: they are provider authorities,
+               * not safe raw-path authorities for DirectFS browsing or raw Fast Resume.
+               */
+              fun getConfiguredRootsAsFiles(): Map<String, File> {
+                  val rawPaths =
+                      if (locationMode == LocationMode.DIRECT_FS) {
+                          settings.safQuery.source.mapNotNull { it.uri.path }
+                      } else {
+                          settings.safQuery.source.mapNotNull { source ->
+                              source.uri.path?.takeIf {
+                                  source.uri.scheme.isNullOrBlank() && it.startsWith('/')
+                              }
+                          }
+                      }
+
+                  return rawPaths
+                      .mapNotNull(::normaliseConfiguredRoot)
+                      .distinctBy { it.absolutePath }
+                      .associateBy { it.absolutePath }
+              }
+
+              internal companion object {
+                  private val UUID_STORAGE_PATH =
+                      Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
+                  private val UUID_VOLUME_TOKEN =
+                      Regex(
+                          "(?:^|/)(?:storage/|tree/|document/)?" +
+                              "[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(?=[:/]|$)"
+                      )
+                  private val USB_DISK_PATH =
+                      Regex("^/storage/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
+                  private val MEDIA_RW_USB_PATH =
+                      Regex("^/mnt/media_rw/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
+
+                  fun isUsbUri(uri: Uri): Boolean {
+                      val text = Uri.decode(uri.toString())
+                      val path = Uri.decode(uri.path.orEmpty()).replace('\\\\', '/')
+                      return text.contains("usbdisk", ignoreCase = true) ||
+                          text.contains("media_rw", ignoreCase = true) ||
+                          UUID_STORAGE_PATH.matches(path.trimEnd('/')) ||
+                          UUID_VOLUME_TOKEN.containsMatchIn(path)
+                  }
+
+                  fun normaliseConfiguredRoot(rawPath: String): File? {
+                      val path = rawPath.trim().replace('\\\\', '/').trimEnd('/')
+                      if (path.isEmpty() || !path.startsWith('/')) return null
+                      if (
+                          path.contains("/../") ||
+                              path.endsWith("/..") ||
+                              path.contains("/./") ||
+                              path.endsWith("/.")
+                      ) {
+                          return null
+                      }
+                      val candidate =
+                          runCatching { File(path).canonicalFile }.getOrElse { File(path).absoluteFile }
+                      val canonical = candidate.absolutePath.replace('\\\\', '/').trimEnd('/')
+                      val allowed =
+                          canonical == "/sdcard" ||
+                              canonical.startsWith("/sdcard/") ||
+                              canonical == "/storage/emulated/0" ||
+                              canonical.startsWith("/storage/emulated/0/") ||
+                              USB_DISK_PATH.matches(canonical) ||
+                              MEDIA_RW_USB_PATH.matches(canonical) ||
+                              UUID_STORAGE_PATH.matches(canonical)
+                      return candidate.takeIf { allowed }
+                  }
+              }
+          }
+          '''
+          Path(
+              "app/src/main/java/org/oxycblt/auxio/music/ConfiguredSourcePolicy.kt"
+          ).write_text(configured_source_policy, encoding="utf-8", newline="\n")
+
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwaySourcePolicy.kt",
+              '''        val saved =
+                      savedPaths.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
+                  val media =''',
+              '''        val saved =
+                      savedPaths.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
+                  val savedRoots = saved.map { it.trimEnd('/') }.toSet()
+                  val media =''',
+          )
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwaySourcePolicy.kt",
+              '''            // Only add discovered USB roots if they are already in the savedPaths
+                          candidates.addAll(discoveredRoots.filter { it in savedPaths })''',
+              '''            // Match discovered roots against the normalised configured paths so a
+                          // persisted file:/// root retains the same authority as its raw path.
+                          candidates.addAll(discoveredRoots.filter { it.trimEnd('/') in savedRoots })''',
+          )
+
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt",
+              '''                        storageRoots = discoverStorageRoots(),
+                                      rootGate =''',
+              '''                        storageRoots = discoverStorageRoots(),
+                                      // This is an explicit user-started picker, not background runtime probing.
+                                      allowUnconfiguredUsb = true,
+                                      rootGate =''',
+          )
+
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/headunit/ts18/RawFastResume.kt",
+              '''    private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean {
+                      if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
+                      val roots = policy.getConfiguredRootsAsFiles().keys
+                      return roots.any { root -> path == root.removeSuffix("/") || path.startsWith(root) }
+                  }''',
+              '''    private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean {
+                      if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
+                      val candidate = runCatching { File(path).canonicalFile }.getOrNull() ?: return false
+                      return policy.getConfiguredRootsAsFiles().values.any { root ->
+                          runCatching { candidate.isInside(root.canonicalFile) }.getOrDefault(false)
+                      }
+                  }''',
+          )
+
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/MainFragment.kt",
+              '''            if (playbackModel.song.value != null) {
+                              // Playback sheet intercepts queue sheet touch events, prevent that from
+                              // occurring by disabling dragging whenever the queue sheet is expanded.
+                              playbackSheetBehavior.isDraggable =
+                                  queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED
+                          }''',
+              '''            if (playbackModel.bannerState.value.playable) {
+                              // Playback sheet intercepts queue sheet touch events, prevent that from
+                              // occurring by disabling dragging whenever the queue sheet is expanded.
+                              // Raw Fast Resume is playable even before a rich Song has hydrated.
+                              playbackSheetBehavior.isDraggable =
+                                  queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED
+                          }''',
+          )
+
+          replace_once(
+              "app/src/topwayCompat/java/org/oxycblt/auxio/car/overlay/CarFloatingControlsView.kt",
+              '''    override fun onAttachedToWindow() {
+                      super.onAttachedToWindow()
+                      preferences.registerOnSharedPreferenceChangeListener(this)
+                      FloatingTrackMetadataBus.addListener(trackMetadataListener)
+                  }''',
+              '''    override fun onAttachedToWindow() {
+                      super.onAttachedToWindow()
+                      tickerView?.isSelected = true
+                      preferences.registerOnSharedPreferenceChangeListener(this)
+                      FloatingTrackMetadataBus.addListener(trackMetadataListener)
+                  }''',
+          )
+
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt",
+              '''import androidx.activity.result.ActivityResultLauncher
+          import androidx.activity.result.contract.ActivityResultContracts''',
+              '''import androidx.activity.result.contract.ActivityResultContracts''',
+          )
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt",
+              '''    private lateinit var visualizerCoordinator: VisualizerCoordinator
+                  private var visualizerPermissionLauncher:
+                      androidx.activity.result.ActivityResultLauncher<String>? =
+                      null''',
+              '''    private var visualizerCoordinator: VisualizerCoordinator? = null
+                  private val visualizerPermissionLauncher =
+                      registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                          visualizerCoordinator?.onPermissionResult(isGranted)
+                      }''',
+          )
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt",
+              '''        visualizerCoordinator =
+                      VisualizerCoordinator(
+                          requireContext(),
+                          playbackModel.isPlaying,
+                          playbackModel.currentAudioSessionId,
+                          uiSettings,
+                      )
+                  viewLifecycleOwner.lifecycle.addObserver(visualizerCoordinator)
+
+                  val currentCoverPagerAdapter =
+                      CoverPagerAdapter(this, visualizerCoordinator.state, uiSettings, viewLifecycleOwner)
+                  coverPagerAdapter = currentCoverPagerAdapter
+
+                  visualizerPermissionLauncher =
+                      registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                          visualizerCoordinator.onPermissionResult(isGranted)
+                      }
+                  uiSettings.registerListener(this)''',
+              '''        val currentVisualizerCoordinator =
+                      VisualizerCoordinator(
+                          requireContext(),
+                          playbackModel.isPlaying,
+                          playbackModel.currentAudioSessionId,
+                          uiSettings,
+                      )
+                  visualizerCoordinator = currentVisualizerCoordinator
+                  viewLifecycleOwner.lifecycle.addObserver(currentVisualizerCoordinator)
+
+                  val currentCoverPagerAdapter =
+                      CoverPagerAdapter(
+                          this,
+                          currentVisualizerCoordinator.state,
+                          uiSettings,
+                          viewLifecycleOwner,
+                      )
+                  coverPagerAdapter = currentCoverPagerAdapter
+
+                  uiSettings.registerListener(this)''',
+          )
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt",
+              '''                visualizerCoordinator.state.collect { state ->
+                                  if (
+                                      state is VisualizerState.PermissionRequired &&
+                                          visualizerCoordinator.claimPermissionRequest()
+                                  ) {
+                                      visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
+                                  }
+                              }''',
+              '''                currentVisualizerCoordinator.state.collect { state ->
+                                  if (
+                                      state is VisualizerState.PermissionRequired &&
+                                          currentVisualizerCoordinator.claimPermissionRequest()
+                                  ) {
+                                      visualizerPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                  }
+                              }''',
+          )
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt",
+              '''        uiSettings.unregisterListener(this)
+                  visualizerPermissionLauncher = null
+                  binding.playbackRepeat.clearPendingIcon()''',
+              '''        uiSettings.unregisterListener(this)
+                  visualizerCoordinator = null
+                  binding.playbackRepeat.clearPendingIcon()''',
+          )
+
+          replace_once(
+              "app/src/main/java/org/oxycblt/auxio/playback/PlaybackViewModel.kt",
+              '''    private val _song = MutableStateFlow<Song?>(null)''',
+              '''    private val _song = MutableStateFlow(playbackManager.currentSong)''',
+          )
+
+          test_path = Path(
+              "app/src/test/java/org/oxycblt/auxio/music/ConfiguredSourcePolicyPathTest.kt"
+          )
+          test_path.parent.mkdir(parents=True, exist_ok=True)
+          test_path.write_text(
+              '''/*
+           * Copyright (c) 2026 Auxio Project
+           * ConfiguredSourcePolicyPathTest.kt is part of Auxio.
+           *
+           * This program is free software: you can redistribute it and/or modify
+           * it under the terms of the GNU General Public License as published by
+           * the Free Software Foundation, either version 3 of the License, or
+           * (at your option) any later version.
+           */
+
+          package org.oxycblt.auxio.music
+
+          import android.net.Uri
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertFalse
+          import org.junit.Assert.assertNull
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+          import org.junit.runner.RunWith
+          import org.robolectric.RobolectricTestRunner
+
+          @RunWith(RobolectricTestRunner::class)
+          class ConfiguredSourcePolicyPathTest {
+              @Test
+              fun recognisesTopwayAndUuidRemovableRoots() {
+                  assertTrue(
+                      ConfiguredSourcePolicy.isUsbUri(
+                          Uri.parse("file:///storage/usbdisk0/Music")
+                      )
+                  )
+                  assertTrue(
+                      ConfiguredSourcePolicy.isUsbUri(
+                          Uri.parse("file:///storage/ABCD-1234/Music")
+                      )
+                  )
+                  assertTrue(
+                      ConfiguredSourcePolicy.isUsbUri(
+                          Uri.parse(
+                              "content://com.android.externalstorage.documents/tree/ABCD-1234%3AMusic"
+                          )
+                      )
+                  )
+                  assertFalse(
+                      ConfiguredSourcePolicy.isUsbUri(
+                          Uri.parse("file:///storage/emulated/0/Music")
+                      )
+                  )
+              }
+
+              @Test
+              fun directRootsAreRawCanonicalPathsAndRejectProtectedOrTraversalPaths() {
+                  assertEquals(
+                      "/storage/usbdisk0/Music",
+                      ConfiguredSourcePolicy.normaliseConfiguredRoot(
+                              "/storage/usbdisk0/Music"
+                          )
+                          ?.absolutePath,
+                  )
+                  assertNull(
+                      ConfiguredSourcePolicy.normaliseConfiguredRoot(
+                          "/storage/usbdisk0/Music/../Private"
+                      )
+                  )
+                  assertNull(ConfiguredSourcePolicy.normaliseConfiguredRoot("/data/local/tmp"))
+              }
+          }
+          ''',
+              encoding="utf-8",
+              newline="\n",
+          )
+          PY
+
+          rm -f .github/workflows/temporary-pr191-review-hardening.yml
+          git diff --check
+
+      - name: Commit and push final hardening
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch='fix/pr191-review-hardening-20260722'
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: harden playback and configured-source integration [pr191-hardening-finished]'
+          auth=$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+            push https://github.com/${GITHUB_REPOSITORY}.git HEAD:"${branch}"
