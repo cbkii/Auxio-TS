@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   apply:
-    if: ${{ github.head_ref == 'release-ready-fixes' && !contains(github.event.pull_request.head.sha, 'release-ready-patch-error') }}
+    if: ${{ github.head_ref == 'release-ready-fixes' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -33,11 +33,29 @@ jobs:
         run: |
           patch_script="${RUNNER_TEMP}/release-ready-patch.py"
           patch_log="${RUNNER_TEMP}/release-ready-patch.log"
-          awk '
-            /^[[:space:]]*python3 <<'\''PY'\''$/ { capture=1; next }
-            capture && /^[[:space:]]*PY$/ { exit }
-            capture { sub(/^          /, ""); print }
-          ' .github/workflows/temporary-release-ready-patch.yml > "${patch_script}"
+          python3 - "${patch_script}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path('.github/workflows/temporary-release-ready-patch.yml').read_text(
+              encoding='utf-8'
+          ).splitlines()
+          captured = []
+          active = False
+          in_triple = False
+          for raw in source:
+              if not active:
+                  if raw.strip() == "python3 <<'PY'":
+                      active = True
+                  continue
+              if not in_triple and raw.strip() == 'PY':
+                  break
+              line = raw if in_triple else raw[10:] if raw.startswith('          ') else raw
+              captured.append(line)
+              if line.count('"""') % 2 == 1 or line.count("'''") % 2 == 1:
+                  in_triple = not in_triple
+          Path(sys.argv[1]).write_text('\n'.join(captured) + '\n', encoding='utf-8')
+          PY
           patch_rc=0
           {
             test -s "${patch_script}"
