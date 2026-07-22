@@ -122,8 +122,8 @@ jobs:
           set +e
           printf 'no\n' | "${AVDMANAGER_BIN}" create avd \
             --force \
-            --name "${AVD_NAME}" \
-            --package "${SYSTEM_IMAGE}"
+            -n "${AVD_NAME}" \
+            -k "${SYSTEM_IMAGE}"
           avd_status=${PIPESTATUS[1]}
           set -e
           if [[ "${avd_status}" -ne 0 ]]; then
