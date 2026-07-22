@@ -1,0 +1,133 @@
+name: Temporary WP2 and WP5 finalizer
+
+on:
+  push:
+    branches:
+      - fix/playback-banner-and-visualizer-state-11316441362856201323
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[wp25-finalized]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/playback-banner-and-visualizer-state-11316441362856201323
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Apply bounded final source edits
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          main = Path('app/src/main/java/org/oxycblt/auxio/MainFragment.kt')
+          text = main.read_text()
+          old = '''    private fun updateBannerVisibility(state: org.oxycblt.auxio.playback.BannerState) {
+                  val isExpandable =
+                      state is org.oxycblt.auxio.playback.BannerState.Rich ||
+                          state is org.oxycblt.auxio.playback.BannerState.Raw
+                  val binding = requireBinding()'''
+          new = '''    private fun updateBannerVisibility(state: org.oxycblt.auxio.playback.BannerState) {
+                  val binding = requireBinding()'''
+          if old not in text:
+              raise SystemExit('MainFragment banner declaration anchor not found')
+          text = text.replace(old, new, 1)
+          old = '''        playbackSheetBehavior.isDraggable = isExpandable
+                  queueSheetBehavior?.isDraggable = isExpandable
+
+                  if (!isExpandable) {
+                      if (
+                          playbackSheetBehavior.state ==
+                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                                  .STATE_EXPANDED
+                      ) {
+                          playbackSheetBehavior.state =
+                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                                  .STATE_COLLAPSED
+                      }
+                      if (
+                          queueSheetBehavior?.state ==
+                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                                  .STATE_EXPANDED
+                      ) {
+                          queueSheetBehavior.state =
+                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                                  .STATE_COLLAPSED
+                      }
+                  }'''
+          new = '''        playbackSheetBehavior.isDraggable = state.playable
+                  queueSheetBehavior?.isDraggable = state.richQueueCommandsAvailable
+
+                  if (
+                      !state.richQueueCommandsAvailable &&
+                          queueSheetBehavior?.state ==
+                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                                  .STATE_EXPANDED
+                  ) {
+                      queueSheetBehavior.state =
+                          com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                              .STATE_COLLAPSED
+                  }
+                  if (
+                      !state.playable &&
+                          playbackSheetBehavior.state ==
+                              com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                                  .STATE_EXPANDED
+                  ) {
+                      playbackSheetBehavior.state =
+                          com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                              .STATE_COLLAPSED
+                  }'''
+          if old not in text:
+              raise SystemExit('MainFragment sheet policy anchor not found')
+          main.write_text(text.replace(old, new, 1))
+
+          panel = Path('app/src/main/java/org/oxycblt/auxio/playback/PlaybackPanelFragment.kt')
+          text = panel.read_text()
+          old = '''                    if (state is VisualizerState.PermissionRequired) {
+                                      visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
+                                  }'''
+          new = '''                    if (
+                                      state is VisualizerState.PermissionRequired &&
+                                          visualizerCoordinator.claimPermissionRequest()
+                                  ) {
+                                      visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
+                                  }'''
+          if old not in text:
+              raise SystemExit('PlaybackPanel permission anchor not found')
+          text = text.replace(old, new, 1)
+          text = text.replace('        // releaseVisualizer()\n', '', 1)
+          old = '''    private companion object {
+                  const val FFT_PREFERENCE_WINDOW_MS = 300L
+                  const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L
+                  const val VISUALIZER_STALE_AFTER_MS = 2_000L
+                  const val MAX_VISUALIZER_RETRIES = 1
+                  const val MIN_WAVEFORM_RANGE = 4
+              }
+
+          '''
+          if old not in text:
+              raise SystemExit('PlaybackPanel obsolete constants anchor not found')
+          panel.write_text(text.replace(old, '', 1))
+          PY
+          rm -f .github/workflows/temporary-wp25-finalize.yml
+          git diff --check
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No finalizer changes were required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: finalise banner and visualizer state handling [wp25-finalized]'
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push https://github.com/${GITHUB_REPOSITORY}.git \
+            HEAD:fix/playback-banner-and-visualizer-state-11316441362856201323
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

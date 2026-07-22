@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="lbl_playback_restoring" tools:ignore="MissingTranslation">Restoring playback…</string>
-    <string name="lbl_playback_idle" tools:ignore="MissingTranslation">Nothing playing</string>
-    <string name="lbl_playback_unavailable" tools:ignore="MissingTranslation">Playback unavailable</string>
-    <string name="msg_playback_restore_failed" tools:ignore="MissingTranslation">Saved playback could not be restored</string>
-    <string name="lbl_visualizer_starting" tools:ignore="MissingTranslation">Starting visualiser…</string>
-    <string name="lbl_visualizer_permission_required" tools:ignore="MissingTranslation">Audio capture permission required</string>
-    <string name="lbl_visualizer_permission_denied" tools:ignore="MissingTranslation">Visualiser unavailable: permission denied</string>
-    <string name="lbl_visualizer_unavailable" tools:ignore="MissingTranslation">Visualiser unavailable</string>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="lbl_playback_restoring">Restoring playback…</string>
+    <string name="lbl_playback_idle">Nothing playing</string>
+    <string name="lbl_playback_unavailable">Playback unavailable</string>
+    <string name="msg_playback_restore_failed">Saved playback could not be restored</string>
+    <string name="lbl_visualizer_starting">Starting visualiser…</string>
+    <string name="lbl_visualizer_permission_required">Audio capture permission required</string>
+    <string name="lbl_visualizer_permission_denied">Visualiser unavailable: permission denied</string>
+    <string name="lbl_visualizer_unavailable">Visualiser unavailable</string>
 </resources>

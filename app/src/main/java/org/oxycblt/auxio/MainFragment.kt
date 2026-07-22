@@ -699,8 +699,7 @@ class MainFragment :
                         .STATE_EXPANDED
         ) {
             queueSheetBehavior.state =
-                com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                    .STATE_COLLAPSED
+                com.google.android.material.bottomsheet.BackportBottomSheetBehavior.STATE_COLLAPSED
         }
         if (
             !state.playable &&
@@ -709,8 +708,7 @@ class MainFragment :
                         .STATE_EXPANDED
         ) {
             playbackSheetBehavior.state =
-                com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                    .STATE_COLLAPSED
+                com.google.android.material.bottomsheet.BackportBottomSheetBehavior.STATE_COLLAPSED
         }
 
         updateStartupPanelState()

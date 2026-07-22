@@ -134,11 +134,11 @@ class PlaybackPanelFragment :
             viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 visualizerCoordinator.state.collect { state ->
                     if (
-                            state is VisualizerState.PermissionRequired &&
-                                visualizerCoordinator.claimPermissionRequest()
-                        ) {
-                            visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
-                        }
+                        state is VisualizerState.PermissionRequired &&
+                            visualizerCoordinator.claimPermissionRequest()
+                    ) {
+                        visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
+                    }
                 }
             }
         }
