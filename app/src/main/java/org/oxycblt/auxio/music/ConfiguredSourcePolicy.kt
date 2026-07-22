@@ -96,28 +96,29 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
     /** Capture one internally consistent source configuration for a complete operation. */
     fun snapshot(): Snapshot {
         val mode = settings.locationMode
+        val safQuery = settings.safQuery
+        val mediaStoreQuery = settings.mediaStoreQuery
+        val systemFilter = settings.ts18SystemSourceFilter
         val sourceUris =
             when (mode) {
                 LocationMode.SAF,
-                LocationMode.DIRECT_FS -> settings.safQuery.source.map { it.uri.toString() }
-                LocationMode.MEDIA_STORE -> {
-                    val query = settings.mediaStoreQuery
-                    if (query.mode == MediaStore.FilterMode.INCLUDE) {
-                        query.filtered.map { it.uri.toString() }
+                LocationMode.DIRECT_FS -> safQuery.source.map { it.uri.toString() }
+                LocationMode.MEDIA_STORE ->
+                    if (mediaStoreQuery.mode == MediaStore.FilterMode.INCLUDE) {
+                        mediaStoreQuery.filtered.map { it.uri.toString() }
                     } else {
                         // An exclude query does not define positive browse roots. MediaStore remains
                         // authoritative for indexing, while Fast Start direct browsing stays empty.
                         emptyList()
                     }
-                }
             }
 
-        val sources = sourceUris.distinct().map(::sourceFromUri)
+        val sources = sourceUris.distinct().map { sourceFromUri(it, mode) }
         val revisionMaterial = buildString {
             append(mode.name)
-            append('|').append(settings.safQuery)
-            append('|').append(settings.mediaStoreQuery)
-            append('|').append(settings.ts18SystemSourceFilter)
+            append('|').append(safQuery)
+            append('|').append(mediaStoreQuery)
+            append('|').append(systemFilter)
         }
         return Snapshot(mode, sources, stableLong(revisionMaterial))
     }
@@ -126,9 +127,9 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
 
     fun isConfiguredPath(path: String): Boolean = snapshot().containsPath(path)
 
-    private fun sourceFromUri(rawUri: String): Source {
+    private fun sourceFromUri(rawUri: String, mode: LocationMode): Source {
         val appPath = appFacingPath(rawUri)
-        val kind = classify(rawUri, appPath)
+        val kind = classify(rawUri, appPath, mode)
         val availability =
             if (appPath == null) {
                 Availability.PROVIDER_MANAGED
@@ -153,7 +154,7 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
         )
     }
 
-    private fun classify(rawUri: String, appPath: String?): SourceKind {
+    private fun classify(rawUri: String, appPath: String?, mode: LocationMode): SourceKind {
         val lower = (appPath ?: rawUri).lowercase()
         return when {
             lower.contains("usbdisk") || UUID_STORAGE.matches(appPath.orEmpty()) ->
@@ -163,7 +164,7 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
                 appPath == "/storage/emulated/0" ||
                 appPath?.startsWith("/storage/emulated/0/") == true -> SourceKind.INTERNAL
             rawUri.startsWith("content://") -> SourceKind.DOCUMENT_PROVIDER
-            settings.locationMode == LocationMode.MEDIA_STORE -> SourceKind.MEDIASTORE
+            mode == LocationMode.MEDIA_STORE -> SourceKind.MEDIASTORE
             else -> SourceKind.UNKNOWN
         }
     }
