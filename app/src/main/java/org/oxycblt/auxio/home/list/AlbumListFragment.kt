@@ -133,6 +133,8 @@ class AlbumListFragment :
     }
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
+        homeSettingsListener?.let { homeSettings.unregisterListener(it) }
+        homeSettingsListener = null
         listSettingsListener?.let { listSettings.unregisterListener(it) }
         listSettingsListener = null
         super.onDestroyBinding(binding)
@@ -145,33 +147,21 @@ class AlbumListFragment :
 
     override fun getPopupData(pos: Int): FastScrollRecyclerView.PopupProvider.PopupData? {
         val album = homeModel.albumList.value.getOrNull(pos) ?: return null
-        // Change how we display the popup depending on the current sort mode.
         return when (homeModel.albumSort.mode) {
-            // By Name -> Use Name
             is Sort.Mode.ByName ->
                 FastScrollRecyclerView.PopupProvider.PopupData(album.name.thumb() ?: "?")
-
-            // By Artist -> Use name of first artist
             is Sort.Mode.ByArtist ->
                 FastScrollRecyclerView.PopupProvider.PopupData(album.artists[0].name.thumb() ?: "?")
-
-            // Date -> Use year of the range minimum
             is Sort.Mode.ByDate -> {
                 val year = album.dates?.min?.year ?: return null
                 FastScrollRecyclerView.PopupProvider.PopupData(getString(R.string.fmt_number, year))
             }
-
-            // Duration -> Use compact bucket duration
             is Sort.Mode.ByDuration ->
                 FastScrollRecyclerView.PopupProvider.PopupData(
                     album.durationMs.formatDurationMsPopup()
                 )
-
-            // Count -> Use song count
             is Sort.Mode.ByCount ->
                 FastScrollRecyclerView.PopupProvider.PopupData(album.songs.size.toString())
-
-            // Last added -> Use year
             is Sort.Mode.ByDateAdded -> {
                 val calendar = Calendar.getInstance()
                 calendar.timeInMillis = album.addedMs
@@ -179,8 +169,6 @@ class AlbumListFragment :
                     getString(R.string.fmt_number, calendar.get(Calendar.YEAR))
                 )
             }
-
-            // Unsupported sort, error gracefully
             else -> null
         }
     }
@@ -220,20 +208,12 @@ class AlbumListFragment :
     }
 
     private fun updatePlayback(song: Song?, parent: MusicParent?, isPlaying: Boolean) {
-        // Only highlight the album if it is currently playing, and if the currently
-        // playing song is also contained within.
         val album = (parent as? Album)?.takeIf { song?.album == it }
         albumAdapter.setPlaying(album, isPlaying)
     }
 
-    /**
-     * A [SelectionIndicatorAdapter] that shows a list of [Album]s using [AlbumViewHolder].
-     *
-     * @param listener An [SelectableListListener] to bind interactions to.
-     */
     private class AlbumAdapter(private val listener: SelectableListListener<Album>) :
         SelectionIndicatorAdapter<Album, AlbumViewHolder>(AlbumViewHolder.DIFF_CALLBACK) {
-
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
             AlbumViewHolder.from(parent)
 
