@@ -152,7 +152,7 @@ class PlaybackPanelFragment :
             setOnMenuItemClickListener(this@PlaybackPanelFragment)
         }
 
-        binding.playbackPager?.apply {
+        binding.playbackPager.apply {
             adapter = currentCoverPagerAdapter
             userAwarePagerCallback =
                 UserAwarePagerCallback(this) {
@@ -208,7 +208,7 @@ class PlaybackPanelFragment :
                 else -> null
             }
         if (!uiSettings.showHeadUnitAlbumArt) {
-            binding.playbackPager?.visibility = View.GONE
+            binding.playbackPager.visibility = View.GONE
             binding.playbackSong.maxLines = 3
             binding.playbackArtist.maxLines = 2
             binding.playbackControlsWrapper?.updatePadding(top = spacingSmall)
@@ -336,7 +336,7 @@ class PlaybackPanelFragment :
         binding.playbackToolbar.setOnMenuItemClickListener(null)
         userAwarePagerCallback?.release()
         userAwarePagerCallback = null
-        binding.playbackPager?.adapter = null
+        binding.playbackPager.adapter = null
         coverPagerAdapter = null
     }
 
