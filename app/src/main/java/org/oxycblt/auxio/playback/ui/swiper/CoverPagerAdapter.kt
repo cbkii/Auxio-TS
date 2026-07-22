@@ -9,11 +9,11 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.playback.ui.swiper
@@ -29,6 +29,7 @@ import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
+import org.oxycblt.auxio.playback.ui.visualizer.VisualizerDisplayPolicy
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
@@ -37,8 +38,9 @@ import org.oxycblt.musikr.Song
 /**
  * Hosts cover pages while keeping visualizer collection at adapter scope.
  *
- * Only the current page receives live frames. Attached off-screen holders are reset to artwork, and
- * replayed StateFlow frames are rejected before they can briefly replace artwork after recreation.
+ * Only the current page receives visualizer state. Attached off-screen holders are reset to
+ * artwork, and replayed stale frames are rejected before they can briefly replace artwork after
+ * recreation.
  */
 class CoverPagerAdapter(
     private val listener: StepperOverlay.Listener,
@@ -144,12 +146,12 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
 
     fun updateVisualizerState(state: VisualizerState, mode: UISettings.VisualizerMode) {
         binding.coverVisualizer.updateState(state)
-        val hasArtwork = song?.cover != null
         val shouldShow =
-            state is VisualizerState.Live &&
-                (mode == UISettings.VisualizerMode.ALWAYS ||
-                    (mode == UISettings.VisualizerMode.FALLBACK && !hasArtwork))
-
+            VisualizerDisplayPolicy.shouldShowVisualizer(
+                state = state,
+                mode = mode,
+                hasArtwork = song?.cover != null,
+            )
         binding.coverVisualizer.visibility = if (shouldShow) View.VISIBLE else View.GONE
         binding.cover.visibility = if (shouldShow) View.INVISIBLE else View.VISIBLE
     }
