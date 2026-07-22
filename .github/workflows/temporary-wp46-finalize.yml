@@ -26,53 +26,54 @@ jobs:
           from pathlib import Path
           import re
 
-          # Generated playlists are derived from the one committed rich library. Remove the
-          # incomplete metadata-only Room table so it cannot become a second authority.
+          def replace_once(text, pattern, replacement, label, flags=0):
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: replacements={count}')
+              return updated
+
           cache = Path('musikr/src/main/java/org/oxycblt/musikr/cache/db/CacheDatabase.kt')
           text = cache.read_text(encoding='utf-8')
+          if 'LibraryGeneratedPlaylistData::class' not in text:
+              raise SystemExit('generated entity list anchor missing')
           text = text.replace('            LibraryGeneratedPlaylistData::class,\n', '', 1)
           text = text.replace('    version = 73,\n', '    version = 72,\n', 1)
-          text, migration_count = re.subn(
-              r'''\n        val MIGRATION_72_73 =\n            Migration\(72, 73\) \{ database ->\n                database\.execSQL\(\n                    "CREATE TABLE IF NOT EXISTS LibraryGeneratedPlaylistData \(id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, stableUid TEXT NOT NULL, name TEXT NOT NULL, nameSort TEXT NOT NULL, available INTEGER NOT NULL\)"\n                \)\n            \}\n''',
-              '\n',
+          text = replace_once(
               text,
-              count=1,
+              r'\n        val MIGRATION_72_73 =.*?(?=\n        val MIGRATION_71_72 =)',
+              '',
+              'generated migration block',
+              re.S,
           )
-          if migration_count != 1:
-              raise SystemExit(f'generated migration removals={migration_count}')
           text = text.replace(
               '.addMigrations(MIGRATION_70_71, MIGRATION_71_72, MIGRATION_72_73)',
               '.addMigrations(MIGRATION_70_71, MIGRATION_71_72)',
               1,
           )
-          text, entity_count = re.subn(
-              r'''\n@Entity\ninternal data class LibraryGeneratedPlaylistData\(\n    @PrimaryKey\(autoGenerate = true\) val id: Long = 0,\n    val stableUid: String,\n    val name: String,\n    val nameSort: String,\n    val available: Boolean,\n\)\n''',
-              '\n',
+          text = replace_once(
               text,
-              count=1,
+              r'\n@Entity\ninternal data class LibraryGeneratedPlaylistData\(.*?\n\)\n(?=\n@Entity)',
+              '',
+              'generated entity block',
+              re.S,
           )
-          if entity_count != 1:
-              raise SystemExit(f'generated entity removals={entity_count}')
+          if 'LibraryGeneratedPlaylistData' in text or 'MIGRATION_72_73' in text:
+              raise SystemExit('generated Room authority remains')
           cache.write_text(text, encoding='utf-8')
 
           migration_test = Path(
               'musikr/src/test/java/org/oxycblt/musikr/cache/db/CacheMigrationAndBackfillTest.kt'
           )
           text = migration_test.read_text(encoding='utf-8')
-          text = text.replace(
-              '''                .addMigrations(
-                          CacheDatabase.MIGRATION_70_71,
-                          CacheDatabase.MIGRATION_71_72,
-                          CacheDatabase.MIGRATION_72_73,
-                      )''',
-              '''                .addMigrations(CacheDatabase.MIGRATION_70_71, CacheDatabase.MIGRATION_71_72)''',
-              1,
+          text = replace_once(
+              text,
+              r'\.addMigrations\(\s*CacheDatabase\.MIGRATION_70_71,\s*CacheDatabase\.MIGRATION_71_72,\s*CacheDatabase\.MIGRATION_72_73,?\s*\)',
+              '.addMigrations(CacheDatabase.MIGRATION_70_71, CacheDatabase.MIGRATION_71_72)',
+              'migration test list',
+              re.S,
           )
-          if 'MIGRATION_72_73' in text:
-              raise SystemExit('stale MIGRATION_72_73 remains in migration test')
           migration_test.write_text(text, encoding='utf-8')
 
-          # Preserve the first visible item and offset while changing only presentation span count.
           tab_keys = {
               'SongListFragment.kt': 'songSpanCount',
               'AlbumListFragment.kt': 'albumSpanCount',
@@ -85,27 +86,21 @@ jobs:
               path = base / filename
               text = path.read_text(encoding='utf-8')
               text = text.replace('import androidx.recyclerview.widget.GridLayoutManager\n', '')
-              pattern = re.compile(
-                  r'''        fun updateSpanCount\(\) \{\n'''
-                  rf'''            val spanCount = listSettings\.{key}\n'''
-                  r'''            val finalSpanCount = if \(spanCount == 0\) homeSettings\.defaultSpanCount else spanCount\n'''
-                  r'''            val layoutManager = binding\.homeRecycler\.layoutManager as\? GridLayoutManager\n'''
-                  r'''            if \(layoutManager != null && layoutManager\.spanCount != finalSpanCount\) \{\n'''
-                  r'''                layoutManager\.spanCount = finalSpanCount\n'''
-                  r'''            \}\n'''
-                  r'''        \}'''
-              )
-              replacement = f'''        fun updateSpanCount() {{
+              text = replace_once(
+                  text,
+                  r'        fun updateSpanCount\(\) \{.*?\n        \}\n        listSettingsListener =',
+                  f'''        fun updateSpanCount() {{
                           val finalSpanCount =
                               LibraryGridPolicy.effective(
                                   defaultValue = homeSettings.defaultSpanCount,
                                   overrideValue = listSettings.{key},
                               )
                           binding.homeRecycler.applyLibraryGridSpanCount(finalSpanCount)
-                      }}'''
-              text, count = pattern.subn(replacement, text, count=1)
-              if count != 1:
-                  raise SystemExit(f'{filename} span replacements={count}')
+                      }}
+                      listSettingsListener =''',
+                  f'{filename} span block',
+                  re.S,
+              )
               if filename == 'PlaylistListFragment.kt':
                   if 'import dagger.hilt.android.AndroidEntryPoint\n' not in text:
                       text = text.replace(
@@ -113,33 +108,31 @@ jobs:
                           'import androidx.fragment.app.activityViewModels\nimport dagger.hilt.android.AndroidEntryPoint\n',
                           1,
                       )
-                  text = text.replace(
-                      'class PlaylistListFragment :',
-                      '@AndroidEntryPoint\nclass PlaylistListFragment :',
-                      1,
-                  )
+                  if '@AndroidEntryPoint\nclass PlaylistListFragment :' not in text:
+                      text = text.replace(
+                          'class PlaylistListFragment :',
+                          '@AndroidEntryPoint\nclass PlaylistListFragment :',
+                          1,
+                      )
               path.write_text(text, encoding='utf-8')
 
           detail = Path('app/src/main/java/org/oxycblt/auxio/detail/DetailViewModel.kt')
           text = detail.read_text(encoding='utf-8')
-          pattern = re.compile(
-              r'''playlist\?\.let \{ it as\? org\.oxycblt\.musikr\.Playlist \}\?\.origin ==\n'''
-              r'''\s+org\.oxycblt\.musikr\.Playlist\.Origin\.GENERATED'''
-          )
-          text, count = pattern.subn(
-              '''playlist?.parent?.origin ==
-                                  org.oxycblt.musikr.Playlist.Origin.GENERATED''',
+          text = replace_once(
               text,
-              count=1,
+              r'playlist\?\.let \{ it as\? org\.oxycblt\.musikr\.Playlist \}\?\.origin\s*==\s*org\.oxycblt\.musikr\.Playlist\.Origin\.GENERATED',
+              'playlist?.parent?.origin == org.oxycblt.musikr.Playlist.Origin.GENERATED',
+              'generated detail header',
+              re.S,
           )
-          if count != 1:
-              raise SystemExit(f'Detail generated header replacements={count}')
           detail.write_text(text, encoding='utf-8')
 
           menu = Path('app/src/main/java/org/oxycblt/auxio/list/menu/MenuDialogFragmentImpl.kt')
           text = menu.read_text(encoding='utf-8')
-          old = 'disabled.addAll(setOf(R.id.action_rename, R.id.action_delete, R.id.action_import))'
-          new = '''disabled.addAll(
+          text = replace_once(
+              text,
+              r'disabled\.addAll\(setOf\(R\.id\.action_rename, R\.id\.action_delete, R\.id\.action_import\)\)',
+              '''disabled.addAll(
                           setOf(
                               R.id.action_rename,
                               R.id.action_delete,
@@ -147,23 +140,17 @@ jobs:
                               R.id.action_export,
                               R.id.action_share,
                           )
-                      )'''
-          if old not in text:
-              raise SystemExit('generated menu guard anchor missing')
-          menu.write_text(text.replace(old, new, 1), encoding='utf-8')
+                      )''',
+              'generated menu guard',
+          )
+          menu.write_text(text, encoding='utf-8')
 
           home = Path('app/src/main/java/org/oxycblt/auxio/home/HomeFragment.kt')
           text = home.read_text(encoding='utf-8')
-          pattern = re.compile(
-              r'''    private fun playRecentlyAdded\(deferIfEmpty: Boolean = false\): Boolean \{\n'''
-              r'''        val songs = homeModel\.songList\.value // Use actual generated playlist instead in the future\n'''
-              r'''        if \(songs\.isEmpty\(\)\) \{\n'''
-              r'''(?:.|\n)*?'''
-              r'''        openTab\(MusicType\.SONGS\)\n'''
-              r'''        return true\n'''
-              r'''    \}'''
-          )
-          replacement = '''    private fun playRecentlyAdded(deferIfEmpty: Boolean = false): Boolean {
+          text = replace_once(
+              text,
+              r'    private fun playRecentlyAdded\(deferIfEmpty: Boolean = false\): Boolean \{.*?(?=\n    private fun playFavourites\(\): Boolean)',
+              '''    private fun playRecentlyAdded(deferIfEmpty: Boolean = false): Boolean {
                   val playlist =
                       homeModel.playlistList.value.firstOrNull {
                           it.origin == Playlist.Origin.GENERATED &&
@@ -181,10 +168,11 @@ jobs:
                   playbackModel.play(playlist)
                   openTab(MusicType.PLAYLISTS)
                   return true
-              }'''
-          text, count = pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'Home Recently Added replacements={count}')
+              }
+          ''',
+              'Recently Added route',
+              re.S,
+          )
           home.write_text(text, encoding='utf-8')
           PY
           rm -f .github/workflows/temporary-wp46-finalize.yml
