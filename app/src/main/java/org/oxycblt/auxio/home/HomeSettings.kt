@@ -23,6 +23,7 @@ import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.home.list.LibraryGridPolicy
 import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.settings.Settings
@@ -39,8 +40,8 @@ interface HomeSettings : Settings<HomeSettings.Listener> {
     var homeTabs: Array<Tab>
     /** Whether to hide artists considered "collaborators" from the home UI. */
     val shouldHideCollaborators: Boolean
-
-    val defaultSpanCount: Int
+    /** Default grid columns used by tabs without an explicit override. */
+    var defaultSpanCount: Int
 
     interface Listener {
         /** Called when the [homeTabs] configuration changes. */
@@ -49,6 +50,7 @@ interface HomeSettings : Settings<HomeSettings.Listener> {
         /** Called when the [shouldHideCollaborators] configuration changes. */
         fun onHideCollaboratorsChanged() {}
 
+        /** Called when [defaultSpanCount] changes. */
         fun onDefaultSpanCountChanged() {}
     }
 }
@@ -74,9 +76,20 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_hide_collaborators), false)
 
     override var defaultSpanCount: Int
-        get() = sharedPreferences.getInt("set_key_default_span_count", 2)
+        get() =
+            LibraryGridPolicy.normalizeDefault(
+                sharedPreferences.getInt(
+                    getString(R.string.set_key_default_span_count),
+                    LibraryGridPolicy.TWO_COLUMNS,
+                )
+            )
         set(value) {
-            sharedPreferences.edit { putInt("set_key_default_span_count", value) }
+            sharedPreferences.edit {
+                putInt(
+                    getString(R.string.set_key_default_span_count),
+                    LibraryGridPolicy.normalizeDefault(value),
+                )
+            }
         }
 
     override fun migrate() {
@@ -110,7 +123,7 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
                 L.d("Dispatching collaborator setting change")
                 listener.onHideCollaboratorsChanged()
             }
-            "set_key_default_span_count" -> {
+            getString(R.string.set_key_default_span_count) -> {
                 L.d("Dispatching default span count setting change")
                 listener.onDefaultSpanCountChanged()
             }
