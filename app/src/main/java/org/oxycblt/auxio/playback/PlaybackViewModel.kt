@@ -75,7 +75,7 @@ constructor(
     private var lastPositionJob: Job? = null
     private var genreShuffleJob: Job? = null
 
-    private val _song = MutableStateFlow<Song?>(null)
+    private val _song = MutableStateFlow(playbackManager.currentSong)
     /** The currently playing song. */
     val song: StateFlow<Song?>
         get() = _song

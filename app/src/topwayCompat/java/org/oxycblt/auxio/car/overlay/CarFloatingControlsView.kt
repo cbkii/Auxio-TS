@@ -116,6 +116,7 @@ class CarFloatingControlsView(context: Context, private val callbacks: Callbacks
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        tickerView?.isSelected = true
         preferences.registerOnSharedPreferenceChangeListener(this)
         FloatingTrackMetadataBus.addListener(trackMetadataListener)
     }

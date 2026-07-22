@@ -43,6 +43,42 @@ class Ts18RawFastResumePolicyTest {
     }
 
     @Test
+    fun configuredRootContainmentRejectsSiblingPrefixesAndTraversal() {
+        val root = File("/storage/emulated/0/Music")
+
+        assertTrue(
+            RawFastResumeValidator.isInsideConfiguredRoots(
+                "/storage/emulated/0/Music/Artist/track.mp3",
+                listOf(root),
+            )
+        )
+        assertFalse(
+            RawFastResumeValidator.isInsideConfiguredRoots(
+                "/storage/emulated/0/Music_Private/secret.mp3",
+                listOf(root),
+            )
+        )
+        assertFalse(
+            RawFastResumeValidator.isInsideConfiguredRoots(
+                "/storage/emulated/0/Music/../Private/secret.mp3",
+                listOf(root),
+            )
+        )
+        assertFalse(
+            RawFastResumeValidator.isInsideConfiguredRoots(
+                "../storage/emulated/0/Music/track.mp3",
+                listOf(root),
+            )
+        )
+        assertFalse(
+            RawFastResumeValidator.isInsideConfiguredRoots(
+                "./storage/emulated/0/Music/track.mp3",
+                listOf(root),
+            )
+        )
+    }
+
+    @Test
     fun audioExtensionPolicyIsConservative() {
         assertTrue(RawFastResumeValidator.hasAudioExtension("/storage/usbdisk0/Music/a.mp3"))
         assertTrue(RawFastResumeValidator.hasAudioExtension("/storage/usbdisk1/Music/a.FLAC"))

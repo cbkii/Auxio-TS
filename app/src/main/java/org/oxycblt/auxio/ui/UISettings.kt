@@ -74,6 +74,9 @@ interface UISettings : Settings<UISettings.Listener> {
 
     val visualizerMode: VisualizerMode
 
+    /** Whether the user explicitly denied the visualiser permission on a previous request. */
+    var visualizerPermissionDenied: Boolean
+
     enum class DriverSide {
         RIGHT,
         LEFT;
@@ -168,6 +171,12 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
                 sharedPreferences.getString(getString(R.string.set_key_visualizer_mode), "0")
             )
 
+    override var visualizerPermissionDenied: Boolean
+        get() = sharedPreferences.getBoolean(KEY_VISUALIZER_PERMISSION_DENIED, false)
+        set(value) {
+            sharedPreferences.edit { putBoolean(KEY_VISUALIZER_PERMISSION_DENIED, value) }
+        }
+
     override val headUnitCompatStatusSummary: String
         get() = "Tier 1 · Android-standard integration"
 
@@ -182,7 +191,6 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
                 // case, so we need to re-update the setting to dynamic colors here.
                 accent = 16
             }
-
             sharedPreferences.edit {
                 putInt(getString(R.string.set_key_accent), accent)
                 remove(OLD_KEY_ACCENT3)
@@ -206,5 +214,6 @@ class UISettingsImpl @Inject constructor(@ApplicationContext context: Context) :
 
     private companion object {
         const val OLD_KEY_ACCENT3 = "auxio_accent"
+        const val KEY_VISUALIZER_PERMISSION_DENIED = "auxio_visualizer_permission_denied"
     }
 }

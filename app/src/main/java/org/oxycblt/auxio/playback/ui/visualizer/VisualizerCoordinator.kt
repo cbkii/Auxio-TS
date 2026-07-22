@@ -54,7 +54,7 @@ class VisualizerCoordinator(
     private var activeScope: CoroutineScope? = null
     private var generation = 0
     private var retryCount = 0
-    private var permissionDenied = false
+    private var permissionDenied = uiSettings.visualizerPermissionDenied
     private var permissionRequestIssued = false
     private var active = false
 
@@ -63,8 +63,10 @@ class VisualizerCoordinator(
         active = true
         activeScope = owner.lifecycleScope
         if (hasPermission()) {
-            permissionDenied = false
+            clearPersistedPermissionDenial()
             permissionRequestIssued = false
+        } else {
+            permissionDenied = uiSettings.visualizerPermissionDenied
         }
         uiSettings.registerListener(this)
         monitorJob =
@@ -87,8 +89,10 @@ class VisualizerCoordinator(
     override fun onVisualizerModeChanged() {
         retryCount = 0
         if (hasPermission()) {
-            permissionDenied = false
+            clearPersistedPermissionDenial()
             permissionRequestIssued = false
+        } else {
+            permissionDenied = uiSettings.visualizerPermissionDenied
         }
         updateState(forceRestart = true)
     }
@@ -105,12 +109,20 @@ class VisualizerCoordinator(
         permissionRequestIssued = false
         if (granted) {
             retryCount = 0
-            permissionDenied = false
+            clearPersistedPermissionDenial()
             updateState(forceRestart = true)
         } else {
             permissionDenied = true
+            uiSettings.visualizerPermissionDenied = true
             releaseVisualizer()
             _state.value = VisualizerState.PermissionDenied
+        }
+    }
+
+    private fun clearPersistedPermissionDenial() {
+        permissionDenied = false
+        if (uiSettings.visualizerPermissionDenied) {
+            uiSettings.visualizerPermissionDenied = false
         }
     }
 
@@ -138,12 +150,13 @@ class VisualizerCoordinator(
 
         if (!hasPermission()) {
             releaseVisualizer()
+            permissionDenied = permissionDenied || uiSettings.visualizerPermissionDenied
             _state.value =
                 if (permissionDenied) VisualizerState.PermissionDenied
                 else VisualizerState.PermissionRequired
             return
         }
-        permissionDenied = false
+        clearPersistedPermissionDenial()
         permissionRequestIssued = false
 
         if (forceRestart || (visualizer != null && currentSessionId != sessionId)) {
@@ -271,26 +284,32 @@ class VisualizerCoordinator(
         }
         watchdogJob =
             scope.launch {
-                delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
-                if (currentGeneration != generation || currentSessionId != sessionId) return@launch
-                val currentState = _state.value
-                val now = android.os.SystemClock.uptimeMillis()
-                val hasFreshFrame =
-                    currentState is VisualizerState.Live &&
-                        now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
-                if (hasFreshFrame) return@launch
+                while (currentGeneration == generation && currentSessionId == sessionId) {
+                    delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
+                    if (currentGeneration != generation || currentSessionId != sessionId) {
+                        return@launch
+                    }
+                    val currentState = _state.value
+                    val now = android.os.SystemClock.uptimeMillis()
+                    val hasFreshFrame =
+                        currentState is VisualizerState.Live &&
+                            now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
+                    if (hasFreshFrame) continue
 
-                if (retryCount < MAX_VISUALIZER_RETRIES) {
-                    retryCount++
-                    L.w(
-                        "Visualizer produced no recent usable frame; retrying " +
-                            "session=$sessionId attempt=$retryCount"
-                    )
-                    releaseVisualizer()
-                    updateState()
-                } else {
-                    releaseVisualizer()
-                    _state.value = VisualizerState.Unavailable("No usable FFT or waveform frames")
+                    if (retryCount < MAX_VISUALIZER_RETRIES) {
+                        retryCount++
+                        L.w(
+                            "Visualizer produced no recent usable frame; retrying " +
+                                "session=$sessionId attempt=$retryCount"
+                        )
+                        releaseVisualizer()
+                        updateState()
+                    } else {
+                        releaseVisualizer()
+                        _state.value =
+                            VisualizerState.Unavailable("No usable FFT or waveform frames")
+                    }
+                    return@launch
                 }
             }
     }

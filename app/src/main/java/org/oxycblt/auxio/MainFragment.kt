@@ -435,9 +435,10 @@ class MainFragment :
             binding.playbackPanelFragment.alpha = min(playbackInRatio, queuePanelRatio)
             binding.queueFragment.alpha = queueInRatio
 
-            if (playbackModel.song.value != null) {
+            if (playbackModel.bannerState.value.playable) {
                 // Playback sheet intercepts queue sheet touch events, prevent that from
                 // occurring by disabling dragging whenever the queue sheet is expanded.
+                // Raw Fast Resume is playable before a rich Song has hydrated.
                 playbackSheetBehavior.isDraggable =
                     queueSheetBehavior.state == BackportBottomSheetBehavior.STATE_COLLAPSED
             }

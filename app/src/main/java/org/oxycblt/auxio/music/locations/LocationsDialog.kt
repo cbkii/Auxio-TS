@@ -382,6 +382,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         savedPaths = includeLocationAdapter.locations.map { it.uri.toString() },
                         mediaStoreParents = discoverMediaStoreAudioParents(),
                         storageRoots = discoverStorageRoots(),
+                        // This picker is explicitly user-started and may suggest new removable
+                        // roots.
+                        allowUnconfiguredUsb = true,
                         rootGate =
                             rootGate.takeIf {
                                 BuildConfig.TOPWAY_COMPAT_FLAVOR &&
