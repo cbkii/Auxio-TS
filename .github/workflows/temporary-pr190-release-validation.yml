@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   validate-release:
-    if: ${{ !contains(github.event.head_commit.message, '[pr190-release-validated]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[pr190-release-finished]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -35,9 +35,12 @@ jobs:
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
 
       - name: Validate integrated release variants
+        id: release_validation
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
+          echo "validated_merge_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           test -n "${sdk_dir}"
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
@@ -71,22 +74,34 @@ jobs:
           bash ./scripts/check-dofun-topway-compat.sh
           bash ./scripts/check-headunit-compat-safety.sh
 
-      - name: Remove temporary workflow after successful validation
+      - name: Record result and remove temporary workflow
+        if: always()
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATION_OUTCOME: ${{ steps.release_validation.outcome }}
+          VALIDATED_MERGE_SHA: ${{ steps.release_validation.outputs.validated_merge_sha }}
         run: |
           set -euo pipefail
           branch='feat/generated-playlists-and-grid-layout-12959696348616356066'
           git fetch origin "${branch}"
           git checkout -B "${branch}" "origin/${branch}"
           rm -f .github/workflows/temporary-pr190-release-validation.yml
+          {
+            printf 'outcome=%s\n' "${VALIDATION_OUTCOME}"
+            printf 'validated_merge_sha=%s\n' "${VALIDATED_MERGE_SHA}"
+            printf 'validation_run=%s/%s/actions/runs/%s\n' "${GITHUB_SERVER_URL}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}"
+          } > .github/pr190-release-validation-status.env
           git diff --check
           git add -A
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'test: validate integrated release variants [pr190-release-validated]'
+          git commit -m "test: record PR190 release validation ${VALIDATION_OUTCOME} [pr190-release-finished]"
           auth=$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
             push https://github.com/${GITHUB_REPOSITORY}.git \
             HEAD:"${branch}"
+          if [[ "${VALIDATION_OUTCOME}" != 'success' ]]; then
+            printf 'Integrated release validation failed; status was committed for inspection.\n' >&2
+            exit 1
+          fi
