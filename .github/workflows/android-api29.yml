@@ -78,12 +78,36 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y "${missing[@]}"
           fi
-          yes | sdkmanager --licenses >/dev/null 2>&1 || {
-            status=$?
-            # sdkmanager commonly exits 141 when `yes` receives SIGPIPE after all prompts finish.
-            if [[ "${status}" -ne 141 ]]; then exit "${status}"; fi
-          }
-          sdkmanager \
+
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          sdkmanager_bin="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
+          avdmanager_bin="${sdk_root}/cmdline-tools/latest/bin/avdmanager"
+          if [[ ! -x "${sdkmanager_bin}" ]]; then
+            sdkmanager_bin="$(command -v sdkmanager || true)"
+          fi
+          if [[ ! -x "${avdmanager_bin}" ]]; then
+            avdmanager_bin="$(command -v avdmanager || true)"
+          fi
+          if [[ -z "${sdkmanager_bin}" || ! -x "${sdkmanager_bin}" ]]; then
+            echo "::error::sdkmanager was not found in the hosted Android SDK."
+            exit 1
+          fi
+          if [[ -z "${avdmanager_bin}" || ! -x "${avdmanager_bin}" ]]; then
+            echo "::error::avdmanager was not found in the hosted Android SDK."
+            exit 1
+          fi
+          printf 'SDKMANAGER_BIN=%s\n' "${sdkmanager_bin}" >> "${GITHUB_ENV}"
+          printf 'AVDMANAGER_BIN=%s\n' "${avdmanager_bin}" >> "${GITHUB_ENV}"
+
+          set +e
+          yes | "${sdkmanager_bin}" --licenses >/dev/null 2>&1
+          license_status=${PIPESTATUS[1]}
+          set -e
+          if [[ "${license_status}" -ne 0 ]]; then
+            echo "::error::Android SDK license acceptance failed with status ${license_status}."
+            exit "${license_status}"
+          fi
+          "${sdkmanager_bin}" --install \
             "platform-tools" \
             "emulator" \
             "platforms;android-${ANDROID_API}" \
@@ -93,7 +117,7 @@ jobs:
         shell: bash
         run: |
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
-          echo no | avdmanager create avd \
+          echo no | "${AVDMANAGER_BIN}" create avd \
             --force \
             --name "${AVD_NAME}" \
             --package "${SYSTEM_IMAGE}" \
