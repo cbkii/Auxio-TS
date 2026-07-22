@@ -133,9 +133,12 @@ class PlaybackPanelFragment :
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
                 visualizerCoordinator.state.collect { state ->
-                    if (state is VisualizerState.PermissionRequired) {
-                        visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
-                    }
+                    if (
+                            state is VisualizerState.PermissionRequired &&
+                                visualizerCoordinator.claimPermissionRequest()
+                        ) {
+                            visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
+                        }
                 }
             }
         }
@@ -328,7 +331,6 @@ class PlaybackPanelFragment :
     override fun onDestroyBinding(binding: FragmentPlaybackPanelBinding) {
         uiSettings.unregisterListener(this)
         visualizerPermissionLauncher = null
-        // releaseVisualizer()
         binding.playbackRepeat.clearPendingIcon()
         binding.playbackSong.isSelected = false
         binding.playbackArtist.isSelected = false
@@ -506,14 +508,6 @@ class PlaybackPanelFragment :
             Direction.FORWARDS -> playbackModel.stepForward()
             Direction.BACKWARDS -> playbackModel.stepBackwards()
         }
-    }
-
-    private companion object {
-        const val FFT_PREFERENCE_WINDOW_MS = 300L
-        const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L
-        const val VISUALIZER_STALE_AFTER_MS = 2_000L
-        const val MAX_VISUALIZER_RETRIES = 1
-        const val MIN_WAVEFORM_RANGE = 4
     }
 
     private fun applyDriverSideLayout(binding: FragmentPlaybackPanelBinding) {

@@ -672,9 +672,6 @@ class MainFragment :
     }
 
     private fun updateBannerVisibility(state: org.oxycblt.auxio.playback.BannerState) {
-        val isExpandable =
-            state is org.oxycblt.auxio.playback.BannerState.Rich ||
-                state is org.oxycblt.auxio.playback.BannerState.Raw
         val binding = requireBinding()
         val playbackSheetBehavior =
             binding.playbackSheet.coordinatorLayoutBehavior
@@ -692,28 +689,28 @@ class MainFragment :
                 com.google.android.material.bottomsheet.BackportBottomSheetBehavior.STATE_COLLAPSED
         }
 
-        playbackSheetBehavior.isDraggable = isExpandable
-        queueSheetBehavior?.isDraggable = isExpandable
+        playbackSheetBehavior.isDraggable = state.playable
+        queueSheetBehavior?.isDraggable = state.richQueueCommandsAvailable
 
-        if (!isExpandable) {
-            if (
-                playbackSheetBehavior.state ==
-                    com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                        .STATE_EXPANDED
-            ) {
-                playbackSheetBehavior.state =
-                    com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                        .STATE_COLLAPSED
-            }
-            if (
+        if (
+            !state.richQueueCommandsAvailable &&
                 queueSheetBehavior?.state ==
                     com.google.android.material.bottomsheet.BackportBottomSheetBehavior
                         .STATE_EXPANDED
-            ) {
-                queueSheetBehavior.state =
+        ) {
+            queueSheetBehavior.state =
+                com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                    .STATE_COLLAPSED
+        }
+        if (
+            !state.playable &&
+                playbackSheetBehavior.state ==
                     com.google.android.material.bottomsheet.BackportBottomSheetBehavior
-                        .STATE_COLLAPSED
-            }
+                        .STATE_EXPANDED
+        ) {
+            playbackSheetBehavior.state =
+                com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+                    .STATE_COLLAPSED
         }
 
         updateStartupPanelState()
