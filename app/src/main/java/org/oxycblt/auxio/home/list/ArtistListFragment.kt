@@ -133,6 +133,8 @@ class ArtistListFragment :
     }
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
+        homeSettingsListener?.let { homeSettings.unregisterListener(it) }
+        homeSettingsListener = null
         listSettingsListener?.let { listSettings.unregisterListener(it) }
         listSettingsListener = null
         super.onDestroyBinding(binding)
@@ -145,25 +147,17 @@ class ArtistListFragment :
 
     override fun getPopupData(pos: Int): FastScrollRecyclerView.PopupProvider.PopupData? {
         val artist = homeModel.artistList.value.getOrNull(pos) ?: return null
-        // Change how we display the popup depending on the current sort mode.
         return when (homeModel.artistSort.mode) {
-            // By Name -> Use Name
             is Sort.Mode.ByName ->
                 FastScrollRecyclerView.PopupProvider.PopupData(artist.name.thumb() ?: "?")
-
-            // Duration -> Use compact bucket duration
             is Sort.Mode.ByDuration ->
                 artist.durationMs?.formatDurationMsPopup()?.let {
                     FastScrollRecyclerView.PopupProvider.PopupData(it)
                 }
-
-            // Count -> Use song count
             is Sort.Mode.ByCount ->
                 artist.songs.size.positiveOrNull()?.toString()?.let {
                     FastScrollRecyclerView.PopupProvider.PopupData(it)
                 }
-
-            // Unsupported sort, error gracefully
             else -> null
         }
     }
@@ -203,20 +197,12 @@ class ArtistListFragment :
     }
 
     private fun updatePlayback(song: Song?, parent: MusicParent?, isPlaying: Boolean) {
-        // Only highlight the artist if it is currently playing, and if the currently
-        // playing song is also contained within.
         val artist = (parent as? Artist)?.takeIf { song?.run { artists.contains(it) } ?: false }
         artistAdapter.setPlaying(artist, isPlaying)
     }
 
-    /**
-     * A [SelectionIndicatorAdapter] that shows a list of [Artist]s using [ArtistViewHolder].
-     *
-     * @param listener An [SelectableListListener] to bind interactions to.
-     */
     private class ArtistAdapter(private val listener: SelectableListListener<Artist>) :
         SelectionIndicatorAdapter<Artist, ArtistViewHolder>(ArtistViewHolder.DIFF_CALLBACK) {
-
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
             ArtistViewHolder.from(parent)
 
