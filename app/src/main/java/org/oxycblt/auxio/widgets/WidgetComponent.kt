@@ -26,6 +26,7 @@ import coil3.request.transformations
 import coil3.size.Size
 import javax.inject.Inject
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.headunit.overlay.FloatingTrackMetadataBus
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.image.coil.RoundedRectTransformation
@@ -121,12 +122,18 @@ private constructor(
                 updateRawPlayback(rawMetadata, force)
                 return
             }
+            FloatingTrackMetadataBus.clear()
             L.d("No song, resetting widget")
             lastRenderedIsPlaying = null
             widgetProvider.update(context, uiSettings, null)
             updateTopwayWidget(null)
             return
         }
+
+        FloatingTrackMetadataBus.publish(
+            artist = song.artists.resolveNames(context),
+            title = song.name.resolve(context),
+        )
 
         // Note: Store these values here so they remain consistent once the bitmap is loaded.
         val isPlaying = playbackManager.progression.isPlaying
@@ -189,6 +196,7 @@ private constructor(
     }
 
     private fun updateRawPlayback(metadata: RawPlaybackMetadata, force: Boolean) {
+        FloatingTrackMetadataBus.publish(metadata.displayArtist, metadata.displayTitle)
         val isPlaying = playbackManager.progression.isPlaying
         lastRenderedIsPlaying = isPlaying
         val elapsedMs = playbackManager.progression.calculateElapsedPositionMs()
@@ -214,6 +222,7 @@ private constructor(
         uiSettings.unregisterListener(this)
         widgetProvider.reset(context, uiSettings)
         updateTopwayWidget(null)
+        FloatingTrackMetadataBus.clear()
     }
 
     private fun updateTopwayWidget(state: PlaybackState?) {
@@ -260,6 +269,8 @@ private constructor(
     override fun onRepeatModeChanged(repeatMode: RepeatMode) = update()
 
     override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) = update(force = true)
+
+    override fun onSessionEnded() = FloatingTrackMetadataBus.clear()
 
     // Respond to settings changes that will affect the widget
     override fun onRoundModeChanged() = update()

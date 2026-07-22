@@ -19,11 +19,23 @@
 package org.oxycblt.auxio.playback.ui.visualizer
 
 sealed interface VisualizerState {
-    /** Visualizer is disabled by settings, playback is stopped, or not requested. */
-    data object Hidden : VisualizerState
+    /** Visualizer is disabled. */
+    data object Disabled : VisualizerState
 
-    /** Capture is established, but no valid recent frame has arrived yet. */
-    data object WaitingForFrames : VisualizerState
+    /** Playback is paused, or no track is actively playing. */
+    data object Paused : VisualizerState
+
+    /** Waiting for a non-zero audio session. */
+    data object AwaitingAudioSession : VisualizerState
+
+    /** Recording permission has not yet been granted. */
+    data object PermissionRequired : VisualizerState
+
+    /** Recording permission was explicitly denied. */
+    data object PermissionDenied : VisualizerState
+
+    /** The capture session is starting up. */
+    data object Starting : VisualizerState
 
     enum class FrameSource {
         FFT,
@@ -39,5 +51,5 @@ sealed interface VisualizerState {
     ) : VisualizerState
 
     /** Permission, listener registration, construction, or bounded capture recovery failed. */
-    data class Failed(val reason: String) : VisualizerState
+    data class Unavailable(val reason: String) : VisualizerState
 }

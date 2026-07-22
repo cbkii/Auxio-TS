@@ -247,7 +247,7 @@ data class RawPlaybackMetadata(
         get() = title?.takeIf { it.isNotBlank() } ?: path?.substringAfterLast('/') ?: uriString
 
     val displayArtist: String
-        get() = artist?.takeIf { it.isNotBlank() } ?: "USB audio"
+        get() = artist?.takeIf { it.isNotBlank() } ?: "External audio"
 }
 
 /**

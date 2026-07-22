@@ -62,6 +62,7 @@ import org.oxycblt.auxio.headunit.ts18.RawFastResumeItem
 import org.oxycblt.auxio.headunit.ts18.RawFastResumeValidator
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.image.ImageSettings
+import org.oxycblt.auxio.music.ConfiguredSourcePolicy
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.StartupReadinessController
 import org.oxycblt.auxio.music.StartupReadinessState
@@ -102,6 +103,7 @@ class ExoPlaybackStateHolder(
     private val musicRepository: MusicRepository,
     private val imageSettings: ImageSettings,
     private val startupReadinessController: StartupReadinessController,
+    private val configuredSourcePolicy: ConfiguredSourcePolicy,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -337,7 +339,8 @@ class ExoPlaybackStateHolder(
                             playing = true,
                             savedAtMs = System.currentTimeMillis(),
                         )
-                    val validation = RawFastResumeValidator.validate(context, snapshot)
+                    val validation =
+                        RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
                     withContext(Dispatchers.Main) {
                         if (generation != restoreGeneration) return@withContext
                         when (validation) {
@@ -1505,7 +1508,8 @@ class ExoPlaybackStateHolder(
                 return@launch
             }
             Ts18FirstAudioLatency.mark("raw_media_validation_start")
-            val validation = RawFastResumeValidator.validate(context, snapshot)
+            val validation =
+                RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
             Ts18FirstAudioLatency.mark("raw_media_validation_end")
             withContext(Dispatchers.Main) {
                 when (validation) {
@@ -1857,6 +1861,7 @@ class ExoPlaybackStateHolder(
         private val musicRepository: MusicRepository,
         private val imageSettings: ImageSettings,
         private val startupReadinessController: StartupReadinessController,
+        private val configuredSourcePolicy: ConfiguredSourcePolicy,
     ) {
         fun create(): ExoPlaybackStateHolder {
             // Since Auxio is a music player, only specify an audio renderer to save
@@ -1908,6 +1913,7 @@ class ExoPlaybackStateHolder(
                 musicRepository,
                 imageSettings,
                 startupReadinessController,
+                configuredSourcePolicy,
             )
         }
     }

@@ -11,5 +11,9 @@
     <string name="car_overlay_permission_manual_instructions" translatable="false">Your device does not support direct settings access. Open Android Settings manually, then find Auxio, Music, or TW Music under Apps and allow Display over other apps / Appear on top.</string>
     <string name="car_overlay_setting_title" translatable="false">Car Floating Controls</string>
     <string name="car_overlay_setting_summary" translatable="false">Show persistent media controls over other apps</string>
+    <string name="car_overlay_track_ticker_title" translatable="false">Show current track ticker</string>
+    <string name="car_overlay_track_ticker_summary" translatable="false">Add a scrolling Artist - Song title row above the controls</string>
+    <string name="car_overlay_track_ticker_idle" translatable="false">Nothing playing</string>
+    <string name="car_overlay_track_ticker_content_description" translatable="false">Currently playing: %1$s</string>
     <string name="car_overlay_reset_position" translatable="false">Reset overlay position</string>
 </resources>

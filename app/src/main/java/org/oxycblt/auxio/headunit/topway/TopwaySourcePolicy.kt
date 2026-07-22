@@ -136,6 +136,7 @@ object TopwaySourcePolicy {
         mediaStoreParents: Collection<String> = emptyList(),
         storageRoots: Collection<String> = emptyList(),
         rootGate: RootGate? = null,
+        allowUnconfiguredUsb: Boolean = false,
     ): List<String> {
         val saved =
             savedPaths.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
@@ -143,9 +144,17 @@ object TopwaySourcePolicy {
             mediaStoreParents
                 .mapNotNull(::normaliseCandidatePath)
                 .filter(::isAllowedSourceCandidate)
-        val roots =
-            preferAppFacingRoots(SAFE_GENERIC_FALLBACKS + storageRoots + discoverCandidateRoots())
-                .filter(::isAllowedSourceCandidate)
+        val candidates = mutableListOf<String>()
+        candidates.addAll(SAFE_GENERIC_FALLBACKS)
+        candidates.addAll(storageRoots)
+        val discoveredRoots = discoverCandidateRoots()
+        if (allowUnconfiguredUsb) {
+            candidates.addAll(discoveredRoots)
+        } else {
+            // Only add discovered USB roots if they are already in the savedPaths
+            candidates.addAll(discoveredRoots.filter { it in savedPaths })
+        }
+        val roots = preferAppFacingRoots(candidates).filter(::isAllowedSourceCandidate)
         val audioParents = linkedSetOf<String>()
         val deadline = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS
         for (root in roots) {

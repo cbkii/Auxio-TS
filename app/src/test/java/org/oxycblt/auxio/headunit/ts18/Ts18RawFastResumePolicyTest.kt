@@ -88,7 +88,7 @@ class Ts18RawFastResumePolicyTest {
             )
 
         assertEquals("example.mp3", metadata.displayTitle)
-        assertEquals("USB audio", metadata.displayArtist)
+        assertEquals("External audio", metadata.displayArtist)
     }
 
     @Test
