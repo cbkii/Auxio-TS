@@ -189,6 +189,9 @@ object RawFastResumeValidator {
     internal fun isInsideConfiguredRoots(path: String, roots: Collection<File>): Boolean {
         if (
             path.isBlank() ||
+                path == "." ||
+                path.startsWith("./") ||
+                path.startsWith("../") ||
                 path.contains("/../") ||
                 path.endsWith("/..") ||
                 path.contains("/./") ||

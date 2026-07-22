@@ -140,33 +140,25 @@ object TopwaySourcePolicy {
     ): List<String> {
         val saved =
             savedPaths.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
-        val savedSet = saved.map { it.trimEnd('/') }.toSet()
         val media =
             mediaStoreParents
                 .mapNotNull(::normaliseCandidatePath)
                 .filter(::isAllowedSourceCandidate)
         val injectedRoots =
             storageRoots.mapNotNull(::normaliseCandidatePath).filter(::isAllowedSourceCandidate)
-        val candidates = mutableListOf<String>()
-        // Configured roots are always authoritative and are scanned before optional suggestions.
-        candidates.addAll(saved)
-        candidates.addAll(SAFE_GENERIC_FALLBACKS)
-        candidates.addAll(injectedRoots)
-
-        // Do not walk /storage or /mnt/media_rw during configured-only/background access. The
-        // explicit source picker opts in and remains the only caller allowed to discover new USBs.
-        val discoveredRoots =
+        val fallbackRoots = SAFE_GENERIC_FALLBACKS.filter(::isAllowedSourceCandidate)
+        val optionalRoots = media + injectedRoots + fallbackRoots
+        val authorisedOptionalRoots =
             if (allowUnconfiguredUsb) {
-                discoverCandidateRoots()
+                optionalRoots
             } else {
-                emptyList()
+                optionalRoots.filter { candidate -> isContainedByAny(candidate, saved) }
             }
-        if (allowUnconfiguredUsb) {
-            candidates.addAll(discoveredRoots)
-        } else {
-            candidates.addAll(discoveredRoots.filter { it.trimEnd('/') in savedSet })
-        }
+        val discoveredRoots = if (allowUnconfiguredUsb) discoverCandidateRoots() else emptyList()
+        val candidates = saved + authorisedOptionalRoots + discoveredRoots
 
+        // Background/configured-only access never walks or returns an unconfigured root. The
+        // explicit source picker is the sole caller that opts into new removable suggestions.
         val roots = preferAppFacingRoots(candidates).filter(::isAllowedSourceCandidate)
         val audioParents = linkedSetOf<String>()
         val deadline = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS
@@ -182,9 +174,8 @@ object TopwaySourcePolicy {
         val usb = roots.filter(::isUsbCandidate)
         val generic = roots.filterNot(::isUsbCandidate)
         val ordered = linkedSetOf<String>()
-        listOf(saved, media, audioParents.toList(), musicFolders, usb, generic).forEach { group ->
-            group.filterTo(ordered, ::isAllowedSourceCandidate)
-        }
+        listOf(saved, authorisedOptionalRoots, audioParents.toList(), musicFolders, usb, generic)
+            .forEach { group -> group.filterTo(ordered, ::isAllowedSourceCandidate) }
         L.i(
             "Discovered ${ordered.size} TS18 music source candidates " +
                 "(explicitUsb=$allowUnconfiguredUsb, configured=${saved.size}, injected=${injectedRoots.size})"
@@ -290,6 +281,24 @@ object TopwaySourcePolicy {
 
     private fun musicChildIfAccessible(root: String): String? =
         File(root, "Music").absolutePath.takeIf { isAccessibleCandidate(it) }
+
+    private fun isContainedByAny(
+        candidatePath: String,
+        configuredRoots: Collection<String>,
+    ): Boolean {
+        val candidate =
+            runCatching { File(candidatePath).canonicalFile }.getOrNull() ?: return false
+        return configuredRoots.any { configuredPath ->
+            val root =
+                runCatching { File(configuredPath).canonicalFile }.getOrNull() ?: return@any false
+            var cursor: File? = candidate
+            while (cursor != null) {
+                if (cursor == root) return@any true
+                cursor = cursor.parentFile
+            }
+            false
+        }
+    }
 
     private fun normaliseCandidatePath(value: String): String? {
         val trimmed = value.trim()

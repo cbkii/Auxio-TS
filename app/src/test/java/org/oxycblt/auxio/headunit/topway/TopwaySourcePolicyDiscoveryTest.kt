@@ -97,10 +97,30 @@ class TopwaySourcePolicyDiscoveryTest {
                 savedPaths = listOf("/sdcard/Custom"),
                 mediaStoreParents = listOf("/storage/emulated/0/Music/Albums"),
                 storageRoots = listOf("/storage/emulated/0", "/storage/usbdisk1"),
+                allowUnconfiguredUsb = true,
             )
 
         assertEquals("/sdcard/Custom", candidates.first())
         assertTrue(candidates.indexOf("/storage/emulated/0/Music/Albums") > 0)
+    }
+
+    @Test
+    fun configuredOnlyModeExcludesUnconfiguredMediaInjectedAndFallbackRoots() {
+        val candidates =
+            TopwaySourcePolicy.discoverMusicSourceCandidates(
+                savedPaths = listOf("/storage/emulated/0/Music"),
+                mediaStoreParents = listOf("/storage/emulated/0/Other", "/storage/usbdisk1/Music"),
+                storageRoots = listOf("/storage/emulated/0", "/storage/usbdisk2"),
+                allowUnconfiguredUsb = false,
+            )
+
+        assertTrue(
+            candidates.all {
+                it == "/storage/emulated/0/Music" || it.startsWith("/storage/emulated/0/Music/")
+            }
+        )
+        assertFalse(candidates.any { it.startsWith("/storage/usbdisk") })
+        assertFalse(candidates.contains("/storage/emulated/0/Other"))
     }
 
     @Test
@@ -146,7 +166,8 @@ class TopwaySourcePolicyDiscoveryTest {
     fun appFacingUsbRootsRankBeforeRawMediaRwRoots() {
         val candidates =
             TopwaySourcePolicy.discoverMusicSourceCandidates(
-                storageRoots = listOf("/mnt/media_rw/usbdisk1", "/storage/usbdisk1")
+                storageRoots = listOf("/mnt/media_rw/usbdisk1", "/storage/usbdisk1"),
+                allowUnconfiguredUsb = true,
             )
 
         assertTrue(candidates.contains("/storage/usbdisk1"))

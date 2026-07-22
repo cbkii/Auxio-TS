@@ -64,6 +64,18 @@ class Ts18RawFastResumePolicyTest {
                 listOf(root),
             )
         )
+        assertFalse(
+            RawFastResumeValidator.isInsideConfiguredRoots(
+                "../storage/emulated/0/Music/track.mp3",
+                listOf(root),
+            )
+        )
+        assertFalse(
+            RawFastResumeValidator.isInsideConfiguredRoots(
+                "./storage/emulated/0/Music/track.mp3",
+                listOf(root),
+            )
+        )
     }
 
     @Test
