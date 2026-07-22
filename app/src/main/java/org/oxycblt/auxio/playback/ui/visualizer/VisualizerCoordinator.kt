@@ -9,11 +9,11 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.playback.ui.visualizer
@@ -26,6 +26,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.ui.UISettings
 import timber.log.Timber as L
 
+/** Owns one Android [Visualizer] for the visible playback-panel lifecycle. */
 class VisualizerCoordinator(
     private val context: Context,
     private val isPlayingFlow: StateFlow<Boolean>,
@@ -48,15 +50,22 @@ class VisualizerCoordinator(
     private var visualizer: Visualizer? = null
     private var currentSessionId: Int? = null
     private var watchdogJob: Job? = null
+    private var monitorJob: Job? = null
+    private var activeScope: CoroutineScope? = null
     private var generation = 0
     private var retryCount = 0
     private var permissionDenied = false
+    private var permissionRequestIssued = false
     private var active = false
 
-    private var monitorJob: Job? = null
-
     override fun onStart(owner: LifecycleOwner) {
+        if (active) return
         active = true
+        activeScope = owner.lifecycleScope
+        if (hasPermission()) {
+            permissionDenied = false
+            permissionRequestIssued = false
+        }
         uiSettings.registerListener(this)
         monitorJob =
             owner.lifecycleScope.launch {
@@ -66,19 +75,34 @@ class VisualizerCoordinator(
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        if (!active) return
         active = false
         uiSettings.unregisterListener(this)
         monitorJob?.cancel()
+        monitorJob = null
         releaseVisualizer()
+        activeScope = null
     }
 
     override fun onVisualizerModeChanged() {
         retryCount = 0
-        permissionDenied = false
+        if (hasPermission()) {
+            permissionDenied = false
+            permissionRequestIssued = false
+        }
         updateState(forceRestart = true)
     }
 
+    /** Claims the one permission request allowed for the current unresolved permission state. */
+    fun claimPermissionRequest(): Boolean {
+        if (!active || permissionDenied || permissionRequestIssued) return false
+        if (_state.value !is VisualizerState.PermissionRequired) return false
+        permissionRequestIssued = true
+        return true
+    }
+
     fun onPermissionResult(granted: Boolean) {
+        permissionRequestIssued = false
         if (granted) {
             retryCount = 0
             permissionDenied = false
@@ -93,6 +117,7 @@ class VisualizerCoordinator(
     private fun updateState(forceRestart: Boolean = false) {
         if (!active) return
         if (uiSettings.visualizerMode == UISettings.VisualizerMode.OFF) {
+            permissionRequestIssued = false
             releaseVisualizer()
             _state.value = VisualizerState.Disabled
             return
@@ -111,29 +136,22 @@ class VisualizerCoordinator(
             return
         }
 
-        if (permissionDenied) {
+        if (!hasPermission()) {
             releaseVisualizer()
-            _state.value = VisualizerState.PermissionDenied
+            _state.value =
+                if (permissionDenied) VisualizerState.PermissionDenied
+                else VisualizerState.PermissionRequired
             return
         }
-
-        val hasPermission =
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                PackageManager.PERMISSION_GRANTED
-        if (!hasPermission) {
-            releaseVisualizer()
-            _state.value = VisualizerState.PermissionRequired
-            return
-        }
+        permissionDenied = false
+        permissionRequestIssued = false
 
         if (forceRestart || (visualizer != null && currentSessionId != sessionId)) {
             retryCount = 0
             releaseVisualizer()
         }
 
-        if (visualizer == null) {
-            startVisualizer(sessionId)
-        }
+        if (visualizer == null) startVisualizer(sessionId)
     }
 
     private fun startVisualizer(sessionId: Int) {
@@ -153,23 +171,24 @@ class VisualizerCoordinator(
             candidateToRelease = candidate
             val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
             candidate.captureSize = targetSize
-            val maxCaptureRate = Visualizer.getMaxCaptureRate()
-            val targetRate = minOf(maxCaptureRate, 30_000).coerceAtLeast(1)
+            val targetRate = minOf(Visualizer.getMaxCaptureRate(), 30_000).coerceAtLeast(1)
             val scalingMode =
                 if (retryCount == 0) Visualizer.SCALING_MODE_AS_PLAYED
                 else Visualizer.SCALING_MODE_NORMALIZED
             try {
                 candidate.scalingMode = scalingMode
-            } catch (e: Exception) {}
+            } catch (error: RuntimeException) {
+                L.d(error, "Requested visualizer scaling mode unavailable")
+            }
 
             var lastFftMs = 0L
             val listenerStatus =
                 candidate.setDataCaptureListener(
                     object : Visualizer.OnDataCaptureListener {
                         override fun onWaveFormDataCapture(
-                            v: Visualizer,
+                            visualizer: Visualizer,
                             waveform: ByteArray,
-                            rate: Int,
+                            samplingRate: Int,
                         ) {
                             val now = android.os.SystemClock.uptimeMillis()
                             if (now - lastFftMs < FFT_PREFERENCE_WINDOW_MS) return
@@ -178,14 +197,18 @@ class VisualizerCoordinator(
                                 _state.value =
                                     VisualizerState.Live(
                                         waveform.copyOf(),
-                                        rate,
+                                        samplingRate,
                                         now,
                                         VisualizerState.FrameSource.WAVEFORM,
                                     )
                             }
                         }
 
-                        override fun onFftDataCapture(v: Visualizer, fft: ByteArray, rate: Int) {
+                        override fun onFftDataCapture(
+                            visualizer: Visualizer,
+                            fft: ByteArray,
+                            samplingRate: Int,
+                        ) {
                             if (!hasUsableFft(fft)) return
                             val now = android.os.SystemClock.uptimeMillis()
                             lastFftMs = now
@@ -193,7 +216,7 @@ class VisualizerCoordinator(
                                 _state.value =
                                     VisualizerState.Live(
                                         fft.copyOf(),
-                                        rate,
+                                        samplingRate,
                                         now,
                                         VisualizerState.FrameSource.FFT,
                                     )
@@ -216,71 +239,61 @@ class VisualizerCoordinator(
             candidateToRelease = null
             currentSessionId = sessionId
             L.i(
-                "Visualizer started session=$sessionId captureSize=$targetSize rate=$targetRate attempt=$retryCount"
+                "Visualizer started session=$sessionId captureSize=$targetSize " +
+                    "rate=$targetRate attempt=$retryCount"
             )
             scheduleWatchdog(sessionId, currentGeneration)
-        } catch (e: RuntimeException) {
+        } catch (error: RuntimeException) {
             val message =
-                when (e) {
+                when (error) {
                     is SecurityException -> "Visualizer construction denied"
                     is IllegalArgumentException -> "Visualizer rejected session configuration"
                     is IllegalStateException -> "Visualizer entered invalid state"
                     is UnsupportedOperationException -> "Visualizer unsupported on this device"
                     else -> "Visualizer construction failed"
                 }
-            L.w(e, "$message for session $sessionId")
+            L.w(error, "$message for session $sessionId")
             visualizer = null
             currentSessionId = null
             _state.value = VisualizerState.Unavailable(message)
         } finally {
-            candidateToRelease?.let { candidate ->
-                try {
-                    if (candidate.enabled) candidate.enabled = false
-                } catch (e: Exception) {}
-                try {
-                    candidate.setDataCaptureListener(null, 0, false, false)
-                } catch (e: Exception) {}
-                try {
-                    candidate.release()
-                } catch (e: Exception) {}
-            }
+            candidateToRelease?.let(::releaseCandidate)
         }
     }
 
     private fun scheduleWatchdog(sessionId: Int, currentGeneration: Int) {
         watchdogJob?.cancel()
+        val scope = activeScope
+        if (scope == null) {
+            releaseVisualizer()
+            _state.value = VisualizerState.Unavailable("Visualizer lifecycle is unavailable")
+            return
+        }
         watchdogJob =
-            kotlinx.coroutines
-                .CoroutineScope(
-                    kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob()
-                )
-                .launch {
-                    while (true) {
-                        delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
-                        if (currentGeneration != generation || currentSessionId != sessionId)
-                            return@launch
-                        val currentState = _state.value
-                        val now = android.os.SystemClock.uptimeMillis()
-                        val hasFreshFrame =
-                            currentState is VisualizerState.Live &&
-                                (now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS)
-                        if (hasFreshFrame) continue
+            scope.launch {
+                delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
+                if (currentGeneration != generation || currentSessionId != sessionId) return@launch
+                val currentState = _state.value
+                val now = android.os.SystemClock.uptimeMillis()
+                val hasFreshFrame =
+                    currentState is VisualizerState.Live &&
+                        now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
+                if (hasFreshFrame) return@launch
 
-                        if (retryCount < MAX_VISUALIZER_RETRIES) {
-                            retryCount++
-                            L.w(
-                                "Visualizer produced no recent usable frame; retrying session=$sessionId attempt=$retryCount"
-                            )
-                            watchdogJob = null
-                            releaseVisualizer()
-                            updateState()
-                        } else {
-                            _state.value =
-                                VisualizerState.Unavailable("No usable FFT or waveform frames")
-                        }
-                        return@launch
-                    }
+                if (retryCount < MAX_VISUALIZER_RETRIES) {
+                    retryCount++
+                    L.w(
+                        "Visualizer produced no recent usable frame; retrying " +
+                            "session=$sessionId attempt=$retryCount"
+                    )
+                    releaseVisualizer()
+                    updateState()
+                } else {
+                    releaseVisualizer()
+                    _state.value =
+                        VisualizerState.Unavailable("No usable FFT or waveform frames")
                 }
+            }
     }
 
     private fun releaseVisualizer() {
@@ -290,18 +303,30 @@ class VisualizerCoordinator(
         val activeVisualizer = visualizer
         visualizer = null
         currentSessionId = null
-        if (activeVisualizer != null) {
-            try {
-                if (activeVisualizer.enabled) activeVisualizer.enabled = false
-            } catch (e: Exception) {}
-            try {
-                activeVisualizer.setDataCaptureListener(null, 0, false, false)
-            } catch (e: Exception) {}
-            try {
-                activeVisualizer.release()
-            } catch (e: Exception) {}
+        if (activeVisualizer != null) releaseCandidate(activeVisualizer)
+    }
+
+    private fun releaseCandidate(candidate: Visualizer) {
+        try {
+            if (candidate.enabled) candidate.enabled = false
+        } catch (error: RuntimeException) {
+            L.d(error, "Visualizer disable during release failed")
+        }
+        try {
+            candidate.setDataCaptureListener(null, 0, false, false)
+        } catch (error: RuntimeException) {
+            L.d(error, "Visualizer listener cleanup failed")
+        }
+        try {
+            candidate.release()
+        } catch (error: RuntimeException) {
+            L.d(error, "Visualizer native release failed")
         }
     }
+
+    private fun hasPermission() =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun hasUsableFft(fft: ByteArray): Boolean {
         for (index in 2 until fft.size) {
@@ -322,11 +347,11 @@ class VisualizerCoordinator(
         return max - min >= MIN_WAVEFORM_RANGE
     }
 
-    companion object {
-        private const val FFT_PREFERENCE_WINDOW_MS = 300L
-        private const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L
-        private const val VISUALIZER_STALE_AFTER_MS = 2_000L
-        private const val MAX_VISUALIZER_RETRIES = 1
-        private const val MIN_WAVEFORM_RANGE = 4
+    private companion object {
+        const val FFT_PREFERENCE_WINDOW_MS = 300L
+        const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L
+        const val VISUALIZER_STALE_AFTER_MS = 2_000L
+        const val MAX_VISUALIZER_RETRIES = 1
+        const val MIN_WAVEFORM_RANGE = 4
     }
 }
