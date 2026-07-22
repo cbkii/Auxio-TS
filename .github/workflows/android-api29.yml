@@ -119,22 +119,25 @@ jobs:
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
           mkdir -p "${HOME}/.android"
           touch "${HOME}/.android/repositories.cfg"
+          avd_log="${RUNNER_TEMP}/avdmanager-create.log"
           set +e
           printf 'no\n' | "${AVDMANAGER_BIN}" create avd \
             --force \
             -n "${AVD_NAME}" \
-            -k "${SYSTEM_IMAGE}"
-          avd_status=${PIPESTATUS[1]}
+            -k "${SYSTEM_IMAGE}" 2>&1 | tee "${avd_log}"
+          pipeline_status=("${PIPESTATUS[@]}")
           set -e
+          avd_status="${pipeline_status[1]}"
           if [[ "${avd_status}" -ne 0 ]]; then
             echo "::error::avdmanager failed with status ${avd_status}."
-            "${AVDMANAGER_BIN}" list avd || true
-            "${AVDMANAGER_BIN}" list target || true
+            "${AVDMANAGER_BIN}" list avd 2>&1 | tee -a "${avd_log}" || true
+            "${AVDMANAGER_BIN}" list target 2>&1 | tee -a "${avd_log}" || true
             exit "${avd_status}"
           fi
           avd_dir="${HOME}/.android/avd/${AVD_NAME}.avd"
           if [[ ! -d "${avd_dir}" ]]; then
             echo "::error::avdmanager reported success but ${avd_dir} was not created."
+            find "${HOME}/.android" -maxdepth 3 -print 2>&1 | tee -a "${avd_log}" || true
             exit 1
           fi
           cat >> "${avd_dir}/config.ini" <<'EOF'
@@ -209,6 +212,7 @@ jobs:
             app/build/outputs/androidTest-results/**
             musikr/build/reports/androidTests/**
             musikr/build/outputs/androidTest-results/**
+            ${{ runner.temp }}/avdmanager-create.log
             ${{ runner.temp }}/api29-emulator.log
           if-no-files-found: ignore
           retention-days: 7
