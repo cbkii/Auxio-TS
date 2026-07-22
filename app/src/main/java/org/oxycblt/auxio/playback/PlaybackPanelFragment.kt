@@ -26,7 +26,6 @@ import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
 import androidx.constraintlayout.widget.ConstraintSet
@@ -97,10 +96,11 @@ class PlaybackPanelFragment :
     @Inject lateinit var uiSettings: UISettings
     private val queueModel: QueueViewModel by viewModels()
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
-    private lateinit var visualizerCoordinator: VisualizerCoordinator
-    private var visualizerPermissionLauncher:
-        androidx.activity.result.ActivityResultLauncher<String>? =
-        null
+    private var visualizerCoordinator: VisualizerCoordinator? = null
+    private val visualizerPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            visualizerCoordinator?.onPermissionResult(isGranted)
+        }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -111,33 +111,35 @@ class PlaybackPanelFragment :
     ) {
         super.onBindingCreated(binding, savedInstanceState)
 
-        visualizerCoordinator =
+        val currentVisualizerCoordinator =
             VisualizerCoordinator(
                 requireContext(),
                 playbackModel.isPlaying,
                 playbackModel.currentAudioSessionId,
                 uiSettings,
             )
-        viewLifecycleOwner.lifecycle.addObserver(visualizerCoordinator)
+        visualizerCoordinator = currentVisualizerCoordinator
+        viewLifecycleOwner.lifecycle.addObserver(currentVisualizerCoordinator)
 
         val currentCoverPagerAdapter =
-            CoverPagerAdapter(this, visualizerCoordinator.state, uiSettings, viewLifecycleOwner)
+            CoverPagerAdapter(
+                this,
+                currentVisualizerCoordinator.state,
+                uiSettings,
+                viewLifecycleOwner,
+            )
         coverPagerAdapter = currentCoverPagerAdapter
 
-        visualizerPermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                visualizerCoordinator.onPermissionResult(isGranted)
-            }
         uiSettings.registerListener(this)
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
-                visualizerCoordinator.state.collect { state ->
+                currentVisualizerCoordinator.state.collect { state ->
                     if (
                         state is VisualizerState.PermissionRequired &&
-                            visualizerCoordinator.claimPermissionRequest()
+                            currentVisualizerCoordinator.claimPermissionRequest()
                     ) {
-                        visualizerPermissionLauncher?.launch(Manifest.permission.RECORD_AUDIO)
+                        visualizerPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
                 }
             }
@@ -330,7 +332,7 @@ class PlaybackPanelFragment :
 
     override fun onDestroyBinding(binding: FragmentPlaybackPanelBinding) {
         uiSettings.unregisterListener(this)
-        visualizerPermissionLauncher = null
+        visualizerCoordinator = null
         binding.playbackRepeat.clearPendingIcon()
         binding.playbackSong.isSelected = false
         binding.playbackArtist.isSelected = false

@@ -56,9 +56,10 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
         val configurationRevision: Long,
     ) {
         val configuredFileRoots: Map<String, File> =
-            sources.mapNotNull { it.fileRoot }.distinctBy { it.absolutePath }.associateBy {
-                it.absolutePath
-            }
+            sources
+                .mapNotNull { it.fileRoot }
+                .distinctBy { it.absolutePath }
+                .associateBy { it.absolutePath }
 
         val isUsbConfigured: Boolean
             get() = sources.any { it.kind == SourceKind.REMOVABLE }
@@ -128,12 +129,9 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
     }
 
     internal companion object {
-        private val UUID_STORAGE_PATH =
-            Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
-        private val UUID_VOLUME_TOKEN =
-            Regex("(?:^|[/=:])[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(?=[:/]|$)")
-        private val USB_DISK_PATH =
-            Regex("^/storage/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
+        private val UUID_STORAGE_PATH = Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
+        private val UUID_VOLUME_TOKEN = Regex("(?:^|[/=:])[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(?=[:/]|$)")
+        private val USB_DISK_PATH = Regex("^/storage/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
         private val MEDIA_RW_USB_PATH =
             Regex("^/mnt/media_rw/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
 
@@ -167,7 +165,8 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
 
             val appFacing = toAppFacingPath(clean)
             val canonical =
-                runCatching { File(appFacing).canonicalFile }.getOrElse { File(appFacing).absoluteFile }
+                runCatching { File(appFacing).canonicalFile }
+                    .getOrElse { File(appFacing).absoluteFile }
             val canonicalPath = toAppFacingPath(canonical.absolutePath.replace('\\', '/'))
             if (!isAllowedRoot(canonicalPath)) return null
             return File(canonicalPath)
