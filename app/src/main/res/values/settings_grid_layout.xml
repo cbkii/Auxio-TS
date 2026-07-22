@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="set_key_default_span_count" translatable="false">auxio_default_span_count</string>
+    <string name="set_key_song_span_count" translatable="false">auxio_song_span_count</string>
+    <string name="set_key_album_span_count" translatable="false">auxio_album_span_count</string>
+    <string name="set_key_artist_span_count" translatable="false">auxio_artist_span_count</string>
+    <string name="set_key_genre_span_count" translatable="false">auxio_genre_span_count</string>
+    <string name="set_key_playlist_span_count" translatable="false">auxio_playlist_span_count</string>
+
+    <string-array name="entries_grid_span_default">
+        <item>@string/set_grid_columns_two</item>
+        <item>@string/set_grid_columns_three</item>
+    </string-array>
+    <integer-array name="values_grid_span_default">
+        <item>2</item>
+        <item>3</item>
+    </integer-array>
+
+    <string-array name="entries_grid_span_override">
+        <item>@string/set_grid_columns_inherit</item>
+        <item>@string/set_grid_columns_two</item>
+        <item>@string/set_grid_columns_three</item>
+    </string-array>
+    <integer-array name="values_grid_span_override">
+        <item>0</item>
+        <item>2</item>
+        <item>3</item>
+    </integer-array>
+
+    <integer name="grid_span_default">2</integer>
+    <integer name="grid_span_inherit">0</integer>
+</resources>
