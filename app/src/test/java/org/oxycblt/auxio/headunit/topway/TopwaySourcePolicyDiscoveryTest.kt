@@ -178,6 +178,32 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
+    fun canonicalContainmentRejectsSymlinkEscapes() {
+        val tempRoot = Files.createTempDirectory("topway-source-boundary").toFile()
+        try {
+            val configuredRoot = File(tempRoot, "configured").apply { mkdirs() }
+            val outsideRoot = File(tempRoot, "outside").apply { mkdirs() }
+            val escape = File(configuredRoot, "escape")
+            Files.createSymbolicLink(escape.toPath(), outsideRoot.toPath())
+
+            assertTrue(
+                TopwaySourcePolicy.isWithinCanonicalRoot(
+                    configuredRoot,
+                    configuredRoot.canonicalFile,
+                )
+            )
+            assertFalse(
+                TopwaySourcePolicy.isWithinCanonicalRoot(
+                    escape,
+                    configuredRoot.canonicalFile,
+                )
+            )
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
     fun discoversAudioParentFoldersUnderInjectedRootForTests() {
         val tempRoot = Files.createTempDirectory("topway-audio-parent").toFile()
         try {

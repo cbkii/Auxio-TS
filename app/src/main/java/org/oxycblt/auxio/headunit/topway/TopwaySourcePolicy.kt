@@ -156,6 +156,7 @@ object TopwaySourcePolicy {
             }
         val discoveredRoots = if (allowUnconfiguredUsb) discoverCandidateRoots() else emptyList()
         val candidates = saved + authorisedOptionalRoots + discoveredRoots
+        val displayOptionalRoots = preferAppFacingRoots(authorisedOptionalRoots)
 
         // Background/configured-only access never walks or returns an unconfigured root. The
         // explicit source picker is the sole caller that opts into new removable suggestions.
@@ -174,7 +175,7 @@ object TopwaySourcePolicy {
         val usb = roots.filter(::isUsbCandidate)
         val generic = roots.filterNot(::isUsbCandidate)
         val ordered = linkedSetOf<String>()
-        listOf(saved, authorisedOptionalRoots, audioParents.toList(), musicFolders, usb, generic)
+        listOf(saved, displayOptionalRoots, audioParents.toList(), musicFolders, usb, generic)
             .forEach { group -> group.filterTo(ordered, ::isAllowedSourceCandidate) }
         L.i(
             "Discovered ${ordered.size} TS18 music source candidates " +
@@ -191,6 +192,12 @@ object TopwaySourcePolicy {
         deadline: Long = System.currentTimeMillis() + MAX_SCAN_ELAPSED_MS,
     ) {
         if (enforceSafeRoot && !isAllowedSourceCandidate(root.absolutePath)) return
+        val canonicalRoot =
+            if (enforceSafeRoot) {
+                runCatching { root.canonicalFile }.getOrNull() ?: return
+            } else {
+                null
+            }
         var visited = 0
         val queue = ArrayDeque<Pair<File, Int>>()
         queue.add(root to 0)
@@ -198,21 +205,31 @@ object TopwaySourcePolicy {
             if (out.size >= MAX_CANDIDATES || visited >= MAX_VISITED_FILES) return
             if (System.currentTimeMillis() > deadline) return
             val (dir, depth) = queue.removeFirst()
+            if (canonicalRoot != null && !isWithinCanonicalRoot(dir, canonicalRoot)) continue
             val children = listFilesSafe(dir, rootGate) ?: continue
             var containsAudio = false
             for (child in children) {
                 visited++
                 if (visited >= MAX_VISITED_FILES) break
+                if (canonicalRoot != null && !isWithinCanonicalRoot(child.file, canonicalRoot)) {
+                    continue
+                }
                 when {
                     child.isFile && child.file.extension.lowercase() in AUDIO_EXTENSIONS ->
                         containsAudio = true
                     child.isDirectory &&
                         depth < MAX_SCAN_DEPTH &&
-                        shouldDescend(child.file, enforceSafeRoot) ->
+                        shouldDescend(child.file, enforceSafeRoot, canonicalRoot) ->
                         queue.add(child.file to depth + 1)
                 }
             }
-            if (containsAudio && (!enforceSafeRoot || isAllowedSourceCandidate(dir.absolutePath))) {
+            if (
+                containsAudio &&
+                    (!enforceSafeRoot ||
+                        (isAllowedSourceCandidate(dir.absolutePath) &&
+                            canonicalRoot != null &&
+                            isWithinCanonicalRoot(dir, canonicalRoot)))
+            ) {
                 out.add(dir.absolutePath)
             }
         }
@@ -263,17 +280,24 @@ object TopwaySourcePolicy {
         }
     }
 
-    private fun shouldDescend(dir: File, enforceSafeRoot: Boolean): Boolean {
+    private fun shouldDescend(
+        dir: File,
+        enforceSafeRoot: Boolean,
+        canonicalRoot: File?,
+    ): Boolean {
         val name = dir.name
         if (name == "." || name == ".." || name.startsWith('.')) return false
         if (isNoisyDir(name)) return false
-        val path = dir.absolutePath.replace('\\', '/')
+        val path = dir.absolutePath.replace('\', '/')
         if (
             path.contains("/Android/", ignoreCase = true) ||
                 path.endsWith("/Android", ignoreCase = true)
         )
             return false
-        return !enforceSafeRoot || isAllowedSourceCandidate(path)
+        if (!enforceSafeRoot) return true
+        return canonicalRoot != null &&
+            isAllowedSourceCandidate(path) &&
+            isWithinCanonicalRoot(dir, canonicalRoot)
     }
 
     internal fun isNoisyDir(name: String): Boolean =
@@ -281,6 +305,16 @@ object TopwaySourcePolicy {
 
     private fun musicChildIfAccessible(root: String): String? =
         File(root, "Music").absolutePath.takeIf { isAccessibleCandidate(it) }
+
+    internal fun isWithinCanonicalRoot(candidate: File, canonicalRoot: File): Boolean {
+        val canonicalCandidate = runCatching { candidate.canonicalFile }.getOrNull() ?: return false
+        var cursor: File? = canonicalCandidate
+        while (cursor != null) {
+            if (cursor == canonicalRoot) return true
+            cursor = cursor.parentFile
+        }
+        return false
+    }
 
     private fun isContainedByAny(
         candidatePath: String,
