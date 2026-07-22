@@ -38,6 +38,8 @@ jobs:
       AVD_NAME: auxio-api29
       ANDROID_API: "29"
       SYSTEM_IMAGE: system-images;android-29;google_apis;x86_64
+      ANDROID_USER_HOME: ${{ runner.temp }}/android-user-home
+      ANDROID_AVD_HOME: ${{ runner.temp }}/android-avd-home
 
     steps:
       - name: Checkout repository
@@ -127,8 +129,8 @@ jobs:
         shell: bash
         run: |
           if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
-          mkdir -p "${HOME}/.android"
-          touch "${HOME}/.android/repositories.cfg"
+          mkdir -p "${ANDROID_USER_HOME}" "${ANDROID_AVD_HOME}"
+          touch "${ANDROID_USER_HOME}/repositories.cfg"
           avd_log="${RUNNER_TEMP}/avdmanager-create.log"
           set +e
           printf 'no\n' | "${AVDMANAGER_BIN}" create avd \
@@ -148,8 +150,8 @@ jobs:
           if ! grep -Fxq "${AVD_NAME}" <<<"${avd_names}"; then
             echo "::error::avdmanager reported success but ${AVD_NAME} is not runnable."
             "${AVDMANAGER_BIN}" list avd 2>&1 | tee -a "${avd_log}" || true
-            find "${HOME}" -maxdepth 4 -type f \( -name '*.ini' -o -name 'config.ini' \) \
-              -print 2>&1 | tee -a "${avd_log}" || true
+            find "${ANDROID_USER_HOME}" "${ANDROID_AVD_HOME}" -maxdepth 4 -print \
+              2>&1 | tee -a "${avd_log}" || true
             exit 1
           fi
 
@@ -169,14 +171,39 @@ jobs:
             -camera-back none \
             -camera-front none \
             >"${emulator_log}" 2>&1 &
-          echo $! > "${RUNNER_TEMP}/api29-emulator.pid"
+          emulator_pid=$!
+          printf '%s\n' "${emulator_pid}" > "${RUNNER_TEMP}/api29-emulator.pid"
 
-          adb wait-for-device
+          adb start-server
+          device_ready=0
+          for attempt in $(seq 1 120); do
+            if adb get-state 2>/dev/null | grep -Fxq device; then
+              device_ready=1
+              break
+            fi
+            if ! kill -0 "${emulator_pid}" 2>/dev/null; then
+              echo "::error::API 29 emulator exited before becoming available to adb."
+              tail -n 200 "${emulator_log}" || true
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "${device_ready}" -ne 1 ]]; then
+            echo "::error::API 29 emulator did not become available to adb."
+            tail -n 200 "${emulator_log}" || true
+            exit 1
+          fi
+
           booted=0
           for attempt in $(seq 1 180); do
             if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
               booted=1
               break
+            fi
+            if ! kill -0 "${emulator_pid}" 2>/dev/null; then
+              echo "::error::API 29 emulator exited before Android completed booting."
+              tail -n 200 "${emulator_log}" || true
+              exit 1
             fi
             sleep 2
           done
