@@ -132,10 +132,10 @@ class GenreListFragment :
     }
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
-        homeSettingsListener?.let { homeSettings.unregisterListener(it) }
-        homeSettingsListener = null
         listSettingsListener?.let { listSettings.unregisterListener(it) }
+        homeSettingsListener?.let { homeSettings.unregisterListener(it) }
         listSettingsListener = null
+        homeSettingsListener = null
         super.onDestroyBinding(binding)
         binding.homeRecycler.apply {
             adapter = null
@@ -146,15 +146,23 @@ class GenreListFragment :
 
     override fun getPopupData(pos: Int): FastScrollRecyclerView.PopupProvider.PopupData? {
         val genre = homeModel.genreList.value.getOrNull(pos) ?: return null
+        // Change how we display the popup depending on the current sort mode.
         return when (homeModel.genreSort.mode) {
+            // By Name -> Use Name
             is Sort.Mode.ByName ->
                 FastScrollRecyclerView.PopupProvider.PopupData(genre.name.thumb() ?: "?")
+
+            // Duration -> Use compact bucket duration
             is Sort.Mode.ByDuration ->
                 FastScrollRecyclerView.PopupProvider.PopupData(
                     genre.durationMs.formatDurationMsPopup()
                 )
+
+            // Count -> Use song count
             is Sort.Mode.ByCount ->
                 FastScrollRecyclerView.PopupProvider.PopupData(genre.songs.size.toString())
+
+            // Unsupported sort, error gracefully
             else -> null
         }
     }
@@ -194,10 +202,17 @@ class GenreListFragment :
     }
 
     private fun updatePlayback(song: Song?, parent: MusicParent?, isPlaying: Boolean) {
+        // Only highlight the genre if it is currently playing, and if the currently
+        // playing song is also contained within.
         val genre = (parent as? Genre)?.takeIf { song?.run { genres.contains(it) } ?: false }
         genreAdapter.setPlaying(genre, isPlaying)
     }
 
+    /**
+     * A [SelectionIndicatorAdapter] that shows a list of [Genre]s using [GenreViewHolder].
+     *
+     * @param listener An [SelectableListListener] to bind interactions to.
+     */
     private class GenreAdapter(private val listener: SelectableListListener<Genre>) :
         SelectionIndicatorAdapter<Genre, GenreViewHolder>(GenreViewHolder.DIFF_CALLBACK) {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =

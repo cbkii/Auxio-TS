@@ -130,7 +130,9 @@ class PlaylistListFragment :
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
         listSettingsListener?.let { listSettings.unregisterListener(it) }
+        homeSettingsListener?.let { homeSettings.unregisterListener(it) }
         listSettingsListener = null
+        homeSettingsListener = null
         super.onDestroyBinding(binding)
         binding.homeRecycler.apply {
             adapter = null
