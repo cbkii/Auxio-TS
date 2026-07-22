@@ -98,11 +98,9 @@ constructor(
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
-        // Queue changed trivially due to item mo -> Diff queue, stay at current index.
+        // Queue changed trivially due to item move -> Diff queue, stay at current index.
         L.d("Updating queue display")
-        queueGeneration++
-        rangeJob?.cancel()
-        activePrimitiveWindow = null
+        invalidatePrimitiveRange()
         _queueInstructions.put(change.instructions)
         _queue.value = queue.toDisplayItems()
         _isInitialQueueLoaded.value = true
@@ -116,9 +114,7 @@ constructor(
     override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
         // Queue changed completely -> Replace queue, update index
         L.d("Queue changed completely, replacing queue and position")
-        queueGeneration++
-        rangeJob?.cancel()
-        activePrimitiveWindow = null
+        invalidatePrimitiveRange()
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
         _queue.value = queue.toDisplayItems()
@@ -134,9 +130,7 @@ constructor(
     ) {
         // Entirely new queue -> Replace queue, update index
         L.d("New playback, replacing queue and position")
-        queueGeneration++
-        rangeJob?.cancel()
-        activePrimitiveWindow = null
+        invalidatePrimitiveRange()
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
         _queue.value = queue.toDisplayItems()
@@ -145,11 +139,9 @@ constructor(
     }
 
     override fun onQueueWindowChanged(window: QueueWindow?) {
+        invalidatePrimitiveRange(window)
         if (window == null) return
         L.d("Updating bounded primitive queue display")
-        queueGeneration++
-        rangeJob?.cancel()
-        activePrimitiveWindow = window
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _queue.value =
             window.items.map { item ->
@@ -166,7 +158,7 @@ constructor(
 
     fun requestAdjacentRange(firstVisible: Int, lastVisible: Int) {
         val activeWindow = activePrimitiveWindow ?: return
-        val loaded = queue.value
+        val loaded = _queue.value
         if (loaded.isEmpty() || rangeJob?.isActive == true) return
         val anchor =
             when {
@@ -178,43 +170,52 @@ constructor(
             }
         if (anchor == lastRequestedAnchor) return
         lastRequestedAnchor = anchor
-        val requestGen = queueGeneration
+        val requestToken = PrimitiveQueueAuthority.token(queueGeneration, activeWindow.descriptor)
         rangeJob =
             viewModelScope.launch {
                 val window =
                     withContext(Dispatchers.IO) {
                         persistenceRepository.readQueueWindowAround(activeWindow.descriptor, anchor)
-                    } ?: return@launch
-                if (requestGen != queueGeneration) {
-                    L.d(
-                        "Discarding stale primitive range result (generation $requestGen != $queueGeneration)"
-                    )
+                    }
+                if (window == null) {
+                    if (requestToken.generation == queueGeneration) lastRequestedAnchor = null
                     return@launch
                 }
                 if (
-                    window.descriptor.sessionId != activeWindow.descriptor.sessionId ||
-                        window.descriptor.revision != activeWindow.descriptor.revision
+                    !PrimitiveQueueAuthority.accepts(
+                        requestToken,
+                        currentGeneration = queueGeneration,
+                        activeDescriptor = activePrimitiveWindow?.descriptor,
+                        returnedDescriptor = window.descriptor,
+                    )
                 ) {
-                    L.d("Discarding stale primitive range result (session/revision mismatch)")
+                    L.d("Discarding stale primitive range result")
                     return@launch
                 }
-                val currentItems = _queue.value
+
                 val newItems =
                     window.items.map { item -> QueueDisplayItem(item.logicalPosition, null, item) }
-                val mergedMap = currentItems.associateBy { it.globalPosition }.toMutableMap()
-                for (item in newItems) {
-                    mergedMap[item.globalPosition] = item
-                }
-                val mergedList = mergedMap.values.sortedBy { it.globalPosition }
+                val merged =
+                    PrimitiveQueueAuthority.mergeBounded(
+                        current = _queue.value,
+                        incoming = newItems,
+                        anchorGlobalPosition = anchor,
+                        maximumItems = QueueWindowPolicy.MAX_LOADED_ITEMS,
+                    )
                 _queueInstructions.put(UpdateInstructions.Replace(0))
-                _queue.value = mergedList
+                _queue.value = merged
+                _index.value =
+                    merged.indexOfFirst {
+                        it.globalPosition == window.descriptor.currentLogicalPosition
+                    }
                 _isInitialQueueLoaded.value = true
             }
     }
 
     override fun onCleared() {
-        super.onCleared()
+        rangeJob?.cancel()
         playbackManager.removeListener(this)
+        super.onCleared()
     }
 
     /**
@@ -224,14 +225,12 @@ constructor(
      *   range.
      */
     fun goto(adapterIndex: Int) {
-        if (adapterIndex !in queue.value.indices) {
-            return
-        }
-        val item = queue.value[adapterIndex]
+        val currentQueue = _queue.value
+        if (adapterIndex !in currentQueue.indices) return
+        val item = currentQueue[adapterIndex]
         if (!item.editable) return
-        val globalPosition = item.globalPosition
-        L.d("Going to logical position $globalPosition in queue")
-        playbackManager.goto(globalPosition)
+        L.d("Going to logical position ${item.globalPosition} in queue")
+        playbackManager.goto(item.globalPosition)
     }
 
     /**
@@ -241,10 +240,9 @@ constructor(
      *   range.
      */
     fun removeQueueDataItem(adapterIndex: Int) {
-        if (adapterIndex !in queue.value.indices) {
-            return
-        }
-        val item = queue.value[adapterIndex]
+        val currentQueue = _queue.value
+        if (adapterIndex !in currentQueue.indices) return
+        val item = currentQueue[adapterIndex]
         if (!item.editable) return
         L.d("Removing item ${item.globalPosition} in queue")
         playbackManager.removeQueueItem(item.globalPosition)
@@ -258,15 +256,24 @@ constructor(
      * @return true if the items were moved, false otherwise.
      */
     fun moveQueueDataItems(adapterFrom: Int, adapterTo: Int): Boolean {
-        if (adapterFrom !in queue.value.indices || adapterTo !in queue.value.indices) {
+        val currentQueue = _queue.value
+        if (adapterFrom !in currentQueue.indices || adapterTo !in currentQueue.indices) {
             return false
         }
-        val from = queue.value[adapterFrom]
-        val to = queue.value[adapterTo]
+        val from = currentQueue[adapterFrom]
+        val to = currentQueue[adapterTo]
         if (!from.editable || !to.editable) return false
         L.d("Moving ${from.globalPosition} to ${to.globalPosition} in queue")
         playbackManager.moveQueueItem(from.globalPosition, to.globalPosition)
         return true
+    }
+
+    private fun invalidatePrimitiveRange(nextWindow: QueueWindow? = null) {
+        queueGeneration++
+        rangeJob?.cancel()
+        rangeJob = null
+        lastRequestedAnchor = null
+        activePrimitiveWindow = nextWindow
     }
 
     private fun List<Song>.toDisplayItems() = mapIndexed { index, song ->
