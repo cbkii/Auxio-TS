@@ -6,14 +6,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.topway
@@ -46,6 +38,22 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
+        if (intent.clipData != null) {
+            L.w("Ignoring Topway bridge action carrying ClipData: $action")
+            return
+        }
+        if (
+            !ExportedCommandRateLimiter.allow(
+                key = "topway:$action",
+                maxEvents = MAX_TOPWAY_EVENTS_PER_WINDOW,
+                windowMs = TOPWAY_RATE_WINDOW_MS,
+            )
+        ) {
+            L.w("Dropping excessive Topway bridge action: $action")
+            journal.log(DiagnosticJournal.CAT_TOPWAY_CMD, "Rate limited", action)
+            return
+        }
+
         journal.log(DiagnosticJournal.CAT_TOPWAY_CMD, "Incoming Intent", action)
         val serviceClass =
             if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
@@ -78,6 +86,13 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w(e, "Unable to start Auxio for Topway action due to service state")
         } catch (e: SecurityException) {
             L.w(e, "Unable to start Auxio for Topway action due to security policy")
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to start Auxio for malformed Topway action")
         }
+    }
+
+    private companion object {
+        const val MAX_TOPWAY_EVENTS_PER_WINDOW = 24
+        const val TOPWAY_RATE_WINDOW_MS = 1_000L
     }
 }
