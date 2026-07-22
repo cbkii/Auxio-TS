@@ -26,7 +26,9 @@ jobs:
       - name: Apply repository formatting and remove this workflow
         shell: bash
         run: |
-          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk_dir"
+          printf 'sdk.dir=%s\n' "$sdk_dir" > local.properties
           ./gradlew --no-daemon --console=plain spotlessApply
           rm -f .github/workflows/temporary-wp13-format.yml
           git diff --check
