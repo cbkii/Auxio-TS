@@ -182,10 +182,26 @@ object RawFastResumeValidator {
         return allowedDirectRoots.any { path == it.removeSuffix("/") || path.startsWith(it) }
     }
 
-    private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean {
-        if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
-        val roots = policy.getConfiguredRootsAsFiles().keys
-        return roots.any { root -> path == root.removeSuffix("/") || path.startsWith(root) }
+    private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean =
+        isInsideConfiguredRoots(path, policy.getConfiguredRootsAsFiles().values)
+
+    /** Canonical, segment-aware containment used by configured-source Fast Resume and tests. */
+    internal fun isInsideConfiguredRoots(path: String, roots: Collection<File>): Boolean {
+        if (
+            path.isBlank() ||
+                path.contains("/../") ||
+                path.endsWith("/..") ||
+                path.contains("/./") ||
+                path.endsWith("/.") ||
+                path == ".."
+        ) {
+            return false
+        }
+        val candidate = runCatching { File(path).canonicalFile }.getOrNull() ?: return false
+        return roots.any { root ->
+            val canonicalRoot = runCatching { root.canonicalFile }.getOrNull() ?: return@any false
+            candidate.isInside(canonicalRoot)
+        }
     }
 
     fun hasAudioExtension(path: String): Boolean {
