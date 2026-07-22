@@ -30,7 +30,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
@@ -258,7 +257,8 @@ internal interface CacheWriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateSongs(data: List<CachedFileData>)
 
-    @Transaction
+    // Legacy compatibility cleanup is restart-safe. Let each bounded query/delete call
+    // commit independently so a large library does not hold one write transaction throughout.
     suspend fun deleteExcludingUris(uris: Set<String>) {
         var afterUri: String? = null
         while (true) {

@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.playback.ui.visualizer
@@ -26,7 +34,7 @@ internal class VisualizerRuntimeMetrics(
     private val lastReportMs = AtomicLong()
 
     fun recordFrame(bytes: Int, elapsedCopyNanos: Long, nowMs: Long) {
-        if (bytes <= 0) return
+        if (journal?.hasActiveSession != true || bytes <= 0) return
         frameCount.incrementAndGet()
         copiedBytes.addAndGet(bytes.toLong())
         copyNanos.addAndGet(elapsedCopyNanos.coerceAtLeast(0L))
@@ -34,11 +42,11 @@ internal class VisualizerRuntimeMetrics(
     }
 
     fun recordSuppressedWaveform() {
-        suppressedWaveforms.incrementAndGet()
+        if (journal?.hasActiveSession == true) suppressedWaveforms.incrementAndGet()
     }
 
     fun recordWatchdogRetry() {
-        watchdogRetries.incrementAndGet()
+        if (journal?.hasActiveSession == true) watchdogRetries.incrementAndGet()
     }
 
     fun flush(reason: String, nowMs: Long) {
@@ -79,6 +87,7 @@ internal class VisualizerRuntimeMetrics(
         copyNanos.set(0L)
         suppressedWaveforms.set(0L)
         watchdogRetries.set(0L)
+        lastReportMs.set(0L)
     }
 
     private companion object {

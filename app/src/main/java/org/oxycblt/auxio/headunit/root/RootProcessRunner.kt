@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.root
@@ -45,8 +53,7 @@ class RootProcessRunner @Inject constructor() {
         command: String,
         timeoutMs: Long,
         maxOutputBytes: Int = DEFAULT_MAX_OUTPUT_BYTES,
-    ): RootProcessResult =
-        runProcess(arrayOf("su", "-c", command), timeoutMs, maxOutputBytes)
+    ): RootProcessResult = runProcess(arrayOf("su", "-c", command), timeoutMs, maxOutputBytes)
 
     internal fun runProcessForTest(
         command: Array<String>,
@@ -145,7 +152,10 @@ class RootProcessRunner @Inject constructor() {
     private fun Process.terminateCompat() {
         destroy()
         try {
-            if (!waitForCompat(TERMINATION_GRACE_MS) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (
+                !waitForCompat(TERMINATION_GRACE_MS) &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            ) {
                 destroyForcibly()
                 waitForCompat(TERMINATION_GRACE_MS)
             }
@@ -160,7 +170,8 @@ class RootProcessRunner @Inject constructor() {
     ) : Runnable {
         private val output = ByteArrayOutputStream(minOf(maxBytes, INITIAL_BUFFER_BYTES))
 
-        @Volatile var exceeded: Boolean = false
+        @Volatile
+        var exceeded: Boolean = false
             private set
 
         override fun run() {

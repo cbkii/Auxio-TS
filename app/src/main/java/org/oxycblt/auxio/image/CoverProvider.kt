@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.image
@@ -54,15 +62,11 @@ class CoverProvider : ContentProvider() {
                 )
                 .apply { allowCoreThreadTimeOut(true) }
         transferTimeoutExecutor =
-            ScheduledThreadPoolExecutor(
-                    1,
-                    NamedThreadFactory("AuxioCoverTimeout"),
-                )
-                .apply {
-                    removeOnCancelPolicy = true
-                    executeExistingDelayedTasksAfterShutdownPolicy = false
-                    continueExistingPeriodicTasksAfterShutdownPolicy = false
-                }
+            ScheduledThreadPoolExecutor(1, NamedThreadFactory("AuxioCoverTimeout")).apply {
+                removeOnCancelPolicy = true
+                executeExistingDelayedTasksAfterShutdownPolicy = false
+                continueExistingPeriodicTasksAfterShutdownPolicy = false
+            }
         return true
     }
 
@@ -108,20 +112,19 @@ class CoverProvider : ContentProvider() {
 
         try {
             ParcelFileDescriptor.AutoCloseOutputStream(writeSide).use { output ->
-                val coverDescriptor =
-                    runBlocking {
-                        withTimeoutOrNull(COVER_LOAD_TIMEOUT_MS) {
-                            withContext(Dispatchers.IO) {
-                                when (
-                                    val result =
-                                        SettingCovers.immutable(requireNotNull(context)).obtain(id)
-                                ) {
-                                    is CoverResult.Hit -> result.cover.fd()
-                                    else -> null
-                                }
+                val coverDescriptor = runBlocking {
+                    withTimeoutOrNull(COVER_LOAD_TIMEOUT_MS) {
+                        withContext(Dispatchers.IO) {
+                            when (
+                                val result =
+                                    SettingCovers.immutable(requireNotNull(context)).obtain(id)
+                            ) {
+                                is CoverResult.Hit -> result.cover.fd()
+                                else -> null
                             }
                         }
                     }
+                }
                 if (coverDescriptor == null) {
                     L.d("Cover-provider request missed or timed out: $id")
                     return
@@ -199,21 +202,27 @@ class CoverProvider : ContentProvider() {
         internal const val MAX_COVER_BYTES = 8L * 1024L * 1024L
         private const val COPY_BUFFER_BYTES = 16 * 1024
 
-        private val uriMatcher: UriMatcher by lazy(LazyThreadSafetyMode.PUBLICATION) {
-            UriMatcher(UriMatcher.NO_MATCH).apply {
-                addURI(AUTHORITY, "$IMAGES_PATH/*", MATCH_COVER)
+        private val uriMatcher: UriMatcher by
+            lazy(LazyThreadSafetyMode.PUBLICATION) {
+                UriMatcher(UriMatcher.NO_MATCH).apply {
+                    addURI(AUTHORITY, "$IMAGES_PATH/*", MATCH_COVER)
+                }
             }
-        }
 
-        val CONTENT_URI: Uri by lazy(LazyThreadSafetyMode.PUBLICATION) {
-            Uri.Builder()
-                .scheme(ContentResolver.SCHEME_CONTENT)
-                .authority(AUTHORITY)
-                .appendPath(IMAGES_PATH)
-                .build()
-        }
+        val CONTENT_URI: Uri by
+            lazy(LazyThreadSafetyMode.PUBLICATION) {
+                Uri.Builder()
+                    .scheme(ContentResolver.SCHEME_CONTENT)
+                    .authority(AUTHORITY)
+                    .appendPath(IMAGES_PATH)
+                    .build()
+            }
 
-        internal fun copyBounded(input: InputStream, output: OutputStream, maxBytes: Long): Boolean {
+        internal fun copyBounded(
+            input: InputStream,
+            output: OutputStream,
+            maxBytes: Long,
+        ): Boolean {
             require(maxBytes > 0)
             val buffer = ByteArray(COPY_BUFFER_BYTES)
             var copied = 0L

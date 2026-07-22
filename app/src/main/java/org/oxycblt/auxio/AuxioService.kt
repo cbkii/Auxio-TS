@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio
@@ -169,9 +177,9 @@ open class AuxioService :
     private fun getRootChildrenLimit(): Int =
         try {
             (browserRootHints?.getInt(
-                MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_LIMIT,
-                DEFAULT_ROOT_CHILDREN_LIMIT,
-            ) ?: DEFAULT_ROOT_CHILDREN_LIMIT)
+                    MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_LIMIT,
+                    DEFAULT_ROOT_CHILDREN_LIMIT,
+                ) ?: DEFAULT_ROOT_CHILDREN_LIMIT)
                 .coerceIn(1, MAX_ROOT_CHILDREN_LIMIT)
         } catch (e: BadParcelableException) {
             Timber.w(e, "Ignoring malformed MediaBrowser root hints")
@@ -182,9 +190,7 @@ open class AuxioService :
         }
 
     private fun isValidMediaId(value: String): Boolean =
-        value.isNotBlank() &&
-            value.length <= MAX_MEDIA_ID_LENGTH &&
-            value.none(Char::isISOControl)
+        value.isNotBlank() && value.length <= MAX_MEDIA_ID_LENGTH && value.none(Char::isISOControl)
 
     override fun updateForeground(change: ForegroundListener.Change) {
         val mediaNotification = playbackFragment.notification

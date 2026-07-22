@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.cache.db
@@ -26,10 +34,7 @@ import org.junit.runner.RunWith
 class CacheMigrationInstrumentedTest {
     @get:Rule
     val helper =
-        MigrationTestHelper(
-            InstrumentationRegistry.getInstrumentation(),
-            CacheDatabase::class.java,
-        )
+        MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), CacheDatabase::class.java)
 
     @After
     fun deleteTestDatabases() {
@@ -81,12 +86,7 @@ class CacheMigrationInstrumentedTest {
         }
 
         val migrated =
-            helper.runMigrationsAndValidate(
-                DB_FROM_71,
-                72,
-                true,
-                CacheDatabase.MIGRATION_71_72,
-            )
+            helper.runMigrationsAndValidate(DB_FROM_71, 72, true, CacheDatabase.MIGRATION_71_72)
         migrated
             .query(
                 "SELECT available, lastSeenMs, lastCommittedGeneration FROM SourceStateData " +
@@ -98,16 +98,35 @@ class CacheMigrationInstrumentedTest {
                 assertEquals(1234L, cursor.getLong(1))
                 assertEquals(7L, cursor.getLong(2))
             }
-        migrated
-            .query(
-                "SELECT COUNT(*) FROM sqlite_master " +
-                    "WHERE type = 'table' AND name = 'SourceLedgerData'"
-            )
-            .use { cursor ->
-                assertTrue(cursor.moveToFirst())
-                assertEquals(1, cursor.getInt(0))
-            }
+        assertTablesExist(
+            migrated,
+            listOf(
+                "SourceLedgerData",
+                "SourceScanGenerationData",
+                "ScanSeenData",
+                "PendingCachedFileData",
+                "IndexedSongData",
+                "IndexedUriStateData",
+            ),
+        )
         migrated.close()
+    }
+
+    private fun assertTablesExist(
+        database: androidx.sqlite.db.SupportSQLiteDatabase,
+        tableNames: List<String>,
+    ) {
+        tableNames.forEach { tableName ->
+            database
+                .query(
+                    "SELECT COUNT(*) FROM sqlite_master " + "WHERE type = 'table' AND name = ?",
+                    arrayOf(tableName),
+                )
+                .use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("Missing table $tableName", 1, cursor.getInt(0))
+                }
+        }
     }
 
     private companion object {

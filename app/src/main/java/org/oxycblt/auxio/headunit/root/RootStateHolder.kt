@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.root
@@ -16,6 +24,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.musikr.fs.RootGate
 
 @Singleton
@@ -24,6 +33,7 @@ class RootStateHolder
 constructor(
     @ApplicationContext private val context: Context,
     private val processRunner: RootProcessRunner,
+    private val journal: DiagnosticJournal,
 ) : RootGate {
     enum class State {
         Unknown,
@@ -149,18 +159,35 @@ constructor(
                     maxOutputBytes = ROOT_LIST_OUTPUT_BYTES,
                 )
         ) {
-            is RootProcessResult.Success ->
-                result.stdout
-                    .lineSequence()
-                    .filter(String::isNotBlank)
-                    .take(MAX_ROOT_LIST_LINES)
-                    .toList()
+            is RootProcessResult.Success -> {
+                val lines =
+                    result.stdout
+                        .lineSequence()
+                        .filter(String::isNotBlank)
+                        .take(MAX_ROOT_LIST_LINES + 1)
+                        .toList()
+                if (lines.size > MAX_ROOT_LIST_LINES) {
+                    journal.log(
+                        DiagnosticJournal.CAT_STORAGE,
+                        "Root listing line limit exceeded",
+                        "maxLines=$MAX_ROOT_LIST_LINES",
+                    )
+                }
+                lines.take(MAX_ROOT_LIST_LINES)
+            }
             RootProcessResult.TimedOut -> {
                 state = State.TimedOut
                 null
             }
+            RootProcessResult.OutputLimitExceeded -> {
+                journal.log(
+                    DiagnosticJournal.CAT_STORAGE,
+                    "Root listing output limit exceeded",
+                    "maxBytes=$ROOT_LIST_OUTPUT_BYTES",
+                )
+                null
+            }
             is RootProcessResult.NonZeroExit,
-            RootProcessResult.OutputLimitExceeded,
             is RootProcessResult.ExecutionFailure -> null
         }
     }
@@ -178,7 +205,8 @@ constructor(
         }
 
     private fun isAllowedRootListCommand(command: String): Boolean {
-        // Extract the path and reconstruct the only shell command RootGate accepts. Paths with shell
+        // Extract the path and reconstruct the only shell command RootGate accepts. Paths with
+        // shell
         // metacharacters are rejected before reconstruction.
         val prefix = "for p in '"
         if (!command.startsWith(prefix)) return false

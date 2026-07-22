@@ -6,11 +6,18 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.topway
 
-import android.os.SystemClock
 import java.io.File
 import java.net.URI
 import java.util.ArrayDeque
@@ -61,6 +68,9 @@ object TopwaySourcePolicy {
     private const val MAX_VISITED_FILES = 2500
     private const val MAX_CANDIDATES = 48
     private const val MAX_SCAN_ELAPSED_MS = 1200L
+    private const val NANOS_PER_MILLISECOND = 1_000_000L
+
+    private fun monotonicNowMs(): Long = System.nanoTime() / NANOS_PER_MILLISECOND
 
     internal data class FileEntry(val file: File, val isDirectory: Boolean, val isFile: Boolean)
 
@@ -155,10 +165,10 @@ object TopwaySourcePolicy {
         // explicit source picker is the sole caller that opts into new removable suggestions.
         val roots = preferAppFacingRoots(candidates).filter(::isAllowedSourceCandidate)
         val audioParents = linkedSetOf<String>()
-        val deadlineElapsedMs = SystemClock.elapsedRealtime() + MAX_SCAN_ELAPSED_MS
+        val deadlineElapsedMs = monotonicNowMs() + MAX_SCAN_ELAPSED_MS
         for (root in roots) {
             if (audioParents.size >= MAX_CANDIDATES) break
-            if (SystemClock.elapsedRealtime() > deadlineElapsedMs) break
+            if (monotonicNowMs() > deadlineElapsedMs) break
             discoverAudioParents(
                 File(root),
                 audioParents,
@@ -187,7 +197,7 @@ object TopwaySourcePolicy {
         out: LinkedHashSet<String>,
         rootGate: RootGate? = null,
         enforceSafeRoot: Boolean = true,
-        deadlineElapsedMs: Long = SystemClock.elapsedRealtime() + MAX_SCAN_ELAPSED_MS,
+        deadlineElapsedMs: Long = monotonicNowMs() + MAX_SCAN_ELAPSED_MS,
     ) {
         if (enforceSafeRoot && !isAllowedSourceCandidate(root.absolutePath)) return
         val canonicalCache = mutableMapOf<String, File?>()
@@ -202,11 +212,10 @@ object TopwaySourcePolicy {
         queue.add(root to 0)
         while (queue.isNotEmpty()) {
             if (out.size >= MAX_CANDIDATES || visited >= MAX_VISITED_FILES) return
-            if (SystemClock.elapsedRealtime() > deadlineElapsedMs) return
+            if (monotonicNowMs() > deadlineElapsedMs) return
             val (dir, depth) = queue.removeFirst()
             if (
-                canonicalRoot != null &&
-                    !isWithinCanonicalRoot(dir, canonicalRoot, canonicalCache)
+                canonicalRoot != null && !isWithinCanonicalRoot(dir, canonicalRoot, canonicalCache)
             ) {
                 continue
             }
@@ -228,12 +237,8 @@ object TopwaySourcePolicy {
                 when {
                     isAudioFile -> containsAudio = true
                     isDirectory &&
-                        shouldDescend(
-                            child.file,
-                            enforceSafeRoot,
-                            canonicalRoot,
-                            canonicalCache,
-                        ) -> queue.add(child.file to depth + 1)
+                        shouldDescend(child.file, enforceSafeRoot, canonicalRoot, canonicalCache) ->
+                        queue.add(child.file to depth + 1)
                 }
             }
             if (
@@ -345,10 +350,7 @@ object TopwaySourcePolicy {
         return false
     }
 
-    private fun canonicalFile(
-        file: File,
-        canonicalCache: MutableMap<String, File?>,
-    ): File? {
+    private fun canonicalFile(file: File, canonicalCache: MutableMap<String, File?>): File? {
         val key = file.absolutePath
         if (canonicalCache.containsKey(key)) return canonicalCache[key]
         val canonical = runCatching { file.canonicalFile }.getOrNull()
@@ -399,7 +401,9 @@ object TopwaySourcePolicy {
         ) {
             return false
         }
-        if (BLOCKED_SOURCE_PREFIXES.any { clean == it || (it != "/" && clean.startsWith("$it/")) }) {
+        if (
+            BLOCKED_SOURCE_PREFIXES.any { clean == it || (it != "/" && clean.startsWith("$it/")) }
+        ) {
             return false
         }
         val syntacticallyAllowed =
@@ -413,7 +417,7 @@ object TopwaySourcePolicy {
         if (!syntacticallyAllowed) return false
         val canonical =
             runCatching { File(clean).canonicalPath.replace('\\', '/').trimEnd('/') }.getOrNull()
-        if (canonical != null && canonical != clean && canonical != "/") {
+        if (canonical != null && canonical != clean) {
             return canonical == SDCARD_ROOT ||
                 canonical.startsWith("$SDCARD_ROOT/") ||
                 canonical == EMULATED_ROOT ||
