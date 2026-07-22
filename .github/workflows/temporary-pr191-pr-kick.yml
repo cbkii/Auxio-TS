@@ -28,8 +28,10 @@ jobs:
 
       - name: Extract and run reviewed patch
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
+          set -u
           source_workflow='.github/workflows/temporary-pr191-review-hardening.yml'
           patch_script="${RUNNER_TEMP}/pr191-review-hardening.py"
           patch_log="${RUNNER_TEMP}/pr191-review-hardening.log"
@@ -38,14 +40,31 @@ jobs:
             capture && /^[[:space:]]*PY$/ { exit }
             capture { sub(/^          /, ""); print }
           ' "${source_workflow}" > "${patch_script}"
-          test -s "${patch_script}"
-          python3 -m py_compile "${patch_script}"
-          if ! python3 "${patch_script}" >"${patch_log}" 2>&1; then
+
+          patch_rc=0
+          {
+            test -s "${patch_script}"
+            python3 -m py_compile "${patch_script}"
+            python3 "${patch_script}"
+          } >"${patch_log}" 2>&1 || patch_rc=$?
+
+          if ((patch_rc != 0)); then
+            git reset --hard HEAD
+            cp "${patch_log}" .github/pr191-hardening-error.txt
+            git add .github/pr191-hardening-error.txt
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'ci: record PR191 hardening failure'
+            auth=$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+              push https://github.com/${GITHUB_REPOSITORY}.git \
+              HEAD:fix/pr191-review-hardening-20260722
             cat "${patch_log}"
-            exit 1
+            exit "${patch_rc}"
           fi
-          cat "${patch_log}"
+
           rm -f \
+            .github/pr191-hardening-error.txt \
             .github/workflows/temporary-pr191-review-hardening.yml \
             .github/workflows/temporary-pr191-pr-kick.yml
           git diff --check
