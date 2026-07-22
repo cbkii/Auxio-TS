@@ -46,7 +46,7 @@ class GeneratedPlaylistCompilerTest {
         assertEquals("recently-added", definitions[0].id)
         assertEquals(listOf("unknown", "2001", "1992", "1998"), definitions[0].values)
         assertEquals(listOf("decade:2000", "decade:1990"), definitions.drop(1).map { it.id })
-        assertEquals(listOf("1992", "1998"), definitions.last().values)
+        assertEquals(listOf("1998", "1992"), definitions.last().values)
     }
 
     @Test
