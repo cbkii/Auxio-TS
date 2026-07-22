@@ -98,6 +98,10 @@ class Auxio : Application() {
         }
         super.onCreate()
 
+        // Configure timing before any measured migration. This preference read is deliberately
+        // cheap and synchronous; moving migrations themselves off-main would risk partially
+        // migrated settings being consumed by playback or UI startup.
+        PerfTimer.configure(musicSettings.performanceCaptureEnabled)
         NotificationBitmapSafety.journal = journal
         @Suppress("KotlinConstantConditions")
         if (
@@ -127,7 +131,6 @@ class Auxio : Application() {
 
     private fun scheduleOptionalStartupWork() {
         startupScope.launch {
-            PerfTimer.configure(musicSettings.performanceCaptureEnabled)
             val prefs = PreferenceManager.getDefaultSharedPreferences(this@Auxio)
             val shortcutsEnabled =
                 prefs.getBoolean(
