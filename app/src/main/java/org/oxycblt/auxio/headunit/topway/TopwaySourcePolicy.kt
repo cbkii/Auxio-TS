@@ -288,7 +288,7 @@ object TopwaySourcePolicy {
         val name = dir.name
         if (name == "." || name == ".." || name.startsWith('.')) return false
         if (isNoisyDir(name)) return false
-        val path = dir.absolutePath.replace('\', '/')
+        val path = dir.absolutePath.replace('\\', '/')
         if (
             path.contains("/Android/", ignoreCase = true) ||
                 path.endsWith("/Android", ignoreCase = true)
