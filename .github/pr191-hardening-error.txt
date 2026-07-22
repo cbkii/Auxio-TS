@@ -1,1 +1,1 @@
-Expected exactly one match in app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt, found 0: '                        storageRoots = discoverStorageRoots(),\n                            rootGate '
+Expected exactly one match in app/src/main/java/org/oxycblt/auxio/headunit/ts18/RawFastResume.kt, found 0: '    private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean {\n          '
