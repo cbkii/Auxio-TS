@@ -9,11 +9,11 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.playback.ui.visualizer
@@ -26,10 +26,12 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.appcompat.R as AR
 import androidx.core.graphics.ColorUtils
+import com.google.android.material.R as MR
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.util.getAttrColorCompat
 
 /**
@@ -43,13 +45,13 @@ class BlobVisualizer
 @JvmOverloads
 constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) :
     View(context, attrs, defStyleAttr) {
-
     private val spectrumMapper = FftSpectrumMapper()
     private val bands: FloatArray
         get() = spectrumMapper.bands
 
     private var pointsX = FloatArray(0)
     private var pointsY = FloatArray(0)
+    private var statusText: String? = null
 
     private val outlinePaint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -58,6 +60,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
             strokeCap = Paint.Cap.ROUND
         }
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val textPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            style = Paint.Style.FILL
+        }
     private val path = Path()
 
     init {
@@ -70,13 +77,28 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     }
 
     fun updateState(state: VisualizerState) {
+        statusText =
+            when (state) {
+                VisualizerState.Disabled,
+                VisualizerState.Paused -> null
+                VisualizerState.AwaitingAudioSession,
+                VisualizerState.Starting -> context.getString(R.string.lbl_visualizer_starting)
+                VisualizerState.PermissionRequired ->
+                    context.getString(R.string.lbl_visualizer_permission_required)
+                VisualizerState.PermissionDenied ->
+                    context.getString(R.string.lbl_visualizer_permission_denied)
+                is VisualizerState.Unavailable ->
+                    context.getString(R.string.lbl_visualizer_unavailable)
+                is VisualizerState.Live -> null
+            }
+        contentDescription = statusText
         when (state) {
-            is VisualizerState.Disabled,
-            is VisualizerState.Paused,
-            is VisualizerState.AwaitingAudioSession,
-            is VisualizerState.PermissionRequired,
-            is VisualizerState.PermissionDenied,
-            is VisualizerState.Starting,
+            VisualizerState.Disabled,
+            VisualizerState.Paused,
+            VisualizerState.AwaitingAudioSession,
+            VisualizerState.PermissionRequired,
+            VisualizerState.PermissionDenied,
+            VisualizerState.Starting,
             is VisualizerState.Unavailable -> spectrumMapper.reset()
             is VisualizerState.Live -> {
                 when (state.source) {
@@ -92,9 +114,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
     private fun refreshThemeColors() {
         val primary = context.getAttrColorCompat(AR.attr.colorPrimary).defaultColor
-
         outlinePaint.color = ColorUtils.setAlphaComponent(primary, 200)
         fillPaint.color = ColorUtils.setAlphaComponent(primary, 140)
+        textPaint.color = context.getAttrColorCompat(MR.attr.colorOnSurface).defaultColor
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -106,57 +128,53 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         val cx = width / 2f
         val cy = height / 2f
         val baseRadius = size * 0.35f
-
-        // Ensure bands map to an appropriate level for the blob contour.
-        // We use globalEnvelope for the base expansion and individual bands for contour shaping.
         val globalEnv = spectrumMapper.globalEnvelope
         val baseRadiusWithEnv = baseRadius * (1f + 0.10f * globalEnv)
         val maxPeakExcursion = baseRadius * 0.18f
-
-        val strokeWidth = max(2f, size * 0.008f)
-        outlinePaint.strokeWidth = strokeWidth
+        outlinePaint.strokeWidth = max(2f, size * 0.008f)
 
         path.reset()
         val count = bands.size
-
-        // To draw a smooth Catmull-Rom or smooth curve, we'll use a standard technique of
-        // passing through the midpoints or utilizing Bezier curves. Here, we'll use quadratic
-        // beziers through midpoints for an organic closed path.
         if (pointsX.size != count) {
             pointsX = FloatArray(count)
             pointsY = FloatArray(count)
         }
 
-        for (i in 0 until count) {
-            val level = bands[i]
-            val excursion = maxPeakExcursion * level
-            val r = baseRadiusWithEnv + excursion
-
-            pointsX[i] = cx + r * COS_LOOKUP[i]
-            pointsY[i] = cy + r * SIN_LOOKUP[i]
+        for (index in 0 until count) {
+            val radius = baseRadiusWithEnv + maxPeakExcursion * bands[index]
+            pointsX[index] = cx + radius * COS_LOOKUP[index]
+            pointsY[index] = cy + radius * SIN_LOOKUP[index]
         }
 
         if (count > 0) {
-            val midX0 = (pointsX[count - 1] + pointsX[0]) / 2f
-            val midY0 = (pointsY[count - 1] + pointsY[0]) / 2f
-
-            path.moveTo(midX0, midY0)
-
-            for (i in 0 until count) {
-                val nextI = (i + 1) % count
-                val midX = (pointsX[i] + pointsX[nextI]) / 2f
-                val midY = (pointsY[i] + pointsY[nextI]) / 2f
-
-                path.quadTo(pointsX[i], pointsY[i], midX, midY)
+            val firstMidX = (pointsX[count - 1] + pointsX[0]) / 2f
+            val firstMidY = (pointsY[count - 1] + pointsY[0]) / 2f
+            path.moveTo(firstMidX, firstMidY)
+            for (index in 0 until count) {
+                val nextIndex = (index + 1) % count
+                val midX = (pointsX[index] + pointsX[nextIndex]) / 2f
+                val midY = (pointsY[index] + pointsY[nextIndex]) / 2f
+                path.quadTo(pointsX[index], pointsY[index], midX, midY)
             }
             path.close()
         }
 
         canvas.drawPath(path, fillPaint)
         canvas.drawPath(path, outlinePaint)
+        statusText?.let { text ->
+            textPaint.textSize = size * STATUS_TEXT_SIZE_RATIO
+            val measured = textPaint.measureText(text)
+            if (measured > width * STATUS_MAX_WIDTH_RATIO && measured > 0f) {
+                textPaint.textSize *= (width * STATUS_MAX_WIDTH_RATIO) / measured
+            }
+            val baseline = cy - (textPaint.ascent() + textPaint.descent()) / 2f
+            canvas.drawText(text, cx, baseline, textPaint)
+        }
     }
 
     companion object {
+        private const val STATUS_TEXT_SIZE_RATIO = 0.055f
+        private const val STATUS_MAX_WIDTH_RATIO = 0.82f
         private val COS_LOOKUP =
             FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT) { index ->
                 cos(angleForBand(index)).toFloat()
