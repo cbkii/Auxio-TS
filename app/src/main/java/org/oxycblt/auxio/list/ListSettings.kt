@@ -23,6 +23,7 @@ import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.home.list.LibraryGridPolicy
 import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.settings.Settings
 
@@ -44,10 +45,15 @@ interface ListSettings : Settings<ListSettings.Listener> {
     /** The [Sort] mode used in a Genre's Song list. */
     var genreSongSort: Sort
 
+    /** Per-tab grid override, or [LibraryGridPolicy.INHERIT]. */
     var songSpanCount: Int
+    /** Per-tab grid override, or [LibraryGridPolicy.INHERIT]. */
     var albumSpanCount: Int
+    /** Per-tab grid override, or [LibraryGridPolicy.INHERIT]. */
     var artistSpanCount: Int
+    /** Per-tab grid override, or [LibraryGridPolicy.INHERIT]. */
     var genreSpanCount: Int
+    /** Per-tab grid override, or [LibraryGridPolicy.INHERIT]. */
     var playlistSpanCount: Int
 
     interface Listener {
@@ -179,34 +185,24 @@ class ListSettingsImpl @Inject constructor(@ApplicationContext val context: Cont
         }
 
     override var songSpanCount: Int
-        get() = sharedPreferences.getInt("set_key_song_span_count", 0)
-        set(value) {
-            sharedPreferences.edit { putInt("set_key_song_span_count", value) }
-        }
+        get() = getSpanCount(R.string.set_key_song_span_count)
+        set(value) = setSpanCount(R.string.set_key_song_span_count, value)
 
     override var albumSpanCount: Int
-        get() = sharedPreferences.getInt("set_key_album_span_count", 0)
-        set(value) {
-            sharedPreferences.edit { putInt("set_key_album_span_count", value) }
-        }
+        get() = getSpanCount(R.string.set_key_album_span_count)
+        set(value) = setSpanCount(R.string.set_key_album_span_count, value)
 
     override var artistSpanCount: Int
-        get() = sharedPreferences.getInt("set_key_artist_span_count", 0)
-        set(value) {
-            sharedPreferences.edit { putInt("set_key_artist_span_count", value) }
-        }
+        get() = getSpanCount(R.string.set_key_artist_span_count)
+        set(value) = setSpanCount(R.string.set_key_artist_span_count, value)
 
     override var genreSpanCount: Int
-        get() = sharedPreferences.getInt("set_key_genre_span_count", 0)
-        set(value) {
-            sharedPreferences.edit { putInt("set_key_genre_span_count", value) }
-        }
+        get() = getSpanCount(R.string.set_key_genre_span_count)
+        set(value) = setSpanCount(R.string.set_key_genre_span_count, value)
 
     override var playlistSpanCount: Int
-        get() = sharedPreferences.getInt("set_key_playlist_span_count", 0)
-        set(value) {
-            sharedPreferences.edit { putInt("set_key_playlist_span_count", value) }
-        }
+        get() = getSpanCount(R.string.set_key_playlist_span_count)
+        set(value) = setSpanCount(R.string.set_key_playlist_span_count, value)
 
     override fun onSettingChanged(key: String, listener: ListSettings.Listener) {
         when (key) {
@@ -218,11 +214,22 @@ class ListSettingsImpl @Inject constructor(@ApplicationContext val context: Cont
             getString(R.string.set_key_genres_sort) -> listener.onGenreSortChanged()
             getString(R.string.set_key_genre_songs_sort) -> listener.onGenreSongSortChanged()
             getString(R.string.set_key_playlists_sort) -> listener.onPlaylistSortChanged()
-            "set_key_song_span_count" -> listener.onSpanCountChanged()
-            "set_key_album_span_count" -> listener.onSpanCountChanged()
-            "set_key_artist_span_count" -> listener.onSpanCountChanged()
-            "set_key_genre_span_count" -> listener.onSpanCountChanged()
-            "set_key_playlist_span_count" -> listener.onSpanCountChanged()
+            getString(R.string.set_key_song_span_count),
+            getString(R.string.set_key_album_span_count),
+            getString(R.string.set_key_artist_span_count),
+            getString(R.string.set_key_genre_span_count),
+            getString(R.string.set_key_playlist_span_count) -> listener.onSpanCountChanged()
+        }
+    }
+
+    private fun getSpanCount(keyRes: Int): Int =
+        LibraryGridPolicy.normalizeOverride(
+            sharedPreferences.getInt(getString(keyRes), LibraryGridPolicy.INHERIT)
+        )
+
+    private fun setSpanCount(keyRes: Int, value: Int) {
+        sharedPreferences.edit {
+            putInt(getString(keyRes), LibraryGridPolicy.normalizeOverride(value))
         }
     }
 }
