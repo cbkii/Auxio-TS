@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: temporary-pr191-pull-request-kick
+  cancel-in-progress: true
+
 jobs:
   apply-hardening:
     if: ${{ github.head_ref == 'fix/pr191-review-hardening-20260722' }}
@@ -18,8 +22,9 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: fix/pr191-review-hardening-20260722
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
+          show-progress: false
 
       - name: Extract and run reviewed patch
         shell: bash
@@ -27,13 +32,19 @@ jobs:
           set -euo pipefail
           source_workflow='.github/workflows/temporary-pr191-review-hardening.yml'
           patch_script="${RUNNER_TEMP}/pr191-review-hardening.py"
+          patch_log="${RUNNER_TEMP}/pr191-review-hardening.log"
           awk '
             /^[[:space:]]*python3 <<'\''PY'\''$/ { capture=1; next }
             capture && /^[[:space:]]*PY$/ { exit }
             capture { sub(/^          /, ""); print }
           ' "${source_workflow}" > "${patch_script}"
           test -s "${patch_script}"
-          python3 "${patch_script}"
+          python3 -m py_compile "${patch_script}"
+          if ! python3 "${patch_script}" >"${patch_log}" 2>&1; then
+            cat "${patch_log}"
+            exit 1
+          fi
+          cat "${patch_log}"
           rm -f \
             .github/workflows/temporary-pr191-review-hardening.yml \
             .github/workflows/temporary-pr191-pr-kick.yml
