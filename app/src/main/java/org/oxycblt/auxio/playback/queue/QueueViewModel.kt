@@ -41,11 +41,7 @@ import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
-/**
- * A [ViewModel] that manages the current queue state and allows navigation through the queue.
- *
- * @author Alexander Capehart (OxygenCobalt)
- */
+/** A queue row backed either by a hydrated song or a valid primitive reference. */
 data class QueueDisplayItem(
     val globalPosition: Int,
     val song: Song?,
@@ -55,6 +51,12 @@ data class QueueDisplayItem(
         get() = song != null || primitive?.hasPlayableReference == true
 }
 
+/**
+ * Manages the visible queue while enforcing one explicit rich-or-primitive display authority.
+ *
+ * Every asynchronous primitive read captures a monotonic generation and descriptor. A newer rich
+ * queue, primitive session, reorder, or mutation invalidates that read before it can publish.
+ */
 @HiltViewModel
 class QueueViewModel
 @Inject
@@ -64,28 +66,27 @@ constructor(
 ) : ViewModel(), PlaybackStateManager.Listener {
 
     private val _queue = MutableStateFlow(listOf<QueueDisplayItem>())
-    /** The currently loaded queue range. */
     val queue: StateFlow<List<QueueDisplayItem>> = _queue
+
     private val _queueInstructions = MutableEvent<UpdateInstructions>()
-    /** Instructions for how to update [queue] in the UI. */
     val queueInstructions: Event<UpdateInstructions> = _queueInstructions
+
     private val _scrollTo = MutableEvent<Int>()
-    /** Controls whether the queue should be force-scrolled to a particular location. */
     val scrollTo: Event<Int>
         get() = _scrollTo
 
     private val _index = MutableStateFlow(playbackManager.index)
-    /** The index of the currently playing song in the queue. */
     val index: StateFlow<Int>
         get() = _index
 
     private val _isInitialQueueLoaded = MutableStateFlow(false)
+    val isInitialQueueLoaded: StateFlow<Boolean>
+        get() = _isInitialQueueLoaded
+
     private var rangeJob: Job? = null
     private var lastRequestedAnchor: Int? = null
     private var queueGeneration = 0L
     private var activePrimitiveWindow: QueueWindow? = null
-    val isInitialQueueLoaded: StateFlow<Boolean>
-        get() = _isInitialQueueLoaded
 
     init {
         playbackManager.addListener(this)
@@ -98,27 +99,19 @@ constructor(
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
-        // Queue changed trivially due to item mo -> Diff queue, stay at current index.
-        L.d("Updating queue display")
-        queueGeneration++
-        rangeJob?.cancel()
-        activePrimitiveWindow = null
+        L.d("Updating rich queue display")
+        beginRichAuthority()
         _queueInstructions.put(change.instructions)
         _queue.value = queue.toDisplayItems()
         _isInitialQueueLoaded.value = true
         if (change.type != QueueChange.Type.MAPPING) {
-            // Index changed, make sure it remains updated without actually scrolling to it.
-            L.d("Index changed with queue, synchronizing new position")
             _index.value = index
         }
     }
 
     override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
-        // Queue changed completely -> Replace queue, update index
-        L.d("Queue changed completely, replacing queue and position")
-        queueGeneration++
-        rangeJob?.cancel()
-        activePrimitiveWindow = null
+        L.d("Rich queue reordered; replacing queue and position")
+        beginRichAuthority()
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
         _queue.value = queue.toDisplayItems()
@@ -132,11 +125,8 @@ constructor(
         index: Int,
         isShuffled: Boolean,
     ) {
-        // Entirely new queue -> Replace queue, update index
-        L.d("New playback, replacing queue and position")
-        queueGeneration++
-        rangeJob?.cancel()
-        activePrimitiveWindow = null
+        L.d("New rich playback; replacing queue and position")
+        beginRichAuthority()
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
         _queue.value = queue.toDisplayItems()
@@ -145,20 +135,29 @@ constructor(
     }
 
     override fun onQueueWindowChanged(window: QueueWindow?) {
-        if (window == null) return
+        if (window == null) {
+            if (activePrimitiveWindow != null) {
+                L.d("Primitive queue authority ended")
+                invalidatePendingRange()
+                activePrimitiveWindow = null
+            }
+            return
+        }
+        if (QueueAuthorityPolicy.hasMissingRows(window.items)) {
+            L.w(
+                "Rejecting incomplete primitive queue window " +
+                    "session=${window.descriptor.sessionId} revision=${window.descriptor.revision}"
+            )
+            invalidatePendingRange()
+            activePrimitiveWindow = null
+            return
+        }
+
         L.d("Updating bounded primitive queue display")
-        queueGeneration++
-        rangeJob?.cancel()
+        invalidatePendingRange()
         activePrimitiveWindow = window
         _queueInstructions.put(UpdateInstructions.Replace(0))
-        _queue.value =
-            window.items.map { item ->
-                QueueDisplayItem(
-                    globalPosition = item.logicalPosition,
-                    song = null,
-                    primitive = item,
-                )
-            }
+        _queue.value = window.toDisplayItems()
         _index.value = window.currentLocalPosition
         _scrollTo.put(window.currentLocalPosition)
         _isInitialQueueLoaded.value = true
@@ -166,7 +165,7 @@ constructor(
 
     fun requestAdjacentRange(firstVisible: Int, lastVisible: Int) {
         val activeWindow = activePrimitiveWindow ?: return
-        val loaded = queue.value
+        val loaded = _queue.value
         if (loaded.isEmpty() || rangeJob?.isActive == true) return
         val anchor =
             when {
@@ -178,34 +177,34 @@ constructor(
             }
         if (anchor == lastRequestedAnchor) return
         lastRequestedAnchor = anchor
-        val requestGen = queueGeneration
+
+        val request = QueueAuthorityPolicy.request(queueGeneration, activeWindow.descriptor)
         rangeJob =
             viewModelScope.launch {
                 val window =
                     withContext(Dispatchers.IO) {
                         persistenceRepository.readQueueWindowAround(activeWindow.descriptor, anchor)
                     } ?: return@launch
-                if (requestGen != queueGeneration) {
-                    L.d(
-                        "Discarding stale primitive range result (generation $requestGen != $queueGeneration)"
-                    )
-                    return@launch
-                }
+
                 if (
-                    window.descriptor.sessionId != activeWindow.descriptor.sessionId ||
-                        window.descriptor.revision != activeWindow.descriptor.revision
+                    !QueueAuthorityPolicy.accepts(
+                        request = request,
+                        currentGeneration = queueGeneration,
+                        activeDescriptor = activePrimitiveWindow?.descriptor,
+                        resultDescriptor = window.descriptor,
+                        resultItems = window.items,
+                    )
                 ) {
-                    L.d("Discarding stale primitive range result (session/revision mismatch)")
+                    L.d("Discarding stale or incomplete primitive range result")
                     return@launch
                 }
-                val currentItems = _queue.value
-                val newItems =
-                    window.items.map { item -> QueueDisplayItem(item.logicalPosition, null, item) }
-                val mergedMap = currentItems.associateBy { it.globalPosition }.toMutableMap()
-                for (item in newItems) {
-                    mergedMap[item.globalPosition] = item
-                }
-                val mergedList = mergedMap.values.sortedBy { it.globalPosition }
+
+                val newItems = window.toDisplayItems()
+                val mergedList =
+                    (_queue.value + newItems)
+                        .associateBy { it.globalPosition }
+                        .values
+                        .sortedBy { it.globalPosition }
                 _queueInstructions.put(UpdateInstructions.Replace(0))
                 _queue.value = mergedList
                 _isInitialQueueLoaded.value = true
@@ -213,63 +212,56 @@ constructor(
     }
 
     override fun onCleared() {
-        super.onCleared()
+        invalidatePendingRange()
         playbackManager.removeListener(this)
+        super.onCleared()
     }
 
-    /**
-     * Start playing the the queue item at the given index.
-     *
-     * @param adapterIndex The index of the queue item to play. Does nothing if the index is out of
-     *   range.
-     */
     fun goto(adapterIndex: Int) {
-        if (adapterIndex !in queue.value.indices) {
-            return
-        }
-        val item = queue.value[adapterIndex]
+        val currentQueue = _queue.value
+        val item = currentQueue.getOrNull(adapterIndex) ?: return
         if (!item.editable) return
-        val globalPosition = item.globalPosition
-        L.d("Going to logical position $globalPosition in queue")
-        playbackManager.goto(globalPosition)
+        L.d("Going to logical position ${item.globalPosition} in queue")
+        playbackManager.goto(item.globalPosition)
     }
 
-    /**
-     * Remove a queue item at the given index.
-     *
-     * @param adapterIndex The index of the queue item to play. Does nothing if the index is out of
-     *   range.
-     */
     fun removeQueueDataItem(adapterIndex: Int) {
-        if (adapterIndex !in queue.value.indices) {
-            return
-        }
-        val item = queue.value[adapterIndex]
+        val currentQueue = _queue.value
+        val item = currentQueue.getOrNull(adapterIndex) ?: return
         if (!item.editable) return
         L.d("Removing item ${item.globalPosition} in queue")
         playbackManager.removeQueueItem(item.globalPosition)
     }
 
-    /**
-     * Move a queue item from one index to another index.
-     *
-     * @param adapterFrom The index of the queue item to move.
-     * @param adapterTo The destination index for the queue item.
-     * @return true if the items were moved, false otherwise.
-     */
     fun moveQueueDataItems(adapterFrom: Int, adapterTo: Int): Boolean {
-        if (adapterFrom !in queue.value.indices || adapterTo !in queue.value.indices) {
-            return false
-        }
-        val from = queue.value[adapterFrom]
-        val to = queue.value[adapterTo]
+        val currentQueue = _queue.value
+        val from = currentQueue.getOrNull(adapterFrom) ?: return false
+        val to = currentQueue.getOrNull(adapterTo) ?: return false
         if (!from.editable || !to.editable) return false
         L.d("Moving ${from.globalPosition} to ${to.globalPosition} in queue")
         playbackManager.moveQueueItem(from.globalPosition, to.globalPosition)
         return true
     }
 
-    private fun List<Song>.toDisplayItems() = mapIndexed { index, song ->
-        QueueDisplayItem(globalPosition = index, song = song, primitive = null)
+    private fun beginRichAuthority() {
+        invalidatePendingRange()
+        activePrimitiveWindow = null
     }
+
+    private fun invalidatePendingRange() {
+        queueGeneration++
+        rangeJob?.cancel()
+        rangeJob = null
+        lastRequestedAnchor = null
+    }
+
+    private fun QueueWindow.toDisplayItems() =
+        items.map { item ->
+            QueueDisplayItem(globalPosition = item.logicalPosition, song = null, primitive = item)
+        }
+
+    private fun List<Song>.toDisplayItems() =
+        mapIndexed { index, song ->
+            QueueDisplayItem(globalPosition = index, song = song, primitive = null)
+        }
 }
