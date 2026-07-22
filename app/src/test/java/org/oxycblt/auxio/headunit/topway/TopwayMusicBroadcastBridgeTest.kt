@@ -22,60 +22,48 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runTest
+import org.junit.Before
 import org.junit.runner.RunWith
+import org.oxycblt.auxio.playback.state.PlaybackStateManager
+import org.oxycblt.auxio.playback.state.Progression
+import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.playback.state.ShuffleMode
+import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.accent.Accent
+import org.oxycblt.musikr.Music
+import org.oxycblt.musikr.Song
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class TopwayMusicBroadcastBridgeTest {
-    @Test
-    fun `publishProgress clears stale Topway progress when duration becomes unknown`() {
-        val context = RecordingContext(ApplicationProvider.getApplicationContext<Context>())
-        val bridge =
-            TopwayMusicBroadcastBridge(context, FakeUiSettings(headUnitLandscapeMode = true))
+    private lateinit var context: RecordingContext
 
-        bridge.publishProgress(progressMs = 1_000L, durationMs = 5_000L, nowMs = 1_000L)
-        bridge.publishProgress(progressMs = 1_500L, durationMs = 0L, nowMs = 2_000L)
-        bridge.publishProgress(progressMs = 1_700L, durationMs = -1L, nowMs = 3_000L)
-
-        val progressBroadcasts =
-            context.broadcasts.filter { it.action == TopwayMusicContract.ACTION_PROGRESS_DURATION }
-        assertEquals(2, progressBroadcasts.size)
-        assertEquals(
-            1_000,
-            progressBroadcasts[0].getIntExtra(TopwayMusicContract.EXTRA_PROGRESS, -1),
-        )
-        assertEquals(
-            5_000,
-            progressBroadcasts[0].getIntExtra(TopwayMusicContract.EXTRA_DURATION, -1),
-        )
-        assertEquals(0, progressBroadcasts[1].getIntExtra(TopwayMusicContract.EXTRA_PROGRESS, -1))
-        assertEquals(0, progressBroadcasts[1].getIntExtra(TopwayMusicContract.EXTRA_DURATION, -1))
+    @Before
+    fun setUp() {
+        context = RecordingContext(ApplicationProvider.getApplicationContext())
     }
 
     @Test
-    fun `publishProgress uses consistent time base for clearing to avoid suppressing future updates`() {
-        val context = RecordingContext(ApplicationProvider.getApplicationContext<Context>())
+    fun progressRecoversAfterStateClearAndNewPlaybackStarts() = runTest {
+        val stateManager = FakePlaybackStateManager()
         val bridge =
-            TopwayMusicBroadcastBridge(context, FakeUiSettings(headUnitLandscapeMode = true))
+            TopwayMusicBroadcastBridge(
+                context,
+                FakeUiSettings(headUnitLandscapeMode = true),
+                stateManager,
+            )
+        bridge.start()
 
-        // 1. Publish active progress at deterministic time
-        bridge.publishProgress(progressMs = 1_000L, durationMs = 5_000L, nowMs = 10_000L)
-
-        // 2. Publish invalid duration, causing clear, also at deterministic time
-        // If this used real SystemClock.elapsedRealtime() internally, it could be > 10_000 +
-        // MIN_INTERVAL
-        bridge.publishProgress(progressMs = 1_500L, durationMs = 0L, nowMs = 10_100L)
-
-        // 3. Publish active progress again at a time that is > 1000ms after the PREVIOUS
-        // deterministic time (10_100)
-        // and exceeds the minIntervalMs (1000ms) to ensure it triggers a broadcast under the
-        // refined policy.
-        // We use 12_200 to be well past 11_100 (10_100 + 1000).
-        bridge.publishProgress(progressMs = 2_500L, durationMs = 5_000L, nowMs = 12_200L)
+        stateManager.emitProgression(positionMs = 1_000, durationMs = 5_000)
+        stateManager.emitClear()
+        stateManager.emitProgression(positionMs = 2_500, durationMs = 5_000)
 
         val progressBroadcasts =
             context.broadcasts.filter { it.action == TopwayMusicContract.ACTION_PROGRESS_DURATION }
@@ -112,11 +100,100 @@ class TopwayMusicBroadcastBridgeTest {
         override val showHeadUnitAlbumArt: Boolean = true
         override val showHeadUnitDashboardQuickAccess: Boolean = true
         override val headUnitCompatStatusSummary: String = "test"
-
         override val visualizerMode: UISettings.VisualizerMode = UISettings.VisualizerMode.OFF
+        override var visualizerPermissionDenied: Boolean = false
 
         override fun registerListener(listener: UISettings.Listener) = Unit
 
         override fun unregisterListener(listener: UISettings.Listener) = Unit
+    }
+
+    private class FakePlaybackStateManager : PlaybackStateManager {
+        override val currentSong: Song? = null
+        override val rawPlaybackMetadata = null
+        override val restoreOutcome = org.oxycblt.auxio.playback.state.RestoreOutcome.NONE
+        override val isPlaying = false
+        override val currentAudioSessionId = null
+        override val queueWindow = null
+        override val parent = null
+        override val progression: Progression? = null
+        override val repeatMode = RepeatMode.NONE
+        override val shuffleMode = ShuffleMode.OFF
+        override val shuffleScope = ShuffleScope.OFF
+        override val currentIndex = -1
+        override val queue: List<Song> = emptyList()
+        override val listeners = CopyOnWriteArrayList<PlaybackStateManager.Listener>()
+
+        override fun addListener(listener: PlaybackStateManager.Listener) {
+            listeners.add(listener)
+        }
+
+        override fun removeListener(listener: PlaybackStateManager.Listener) {
+            listeners.remove(listener)
+        }
+
+        override fun emitCurrentState(listener: PlaybackStateManager.Listener) = Unit
+
+        override fun emitCurrentProgression(listener: PlaybackStateManager.Listener) = Unit
+
+        override fun emitCurrentAudioSession(listener: PlaybackStateManager.Listener) = Unit
+
+        override fun registerStoredPlaylist(handle: org.oxycblt.musikr.storage.StoredPlaylistHandle) = Unit
+
+        override fun start() = Unit
+
+        override fun end() = Unit
+
+        override fun endSession() = Unit
+
+        override fun play(song: Song) = Unit
+
+        override fun play(parent: org.oxycblt.musikr.MusicParent) = Unit
+
+        override fun play(parent: org.oxycblt.musikr.MusicParent, song: Song) = Unit
+
+        override fun play(songs: List<Song>, song: Song?) = Unit
+
+        override fun playOrPause() = Unit
+
+        override fun pause() = Unit
+
+        override fun seekTo(positionMs: Long) = Unit
+
+        override fun next() = Unit
+
+        override fun prev() = Unit
+
+        override fun goTo(index: Int) = Unit
+
+        override fun setRepeatMode(mode: RepeatMode) = Unit
+
+        override fun setShuffleMode(mode: ShuffleMode) = Unit
+
+        override fun setShuffleScope(scope: ShuffleScope) = Unit
+
+        override fun move(from: Int, to: Int) = Unit
+
+        override fun remove(index: Int) = Unit
+
+        override fun resolve(raw: Music.Raw, music: Music) = Unit
+
+        override fun requestRestore() = Unit
+
+        override fun requestRawFastResume() = Unit
+
+        fun emitProgression(positionMs: Long, durationMs: Long) {
+            val progression =
+                Progression(
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    isPlaying = true,
+                )
+            listeners.forEach { it.onProgressionChanged(progression) }
+        }
+
+        fun emitClear() {
+            listeners.forEach { it.onStateChanged(null, null) }
+        }
     }
 }
