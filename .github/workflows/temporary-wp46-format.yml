@@ -1,0 +1,48 @@
+name: Temporary WP4 and WP6 formatter
+
+on:
+  push:
+    branches:
+      - feat/generated-playlists-and-grid-layout-12959696348616356066
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[wp46-formatted]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/generated-playlists-and-grid-layout-12959696348616356066
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply repository formatting and remove this workflow
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk_dir"
+          printf 'sdk.dir=%s\n' "$sdk_dir" > local.properties
+          ./gradlew --no-daemon --console=plain spotlessApply
+          rm -f .github/workflows/temporary-wp46-format.yml
+          git diff --check
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No formatting changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'style: format generated playlists and grid layouts [wp46-formatted]'
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push https://github.com/${GITHUB_REPOSITORY}.git \
+            HEAD:feat/generated-playlists-and-grid-layout-12959696348616356066
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
