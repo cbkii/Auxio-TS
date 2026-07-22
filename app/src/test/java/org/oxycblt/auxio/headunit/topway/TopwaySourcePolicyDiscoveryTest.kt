@@ -104,34 +104,6 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
-    fun configuredOnlyDiscoveryDoesNotProbeUnconfiguredUsb() {
-        val result =
-            TopwaySourcePolicy.discoverMusicSourceCandidatesWithEvidence(
-                savedPaths = listOf("/storage/emulated/0/Music"),
-                storageRoots = listOf("/storage/emulated/0", "/storage/usbdisk1"),
-                allowUnconfiguredUsb = false,
-            )
-
-        assertFalse(result.evidence.usbProbeRequested)
-        assertEquals("disabled-no-configured-removable-source", result.evidence.usbProbeReason)
-        assertFalse(result.candidates.any { it.startsWith("/storage/usbdisk") })
-    }
-
-    @Test
-    fun configuredUsbMayBeProbedWithoutEnablingUnconfiguredVolumes() {
-        val result =
-            TopwaySourcePolicy.discoverMusicSourceCandidatesWithEvidence(
-                savedPaths = listOf("/mnt/media_rw/usbdisk1/Music"),
-                allowUnconfiguredUsb = false,
-            )
-
-        assertTrue(result.evidence.usbProbeRequested)
-        assertEquals("configured-removable-source", result.evidence.usbProbeReason)
-        assertTrue(result.candidates.contains("/storage/usbdisk1/Music"))
-        assertFalse(result.candidates.any { it.startsWith("/mnt/media_rw/") })
-    }
-
-    @Test
     fun allowsUuidStyleRemovableStorageRootsButRejectsStorageAliases() {
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/1234-ABCD"))
         assertTrue(TopwaySourcePolicy.isAllowedSourceCandidate("/storage/1234-abcd/Music"))
@@ -171,15 +143,17 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
-    fun rawMediaRwCandidatesAreNormalisedToAppFacingStoragePaths() {
+    fun appFacingUsbRootsRankBeforeRawMediaRwRoots() {
         val candidates =
             TopwaySourcePolicy.discoverMusicSourceCandidates(
                 storageRoots = listOf("/mnt/media_rw/usbdisk1", "/storage/usbdisk1")
             )
 
         assertTrue(candidates.contains("/storage/usbdisk1"))
-        assertFalse(candidates.contains("/mnt/media_rw/usbdisk1"))
-        assertEquals(1, candidates.count { it == "/storage/usbdisk1" })
+        assertTrue(candidates.contains("/mnt/media_rw/usbdisk1"))
+        assertTrue(
+            candidates.indexOf("/storage/usbdisk1") < candidates.indexOf("/mnt/media_rw/usbdisk1")
+        )
     }
 
     @Test

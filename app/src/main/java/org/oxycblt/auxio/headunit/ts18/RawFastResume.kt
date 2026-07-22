@@ -184,10 +184,8 @@ object RawFastResumeValidator {
 
     private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean {
         if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
-        return policy.getConfiguredRootsAsFiles().keys.any { root ->
-            val cleanRoot = root.replace('\\', '/').trimEnd('/')
-            cleanRoot.isNotEmpty() && (path == cleanRoot || path.startsWith("$cleanRoot/"))
-        }
+        val roots = policy.getConfiguredRootsAsFiles().keys
+        return roots.any { root -> path == root.removeSuffix("/") || path.startsWith(root) }
     }
 
     fun hasAudioExtension(path: String): Boolean {
