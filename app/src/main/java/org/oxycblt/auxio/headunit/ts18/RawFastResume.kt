@@ -27,6 +27,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import java.io.File
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.music.ConfiguredSourcePolicy
 import org.oxycblt.auxio.playback.persist.FastResumeSnapshot
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 
@@ -57,7 +58,11 @@ object RawFastResumeValidator {
         PROVIDER_FAILURE,
     }
 
-    fun validate(context: Context, snapshot: FastResumeSnapshot): Result {
+    fun validate(
+        context: Context,
+        snapshot: FastResumeSnapshot,
+        policy: ConfiguredSourcePolicy? = null,
+    ): Result {
         val uriText = snapshot.uri.trim()
         val pathText = snapshot.path?.trim()?.takeIf { it.isNotEmpty() }
         if (uriText.isEmpty() && pathText == null) {
@@ -82,7 +87,7 @@ object RawFastResumeValidator {
                 }
                 "file" -> {
                     val path = parsedUri.path ?: pathText
-                    val fileCheck = validateDirectPath(context, path)
+                    val fileCheck = validateDirectPath(context, path, policy)
                     if (fileCheck != null) return fileCheck
                     resolvedPath = path
                     Uri.fromFile(File(path!!))
@@ -90,7 +95,7 @@ object RawFastResumeValidator {
                 null,
                 "" -> {
                     val path = pathText ?: uriText
-                    val fileCheck = validateDirectPath(context, path)
+                    val fileCheck = validateDirectPath(context, path, policy)
                     if (fileCheck != null) return fileCheck
                     resolvedPath = path
                     Uri.fromFile(File(path))
@@ -137,12 +142,22 @@ object RawFastResumeValidator {
         }
     }
 
-    private fun validateDirectPath(context: Context, path: String?): Result.Invalid? {
+    private fun validateDirectPath(
+        context: Context,
+        path: String?,
+        policy: ConfiguredSourcePolicy?,
+    ): Result.Invalid? {
         if (path.isNullOrBlank()) return invalid(Reason.BLANK_SOURCE, "direct path is blank")
         val normalized = path.trim()
-        if (
-            !isAllowedDirectPath(normalized) && !isAllowedBenchmarkFixturePath(context, normalized)
-        ) {
+        val isAllowed =
+            if (policy != null) {
+                isConfiguredPath(normalized, policy) ||
+                    isAllowedBenchmarkFixturePath(context, normalized)
+            } else {
+                isAllowedDirectPath(normalized) ||
+                    isAllowedBenchmarkFixturePath(context, normalized)
+            }
+        if (!isAllowed) {
             return invalid(Reason.UNSAFE_PATH, normalized)
         }
         if (!hasAudioExtension(normalized)) {
@@ -165,6 +180,12 @@ object RawFastResumeValidator {
     fun isAllowedDirectPath(path: String): Boolean {
         if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
         return allowedDirectRoots.any { path == it.removeSuffix("/") || path.startsWith(it) }
+    }
+
+    private fun isConfiguredPath(path: String, policy: ConfiguredSourcePolicy): Boolean {
+        if (path.contains("/../") || path.endsWith("/..") || path == "..") return false
+        val roots = policy.getConfiguredRootsAsFiles().keys
+        return roots.any { root -> path == root.removeSuffix("/") || path.startsWith(root) }
     }
 
     fun hasAudioExtension(path: String): Boolean {
@@ -214,7 +235,10 @@ data class RawFastResumeItem(
         val metadata =
             MediaMetadata.Builder()
                 .setTitle(
-                    title ?: path?.substringAfterLast('/') ?: uri.lastPathSegment ?: "USB audio"
+                    title
+                        ?: path?.substringAfterLast('/')
+                        ?: uri.lastPathSegment
+                        ?: "External audio"
                 )
                 .setArtist(artist)
                 .setAlbumTitle(album)
