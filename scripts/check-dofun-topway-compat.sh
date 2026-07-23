@@ -211,7 +211,7 @@ require_file_contains "$mode_file" "DiagnosticsOnly" "launcher integration diagn
 require_file_contains "$mode_file" "sendsTopwayBroadcasts" "launcher integration outgoing mode flag"
 require_file_contains "$mode_file" "handlesTopwayCommands" "launcher integration incoming mode flag"
 require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt" "DofunMediaCompatPolicy.compactActionIndices" "generic DoFun compact notification actions"
-require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt" "AndroidXMediaButtonReceiver.buildMediaButtonPendingIntent" "generic DoFun AndroidX media-button pending intents"
+require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt" "buildMediaButtonPendingIntent" "generic DoFun explicit media-button pending intents"
 require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackNotificationChannel.kt" "ACTION_CHANNEL_NOTIFICATION_SETTINGS" "playback channel settings recovery path"
 
 require_file_contains "$seek_policy_file" "Percent0To100" "Topway seek percent policy"
