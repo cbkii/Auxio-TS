@@ -56,7 +56,7 @@ jobs:
           diff_status=0
           mkdir -p "${RUNNER_TEMP}/pr196-verified/app/src/main/java/org/oxycblt/auxio"
 
-          bash ./scripts/ci-gradle.sh spotlessKotlinApply spotlessXmlApply \
+          bash ./scripts/ci-gradle.sh spotlessApply \
             > "${RUNNER_TEMP}/pr196-format.log" 2>&1 || format_status=$?
           cat "${RUNNER_TEMP}/pr196-format.log"
 
