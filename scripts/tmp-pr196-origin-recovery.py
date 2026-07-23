@@ -9,9 +9,9 @@ def patch(path_value: str, replacements: list[tuple[str, str]]) -> None:
     text = path.read_text()
     for old, new in replacements:
         count = text.count(old)
-        if count != 1:
+        if count < 1:
             raise SystemExit(
-                f"{path}: expected one match, found {count}: {old[:100]!r}"
+                f"{path}: expected at least one match, found {count}: {old[:100]!r}"
             )
         text = text.replace(old, new, 1)
     path.write_text(text)
@@ -91,8 +91,7 @@ patch(
             if (startupJob?.isActive == true) {
                 val activePriority = activeStartupOrigin?.priority ?: 0
                 if (origin.priority > activePriority) {
-                    pendingStartupOrigin =
-                        StartupScanOrigin.merge(pendingStartupOrigin, origin)
+                    pendingStartupOrigin = StartupScanOrigin.merge(pendingStartupOrigin, origin)
                     L.d(
                         "Queued higher-priority startup origin while load is active " +
                             "[active=$activeStartupOrigin pending=$pendingStartupOrigin]"
