@@ -54,72 +54,54 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Apply repository formatting
-        id: format
+      - name: Format, compile and preserve exact result
         shell: bash
         run: |
           set +e
           bash ./scripts/ci-gradle.sh --warning-mode all spotlessApply \
             > /tmp/pr195-format.log 2>&1
-          rc=$?
+          format_rc=$?
+          cat /tmp/pr195-format.log
+
+          compile_rc=0
+          if [[ "${format_rc}" -eq 0 ]]; then
+            bash ./scripts/ci-gradle.sh --warning-mode all \
+              :app:assembleStandardDebug \
+              :app:assembleTopwayTwMusicDebug \
+              :app:assembleTopwayTwMediaDebug \
+              > /tmp/pr195-build.log 2>&1
+            compile_rc=$?
+            cat /tmp/pr195-build.log
+          fi
           set -e
-          tail -n 5000 /tmp/pr195-format.log
-          if [[ "${rc}" -ne 0 ]]; then
+
+          rm -f docs/ts18/launcher-integration/PR195_FORMAT_ERROR.txt
+          rm -f docs/ts18/launcher-integration/PR195_BUILD_ERROR.txt
+          if [[ "${format_rc}" -ne 0 ]]; then
             {
               echo "Temporary Spotless output captured by PR #195 hardening workflow."
-              echo "Exit status: ${rc}"
+              echo "Exit status: ${format_rc}"
               echo
               tail -n 4000 /tmp/pr195-format.log
             } > docs/ts18/launcher-integration/PR195_FORMAT_ERROR.txt
-          else
-            rm -f docs/ts18/launcher-integration/PR195_FORMAT_ERROR.txt
-          fi
-          echo "status=${rc}" >> "${GITHUB_OUTPUT}"
-
-      - name: Compile all debug identities
-        if: steps.format.outputs.status == '0'
-        id: compile
-        shell: bash
-        run: |
-          set +e
-          bash ./scripts/ci-gradle.sh --warning-mode all \
-            :app:assembleStandardDebug \
-            :app:assembleTopwayTwMusicDebug \
-            :app:assembleTopwayTwMediaDebug \
-            > /tmp/pr195-build.log 2>&1
-          rc=$?
-          set -e
-          tail -n 5000 /tmp/pr195-build.log
-          if [[ "${rc}" -ne 0 ]]; then
+          elif [[ "${compile_rc}" -ne 0 ]]; then
             {
               echo "Temporary compiler output captured by PR #195 hardening workflow."
-              echo "Exit status: ${rc}"
+              echo "Exit status: ${compile_rc}"
               echo
               tail -n 4000 /tmp/pr195-build.log
             } > docs/ts18/launcher-integration/PR195_BUILD_ERROR.txt
-          else
-            rm -f docs/ts18/launcher-integration/PR195_BUILD_ERROR.txt
           fi
-          echo "status=${rc}" >> "${GITHUB_OUTPUT}"
 
-      - name: Commit formatting and captured result
-        if: always()
-        shell: bash
-        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app scripts/check-dofun-topway-compat.sh \
-            docs/ts18/launcher-integration/PR195_FORMAT_ERROR.txt \
-            docs/ts18/launcher-integration/PR195_BUILD_ERROR.txt
+          git add -A app scripts/check-dofun-topway-compat.sh docs/ts18/launcher-integration
           if ! git diff --cached --quiet; then
             git commit -m 'chore(pr195): apply formatting and preserve hardening result'
             git push origin HEAD:feat/ts18-dofun-generic-media-compat
           fi
-          format_status="${{ steps.format.outputs.status }}"
-          compile_status="${{ steps.compile.outputs.status }}"
-          if [[ "${format_status}" != "0" ]]; then
-            exit "${format_status}"
+
+          if [[ "${format_rc}" -ne 0 ]]; then
+            exit "${format_rc}"
           fi
-          if [[ -n "${compile_status}" && "${compile_status}" != "0" ]]; then
-            exit "${compile_status}"
-          fi
+          exit "${compile_rc}"
