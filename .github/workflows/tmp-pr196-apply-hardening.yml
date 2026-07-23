@@ -83,7 +83,7 @@ jobs:
           fi
           printf 'format_status=%s\n' "${format_status}" >> "${GITHUB_OUTPUT}"
           printf 'test_status=%s\n' "${test_status}" >> "${GITHUB_OUTPUT}"
-      - name: Commit service fixes and remove temporary machinery
+      - name: Commit and push service fixes
         if: always()
         shell: bash
         env:
@@ -94,10 +94,10 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u app musikr
           git add app musikr tmp-pr196-service-error.log 2>/dev/null || true
-          git rm .github/workflows/tmp-pr196-apply-hardening.yml
-          git rm scripts/tmp-pr196-comprehensive-hardening.py
-          git rm scripts/tmp-pr196-service-hardening.py
-          git rm -f tmp-pr196-hardening-error.log
+          if git diff --cached --quiet; then
+            echo '::error::Expected service fixes or diagnostics were not staged.'
+            exit 1
+          fi
           git diff --cached --check
           git commit -m 'fix: finalise PR 196 service and recovery hardening'
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
