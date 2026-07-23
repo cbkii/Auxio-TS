@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.prestart
@@ -36,10 +44,11 @@ class EarlyPrestartSettings @Inject constructor(@ApplicationContext context: Con
 
     var enabled: Boolean
         get() =
-            BuildConfig.TOPWAY_COMPAT_FLAVOR &&
-                prefs.getBoolean(KEY_EARLY_PRESTART_ENABLED, false)
+            BuildConfig.TOPWAY_COMPAT_FLAVOR && prefs.getBoolean(KEY_EARLY_PRESTART_ENABLED, false)
         set(value) {
-            prefs.edit { putBoolean(KEY_EARLY_PRESTART_ENABLED, value && BuildConfig.TOPWAY_COMPAT_FLAVOR) }
+            prefs.edit {
+                putBoolean(KEY_EARLY_PRESTART_ENABLED, value && BuildConfig.TOPWAY_COMPAT_FLAVOR)
+            }
         }
 
     val outcome: Outcome
@@ -77,7 +86,11 @@ class EarlyPrestartSettings @Inject constructor(@ApplicationContext context: Con
                     appContext.getString(R.string.set_early_prestart_status_start_failed)
             }
         return if (lastRunEpochMs > 0L) {
-            appContext.getString(R.string.set_early_prestart_status_with_time, state, lastRunEpochMs)
+            appContext.getString(
+                R.string.set_early_prestart_status_with_time,
+                state,
+                lastRunEpochMs,
+            )
         } else {
             state
         }
