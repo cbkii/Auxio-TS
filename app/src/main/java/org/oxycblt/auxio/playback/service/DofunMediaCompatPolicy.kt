@@ -41,6 +41,14 @@ object DofunMediaCompatPolicy {
             PlaybackNotificationProfile.RichAuxio
         }
 
+    /**
+     * The stock-name wrapper widget must stay usable in the generic profile without re-enabling
+     * private Topway command handling. Its controls therefore use Auxio's canonical media-button
+     * service path; explicit legacy profiles retain the stock-compatible Topway actions.
+     */
+    fun usesCanonicalWidgetControls(mode: Ts18LauncherIntegrationMode): Boolean =
+        mode.usesGenericMediaNotification
+
     fun genericActionKeyCodes(isPlaying: Boolean): IntArray =
         intArrayOf(
             KeyEvent.KEYCODE_MEDIA_PREVIOUS,
