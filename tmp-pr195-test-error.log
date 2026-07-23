@@ -1,163 +1,6 @@
 PR #195 app unit-test output. Exit status: 1
 
-[ 79%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/matroskasegment.cpp.o
-[ 80%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/matroskasimpletag.cpp.o
-[ 81%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/matroskatag.cpp.o
-[ 82%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlbinaryelement.cpp.o
-[ 83%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlelement.cpp.o
-[ 83%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmasterelement.cpp.o
-[ 84%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkattachments.cpp.o
-[ 85%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkchapters.cpp.o
-[ 86%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkcues.cpp.o
-[ 87%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkseekhead.cpp.o
-[ 88%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmksegment.cpp.o
-[ 88%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkinfo.cpp.o
-[ 89%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmktracks.cpp.o
-[ 90%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmktags.cpp.o
-[ 91%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlstringelement.cpp.o
-[ 92%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmluintelement.cpp.o
-[ 93%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlfloatelement.cpp.o
-[ 94%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlutils.cpp.o
-[ 94%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlvoidelement.cpp.o
-[ 95%] Building CXX object taglib/CMakeFiles/tag.dir/tag.cpp.o
-[ 96%] Building CXX object taglib/CMakeFiles/tag.dir/tagunion.cpp.o
-[ 97%] Building CXX object taglib/CMakeFiles/tag.dir/fileref.cpp.o
-[ 98%] Building CXX object taglib/CMakeFiles/tag.dir/audioproperties.cpp.o
-[ 99%] Building CXX object taglib/CMakeFiles/tag.dir/tagutils.cpp.o
-[100%] Linking CXX static library libtag.a
-[100%] Built target tag
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/bin/taglib-config
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/pkgconfig/taglib.pc
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppTargets.cmake
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppConfig.cmake
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppConfigVersion.cmake
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/core.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/unchecked.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/checked.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp17.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp20.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp11.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/libtag.a
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/fileref.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/audioproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib_export.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib_config.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tstring.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tlist.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tlist.tcc
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tstringlist.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevector.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevectorlist.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tvariant.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevectorstream.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tiostream.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tfilestream.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tmap.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tmap.tcc
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tpicturetype.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tpropertymap.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tdebuglistener.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tversionnumber.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegheader.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/xingheader.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v1tag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v1genres.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2extendedheader.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2frame.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2header.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2synchdata.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2footer.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2framefactory.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2tag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/attachedpictureframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/commentsframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/eventtimingcodesframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/generalencapsulatedobjectframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/ownershipframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/popularimeterframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/privateframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/relativevolumeframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/synchronizedlyricsframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/textidentificationframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/uniquefileidentifierframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/unknownframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/unsynchronizedlyricsframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/urllinkframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/chapterframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tableofcontentsframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/podcastframe.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggpage.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggpageheader.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/xiphcomment.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/vorbisfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/vorbisproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggflacfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/speexfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/speexproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/opusfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/opusproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacpicture.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacmetadatablock.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/rifffile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/aifffile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/aiffproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/wavfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/wavproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/infotag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4file.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4atom.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4tag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4item.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4properties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4coverart.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4stem.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4itemfactory.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4chapter.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4chapterholder.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4nerochapterlist.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4qtchapterlist.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsffile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsfproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdifffile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdiffproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdiffdiintag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaattachedfile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaattachments.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapter.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapteredition.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapters.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaelement.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskafile.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaproperties.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskasimpletag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskatag.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskawritestyle.h
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-targets.cmake
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-targets-release.cmake
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-config.cmake
--- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-config-version.cmake
-
-> Task :musikr:preBuild UP-TO-DATE
-> Task :musikr:preDebugBuild
-> Task :musikr:generateDebugResources FROM-CACHE
-> Task :musikr:packageDebugResources FROM-CACHE
-/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/res/values/strings.xml:750:4: Failed to flatten XML for resource 'set_playback_notification_access_desc' with error: Invalid unicode escape sequence in string
-
-"{str}"
-/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/res/values/strings.xml:750:4: string/set_playback_notification_access_desc does not contain a valid string resource.
-> Task :app:mergeStandardDebugResources
-
+[INFO] Gradle still running: 4m 00s elapsed; no output for 2s
 > Task :app:packageStandardDebugResources
 > Task :media-lib-common:processDebugNavigationResources FROM-CACHE
 > Task :media-lib-container:processDebugNavigationResources FROM-CACHE
@@ -169,37 +12,207 @@ PR #195 app unit-test output. Exit status: 1
 > Task :media-lib-extractor:processDebugNavigationResources FROM-CACHE
 > Task :musikr:processDebugNavigationResources FROM-CACHE
 > Task :app:processStandardDebugNavigationResources
-> Task :app:mergeStandardDebugResources FAILED
 > Task :app:parseStandardDebugLocalResources
+> Task :app:mergeStandardDebugResources
+> Task :media-lib-common:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-common:generateDebugRFile FROM-CACHE
+> Task :media-lib-container:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-container:generateDebugRFile FROM-CACHE
+> Task :media-lib-database:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-database:generateDebugRFile FROM-CACHE
+> Task :media-lib-datasource:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-datasource:generateDebugRFile FROM-CACHE
+> Task :media-lib-decoder:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-decoder:generateDebugRFile FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:generateDebugRFile FROM-CACHE
+> Task :media-lib-exoplayer:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-exoplayer:generateDebugRFile FROM-CACHE
+> Task :media-lib-extractor:parseDebugLocalResources FROM-CACHE
+> Task :media-lib-extractor:generateDebugRFile FROM-CACHE
+> Task :musikr:parseDebugLocalResources FROM-CACHE
+> Task :musikr:generateDebugRFile FROM-CACHE
+> Task :app:dataBindingGenBaseClassesStandardDebug
+> Task :app:generateSafeArgsStandardDebug FROM-CACHE
+> Task :app:generateStandardDebugBuildConfig
+> Task :media-lib-common:compileDebugKotlin NO-SOURCE
+> Task :media-lib-common:javaPreCompileDebug FROM-CACHE
+> Task :app:generateStandardDebugRFile
+> Task :media-lib-common:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-container:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-database:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-datasource:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-decoder:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-extractor:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-exoplayer:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:javaPreCompileDebug FROM-CACHE
+> Task :musikr:generateDebugBuildConfig FROM-CACHE
+> Task :media-lib-common:bundleLibCompileToJarDebug
+> Task :musikr:kspDebugKotlin FROM-CACHE
+> Task :media-lib-container:compileDebugKotlin NO-SOURCE
+> Task :media-lib-container:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-container:bundleLibCompileToJarDebug
+> Task :media-lib-database:compileDebugKotlin NO-SOURCE
+> Task :media-lib-database:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-database:bundleLibCompileToJarDebug
+> Task :media-lib-decoder:compileDebugKotlin NO-SOURCE
+> Task :media-lib-datasource:compileDebugKotlin NO-SOURCE
+> Task :media-lib-datasource:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-datasource:bundleLibCompileToJarDebug
+> Task :media-lib-decoder:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-decoder:bundleLibCompileToJarDebug
+> Task :musikr:compileDebugKotlin FROM-CACHE
+> Task :media-lib-extractor:compileDebugKotlin NO-SOURCE
+> Task :media-lib-extractor:compileDebugJavaWithJavac FROM-CACHE
+> Task :musikr:javaPreCompileDebug FROM-CACHE
+> Task :media-lib-extractor:bundleLibCompileToJarDebug
+> Task :musikr:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-exoplayer:compileDebugKotlin NO-SOURCE
+> Task :media-lib-exoplayer:compileDebugJavaWithJavac FROM-CACHE
+> Task :musikr:bundleLibCompileToJarDebug
+> Task :media-lib-exoplayer:bundleLibCompileToJarDebug
+> Task :app:javaPreCompileStandardDebug FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:compileDebugKotlin NO-SOURCE
+> Task :media-lib-decoder-ffmpeg:compileDebugJavaWithJavac FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:bundleLibCompileToJarDebug
+> Task :musikr:bundleLibRuntimeToJarDebug
+> Task :media-lib-decoder-ffmpeg:bundleLibRuntimeToJarDebug
+> Task :media-lib-extractor:bundleLibRuntimeToJarDebug
+> Task :media-lib-container:bundleLibRuntimeToJarDebug
+> Task :media-lib-datasource:bundleLibRuntimeToJarDebug
+> Task :media-lib-decoder:bundleLibRuntimeToJarDebug
+> Task :media-lib-database:bundleLibRuntimeToJarDebug
+> Task :media-lib-common:bundleLibRuntimeToJarDebug
+> Task :media-lib-exoplayer:bundleLibRuntimeToJarDebug
+> Task :media-lib-common:writeDebugAarMetadata
+> Task :media-lib-container:writeDebugAarMetadata
+> Task :media-lib-database:writeDebugAarMetadata
+> Task :media-lib-datasource:writeDebugAarMetadata
+> Task :media-lib-decoder:writeDebugAarMetadata
+> Task :media-lib-decoder-ffmpeg:writeDebugAarMetadata
+> Task :media-lib-exoplayer:writeDebugAarMetadata
+> Task :media-lib-extractor:writeDebugAarMetadata
+> Task :musikr:writeDebugAarMetadata
+> Task :app:checkStandardDebugAarMetadata
+> Task :app:mapStandardDebugSourceSetPaths
+> Task :app:compileStandardDebugNavigationResources FROM-CACHE
+> Task :app:createStandardDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksStandardDebug FROM-CACHE
+> Task :media-lib-common:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-common:processDebugManifest FROM-CACHE
+> Task :media-lib-container:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-container:processDebugManifest FROM-CACHE
+> Task :media-lib-database:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-database:processDebugManifest FROM-CACHE
+> Task :media-lib-datasource:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-datasource:processDebugManifest FROM-CACHE
+> Task :media-lib-decoder:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-decoder:processDebugManifest FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:processDebugManifest FROM-CACHE
+> Task :media-lib-exoplayer:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-exoplayer:processDebugManifest FROM-CACHE
+> Task :media-lib-extractor:extractDeepLinksDebug FROM-CACHE
+> Task :media-lib-extractor:processDebugManifest FROM-CACHE
+> Task :musikr:extractDeepLinksDebug FROM-CACHE
+> Task :musikr:processDebugManifest FROM-CACHE
+> Task :app:processStandardDebugMainManifest
+> Task :app:processStandardDebugManifest
+> Task :app:processStandardDebugManifestForPackage
+> Task :media-lib-common:mapDebugSourceSetPaths
+> Task :media-lib-common:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-container:mapDebugSourceSetPaths
+> Task :media-lib-container:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-database:mapDebugSourceSetPaths
+> Task :media-lib-database:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-datasource:mapDebugSourceSetPaths
+> Task :media-lib-datasource:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-decoder:mapDebugSourceSetPaths
+> Task :media-lib-decoder:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:mapDebugSourceSetPaths
+> Task :media-lib-decoder-ffmpeg:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-exoplayer:mapDebugSourceSetPaths
+> Task :media-lib-exoplayer:compileDebugLibraryResources FROM-CACHE
+> Task :media-lib-extractor:mapDebugSourceSetPaths
+> Task :media-lib-extractor:compileDebugLibraryResources FROM-CACHE
+> Task :musikr:mapDebugSourceSetPaths
+> Task :musikr:compileDebugLibraryResources FROM-CACHE
+> Task :app:processStandardDebugResources
+> Task :app:generateStandardDebugAssets UP-TO-DATE
+> Task :media-lib-common:generateDebugAssets UP-TO-DATE
+> Task :media-lib-common:mergeDebugAssets
+> Task :media-lib-container:generateDebugAssets UP-TO-DATE
+> Task :media-lib-container:mergeDebugAssets
+> Task :media-lib-database:generateDebugAssets UP-TO-DATE
+> Task :media-lib-database:mergeDebugAssets
+> Task :media-lib-datasource:generateDebugAssets UP-TO-DATE
+> Task :media-lib-datasource:mergeDebugAssets
+> Task :media-lib-decoder:generateDebugAssets UP-TO-DATE
+> Task :media-lib-decoder:mergeDebugAssets
+> Task :media-lib-decoder-ffmpeg:generateDebugAssets UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:mergeDebugAssets
+> Task :media-lib-exoplayer:generateDebugAssets UP-TO-DATE
+> Task :media-lib-exoplayer:mergeDebugAssets
+> Task :media-lib-extractor:generateDebugAssets UP-TO-DATE
+> Task :media-lib-extractor:mergeDebugAssets
+> Task :musikr:generateDebugAssets UP-TO-DATE
+> Task :musikr:mergeDebugAssets
+> Task :app:mergeStandardDebugAssets
+> Task :app:preStandardDebugUnitTestBuild UP-TO-DATE
+> Task :app:packageStandardDebugUnitTestForUnitTest
+
+> Task :app:processStandardDebugUnitTestManifest
+/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/AndroidManifest.xml:25:5-27:31 Warning:
+	uses-permission#android.permission.ACCESS_NETWORK_STATE was tagged at AndroidManifest.xml:25 to remove other declarations but no other declaration present
+
+> Task :app:generateStandardDebugUnitTestConfig
+> Task :app:javaPreCompileStandardDebugUnitTest
+> Task :media-lib-common:processDebugJavaRes NO-SOURCE
+> Task :media-lib-container:processDebugJavaRes NO-SOURCE
+> Task :media-lib-database:processDebugJavaRes NO-SOURCE
+> Task :media-lib-datasource:processDebugJavaRes NO-SOURCE
+> Task :media-lib-decoder:processDebugJavaRes NO-SOURCE
+> Task :media-lib-decoder-ffmpeg:processDebugJavaRes NO-SOURCE
+> Task :media-lib-exoplayer:processDebugJavaRes NO-SOURCE
+> Task :media-lib-extractor:processDebugJavaRes NO-SOURCE
+> Task :musikr:processDebugJavaRes
+[INFO] Gradle still running: 4m 30s elapsed; no output for 10s
+> Task :app:kspStandardDebugKotlin
+[INFO] Gradle still running: 5m 00s elapsed; no output for 23s
+> Task :app:compileStandardDebugKotlin
+
+e: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:178:9 Unresolved reference 'AndroidXMediaButtonReceiver'.
+> Task :app:compileStandardDebugKotlin FAILED
+e: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:820:31 Unresolved reference 'mediaButtonReceiver'.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_4-1784822337750.json
+
 
 FAILURE: Build failed with an exception.
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1784821454622.json
-
-
-* What went wrong:
-Execution failed for task ':app:mergeStandardDebugResources' (registered by plugin 'com.android.internal.application').
 [Incubating] Problems report is available at: file:///home/runner/work/Auxio-TS/Auxio-TS/build/reports/problems/problems-report.html
-> A failure occurred while executing com.android.build.gradle.internal.res.ResourceCompilerRunnable
-   > Resource compilation failed (Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml. Cause: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@2340e93f.). Check logs for more details.
+
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+* What went wrong:
+Execution failed for task ':app:compileStandardDebugKotlin' (registered by plugin 'com.android.internal.application').
+
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
 
 
 * Try:
-Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 > Run with --info or --debug option to get more log output.
+168 actionable tasks: 71 executed, 97 from cache
 > Run with --scan to get full insights from a Build Scan (powered by Develocity).
 > Get more help at https://help.gradle.org.
 
-
-You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
 * Exception is:
-org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:mergeStandardDebugResources' (registered by plugin 'com.android.internal.application').
-
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileStandardDebugKotlin' (registered by plugin 'com.android.internal.application').
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:135)
 	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:288)
-For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:133)
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:121)
-35 actionable tasks: 8 executed, 27 from cache
 	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
 	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
 	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
@@ -229,7 +242,7 @@ For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/comman
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
-Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing com.android.build.gradle.internal.res.ResourceCompilerRunnable
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
 	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:278)
 	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:132)
 	at org.gradle.internal.Factories$1.create(Factories.java:30)
@@ -321,7 +334,7 @@ Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionExcept
 	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:65)
 	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:45)
 	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeWithNonEmptySources(SkipEmptyMutableWorkStep.java:210)
-	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:85)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:90)
 	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:53)
 	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
 	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
@@ -348,11 +361,10 @@ Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionExcept
 	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:68)
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:132)
 	... 30 more
-Caused by: com.android.aaptcompiler.ResourceCompilationException: Resource compilation failed (Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml. Cause: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@2340e93f.). Check logs for more details.
-	at com.android.aaptcompiler.ResourceCompiler.compileResource(ResourceCompiler.kt:120)
-	at com.android.build.gradle.internal.res.ResourceCompilerRunnable$Companion.compileSingleResource(ResourceCompilerRunnable.kt:33)
-	at com.android.build.gradle.internal.res.ResourceCompilerRunnable.run(ResourceCompilerRunnable.kt:13)
-	at com.android.build.gradle.internal.profile.ProfileAwareWorkAction.execute(ProfileAwareWorkAction.kt:66)
+Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilation error. See log for more details
+	at org.jetbrains.kotlin.gradle.tasks.TasksUtilsKt.throwExceptionIfCompilationFailed(tasksUtils.kt:21)
+	at org.jetbrains.kotlin.compilerRunner.GradleKotlinCompilerWork.run(GradleKotlinCompilerWork.kt:112)
+	at org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction.execute(GradleCompilerRunnerWithWorkers.kt:75)
 	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:68)
 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:64)
 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:61)
@@ -384,19 +396,7 @@ Caused by: com.android.aaptcompiler.ResourceCompilationException: Resource compi
 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:163)
 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:125)
 	... 2 more
-Caused by: com.android.aaptcompiler.ResourceCompilationException: Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml
-	at com.android.aaptcompiler.ResourceCompiler.compileTable(ResourceCompiler.kt:179)
-	at com.android.aaptcompiler.ResourceCompiler.access$compileTable(ResourceCompiler.kt:1)
-	at com.android.aaptcompiler.ResourceCompiler$getCompileMethod$1.invoke(ResourceCompiler.kt:130)
-	at com.android.aaptcompiler.ResourceCompiler$getCompileMethod$1.invoke(ResourceCompiler.kt:130)
-	at com.android.aaptcompiler.ResourceCompiler.compileResource(ResourceCompiler.kt:116)
-	... 35 more
-Caused by: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@2340e93f.
-	at com.android.aaptcompiler.TableExtractor.extractResourceValues(TableExtractor.kt:248)
-	at com.android.aaptcompiler.TableExtractor.extract(TableExtractor.kt:162)
-	at com.android.aaptcompiler.ResourceCompiler.compileTable(ResourceCompiler.kt:175)
-	... 39 more
 
 
-BUILD FAILED in 4m 25s
-::error::Gradle failed with exit code 1 after 4m 26s.
+BUILD FAILED in 5m 8s
+::error::Gradle failed with exit code 1 after 5m 09s.

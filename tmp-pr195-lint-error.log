@@ -1,88 +1,17 @@
 PR #195 Android lint output. Exit status: 1
 
-> Task :media-lib-decoder-ffmpeg:configureCMakeDebug[armeabi-v7a]
-> Task :media-lib-decoder-ffmpeg:buildCMakeDebug[armeabi-v7a]
-> Task :media-lib-decoder-ffmpeg:configureCMakeDebug[x86]
-> Task :media-lib-decoder-ffmpeg:buildCMakeDebug[x86]
-> Task :media-lib-decoder-ffmpeg:configureCMakeDebug[x86_64]
-> Task :media-lib-decoder-ffmpeg:buildCMakeDebug[x86_64]
-> Task :media-lib-decoder-ffmpeg:mergeDebugJniLibFolders
-> Task :media-lib-decoder-ffmpeg:generateDebugResources UP-TO-DATE
-> Task :media-lib-decoder-ffmpeg:packageDebugResources UP-TO-DATE
-> Task :media-lib-decoder-ffmpeg:processDebugNavigationResources UP-TO-DATE
-> Task :media-lib-decoder-ffmpeg:parseDebugLocalResources FROM-CACHE
-> Task :media-lib-decoder-ffmpeg:mergeDebugNativeLibs
-> Task :media-lib-decoder-ffmpeg:generateDebugRFile FROM-CACHE
-> Task :media-lib-decoder-ffmpeg:stripDebugDebugSymbols
-> Task :media-lib-decoder-ffmpeg:copyDebugJniLibsProjectAndLocalJars
-> Task :media-lib-decoder-ffmpeg:extractDeepLinksForAarDebug FROM-CACHE
-> Task :media-lib-decoder-ffmpeg:generateDebugAssets UP-TO-DATE
-> Task :media-lib-decoder-ffmpeg:mergeDebugAssets
-> Task :media-lib-decoder-ffmpeg:javaPreCompileDebug FROM-CACHE
-> Task :media-lib-decoder-ffmpeg:prepareDebugArtProfile
-> Task :media-lib-exoplayer:bundleLibCompileToJarDebug
-> Task :media-lib-decoder-ffmpeg:prepareLintJarForPublish
-> Task :media-lib-decoder-ffmpeg:extractDebugAnnotations FROM-CACHE
-> Task :media-lib-decoder-ffmpeg:compileDebugKotlin NO-SOURCE
-> Task :media-lib-decoder-ffmpeg:compileDebugJavaWithJavac FROM-CACHE
-> Task :media-lib-decoder-ffmpeg:mergeDebugGeneratedProguardFiles
-> Task :media-lib-decoder-ffmpeg:mergeDebugConsumerProguardFiles
-> Task :media-lib-decoder-ffmpeg:processDebugManifest FROM-CACHE
-> Task :media-lib-decoder-ffmpeg:processDebugJavaRes NO-SOURCE
-> Task :media-lib-decoder-ffmpeg:mergeDebugJavaResource
-> Task :media-lib-decoder-ffmpeg:writeDebugAarMetadata
-> Task :media-lib-decoder-ffmpeg:syncDebugLibJars
-> Task :media-lib-decoder-ffmpeg:bundleDebugLocalLintAar
-> Task :media-lib-extractor:checkDebugAarMetadata
-> Task :media-lib-extractor:mergeDebugJniLibFolders
-> Task :media-lib-extractor:mergeDebugNativeLibs NO-SOURCE
-> Task :media-lib-extractor:stripDebugDebugSymbols NO-SOURCE
-> Task :media-lib-extractor:copyDebugJniLibsProjectAndLocalJars
-> Task :media-lib-extractor:extractDebugAnnotations FROM-CACHE
-> Task :media-lib-extractor:extractDeepLinksForAarDebug FROM-CACHE
-> Task :media-lib-extractor:generateDebugAssets UP-TO-DATE
-> Task :media-lib-extractor:mergeDebugAssets
-> Task :media-lib-extractor:mergeDebugGeneratedProguardFiles
-> Task :media-lib-extractor:mergeDebugConsumerProguardFiles
-> Task :media-lib-extractor:prepareDebugArtProfile
-> Task :media-lib-extractor:prepareLintJarForPublish
-> Task :media-lib-extractor:processDebugManifest FROM-CACHE
-> Task :media-lib-extractor:processDebugJavaRes NO-SOURCE
-> Task :media-lib-extractor:mergeDebugJavaResource
-> Task :media-lib-container:checkDebugAarMetadata
-> Task :media-lib-extractor:syncDebugLibJars
-> Task :media-lib-extractor:bundleDebugLocalLintAar
-> Task :media-lib-container:mergeDebugJniLibFolders
-> Task :media-lib-container:mergeDebugNativeLibs NO-SOURCE
-> Task :media-lib-container:stripDebugDebugSymbols NO-SOURCE
-> Task :media-lib-container:copyDebugJniLibsProjectAndLocalJars
-> Task :media-lib-container:extractDebugAnnotations FROM-CACHE
-> Task :media-lib-container:extractDeepLinksForAarDebug FROM-CACHE
-> Task :media-lib-container:generateDebugAssets UP-TO-DATE
-> Task :media-lib-container:mergeDebugAssets
-> Task :media-lib-container:mergeDebugGeneratedProguardFiles
-> Task :media-lib-container:mergeDebugConsumerProguardFiles
-> Task :media-lib-container:prepareDebugArtProfile
-> Task :media-lib-container:prepareLintJarForPublish
-> Task :media-lib-container:processDebugManifest FROM-CACHE
-> Task :media-lib-container:processDebugJavaRes NO-SOURCE
-> Task :media-lib-container:mergeDebugJavaResource
-> Task :media-lib-datasource:checkDebugAarMetadata
-> Task :media-lib-container:syncDebugLibJars
-> Task :media-lib-container:bundleDebugLocalLintAar
-> Task :media-lib-datasource:mergeDebugJniLibFolders
 > Task :media-lib-datasource:mergeDebugNativeLibs NO-SOURCE
 > Task :media-lib-datasource:stripDebugDebugSymbols NO-SOURCE
 > Task :media-lib-datasource:copyDebugJniLibsProjectAndLocalJars
 > Task :media-lib-datasource:extractDebugAnnotations FROM-CACHE
 > Task :media-lib-datasource:extractDeepLinksForAarDebug FROM-CACHE
 > Task :media-lib-datasource:generateDebugAssets UP-TO-DATE
-> Task :media-lib-datasource:mergeDebugAssets
+> Task :media-lib-datasource:mergeDebugAssets UP-TO-DATE
 > Task :media-lib-datasource:mergeDebugGeneratedProguardFiles
 > Task :media-lib-datasource:mergeDebugConsumerProguardFiles
 > Task :media-lib-datasource:prepareDebugArtProfile
 > Task :media-lib-datasource:prepareLintJarForPublish
-> Task :media-lib-datasource:processDebugManifest FROM-CACHE
+> Task :media-lib-datasource:processDebugManifest UP-TO-DATE
 > Task :media-lib-datasource:processDebugJavaRes NO-SOURCE
 > Task :media-lib-datasource:mergeDebugJavaResource
 > Task :media-lib-decoder:checkDebugAarMetadata
@@ -95,12 +24,12 @@ PR #195 Android lint output. Exit status: 1
 > Task :media-lib-decoder:extractDebugAnnotations FROM-CACHE
 > Task :media-lib-decoder:extractDeepLinksForAarDebug FROM-CACHE
 > Task :media-lib-decoder:generateDebugAssets UP-TO-DATE
-> Task :media-lib-decoder:mergeDebugAssets
+> Task :media-lib-decoder:mergeDebugAssets UP-TO-DATE
 > Task :media-lib-decoder:mergeDebugGeneratedProguardFiles
 > Task :media-lib-decoder:mergeDebugConsumerProguardFiles
 > Task :media-lib-decoder:prepareDebugArtProfile
 > Task :media-lib-decoder:prepareLintJarForPublish
-> Task :media-lib-decoder:processDebugManifest FROM-CACHE
+> Task :media-lib-decoder:processDebugManifest UP-TO-DATE
 > Task :media-lib-decoder:processDebugJavaRes NO-SOURCE
 > Task :media-lib-decoder:mergeDebugJavaResource
 > Task :media-lib-database:checkDebugAarMetadata
@@ -113,12 +42,12 @@ PR #195 Android lint output. Exit status: 1
 > Task :media-lib-database:extractDebugAnnotations FROM-CACHE
 > Task :media-lib-database:extractDeepLinksForAarDebug FROM-CACHE
 > Task :media-lib-database:generateDebugAssets UP-TO-DATE
-> Task :media-lib-database:mergeDebugAssets
+> Task :media-lib-database:mergeDebugAssets UP-TO-DATE
 > Task :media-lib-database:mergeDebugGeneratedProguardFiles
 > Task :media-lib-database:mergeDebugConsumerProguardFiles
 > Task :media-lib-database:prepareDebugArtProfile
 > Task :media-lib-database:prepareLintJarForPublish
-> Task :media-lib-database:processDebugManifest FROM-CACHE
+> Task :media-lib-database:processDebugManifest UP-TO-DATE
 > Task :media-lib-database:processDebugJavaRes NO-SOURCE
 > Task :media-lib-database:mergeDebugJavaResource
 > Task :media-lib-common:checkDebugAarMetadata
@@ -131,12 +60,12 @@ PR #195 Android lint output. Exit status: 1
 > Task :media-lib-common:extractDebugAnnotations FROM-CACHE
 > Task :media-lib-common:extractDeepLinksForAarDebug FROM-CACHE
 > Task :media-lib-common:generateDebugAssets UP-TO-DATE
-> Task :media-lib-common:mergeDebugAssets
+> Task :media-lib-common:mergeDebugAssets UP-TO-DATE
 > Task :media-lib-common:mergeDebugGeneratedProguardFiles
 > Task :media-lib-common:mergeDebugConsumerProguardFiles
 > Task :media-lib-common:prepareDebugArtProfile
 > Task :media-lib-common:prepareLintJarForPublish
-> Task :media-lib-common:processDebugManifest FROM-CACHE
+> Task :media-lib-common:processDebugManifest UP-TO-DATE
 > Task :media-lib-common:processDebugJavaRes NO-SOURCE
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preStandardDebugBuild UP-TO-DATE
@@ -145,57 +74,141 @@ PR #195 Android lint output. Exit status: 1
 > Task :media-lib-common:syncDebugLibJars
 > Task :media-lib-common:bundleDebugLocalLintAar
 > Task :app:generateStandardDebugResources UP-TO-DATE
+> Task :app:mergeStandardDebugResources UP-TO-DATE
 > Task :app:packageStandardDebugResources UP-TO-DATE
 > Task :app:processStandardDebugNavigationResources UP-TO-DATE
 > Task :app:parseStandardDebugLocalResources UP-TO-DATE
-> Task :app:generateSafeArgsStandardDebug FROM-CACHE
-> Task :app:generateStandardDebugBuildConfig
-/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/res/values/strings.xml:750:4: Failed to flatten XML for resource 'set_playback_notification_access_desc' with error: Invalid unicode escape sequence in string
+> Task :app:dataBindingGenBaseClassesStandardDebug UP-TO-DATE
+> Task :app:generateSafeArgsStandardDebug UP-TO-DATE
+> Task :app:generateStandardDebugBuildConfig UP-TO-DATE
+> Task :app:generateStandardDebugRFile UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :musikr:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:kspStandardDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileStandardDebug UP-TO-DATE
+> Task :musikr:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-extractor:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-container:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-datasource:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-decoder:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-database:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-common:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :media-lib-exoplayer:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :app:checkStandardDebugAarMetadata UP-TO-DATE
+> Task :app:mapStandardDebugSourceSetPaths UP-TO-DATE
+> Task :app:compileStandardDebugNavigationResources UP-TO-DATE
+> Task :app:createStandardDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksStandardDebug UP-TO-DATE
+> Task :media-lib-common:extractDeepLinksDebug UP-TO-DATE
+> Task :media-lib-container:extractDeepLinksDebug UP-TO-DATE
+> Task :media-lib-database:extractDeepLinksDebug UP-TO-DATE
+> Task :media-lib-datasource:extractDeepLinksDebug UP-TO-DATE
+> Task :media-lib-decoder:extractDeepLinksDebug UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:extractDeepLinksDebug UP-TO-DATE
+> Task :media-lib-exoplayer:extractDeepLinksDebug UP-TO-DATE
+> Task :media-lib-extractor:extractDeepLinksDebug UP-TO-DATE
+> Task :musikr:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processStandardDebugMainManifest UP-TO-DATE
+> Task :app:processStandardDebugManifest UP-TO-DATE
+> Task :app:processStandardDebugManifestForPackage UP-TO-DATE
+> Task :media-lib-common:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-common:compileDebugLibraryResources UP-TO-DATE
+> Task :media-lib-container:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-container:compileDebugLibraryResources UP-TO-DATE
+> Task :media-lib-database:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-database:compileDebugLibraryResources UP-TO-DATE
+> Task :media-lib-datasource:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-datasource:compileDebugLibraryResources UP-TO-DATE
+> Task :media-lib-decoder:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-decoder:compileDebugLibraryResources UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-decoder-ffmpeg:compileDebugLibraryResources UP-TO-DATE
+> Task :media-lib-exoplayer:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-exoplayer:compileDebugLibraryResources UP-TO-DATE
+> Task :media-lib-extractor:mapDebugSourceSetPaths UP-TO-DATE
+> Task :media-lib-extractor:compileDebugLibraryResources UP-TO-DATE
+> Task :musikr:mapDebugSourceSetPaths UP-TO-DATE
+> Task :musikr:compileDebugLibraryResources UP-TO-DATE
+> Task :app:processStandardDebugResources UP-TO-DATE
+> Task :app:preStandardDebugAndroidTestBuild SKIPPED
+> Task :media-lib-common:createFullJarDebug
+> Task :media-lib-common:writeDebugLintModelMetadata
+> Task :media-lib-container:createFullJarDebug
+> Task :media-lib-container:writeDebugLintModelMetadata
+> Task :media-lib-database:createFullJarDebug
+> Task :media-lib-database:writeDebugLintModelMetadata
+> Task :media-lib-datasource:createFullJarDebug
+> Task :media-lib-datasource:writeDebugLintModelMetadata
+> Task :media-lib-decoder:createFullJarDebug
+> Task :media-lib-decoder:writeDebugLintModelMetadata
+> Task :media-lib-decoder-ffmpeg:createFullJarDebug
+> Task :media-lib-decoder-ffmpeg:writeDebugLintModelMetadata
+> Task :media-lib-exoplayer:createFullJarDebug
+> Task :media-lib-exoplayer:writeDebugLintModelMetadata
+> Task :media-lib-extractor:createFullJarDebug
+> Task :media-lib-extractor:writeDebugLintModelMetadata
+> Task :musikr:createFullJarDebug
+> Task :musikr:writeDebugLintModelMetadata
+> Task :app:extractProguardFiles
+> Task :media-lib-common:extractProguardFiles
+> Task :media-lib-common:generateDebugLintModel
+> Task :media-lib-container:extractProguardFiles
+> Task :media-lib-container:generateDebugLintModel
+> Task :media-lib-database:extractProguardFiles
+> Task :media-lib-database:generateDebugLintModel
+> Task :media-lib-datasource:extractProguardFiles
+> Task :media-lib-datasource:generateDebugLintModel
+> Task :media-lib-decoder:extractProguardFiles
+> Task :media-lib-decoder:generateDebugLintModel
+> Task :media-lib-decoder-ffmpeg:extractProguardFiles
+> Task :media-lib-exoplayer:extractProguardFiles
+> Task :media-lib-extractor:extractProguardFiles
+> Task :media-lib-extractor:generateDebugLintModel
+> Task :media-lib-exoplayer:generateDebugLintModel
+> Task :media-lib-decoder-ffmpeg:generateDebugLintModel
+> Task :musikr:extractProguardFiles
+> Task :musikr:generateDebugLintModel
+> Task :app:preStandardDebugUnitTestBuild UP-TO-DATE
+[INFO] Gradle still running: 1m 00s elapsed; no output for 22s
+> Task :app:compileStandardDebugKotlin
+> Task :media-lib-common:lintAnalyzeDebug
+> Task :media-lib-container:lintAnalyzeDebug
+> Task :media-lib-database:lintAnalyzeDebug
+> Task :media-lib-datasource:lintAnalyzeDebug
+> Task :media-lib-decoder:lintAnalyzeDebug
+[INFO] Gradle still running: 1m 30s elapsed; no output for 6s
 
-> Task :app:mergeStandardDebugResources
-"{str}"
-/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/res/values/strings.xml:750:4: string/set_playback_notification_access_desc does not contain a valid string resource.
+e: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:178:9 Unresolved reference 'AndroidXMediaButtonReceiver'.
+> Task :app:compileStandardDebugKotlin FAILED
+e: file:///home/runner/work/Auxio-TS/Auxio-TS/app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt:820:31 Unresolved reference 'mediaButtonReceiver'.
 
-> Task :app:generateStandardDebugRFile
-> Task :media-lib-decoder-ffmpeg:bundleLibCompileToJarDebug
-> Task :musikr:bundleLibCompileToJarDebug
-> Task :app:javaPreCompileStandardDebug FROM-CACHE
-> Task :musikr:bundleLibRuntimeToJarDebug
-> Task :media-lib-decoder-ffmpeg:bundleLibRuntimeToJarDebug
-> Task :media-lib-extractor:bundleLibRuntimeToJarDebug
-> Task :media-lib-container:bundleLibRuntimeToJarDebug
-> Task :media-lib-datasource:bundleLibRuntimeToJarDebug
-> Task :media-lib-decoder:bundleLibRuntimeToJarDebug
-> Task :media-lib-database:bundleLibRuntimeToJarDebug
-> Task :media-lib-common:bundleLibRuntimeToJarDebug
-> Task :media-lib-exoplayer:bundleLibRuntimeToJarDebug
-> Task :app:mergeStandardDebugResources FAILED
-> Task :app:checkStandardDebugAarMetadata
+> Task :media-lib-extractor:lintAnalyzeDebug
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_4-1784822646967.json
 
+
+[Incubating] Problems report is available at: file:///home/runner/work/Auxio-TS/Auxio-TS/build/reports/problems/problems-report.html
 FAILURE: Build failed with an exception.
 
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1784821719139.json
-
-* What went wrong:
-[Incubating] Problems report is available at: file:///home/runner/work/Auxio-TS/Auxio-TS/build/reports/problems/problems-report.html
-Execution failed for task ':app:mergeStandardDebugResources' (registered by plugin 'com.android.internal.application').
-> A failure occurred while executing com.android.build.gradle.internal.res.ResourceCompilerRunnable
 
 Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
-   > Resource compilation failed (Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml. Cause: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@7cd01ce2.). Check logs for more details.
+* What went wrong:
 
-
+Execution failed for task ':app:compileStandardDebugKotlin' (registered by plugin 'com.android.internal.application').
 You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
-* Try:
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
 
+   > Compilation error. See log for more details
 For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+* Try:
+334 actionable tasks: 157 executed, 17 from cache, 160 up-to-date
 > Run with --info or --debug option to get more log output.
-253 actionable tasks: 154 executed, 67 from cache, 32 up-to-date
 > Run with --scan to get full insights from a Build Scan (powered by Develocity).
 > Get more help at https://help.gradle.org.
 
 * Exception is:
-org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:mergeStandardDebugResources' (registered by plugin 'com.android.internal.application').
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileStandardDebugKotlin' (registered by plugin 'com.android.internal.application').
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:135)
 	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:288)
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:133)
@@ -229,7 +242,7 @@ org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:mer
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
-Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing com.android.build.gradle.internal.res.ResourceCompilerRunnable
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
 	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:278)
 	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:132)
 	at org.gradle.internal.Factories$1.create(Factories.java:30)
@@ -321,7 +334,7 @@ Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionExcept
 	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:65)
 	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:45)
 	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeWithNonEmptySources(SkipEmptyMutableWorkStep.java:210)
-	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:85)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:90)
 	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:53)
 	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
 	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
@@ -348,11 +361,10 @@ Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionExcept
 	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:68)
 	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:132)
 	... 30 more
-Caused by: com.android.aaptcompiler.ResourceCompilationException: Resource compilation failed (Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml. Cause: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@7cd01ce2.). Check logs for more details.
-	at com.android.aaptcompiler.ResourceCompiler.compileResource(ResourceCompiler.kt:120)
-	at com.android.build.gradle.internal.res.ResourceCompilerRunnable$Companion.compileSingleResource(ResourceCompilerRunnable.kt:33)
-	at com.android.build.gradle.internal.res.ResourceCompilerRunnable.run(ResourceCompilerRunnable.kt:13)
-	at com.android.build.gradle.internal.profile.ProfileAwareWorkAction.execute(ProfileAwareWorkAction.kt:66)
+Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilation error. See log for more details
+	at org.jetbrains.kotlin.gradle.tasks.TasksUtilsKt.throwExceptionIfCompilationFailed(tasksUtils.kt:21)
+	at org.jetbrains.kotlin.compilerRunner.GradleKotlinCompilerWork.run(GradleKotlinCompilerWork.kt:112)
+	at org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction.execute(GradleCompilerRunnerWithWorkers.kt:75)
 	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:68)
 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:64)
 	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:61)
@@ -384,19 +396,7 @@ Caused by: com.android.aaptcompiler.ResourceCompilationException: Resource compi
 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:163)
 	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:125)
 	... 2 more
-Caused by: com.android.aaptcompiler.ResourceCompilationException: Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml
-	at com.android.aaptcompiler.ResourceCompiler.compileTable(ResourceCompiler.kt:179)
-	at com.android.aaptcompiler.ResourceCompiler.access$compileTable(ResourceCompiler.kt:1)
-	at com.android.aaptcompiler.ResourceCompiler$getCompileMethod$1.invoke(ResourceCompiler.kt:130)
-	at com.android.aaptcompiler.ResourceCompiler$getCompileMethod$1.invoke(ResourceCompiler.kt:130)
-	at com.android.aaptcompiler.ResourceCompiler.compileResource(ResourceCompiler.kt:116)
-	... 35 more
-Caused by: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@7cd01ce2.
-	at com.android.aaptcompiler.TableExtractor.extractResourceValues(TableExtractor.kt:248)
-	at com.android.aaptcompiler.TableExtractor.extract(TableExtractor.kt:162)
-	at com.android.aaptcompiler.ResourceCompiler.compileTable(ResourceCompiler.kt:175)
-	... 39 more
 
 
-BUILD FAILED in 46s
-::error::Gradle failed with exit code 1 after 0m 47s.
+BUILD FAILED in 1m 36s
+::error::Gradle failed with exit code 1 after 1m 37s.

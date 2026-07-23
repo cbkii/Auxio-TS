@@ -747,7 +747,7 @@
     <string name="set_launcher_integration_desc">Automatic media bridge; advanced protocol options inside</string>
     <string name="set_launcher_integration_summary">Generic Android media — recommended</string>
     <string name="set_playback_notification_access">Playback notification access</string>
-    <string name="set_playback_notification_access_desc">Review Auxio's playback notification channel. Device-specific controller behaviour, including TS18/DoFun compatibility, requires runtime validation.</string>
+    <string name="set_playback_notification_access_desc">Review Auxio’s playback notification channel. Device-specific controller behaviour, including TS18/DoFun compatibility, requires runtime validation.</string>
     <string name="set_playback_notification_access_summary">Package: %1$s
 Notifications: %2$s
 Playback channel: %3$s
