@@ -203,10 +203,16 @@ require_file_contains "$playback_fragment" "topwayCoordinator.handle" "playback 
 require_file_contains "$playback_fragment" "cmd-update" "Topway cmd=update forced republish path"
 require_file_contains "$playback_fragment" "topwayCoordinator.clear" "playback service clears Topway launcher state"
 
-require_file_contains "$mode_file" "AutoAllSafePaths" "launcher integration auto/all-safe-paths mode"
+require_file_contains "$mode_file" "GenericDofunMedia" "launcher integration generic DoFun media mode"
+require_file_contains "$mode_file" "usesGenericMediaNotification" "launcher integration generic notification gate"
+require_file_contains "$mode_file" "bindsTopwayCommandService" "launcher integration command-service bind gate"
+require_file_contains "$mode_file" "AutoAllSafePaths" "launcher integration legacy all-safe-paths mode"
 require_file_contains "$mode_file" "DiagnosticsOnly" "launcher integration diagnostics-only mode"
 require_file_contains "$mode_file" "sendsTopwayBroadcasts" "launcher integration outgoing mode flag"
 require_file_contains "$mode_file" "handlesTopwayCommands" "launcher integration incoming mode flag"
+require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt" "DofunMediaCompatPolicy.compactActionIndices" "generic DoFun compact notification actions"
+require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt" "buildMediaButtonPendingIntent" "generic DoFun explicit media-button pending intents"
+require_file_contains "app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackNotificationChannel.kt" "ACTION_CHANNEL_NOTIFICATION_SETTINGS" "playback channel settings recovery path"
 
 require_file_contains "$seek_policy_file" "Percent0To100" "Topway seek percent policy"
 require_file_contains "$seek_policy_file" "Permille0To1000" "Topway seek permille policy"

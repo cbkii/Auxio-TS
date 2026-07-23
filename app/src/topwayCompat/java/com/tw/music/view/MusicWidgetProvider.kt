@@ -25,8 +25,10 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.view.KeyEvent
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
+import androidx.preference.PreferenceManager
 import com.tw.music.MusicService
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
@@ -34,6 +36,8 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.topway.TopwayBridgeExtrasPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayMusicContract
 import org.oxycblt.auxio.headunit.topway.TopwayWidgetProviderPolicy
+import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
+import org.oxycblt.auxio.playback.service.DofunMediaCompatPolicy
 import org.oxycblt.auxio.playback.service.PendingIntentRequestCodePolicy
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.widgets.WidgetComponent
@@ -224,17 +228,39 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
     private fun bindTopwayControls(context: Context, remoteViews: RemoteViews) {
         remoteViews.setOnClickPendingIntent(R.id.albumart, newActivityPendingIntent(context))
+        val mode = currentIntegrationMode(context)
+        val useCanonicalMediaButtons = DofunMediaCompatPolicy.usesCanonicalWidgetControls(mode)
         remoteViews.setOnClickPendingIntent(
             R.id.control_prev,
-            newServicePendingIntent(context, TopwayMusicContract.ACTION_PREV),
+            if (useCanonicalMediaButtons) {
+                newMediaButtonServicePendingIntent(context, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            } else {
+                newTopwayServicePendingIntent(context, TopwayMusicContract.ACTION_PREV)
+            },
         )
         remoteViews.setOnClickPendingIntent(
             R.id.control_play,
-            newServicePendingIntent(context, TopwayMusicContract.ACTION_PLAY_PAUSE),
+            if (useCanonicalMediaButtons) {
+                newMediaButtonServicePendingIntent(context, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            } else {
+                newTopwayServicePendingIntent(context, TopwayMusicContract.ACTION_PLAY_PAUSE)
+            },
         )
         remoteViews.setOnClickPendingIntent(
             R.id.control_next,
-            newServicePendingIntent(context, TopwayMusicContract.ACTION_NEXT),
+            if (useCanonicalMediaButtons) {
+                newMediaButtonServicePendingIntent(context, KeyEvent.KEYCODE_MEDIA_NEXT)
+            } else {
+                newTopwayServicePendingIntent(context, TopwayMusicContract.ACTION_NEXT)
+            },
+        )
+        L.d("Bound Topway wrapper widget controls through mode=${mode.name}")
+    }
+
+    private fun currentIntegrationMode(context: Context): Ts18LauncherIntegrationMode {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        return Ts18LauncherIntegrationMode.fromPreference(
+            prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
         )
     }
 
@@ -252,7 +278,23 @@ class MusicWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    private fun newServicePendingIntent(context: Context, action: String): PendingIntent {
+    private fun newMediaButtonServicePendingIntent(context: Context, keyCode: Int): PendingIntent {
+        val actionKey = "wrapper-media-button:$keyCode"
+        val intent =
+            Intent(context, MusicService::class.java)
+                .setAction(Intent.ACTION_MEDIA_BUTTON)
+                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
+
+        return PendingIntent.getService(
+            context,
+            PendingIntentRequestCodePolicy.forAction(actionKey),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
+    private fun newTopwayServicePendingIntent(context: Context, action: String): PendingIntent {
         val intent =
             Intent(context, MusicService::class.java)
                 .setAction(action)

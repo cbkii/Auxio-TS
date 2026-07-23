@@ -26,6 +26,7 @@ import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataSnapshot
 import org.oxycblt.auxio.playback.state.Progression
@@ -42,12 +43,47 @@ constructor(
     private var lastProgress: TopwayProgressSnapshot? = null
     private var lastProgressAtMs = 0L
 
+    init {
+        migrateLegacyDefault()
+    }
+
     var mode: Ts18LauncherIntegrationMode
         get() =
             Ts18LauncherIntegrationMode.fromPreference(
                 prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
             )
-        set(value) = prefs.edit { putString(Ts18LauncherIntegrationMode.PREF_KEY, value.name) }
+        set(value) {
+            prefs.edit {
+                putString(Ts18LauncherIntegrationMode.PREF_KEY, value.name)
+                putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
+            }
+        }
+
+    private fun migrateLegacyDefault() {
+        val decision =
+            Ts18LauncherIntegrationMode.migrationDecision(
+                persistedValue = prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null),
+                migrationComplete =
+                    prefs.getBoolean(
+                        Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED,
+                        false,
+                    ),
+                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+            )
+        if (!decision.markComplete && decision.persistMode == null) return
+        prefs.edit {
+            decision.persistMode?.let { putString(Ts18LauncherIntegrationMode.PREF_KEY, it.name) }
+            if (decision.markComplete) {
+                putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
+            }
+        }
+        journal.log(
+            DiagnosticJournal.CAT_TOPWAY_BROADCAST,
+            "Launcher mode migration",
+            "selected=${decision.mode.name}",
+            if (decision.persistMode != null) "migrated" else "preserved",
+        )
+    }
 
     var seekUnitPolicy: TopwaySeekUnitPolicy
         get() =

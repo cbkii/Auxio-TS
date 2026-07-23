@@ -33,6 +33,7 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.service.MediaSessionUID
 import org.oxycblt.auxio.music.service.MusicBrowser
+import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.RepeatMode
@@ -129,7 +130,18 @@ constructor(
     }
 
     override fun onPlay() {
-        playbackManager.playing(true)
+        if (
+            shouldResumeExistingPlayback(
+                hasCurrentSong = playbackManager.currentSong != null,
+                hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null,
+            )
+        ) {
+            playbackManager.playing(true)
+        } else {
+            playbackManager.playDeferred(
+                DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
+            )
+        }
     }
 
     override fun onPause() {
@@ -313,5 +325,10 @@ constructor(
                 PlaybackStateCompat.ACTION_SEEK_TO or
                 PlaybackStateCompat.ACTION_REWIND or
                 PlaybackStateCompat.ACTION_STOP
+
+        internal fun shouldResumeExistingPlayback(
+            hasCurrentSong: Boolean,
+            hasRawPlaybackMetadata: Boolean,
+        ): Boolean = hasCurrentSong || hasRawPlaybackMetadata
     }
 }

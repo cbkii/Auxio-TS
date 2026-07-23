@@ -46,17 +46,23 @@ object MediaButtonActionMapper {
         if (repeatCount > 0) {
             return false
         }
+        if (!isSupportedMediaKey(keyCode)) {
+            return false
+        }
         if (!isFocusHeld) {
+            return DofunMediaCompatPolicy.isColdStartPlayKey(keyCode) ||
+                (hasCurrentSong && isPausedSessionControl(keyCode))
+        }
+        if (!hasCurrentSong && !DofunMediaCompatPolicy.isColdStartPlayKey(keyCode)) {
             return false
         }
-        if (!hasCurrentSong && isPauseOrStop(keyCode)) {
-            return false
-        }
-        return isSupportedMediaKey(keyCode)
+        return true
     }
 
-    private fun isPauseOrStop(keyCode: Int): Boolean =
-        keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE || keyCode == KeyEvent.KEYCODE_MEDIA_STOP
+    private fun isPausedSessionControl(keyCode: Int): Boolean =
+        keyCode == KeyEvent.KEYCODE_MEDIA_NEXT ||
+            keyCode == KeyEvent.KEYCODE_MEDIA_PREVIOUS ||
+            keyCode == KeyEvent.KEYCODE_MEDIA_STOP
 
     private fun isSupportedMediaKey(keyCode: Int): Boolean =
         when (keyCode) {
