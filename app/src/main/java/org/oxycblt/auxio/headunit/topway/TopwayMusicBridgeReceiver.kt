@@ -39,6 +39,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class TopwayMusicBridgeReceiver : BroadcastReceiver() {
     @Inject lateinit var journal: DiagnosticJournal
+    @Inject lateinit var coordinator: TopwayLauncherIntegrationCoordinator
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
@@ -46,7 +47,33 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
+        if (intent.clipData != null) {
+            L.w("Ignoring Topway bridge action carrying ClipData: $action")
+            return
+        }
+        if (
+            !ExportedCommandRateLimiter.allow(
+                key = "topway:$action",
+                maxEvents = MAX_TOPWAY_EVENTS_PER_WINDOW,
+                windowMs = TOPWAY_RATE_WINDOW_MS,
+            )
+        ) {
+            L.w("Dropping excessive Topway bridge action: $action")
+            return
+        }
+
         journal.log(DiagnosticJournal.CAT_TOPWAY_CMD, "Incoming Intent", action)
+        if (!coordinator.mode.handlesTopwayCommands) {
+            journal.log(
+                DiagnosticJournal.CAT_TOPWAY_CMD,
+                "Ignored due to mode",
+                action,
+                coordinator.mode.name,
+            )
+            L.d("Ignoring Topway bridge action in ${coordinator.mode.name}: $action")
+            return
+        }
+
         val serviceClass =
             if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 try {
@@ -78,6 +105,13 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w(e, "Unable to start Auxio for Topway action due to service state")
         } catch (e: SecurityException) {
             L.w(e, "Unable to start Auxio for Topway action due to security policy")
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to start Auxio for malformed Topway action")
         }
+    }
+
+    private companion object {
+        const val MAX_TOPWAY_EVENTS_PER_WINDOW = 24
+        const val TOPWAY_RATE_WINDOW_MS = 1_000L
     }
 }
