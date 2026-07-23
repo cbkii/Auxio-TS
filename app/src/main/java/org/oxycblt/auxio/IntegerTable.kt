@@ -61,6 +61,8 @@ object IntegerTable {
     const val PLAYBACK_NOTIFICATION_CODE = 0xA0A0
     /** "Music loading" notification code */
     const val INDEXER_NOTIFICATION_CODE = 0xA0A1
+    /** Temporary early-prestart notification code */
+    const val EARLY_PRESTART_NOTIFICATION_CODE = 0xA0A2
     /** MainActivity Intent request code */
     const val REQUEST_CODE = 0xA0C0
     /** Now Playing PendingIntent request code */
@@ -119,7 +121,7 @@ object IntegerTable {
     const val SORT_BY_TRACK = 0xA117
     /** Sort.Mode.ByDateAdded */
     const val SORT_BY_DATE_ADDED = 0xA118
-    /** ReplayGainMode.Off (No longer used but still reserved) */
+    /** ReplayGainMode.Off */
     const val REPLAY_GAIN_MODE_OFF = 0xA110
     /** ReplayGainMode.Track */
     const val REPLAY_GAIN_MODE_TRACK = 0xA111
