@@ -233,6 +233,7 @@ object StartupLibraryStartup {
         setStartupReadinessState: (StartupReadinessState) -> Unit = {},
         setStartupLibraryStatus: (StartupLibraryStatus) -> Unit = {},
         sourceConfigured: Boolean = true,
+        allowAutomaticScan: Boolean = !isTopwayCompat,
     ): StartupLibraryPolicy.Decision {
         setStartupReadinessState(StartupReadinessState.ProcessVisible)
         setStartupLibraryStatus(StartupLibraryStatus.Unknown)
@@ -286,7 +287,10 @@ object StartupLibraryStartup {
                 )
             }
 
-        if (isTopwayCompat) {
+        // Source availability and start origin are separate authorities. Never scan with no
+        // configured source. Standard Android launches retain their historic automatic behaviour;
+        // Topway launches scan automatically only when the caller identifies a user-visible start.
+        if (!sourceConfigured || (isTopwayCompat && !allowAutomaticScan)) {
             decision = decision.copy(requestScan = false)
         }
 
