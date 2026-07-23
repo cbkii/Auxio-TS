@@ -1,0 +1,77 @@
+name: Temporary PR 194 API29 log fix
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - ".github/workflows/pr194-api29-log-fix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr194-api29-log-fix
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: perf/android10-code-health-20260723
+          fetch-depth: 1
+
+      - name: Persist API 29 Gradle failure output
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/android.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''      - name: Run API 29 compatibility and Room migration tests
+                shell: bash
+                run: |
+                  bash ./scripts/ci-gradle.sh \\
+                    :app:connectedStandardDebugAndroidTest \\
+                    :musikr:connectedDebugAndroidTest
+          '''.replace('          ', '', 1)
+          new = '''      - name: Run API 29 compatibility and Room migration tests
+                shell: bash
+                env:
+                  AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log
+                run: |
+                  bash ./scripts/ci-gradle.sh \\
+                    :app:connectedStandardDebugAndroidTest \\
+                    :musikr:connectedDebugAndroidTest
+          '''.replace('          ', '', 1)
+          if text.count(old) != 1:
+              raise SystemExit(f'STOP: expected one API29 Gradle step, found {text.count(old)}')
+          text = text.replace(old, new)
+          old_artifact = '''            ${{ runner.temp }}/api29-emulator.log
+          '''.replace('          ', '', 1)
+          new_artifact = '''            ${{ runner.temp }}/api29-emulator.log
+                      ${{ runner.temp }}/api29-gradle.log
+          '''.replace('          ', '', 1)
+          if text.count(old_artifact) != 1:
+              raise SystemExit(
+                  f'STOP: expected one API29 emulator artifact line, found {text.count(old_artifact)}'
+              )
+          path.write_text(text.replace(old_artifact, new_artifact), encoding='utf-8', newline='\n')
+          PY
+
+      - name: Commit scoped CI diagnostic fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -- .github/workflows/pr194-api29-log-fix.yml
+          git add -- .github/workflows/android.yml
+          git diff --cached --check
+          git commit -m "ci: preserve API 29 Gradle failure logs"
+          git push origin HEAD:perf/android10-code-health-20260723
