@@ -130,7 +130,12 @@ constructor(
     }
 
     override fun onPlay() {
-        if (playbackManager.currentSong != null) {
+        if (
+            shouldResumeExistingPlayback(
+                hasCurrentSong = playbackManager.currentSong != null,
+                hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null,
+            )
+        ) {
             playbackManager.playing(true)
         } else {
             playbackManager.playDeferred(
@@ -320,5 +325,10 @@ constructor(
                 PlaybackStateCompat.ACTION_SEEK_TO or
                 PlaybackStateCompat.ACTION_REWIND or
                 PlaybackStateCompat.ACTION_STOP
+
+        internal fun shouldResumeExistingPlayback(
+            hasCurrentSong: Boolean,
+            hasRawPlaybackMetadata: Boolean,
+        ): Boolean = hasCurrentSong || hasRawPlaybackMetadata
     }
 }
