@@ -134,10 +134,7 @@ constructor(
             playbackManager.playing(true)
         } else {
             playbackManager.playDeferred(
-                DeferredPlayback.RestoreState(
-                    play = true,
-                    fallback = DeferredPlayback.ShuffleAll(),
-                )
+                DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
             )
         }
     }

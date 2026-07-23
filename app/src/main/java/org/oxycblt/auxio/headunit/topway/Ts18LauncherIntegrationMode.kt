@@ -53,8 +53,7 @@ enum class Ts18LauncherIntegrationMode {
 
     companion object {
         const val PREF_KEY = "auxio_ts18_launcher_integration_mode"
-        const val PREF_GENERIC_DEFAULT_MIGRATED =
-            "auxio_ts18_launcher_generic_default_migrated_v1"
+        const val PREF_GENERIC_DEFAULT_MIGRATED = "auxio_ts18_launcher_generic_default_migrated_v1"
 
         fun default(): Ts18LauncherIntegrationMode =
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) GenericDofunMedia else AndroidMediaSessionOnly

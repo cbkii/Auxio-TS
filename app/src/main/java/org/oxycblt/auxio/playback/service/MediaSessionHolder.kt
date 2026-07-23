@@ -599,10 +599,7 @@ private constructor(
         album: CharSequence?,
         durationMs: Long,
     ) {
-        if (
-            !BuildConfig.TOPWAY_COMPAT_FLAVOR ||
-                !launcherCoordinator.mode.sendsTopwayBroadcasts
-        ) {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !launcherCoordinator.mode.sendsTopwayBroadcasts) {
             return
         }
         try {
@@ -621,10 +618,7 @@ private constructor(
     }
 
     private fun broadcastLegacyPlaybackChanged() {
-        if (
-            !BuildConfig.TOPWAY_COMPAT_FLAVOR ||
-                !launcherCoordinator.mode.sendsTopwayBroadcasts
-        ) {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !launcherCoordinator.mode.sendsTopwayBroadcasts) {
             return
         }
         try {
@@ -881,9 +875,6 @@ private class PlaybackNotification(
         const val KEY_PARENT = BuildConfig.APPLICATION_ID + ".metadata.PARENT"
 
         private val CHANNEL_INFO =
-            ChannelInfo(
-                id = PlaybackNotificationChannel.id,
-                nameRes = R.string.lbl_playback,
-            )
+            ChannelInfo(id = PlaybackNotificationChannel.id, nameRes = R.string.lbl_playback)
     }
 }

@@ -72,9 +72,7 @@ constructor(
             )
         if (!decision.markComplete && decision.persistMode == null) return
         prefs.edit {
-            decision.persistMode?.let {
-                putString(Ts18LauncherIntegrationMode.PREF_KEY, it.name)
-            }
+            decision.persistMode?.let { putString(Ts18LauncherIntegrationMode.PREF_KEY, it.name) }
             if (decision.markComplete) {
                 putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
             }
