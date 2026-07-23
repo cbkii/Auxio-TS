@@ -23,6 +23,9 @@ jobs:
           ref: feat/ts18-dofun-generic-media-compat
           fetch-depth: 0
           persist-credentials: false
+      - name: Apply resource fix
+        shell: bash
+        run: python3 scripts/tmp-pr195-resource-fix.py
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
@@ -69,7 +72,7 @@ jobs:
 
           printf 'Unit-test status: %s\n' "${test_status}"
           printf 'Lint status: %s\n' "${lint_status}"
-      - name: Commit concise diagnostics
+      - name: Commit fix or concise diagnostics
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -77,11 +80,13 @@ jobs:
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/res/values/strings.xml
+          git add -u tmp-pr195-test-error.log tmp-pr195-lint-error.log 2>/dev/null || true
           git add tmp-pr195-test-error.log tmp-pr195-lint-error.log 2>/dev/null || true
           if git diff --cached --quiet; then
-            echo 'Scoped unit tests and lint passed; no diagnostic files required.'
+            echo 'Scoped unit tests and lint passed; no changes were required.'
             exit 0
           fi
-          git commit -m 'ci: capture PR 195 quality failures'
+          git commit -m 'fix: finalise PR 195 Android resources and quality checks'
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin HEAD:feat/ts18-dofun-generic-media-compat
