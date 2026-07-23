@@ -92,13 +92,10 @@ private val LibraryRecoveryPolicy.Kind.messageRes: Int
         when (this) {
             LibraryRecoveryPolicy.Kind.HIDDEN -> R.string.lng_empty_songs
             LibraryRecoveryPolicy.Kind.WAITING -> R.string.recovery_loading_cache
-            LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED ->
-                R.string.recovery_permission_required
+            LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED -> R.string.recovery_permission_required
             LibraryRecoveryPolicy.Kind.SOURCE_REQUIRED -> R.string.recovery_source_required
-            LibraryRecoveryPolicy.Kind.SOURCE_UNAVAILABLE ->
-                R.string.recovery_source_unavailable
-            LibraryRecoveryPolicy.Kind.CACHE_UNAVAILABLE ->
-                R.string.recovery_cache_unavailable
+            LibraryRecoveryPolicy.Kind.SOURCE_UNAVAILABLE -> R.string.recovery_source_unavailable
+            LibraryRecoveryPolicy.Kind.CACHE_UNAVAILABLE -> R.string.recovery_cache_unavailable
             LibraryRecoveryPolicy.Kind.INDEXING -> R.string.recovery_indexing
             LibraryRecoveryPolicy.Kind.EMPTY -> R.string.recovery_empty
             LibraryRecoveryPolicy.Kind.FAILED -> R.string.recovery_failed
@@ -110,8 +107,7 @@ private val LibraryRecoveryPolicy.Action.labelRes: Int
         when (this) {
             LibraryRecoveryPolicy.Action.GRANT_PERMISSION ->
                 R.string.recovery_action_grant_permission
-            LibraryRecoveryPolicy.Action.CHOOSE_SOURCE ->
-                R.string.recovery_action_choose_source
+            LibraryRecoveryPolicy.Action.CHOOSE_SOURCE -> R.string.recovery_action_choose_source
             LibraryRecoveryPolicy.Action.REFRESH -> R.string.recovery_action_refresh
             LibraryRecoveryPolicy.Action.RESCAN -> R.string.recovery_action_rescan
             LibraryRecoveryPolicy.Action.ENABLE_ROOT -> R.string.recovery_action_enable_root
