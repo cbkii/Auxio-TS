@@ -97,6 +97,13 @@ constructor(
         indexer.createNotification(post)
     }
 
+    /** Snapshot whether indexing/observation currently owns a foreground notification. */
+    fun hasForegroundWork(): Boolean {
+        var active = false
+        createNotification { active = it != null }
+        return active
+    }
+
     fun getRoot() = BrowserRoot(MediaSessionUID.Tab(TabNode.Root).toString(), Bundle())
 
     fun getItem(mediaId: String, result: Result<MediaItem>) =
