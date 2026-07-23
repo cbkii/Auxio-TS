@@ -72,36 +72,39 @@ class Android10CompatibilitySmokeTest {
         val completed = CountDownLatch(1)
         val failure = AtomicReference<String?>()
         lateinit var browser: MediaBrowserCompat
-        browser =
-            MediaBrowserCompat(
-                context,
-                ComponentName(context, AuxioService::class.java),
-                object : MediaBrowserCompat.ConnectionCallback() {
-                    override fun onConnected() {
-                        try {
-                            assertTrue(browser.isConnected)
-                            assertNotNull(browser.sessionToken)
-                        } catch (error: AssertionError) {
-                            failure.set(error.message ?: error.javaClass.simpleName)
-                        } finally {
+
+        instrumentation.runOnMainSync {
+            browser =
+                MediaBrowserCompat(
+                    context,
+                    ComponentName(context, AuxioService::class.java),
+                    object : MediaBrowserCompat.ConnectionCallback() {
+                        override fun onConnected() {
+                            try {
+                                assertTrue(browser.isConnected)
+                                assertNotNull(browser.sessionToken)
+                            } catch (error: AssertionError) {
+                                failure.set(error.message ?: error.javaClass.simpleName)
+                            } finally {
+                                completed.countDown()
+                            }
+                        }
+
+                        override fun onConnectionFailed() {
+                            failure.set("MediaBrowser connection failed")
                             completed.countDown()
                         }
-                    }
 
-                    override fun onConnectionFailed() {
-                        failure.set("MediaBrowser connection failed")
-                        completed.countDown()
-                    }
+                        override fun onConnectionSuspended() {
+                            failure.set("MediaBrowser connection suspended")
+                            completed.countDown()
+                        }
+                    },
+                    null,
+                )
+            browser.connect()
+        }
 
-                    override fun onConnectionSuspended() {
-                        failure.set("MediaBrowser connection suspended")
-                        completed.countDown()
-                    }
-                },
-                null,
-            )
-
-        instrumentation.runOnMainSync { browser.connect() }
         assertTrue("MediaBrowser callback timed out", completed.await(30, TimeUnit.SECONDS))
         instrumentation.runOnMainSync { browser.disconnect() }
         assertNull(failure.get(), failure.get())
