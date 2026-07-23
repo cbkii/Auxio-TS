@@ -13,7 +13,6 @@
         android:layout_height="match_parent"
         tools:listitem="@layout/item_song" />
 
-
     <org.oxycblt.auxio.ui.EdgeFrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
@@ -65,7 +64,28 @@
                 android:id="@+id/home_no_music_action"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:minHeight="48dp"
                 android:text="@string/set_locations" />
+
+            <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                android:id="@+id/home_no_music_secondary_action"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_tiny"
+                android:minHeight="48dp"
+                android:visibility="gone"
+                tools:text="@string/recovery_action_rescan" />
+
+            <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                android:id="@+id/home_no_music_tertiary_action"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_tiny"
+                android:minHeight="48dp"
+                android:visibility="gone"
+                tools:text="@string/recovery_action_choose_source" />
 
         </LinearLayout>
 
