@@ -30,7 +30,6 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
@@ -63,7 +62,7 @@ import org.oxycblt.musikr.util.splitEscaped
             MetadataRevisionData::class,
         ],
     version = 72,
-    exportSchema = false,
+    exportSchema = true,
 )
 @TypeConverters(CachedFileData.Converters::class)
 internal abstract class CacheDatabase : RoomDatabase() {
@@ -258,18 +257,34 @@ internal interface CacheWriteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun updateSongs(data: List<CachedFileData>)
 
-    @Transaction
+    // Legacy compatibility cleanup is restart-safe. Let each bounded query/delete call
+    // commit independently so a large library does not hold one write transaction throughout.
     suspend fun deleteExcludingUris(uris: Set<String>) {
-        val delete = selectAllUris().toSet() - uris
-        for (chunk in delete.chunked(999)) {
-            deleteExcludingUriChunk(chunk)
+        var afterUri: String? = null
+        while (true) {
+            val page = selectUrisAfter(afterUri, LEGACY_RECONCILIATION_PAGE_SIZE)
+            if (page.isEmpty()) return
+            page.filterNot(uris::contains).chunked(SQLITE_BIND_LIMIT).forEach {
+                deleteExcludingUriChunk(it)
+            }
+            afterUri = page.last()
         }
     }
 
-    @Query("SELECT uri FROM CachedFileData") suspend fun selectAllUris(): List<String>
+    @Query(
+        "SELECT uri FROM CachedFileData " +
+            "WHERE (:afterUri IS NULL OR uri > :afterUri) " +
+            "ORDER BY uri LIMIT :limit"
+    )
+    suspend fun selectUrisAfter(afterUri: String?, limit: Int): List<String>
 
     @Query("DELETE FROM CachedFileData WHERE uri IN (:uris)")
     suspend fun deleteExcludingUriChunk(uris: List<String>)
+
+    companion object {
+        const val LEGACY_RECONCILIATION_PAGE_SIZE = 512
+        const val SQLITE_BIND_LIMIT = 999
+    }
 }
 
 @Entity

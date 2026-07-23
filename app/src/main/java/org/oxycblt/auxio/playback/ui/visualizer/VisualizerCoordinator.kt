@@ -22,6 +22,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.ui.UISettings
 import timber.log.Timber as L
 
@@ -42,11 +44,16 @@ class VisualizerCoordinator(
     private val isPlayingFlow: StateFlow<Boolean>,
     private val audioSessionIdFlow: StateFlow<Int?>,
     private val uiSettings: UISettings,
+    diagnosticJournal: DiagnosticJournal? = null,
 ) : DefaultLifecycleObserver, UISettings.Listener {
 
     private val _state = MutableStateFlow<VisualizerState>(VisualizerState.Disabled)
     val state: StateFlow<VisualizerState> = _state.asStateFlow()
 
+    private val runtimeMetrics =
+        VisualizerRuntimeMetrics(
+            diagnosticJournal ?: VisualizerDiagnosticsResolver.resolve(context)
+        )
     private var visualizer: Visualizer? = null
     private var currentSessionId: Int? = null
     private var watchdogJob: Job? = null
@@ -83,6 +90,7 @@ class VisualizerCoordinator(
         monitorJob?.cancel()
         monitorJob = null
         releaseVisualizer()
+        runtimeMetrics.flush("lifecycle_stop", SystemClock.uptimeMillis())
         activeScope = null
     }
 
@@ -203,13 +211,29 @@ class VisualizerCoordinator(
                             waveform: ByteArray,
                             samplingRate: Int,
                         ) {
-                            val now = android.os.SystemClock.uptimeMillis()
-                            if (now - lastFftMs < FFT_PREFERENCE_WINDOW_MS) return
+                            val now = SystemClock.uptimeMillis()
+                            if (now - lastFftMs < FFT_PREFERENCE_WINDOW_MS) {
+                                runtimeMetrics.recordSuppressedWaveform()
+                                return
+                            }
                             if (!hasUsableWaveform(waveform)) return
                             if (generation == currentGeneration && currentSessionId == sessionId) {
+                                val frame =
+                                    if (runtimeMetrics.isActive) {
+                                        val copyStart = SystemClock.elapsedRealtimeNanos()
+                                        waveform.copyOf().also { copy ->
+                                            runtimeMetrics.recordFrame(
+                                                copy.size,
+                                                SystemClock.elapsedRealtimeNanos() - copyStart,
+                                                now,
+                                            )
+                                        }
+                                    } else {
+                                        waveform.copyOf()
+                                    }
                                 _state.value =
                                     VisualizerState.Live(
-                                        waveform.copyOf(),
+                                        frame,
                                         samplingRate,
                                         now,
                                         VisualizerState.FrameSource.WAVEFORM,
@@ -223,12 +247,25 @@ class VisualizerCoordinator(
                             samplingRate: Int,
                         ) {
                             if (!hasUsableFft(fft)) return
-                            val now = android.os.SystemClock.uptimeMillis()
+                            val now = SystemClock.uptimeMillis()
                             lastFftMs = now
                             if (generation == currentGeneration && currentSessionId == sessionId) {
+                                val frame =
+                                    if (runtimeMetrics.isActive) {
+                                        val copyStart = SystemClock.elapsedRealtimeNanos()
+                                        fft.copyOf().also { copy ->
+                                            runtimeMetrics.recordFrame(
+                                                copy.size,
+                                                SystemClock.elapsedRealtimeNanos() - copyStart,
+                                                now,
+                                            )
+                                        }
+                                    } else {
+                                        fft.copyOf()
+                                    }
                                 _state.value =
                                     VisualizerState.Live(
-                                        fft.copyOf(),
+                                        frame,
                                         samplingRate,
                                         now,
                                         VisualizerState.FrameSource.FFT,
@@ -290,7 +327,7 @@ class VisualizerCoordinator(
                         return@launch
                     }
                     val currentState = _state.value
-                    val now = android.os.SystemClock.uptimeMillis()
+                    val now = SystemClock.uptimeMillis()
                     val hasFreshFrame =
                         currentState is VisualizerState.Live &&
                             now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
@@ -298,6 +335,7 @@ class VisualizerCoordinator(
 
                     if (retryCount < MAX_VISUALIZER_RETRIES) {
                         retryCount++
+                        runtimeMetrics.recordWatchdogRetry()
                         L.w(
                             "Visualizer produced no recent usable frame; retrying " +
                                 "session=$sessionId attempt=$retryCount"

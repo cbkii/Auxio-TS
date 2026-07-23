@@ -25,14 +25,20 @@ import java.io.File as JavaFile
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.isActive
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Directory
 import org.oxycblt.musikr.fs.FS
@@ -45,9 +51,7 @@ import org.oxycblt.musikr.fs.SourceAwareFS
 import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.SourceSnapshot
-import org.oxycblt.musikr.util.tryAsync
 import org.oxycblt.musikr.util.tryAsyncWith
-import org.oxycblt.musikr.util.tryAwaitAll
 
 class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
     SourceAwareFS {
@@ -94,109 +98,192 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         sourceFailures.toMap().also { sourceFailures.clear() }
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
-        tryAsyncWith(files, Dispatchers.IO) {
-            roots
-                .map { location ->
-                    val sourceKey = SourceIdentity.forLocation(location)
-                    if (location.uri.scheme != "file") {
-                        val detail = "Unsupported DirectFS URI ${location.uri}"
-                        Log.w(TAG, detail)
-                        sourceFailures[sourceKey] = detail
-                        return@map CompletableDeferred(Result.success(Unit))
-                    }
-                    val root = location.uri.path?.let(::JavaFile)
-                    if (root == null || !isAllowedRoot(root)) {
-                        val detail = "Unsafe or missing DirectFS source ${location.uri}"
-                        Log.w(TAG, detail)
-                        sourceFailures[sourceKey] = detail
-                        return@map CompletableDeferred(Result.success(Unit))
-                    }
-                    tryAsync(Dispatchers.IO) {
-                        val result =
-                            exploreDirectoryImpl(root, location.path, null, files, 0, sourceKey)
-                                .await()
-                        result.exceptionOrNull()?.let { error ->
-                            sourceFailures[sourceKey] = error.message ?: error.javaClass.simpleName
-                        }
-                    }
-                }
-                .tryAwaitAll()
-        }
+        tryAsyncWith(files, Dispatchers.IO) { output -> exploreBounded(output) }
     }
 
     override fun track(): Flow<FSUpdate> = emptyFlow()
 
-    private fun CoroutineScope.exploreDirectoryImpl(
-        directory: JavaFile,
-        relativePath: Path,
-        parent: Deferred<Directory>?,
-        files: Channel<File>,
-        depth: Int,
-        sourceKey: String,
-    ): Deferred<Result<Unit>> =
-        tryAsync(Dispatchers.IO) {
-            if (depth > MAX_DEPTH) {
-                sourceFailures.putIfAbsent(
-                    sourceKey,
-                    "DirectFS maximum depth exceeded at ${directory.path}",
-                )
-                return@tryAsync
-            }
-            if (!isAllowedRoot(directory)) {
-                sourceFailures.putIfAbsent(
-                    sourceKey,
-                    "DirectFS traversal left the allowed source at ${directory.path}",
-                )
-                return@tryAsync
-            }
-            val directoryDeferred = CompletableDeferred<Directory>()
-            val children = mutableListOf<File>()
-            val recursive = mutableListOf<Deferred<Result<Unit>>>()
-            val entries = listFilesSafe(directory)
-            if (entries == null) {
-                sourceFailures.putIfAbsent(
-                    sourceKey,
-                    "DirectFS source became unavailable at ${directory.path}",
-                )
-                return@tryAsync
-            }
-            for (entry in entries) {
-                if (entry.isSymlink) continue
-                val item = entry.javaFile
-                val newPath = relativePath.file(entry.name)
-                if (entry.isDirectory) {
-                    recursive.add(
-                        exploreDirectoryImpl(
-                            item,
-                            newPath,
-                            directoryDeferred,
-                            files,
-                            depth + 1,
-                            sourceKey,
-                        )
-                    )
-                } else {
-                    val file =
-                        File(
-                            Uri.fromFile(item),
-                            newPath,
-                            object : AddedMs {
-                                override suspend fun resolve() = entry.modifiedMs
-                            },
-                            entry.modifiedMs,
-                            getMimeType(item),
-                            entry.size,
-                            directoryDeferred,
-                        )
-                    children.add(file)
-                    files.send(file)
+    private suspend fun exploreBounded(files: Channel<File>) = coroutineScope {
+        val queue = LinkedBlockingQueue<DirectoryTask>(MAX_PENDING_DIRECTORIES)
+        val pending = AtomicInteger(0)
+        val discoveredDirectories = AtomicInteger(0)
+        val seeding = AtomicBoolean(true)
+        val workers =
+            List(DIRECTORY_WORKER_COUNT) {
+                async(Dispatchers.IO) {
+                    while (isActive) {
+                        val task = queue.poll(QUEUE_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)
+                        if (task == null) {
+                            if (!seeding.get() && pending.get() == 0) return@async
+                            continue
+                        }
+                        try {
+                            processDirectory(task, files, queue, pending, discoveredDirectories)
+                        } finally {
+                            pending.decrementAndGet()
+                        }
+                    }
                 }
             }
-            directoryDeferred.complete(
-                Directory(Uri.fromFile(directory), relativePath, parent, children)
-            )
-            recursive.tryAwaitAll()
+
+        try {
+            for (location in roots) {
+                val sourceKey = SourceIdentity.forLocation(location)
+                if (location.uri.scheme != "file") {
+                    recordFailure(sourceKey, "Unsupported DirectFS URI ${location.uri}")
+                    continue
+                }
+                val root = location.uri.path?.let(::JavaFile)
+                val canonicalRoot = root?.let(::canonicalFileOrNull)
+                if (
+                    root == null || canonicalRoot == null || !isAllowedCanonicalRoot(canonicalRoot)
+                ) {
+                    recordFailure(sourceKey, "Unsafe or missing DirectFS source ${location.uri}")
+                    continue
+                }
+                val task =
+                    DirectoryTask(
+                        directory = root,
+                        canonicalRoot = canonicalRoot,
+                        relativePath = location.path,
+                        parent = null,
+                        depth = 0,
+                        sourceKey = sourceKey,
+                    )
+                when (enqueueDirectory(queue, pending, discoveredDirectories, task)) {
+                    EnqueueResult.Enqueued -> Unit
+                    EnqueueResult.ProcessInline ->
+                        processDirectory(task, files, queue, pending, discoveredDirectories)
+                    EnqueueResult.LimitExceeded -> Unit
+                }
+            }
+        } finally {
+            seeding.set(false)
         }
+        workers.awaitAll()
+    }
+
+    private suspend fun processDirectory(
+        task: DirectoryTask,
+        files: Channel<File>,
+        queue: LinkedBlockingQueue<DirectoryTask>,
+        pending: AtomicInteger,
+        discoveredDirectories: AtomicInteger,
+    ) {
+        if (task.depth > MAX_DEPTH) {
+            recordFailure(
+                task.sourceKey,
+                "DirectFS maximum depth exceeded at ${task.directory.path}",
+            )
+            return
+        }
+        if (!isWithinCanonicalRoot(task.directory, task.canonicalRoot)) {
+            recordFailure(
+                task.sourceKey,
+                "DirectFS traversal left the configured source at ${task.directory.path}",
+            )
+            return
+        }
+
+        val entries = listFilesSafe(task.directory)
+        if (entries == null) {
+            recordFailure(
+                task.sourceKey,
+                "DirectFS source became unavailable at ${task.directory.path}",
+            )
+            return
+        }
+
+        val directoryDeferred = CompletableDeferred<Directory>()
+        val children = mutableListOf<File>()
+        try {
+            for (entry in entries) {
+                if (entry.isSymlink || entry.isDirectory) continue
+                val item = entry.javaFile
+                val file =
+                    File(
+                        Uri.fromFile(item),
+                        task.relativePath.file(entry.name),
+                        object : AddedMs {
+                            override suspend fun resolve() = entry.modifiedMs
+                        },
+                        entry.modifiedMs,
+                        getMimeType(item),
+                        entry.size,
+                        directoryDeferred,
+                    )
+                children.add(file)
+                files.send(file)
+            }
+        } finally {
+            if (!directoryDeferred.isCompleted) {
+                directoryDeferred.complete(
+                    Directory(
+                        Uri.fromFile(task.directory),
+                        task.relativePath,
+                        task.parent,
+                        children,
+                    )
+                )
+            }
+        }
+
+        for (entry in entries) {
+            if (entry.isSymlink || !entry.isDirectory) continue
+            val item = entry.javaFile
+            if (!isWithinCanonicalRoot(item, task.canonicalRoot)) {
+                recordFailure(
+                    task.sourceKey,
+                    "DirectFS rejected an escaped directory at ${item.path}",
+                )
+                continue
+            }
+            val childTask =
+                DirectoryTask(
+                    directory = item,
+                    canonicalRoot = task.canonicalRoot,
+                    relativePath = task.relativePath.file(entry.name),
+                    parent = directoryDeferred,
+                    depth = task.depth + 1,
+                    sourceKey = task.sourceKey,
+                )
+            when (enqueueDirectory(queue, pending, discoveredDirectories, childTask)) {
+                EnqueueResult.Enqueued -> Unit
+                EnqueueResult.ProcessInline ->
+                    processDirectory(childTask, files, queue, pending, discoveredDirectories)
+                EnqueueResult.LimitExceeded -> Unit
+            }
+        }
+    }
+
+    private fun enqueueDirectory(
+        queue: LinkedBlockingQueue<DirectoryTask>,
+        pending: AtomicInteger,
+        discoveredDirectories: AtomicInteger,
+        task: DirectoryTask,
+    ): EnqueueResult {
+        while (true) {
+            val current = discoveredDirectories.get()
+            if (current >= MAX_VISITED_DIRECTORIES) {
+                recordFailure(
+                    task.sourceKey,
+                    "DirectFS directory limit exceeded at ${task.directory.path}",
+                )
+                return EnqueueResult.LimitExceeded
+            }
+            if (discoveredDirectories.compareAndSet(current, current + 1)) break
+        }
+        pending.incrementAndGet()
+        if (queue.offer(task)) return EnqueueResult.Enqueued
+        pending.decrementAndGet()
+        return EnqueueResult.ProcessInline
+    }
+
+    private fun recordFailure(sourceKey: String, detail: String) {
+        if (sourceFailures.putIfAbsent(sourceKey, detail) == null) {
+            Log.w(TAG, detail)
+        }
+    }
 
     private fun combineRootFingerprints(roots: List<Pair<JavaFile, Location.Opened>>): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -231,7 +318,13 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
     }
 
     private fun listFilesSafe(directory: JavaFile): List<DirectEntry>? {
-        val local = directory.listFiles()
+        val local =
+            try {
+                directory.listFiles()
+            } catch (e: RuntimeException) {
+                Log.d(TAG, "Direct listing unavailable for ${directory.path}; trying root", e)
+                null
+            }
         if (local != null) {
             return local.map {
                 DirectEntry(
@@ -273,11 +366,34 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         val size: Long,
     )
 
+    private data class DirectoryTask(
+        val directory: JavaFile,
+        val canonicalRoot: JavaFile,
+        val relativePath: Path,
+        val parent: Deferred<Directory>?,
+        val depth: Int,
+        val sourceKey: String,
+    )
+
+    private enum class EnqueueResult {
+        Enqueued,
+        ProcessInline,
+        LimitExceeded,
+    }
+
     private fun parseRootEntry(parent: JavaFile, line: String): DirectEntry? {
         val parts = line.split('\t', limit = 5)
         if (parts.size != 5) return null
         val name = parts[4]
-        if (name.isBlank() || name == "." || name == ".." || name.contains('/')) return null
+        if (
+            name.isBlank() ||
+                name == "." ||
+                name == ".." ||
+                name.contains('/') ||
+                name.contains('\t')
+        ) {
+            return null
+        }
         return DirectEntry(
             javaFile = JavaFile(parent, name),
             name = name,
@@ -297,6 +413,10 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         private const val SOURCE_TYPE = "DIRECT_FS"
         private const val MAX_DEPTH = 32
         private const val FINGERPRINT_ENTRY_LIMIT = 128
+        internal const val DIRECTORY_WORKER_COUNT = 3
+        internal const val MAX_PENDING_DIRECTORIES = 512
+        internal const val MAX_VISITED_DIRECTORIES = 100_000
+        private const val QUEUE_POLL_INTERVAL_MS = 100L
 
         private val protectedRoots =
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
@@ -323,13 +443,25 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                 false
             }
 
-        fun isAllowedRoot(file: JavaFile): Boolean {
-            val canonical =
-                try {
-                    file.canonicalFile
-                } catch (_: Exception) {
-                    return false
-                }
+        fun isAllowedRoot(file: JavaFile): Boolean =
+            canonicalFileOrNull(file)?.let(::isAllowedCanonicalRoot) == true
+
+        internal fun isWithinCanonicalRoot(candidate: JavaFile, canonicalRoot: JavaFile): Boolean {
+            var cursor = canonicalFileOrNull(candidate) ?: return false
+            while (true) {
+                if (cursor == canonicalRoot) return true
+                cursor = cursor.parentFile ?: return false
+            }
+        }
+
+        private fun canonicalFileOrNull(file: JavaFile): JavaFile? =
+            try {
+                file.canonicalFile
+            } catch (_: Exception) {
+                null
+            }
+
+        private fun isAllowedCanonicalRoot(canonical: JavaFile): Boolean {
             val path = canonical.path.trimEnd('/')
             if (path.isBlank()) return false
             if (protectedRoots.any { path == it.trimEnd('/') }) return false

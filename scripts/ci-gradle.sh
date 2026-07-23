@@ -83,6 +83,22 @@ stamp_file="${stamp_root}/auxio-ts-ci-gradle-last-output.$$"
 : > "${stamp_file}" || fail "Cannot create Gradle heartbeat stamp file: ${stamp_file}"
 date +%s > "${stamp_file}"
 
+# Keep a durable copy of API 29 output in the existing failure-report tree. An explicit path may
+# override this for other workflows. The live stdout/stderr streams remain unchanged.
+capture_log=${AUXIO_TS_CI_GRADLE_LOG:-}
+if [[ -z "${capture_log}" && "${ANDROID_API:-}" == "29" ]]; then
+  capture_log="app/build/reports/androidTests/api29-gradle.log"
+fi
+if [[ -n "${capture_log}" ]]; then
+  capture_dir=${capture_log%/*}
+  if [[ "${capture_dir}" == "${capture_log}" ]]; then
+    capture_dir=.
+  fi
+  mkdir -p -- "${capture_dir}" || fail "Cannot create Gradle capture directory: ${capture_dir}"
+  : > "${capture_log}" || fail "Cannot initialise Gradle capture log: ${capture_log}"
+  log "Capturing Gradle output in ${capture_log}"
+fi
+
 heartbeat_interval="${AUXIO_TS_CI_HEARTBEAT_INTERVAL:-30}"
 (
   while :; do
@@ -116,12 +132,18 @@ fi
     while IFS= read -r line || [[ -n ${line:-} ]]; do
       date +%s > "${stamp_file}"
       printf '%s\n' "$line"
+      if [[ -n "${capture_log}" ]]; then
+        printf '%s\n' "$line" >> "${capture_log}"
+      fi
     done
   ) \
   2> >(
     while IFS= read -r line || [[ -n ${line:-} ]]; do
       date +%s > "${stamp_file}"
       printf '%s\n' "$line" >&2
+      if [[ -n "${capture_log}" ]]; then
+        printf '%s\n' "$line" >> "${capture_log}"
+      fi
     done
   )
 rc=$?

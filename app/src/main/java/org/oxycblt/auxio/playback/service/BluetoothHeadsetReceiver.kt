@@ -18,13 +18,17 @@
 
 package org.oxycblt.auxio.playback.service
 
+import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.BadParcelableException
 import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.R
+import org.oxycblt.auxio.headunit.topway.ExportedCommandRateLimiter
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import timber.log.Timber as L
 
@@ -35,31 +39,56 @@ import timber.log.Timber as L
  */
 class BluetoothHeadsetReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == android.bluetooth.BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED) {
-            val newState =
+        if (intent.action != BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED) return
+        val newState =
+            try {
                 intent.getIntExtra(
                     BluetoothProfile.EXTRA_STATE,
                     BluetoothProfile.STATE_DISCONNECTED,
                 )
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                val sharedPreferences =
-                    androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
-                val autoplayKey =
-                    context.getString(org.oxycblt.auxio.R.string.set_key_headset_autoplay)
-                val headsetAutoplay = sharedPreferences.getBoolean(autoplayKey, false)
-                if (headsetAutoplay) {
-                    L.d("Bluetooth headset connected, initializing service")
-                    val serviceClass =
-                        TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
-                    val serviceIntent = Intent(context, serviceClass)
-                    serviceIntent.action = AuxioService.ACTION_START
-                    serviceIntent.putExtra(
-                        AuxioService.INTENT_KEY_START_ID,
-                        IntegerTable.START_ID_BLUETOOTH,
-                    )
-                    ContextCompat.startForegroundService(context, serviceIntent)
-                }
+            } catch (e: BadParcelableException) {
+                L.w(e, "Ignoring malformed Bluetooth connection-state payload")
+                return
+            } catch (e: RuntimeException) {
+                L.w(e, "Ignoring unreadable Bluetooth connection-state payload")
+                return
             }
+        if (newState != BluetoothProfile.STATE_CONNECTED) return
+        if (
+            !ExportedCommandRateLimiter.allow(
+                key = "bluetooth-a2dp-connected",
+                maxEvents = MAX_CONNECTION_EVENTS_PER_WINDOW,
+                windowMs = CONNECTION_RATE_WINDOW_MS,
+            )
+        ) {
+            L.w("Dropping excessive Bluetooth connection-state broadcasts")
+            return
         }
+
+        val sharedPreferences =
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(context)
+        val autoplayKey = context.getString(R.string.set_key_headset_autoplay)
+        if (!sharedPreferences.getBoolean(autoplayKey, false)) return
+
+        L.d("Bluetooth headset connected, initializing service")
+        val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
+        val serviceIntent =
+            Intent(context, serviceClass)
+                .setAction(AuxioService.ACTION_START)
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BLUETOOTH)
+        try {
+            ContextCompat.startForegroundService(context, serviceIntent)
+        } catch (e: IllegalStateException) {
+            L.w(e, "Unable to start Auxio after Bluetooth connection")
+        } catch (e: SecurityException) {
+            L.w(e, "Bluetooth-triggered service start rejected")
+        } catch (e: RuntimeException) {
+            L.w(e, "Bluetooth-triggered service start failed")
+        }
+    }
+
+    private companion object {
+        const val MAX_CONNECTION_EVENTS_PER_WINDOW = 4
+        const val CONNECTION_RATE_WINDOW_MS = 5_000L
     }
 }

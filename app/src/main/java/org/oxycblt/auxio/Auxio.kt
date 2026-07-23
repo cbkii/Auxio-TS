@@ -98,6 +98,10 @@ class Auxio : Application() {
         }
         super.onCreate()
 
+        // Configure timing before any measured migration. This preference read is deliberately
+        // cheap and synchronous; moving migrations themselves off-main would risk partially
+        // migrated settings being consumed by playback or UI startup.
+        PerfTimer.configure(musicSettings.performanceCaptureEnabled)
         NotificationBitmapSafety.journal = journal
         @Suppress("KotlinConstantConditions")
         if (
@@ -114,7 +118,9 @@ class Auxio : Application() {
         // Isolate each migration so a single failure doesn't block the rest.
         listOf(imageSettings, playbackSettings, uiSettings, homeSettings).forEach { settings ->
             try {
-                settings.migrate()
+                PerfTimer.trace("Settings.migrate:${settings.javaClass.simpleName}") {
+                    settings.migrate()
+                }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to migrate settings: ${settings.javaClass.simpleName}")
             }
@@ -125,7 +131,6 @@ class Auxio : Application() {
 
     private fun scheduleOptionalStartupWork() {
         startupScope.launch {
-            PerfTimer.configure(musicSettings.performanceCaptureEnabled)
             val prefs = PreferenceManager.getDefaultSharedPreferences(this@Auxio)
             val shortcutsEnabled =
                 prefs.getBoolean(

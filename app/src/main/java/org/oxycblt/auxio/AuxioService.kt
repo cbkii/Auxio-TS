@@ -21,6 +21,7 @@ package org.oxycblt.auxio
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.os.BadParcelableException
 import android.os.Bundle
 import android.os.IBinder
 import android.support.v4.media.MediaBrowserCompat.MediaItem
@@ -73,7 +74,7 @@ open class AuxioService :
         PerfTimer.trace("AuxioService.onStartCommand") {
             Ts18FirstAudioLatency.mark("service_on_start_command")
             // TODO: Start command occurring from a foreign service basically implies a detached
-            //  service, we might need more handling here.
+            // service, we might need more handling here.
             super.onStartCommand(intent, flags, startId)
             onHandleForeground(intent)
             journal.log(
@@ -120,17 +121,35 @@ open class AuxioService :
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?,
-    ): BrowserRoot {
+    ): BrowserRoot? {
+        if (
+            clientUid < 0 ||
+                clientPackageName.isBlank() ||
+                clientPackageName.length > MAX_CLIENT_PACKAGE_LENGTH ||
+                clientPackageName.any(Char::isISOControl)
+        ) {
+            Timber.w("Rejecting malformed MediaBrowser client identity")
+            return null
+        }
         return musicFragment.getRoot()
     }
 
     override fun onLoadItem(itemId: String, result: Result<MediaItem>) {
+        if (!isValidMediaId(itemId)) {
+            Timber.w("Rejecting malformed MediaBrowser item id")
+            result.sendResult(null)
+            return
+        }
         musicFragment.getItem(itemId, result)
     }
 
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaItem>>) {
-        val maximumRootChildLimit = getRootChildrenLimit()
-        musicFragment.getChildren(parentId, maximumRootChildLimit, result)
+        if (!isValidMediaId(parentId)) {
+            Timber.w("Rejecting malformed MediaBrowser parent id")
+            result.sendResult(mutableListOf())
+            return
+        }
+        musicFragment.getChildren(parentId, getRootChildrenLimit(), result)
     }
 
     override fun onLoadChildren(
@@ -138,20 +157,40 @@ open class AuxioService :
         result: Result<MutableList<MediaItem>>,
         options: Bundle,
     ) {
-        val maximumRootChildLimit = getRootChildrenLimit()
-        musicFragment.getChildren(parentId, maximumRootChildLimit, result)
+        if (!isValidMediaId(parentId)) {
+            Timber.w("Rejecting malformed paged MediaBrowser parent id")
+            result.sendResult(mutableListOf())
+            return
+        }
+        musicFragment.getChildren(parentId, getRootChildrenLimit(), result)
     }
 
     override fun onSearch(query: String, extras: Bundle?, result: Result<MutableList<MediaItem>>) {
+        if (query.length > MAX_SEARCH_QUERY_LENGTH || query.any(Char::isISOControl)) {
+            Timber.w("Rejecting malformed MediaBrowser search query")
+            result.sendResult(mutableListOf())
+            return
+        }
         musicFragment.search(query, result)
     }
 
-    private fun getRootChildrenLimit(): Int {
-        return browserRootHints?.getInt(
-            MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_LIMIT,
-            4,
-        ) ?: 4
-    }
+    private fun getRootChildrenLimit(): Int =
+        try {
+            (browserRootHints?.getInt(
+                    MediaConstants.BROWSER_ROOT_HINTS_KEY_ROOT_CHILDREN_LIMIT,
+                    DEFAULT_ROOT_CHILDREN_LIMIT,
+                ) ?: DEFAULT_ROOT_CHILDREN_LIMIT)
+                .coerceIn(1, MAX_ROOT_CHILDREN_LIMIT)
+        } catch (e: BadParcelableException) {
+            Timber.w(e, "Ignoring malformed MediaBrowser root hints")
+            DEFAULT_ROOT_CHILDREN_LIMIT
+        } catch (e: RuntimeException) {
+            Timber.w(e, "Ignoring unreadable MediaBrowser root hints")
+            DEFAULT_ROOT_CHILDREN_LIMIT
+        }
+
+    private fun isValidMediaId(value: String): Boolean =
+        value.isNotBlank() && value.length <= MAX_MEDIA_ID_LENGTH && value.none(Char::isISOControl)
 
     override fun updateForeground(change: ForegroundListener.Change) {
         val mediaNotification = playbackFragment.notification
@@ -176,7 +215,7 @@ open class AuxioService :
     }
 
     override fun invalidateMusic(mediaId: String) {
-        notifyChildrenChanged(mediaId)
+        if (isValidMediaId(mediaId)) notifyChildrenChanged(mediaId)
     }
 
     companion object {
@@ -188,6 +227,12 @@ open class AuxioService :
 
         // This is only meant for Auxio to internally ensure that it's state management will work.
         const val INTENT_KEY_START_ID = BuildConfig.APPLICATION_ID + ".service.START_ID"
+
+        private const val MAX_CLIENT_PACKAGE_LENGTH = 255
+        private const val MAX_MEDIA_ID_LENGTH = 1024
+        private const val MAX_SEARCH_QUERY_LENGTH = 256
+        private const val DEFAULT_ROOT_CHILDREN_LIMIT = 4
+        private const val MAX_ROOT_CHILDREN_LIMIT = 100
     }
 }
 
