@@ -22,6 +22,8 @@ import android.app.NotificationManager
 import android.view.KeyEvent
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 
@@ -48,6 +50,25 @@ class DofunMediaCompatPolicyTest {
                 Ts18LauncherIntegrationMode.AutoAllSafePaths,
                 topwayCompatFlavor = true,
             ),
+        )
+    }
+
+    @Test
+    fun `generic wrapper widget uses canonical media controls only`() {
+        assertTrue(
+            DofunMediaCompatPolicy.usesCanonicalWidgetControls(
+                Ts18LauncherIntegrationMode.GenericDofunMedia
+            )
+        )
+        assertFalse(
+            DofunMediaCompatPolicy.usesCanonicalWidgetControls(
+                Ts18LauncherIntegrationMode.AutoAllSafePaths
+            )
+        )
+        assertFalse(
+            DofunMediaCompatPolicy.usesCanonicalWidgetControls(
+                Ts18LauncherIntegrationMode.TopwayCommandOnly
+            )
         )
     }
 
