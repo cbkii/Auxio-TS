@@ -1,9 +1,6 @@
 name: Temporary PR196 source patch
 
 on:
-  push:
-    branches:
-      - fix/first-launch-source-recovery
   pull_request:
     branches:
       - dev
@@ -12,12 +9,12 @@ permissions:
   contents: write
 
 concurrency:
-  group: tmp-pr196-source-patch-${{ github.event.pull_request.number || github.ref }}
+  group: tmp-pr196-source-patch
   cancel-in-progress: false
 
 jobs:
   patch:
-    if: ${{ github.event_name == 'pull_request' || !contains(github.event.head_commit.message, 'apply source-dialog permission and root recovery') }}
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
