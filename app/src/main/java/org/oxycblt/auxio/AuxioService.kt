@@ -47,6 +47,7 @@ import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceClient
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.StartupReadinessController
 import org.oxycblt.auxio.music.StartupReadinessState
+import org.oxycblt.auxio.music.StartupScanOrigin
 import org.oxycblt.auxio.music.service.MusicServiceFragment
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
 import org.oxycblt.auxio.util.PerfTimer
@@ -121,8 +122,15 @@ open class AuxioService :
     private fun onHandleForeground(intent: Intent?) {
         // TS18 fast-resume priority: handle playback/launcher commands before any heavy
         // music indexing path. This keeps raw snapshot restore independent from library readiness.
+        val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
+        val origin =
+            when {
+                intent?.action == ACTION_EARLY_PRESTART -> StartupScanOrigin.EARLY_PRESTART
+                startId == IntegerTable.START_ID_ACTIVITY -> StartupScanOrigin.USER_VISIBLE
+                else -> StartupScanOrigin.BACKGROUND
+            }
         playbackFragment.start(intent)
-        musicFragment.start()
+        musicFragment.start(origin)
     }
 
     private fun beginEarlyPrestart(): Boolean {
@@ -175,9 +183,19 @@ open class AuxioService :
                 )
                 delay(EARLY_PRESTART_SETTLE_MS)
 
-                // Do not remove a real playback/indexing foreground owner or stop a service that
-                // acquired useful foreground work while prestart was running.
-                if (playbackFragment.notification == null && !musicFragment.hasForegroundWork()) {
+                // Restore any real playback/indexing foreground owner that became active while
+                // prestart was running. Otherwise remove only the temporary prestart notification.
+                val playbackForeground = playbackFragment.notification != null
+                val musicForeground = musicFragment.hasForegroundWork()
+                if (playbackForeground || musicForeground) {
+                    updateForeground(
+                        if (playbackForeground) {
+                            ForegroundListener.Change.MEDIA_SESSION
+                        } else {
+                            ForegroundListener.Change.INDEXER
+                        }
+                    )
+                } else {
                     ServiceCompat.stopForeground(
                         this@AuxioService,
                         ServiceCompat.STOP_FOREGROUND_REMOVE,

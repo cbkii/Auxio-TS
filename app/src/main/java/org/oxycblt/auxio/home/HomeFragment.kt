@@ -103,7 +103,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private val homeModel: HomeViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
     @Inject lateinit var uiSettings: UISettings
-    private var storagePermissionLauncher: ActivityResultLauncher<String>? = null
     private var getContentLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
     /** The current Favourites playlist (a playlist named [FAVOURITES_PLAYLIST_NAME]), or null. */
@@ -133,12 +132,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     @SuppressLint("ClickableViewAccessibility")
     override fun onBindingCreated(binding: FragmentHomeBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
-
-        // Have to set up the permission launcher before the view is shown
-        storagePermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-                musicModel.refresh()
-            }
 
         getContentLauncher =
             registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -409,7 +402,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         shortcutLayoutListener = null
         lastDashboardState = null
         super.onDestroyBinding(binding)
-        storagePermissionLauncher = null
         favouritesPlaylist = null
         binding.homeNormalToolbar.setOnMenuItemClickListener(null)
     }

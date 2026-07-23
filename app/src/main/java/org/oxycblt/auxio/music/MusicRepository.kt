@@ -208,7 +208,10 @@ interface MusicRepository {
      *
      * @param worker The [IndexingWorker] to use for initial loading.
      */
-    suspend fun startup(worker: IndexingWorker)
+    suspend fun startup(
+        worker: IndexingWorker,
+        origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND,
+    )
 
     /**
      * Re-index the music library. This will trigger a call to [IndexingWorker.requestIndex] on the
@@ -463,8 +466,8 @@ constructor(
         (cache as? IncrementalCache)?.invalidateSource(sourceKey)
     }
 
-    override suspend fun startup(worker: IndexingWorker) {
-        PerfTimer.traceSuspend("MusicRepository.startup") {
+    override suspend fun startup(worker: IndexingWorker, origin: StartupScanOrigin) {
+        PerfTimer.traceSuspend("MusicRepository.startup(origin=$origin)") {
             val start = System.currentTimeMillis()
             L.i("Music system starting...")
             val decision =
@@ -490,10 +493,11 @@ constructor(
                             musicSettings.locationMode,
                             musicSettings.configuredSourceCount,
                         ),
+                    allowAutomaticScan = origin.allowAutomaticScan,
                 )
             L.d(
                 "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
-                    "[state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
+                    "[origin=$origin state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
             )
         }
         try {

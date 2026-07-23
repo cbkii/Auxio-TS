@@ -316,6 +316,16 @@ object StartupLibraryStartup {
     }
 }
 
+/** Origin of a startup request, used to keep TS18 scanning user- and boot-aware. */
+enum class StartupScanOrigin {
+    USER_VISIBLE,
+    BACKGROUND,
+    EARLY_PRESTART;
+
+    val allowAutomaticScan: Boolean
+        get() = this == USER_VISIBLE
+}
+
 /** Cache mode constants for user-driven scan actions. */
 object MusicScanRequestMode {
     const val REFRESH_WITH_CACHE = true

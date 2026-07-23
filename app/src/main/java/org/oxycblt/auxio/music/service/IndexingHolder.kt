@@ -35,6 +35,7 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.ObservationMode
 import org.oxycblt.auxio.music.RootAccessPolicy
+import org.oxycblt.auxio.music.StartupScanOrigin
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.PerfTimer
@@ -129,8 +130,8 @@ private constructor(
     }
 
     @Synchronized
-    fun start() {
-        PerfTimer.trace("IndexingHolder.start") {
+    fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
+        PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
             if (startupJob?.isActive == true) {
                 L.d("Startup library load already running; ignoring duplicate start")
                 return
@@ -139,7 +140,7 @@ private constructor(
                 indexScope.launch {
                     // Root probing is intentionally on-demand. Normal startup must restore
                     // playback/session surfaces without waiting for su.
-                    musicRepository.startup(this@IndexingHolder)
+                    musicRepository.startup(this@IndexingHolder, origin)
                 }
         }
     }

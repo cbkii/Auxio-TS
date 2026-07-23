@@ -31,6 +31,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
+import org.oxycblt.auxio.music.StartupScanOrigin
 import timber.log.Timber as L
 
 class MusicServiceFragment
@@ -88,9 +89,9 @@ constructor(
         ids.forEach { mediaId -> invalidator.invalidateMusic(mediaId) }
     }
 
-    fun start() {
-        L.d("Starting music service fragment without forcing a scan")
-        indexer.start()
+    fun start(origin: StartupScanOrigin) {
+        L.d("Starting music service fragment [origin=$origin]")
+        indexer.start(origin)
     }
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
