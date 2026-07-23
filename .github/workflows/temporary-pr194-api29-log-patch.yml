@@ -6,6 +6,11 @@ on:
       - perf/android10-code-health-20260723
     paths:
       - ".github/workflows/temporary-pr194-api29-log-patch.yml"
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - ".github/workflows/temporary-pr194-api29-log-patch.yml"
 
 permissions:
   contents: write
