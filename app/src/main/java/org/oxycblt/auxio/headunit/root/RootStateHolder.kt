@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.headunit.root
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -59,6 +60,25 @@ constructor(
 
     private fun userEnabled(): Boolean =
         BuildConfig.TOPWAY_COMPAT_FLAVOR && prefs.getBoolean(KEY_USE_ROOT_FS, false)
+
+    /** Snapshot the persisted user consent without invoking `su`. */
+    fun isUserEnabled(): Boolean = userEnabled()
+
+    /**
+     * Persist an explicit user decision for root-assisted DirectFS.
+     *
+     * Enabling resets any prior denied/unavailable result so the next bounded probe may present the
+     * Magisk consent UI again. Disabling immediately closes the root gate and leaves ordinary
+     * `/storage/...` access untouched.
+     */
+    fun setUserEnabled(enabled: Boolean) {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            state = State.UnsupportedForVariant
+            return
+        }
+        prefs.edit { putBoolean(KEY_USE_ROOT_FS, enabled) }
+        state = if (enabled) State.Unknown else State.DisabledByUser
+    }
 
     fun stateSnapshot(): State {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
@@ -208,8 +228,7 @@ constructor(
 
     private fun isAllowedRootListCommand(command: String): Boolean {
         // Extract the path and reconstruct the only shell command RootGate accepts. Paths with
-        // shell
-        // metacharacters are rejected before reconstruction.
+        // shell metacharacters are rejected before reconstruction.
         val prefix = "for p in '"
         if (!command.startsWith(prefix)) return false
         val pathEndIndex = command.indexOf("'", prefix.length)
