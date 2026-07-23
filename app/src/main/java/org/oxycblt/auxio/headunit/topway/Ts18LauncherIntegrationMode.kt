@@ -78,16 +78,26 @@ enum class Ts18LauncherIntegrationMode {
             val parsed = entries.firstOrNull { it.name == persistedValue }
             if (!topwayCompatFlavor || migrationComplete) {
                 return Ts18LauncherModeMigrationDecision(
-                    mode = parsed ?: if (topwayCompatFlavor) GenericDofunMedia else AndroidMediaSessionOnly,
+                    mode =
+                        parsed
+                            ?: if (topwayCompatFlavor) {
+                                GenericDofunMedia
+                            } else {
+                                AndroidMediaSessionOnly
+                            },
                     persistMode = null,
                     markComplete = false,
                 )
             }
 
-            val shouldAdoptGenericDefault =
-                parsed == null || parsed == AutoAllSafePaths
+            val shouldAdoptGenericDefault = parsed == null || parsed == AutoAllSafePaths
             return Ts18LauncherModeMigrationDecision(
-                mode = if (shouldAdoptGenericDefault) GenericDofunMedia else parsed,
+                mode =
+                    if (shouldAdoptGenericDefault) {
+                        GenericDofunMedia
+                    } else {
+                        requireNotNull(parsed)
+                    },
                 persistMode = if (shouldAdoptGenericDefault) GenericDofunMedia else null,
                 markComplete = true,
             )
