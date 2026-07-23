@@ -9,8 +9,8 @@ def patch(path_value: str, replacements: list[tuple[str, str]]) -> None:
     text = path.read_text(encoding="utf-8")
     for old, new in replacements:
         count = text.count(old)
-        if count != 1:
-            raise SystemExit(f"{path}: expected one match, found {count}: {old[:120]!r}")
+        if count < 1:
+            raise SystemExit(f"{path}: expected at least one match, found {count}: {old[:120]!r}")
         text = text.replace(old, new, 1)
     path.write_text(text, encoding="utf-8", newline="\n")
 
