@@ -33,7 +33,13 @@ jobs:
           java-version: "21"
       - name: Write local.properties
         shell: bash
-        run: printf 'sdk.dir=%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}" > local.properties
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
@@ -41,13 +47,12 @@ jobs:
       - name: Prepare CI environment
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-      - name: Apply repository formatting
+      - name: Apply Kotlin formatting
         shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessApply
+        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
       - name: Commit fixes
         shell: bash
         run: |
-          set -euo pipefail
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -55,5 +60,9 @@ jobs:
           git add app/src/main/java/org/oxycblt/auxio/playback/service/PlaybackNotificationChannel.kt
           git add app/src/main/res/values/strings.xml
           git add docs/ts18/launcher-integration/DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md
+          if git diff --cached --quiet; then
+            echo "::error::Expected PR #195 review fixes were not staged."
+            exit 1
+          fi
           git commit -m 'fix: finalise generic DoFun media compatibility'
           git push origin HEAD:feat/ts18-dofun-generic-media-compat
