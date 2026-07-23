@@ -39,10 +39,17 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path = Path('scripts/pr195_apply_generic_media_compat.py')
-          lines = path.read_text(encoding='utf-8').splitlines()
+          source = path.read_text(encoding='utf-8')
+          lines = source.splitlines()
           if lines and lines[-1].strip() == "'''":
               lines.pop()
-          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          source = '\n'.join(lines) + '\n'
+          source = source.replace(
+              '    if count != 1:\n        raise RuntimeError(f"{path}: expected one match, found {count}: {old[:120]!r}")\n',
+              '    if count < 1:\n        raise RuntimeError(f"{path}: expected at least one match, found {count}: {old[:120]!r}")\n',
+              1,
+          )
+          path.write_text(source, encoding='utf-8')
           PY
 
       - name: Apply implementation
