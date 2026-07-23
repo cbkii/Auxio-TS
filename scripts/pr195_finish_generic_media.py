@@ -49,4 +49,4 @@ for marker in (
     if marker not in content:
         raise RuntimeError(f"{holder}: missing generated marker {marker!r}")
 
-print("PR #195 session initialization policy wired successfully")
+print("PR #195 deterministic session initialization policy wired successfully")
