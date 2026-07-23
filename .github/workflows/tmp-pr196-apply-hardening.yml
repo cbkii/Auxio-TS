@@ -47,22 +47,67 @@ jobs:
       - name: Prepare CI environment
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-      - name: Format and run scoped unit tests
+      - name: Format and capture scoped verification
+        id: verify
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh spotlessKotlinApply spotlessXmlApply
-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest
-          git diff --check
+          format_status=0
+          test_status=0
+          diff_status=0
+          mkdir -p "${RUNNER_TEMP}/pr196-verified/app/src/main/java/org/oxycblt/auxio"
+
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply spotlessXmlApply \
+            > "${RUNNER_TEMP}/pr196-format.log" 2>&1 || format_status=$?
+          cat "${RUNNER_TEMP}/pr196-format.log"
+
+          if [[ "${format_status}" -eq 0 ]]; then
+            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest \
+              > "${RUNNER_TEMP}/pr196-tests.log" 2>&1 || test_status=$?
+            cat "${RUNNER_TEMP}/pr196-tests.log"
+          fi
+
+          git diff --check > "${RUNNER_TEMP}/pr196-diff-check.log" 2>&1 || diff_status=$?
+          cat "${RUNNER_TEMP}/pr196-diff-check.log"
+
+          cp app/src/main/java/org/oxycblt/auxio/AuxioService.kt \
+            "${RUNNER_TEMP}/pr196-verified/app/src/main/java/org/oxycblt/auxio/AuxioService.kt"
+          cp app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
+            "${RUNNER_TEMP}/pr196-verified/app/src/main/java/org/oxycblt/auxio/BootReceiver.kt"
+          cp "${RUNNER_TEMP}/pr196-format.log" "${RUNNER_TEMP}/pr196-verified/"
+          cp "${RUNNER_TEMP}/pr196-tests.log" "${RUNNER_TEMP}/pr196-verified/" 2>/dev/null || true
+          cp "${RUNNER_TEMP}/pr196-diff-check.log" "${RUNNER_TEMP}/pr196-verified/"
           git diff -- app/src/main/java/org/oxycblt/auxio/AuxioService.kt \
             app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
-            > "${RUNNER_TEMP}/pr196-service.patch"
-      - name: Upload verified service patch
+            > "${RUNNER_TEMP}/pr196-verified/pr196-service.patch"
+
+          printf 'format_status=%s\n' "${format_status}" >> "${GITHUB_OUTPUT}"
+          printf 'test_status=%s\n' "${test_status}" >> "${GITHUB_OUTPUT}"
+          printf 'diff_status=%s\n' "${diff_status}" >> "${GITHUB_OUTPUT}"
+      - name: Upload patched sources and full logs
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: pr196-verified-service-patch
-          path: |
-            app/src/main/java/org/oxycblt/auxio/AuxioService.kt
-            app/src/main/java/org/oxycblt/auxio/BootReceiver.kt
-            ${{ runner.temp }}/pr196-service.patch
+          path: ${{ runner.temp }}/pr196-verified/**
           if-no-files-found: error
           retention-days: 3
+      - name: Preserve verification result
+        if: always()
+        shell: bash
+        env:
+          FORMAT_STATUS: ${{ steps.verify.outputs.format_status }}
+          TEST_STATUS: ${{ steps.verify.outputs.test_status }}
+          DIFF_STATUS: ${{ steps.verify.outputs.diff_status }}
+        run: |
+          if [[ "${FORMAT_STATUS:-1}" -ne 0 ]]; then
+            echo "::error::Formatting failed with status ${FORMAT_STATUS:-1}."
+            exit "${FORMAT_STATUS:-1}"
+          fi
+          if [[ "${TEST_STATUS:-1}" -ne 0 ]]; then
+            echo "::error::Unit tests failed with status ${TEST_STATUS:-1}."
+            exit "${TEST_STATUS:-1}"
+          fi
+          if [[ "${DIFF_STATUS:-1}" -ne 0 ]]; then
+            echo "::error::git diff --check failed with status ${DIFF_STATUS:-1}."
+            exit "${DIFF_STATUS:-1}"
+          fi
