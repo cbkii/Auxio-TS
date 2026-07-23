@@ -61,7 +61,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm -f -- \
+          git rm -f --ignore-unmatch -- \
             .github/workflows/pr194-api29-finalise.yml \
             .github/workflows/pr194-api29-log-export.yml \
             .github/workflows/pr194-api29-log-fix2.yml
