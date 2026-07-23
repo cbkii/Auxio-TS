@@ -1,9 +1,9 @@
 name: Temporary PR196 apply hardening
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/first-launch-source-recovery
+      - 'cx/**'
 
 permissions:
   contents: write
