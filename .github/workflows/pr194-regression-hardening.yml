@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/pr194-regression-hardening.yml"
       - ".github/pr194_patch.py"
+      - ".github/pr194_fix_patch_script.py"
 
 permissions:
   contents: write
@@ -29,7 +30,9 @@ jobs:
 
       - name: Apply regression hardening
         shell: bash
-        run: python3 .github/pr194_patch.py
+        run: |
+          python3 .github/pr194_fix_patch_script.py
+          python3 .github/pr194_patch.py
 
       - name: Validate and push scoped patch
         shell: bash
@@ -38,6 +41,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm -- \
             .github/pr194_patch.py \
+            .github/pr194_fix_patch_script.py \
             .github/workflows/pr194-regression-hardening.yml
           git add -- \
             app/src/main/java/org/oxycblt/auxio/headunit/root/RootStateHolder.kt \
