@@ -840,8 +840,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private fun updatePermissionCardVisibility(binding: DialogMusicLocationsBinding) {
         with(binding) {
             // SAF/File Picker owns its URI grant and does not need broad storage permission.
-            locationsPermsCard.isVisible =
-                locationMode != LocationMode.SAF && !hasStoragePermission
+            locationsPermsCard.isVisible = locationMode != LocationMode.SAF && !hasStoragePermission
         }
     }
 

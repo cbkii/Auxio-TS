@@ -29,10 +29,7 @@ class StartupScanOriginTest {
     fun userVisibleOriginOverridesBackgroundOrigin() {
         assertEquals(
             StartupScanOrigin.USER_VISIBLE,
-            StartupScanOrigin.merge(
-                StartupScanOrigin.BACKGROUND,
-                StartupScanOrigin.USER_VISIBLE,
-            ),
+            StartupScanOrigin.merge(StartupScanOrigin.BACKGROUND, StartupScanOrigin.USER_VISIBLE),
         )
         assertEquals(
             StartupScanOrigin.USER_VISIBLE,

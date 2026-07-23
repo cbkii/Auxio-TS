@@ -697,10 +697,7 @@ constructor(
         }
     }
 
-    private fun startCompatibilityHydration(
-        worker: IndexingWorker,
-        origin: StartupScanOrigin,
-    ) {
+    private fun startCompatibilityHydration(worker: IndexingWorker, origin: StartupScanOrigin) {
         compatibilityHydrationJob?.cancel()
         val startingDeviceGeneration = deviceLibraryGeneration.get()
         val startingRevision = musicSettings.revision
