@@ -18,6 +18,15 @@ section = text[start:end]
 section = section.replace('old = dedent(', 'old = "    " + dedent(', 1)
 section = section.replace('new = dedent(', 'new = "    " + dedent(', 1)
 section = section.replace('.replace("\\n", "\\n    ", 1)', '.replace("\\n", "\\n    ")', 2)
+section = section.replace(
+    '    replace_once(path, old, new)\n',
+    '''    file = Path(path)\n'''
+    '''    source = file.read_text(encoding="utf-8")\n'''
+    '''    block_start = source.index("    private suspend fun exploreBounded(files: Channel<File>)")\n'''
+    '''    block_end = source.index("    private fun combineRootFingerprints", block_start)\n'''
+    '''    file.write_text(source[:block_start] + new + "\\n" + source[block_end:], encoding="utf-8", newline="\\n")\n''',
+    1,
+)
 text = text[:start] + section + text[end:]
 
 start = text.index('def patch_cover_provider()')
@@ -26,6 +35,15 @@ section = text[start:end]
 section = section.replace('old = dedent(', 'old = "        " + dedent(', 1)
 section = section.replace('new = dedent(', 'new = "        " + dedent(', 1)
 section = section.replace('.replace("\\n", "\\n        ", 1)', '.replace("\\n", "\\n        ")', 2)
+section = section.replace(
+    '    replace_once(path, old, new)\n',
+    '''    file = Path(path)\n'''
+    '''    source = file.read_text(encoding="utf-8")\n'''
+    '''    block_start = source.index("        return try {\\n            writerExecutor.execute")\n'''
+    '''    block_end = source.index("    override fun shutdown()", block_start)\n'''
+    '''    file.write_text(source[:block_start] + new + "\\n" + source[block_end:], encoding="utf-8", newline="\\n")\n''',
+    1,
+)
 text = text[:start] + section + text[end:]
 
 path.write_text(text, encoding='utf-8', newline='\n')
