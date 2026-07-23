@@ -23,19 +23,19 @@ jobs:
           ref: fix/first-launch-source-recovery
           fetch-depth: 0
           persist-credentials: false
-      - name: Apply comprehensive hardening
+      - name: Apply service hardening
         id: apply
         shell: bash
         run: |
           apply_status=0
-          python3 scripts/tmp-pr196-comprehensive-hardening.py > "${RUNNER_TEMP}/pr196-apply.log" 2>&1 || apply_status=$?
-          cat "${RUNNER_TEMP}/pr196-apply.log"
-          rm -f tmp-pr196-hardening-error.log
+          python3 scripts/tmp-pr196-service-hardening.py > "${RUNNER_TEMP}/pr196-service-apply.log" 2>&1 || apply_status=$?
+          cat "${RUNNER_TEMP}/pr196-service-apply.log"
+          rm -f tmp-pr196-service-error.log
           if [[ "${apply_status}" -ne 0 ]]; then
             {
-              printf 'PR #196 hardening patch failed with status %s\n\n' "${apply_status}"
-              cat "${RUNNER_TEMP}/pr196-apply.log"
-            } > tmp-pr196-hardening-error.log
+              printf 'PR #196 service hardening patch failed with status %s\n\n' "${apply_status}"
+              cat "${RUNNER_TEMP}/pr196-service-apply.log"
+            } > tmp-pr196-service-error.log
           fi
           printf 'apply_status=%s\n' "${apply_status}" >> "${GITHUB_OUTPUT}"
       - name: Set up JDK 21
@@ -63,7 +63,7 @@ jobs:
         if: steps.apply.outputs.apply_status == '0'
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-      - name: Format and verify scoped changes
+      - name: Format and run scoped unit tests
         if: steps.apply.outputs.apply_status == '0'
         id: verify
         shell: bash
@@ -72,18 +72,18 @@ jobs:
           test_status=0
           bash ./scripts/ci-gradle.sh spotlessKotlinApply spotlessXmlApply || format_status=$?
           if [[ "${format_status}" -eq 0 ]]; then
-            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > "${RUNNER_TEMP}/pr196-hardening-tests.log" 2>&1 || test_status=$?
-            cat "${RUNNER_TEMP}/pr196-hardening-tests.log"
+            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > "${RUNNER_TEMP}/pr196-service-tests.log" 2>&1 || test_status=$?
+            cat "${RUNNER_TEMP}/pr196-service-tests.log"
           fi
           if [[ "${format_status}" -ne 0 || "${test_status}" -ne 0 ]]; then
             {
-              printf 'PR #196 hardening verification. format=%s test=%s\n\n' "${format_status}" "${test_status}"
-              tail -n 500 "${RUNNER_TEMP}/pr196-hardening-tests.log" 2>/dev/null || true
-            } > tmp-pr196-hardening-error.log
+              printf 'PR #196 service hardening verification. format=%s test=%s\n\n' "${format_status}" "${test_status}"
+              tail -n 500 "${RUNNER_TEMP}/pr196-service-tests.log" 2>/dev/null || true
+            } > tmp-pr196-service-error.log
           fi
           printf 'format_status=%s\n' "${format_status}" >> "${GITHUB_OUTPUT}"
           printf 'test_status=%s\n' "${test_status}" >> "${GITHUB_OUTPUT}"
-      - name: Commit fixes or concise diagnostic
+      - name: Commit service fixes and remove temporary machinery
         if: always()
         shell: bash
         env:
@@ -93,12 +93,13 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u app musikr
-          git add app musikr tmp-pr196-hardening-error.log 2>/dev/null || true
-          if git diff --cached --quiet; then
-            echo '::error::Expected hardening changes or diagnostics were not staged.'
-            exit 1
-          fi
-          git commit -m 'fix: complete PR 196 hardening findings'
+          git add app musikr tmp-pr196-service-error.log 2>/dev/null || true
+          git rm .github/workflows/tmp-pr196-apply-hardening.yml
+          git rm scripts/tmp-pr196-comprehensive-hardening.py
+          git rm scripts/tmp-pr196-service-hardening.py
+          git rm -f tmp-pr196-hardening-error.log
+          git diff --cached --check
+          git commit -m 'fix: finalise PR 196 service and recovery hardening'
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin HEAD:fix/first-launch-source-recovery
       - name: Preserve verification result
@@ -114,7 +115,7 @@ jobs:
             exit "${APPLY_STATUS:-1}"
           fi
           if [[ "${FORMAT_STATUS:-1}" -ne 0 ]]; then
-            echo "::error::Formatting failed with status ${FORMAT_STATUS:-1}."
+            echo "::error::Formatting failed with status ${FORMAT_STATUS:-1}; diagnostic committed."
             exit "${FORMAT_STATUS:-1}"
           fi
           if [[ "${TEST_STATUS:-1}" -ne 0 ]]; then
