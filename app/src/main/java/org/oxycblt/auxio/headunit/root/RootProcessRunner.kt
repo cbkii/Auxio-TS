@@ -104,9 +104,20 @@ class RootProcessRunner @Inject constructor() {
 
         stdoutThread.joinQuietly(COLLECTOR_JOIN_TIMEOUT_MS)
         stderrThread.joinQuietly(COLLECTOR_JOIN_TIMEOUT_MS)
+        if (stdoutThread.isAlive || stderrThread.isAlive) {
+            process.inputStream.closeQuietly()
+            process.errorStream.closeQuietly()
+            stdoutThread.joinQuietly(TERMINATION_GRACE_MS)
+            stderrThread.joinQuietly(TERMINATION_GRACE_MS)
+            return RootProcessResult.ExecutionFailure("process output collectors did not finish")
+        }
         process.inputStream.closeQuietly()
         process.errorStream.closeQuietly()
 
+        val collectorFailure = stdout.failure ?: stderr.failure
+        if (collectorFailure != null) {
+            return RootProcessResult.ExecutionFailure("process output collection failed: $collectorFailure")
+        }
         if (stdout.exceeded || stderr.exceeded) {
             return RootProcessResult.OutputLimitExceeded
         }
@@ -174,6 +185,10 @@ class RootProcessRunner @Inject constructor() {
         var exceeded: Boolean = false
             private set
 
+        @Volatile
+        var failure: String? = null
+            private set
+
         override fun run() {
             val buffer = ByteArray(STREAM_BUFFER_BYTES)
             try {
@@ -184,8 +199,8 @@ class RootProcessRunner @Inject constructor() {
                     if (remaining > 0) output.write(buffer, 0, minOf(read, remaining))
                     if (read > remaining) exceeded = true
                 }
-            } catch (_: Exception) {
-                // Stream closure is expected when a timed-out process is terminated.
+            } catch (e: Exception) {
+                failure = e.javaClass.simpleName
             }
         }
 
@@ -210,7 +225,7 @@ class RootProcessRunner @Inject constructor() {
         const val DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024
         const val INITIAL_BUFFER_BYTES = 8 * 1024
         const val STREAM_BUFFER_BYTES = 4 * 1024
-        const val COLLECTOR_JOIN_TIMEOUT_MS = 500L
+        const val COLLECTOR_JOIN_TIMEOUT_MS = 2_000L
         const val PROCESS_POLL_INTERVAL_MS = 25L
         const val TERMINATION_GRACE_MS = 250L
         const val NANOS_PER_MILLISECOND = 1_000_000L
