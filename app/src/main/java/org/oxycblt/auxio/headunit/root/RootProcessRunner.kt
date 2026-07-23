@@ -116,7 +116,9 @@ class RootProcessRunner @Inject constructor() {
 
         val collectorFailure = stdout.failure ?: stderr.failure
         if (collectorFailure != null) {
-            return RootProcessResult.ExecutionFailure("process output collection failed: $collectorFailure")
+            return RootProcessResult.ExecutionFailure(
+                "process output collection failed: $collectorFailure"
+            )
         }
         if (stdout.exceeded || stderr.exceeded) {
             return RootProcessResult.OutputLimitExceeded
