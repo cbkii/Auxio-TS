@@ -18,15 +18,31 @@
 
 package org.oxycblt.auxio.home.list
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings as AndroidSettings
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
+import androidx.preference.PreferenceManager
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Calendar
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.home.HomeViewModel
 import org.oxycblt.auxio.list.ListFragment
@@ -37,11 +53,15 @@ import org.oxycblt.auxio.list.recycler.FastScrollRecyclerView
 import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.IndexingState
+import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.StartupLibraryPolicy
+import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
 import org.oxycblt.auxio.util.collectImmediately
+import org.oxycblt.auxio.util.showToast
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
@@ -62,13 +82,33 @@ class SongListFragment :
     override val playbackModel: PlaybackViewModel by activityViewModels()
     @Inject lateinit var homeSettings: HomeSettings
     @Inject lateinit var listSettings: org.oxycblt.auxio.list.ListSettings
+    @Inject lateinit var musicSettings: MusicSettings
+    @Inject lateinit var rootStateHolder: RootStateHolder
     private val songAdapter = SongAdapter(this)
 
     private var listSettingsListener: org.oxycblt.auxio.list.ListSettings.Listener? = null
     private var homeSettingsListener: org.oxycblt.auxio.home.HomeSettings.Listener? = null
+    private var currentRecoveryState =
+        LibraryRecoveryPolicy.State(LibraryRecoveryPolicy.Kind.HIDDEN, showProgress = false)
+
+    private val storagePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            markStoragePermissionRequested()
+            if (granted) {
+                musicModel.refresh()
+            } else if (isAdded) {
+                requireContext().showToast(R.string.recovery_permission_denied)
+            }
+            refreshRecoveryState()
+        }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentHomeListBinding.inflate(inflater)
+
+    override fun onResume() {
+        super.onResume()
+        if (view != null) refreshRecoveryState()
+    }
 
     override fun onBindingCreated(binding: FragmentHomeListBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
@@ -110,13 +150,22 @@ class SongListFragment :
         }
         binding.homeNoMusicMsg.text = getString(R.string.lng_empty_songs)
 
-        binding.homeNoMusicAction.setOnClickListener { homeModel.startChooseMusicLocations() }
+        binding.homeNoMusicAction.setOnClickListener {
+            handleRecoveryAction(currentRecoveryState.primary?.action)
+        }
+        binding.homeNoMusicSecondaryAction.setOnClickListener {
+            handleRecoveryAction(currentRecoveryState.secondary?.action)
+        }
+        binding.homeNoMusicTertiaryAction.setOnClickListener {
+            handleRecoveryAction(currentRecoveryState.tertiary?.action)
+        }
 
         collectImmediately(homeModel.songList, ::updateSongs)
         collectImmediately(
             homeModel.empty,
             musicModel.indexingState,
             musicModel.startupReadinessState,
+            musicModel.startupLibraryStatus,
             ::updateNoMusicIndicator,
         )
         collectImmediately(listModel.selected, ::updateSelection)
@@ -133,12 +182,17 @@ class SongListFragment :
         homeSettingsListener?.let { homeSettings.unregisterListener(it) }
         listSettingsListener = null
         homeSettingsListener = null
+        currentRecoveryState =
+            LibraryRecoveryPolicy.State(LibraryRecoveryPolicy.Kind.HIDDEN, showProgress = false)
         super.onDestroyBinding(binding)
         binding.homeRecycler.apply {
             adapter = null
             popupProvider = null
             listener = null
         }
+        binding.homeNoMusicAction.setOnClickListener(null)
+        binding.homeNoMusicSecondaryAction.setOnClickListener(null)
+        binding.homeNoMusicTertiaryAction.setOnClickListener(null)
     }
 
     override fun getPopupData(pos: Int): FastScrollRecyclerView.PopupProvider.PopupData? {
@@ -207,14 +261,159 @@ class SongListFragment :
         empty: Boolean,
         indexingState: IndexingState?,
         startupState: StartupReadinessState,
+        libraryStatus: StartupLibraryStatus,
     ) {
-        requireBinding()
-            .updateLibraryEmptyState(
-                empty = empty,
-                indexingState = indexingState,
-                startupState = startupState,
-                emptyMessage = R.string.lng_empty_songs,
+        val state =
+            LibraryRecoveryPolicy.resolve(
+                LibraryRecoveryPolicy.Input(
+                    empty = empty,
+                    indexingState = indexingState,
+                    startupState = startupState,
+                    libraryStatus = libraryStatus,
+                    locationMode = musicSettings.locationMode,
+                    sourceConfigured =
+                        StartupLibraryPolicy.isMusicSourceConfigured(
+                            musicSettings.locationMode,
+                            musicSettings.configuredSourceCount,
+                        ),
+                    storagePermissionGranted = hasStoragePermission(),
+                    rootSupported = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    rootEnabled = rootStateHolder.isUserEnabled(),
+                    lastScanFailed = musicSettings.lastScanFailed,
+                )
             )
+        currentRecoveryState = state
+        requireBinding().updateLibraryRecoveryState(state)
+    }
+
+    private fun refreshRecoveryState() {
+        if (view == null) return
+        updateNoMusicIndicator(
+            homeModel.empty.value,
+            musicModel.indexingState.value,
+            musicModel.startupReadinessState.value,
+            musicModel.startupLibraryStatus.value,
+        )
+    }
+
+    private fun handleRecoveryAction(action: LibraryRecoveryPolicy.Action?) {
+        when (action) {
+            LibraryRecoveryPolicy.Action.GRANT_PERMISSION -> requestStoragePermission()
+            LibraryRecoveryPolicy.Action.CHOOSE_SOURCE -> homeModel.startChooseMusicLocations()
+            LibraryRecoveryPolicy.Action.REFRESH -> musicModel.refresh()
+            LibraryRecoveryPolicy.Action.RESCAN -> confirmFullRescan()
+            LibraryRecoveryPolicy.Action.ENABLE_ROOT -> confirmRootAccess()
+            null -> Unit
+        }
+    }
+
+    private fun confirmFullRescan() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.recovery_action_rescan)
+            .setMessage(R.string.set_rescan_desc)
+            .setPositiveButton(android.R.string.ok) { _, _ -> musicModel.rescan() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun requestStoragePermission() {
+        val permission = requiredStoragePermission()
+        if (hasStoragePermission()) {
+            musicModel.refresh()
+            return
+        }
+        if (storagePermissionRequestedBefore() && !shouldShowRequestPermissionRationale(permission)) {
+            showOpenAppSettingsDialog()
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.recovery_permission_title)
+            .setMessage(R.string.recovery_permission_message)
+            .setPositiveButton(R.string.recovery_action_grant_permission) { _, _ ->
+                markStoragePermissionRequested()
+                storagePermissionLauncher.launch(permission)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showOpenAppSettingsDialog() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.recovery_permission_title)
+            .setMessage(R.string.recovery_permission_denied)
+            .setPositiveButton(R.string.recovery_action_open_settings) { _, _ ->
+                val intent =
+                    Intent(
+                        AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", requireContext().packageName, null),
+                    )
+                startActivity(intent)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun confirmRootAccess() {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            requireContext().showToast(R.string.recovery_root_unavailable)
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.recovery_root_title)
+            .setMessage(R.string.recovery_root_message)
+            .setPositiveButton(R.string.recovery_action_enable_root) { _, _ ->
+                rootStateHolder.setUserEnabled(true)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    val state = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
+                    if (!isAdded) return@launch
+                    requireContext().showToast(rootStateMessage(state))
+                    if (
+                        state == RootStateHolder.State.Available &&
+                            StartupLibraryPolicy.isMusicSourceConfigured(
+                                musicSettings.locationMode,
+                                musicSettings.configuredSourceCount,
+                            )
+                    ) {
+                        musicModel.refresh()
+                    }
+                    refreshRecoveryState()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun rootStateMessage(state: RootStateHolder.State): Int =
+        when (state) {
+            RootStateHolder.State.Available -> R.string.recovery_root_granted
+            RootStateHolder.State.Denied -> R.string.recovery_root_denied
+            RootStateHolder.State.TimedOut -> R.string.recovery_root_timed_out
+            RootStateHolder.State.Unknown,
+            RootStateHolder.State.Unavailable,
+            RootStateHolder.State.UnsupportedForVariant,
+            RootStateHolder.State.DisabledByUser -> R.string.recovery_root_unavailable
+        }
+
+    private fun requiredStoragePermission(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+    private fun hasStoragePermission(): Boolean =
+        ContextCompat.checkSelfPermission(requireContext(), requiredStoragePermission()) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun storagePermissionRequestedBefore(): Boolean =
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .getBoolean(KEY_STORAGE_PERMISSION_REQUESTED, false)
+
+    private fun markStoragePermissionRequested() {
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .edit()
+            .putBoolean(KEY_STORAGE_PERMISSION_REQUESTED, true)
+            .apply()
     }
 
     private fun updateSelection(selection: List<Music>) {
@@ -227,18 +426,21 @@ class SongListFragment :
     }
 
     /**
-     * A [SelectionIndicatorAdapter] that shows a list of [Song]s using [SongViewHolder].
+     * A [SelectionIndicatorAdapter] implementation for [Song]s.
      *
-     * @param listener An [SelectableListListener] to bind interactions to.
+     * @param listener The listener to pass to the [SongViewHolder] instances.
      */
     private class SongAdapter(private val listener: SelectableListListener<Song>) :
         SelectionIndicatorAdapter<Song, SongViewHolder>(SongViewHolder.DIFF_CALLBACK) {
-
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
             SongViewHolder.from(parent)
 
         override fun onBindViewHolder(holder: SongViewHolder, position: Int) {
             holder.bind(getItem(position), listener)
         }
+    }
+
+    private companion object {
+        const val KEY_STORAGE_PERMISSION_REQUESTED = "auxio_storage_permission_requested"
     }
 }
