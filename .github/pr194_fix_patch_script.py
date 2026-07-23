@@ -5,6 +5,13 @@ from pathlib import Path
 path = Path('.github/pr194_patch.py')
 text = path.read_text(encoding='utf-8')
 
+text = text.replace(
+    '    count = text.count(old)\n',
+    '    print(f"PATCH {path}: {old.splitlines()[0]!r}", flush=True)\n'
+    '    count = text.count(old)\n',
+    1,
+)
+
 start = text.index('def patch_direct_fs()')
 end = text.index('\ndef patch_root_listing()', start)
 section = text[start:end]
