@@ -227,9 +227,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
 
         // Set up grant permission card click
-        binding.locationsPermsCard.setOnClickListener {
-            showStoragePermissionExplanation()
-        }
+        binding.locationsPermsCard.setOnClickListener { showStoragePermissionExplanation() }
 
         // Initialize UI state
         updateModeUI(binding)
@@ -519,8 +517,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
         return try {
             val file = File(path)
-            val rawRootCandidate =
-                directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
+            val rawRootCandidate = directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
             when {
                 isRootBackedRawDirectPath(path, file, directTs18Path) ->
                     ManualPathValidation.ROOT_BACKED
