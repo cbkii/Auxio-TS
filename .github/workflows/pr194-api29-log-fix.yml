@@ -34,6 +34,7 @@ jobs:
 
           path = Path('.github/workflows/android.yml')
           lines = path.read_text(encoding='utf-8').splitlines()
+          expression = '$' + '{{ runner.temp }}'
 
           step = '      - name: Run API 29 compatibility and Room migration tests'
           step_indexes = [index for index, line in enumerate(lines) if line == step]
@@ -46,17 +47,17 @@ jobs:
               raise SystemExit('STOP: API29 Gradle log environment is already present')
           lines[step_index + 2:step_index + 2] = [
               '        env:',
-              '          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log',
+              f'          AUXIO_TS_CI_GRADLE_LOG: {expression}/api29-gradle.log',
           ]
 
-          artifact = '            ${{ runner.temp }}/api29-emulator.log'
+          artifact = f'            {expression}/api29-emulator.log'
           artifact_indexes = [index for index, line in enumerate(lines) if line == artifact]
           if len(artifact_indexes) != 1:
               raise SystemExit(
                   f'STOP: expected one API29 emulator artifact line, found {len(artifact_indexes)}'
               )
           artifact_index = artifact_indexes[0]
-          lines.insert(artifact_index + 1, '            ${{ runner.temp }}/api29-gradle.log')
+          lines.insert(artifact_index + 1, f'            {expression}/api29-gradle.log')
           path.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
           PY
 
