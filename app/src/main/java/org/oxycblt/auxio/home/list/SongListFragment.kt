@@ -322,7 +322,9 @@ class SongListFragment :
             musicModel.refresh()
             return
         }
-        if (storagePermissionRequestedBefore() && !shouldShowRequestPermissionRationale(permission)) {
+        if (
+            storagePermissionRequestedBefore() && !shouldShowRequestPermissionRationale(permission)
+        ) {
             showOpenAppSettingsDialog()
             return
         }
