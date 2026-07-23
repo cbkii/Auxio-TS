@@ -95,7 +95,7 @@ class SongListFragment :
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             markStoragePermissionRequested()
             if (granted) {
-                musicModel.refresh()
+                continueAfterStoragePermission()
             } else if (isAdded) {
                 requireContext().showToast(R.string.recovery_permission_denied)
             }
@@ -319,7 +319,7 @@ class SongListFragment :
     private fun requestStoragePermission() {
         val permission = requiredStoragePermission()
         if (hasStoragePermission()) {
-            musicModel.refresh()
+            continueAfterStoragePermission()
             return
         }
         if (
@@ -337,6 +337,19 @@ class SongListFragment :
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun continueAfterStoragePermission() {
+        val sourceConfigured =
+            StartupLibraryPolicy.isMusicSourceConfigured(
+                musicSettings.locationMode,
+                musicSettings.configuredSourceCount,
+            )
+        if (sourceConfigured) {
+            musicModel.refresh()
+        } else {
+            homeModel.startChooseMusicLocations()
+        }
     }
 
     private fun showOpenAppSettingsDialog() {

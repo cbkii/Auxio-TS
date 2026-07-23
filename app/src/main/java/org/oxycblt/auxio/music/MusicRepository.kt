@@ -510,7 +510,7 @@ constructor(
             L.w(e, "Bounded startup projection seed failed; continuing legacy hydration")
             emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
         }
-        startCompatibilityHydration(worker)
+        startCompatibilityHydration(worker, origin)
         startCompatibilityBackfill()
     }
 
@@ -697,7 +697,10 @@ constructor(
         }
     }
 
-    private fun startCompatibilityHydration(worker: IndexingWorker) {
+    private fun startCompatibilityHydration(
+        worker: IndexingWorker,
+        origin: StartupScanOrigin,
+    ) {
         compatibilityHydrationJob?.cancel()
         val startingDeviceGeneration = deviceLibraryGeneration.get()
         val startingRevision = musicSettings.revision
@@ -756,6 +759,7 @@ constructor(
                             priorState,
                             decision,
                             sourceConfigured,
+                            origin,
                         )
                     }
                 } catch (e: CancellationException) {
@@ -790,6 +794,7 @@ constructor(
                             priorState,
                             decision,
                             sourceConfigured,
+                            origin,
                         )
                     }
                 }
@@ -801,12 +806,13 @@ constructor(
         priorState: LibraryState,
         decision: StartupLibraryPolicy.Decision,
         sourceConfigured: Boolean,
+        origin: StartupScanOrigin,
     ) {
         if (
             priorState == LibraryState.USABLE &&
                 decision.requestScan &&
                 sourceConfigured &&
-                !BuildConfig.TOPWAY_COMPAT_FLAVOR
+                (!BuildConfig.TOPWAY_COMPAT_FLAVOR || origin.allowAutomaticScan)
         ) {
             worker.requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
         }

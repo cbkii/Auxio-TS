@@ -87,6 +87,8 @@ private constructor(
     private var currentIndexJob: Job? = null
     private var pendingIndexRequest: IndexRequest? = null
     private var startupJob: Job? = null
+    private var activeStartupOrigin: StartupScanOrigin? = null
+    private var pendingStartupOrigin: StartupScanOrigin? = null
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
     private val wakeLock =
@@ -114,6 +116,8 @@ private constructor(
     fun release() {
         startupJob?.cancel()
         startupJob = null
+        activeStartupOrigin = null
+        pendingStartupOrigin = null
         stopTracking()
         observationRequestJob?.cancel()
         observationRequestJob = null
@@ -133,14 +137,39 @@ private constructor(
     fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
         PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
             if (startupJob?.isActive == true) {
-                L.d("Startup library load already running; ignoring duplicate start")
+                val activePriority = activeStartupOrigin?.priority ?: 0
+                if (origin.priority > activePriority) {
+                    pendingStartupOrigin = StartupScanOrigin.merge(pendingStartupOrigin, origin)
+                    L.d(
+                        "Queued higher-priority startup origin while load is active " +
+                            "[active=$activeStartupOrigin pending=$pendingStartupOrigin]"
+                    )
+                } else {
+                    L.d(
+                        "Startup library load already running; ignoring duplicate " +
+                            "[active=$activeStartupOrigin requested=$origin]"
+                    )
+                }
                 return
             }
+            activeStartupOrigin = origin
             startupJob =
                 indexScope.launch {
-                    // Root probing is intentionally on-demand. Normal startup must restore
-                    // playback/session surfaces without waiting for su.
-                    musicRepository.startup(this@IndexingHolder, origin)
+                    try {
+                        // Root probing is intentionally on-demand. Normal startup must restore
+                        // playback/session surfaces without waiting for su.
+                        musicRepository.startup(this@IndexingHolder, origin)
+                    } finally {
+                        val nextOrigin =
+                            synchronized(this@IndexingHolder) {
+                                startupJob = null
+                                activeStartupOrigin = null
+                                pendingStartupOrigin.also { pendingStartupOrigin = null }
+                            }
+                        if (nextOrigin != null) {
+                            start(nextOrigin)
+                        }
+                    }
                 }
         }
     }

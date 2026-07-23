@@ -324,6 +324,14 @@ enum class StartupScanOrigin {
 
     val allowAutomaticScan: Boolean
         get() = this == USER_VISIBLE
+
+    internal val priority: Int
+        get() = if (allowAutomaticScan) 1 else 0
+
+    companion object {
+        fun merge(current: StartupScanOrigin?, next: StartupScanOrigin): StartupScanOrigin =
+            if (current == null || next.priority > current.priority) next else current
+    }
 }
 
 /** Cache mode constants for user-driven scan actions. */
