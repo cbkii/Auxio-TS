@@ -27,6 +27,13 @@ enum class PlaybackNotificationProfile {
     GenericDofun,
 }
 
+/** Pure state required to build the conventional generic playback notification. */
+data class GenericPlaybackNotificationState(
+    val actionKeyCodes: IntArray,
+    val ongoing: Boolean,
+    val deleteKeyCode: Int,
+)
+
 /** Pure policy for the Android-standard DoFun compatibility lane. */
 object DofunMediaCompatPolicy {
     val compactActionIndices: IntArray = intArrayOf(0, 1, 2)
@@ -49,11 +56,20 @@ object DofunMediaCompatPolicy {
     fun usesCanonicalWidgetControls(mode: Ts18LauncherIntegrationMode): Boolean =
         mode.usesGenericMediaNotification
 
-    fun genericActionKeyCodes(isPlaying: Boolean): IntArray =
-        intArrayOf(
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-            if (isPlaying) KeyEvent.KEYCODE_MEDIA_PAUSE else KeyEvent.KEYCODE_MEDIA_PLAY,
-            KeyEvent.KEYCODE_MEDIA_NEXT,
+    fun genericNotificationState(isPlaying: Boolean): GenericPlaybackNotificationState =
+        GenericPlaybackNotificationState(
+            actionKeyCodes =
+                intArrayOf(
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                    if (isPlaying) {
+                        KeyEvent.KEYCODE_MEDIA_PAUSE
+                    } else {
+                        KeyEvent.KEYCODE_MEDIA_PLAY
+                    },
+                    KeyEvent.KEYCODE_MEDIA_NEXT,
+                ),
+            ongoing = isPlaying,
+            deleteKeyCode = KeyEvent.KEYCODE_MEDIA_STOP,
         )
 
     fun isColdStartPlayKey(keyCode: Int): Boolean =

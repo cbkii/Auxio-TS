@@ -73,7 +73,9 @@ class DofunMediaCompatPolicyTest {
     }
 
     @Test
-    fun `generic actions are conventional previous play pause next`() {
+    fun `generic notification is previous play next while paused`() {
+        val state = DofunMediaCompatPolicy.genericNotificationState(isPlaying = false)
+
         assertArrayEquals(intArrayOf(0, 1, 2), DofunMediaCompatPolicy.compactActionIndices)
         assertArrayEquals(
             intArrayOf(
@@ -81,16 +83,26 @@ class DofunMediaCompatPolicyTest {
                 KeyEvent.KEYCODE_MEDIA_PLAY,
                 KeyEvent.KEYCODE_MEDIA_NEXT,
             ),
-            DofunMediaCompatPolicy.genericActionKeyCodes(isPlaying = false),
+            state.actionKeyCodes,
         )
+        assertFalse(state.ongoing)
+        assertEquals(KeyEvent.KEYCODE_MEDIA_STOP, state.deleteKeyCode)
+    }
+
+    @Test
+    fun `generic notification is previous pause next while playing`() {
+        val state = DofunMediaCompatPolicy.genericNotificationState(isPlaying = true)
+
         assertArrayEquals(
             intArrayOf(
                 KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                 KeyEvent.KEYCODE_MEDIA_PAUSE,
                 KeyEvent.KEYCODE_MEDIA_NEXT,
             ),
-            DofunMediaCompatPolicy.genericActionKeyCodes(isPlaying = true),
+            state.actionKeyCodes,
         )
+        assertTrue(state.ongoing)
+        assertEquals(KeyEvent.KEYCODE_MEDIA_STOP, state.deleteKeyCode)
     }
 
     @Test
