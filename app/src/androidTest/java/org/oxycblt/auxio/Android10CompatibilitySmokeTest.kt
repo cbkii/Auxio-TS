@@ -20,8 +20,8 @@ package org.oxycblt.auxio
 
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.os.Build
+import android.os.Environment
 import android.support.v4.media.MediaBrowserCompat
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
@@ -54,10 +54,9 @@ class Android10CompatibilitySmokeTest {
     @Test
     fun legacyStorageAndMediaComponentsArePresent() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val appInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
         assertTrue(
-            "Android 10 DirectFS requires requestLegacyExternalStorage",
-            appInfo.flags and ApplicationInfo.FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE != 0,
+            "Android 10 DirectFS requires legacy external-storage behaviour",
+            Environment.isExternalStorageLegacy(),
         )
 
         val service =
