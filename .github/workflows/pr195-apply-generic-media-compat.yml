@@ -1,5 +1,6 @@
 name: PR195 Apply Generic Media Compatibility
 
+# Temporary branch-local applicator. Removed after the implementation commit lands.
 on:
   push:
     branches:
