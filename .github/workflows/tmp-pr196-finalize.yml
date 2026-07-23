@@ -22,6 +22,9 @@ jobs:
         with:
           ref: fix/first-launch-source-recovery
           fetch-depth: 0
+      - name: Apply test interface fix
+        shell: bash
+        run: python3 scripts/tmp-pr196-test-fix.py
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
@@ -66,16 +69,17 @@ jobs:
 
           printf 'format_status=%s\n' "${format_status}" >> "${GITHUB_OUTPUT}"
           printf 'test_status=%s\n' "${test_status}" >> "${GITHUB_OUTPUT}"
-      - name: Commit deterministic formatting or diagnostic
+      - name: Commit deterministic fixes or diagnostic
         shell: bash
         run: |
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/test/java/org/oxycblt/auxio/playback/persist/PersistenceCancellationTest.kt
           git add -u app
           git add tmp-pr196-test-error.log 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m 'style: finalise source-recovery formatting and diagnostics'
+            git commit -m 'test: finalise source-recovery unit-test compatibility'
             git push origin HEAD:fix/first-launch-source-recovery
           fi
       - name: Preserve verification result
