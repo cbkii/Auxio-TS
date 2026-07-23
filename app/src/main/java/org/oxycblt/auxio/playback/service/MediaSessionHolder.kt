@@ -28,7 +28,6 @@ import android.net.Uri
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
-import android.view.KeyEvent
 import androidx.annotation.DrawableRes
 import androidx.car.app.mediaextensions.MetadataExtras
 import androidx.core.app.NotificationCompat
@@ -102,8 +101,7 @@ private constructor(
             )
     }
 
-    private val mediaButtonReceiver =
-        ComponentName(context, org.oxycblt.auxio.playback.service.MediaButtonReceiver::class.java)
+    private val mediaButtonReceiver = MediaButtonIntentFactory.receiverComponent(context)
     private val mediaButtonReceiverIntent =
         PendingIntent.getBroadcast(
             context,
@@ -742,7 +740,8 @@ private class PlaybackNotification(
     }
 
     private fun rebuildGenericActions() {
-        val keys = DofunMediaCompatPolicy.genericActionKeyCodes(isPlaying)
+        val state = DofunMediaCompatPolicy.genericNotificationState(isPlaying)
+        val keys = state.actionKeyCodes
         addAction(
             buildMediaButtonAction(
                 keys[0],
@@ -764,9 +763,9 @@ private class PlaybackNotification(
                 context.getString(R.string.desc_skip_next),
             )
         )
-        val stopIntent = buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_STOP)
+        val stopIntent = buildMediaButtonPendingIntent(state.deleteKeyCode)
         setDeleteIntent(stopIntent)
-        setOngoing(isPlaying)
+        setOngoing(state.ongoing)
         setStyle(
             MediaStyle(this)
                 .setMediaSession(sessionToken)
@@ -818,9 +817,7 @@ private class PlaybackNotification(
         PendingIntent.getBroadcast(
             context,
             keyCode,
-            Intent(Intent.ACTION_MEDIA_BUTTON)
-                .setComponent(mediaButtonReceiver)
-                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, keyCode)),
+            MediaButtonIntentFactory.receiverIntent(context, keyCode),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
