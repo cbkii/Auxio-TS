@@ -50,14 +50,14 @@ object MediaButtonActionMapper {
             return false
         }
         if (!isFocusHeld) {
-            return DofunMediaCompatPolicy.isColdStartPlayKey(keyCode)
+            return DofunMediaCompatPolicy.isColdStartPlayKey(keyCode) ||
+                (hasCurrentSong && keyCode == KeyEvent.KEYCODE_MEDIA_STOP)
         }
         if (!hasCurrentSong && !DofunMediaCompatPolicy.isColdStartPlayKey(keyCode)) {
             return false
         }
         return true
     }
-
 
     private fun isSupportedMediaKey(keyCode: Int): Boolean =
         when (keyCode) {
