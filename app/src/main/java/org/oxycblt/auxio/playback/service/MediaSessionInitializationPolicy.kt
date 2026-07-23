@@ -23,6 +23,6 @@ object MediaSessionInitializationPolicy {
     fun initialPlaybackState(): PlaybackStateCompat =
         PlaybackStateCompat.Builder()
             .setActions(MediaSessionInterface.ACTIONS)
-            .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f)
+            .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f, 0L)
             .build()
 }
