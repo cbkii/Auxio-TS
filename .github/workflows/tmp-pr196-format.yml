@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - fix/first-launch-source-recovery
+  pull_request:
+    branches:
+      - dev
 
 permissions:
   contents: read
 
 concurrency:
-  group: tmp-pr196-format-${{ github.ref }}
+  group: tmp-pr196-format-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
