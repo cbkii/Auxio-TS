@@ -24,14 +24,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Apply comprehensive hardening
+        id: apply
         shell: bash
-        run: python3 scripts/tmp-pr196-comprehensive-hardening.py
+        run: |
+          apply_status=0
+          python3 scripts/tmp-pr196-comprehensive-hardening.py > "${RUNNER_TEMP}/pr196-apply.log" 2>&1 || apply_status=$?
+          cat "${RUNNER_TEMP}/pr196-apply.log"
+          rm -f tmp-pr196-hardening-error.log
+          if [[ "${apply_status}" -ne 0 ]]; then
+            {
+              printf 'PR #196 hardening patch failed with status %s\n\n' "${apply_status}"
+              cat "${RUNNER_TEMP}/pr196-apply.log"
+            } > tmp-pr196-hardening-error.log
+          fi
+          printf 'apply_status=%s\n' "${apply_status}" >> "${GITHUB_OUTPUT}"
       - name: Set up JDK 21
+        if: steps.apply.outputs.apply_status == '0'
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
           java-version: '21'
       - name: Write local.properties
+        if: steps.apply.outputs.apply_status == '0'
         shell: bash
         run: |
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
@@ -41,13 +55,16 @@ jobs:
           fi
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
       - name: Set up Gradle
+        if: steps.apply.outputs.apply_status == '0'
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
           cache-read-only: true
       - name: Prepare CI environment
+        if: steps.apply.outputs.apply_status == '0'
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
       - name: Format and verify scoped changes
+        if: steps.apply.outputs.apply_status == '0'
         id: verify
         shell: bash
         run: |
@@ -58,7 +75,6 @@ jobs:
             bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > "${RUNNER_TEMP}/pr196-hardening-tests.log" 2>&1 || test_status=$?
             cat "${RUNNER_TEMP}/pr196-hardening-tests.log"
           fi
-          rm -f tmp-pr196-hardening-error.log
           if [[ "${format_status}" -ne 0 || "${test_status}" -ne 0 ]]; then
             {
               printf 'PR #196 hardening verification. format=%s test=%s\n\n' "${format_status}" "${test_status}"
@@ -68,6 +84,7 @@ jobs:
           printf 'format_status=%s\n' "${format_status}" >> "${GITHUB_OUTPUT}"
           printf 'test_status=%s\n' "${test_status}" >> "${GITHUB_OUTPUT}"
       - name: Commit fixes or concise diagnostic
+        if: always()
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,23 +95,29 @@ jobs:
           git add -u app musikr
           git add app musikr tmp-pr196-hardening-error.log 2>/dev/null || true
           if git diff --cached --quiet; then
-            echo '::error::Expected hardening changes were not staged.'
+            echo '::error::Expected hardening changes or diagnostics were not staged.'
             exit 1
           fi
           git commit -m 'fix: complete PR 196 hardening findings'
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin HEAD:fix/first-launch-source-recovery
       - name: Preserve verification result
+        if: always()
         shell: bash
         env:
+          APPLY_STATUS: ${{ steps.apply.outputs.apply_status }}
           FORMAT_STATUS: ${{ steps.verify.outputs.format_status }}
           TEST_STATUS: ${{ steps.verify.outputs.test_status }}
         run: |
-          if [[ "${FORMAT_STATUS}" -ne 0 ]]; then
-            echo "::error::Formatting failed with status ${FORMAT_STATUS}."
-            exit "${FORMAT_STATUS}"
+          if [[ "${APPLY_STATUS:-1}" -ne 0 ]]; then
+            echo "::error::Patch failed with status ${APPLY_STATUS:-1}; diagnostic committed."
+            exit "${APPLY_STATUS:-1}"
           fi
-          if [[ "${TEST_STATUS}" -ne 0 ]]; then
-            echo "::error::Unit tests failed with status ${TEST_STATUS}; diagnostic committed."
-            exit "${TEST_STATUS}"
+          if [[ "${FORMAT_STATUS:-1}" -ne 0 ]]; then
+            echo "::error::Formatting failed with status ${FORMAT_STATUS:-1}."
+            exit "${FORMAT_STATUS:-1}"
+          fi
+          if [[ "${TEST_STATUS:-1}" -ne 0 ]]; then
+            echo "::error::Unit tests failed with status ${TEST_STATUS:-1}; diagnostic committed."
+            exit "${TEST_STATUS:-1}"
           fi
