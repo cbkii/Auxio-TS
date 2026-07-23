@@ -48,11 +48,29 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
       - name: Format and run scoped unit tests
+        id: verify
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh spotlessKotlinApply
-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest
-      - name: Commit review fixes
+          format_status=0
+          test_status=0
+
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply || format_status=$?
+          if [[ "${format_status}" -eq 0 ]]; then
+            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > "${RUNNER_TEMP}/pr196-review-tests.log" 2>&1 || test_status=$?
+            cat "${RUNNER_TEMP}/pr196-review-tests.log"
+          fi
+
+          rm -f tmp-pr196-review-test-error.log
+          if [[ "${test_status}" -ne 0 ]]; then
+            {
+              printf 'PR #196 review-fix unit-test output. Exit status: %s\n\n' "${test_status}"
+              tail -n 400 "${RUNNER_TEMP}/pr196-review-tests.log"
+            } > tmp-pr196-review-test-error.log
+          fi
+
+          printf 'format_status=%s\n' "${format_status}" >> "${GITHUB_OUTPUT}"
+          printf 'test_status=%s\n' "${test_status}" >> "${GITHUB_OUTPUT}"
+      - name: Commit review fixes or concise diagnostic
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -67,9 +85,12 @@ jobs:
           git add app/src/main/java/org/oxycblt/auxio/music/StartupLibraryPolicy.kt
           git add app/src/main/java/org/oxycblt/auxio/music/service/IndexingHolder.kt
           git add app/src/main/java/org/oxycblt/auxio/music/service/MusicServiceFragment.kt
+          git add app/src/main/java/org/oxycblt/auxio/music/service/StartupScanAuthorityPolicy.kt
           git add app/src/main/res/values/strings_source_recovery.xml
           git add app/src/test/java/org/oxycblt/auxio/music/StartupScanOriginTest.kt
           git add app/src/test/java/org/oxycblt/auxio/playback/persist/PersistenceCancellationTest.kt
+          git add -u tmp-pr196-review-test-error.log 2>/dev/null || true
+          git add tmp-pr196-review-test-error.log 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "::error::Expected PR #196 review fixes were not staged."
             exit 1
@@ -77,3 +98,17 @@ jobs:
           git commit -m 'fix: address source-recovery review findings'
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push origin HEAD:fix/first-launch-source-recovery
+      - name: Preserve verification result
+        shell: bash
+        env:
+          FORMAT_STATUS: ${{ steps.verify.outputs.format_status }}
+          TEST_STATUS: ${{ steps.verify.outputs.test_status }}
+        run: |
+          if [[ "${FORMAT_STATUS}" -ne 0 ]]; then
+            echo "::error::spotlessKotlinApply failed with status ${FORMAT_STATUS}."
+            exit "${FORMAT_STATUS}"
+          fi
+          if [[ "${TEST_STATUS}" -ne 0 ]]; then
+            echo "::error::App unit tests failed with status ${TEST_STATUS}; concise output was committed."
+            exit "${TEST_STATUS}"
+          fi
