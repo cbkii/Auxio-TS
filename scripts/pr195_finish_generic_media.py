@@ -19,7 +19,6 @@ def replace_once(path: str, old: str, new: str) -> None:
 
 
 holder = "app/src/main/java/org/oxycblt/auxio/playback/service/MediaSessionHolder.kt"
-replace_once(holder, "import android.content.ComponentName\n", "")
 replace_once(
     holder,
     """    private val mediaButtonReceiver =
