@@ -167,7 +167,7 @@ No second session may be created.
 
 ### 4. Notification-channel diagnostics and recovery
 
-Add a bounded, user-visible diagnostic that reports:
+Add a bounded, user-visible playback-notification status row that reports:
 
 - package notifications enabled/disabled;
 - playback channel ID and current importance;

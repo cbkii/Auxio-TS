@@ -57,12 +57,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
             !MediaButtonActionMapper.shouldForward(
                 event,
                 hasCurrentSong = hasCurrentSong,
-                isFocusHeld =
-                    AudioFocusPolicy.shouldHandleMediaButton(
-                        isFocusHeld = isFocusHeld,
-                        hasCurrentSong = hasCurrentSong,
-                        sessionOngoing = hasCurrentSong,
-                    ),
+                isFocusHeld = isFocusHeld,
             )
         ) {
             L.d("Ignoring media button event after policy evaluation: $event")

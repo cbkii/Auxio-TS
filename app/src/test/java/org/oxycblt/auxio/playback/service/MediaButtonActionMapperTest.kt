@@ -145,13 +145,40 @@ class MediaButtonActionMapperTest {
     }
 
     @Test
-    fun `rejects media keys when focus is not held`() {
+    fun `allows only play-like cold start keys when focus is not held`() {
+        assertTrue(
+            MediaButtonActionMapper.shouldForward(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_MEDIA_PLAY,
+                repeatCount = 0,
+                hasCurrentSong = false,
+                isFocusHeld = false,
+            )
+        )
+        assertTrue(
+            MediaButtonActionMapper.shouldForward(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                repeatCount = 0,
+                hasCurrentSong = true,
+                isFocusHeld = false,
+            )
+        )
         assertFalse(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
                 keyCode = KeyEvent.KEYCODE_MEDIA_NEXT,
                 repeatCount = 0,
                 hasCurrentSong = true,
+                isFocusHeld = false,
+            )
+        )
+        assertFalse(
+            MediaButtonActionMapper.shouldForward(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_MEDIA_PAUSE,
+                repeatCount = 0,
+                hasCurrentSong = false,
                 isFocusHeld = false,
             )
         )

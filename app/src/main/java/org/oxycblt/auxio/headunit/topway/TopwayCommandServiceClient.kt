@@ -20,6 +20,7 @@ package org.oxycblt.auxio.headunit.topway
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Binder
@@ -32,6 +33,7 @@ import android.os.Parcel
 import android.os.RemoteException
 import android.view.KeyEvent
 import androidx.core.content.ContextCompat
+import androidx.preference.PreferenceManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,6 +60,15 @@ constructor(
     private val journal: DiagnosticJournal,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    private var requestedServiceClass: Class<out AuxioService>? = null
+    private var preferenceListenerRegistered = false
+    private val modePreferenceListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == Ts18LauncherIntegrationMode.PREF_KEY) {
+                mainHandler.post(::reconcileMode)
+            }
+        }
     private var workerThread: HandlerThread? = null
     private var workerHandler: Handler? = null
 
@@ -126,10 +137,49 @@ constructor(
             }
         }
 
-    /** Starts a bounded, idempotent bind for the concrete Auxio service component in use. */
+    /** Tracks the service owner and binds only for an explicitly selected fallback mode. */
     @Synchronized
     fun attach(serviceClass: Class<out AuxioService>) {
         if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        requestedServiceClass = serviceClass
+        if (!preferenceListenerRegistered) {
+            prefs.registerOnSharedPreferenceChangeListener(modePreferenceListener)
+            preferenceListenerRegistered = true
+        }
+        reconcileMode()
+    }
+
+    /** Releases the optional adapter without touching Auxio's canonical Android media stack. */
+    @Synchronized
+    fun release() {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        requestedServiceClass = null
+        pendingServiceClass = null
+        if (preferenceListenerRegistered) {
+            prefs.unregisterOnSharedPreferenceChangeListener(modePreferenceListener)
+            preferenceListenerRegistered = false
+        }
+        if (attached) {
+            beginRelease()
+        } else if (!releaseInProgress) {
+            stopWorker()
+        }
+    }
+
+    @Synchronized
+    private fun reconcileMode() {
+        val serviceClass = requestedServiceClass ?: return
+        val mode = coordinator.mode
+        if (!mode.bindsTopwayCommandService) {
+            pendingServiceClass = null
+            if (attached) {
+                log("Bind disabled by profile", mode.name)
+                beginRelease()
+            } else {
+                log("Bind suppressed", mode.name)
+            }
+            return
+        }
         if (attached) {
             if (ownerServiceClass != serviceClass) {
                 log(
@@ -147,16 +197,15 @@ constructor(
         startAttach(serviceClass)
     }
 
-    /** Unregisters callbacks and releases only resources owned by this adapter. */
     @Synchronized
-    fun release() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !attached) return
+    private fun beginRelease() {
+        if (!attached) return
         attached = false
         ownerServiceClass = null
         releaseInProgress = true
         mainHandler.removeCallbacks(retryRunnable)
         retryScheduled = false
-        log("Release")
+        log("Release binding")
 
         val worker = workerHandler
         if (
@@ -184,7 +233,10 @@ constructor(
     private fun finishRelease() {
         unbindIfNeeded()
         releaseInProgress = false
-        val pending = pendingServiceClass
+        val pending =
+            pendingServiceClass?.takeIf {
+                requestedServiceClass != null && coordinator.mode.bindsTopwayCommandService
+            }
         pendingServiceClass = null
         if (pending != null) {
             startAttach(pending)

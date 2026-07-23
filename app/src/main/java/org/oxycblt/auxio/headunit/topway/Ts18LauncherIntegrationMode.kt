@@ -23,6 +23,7 @@ import org.oxycblt.auxio.BuildConfig
 enum class Ts18LauncherIntegrationMode {
     Disabled,
     AndroidMediaSessionOnly,
+    GenericDofunMedia,
     TopwayBroadcastOnly,
     TopwayCommandOnly,
     TopwayBroadcastAndCommand,
@@ -44,11 +45,17 @@ enum class Ts18LauncherIntegrationMode {
     val diagnosticsOnly: Boolean
         get() = this == DiagnosticsOnly
 
+    val usesGenericMediaNotification: Boolean
+        get() = this == GenericDofunMedia
+
+    val bindsTopwayCommandService: Boolean
+        get() = handlesTopwayCommands || diagnosticsOnly
+
     companion object {
         const val PREF_KEY = "auxio_ts18_launcher_integration_mode"
 
         fun default(): Ts18LauncherIntegrationMode =
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) AutoAllSafePaths else AndroidMediaSessionOnly
+            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) GenericDofunMedia else AndroidMediaSessionOnly
 
         fun fromPreference(value: String?): Ts18LauncherIntegrationMode =
             entries.firstOrNull { it.name == value } ?: default()

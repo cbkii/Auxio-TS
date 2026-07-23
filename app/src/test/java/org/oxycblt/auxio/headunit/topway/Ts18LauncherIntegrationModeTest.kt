@@ -28,7 +28,7 @@ class Ts18LauncherIntegrationModeTest {
     fun `default follows build flavor`() {
         val expected =
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                Ts18LauncherIntegrationMode.AutoAllSafePaths
+                Ts18LauncherIntegrationMode.GenericDofunMedia
             } else {
                 Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
             }
@@ -38,6 +38,10 @@ class Ts18LauncherIntegrationModeTest {
 
     @Test
     fun `mode gating matches launcher plan`() {
+        assertTrue(Ts18LauncherIntegrationMode.GenericDofunMedia.usesGenericMediaNotification)
+        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.sendsTopwayBroadcasts)
+        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.handlesTopwayCommands)
+        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.bindsTopwayCommandService)
         assertFalse(Ts18LauncherIntegrationMode.Disabled.sendsTopwayBroadcasts)
         assertFalse(Ts18LauncherIntegrationMode.DiagnosticsOnly.handlesTopwayCommands)
         assertTrue(Ts18LauncherIntegrationMode.TopwayBroadcastOnly.sendsTopwayBroadcasts)
@@ -46,5 +50,7 @@ class Ts18LauncherIntegrationModeTest {
         assertFalse(Ts18LauncherIntegrationMode.TopwayCommandOnly.sendsTopwayBroadcasts)
         assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.sendsTopwayBroadcasts)
         assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.handlesTopwayCommands)
+        assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.bindsTopwayCommandService)
+        assertTrue(Ts18LauncherIntegrationMode.DiagnosticsOnly.bindsTopwayCommandService)
     }
 }
