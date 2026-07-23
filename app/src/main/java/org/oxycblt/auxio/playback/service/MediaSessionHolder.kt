@@ -28,11 +28,11 @@ import android.net.Uri
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.KeyEvent
 import androidx.annotation.DrawableRes
 import androidx.car.app.mediaextensions.MetadataExtras
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
-import androidx.media.session.MediaButtonReceiver as AndroidXMediaButtonReceiver
 import coil3.size.Size
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -762,11 +762,7 @@ private class PlaybackNotification(
                 context.getString(R.string.desc_skip_next),
             )
         )
-        val stopIntent =
-            AndroidXMediaButtonReceiver.buildMediaButtonPendingIntent(
-                context,
-                android.view.KeyEvent.KEYCODE_MEDIA_STOP,
-            )
+        val stopIntent = buildMediaButtonPendingIntent(KeyEvent.KEYCODE_MEDIA_STOP)
         setDeleteIntent(stopIntent)
         setOngoing(isPlaying)
         setStyle(
@@ -813,12 +809,18 @@ private class PlaybackNotification(
         @DrawableRes iconRes: Int,
         title: String,
     ): NotificationCompat.Action =
-        NotificationCompat.Action.Builder(
-                iconRes,
-                title,
-                AndroidXMediaButtonReceiver.buildMediaButtonPendingIntent(context, keyCode),
-            )
+        NotificationCompat.Action.Builder(iconRes, title, buildMediaButtonPendingIntent(keyCode))
             .build()
+
+    private fun buildMediaButtonPendingIntent(keyCode: Int): PendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            keyCode,
+            Intent(Intent.ACTION_MEDIA_BUTTON)
+                .setComponent(mediaButtonReceiver)
+                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, keyCode)),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
     private fun buildPlayPauseAction(
         context: Context,

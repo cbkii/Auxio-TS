@@ -4,7 +4,10 @@
 
 Implementation specification for the draft PR that supersedes the current TS18 launcher strategy with a standards-first, evidence-driven generic media compatibility path.
 
-Repository evidence and automated tests can validate code structure and Android contracts. Exact TS18/DoFun acceptance remains **Requires device validation**.
+- **Evidence status:** Observed for repository structure, Android media contracts and the captured blocked Auxio playback channel; Inferred for DoFun's use of the generic notification/MediaSession lane.
+- **Confidence:** Medium for Android standards compatibility; low-to-medium for exact fixed-widget recognition until physical validation.
+- **Porting decision:** Implement and default to the standards-first generic profile on Topway variants, retain explicit legacy adapters as bounded fallbacks, and do not claim exact DoFun acceptance from CI.
+- **Device validation:** Exact TS18/DoFun acceptance remains **Requires device validation**.
 
 ## Problem statement
 
