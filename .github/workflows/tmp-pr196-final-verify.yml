@@ -1,9 +1,9 @@
 name: Temporary PR196 final verification
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/first-launch-source-recovery
+      - 'cx/**'
 
 permissions:
   contents: read
