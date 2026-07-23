@@ -35,7 +35,6 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.ObservationMode
 import org.oxycblt.auxio.music.RootAccessPolicy
-import org.oxycblt.auxio.music.StartupScanOrigin
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.PerfTimer
@@ -87,6 +86,7 @@ private constructor(
     private var currentIndexJob: Job? = null
     private var pendingIndexRequest: IndexRequest? = null
     private var startupJob: Job? = null
+    private var attached = false
     private var activeStartupOrigin: StartupScanOrigin? = null
     private var pendingStartupOrigin: StartupScanOrigin? = null
     private val indexingNotification = IndexingNotification(workerContext)
@@ -103,6 +103,10 @@ private constructor(
     private val observationBurstGate = ObservationBurstGate()
 
     fun attach() {
+        synchronized(this) {
+            if (attached) return
+            attached = true
+        }
         musicSettings.registerListener(this)
         musicRepository.addUpdateListener(this)
         musicRepository.addIndexingListener(this)
@@ -114,10 +118,17 @@ private constructor(
     }
 
     fun release() {
-        startupJob?.cancel()
-        startupJob = null
-        activeStartupOrigin = null
-        pendingStartupOrigin = null
+        val startupToCancel =
+            synchronized(this) {
+                if (!attached) return
+                attached = false
+                startupJob.also {
+                    startupJob = null
+                    activeStartupOrigin = null
+                    pendingStartupOrigin = null
+                }
+            }
+        startupToCancel?.cancel()
         stopTracking()
         observationRequestJob?.cancel()
         observationRequestJob = null
@@ -136,6 +147,10 @@ private constructor(
     @Synchronized
     fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
         PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
+            if (!attached) {
+                L.d("Ignoring startup request after IndexingHolder release [origin=$origin]")
+                return
+            }
             if (startupJob?.isActive == true) {
                 val activePriority = activeStartupOrigin?.priority ?: 0
                 if (origin.priority > activePriority) {
@@ -152,20 +167,35 @@ private constructor(
                 }
                 return
             }
+            val automaticScanAllowed =
+                StartupScanAuthorityPolicy.allowAutomaticScan(
+                    topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    origin = origin,
+                )
             activeStartupOrigin = origin
             startupJob =
                 indexScope.launch {
                     try {
                         // Root probing is intentionally on-demand. Normal startup must restore
                         // playback/session surfaces without waiting for su.
-                        musicRepository.startup(this@IndexingHolder, origin)
+                        musicRepository.startup(this@IndexingHolder, automaticScanAllowed)
                     } finally {
                         val nextOrigin =
                             synchronized(this@IndexingHolder) {
-                                startupJob = null
-                                activeStartupOrigin = null
-                                pendingStartupOrigin.also { pendingStartupOrigin = null }
+                                if (!attached) {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    pendingStartupOrigin = null
+                                    null
+                                } else {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    pendingStartupOrigin.also { pendingStartupOrigin = null }
+                                }
                             }
+                        // start() rechecks attached under the same monitor, closing the release
+                        // race
+                        // between capturing a queued origin and handing it off.
                         if (nextOrigin != null) {
                             start(nextOrigin)
                         }

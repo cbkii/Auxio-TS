@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.headunit.prestart
 
 import android.content.Context
+import android.text.format.DateUtils
 import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -86,11 +87,14 @@ class EarlyPrestartSettings @Inject constructor(@ApplicationContext context: Con
                     appContext.getString(R.string.set_early_prestart_status_start_failed)
             }
         return if (lastRunEpochMs > 0L) {
-            appContext.getString(
-                R.string.set_early_prestart_status_with_time,
-                state,
-                lastRunEpochMs,
-            )
+            val formatted =
+                DateUtils.getRelativeTimeSpanString(
+                        lastRunEpochMs,
+                        System.currentTimeMillis(),
+                        DateUtils.MINUTE_IN_MILLIS,
+                    )
+                    .toString()
+            appContext.getString(R.string.set_early_prestart_status_with_time, state, formatted)
         } else {
             state
         }

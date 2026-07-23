@@ -208,10 +208,7 @@ interface MusicRepository {
      *
      * @param worker The [IndexingWorker] to use for initial loading.
      */
-    suspend fun startup(
-        worker: IndexingWorker,
-        origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND,
-    )
+    suspend fun startup(worker: IndexingWorker, automaticScanAllowed: Boolean = true)
 
     /**
      * Re-index the music library. This will trigger a call to [IndexingWorker.requestIndex] on the
@@ -466,8 +463,10 @@ constructor(
         (cache as? IncrementalCache)?.invalidateSource(sourceKey)
     }
 
-    override suspend fun startup(worker: IndexingWorker, origin: StartupScanOrigin) {
-        PerfTimer.traceSuspend("MusicRepository.startup(origin=$origin)") {
+    override suspend fun startup(worker: IndexingWorker, automaticScanAllowed: Boolean) {
+        PerfTimer.traceSuspend(
+            "MusicRepository.startup(automaticScanAllowed=$automaticScanAllowed)"
+        ) {
             val start = System.currentTimeMillis()
             L.i("Music system starting...")
             val decision =
@@ -477,7 +476,6 @@ constructor(
                     priorState = musicSettings.libraryState,
                     deferCachedLoad = true,
                     lastScanFailed = { musicSettings.lastScanFailed },
-                    isTopwayCompat = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     loadCachedLibrary = { 0 },
                     cachedSongCount = { 0 },
                     emitCachedLibrary = {},
@@ -493,11 +491,11 @@ constructor(
                             musicSettings.locationMode,
                             musicSettings.configuredSourceCount,
                         ),
-                    allowAutomaticScan = origin.allowAutomaticScan,
+                    automaticScanAllowed = automaticScanAllowed,
                 )
             L.d(
                 "Startup policy completed in ${System.currentTimeMillis() - start}ms " +
-                    "[origin=$origin state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
+                    "[automaticScanAllowed=$automaticScanAllowed state=${decision.libraryState}, scan=${decision.requestScan}, reason=${decision.reason}]"
             )
         }
         try {
@@ -510,7 +508,7 @@ constructor(
             L.w(e, "Bounded startup projection seed failed; continuing legacy hydration")
             emitStartupLibraryStatus(StartupLibraryStatus.CacheUnavailable)
         }
-        startCompatibilityHydration(worker, origin)
+        startCompatibilityHydration(worker, automaticScanAllowed)
         startCompatibilityBackfill()
     }
 
@@ -697,7 +695,7 @@ constructor(
         }
     }
 
-    private fun startCompatibilityHydration(worker: IndexingWorker, origin: StartupScanOrigin) {
+    private fun startCompatibilityHydration(worker: IndexingWorker, automaticScanAllowed: Boolean) {
         compatibilityHydrationJob?.cancel()
         val startingDeviceGeneration = deviceLibraryGeneration.get()
         val startingRevision = musicSettings.revision
@@ -756,7 +754,7 @@ constructor(
                             priorState,
                             decision,
                             sourceConfigured,
-                            origin,
+                            automaticScanAllowed,
                         )
                     }
                 } catch (e: CancellationException) {
@@ -791,7 +789,7 @@ constructor(
                             priorState,
                             decision,
                             sourceConfigured,
-                            origin,
+                            automaticScanAllowed,
                         )
                     }
                 }
@@ -803,13 +801,13 @@ constructor(
         priorState: LibraryState,
         decision: StartupLibraryPolicy.Decision,
         sourceConfigured: Boolean,
-        origin: StartupScanOrigin,
+        automaticScanAllowed: Boolean,
     ) {
         if (
             priorState == LibraryState.USABLE &&
                 decision.requestScan &&
                 sourceConfigured &&
-                (!BuildConfig.TOPWAY_COMPAT_FLAVOR || origin.allowAutomaticScan)
+                automaticScanAllowed
         ) {
             worker.requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
         }

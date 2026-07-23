@@ -160,7 +160,7 @@ class BootReceiver : BroadcastReceiver() {
             val serviceIntent =
                 Intent(context, serviceClass)
                     .setAction(AuxioService.ACTION_EARLY_PRESTART)
-                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
+                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
             ContextCompat.startForegroundService(context, serviceIntent)
             journal.log(
                 DiagnosticJournal.CAT_BOOT,

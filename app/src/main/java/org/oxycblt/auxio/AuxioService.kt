@@ -47,8 +47,8 @@ import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceClient
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.StartupReadinessController
 import org.oxycblt.auxio.music.StartupReadinessState
-import org.oxycblt.auxio.music.StartupScanOrigin
 import org.oxycblt.auxio.music.service.MusicServiceFragment
+import org.oxycblt.auxio.music.service.StartupScanOrigin
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
 import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber

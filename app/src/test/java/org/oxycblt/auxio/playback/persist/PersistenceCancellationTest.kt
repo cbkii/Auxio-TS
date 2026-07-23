@@ -34,7 +34,6 @@ import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
-import org.oxycblt.auxio.music.StartupScanOrigin
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.musikr.Library
@@ -316,7 +315,7 @@ class PersistenceCancellationTest {
 
         override suspend fun startup(
             worker: MusicRepository.IndexingWorker,
-            origin: StartupScanOrigin,
+            automaticScanAllowed: Boolean,
         ) = Unit
 
         override suspend fun index(worker: MusicRepository.IndexingWorker, withCache: Boolean) =

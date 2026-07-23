@@ -23,6 +23,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
+import org.oxycblt.auxio.music.service.StartupScanOrigin
 
 class StartupScanOriginTest {
     @Test
@@ -50,7 +52,6 @@ class StartupScanOriginTest {
                 priorState = LibraryState.NEVER,
                 deferCachedLoad = true,
                 lastScanFailed = { false },
-                isTopwayCompat = true,
                 loadCachedLibrary = { Unit },
                 cachedSongCount = { 0 },
                 emitCachedLibrary = {},
@@ -58,7 +59,11 @@ class StartupScanOriginTest {
                 setLibraryState = {},
                 requestIndex = { requests++ },
                 sourceConfigured = true,
-                allowAutomaticScan = StartupScanOrigin.USER_VISIBLE.allowAutomaticScan,
+                automaticScanAllowed =
+                    StartupScanAuthorityPolicy.allowAutomaticScan(
+                        topwayCompatFlavor = true,
+                        origin = StartupScanOrigin.USER_VISIBLE,
+                    ),
             )
 
         assertTrue(decision.requestScan)
@@ -76,7 +81,6 @@ class StartupScanOriginTest {
                     priorState = LibraryState.NEVER,
                     deferCachedLoad = true,
                     lastScanFailed = { false },
-                    isTopwayCompat = true,
                     loadCachedLibrary = { Unit },
                     cachedSongCount = { 0 },
                     emitCachedLibrary = {},
@@ -84,12 +88,26 @@ class StartupScanOriginTest {
                     setLibraryState = {},
                     requestIndex = { requests++ },
                     sourceConfigured = true,
-                    allowAutomaticScan = origin.allowAutomaticScan,
+                    automaticScanAllowed =
+                        StartupScanAuthorityPolicy.allowAutomaticScan(
+                            topwayCompatFlavor = true,
+                            origin = origin,
+                        ),
                 )
 
             assertFalse(decision.requestScan)
             assertEquals(0, requests)
         }
+    }
+
+    @Test
+    fun standardBackgroundRetainsAutomaticFirstStartScan() {
+        assertTrue(
+            StartupScanAuthorityPolicy.allowAutomaticScan(
+                topwayCompatFlavor = false,
+                origin = StartupScanOrigin.BACKGROUND,
+            )
+        )
     }
 
     @Test
@@ -102,7 +120,6 @@ class StartupScanOriginTest {
                 priorState = LibraryState.NEVER,
                 deferCachedLoad = true,
                 lastScanFailed = { false },
-                isTopwayCompat = true,
                 loadCachedLibrary = { Unit },
                 cachedSongCount = { 0 },
                 emitCachedLibrary = {},
@@ -110,7 +127,7 @@ class StartupScanOriginTest {
                 setLibraryState = {},
                 requestIndex = { requests++ },
                 sourceConfigured = false,
-                allowAutomaticScan = true,
+                automaticScanAllowed = true,
             )
 
         assertFalse(decision.requestScan)

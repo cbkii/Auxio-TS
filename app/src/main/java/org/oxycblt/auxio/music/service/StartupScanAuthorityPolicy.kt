@@ -41,8 +41,6 @@ enum class StartupScanOrigin {
  * historical automatic first-start behaviour.
  */
 object StartupScanAuthorityPolicy {
-    fun allowAutomaticScan(
-        topwayCompatFlavor: Boolean,
-        origin: StartupScanOrigin,
-    ): Boolean = !topwayCompatFlavor || origin == StartupScanOrigin.USER_VISIBLE
+    fun allowAutomaticScan(topwayCompatFlavor: Boolean, origin: StartupScanOrigin): Boolean =
+        !topwayCompatFlavor || origin == StartupScanOrigin.USER_VISIBLE
 }

@@ -223,7 +223,6 @@ object StartupLibraryStartup {
         priorState: LibraryState,
         deferCachedLoad: Boolean = false,
         lastScanFailed: () -> Boolean,
-        isTopwayCompat: Boolean,
         loadCachedLibrary: suspend () -> T,
         cachedSongCount: (T) -> Int,
         emitCachedLibrary: suspend (T) -> Unit,
@@ -233,7 +232,7 @@ object StartupLibraryStartup {
         setStartupReadinessState: (StartupReadinessState) -> Unit = {},
         setStartupLibraryStatus: (StartupLibraryStatus) -> Unit = {},
         sourceConfigured: Boolean = true,
-        allowAutomaticScan: Boolean = !isTopwayCompat,
+        automaticScanAllowed: Boolean = true,
     ): StartupLibraryPolicy.Decision {
         setStartupReadinessState(StartupReadinessState.ProcessVisible)
         setStartupLibraryStatus(StartupLibraryStatus.Unknown)
@@ -287,10 +286,9 @@ object StartupLibraryStartup {
                 )
             }
 
-        // Source availability and start origin are separate authorities. Never scan with no
-        // configured source. Standard Android launches retain their historic automatic behaviour;
-        // Topway launches scan automatically only when the caller identifies a user-visible start.
-        if (!sourceConfigured || (isTopwayCompat && !allowAutomaticScan)) {
+        // Source availability and caller-provided scan authority are separate. The shared
+        // startup core never infers build flavour, boot state or vehicle lifecycle.
+        if (!sourceConfigured || !automaticScanAllowed) {
             decision = decision.copy(requestScan = false)
         }
 
@@ -313,24 +311,6 @@ object StartupLibraryStartup {
             requestIndex(MusicScanRequestMode.REFRESH_WITH_CACHE)
         }
         return decision
-    }
-}
-
-/** Origin of a startup request, used to keep TS18 scanning user- and boot-aware. */
-enum class StartupScanOrigin {
-    USER_VISIBLE,
-    BACKGROUND,
-    EARLY_PRESTART;
-
-    val allowAutomaticScan: Boolean
-        get() = this == USER_VISIBLE
-
-    internal val priority: Int
-        get() = if (allowAutomaticScan) 1 else 0
-
-    companion object {
-        fun merge(current: StartupScanOrigin?, next: StartupScanOrigin): StartupScanOrigin =
-            if (current == null || next.priority > current.priority) next else current
     }
 }
 

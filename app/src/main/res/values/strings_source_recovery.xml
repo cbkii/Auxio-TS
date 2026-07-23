@@ -40,7 +40,7 @@
     <string name="set_early_prestart_status_timed_out">Preparation timed out safely</string>
     <string name="set_early_prestart_status_root_disabled">Skipped because root access was disabled</string>
     <string name="set_early_prestart_status_start_failed">The existing service could not be started</string>
-    <string name="set_early_prestart_status_with_time">%1$s (epoch ms %2$d)</string>
+    <string name="set_early_prestart_status_with_time">%1$s (%2$s)</string>
 
     <string name="notification_early_prestart_channel">Early music preparation</string>
     <string name="notification_early_prestart_title">Preparing music library</string>
