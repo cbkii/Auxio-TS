@@ -33,36 +33,31 @@ jobs:
           from pathlib import Path
 
           path = Path('.github/workflows/android.yml')
-          text = path.read_text(encoding='utf-8')
-          old = '''      - name: Run API 29 compatibility and Room migration tests
-                shell: bash
-                run: |
-                  bash ./scripts/ci-gradle.sh \\
-                    :app:connectedStandardDebugAndroidTest \\
-                    :musikr:connectedDebugAndroidTest
-          '''.replace('          ', '', 1)
-          new = '''      - name: Run API 29 compatibility and Room migration tests
-                shell: bash
-                env:
-                  AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log
-                run: |
-                  bash ./scripts/ci-gradle.sh \\
-                    :app:connectedStandardDebugAndroidTest \\
-                    :musikr:connectedDebugAndroidTest
-          '''.replace('          ', '', 1)
-          if text.count(old) != 1:
-              raise SystemExit(f'STOP: expected one API29 Gradle step, found {text.count(old)}')
-          text = text.replace(old, new)
-          old_artifact = '''            ${{ runner.temp }}/api29-emulator.log
-          '''.replace('          ', '', 1)
-          new_artifact = '''            ${{ runner.temp }}/api29-emulator.log
-                      ${{ runner.temp }}/api29-gradle.log
-          '''.replace('          ', '', 1)
-          if text.count(old_artifact) != 1:
+          lines = path.read_text(encoding='utf-8').splitlines()
+
+          step = '      - name: Run API 29 compatibility and Room migration tests'
+          step_indexes = [index for index, line in enumerate(lines) if line == step]
+          if len(step_indexes) != 1:
+              raise SystemExit(f'STOP: expected one API29 Gradle step, found {len(step_indexes)}')
+          step_index = step_indexes[0]
+          if lines[step_index + 1] != '        shell: bash':
+              raise SystemExit('STOP: API29 Gradle step structure changed')
+          if lines[step_index + 2].strip() == 'env:':
+              raise SystemExit('STOP: API29 Gradle log environment is already present')
+          lines[step_index + 2:step_index + 2] = [
+              '        env:',
+              '          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log',
+          ]
+
+          artifact = '            ${{ runner.temp }}/api29-emulator.log'
+          artifact_indexes = [index for index, line in enumerate(lines) if line == artifact]
+          if len(artifact_indexes) != 1:
               raise SystemExit(
-                  f'STOP: expected one API29 emulator artifact line, found {text.count(old_artifact)}'
+                  f'STOP: expected one API29 emulator artifact line, found {len(artifact_indexes)}'
               )
-          path.write_text(text.replace(old_artifact, new_artifact), encoding='utf-8', newline='\n')
+          artifact_index = artifact_indexes[0]
+          lines.insert(artifact_index + 1, '            ${{ runner.temp }}/api29-gradle.log')
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8', newline='\n')
           PY
 
       - name: Commit scoped CI diagnostic fix
