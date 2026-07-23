@@ -44,15 +44,13 @@ class DirectFSInstrumentedTest {
 
         try {
             repeat(directoryCount) { index ->
-                val directory =
-                    JavaFile(root, "album-${index.toString().padStart(5, '0')}")
+                val directory = JavaFile(root, "album-${index.toString().padStart(5, '0')}")
                 assertTrue(directory.mkdir())
                 assertTrue(JavaFile(directory, "track-$index.mp3").createNewFile())
             }
 
             val rootUri = Uri.fromFile(root)
-            val location =
-                requireNotNull(Location.Unopened.from(context, rootUri).open(context))
+            val location = requireNotNull(Location.Unopened.from(context, rootUri).open(context))
             val output = Channel<MusicFile>(Channel.RENDEZVOUS)
             val directFs = DirectFS(listOf(location))
             val exploration = directFs.explore(output)

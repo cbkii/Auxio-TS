@@ -136,9 +136,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                 val root = location.uri.path?.let(::JavaFile)
                 val canonicalRoot = root?.let(::canonicalFileOrNull)
                 if (
-                    root == null ||
-                        canonicalRoot == null ||
-                        !isAllowedCanonicalRoot(canonicalRoot)
+                    root == null || canonicalRoot == null || !isAllowedCanonicalRoot(canonicalRoot)
                 ) {
                     recordFailure(sourceKey, "Unsafe or missing DirectFS source ${location.uri}")
                     continue
@@ -252,13 +250,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             when (enqueueDirectory(queue, pending, discoveredDirectories, childTask)) {
                 EnqueueResult.Enqueued -> Unit
                 EnqueueResult.ProcessInline ->
-                    processDirectory(
-                        childTask,
-                        files,
-                        queue,
-                        pending,
-                        discoveredDirectories,
-                    )
+                    processDirectory(childTask, files, queue, pending, discoveredDirectories)
                 EnqueueResult.LimitExceeded -> Unit
             }
         }
