@@ -218,13 +218,19 @@ class VisualizerCoordinator(
                             }
                             if (!hasUsableWaveform(waveform)) return
                             if (generation == currentGeneration && currentSessionId == sessionId) {
-                                val copyStart = SystemClock.elapsedRealtimeNanos()
-                                val frame = waveform.copyOf()
-                                runtimeMetrics.recordFrame(
-                                    frame.size,
-                                    SystemClock.elapsedRealtimeNanos() - copyStart,
-                                    now,
-                                )
+                                val frame =
+                                    if (runtimeMetrics.isActive) {
+                                        val copyStart = SystemClock.elapsedRealtimeNanos()
+                                        waveform.copyOf().also { copy ->
+                                            runtimeMetrics.recordFrame(
+                                                copy.size,
+                                                SystemClock.elapsedRealtimeNanos() - copyStart,
+                                                now,
+                                            )
+                                        }
+                                    } else {
+                                        waveform.copyOf()
+                                    }
                                 _state.value =
                                     VisualizerState.Live(
                                         frame,
@@ -244,13 +250,19 @@ class VisualizerCoordinator(
                             val now = SystemClock.uptimeMillis()
                             lastFftMs = now
                             if (generation == currentGeneration && currentSessionId == sessionId) {
-                                val copyStart = SystemClock.elapsedRealtimeNanos()
-                                val frame = fft.copyOf()
-                                runtimeMetrics.recordFrame(
-                                    frame.size,
-                                    SystemClock.elapsedRealtimeNanos() - copyStart,
-                                    now,
-                                )
+                                val frame =
+                                    if (runtimeMetrics.isActive) {
+                                        val copyStart = SystemClock.elapsedRealtimeNanos()
+                                        fft.copyOf().also { copy ->
+                                            runtimeMetrics.recordFrame(
+                                                copy.size,
+                                                SystemClock.elapsedRealtimeNanos() - copyStart,
+                                                now,
+                                            )
+                                        }
+                                    } else {
+                                        fft.copyOf()
+                                    }
                                 _state.value =
                                     VisualizerState.Live(
                                         frame,

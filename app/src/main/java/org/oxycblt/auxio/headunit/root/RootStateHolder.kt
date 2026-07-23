@@ -172,8 +172,10 @@ constructor(
                         "Root listing line limit exceeded",
                         "maxLines=$MAX_ROOT_LIST_LINES",
                     )
+                    null
+                } else {
+                    lines
                 }
-                lines.take(MAX_ROOT_LIST_LINES)
             }
             RootProcessResult.TimedOut -> {
                 state = State.TimedOut
@@ -240,8 +242,8 @@ constructor(
         const val ROOT_PROBE_OUTPUT_BYTES = 4 * 1024
         const val TS18_OPERATION_TIMEOUT_MS = 5_000L
         const val TS18_OPERATION_OUTPUT_BYTES = 5_000
-        const val ROOT_LIST_OUTPUT_BYTES = 512 * 1024
-        const val MAX_ROOT_LIST_LINES = 5_000
+        const val ROOT_LIST_OUTPUT_BYTES = 16 * 1024 * 1024
+        const val MAX_ROOT_LIST_LINES = 50_000
     }
 }
 

@@ -33,6 +33,9 @@ internal class VisualizerRuntimeMetrics(
     private val watchdogRetries = AtomicLong()
     private val lastReportMs = AtomicLong()
 
+    val isActive: Boolean
+        get() = journal?.hasActiveSession == true
+
     fun recordFrame(bytes: Int, elapsedCopyNanos: Long, nowMs: Long) {
         if (journal?.hasActiveSession != true || bytes <= 0) return
         frameCount.incrementAndGet()

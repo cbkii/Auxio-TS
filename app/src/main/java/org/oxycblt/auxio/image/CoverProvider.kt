@@ -30,6 +30,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
@@ -81,76 +82,89 @@ class CoverProvider : ContentProvider() {
                 return null
             }
 
-        return try {
-            writerExecutor.execute { writeCoverToPipe(id, pipe[1]) }
-            pipe[0]
-        } catch (e: RejectedExecutionException) {
-            pipe[0].closeQuietly()
-            pipe[1].closeQuietly()
-            L.w("Cover-provider writer queue is full; rejecting request")
-            null
-        }
-    }
+            val timedOut = AtomicBoolean(false)
+            val timeoutFuture =
+                try {
+                    transferTimeoutExecutor.schedule(
+                        {
+                            timedOut.set(true)
+                            pipe[1].closeQuietly()
+                        },
+                        COVER_TRANSFER_TIMEOUT_MS,
+                        TimeUnit.MILLISECONDS,
+                    )
+                } catch (e: RejectedExecutionException) {
+                    pipe[0].closeQuietly()
+                    pipe[1].closeQuietly()
+                    L.w(e, "Cover-provider timeout executor rejected request")
+                    return null
+                }
 
-    private fun writeCoverToPipe(id: String, writeSide: ParcelFileDescriptor) {
-        val timedOut = AtomicBoolean(false)
-        val timeoutFuture =
-            try {
-                transferTimeoutExecutor.schedule(
-                    {
-                        timedOut.set(true)
-                        writeSide.closeQuietly()
-                    },
-                    COVER_TRANSFER_TIMEOUT_MS,
-                    TimeUnit.MILLISECONDS,
-                )
+            return try {
+                writerExecutor.execute { writeCoverToPipe(id, pipe[1], timedOut, timeoutFuture) }
+                pipe[0]
             } catch (e: RejectedExecutionException) {
-                writeSide.closeQuietly()
-                L.w(e, "Cover-provider timeout executor rejected request")
-                return
+                timeoutFuture.cancel(false)
+                pipe[0].closeQuietly()
+                pipe[1].closeQuietly()
+                L.w("Cover-provider writer queue is full; rejecting request")
+                null
             }
+        }
 
-        try {
-            ParcelFileDescriptor.AutoCloseOutputStream(writeSide).use { output ->
-                val coverDescriptor = runBlocking {
-                    withTimeoutOrNull(COVER_LOAD_TIMEOUT_MS) {
-                        withContext(Dispatchers.IO) {
-                            when (
-                                val result =
-                                    SettingCovers.immutable(requireNotNull(context)).obtain(id)
-                            ) {
-                                is CoverResult.Hit -> result.cover.fd()
-                                else -> null
+        private fun writeCoverToPipe(
+            id: String,
+            writeSide: ParcelFileDescriptor,
+            timedOut: AtomicBoolean,
+            timeoutFuture: ScheduledFuture<*>,
+        ) {
+            try {
+                ParcelFileDescriptor.AutoCloseOutputStream(writeSide).use { output ->
+                    val coverDescriptor = runBlocking {
+                        withTimeoutOrNull(COVER_LOAD_TIMEOUT_MS) {
+                            withContext(Dispatchers.IO) {
+                                when (
+                                    val result =
+                                        SettingCovers.immutable(requireNotNull(context)).obtain(id)
+                                ) {
+                                    is CoverResult.Hit -> result.cover.fd()
+                                    else -> null
+                                }
                             }
                         }
                     }
-                }
-                if (coverDescriptor == null) {
-                    L.d("Cover-provider request missed or timed out: $id")
-                    return
-                }
-                ParcelFileDescriptor.AutoCloseInputStream(coverDescriptor).use { input ->
-                    if (!copyBounded(input, output, MAX_COVER_BYTES)) {
+                    if (coverDescriptor == null) {
+                        L.d("Cover-provider request missed or timed out: $id")
+                        return
+                    }
+                    val declaredSize = coverDescriptor.statSize
+                    if (declaredSize > MAX_COVER_BYTES) {
+                        coverDescriptor.closeQuietly()
                         L.w("Cover-provider payload exceeded $MAX_COVER_BYTES bytes: $id")
+                        return
+                    }
+                    ParcelFileDescriptor.AutoCloseInputStream(coverDescriptor).use { input ->
+                        if (!copyBounded(input, output, MAX_COVER_BYTES)) {
+                            L.w("Cover-provider payload exceeded $MAX_COVER_BYTES bytes: $id")
+                        }
                     }
                 }
+            } catch (e: IOException) {
+                if (timedOut.get()) {
+                    L.w("Cover-provider transfer timed out: $id")
+                } else {
+                    L.w(e, "Cover-provider transfer failed: $id")
+                }
+            } catch (e: RuntimeException) {
+                if (timedOut.get()) {
+                    L.w("Cover-provider transfer timed out: $id")
+                } else {
+                    L.w(e, "Cover-provider request failed: $id")
+                }
+            } finally {
+                timeoutFuture.cancel(false)
             }
-        } catch (e: IOException) {
-            if (timedOut.get()) {
-                L.w("Cover-provider transfer timed out: $id")
-            } else {
-                L.w(e, "Cover-provider transfer failed: $id")
-            }
-        } catch (e: RuntimeException) {
-            if (timedOut.get()) {
-                L.w("Cover-provider transfer timed out: $id")
-            } else {
-                L.w(e, "Cover-provider request failed: $id")
-            }
-        } finally {
-            timeoutFuture.cancel(false)
         }
-    }
 
     override fun shutdown() {
         if (::writerExecutor.isInitialized) writerExecutor.shutdownNow()
@@ -195,11 +209,11 @@ class CoverProvider : ContentProvider() {
         private const val MATCH_COVER = 1
         private const val MAX_COVER_ID_LENGTH = 512
         private const val COVER_WRITER_THREADS = 2
-        private const val COVER_WRITER_QUEUE_SIZE = 8
+        private const val COVER_WRITER_QUEUE_SIZE = 32
         private const val COVER_WRITER_KEEP_ALIVE_SECONDS = 30L
         private const val COVER_LOAD_TIMEOUT_MS = 5_000L
-        private const val COVER_TRANSFER_TIMEOUT_MS = 10_000L
-        internal const val MAX_COVER_BYTES = 8L * 1024L * 1024L
+        private const val COVER_TRANSFER_TIMEOUT_MS = 15_000L
+        internal const val MAX_COVER_BYTES = 32L * 1024L * 1024L
         private const val COPY_BUFFER_BYTES = 16 * 1024
 
         private val uriMatcher: UriMatcher by
