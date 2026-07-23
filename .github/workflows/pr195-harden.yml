@@ -18,7 +18,7 @@ permissions:
 
 concurrency:
   group: pr195-harden-generic-media-compat
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   harden:
