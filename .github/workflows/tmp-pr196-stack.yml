@@ -1,0 +1,96 @@
+name: Temporary PR196 stack
+
+on:
+  push:
+    branches:
+      - fix/first-launch-source-recovery
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-pr196-stack
+  cancel-in-progress: true
+
+jobs:
+  stack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PR branch without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/first-launch-source-recovery
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge current generic-media base with guarded conflict resolution
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch --no-tags origin feat/ts18-dofun-generic-media-compat
+
+          merge_status=0
+          git merge --no-ff --no-commit origin/feat/ts18-dofun-generic-media-compat || merge_status=$?
+          if [[ "${merge_status}" -ne 0 ]]; then
+            mapfile -t unresolved < <(git diff --name-only --diff-filter=U)
+            if [[ "${#unresolved[@]}" -ne 1 || "${unresolved[0]}" != 'app/src/main/java/org/oxycblt/auxio/AuxioService.kt' ]]; then
+              printf 'STOP: unexpected stacking conflicts:\n' >&2
+              printf '  %s\n' "${unresolved[@]}" >&2
+              git merge --abort || true
+              exit 1
+            fi
+            # PR #196 already carries the PR #195 notification-publication additions together with
+            # its prestart lifecycle changes. Preserve that reviewed combined form.
+            git checkout --ours -- app/src/main/java/org/oxycblt/auxio/AuxioService.kt
+            git add app/src/main/java/org/oxycblt/auxio/AuxioService.kt
+          fi
+
+          if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+            echo 'STOP: unresolved merge entries remain.' >&2
+            exit 1
+          fi
+          grep -F 'PlaybackNotificationChannel.markPublicationRequested()' app/src/main/java/org/oxycblt/auxio/AuxioService.kt
+          grep -F 'if (!earlyPrestart) playbackFragment.start(intent)' app/src/main/java/org/oxycblt/auxio/AuxioService.kt
+          git diff --check
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Write local.properties
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo '::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set.'
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+      - name: Format and run scoped unit tests
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest
+          bash ./scripts/check-dofun-topway-compat.sh
+          git diff --check
+      - name: Commit merge and remove temporary workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add -u app
+          git add app
+          git rm .github/workflows/tmp-pr196-stack.yml
+          git diff --cached --check
+          git commit -m 'chore: stack source recovery on generic DoFun compatibility'
+          git merge-base --is-ancestor origin/feat/ts18-dofun-generic-media-compat HEAD
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:fix/first-launch-source-recovery
