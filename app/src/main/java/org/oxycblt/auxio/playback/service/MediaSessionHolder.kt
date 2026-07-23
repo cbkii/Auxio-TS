@@ -33,6 +33,7 @@ import androidx.annotation.DrawableRes
 import androidx.car.app.mediaextensions.MetadataExtras
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
+import androidx.media.session.MediaButtonReceiver as AndroidXMediaButtonReceiver
 import coil3.size.Size
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -123,7 +124,7 @@ private constructor(
     private val artworkRequestToken = AtomicLong()
 
     private val _notification =
-        PlaybackNotification(context, mediaSession.sessionToken) {
+        PlaybackNotification(context, mediaSession.sessionToken, mediaButtonReceiver) {
             DofunMediaCompatPolicy.notificationProfile(
                 launcherCoordinator.mode,
                 BuildConfig.TOPWAY_COMPAT_FLAVOR,
@@ -662,6 +663,7 @@ private constructor(
 private class PlaybackNotification(
     private val context: Context,
     sessionToken: MediaSessionCompat.Token,
+    private val mediaButtonReceiver: ComponentName,
     private val profileProvider: () -> PlaybackNotificationProfile,
 ) : ForegroundServiceNotification(context, CHANNEL_INFO) {
     private val sessionToken = sessionToken
