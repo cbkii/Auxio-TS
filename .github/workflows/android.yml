@@ -256,6 +256,8 @@ jobs:
 
       - name: Run API 29 compatibility and Room migration tests
         shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log
         run: |
           bash ./scripts/ci-gradle.sh \
             :app:connectedStandardDebugAndroidTest \
@@ -273,6 +275,7 @@ jobs:
             musikr/build/outputs/androidTest-results/**
             ${{ runner.temp }}/avdmanager-create.log
             ${{ runner.temp }}/api29-emulator.log
+            ${{ runner.temp }}/api29-gradle.log
           if-no-files-found: ignore
           retention-days: 7
 
