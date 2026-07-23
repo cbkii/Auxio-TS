@@ -145,7 +145,7 @@ class MediaButtonActionMapperTest {
     }
 
     @Test
-    fun `allows cold play and paused-session stop without focus`() {
+    fun `allows cold play and paused-session controls without focus`() {
         assertTrue(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
@@ -173,12 +173,30 @@ class MediaButtonActionMapperTest {
                 isFocusHeld = false,
             )
         )
-        assertFalse(
+        assertTrue(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
                 keyCode = KeyEvent.KEYCODE_MEDIA_NEXT,
                 repeatCount = 0,
                 hasCurrentSong = true,
+                isFocusHeld = false,
+            )
+        )
+        assertTrue(
+            MediaButtonActionMapper.shouldForward(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                repeatCount = 0,
+                hasCurrentSong = true,
+                isFocusHeld = false,
+            )
+        )
+        assertFalse(
+            MediaButtonActionMapper.shouldForward(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_MEDIA_NEXT,
+                repeatCount = 0,
+                hasCurrentSong = false,
                 isFocusHeld = false,
             )
         )
