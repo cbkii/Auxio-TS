@@ -1,0 +1,402 @@
+PR #195 app unit-test output. Exit status: 1
+
+[ 79%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/matroskasegment.cpp.o
+[ 80%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/matroskasimpletag.cpp.o
+[ 81%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/matroskatag.cpp.o
+[ 82%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlbinaryelement.cpp.o
+[ 83%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlelement.cpp.o
+[ 83%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmasterelement.cpp.o
+[ 84%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkattachments.cpp.o
+[ 85%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkchapters.cpp.o
+[ 86%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkcues.cpp.o
+[ 87%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkseekhead.cpp.o
+[ 88%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmksegment.cpp.o
+[ 88%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmkinfo.cpp.o
+[ 89%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmktracks.cpp.o
+[ 90%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlmktags.cpp.o
+[ 91%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlstringelement.cpp.o
+[ 92%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmluintelement.cpp.o
+[ 93%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlfloatelement.cpp.o
+[ 94%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlutils.cpp.o
+[ 94%] Building CXX object taglib/CMakeFiles/tag.dir/matroska/ebml/ebmlvoidelement.cpp.o
+[ 95%] Building CXX object taglib/CMakeFiles/tag.dir/tag.cpp.o
+[ 96%] Building CXX object taglib/CMakeFiles/tag.dir/tagunion.cpp.o
+[ 97%] Building CXX object taglib/CMakeFiles/tag.dir/fileref.cpp.o
+[ 98%] Building CXX object taglib/CMakeFiles/tag.dir/audioproperties.cpp.o
+[ 99%] Building CXX object taglib/CMakeFiles/tag.dir/tagutils.cpp.o
+[100%] Linking CXX static library libtag.a
+[100%] Built target tag
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/bin/taglib-config
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/pkgconfig/taglib.pc
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppTargets.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppConfig.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/share/utf8cpp/cmake/utf8cppConfigVersion.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/core.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/unchecked.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/checked.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp17.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp20.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/utf8cpp/utf8/cpp11.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/libtag.a
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/fileref.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/audioproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib_export.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib_config.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/taglib.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tstring.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tlist.tcc
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tstringlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevector.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevectorlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tvariant.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tbytevectorstream.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tiostream.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tfilestream.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tmap.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tmap.tcc
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tpicturetype.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tpropertymap.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tdebuglistener.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tversionnumber.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mpegheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/xingheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v1tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v1genres.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2extendedheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2frame.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2header.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2synchdata.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2footer.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2framefactory.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/id3v2tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/attachedpictureframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/commentsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/eventtimingcodesframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/generalencapsulatedobjectframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/ownershipframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/popularimeterframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/privateframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/relativevolumeframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/synchronizedlyricsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/textidentificationframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/uniquefileidentifierframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/unknownframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/unsynchronizedlyricsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/urllinkframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/chapterframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/tableofcontentsframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/podcastframe.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggpage.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggpageheader.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/xiphcomment.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/vorbisfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/vorbisproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/oggflacfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/speexfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/speexproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/opusfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/opusproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacpicture.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/flacmetadatablock.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/rifffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/aifffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/aiffproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/wavfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/wavproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/infotag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4file.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4atom.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4tag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4item.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4properties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4coverart.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4stem.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4itemfactory.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4chapter.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4chapterholder.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4nerochapterlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/mp4qtchapterlist.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsfproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdifffile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdiffproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/dsdiffdiintag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaattachedfile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaattachments.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapter.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapteredition.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskachapters.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaelement.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskafile.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskaproperties.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskasimpletag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskatag.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/include/taglib/matroskawritestyle.h
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-targets.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-targets-release.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-config.cmake
+-- Installing: /home/runner/work/Auxio-TS/Auxio-TS/musikr/src/main/cpp/taglib/pkg/arm64-v8a/lib/cmake/taglib/taglib-config-version.cmake
+
+> Task :musikr:preBuild UP-TO-DATE
+> Task :musikr:preDebugBuild
+> Task :musikr:generateDebugResources FROM-CACHE
+> Task :musikr:packageDebugResources FROM-CACHE
+/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/res/values/strings.xml:750:4: Failed to flatten XML for resource 'set_playback_notification_access_desc' with error: Invalid unicode escape sequence in string
+
+"{str}"
+/home/runner/work/Auxio-TS/Auxio-TS/app/src/main/res/values/strings.xml:750:4: string/set_playback_notification_access_desc does not contain a valid string resource.
+> Task :app:mergeStandardDebugResources
+
+> Task :app:packageStandardDebugResources
+> Task :media-lib-common:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-container:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-database:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-datasource:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-decoder:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-decoder-ffmpeg:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-exoplayer:processDebugNavigationResources FROM-CACHE
+> Task :media-lib-extractor:processDebugNavigationResources FROM-CACHE
+> Task :musikr:processDebugNavigationResources FROM-CACHE
+> Task :app:processStandardDebugNavigationResources
+> Task :app:mergeStandardDebugResources FAILED
+> Task :app:parseStandardDebugLocalResources
+
+FAILURE: Build failed with an exception.
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run_3-1784821454622.json
+
+
+* What went wrong:
+Execution failed for task ':app:mergeStandardDebugResources' (registered by plugin 'com.android.internal.application').
+[Incubating] Problems report is available at: file:///home/runner/work/Auxio-TS/Auxio-TS/build/reports/problems/problems-report.html
+> A failure occurred while executing com.android.build.gradle.internal.res.ResourceCompilerRunnable
+   > Resource compilation failed (Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml. Cause: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@2340e93f.). Check logs for more details.
+
+
+* Try:
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:mergeStandardDebugResources' (registered by plugin 'com.android.internal.application').
+
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:135)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:288)
+For more on this, please refer to https://docs.gradle.org/9.5.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:133)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:121)
+35 actionable tasks: 8 executed, 27 from cache
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.DefaultNodeExecutor.executeLocalTaskNode(DefaultNodeExecutor.java:55)
+	at org.gradle.execution.plan.DefaultNodeExecutor.execute(DefaultNodeExecutor.java:34)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:355)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:343)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:339)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:84)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:339)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:328)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing com.android.build.gradle.internal.res.ResourceCompilerRunnable
+	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:278)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:132)
+	at org.gradle.internal.Factories$1.create(Factories.java:30)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.lambda$withoutLocksBlocking$3(DefaultWorkerLeaseService.java:410)
+	at org.gradle.internal.work.ResourceLockStatistics$1.measure(ResourceLockStatistics.java:43)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocksBlocking(DefaultWorkerLeaseService.java:405)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.blocking(DefaultWorkerLeaseService.java:255)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.blocking(DefaultWorkerLeaseService.java:237)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$3(DefaultAsyncWorkTracker.java:128)
+	at org.gradle.internal.Factories$1.create(Factories.java:30)
+	at org.gradle.internal.resources.AbstractResourceLockRegistry.whileDisallowingLockChanges(AbstractResourceLockRegistry.java:50)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.whileDisallowingProjectLockChanges(DefaultWorkerLeaseService.java:260)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:127)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:93)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForAll(DefaultAsyncWorkTracker.java:79)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForCompletion(DefaultAsyncWorkTracker.java:67)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:267)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:244)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:227)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:210)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:176)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:167)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:47)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:137)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:134)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:134)
+	at org.gradle.internal.execution.steps.ExecuteStep$Mutable.execute(ExecuteStep.java:80)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:51)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:29)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.executeMutable(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.executeMutable(RemovePreviousOutputsStep.java:39)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:42)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:24)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.executeMutable(ResolveInputChangesStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.executeMutable(ResolveInputChangesStep.java:28)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeAndStoreInCache(BuildCacheStep.java:145)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$executeWithCache$4(BuildCacheStep.java:104)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$executeWithCache$5(BuildCacheStep.java:104)
+	at org.gradle.internal.Try$Success.map(Try.java:170)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithCache(BuildCacheStep.java:88)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$0(BuildCacheStep.java:75)
+	at org.gradle.internal.Either$Left.fold(Either.java:116)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:74)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:49)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.executeMutable(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.executeMutable(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveMutableCachingStateStep.executeDelegate(ResolveMutableCachingStateStep.java:70)
+	at org.gradle.internal.execution.steps.ResolveMutableCachingStateStep.executeDelegate(ResolveMutableCachingStateStep.java:32)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:69)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:37)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.executeMutable(ResolveChangesStep.java:63)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.executeMutable(ResolveChangesStep.java:34)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.ValidateStep$Mutable.executeDelegate(ValidateStep.java:79)
+	at org.gradle.internal.execution.steps.ValidateStep$Mutable.executeDelegate(ValidateStep.java:65)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:99)
+	at org.gradle.internal.execution.steps.ValidateStep$Mutable.execute(ValidateStep.java:65)
+	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.executeMutable(CaptureMutableStateBeforeExecutionStep.java:86)
+	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:65)
+	at org.gradle.internal.execution.steps.CaptureMutableStateBeforeExecutionStep.execute(CaptureMutableStateBeforeExecutionStep.java:45)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeWithNonEmptySources(SkipEmptyMutableWorkStep.java:210)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:85)
+	at org.gradle.internal.execution.steps.SkipEmptyMutableWorkStep.executeMutable(SkipEmptyMutableWorkStep.java:53)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.executeMutable(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.executeMutable(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.executeMutable(HandleStaleOutputsStep.java:77)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.executeMutable(HandleStaleOutputsStep.java:43)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$executeMutable$0(AssignMutableWorkspaceStep.java:34)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:305)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.executeMutable(AssignMutableWorkspaceStep.java:30)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.executeMutable(AssignMutableWorkspaceStep.java:21)
+	at org.gradle.internal.execution.steps.MutableStep.execute(MutableStep.java:26)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:56)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:38)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:68)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:132)
+	... 30 more
+Caused by: com.android.aaptcompiler.ResourceCompilationException: Resource compilation failed (Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml. Cause: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@2340e93f.). Check logs for more details.
+	at com.android.aaptcompiler.ResourceCompiler.compileResource(ResourceCompiler.kt:120)
+	at com.android.build.gradle.internal.res.ResourceCompilerRunnable$Companion.compileSingleResource(ResourceCompilerRunnable.kt:33)
+	at com.android.build.gradle.internal.res.ResourceCompilerRunnable.run(ResourceCompilerRunnable.kt:13)
+	at com.android.build.gradle.internal.profile.ProfileAwareWorkAction.execute(ProfileAwareWorkAction.kt:66)
+	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:68)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:64)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:61)
+	at org.gradle.internal.classloader.ClassLoaderUtils.executeInClassloader(ClassLoaderUtils.java:102)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.lambda$execute$0(NoIsolationWorkerFactory.java:61)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:44)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:41)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.workers.internal.AbstractWorker.executeWrappedInBuildOperation(AbstractWorker.java:41)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.execute(NoIsolationWorkerFactory.java:58)
+	at org.gradle.workers.internal.DefaultWorkerExecutor.lambda$submitWork$0(DefaultWorkerExecutor.java:174)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runExecution(DefaultConditionalExecutionQueue.java:191)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.access$500(DefaultConditionalExecutionQueue.java:112)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner$1.run(DefaultConditionalExecutionQueue.java:168)
+	at org.gradle.internal.Factories$1.create(Factories.java:30)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.lambda$runAndReleaseLocks$0(DefaultWorkerLeaseService.java:300)
+	at org.gradle.internal.work.ResourceLockStatistics$1.measure(ResourceLockStatistics.java:43)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAndReleaseLocks(DefaultWorkerLeaseService.java:298)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocksAcquired(DefaultWorkerLeaseService.java:294)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:286)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:130)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:135)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:163)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:125)
+	... 2 more
+Caused by: com.android.aaptcompiler.ResourceCompilationException: Failed to compile values resource file /home/runner/work/Auxio-TS/Auxio-TS/app/build/intermediates/incremental/standardDebug/mergeStandardDebugResources/merged.dir/values/values.xml
+	at com.android.aaptcompiler.ResourceCompiler.compileTable(ResourceCompiler.kt:179)
+	at com.android.aaptcompiler.ResourceCompiler.access$compileTable(ResourceCompiler.kt:1)
+	at com.android.aaptcompiler.ResourceCompiler$getCompileMethod$1.invoke(ResourceCompiler.kt:130)
+	at com.android.aaptcompiler.ResourceCompiler$getCompileMethod$1.invoke(ResourceCompiler.kt:130)
+	at com.android.aaptcompiler.ResourceCompiler.compileResource(ResourceCompiler.kt:116)
+	... 35 more
+Caused by: java.lang.IllegalStateException: Can not extract resource from com.android.aaptcompiler.ParsedResource@2340e93f.
+	at com.android.aaptcompiler.TableExtractor.extractResourceValues(TableExtractor.kt:248)
+	at com.android.aaptcompiler.TableExtractor.extract(TableExtractor.kt:162)
+	at com.android.aaptcompiler.ResourceCompiler.compileTable(ResourceCompiler.kt:175)
+	... 39 more
+
+
+BUILD FAILED in 4m 25s
+::error::Gradle failed with exit code 1 after 4m 26s.
