@@ -46,6 +46,26 @@ class RootProcessRunnerTest {
     }
 
     @Test
+    fun `captures complete larger stdout and stderr before returning`() {
+        val expectedBytes = 256 * 1024
+        val result =
+            runner.runProcessForTest(
+                arrayOf(
+                    "sh",
+                    "-c",
+                    "yes o | head -c $expectedBytes; yes e | head -c $expectedBytes >&2",
+                ),
+                timeoutMs = 5_000,
+                maxOutputBytes = 512 * 1024,
+            )
+
+        assertTrue(result is RootProcessResult.Success)
+        result as RootProcessResult.Success
+        assertEquals(expectedBytes, result.stdout.toByteArray().size)
+        assertEquals(expectedBytes, result.stderr.toByteArray().size)
+    }
+
+    @Test
     fun `reports non-zero exit without losing output`() {
         val result =
             runner.runProcessForTest(
