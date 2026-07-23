@@ -1,9 +1,9 @@
 name: Temporary PR196 hardening
 
 on:
-  pull_request:
+  push:
     branches:
-      - feat/ts18-dofun-generic-media-compat
+      - fix/first-launch-source-recovery
 
 permissions:
   contents: write
