@@ -54,11 +54,14 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Format, compile and preserve exact result
+      - name: Format Kotlin, compile and preserve exact result
         shell: bash
         run: |
           set +e
-          bash ./scripts/ci-gradle.sh --warning-mode all spotlessApply \
+          # The full Spotless task provisions Eclipse/P2 tooling for unrelated formatters and can
+          # fail on a transient upstream socket timeout. This branch changes Kotlin only, so apply
+          # the deterministic Kotlin formatter here; canonical CI still runs the full check.
+          bash ./scripts/ci-gradle.sh --warning-mode all spotlessKotlinApply \
             > /tmp/pr195-format.log 2>&1
           format_rc=$?
           cat /tmp/pr195-format.log
@@ -79,7 +82,7 @@ jobs:
           rm -f docs/ts18/launcher-integration/PR195_BUILD_ERROR.txt
           if [[ "${format_rc}" -ne 0 ]]; then
             {
-              echo "Temporary Spotless output captured by PR #195 hardening workflow."
+              echo "Temporary Kotlin Spotless output captured by PR #195 hardening workflow."
               echo "Exit status: ${format_rc}"
               echo
               tail -n 4000 /tmp/pr195-format.log
