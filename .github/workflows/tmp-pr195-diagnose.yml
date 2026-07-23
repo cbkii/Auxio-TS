@@ -1,0 +1,87 @@
+name: Temporary PR195 quality diagnosis
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-pr195-quality-diagnosis
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PR branch without persisted credentials
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/ts18-dofun-generic-media-compat
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Write local.properties
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+      - name: Run scoped checks and capture concise failures
+        shell: bash
+        run: |
+          test_status=0
+          lint_status=0
+
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > "${RUNNER_TEMP}/pr195-test.log" 2>&1 || test_status=$?
+          bash ./scripts/ci-gradle.sh :app:lintStandardDebug > "${RUNNER_TEMP}/pr195-lint.log" 2>&1 || lint_status=$?
+
+          rm -f tmp-pr195-test-error.log tmp-pr195-lint-error.log
+          if [[ "${test_status}" -ne 0 ]]; then
+            {
+              printf 'PR #195 app unit-test output. Exit status: %s\n\n' "${test_status}"
+              tail -n 400 "${RUNNER_TEMP}/pr195-test.log"
+            } > tmp-pr195-test-error.log
+          fi
+          if [[ "${lint_status}" -ne 0 ]]; then
+            {
+              printf 'PR #195 Android lint output. Exit status: %s\n\n' "${lint_status}"
+              tail -n 400 "${RUNNER_TEMP}/pr195-lint.log"
+            } > tmp-pr195-lint-error.log
+          fi
+
+          printf 'Unit-test status: %s\n' "${test_status}"
+          printf 'Lint status: %s\n' "${lint_status}"
+      - name: Commit concise diagnostics
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tmp-pr195-test-error.log tmp-pr195-lint-error.log 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo 'Scoped unit tests and lint passed; no diagnostic files required.'
+            exit 0
+          fi
+          git commit -m 'ci: capture PR 195 quality failures'
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:feat/ts18-dofun-generic-media-compat
