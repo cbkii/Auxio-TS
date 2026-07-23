@@ -361,10 +361,12 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 L.d("Dispatching observing setting change")
                 listener.onObservingChanged()
             }
-            getString(R.string.set_key_scan_priority),
-            getString(R.string.set_key_root_access_policy) -> {
+            getString(R.string.set_key_scan_priority) -> {
                 L.d("Dispatching indexing setting change for $key")
                 listener.onIndexingSettingChanged()
+            }
+            getString(R.string.set_key_root_access_policy) -> {
+                L.d("Applying root access policy change without reindex")
             }
             getString(R.string.set_key_performance_capture) -> {
                 // Diagnostics-only toggle: refresh the bounded capture state without

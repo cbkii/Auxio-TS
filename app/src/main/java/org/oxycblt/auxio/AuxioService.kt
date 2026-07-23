@@ -43,12 +43,14 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.prestart.EarlyPrestartNotification
 import org.oxycblt.auxio.headunit.prestart.EarlyPrestartSettings
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceClient
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.StartupReadinessController
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.service.MusicServiceFragment
 import org.oxycblt.auxio.music.service.StartupScanOrigin
+import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
 import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber
@@ -66,6 +68,7 @@ open class AuxioService :
     @Inject lateinit var topwayCommandServiceClient: TopwayCommandServiceClient
     @Inject lateinit var startupReadinessController: StartupReadinessController
     @Inject lateinit var earlyPrestartSettings: EarlyPrestartSettings
+    @Inject lateinit var rootStateHolder: RootStateHolder
 
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main.immediate)
@@ -94,11 +97,15 @@ open class AuxioService :
             // service, we might need more handling here.
             super.onStartCommand(intent, flags, startId)
             val earlyPrestart = intent?.action == ACTION_EARLY_PRESTART
+            if (earlyPrestart && !isEarlyPrestartAllowed()) {
+                stopSelfResult(startId)
+                return@trace START_NOT_STICKY
+            }
             if (earlyPrestart && !beginEarlyPrestart()) {
                 stopSelfResult(startId)
                 return@trace START_NOT_STICKY
             }
-            onHandleForeground(intent)
+            onHandleForeground(intent, earlyPrestart)
             if (earlyPrestart) scheduleEarlyPrestartCompletion(startId)
             journal.log(
                 DiagnosticJournal.CAT_LIFECYCLE,
@@ -115,22 +122,42 @@ open class AuxioService :
 
     override fun onBind(intent: Intent): IBinder? {
         val binder = super.onBind(intent)
-        onHandleForeground(intent)
+        // Binding is a normal MediaBrowser operation. A foreign client cannot opt into the
+        // privileged early-prestart path merely by supplying its action string.
+        onHandleForeground(intent, earlyPrestart = false)
         return binder
     }
 
-    private fun onHandleForeground(intent: Intent?) {
+    private fun onHandleForeground(intent: Intent?, earlyPrestart: Boolean) {
         // TS18 fast-resume priority: handle playback/launcher commands before any heavy
         // music indexing path. This keeps raw snapshot restore independent from library readiness.
         val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
         val origin =
             when {
-                intent?.action == ACTION_EARLY_PRESTART -> StartupScanOrigin.EARLY_PRESTART
+                earlyPrestart -> StartupScanOrigin.EARLY_PRESTART
                 startId == IntegerTable.START_ID_ACTIVITY -> StartupScanOrigin.USER_VISIBLE
                 else -> StartupScanOrigin.BACKGROUND
             }
-        playbackFragment.start(intent)
+        // Early prestart is preparation-only. Never route its boot start id into playback restore
+        // or autoplay policy; the canonical playback fragment remains attached but unstimulated.
+        if (!earlyPrestart) playbackFragment.start(intent)
         musicFragment.start(origin)
+    }
+
+    private fun isEarlyPrestartAllowed(): Boolean {
+        val enabled = earlyPrestartSettings.enabled
+        val rootEnabled = rootStateHolder.isUserEnabled()
+        if (enabled && rootEnabled) return true
+
+        if (enabled && !rootEnabled) {
+            earlyPrestartSettings.mark(EarlyPrestartSettings.Outcome.SKIPPED_ROOT_DISABLED)
+        }
+        journal.log(
+            DiagnosticJournal.CAT_BOOT,
+            "Early prestart rejected",
+            "enabled=$enabled root_user_enabled=$rootEnabled",
+        )
+        return false
     }
 
     private fun beginEarlyPrestart(): Boolean {
@@ -302,6 +329,7 @@ open class AuxioService :
         val mediaNotification = playbackFragment.notification
         if (mediaNotification != null) {
             if (change == ForegroundListener.Change.MEDIA_SESSION) {
+                PlaybackNotificationChannel.markPublicationRequested()
                 startForeground(mediaNotification.code, mediaNotification.build())
             }
             // Nothing changed, but don't show anything music related since we can always

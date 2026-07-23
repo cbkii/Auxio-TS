@@ -512,12 +512,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         if (directTs18Path && !TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
             return ManualPathValidation.UNSAFE
         }
-        if (!hasStoragePermission && locationMode != LocationMode.SAF) {
+        val rawRootCandidate = directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
+        if (!hasStoragePermission && locationMode != LocationMode.SAF && !rawRootCandidate) {
             return ManualPathValidation.PERMISSION_MISSING
         }
         return try {
             val file = File(path)
-            val rawRootCandidate = directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
             when {
                 isRootBackedRawDirectPath(path, file, directTs18Path) ->
                     ManualPathValidation.ROOT_BACKED
@@ -530,7 +530,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             }
         } catch (e: SecurityException) {
             L.w(e, "Security exception while validating manual path $path")
-            ManualPathValidation.PERMISSION_MISSING
+            if (rawRootCandidate) {
+                ManualPathValidation.ROOT_UNAVAILABLE
+            } else {
+                ManualPathValidation.PERMISSION_MISSING
+            }
         } catch (e: RuntimeException) {
             L.w(e, "Runtime exception while validating manual path $path")
             ManualPathValidation.UNREADABLE

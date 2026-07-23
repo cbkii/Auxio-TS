@@ -84,9 +84,16 @@ class MusicSettingsIndexingTriggerTest {
     @Test
     fun `scan-affecting settings still request a reindex`() {
         dispatch(context.getString(R.string.set_key_scan_priority))
-        dispatch(context.getString(R.string.set_key_root_access_policy))
         dispatch(context.getString(R.string.set_key_separators))
-        assertEquals(3, listener.indexingSettingChanges)
+        assertEquals(2, listener.indexingSettingChanges)
+    }
+
+    @Test
+    fun `root consent change defers scanning until source save or explicit refresh`() {
+        dispatch(context.getString(R.string.set_key_root_access_policy))
+        assertEquals(0, listener.indexingSettingChanges)
+        assertEquals(0, listener.locationChanges)
+        assertEquals(0, listener.observingChanges)
     }
 
     @Test

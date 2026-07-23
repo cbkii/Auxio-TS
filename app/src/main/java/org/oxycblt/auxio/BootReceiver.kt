@@ -155,10 +155,8 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
         try {
-            val serviceClass =
-                TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
             val serviceIntent =
-                Intent(context, serviceClass)
+                Intent(context, AuxioService::class.java)
                     .setAction(AuxioService.ACTION_EARLY_PRESTART)
                     .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
             ContextCompat.startForegroundService(context, serviceIntent)
