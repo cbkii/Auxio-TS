@@ -105,7 +105,7 @@ class MediaButtonActionMapperTest {
     }
 
     @Test
-    fun `pause and stop are ignored when queue is inert but toggle actions still forward`() {
+    fun `pause and stop are ignored when queue is inert but play actions still forward`() {
         assertFalse(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
@@ -145,7 +145,7 @@ class MediaButtonActionMapperTest {
     }
 
     @Test
-    fun `allows only play-like cold start keys when focus is not held`() {
+    fun `allows cold play and paused-session stop without focus`() {
         assertTrue(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
@@ -159,6 +159,15 @@ class MediaButtonActionMapperTest {
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
                 keyCode = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                repeatCount = 0,
+                hasCurrentSong = true,
+                isFocusHeld = false,
+            )
+        )
+        assertTrue(
+            MediaButtonActionMapper.shouldForward(
+                action = KeyEvent.ACTION_DOWN,
+                keyCode = KeyEvent.KEYCODE_MEDIA_STOP,
                 repeatCount = 0,
                 hasCurrentSong = true,
                 isFocusHeld = false,
