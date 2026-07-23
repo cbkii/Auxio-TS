@@ -1,0 +1,47 @@
+name: Temporary PR 194 API29 log patch
+
+on:
+  push:
+    branches:
+      - perf/android10-code-health-20260723
+    paths:
+      - ".github/workflows/temporary-pr194-api29-log-patch.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: temporary-pr194-api29-log-patch
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: perf/android10-code-health-20260723
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Apply exact workflow patch
+        shell: bash
+        run: python3 scripts/temporary_pr194_api29_log_patch.py
+
+      - name: Validate workflow YAML and diff
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; Psych.safe_load(File.read(".github/workflows/android.yml"), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK android.yml"'
+          git diff --check
+          git diff -- .github/workflows/android.yml
+
+      - name: Commit and push workflow patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- .github/workflows/android.yml
+          git commit -m "ci: preserve API 29 Gradle failure logs"
+          git push origin HEAD:perf/android10-code-health-20260723
