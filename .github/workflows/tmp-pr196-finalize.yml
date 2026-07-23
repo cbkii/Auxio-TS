@@ -22,7 +22,7 @@ jobs:
         with:
           ref: fix/first-launch-source-recovery
           fetch-depth: 0
-      - name: Apply test interface fix
+      - name: Apply remaining implementation fixes
         shell: bash
         run: python3 scripts/tmp-pr196-test-fix.py
       - name: Set up JDK 21
@@ -55,15 +55,15 @@ jobs:
 
           bash ./scripts/ci-gradle.sh spotlessKotlinApply || format_status=$?
           if [[ "${format_status}" -eq 0 ]]; then
-            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > /tmp/pr196-test.log 2>&1 || test_status=$?
-            cat /tmp/pr196-test.log
+            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > "${RUNNER_TEMP}/pr196-test.log" 2>&1 || test_status=$?
+            cat "${RUNNER_TEMP}/pr196-test.log"
           fi
 
           rm -f tmp-pr196-test-error.log
           if [[ "${test_status}" -ne 0 ]]; then
             {
               printf 'Temporary PR #196 app unit-test output. Exit status: %s\n\n' "${test_status}"
-              tail -n 300 /tmp/pr196-test.log
+              tail -n 300 "${RUNNER_TEMP}/pr196-test.log"
             } > tmp-pr196-test-error.log
           fi
 
@@ -75,11 +75,12 @@ jobs:
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/org/oxycblt/auxio/headunit/root/RootStateHolder.kt
           git add app/src/test/java/org/oxycblt/auxio/playback/persist/PersistenceCancellationTest.kt
           git add -u app
           git add tmp-pr196-test-error.log 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m 'test: finalise source-recovery unit-test compatibility'
+            git commit -m 'test: finalise source-recovery implementation and tests'
             git push origin HEAD:fix/first-launch-source-recovery
           fi
       - name: Preserve verification result
