@@ -90,6 +90,7 @@ class SongListFragment :
     private var homeSettingsListener: org.oxycblt.auxio.home.HomeSettings.Listener? = null
     private var currentRecoveryState =
         LibraryRecoveryPolicy.State(LibraryRecoveryPolicy.Kind.HIDDEN, showProgress = false)
+    private var awaitingPermissionSettings = false
 
     private val storagePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -107,6 +108,10 @@ class SongListFragment :
 
     override fun onResume() {
         super.onResume()
+        if (awaitingPermissionSettings) {
+            awaitingPermissionSettings = false
+            if (hasStoragePermission()) continueAfterStoragePermission()
+        }
         if (view != null) refreshRecoveryState()
     }
 
@@ -270,15 +275,16 @@ class SongListFragment :
                     indexingState = indexingState,
                     startupState = startupState,
                     libraryStatus = libraryStatus,
-                    locationMode = musicSettings.locationMode,
                     sourceConfigured =
                         StartupLibraryPolicy.isMusicSourceConfigured(
                             musicSettings.locationMode,
                             musicSettings.configuredSourceCount,
                         ),
+                    storagePermissionRequired = storagePermissionRequiredForCurrentSource(),
                     storagePermissionGranted = hasStoragePermission(),
                     rootSupported = BuildConfig.TOPWAY_COMPAT_FLAVOR,
-                    rootEnabled = rootStateHolder.isUserEnabled(),
+                    rootRequired = rootRequiredForCurrentSource(),
+                    rootState = rootStateHolder.stateSnapshot(),
                     lastScanFailed = musicSettings.lastScanFailed,
                 )
             )
@@ -362,6 +368,7 @@ class SongListFragment :
                         AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", requireContext().packageName, null),
                     )
+                awaitingPermissionSettings = true
                 startActivity(intent)
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -382,14 +389,17 @@ class SongListFragment :
                     val state = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
                     if (!isAdded) return@launch
                     requireContext().showToast(rootStateMessage(state))
-                    if (
-                        state == RootStateHolder.State.Available &&
+                    if (state == RootStateHolder.State.Available) {
+                        if (
                             StartupLibraryPolicy.isMusicSourceConfigured(
                                 musicSettings.locationMode,
                                 musicSettings.configuredSourceCount,
                             )
-                    ) {
-                        musicModel.refresh()
+                        ) {
+                            musicModel.refresh()
+                        } else {
+                            homeModel.startChooseMusicLocations()
+                        }
                     }
                     refreshRecoveryState()
                 }
@@ -408,6 +418,23 @@ class SongListFragment :
             RootStateHolder.State.UnsupportedForVariant,
             RootStateHolder.State.DisabledByUser -> R.string.recovery_root_unavailable
         }
+
+    private fun storagePermissionRequiredForCurrentSource(): Boolean =
+        when (musicSettings.locationMode) {
+            org.oxycblt.auxio.music.locations.LocationMode.MEDIA_STORE -> true
+            org.oxycblt.auxio.music.locations.LocationMode.SAF -> false
+            org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS ->
+                musicSettings.safQuery.source.any { location ->
+                    location.uri.path?.startsWith("/storage/") == true
+                }
+        }
+
+    private fun rootRequiredForCurrentSource(): Boolean =
+        musicSettings.locationMode ==
+            org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS &&
+            musicSettings.safQuery.source.any { location ->
+                location.uri.path?.startsWith("/mnt/media_rw/usbdisk") == true
+            }
 
     private fun requiredStoragePermission(): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

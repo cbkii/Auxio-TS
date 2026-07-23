@@ -6,40 +6,28 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.home.list
 
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
-import org.oxycblt.auxio.music.locations.LocationMode
 
-/**
- * Pure policy for first-launch and missing-library recovery.
- *
- * Startup capability and recoverable library/source state are deliberately kept separate. A
- * capability spinner must never be the only UI once a recoverable action is known.
- */
+/** Pure first-launch and missing-library recovery policy. */
 object LibraryRecoveryPolicy {
     data class Input(
         val empty: Boolean,
         val indexingState: IndexingState?,
         val startupState: StartupReadinessState,
         val libraryStatus: StartupLibraryStatus,
-        val locationMode: LocationMode,
         val sourceConfigured: Boolean,
+        val storagePermissionRequired: Boolean,
         val storagePermissionGranted: Boolean,
         val rootSupported: Boolean,
-        val rootEnabled: Boolean,
+        val rootRequired: Boolean,
+        val rootState: RootStateHolder.State,
         val lastScanFailed: Boolean,
     )
 
@@ -79,8 +67,7 @@ object LibraryRecoveryPolicy {
     fun resolve(input: Input): State {
         if (!input.empty) return State(Kind.HIDDEN, showProgress = false)
 
-        val requiresStoragePermission = input.locationMode != LocationMode.SAF
-        if (requiresStoragePermission && !input.storagePermissionGranted) {
+        if (input.storagePermissionRequired && !input.storagePermissionGranted) {
             return State(
                 kind = Kind.PERMISSION_REQUIRED,
                 showProgress = false,
@@ -99,6 +86,27 @@ object LibraryRecoveryPolicy {
         }
 
         if (
+            input.libraryStatus == StartupLibraryStatus.NeedsMusicSource || !input.sourceConfigured
+        ) {
+            return State(
+                kind = Kind.SOURCE_REQUIRED,
+                showProgress = false,
+                primary = ActionItem(Action.CHOOSE_SOURCE),
+                secondary = rootAction(input),
+            )
+        }
+
+        if (input.libraryStatus == StartupLibraryStatus.SourceUnavailable) {
+            return State(
+                kind = Kind.SOURCE_UNAVAILABLE,
+                showProgress = false,
+                primary = ActionItem(Action.REFRESH),
+                secondary = ActionItem(Action.CHOOSE_SOURCE),
+                tertiary = rootAction(input),
+            )
+        }
+
+        if (
             input.lastScanFailed ||
                 (input.indexingState is IndexingState.Completed &&
                     input.indexingState.error != null)
@@ -112,26 +120,7 @@ object LibraryRecoveryPolicy {
             )
         }
 
-        if (
-            input.libraryStatus == StartupLibraryStatus.NeedsMusicSource || !input.sourceConfigured
-        ) {
-            return State(
-                kind = Kind.SOURCE_REQUIRED,
-                showProgress = false,
-                primary = ActionItem(Action.CHOOSE_SOURCE),
-                secondary = rootAction(input),
-            )
-        }
-
         return when (input.libraryStatus) {
-            StartupLibraryStatus.SourceUnavailable ->
-                State(
-                    kind = Kind.SOURCE_UNAVAILABLE,
-                    showProgress = false,
-                    primary = ActionItem(Action.REFRESH),
-                    secondary = ActionItem(Action.CHOOSE_SOURCE),
-                    tertiary = rootAction(input),
-                )
             StartupLibraryStatus.CacheUnavailable ->
                 State(
                     kind = Kind.CACHE_UNAVAILABLE,
@@ -159,8 +148,6 @@ object LibraryRecoveryPolicy {
                 )
             }
             StartupLibraryStatus.Usable ->
-                // A usable status paired with an empty visible library is inconsistent but
-                // recoverable. Prefer a refresh action over an indefinite capability spinner.
                 State(
                     kind = Kind.CACHE_UNAVAILABLE,
                     showProgress = false,
@@ -168,15 +155,17 @@ object LibraryRecoveryPolicy {
                     secondary = ActionItem(Action.RESCAN),
                     tertiary = ActionItem(Action.CHOOSE_SOURCE),
                 )
-            StartupLibraryStatus.NeedsMusicSource -> error("Handled above")
+            StartupLibraryStatus.NeedsMusicSource,
+            StartupLibraryStatus.SourceUnavailable -> error("Handled above")
         }
     }
 
     private fun rootAction(input: Input): ActionItem? =
         if (
-            input.locationMode == LocationMode.DIRECT_FS &&
-                input.rootSupported &&
-                !input.rootEnabled
+            input.rootSupported &&
+                input.rootRequired &&
+                input.rootState != RootStateHolder.State.Available &&
+                input.rootState != RootStateHolder.State.UnsupportedForVariant
         ) {
             ActionItem(Action.ENABLE_ROOT)
         } else {

@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
@@ -217,11 +218,14 @@ class LibraryRecoveryPolicyTest {
                 indexingState = indexingState,
                 startupState = startupState,
                 libraryStatus = libraryStatus,
-                locationMode = locationMode,
                 sourceConfigured = sourceConfigured,
+                storagePermissionRequired = locationMode == LocationMode.MEDIA_STORE,
                 storagePermissionGranted = storagePermissionGranted,
                 rootSupported = rootSupported,
-                rootEnabled = rootEnabled,
+                rootRequired = locationMode == LocationMode.DIRECT_FS && !rootEnabled,
+                rootState =
+                    if (rootEnabled) RootStateHolder.State.Available
+                    else RootStateHolder.State.DisabledByUser,
                 lastScanFailed = lastScanFailed,
             )
         )

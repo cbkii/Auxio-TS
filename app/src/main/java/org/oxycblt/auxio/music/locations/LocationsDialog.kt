@@ -20,6 +20,7 @@ package org.oxycblt.auxio.music.locations
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -27,6 +28,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
+import android.provider.Settings as AndroidSettings
 import android.provider.MediaStore.Audio.Media as AndroidAudioMedia
 import android.view.LayoutInflater
 import androidx.activity.result.ActivityResultLauncher
@@ -35,6 +37,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.PreferenceManager
 import com.google.android.material.R as MR
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -279,7 +282,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         locationMode = mode
         updateModeUI(binding)
         updateSaveButtonState()
-        if (mode != LocationMode.SAF && !hasStoragePermission) {
+        // MediaStore cannot proceed without framework permission. DirectFS defers the
+        // decision until a concrete path is validated, because raw and ordinary paths have
+        // different authority requirements.
+        if (mode == LocationMode.MEDIA_STORE && !hasStoragePermission) {
             showStoragePermissionExplanation()
         }
     }
@@ -466,8 +472,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     }
                     return@launch
                 }
-                ManualPathValidation.OK,
-                ManualPathValidation.ROOT_BACKED -> Unit
+                ManualPathValidation.OK -> Unit
                 else -> {
                     L.w("Rejecting music source $path: $result")
                     currentContext.showToast(result.toastRes)
@@ -502,7 +507,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         UNREADABLE(R.string.set_path_unreadable),
         PERMISSION_MISSING(R.string.set_path_permission_missing),
         ROOT_UNAVAILABLE(R.string.set_path_root_unavailable),
-        ROOT_BACKED(R.string.lbl_ok),
         OPEN_FAILED(R.string.set_path_open_failed),
     }
 
@@ -519,10 +523,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         return try {
             val file = File(path)
             when {
-                isRootBackedRawDirectPath(path, file, directTs18Path) ->
-                    ManualPathValidation.ROOT_BACKED
-                rawRootCandidate && (!file.exists() || !file.isDirectory || !file.canRead()) ->
+                rawRootCandidate &&
+                    rootGate.stateSnapshot() != RootStateHolder.State.Available &&
+                    (!file.exists() || !file.isDirectory || !file.canRead()) ->
                     ManualPathValidation.ROOT_UNAVAILABLE
+                rawRootCandidate && (!file.exists() || !file.isDirectory || !file.canRead()) ->
+                    // Root can inspect this directory, but current scanning/playback still opens
+                    // app-UID file:// URIs. Keep the raw mount unavailable and direct users to its
+                    // /storage/usbdiskN alias rather than saving a source that cannot play.
+                    ManualPathValidation.UNREADABLE
                 !file.exists() -> ManualPathValidation.MISSING
                 !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
                 !file.canRead() -> ManualPathValidation.UNREADABLE
@@ -539,17 +548,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             L.w(e, "Runtime exception while validating manual path $path")
             ManualPathValidation.UNREADABLE
         }
-    }
-
-    private fun isRootBackedRawDirectPath(
-        path: String,
-        file: File,
-        directTs18Path: Boolean,
-    ): Boolean {
-        if (!directTs18Path || !path.startsWith("/mnt/media_rw/usbdisk")) return false
-        if (file.exists() && file.isDirectory && file.canRead()) return false
-        if (rootGate.stateSnapshot() != RootStateHolder.State.Available) return false
-        return TopwaySourcePolicy.canListRootBackedDirectory(path, rootGate)
     }
 
     private fun shouldRejectThirdPartyLocation(
@@ -1070,12 +1068,14 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun requestStoragePermission() {
-        val permission =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Manifest.permission.READ_MEDIA_AUDIO
-            } else {
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            }
+        val permission = requiredStoragePermission()
+        if (
+            storagePermissionRequestedBefore() &&
+                !shouldShowRequestPermissionRationale(permission)
+        ) {
+            showOpenAppSettingsDialog()
+            return
+        }
 
         val launcher =
             requireNotNull(storagePermissionLauncher) {
@@ -1084,12 +1084,48 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         try {
             L.d("Requesting storage permission: $permission")
+            markStoragePermissionRequested()
             launcher.launch(permission)
         } catch (e: Exception) {
             L.e("Failed to request storage permission")
             L.e(e.stackTraceToString())
             requireContext().showToast(R.string.err_no_app)
         }
+    }
+
+    private fun requiredStoragePermission(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+    private fun storagePermissionRequestedBefore(): Boolean =
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .getBoolean(KEY_STORAGE_PERMISSION_REQUESTED, false)
+
+    private fun markStoragePermissionRequested() {
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .edit()
+            .putBoolean(KEY_STORAGE_PERMISSION_REQUESTED, true)
+            .apply()
+    }
+
+    private fun showOpenAppSettingsDialog() {
+        val ctx = context ?: return
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.recovery_permission_title)
+            .setMessage(R.string.recovery_permission_denied)
+            .setPositiveButton(R.string.recovery_action_open_settings) { _, _ ->
+                startActivity(
+                    Intent(
+                        AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", ctx.packageName, null),
+                    )
+                )
+            }
+            .setNegativeButton(R.string.lbl_cancel, null)
+            .show()
     }
 
     private fun updateSaveButtonState() {
@@ -1105,5 +1141,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             }
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isEnabled
+    }
+
+    private companion object {
+        const val KEY_STORAGE_PERMISSION_REQUESTED = "auxio_storage_permission_requested"
     }
 }

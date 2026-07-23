@@ -208,7 +208,7 @@ interface MusicRepository {
      *
      * @param worker The [IndexingWorker] to use for initial loading.
      */
-    suspend fun startup(worker: IndexingWorker, automaticScanAllowed: Boolean = true)
+    suspend fun startup(worker: IndexingWorker, automaticScanAllowed: Boolean)
 
     /**
      * Re-index the music library. This will trigger a call to [IndexingWorker.requestIndex] on the

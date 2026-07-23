@@ -73,8 +73,19 @@ class EarlyPrestartSettings @Inject constructor(@ApplicationContext context: Con
     }
 
     fun summary(): String {
+        val persistedOutcome = outcome
+        val effectiveOutcome =
+            if (
+                persistedOutcome == Outcome.REQUESTED &&
+                    lastRunEpochMs > 0L &&
+                    System.currentTimeMillis() - lastRunEpochMs > REQUEST_STALE_AFTER_MS
+            ) {
+                Outcome.TIMED_OUT
+            } else {
+                persistedOutcome
+            }
         val state =
-            when (outcome) {
+            when (effectiveOutcome) {
                 Outcome.NEVER -> appContext.getString(R.string.set_early_prestart_status_never)
                 Outcome.REQUESTED ->
                     appContext.getString(R.string.set_early_prestart_status_requested)
@@ -86,7 +97,7 @@ class EarlyPrestartSettings @Inject constructor(@ApplicationContext context: Con
                 Outcome.START_FAILED ->
                     appContext.getString(R.string.set_early_prestart_status_start_failed)
             }
-        return if (lastRunEpochMs > 0L) {
+        return if (effectiveOutcome != Outcome.NEVER && lastRunEpochMs > 0L) {
             val formatted =
                 DateUtils.getRelativeTimeSpanString(
                         lastRunEpochMs,
@@ -104,5 +115,6 @@ class EarlyPrestartSettings @Inject constructor(@ApplicationContext context: Con
         const val KEY_EARLY_PRESTART_ENABLED = "auxio_early_prestart"
         private const val KEY_EARLY_PRESTART_OUTCOME = "auxio_early_prestart_outcome"
         private const val KEY_EARLY_PRESTART_LAST_RUN = "auxio_early_prestart_last_run"
+        private const val REQUEST_STALE_AFTER_MS = 20_000L
     }
 }

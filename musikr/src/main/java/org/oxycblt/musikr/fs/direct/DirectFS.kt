@@ -337,17 +337,14 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                 )
             }
         }
-        val rootList =
-            try {
-                rootGate
-                    ?.runRootCommandSync(buildRootListCommand(directory.absolutePath))
-                    ?.mapNotNull { parseRootEntry(directory, it) }
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "Root-assisted DirectFS listing failed for ${directory.path}", e)
-                null
-            }
-        if (rootList != null) return rootList
-        Log.w(TAG, "DirectFS root is unavailable or inaccessible: ${directory.path}")
+        if (rootGate != null) {
+            Log.w(
+                TAG,
+                "Rejecting root-only DirectFS source without app-readable descriptors: ${directory.path}",
+            )
+        } else {
+            Log.w(TAG, "DirectFS source is unavailable or inaccessible: ${directory.path}")
+        }
         return null
     }
 

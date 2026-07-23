@@ -24,6 +24,7 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.util.newMainPendingIntent
 
 /** Temporary low-importance notification used by the existing Auxio service during early prep. */
 class EarlyPrestartNotification(context: Context) :
@@ -37,6 +38,7 @@ class EarlyPrestartNotification(context: Context) :
         setSmallIcon(R.drawable.ic_auxio_24)
         setContentTitle(context.getString(R.string.notification_early_prestart_title))
         setContentText(context.getString(R.string.notification_early_prestart_text))
+        setContentIntent(context.newMainPendingIntent())
         setCategory(NotificationCompat.CATEGORY_SERVICE)
         setPriority(NotificationCompat.PRIORITY_LOW)
         setSilent(true)

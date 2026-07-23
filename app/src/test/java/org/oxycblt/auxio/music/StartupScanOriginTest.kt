@@ -63,6 +63,7 @@ class StartupScanOriginTest {
                     StartupScanAuthorityPolicy.allowAutomaticScan(
                         topwayCompatFlavor = true,
                         origin = StartupScanOrigin.USER_VISIBLE,
+                        sourceAuthority = true,
                     ),
             )
 
@@ -92,6 +93,7 @@ class StartupScanOriginTest {
                         StartupScanAuthorityPolicy.allowAutomaticScan(
                             topwayCompatFlavor = true,
                             origin = origin,
+                            sourceAuthority = true,
                         ),
                 )
 
@@ -106,6 +108,19 @@ class StartupScanOriginTest {
             StartupScanAuthorityPolicy.allowAutomaticScan(
                 topwayCompatFlavor = false,
                 origin = StartupScanOrigin.BACKGROUND,
+                sourceAuthority = true,
+            )
+        )
+    }
+
+
+    @Test
+    fun missingSourceAuthorityAlwaysSuppressesAutomaticScan() {
+        assertFalse(
+            StartupScanAuthorityPolicy.allowAutomaticScan(
+                topwayCompatFlavor = false,
+                origin = StartupScanOrigin.USER_VISIBLE,
+                sourceAuthority = false,
             )
         )
     }

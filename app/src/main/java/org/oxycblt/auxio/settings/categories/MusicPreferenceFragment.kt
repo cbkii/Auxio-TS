@@ -54,7 +54,6 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
     private val musicModel: MusicViewModel by viewModels()
     @Inject lateinit var rootStateHolder: RootStateHolder
     @Inject lateinit var earlyPrestartSettings: EarlyPrestartSettings
-    private var applyingEarlyPrestartState = false
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
         when (preference.key) {
@@ -162,12 +161,13 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     rootStateHolder.setUserEnabled(enabled)
                     if (!enabled) {
                         earlyPrestartSettings.enabled = false
-                        applyingEarlyPrestartState = true
                         findPreference<SwitchPreferenceCompat>(
                                 getString(R.string.set_key_early_prestart)
                             )
-                            ?.isChecked = false
-                        applyingEarlyPrestartState = false
+                            ?.apply {
+                                isChecked = false
+                                isEnabled = false
+                            }
                         refreshEarlyPrestartStatus()
                     } else {
                         probeRootFromSettings()
@@ -206,12 +206,10 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
     }
 
     private fun setupEarlyPrestartSwitch(preference: SwitchPreferenceCompat) {
-        applyingEarlyPrestartState = true
         preference.isChecked = earlyPrestartSettings.enabled
-        applyingEarlyPrestartState = false
+        preference.isEnabled = rootStateHolder.isUserEnabled()
         preference.onPreferenceChangeListener =
             Preference.OnPreferenceChangeListener { _, newValue ->
-                if (applyingEarlyPrestartState) return@OnPreferenceChangeListener true
                 val enable = newValue as? Boolean == true
                 if (!enable) {
                     earlyPrestartSettings.enabled = false
@@ -227,13 +225,13 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                 preference.isEnabled = false
                 viewLifecycleOwner.lifecycleScope.launch {
                     val state = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
-                    val available = state == RootStateHolder.State.Available
+                    val rootStillEnabled = rootStateHolder.isUserEnabled()
+                    val available = rootStillEnabled && state == RootStateHolder.State.Available
                     earlyPrestartSettings.enabled = available
-                    applyingEarlyPrestartState = true
                     preference.isChecked = available
-                    applyingEarlyPrestartState = false
-                    preference.isEnabled = true
+                    preference.isEnabled = rootStillEnabled
                     requireContext().showToast(rootStateMessage(state))
+                    refreshRootStatus()
                     refreshEarlyPrestartStatus()
                 }
                 false
@@ -245,7 +243,21 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
             val state = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
             if (!isAdded) return@launch
             requireContext().showToast(rootStateMessage(state))
+            refreshRootStatus()
+            findPreference<SwitchPreferenceCompat>(getString(R.string.set_key_early_prestart))
+                ?.isEnabled = rootStateHolder.isUserEnabled()
             refreshEarlyPrestartStatus()
+        }
+    }
+
+    private fun refreshRootStatus() {
+        findPreference<Preference>(getString(R.string.set_key_root_fs_status))?.let { preference ->
+            RootDiagnosticsHelper.setupRootFsStatus(
+                requireContext(),
+                preference,
+                rootStateHolder,
+                viewLifecycleOwner.lifecycleScope,
+            )
         }
     }
 

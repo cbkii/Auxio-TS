@@ -88,6 +88,7 @@ private constructor(
     private var startupJob: Job? = null
     private var attached = false
     private var activeStartupOrigin: StartupScanOrigin? = null
+    private var activeStartupAutomaticScanAllowed = false
     private var pendingStartupOrigin: StartupScanOrigin? = null
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
@@ -125,6 +126,7 @@ private constructor(
                 startupJob.also {
                     startupJob = null
                     activeStartupOrigin = null
+                    activeStartupAutomaticScanAllowed = false
                     pendingStartupOrigin = null
                 }
             }
@@ -151,28 +153,33 @@ private constructor(
                 L.d("Ignoring startup request after IndexingHolder release [origin=$origin]")
                 return
             }
+            val sourceAuthority =
+                StartupScanAuthorityPolicy.hasCurrentSourceAuthority(workerContext, musicSettings)
+            val automaticScanAllowed =
+                StartupScanAuthorityPolicy.allowAutomaticScan(
+                    topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    origin = origin,
+                    sourceAuthority = sourceAuthority,
+                )
             if (startupJob?.isActive == true) {
-                val activePriority = activeStartupOrigin?.priority ?: 0
-                if (origin.priority > activePriority) {
-                    pendingStartupOrigin = StartupScanOrigin.merge(pendingStartupOrigin, origin)
+                if (automaticScanAllowed && !activeStartupAutomaticScanAllowed) {
+                    pendingStartupOrigin = origin
                     L.d(
-                        "Queued higher-priority startup origin while load is active " +
+                        "Queued startup because effective scan authority increased " +
                             "[active=$activeStartupOrigin pending=$pendingStartupOrigin]"
                     )
                 } else {
                     L.d(
                         "Startup library load already running; ignoring duplicate " +
-                            "[active=$activeStartupOrigin requested=$origin]"
+                            "[active=$activeStartupOrigin requested=$origin " +
+                            "activeAuthority=$activeStartupAutomaticScanAllowed " +
+                            "requestedAuthority=$automaticScanAllowed]"
                     )
                 }
                 return
             }
-            val automaticScanAllowed =
-                StartupScanAuthorityPolicy.allowAutomaticScan(
-                    topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
-                    origin = origin,
-                )
             activeStartupOrigin = origin
+            activeStartupAutomaticScanAllowed = automaticScanAllowed
             startupJob =
                 indexScope.launch {
                     try {
@@ -185,11 +192,13 @@ private constructor(
                                 if (!attached) {
                                     startupJob = null
                                     activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
                                     pendingStartupOrigin = null
                                     null
                                 } else {
                                     startupJob = null
                                     activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
                                     pendingStartupOrigin.also { pendingStartupOrigin = null }
                                 }
                             }
@@ -203,6 +212,10 @@ private constructor(
                 }
         }
     }
+
+    /** Side-effect-free snapshot for prestart foreground-owner restoration. */
+    fun hasForegroundWork(): Boolean =
+        musicRepository.indexingState is IndexingState.Indexing || musicSettings.shouldBeObserving
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
         val state = musicRepository.indexingState

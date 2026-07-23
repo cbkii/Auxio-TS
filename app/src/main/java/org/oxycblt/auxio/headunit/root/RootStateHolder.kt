@@ -48,6 +48,9 @@ constructor(
         DisabledByUser,
     }
 
+    private val stateLock = Any()
+    private var consentGeneration = 0L
+
     @Volatile
     var state: State = State.Unknown
         private set
@@ -85,7 +88,10 @@ constructor(
                 if (enabled) RootAccessPolicy.ON_DEMAND.name else RootAccessPolicy.OFF.name,
             )
         }
-        state = if (enabled) State.Unknown else State.DisabledByUser
+        synchronized(stateLock) {
+            consentGeneration += 1L
+            state = if (enabled) State.Unknown else State.DisabledByUser
+        }
     }
 
     fun stateSnapshot(): State {
@@ -126,23 +132,24 @@ constructor(
     }
 
     fun probeSync(): State {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            state = State.UnsupportedForVariant
-            return state
-        }
+        val generation =
+            synchronized(stateLock) {
+                if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    state = State.UnsupportedForVariant
+                    return state
+                }
+                if (!userEnabled()) {
+                    state = State.DisabledByUser
+                    return state
+                }
+                if (state == State.DisabledByUser) state = State.Unknown
+                // A timeout is retryable. Other resolved states remain cached for this consent
+                // generation.
+                if (state != State.Unknown && state != State.TimedOut) return state
+                consentGeneration
+            }
 
-        if (!userEnabled()) {
-            state = State.DisabledByUser
-            return state
-        }
-        if (state == State.DisabledByUser) {
-            state = State.Unknown
-        }
-
-        // A timeout is retryable. Other resolved states are retained until process restart or the
-        // user disables/re-enables root-assisted storage.
-        if (state != State.Unknown && state != State.TimedOut) return state
-        state =
+        val probed =
             when (
                 val result =
                     processRunner.runRootCommand(
@@ -158,7 +165,15 @@ constructor(
                 RootProcessResult.OutputLimitExceeded -> State.Denied
                 is RootProcessResult.ExecutionFailure -> State.Unavailable
             }
-        return state
+
+        return synchronized(stateLock) {
+            if (generation != consentGeneration || !userEnabled()) {
+                state = if (userEnabled()) State.Unknown else State.DisabledByUser
+            } else {
+                state = probed
+            }
+            state
+        }
     }
 
     // Prevent free-form shell execution. Only accept known-safe deterministic commands.
