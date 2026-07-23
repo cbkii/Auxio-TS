@@ -43,14 +43,14 @@ jobs:
       - name: Prepare CI environment
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-      - name: Format and run app unit tests
+      - name: Format Kotlin and run app unit tests
         id: verify
         shell: bash
         run: |
           format_status=0
           test_status=0
 
-          bash ./scripts/ci-gradle.sh spotlessApply || format_status=$?
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply || format_status=$?
           if [[ "${format_status}" -eq 0 ]]; then
             bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest > /tmp/pr196-test.log 2>&1 || test_status=$?
             cat /tmp/pr196-test.log
@@ -85,7 +85,7 @@ jobs:
           TEST_STATUS: ${{ steps.verify.outputs.test_status }}
         run: |
           if [[ "${FORMAT_STATUS}" -ne 0 ]]; then
-            echo "::error::spotlessApply failed with status ${FORMAT_STATUS}."
+            echo "::error::spotlessKotlinApply failed with status ${FORMAT_STATUS}."
             exit "${FORMAT_STATUS}"
           fi
           if [[ "${TEST_STATUS}" -ne 0 ]]; then
