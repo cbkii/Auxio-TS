@@ -47,8 +47,28 @@ class LibraryRecoveryPolicyTest {
             )
 
         assertEquals(LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED, state.kind)
+        assertFalse(state.showProgress)
         assertEquals(LibraryRecoveryPolicy.Action.GRANT_PERMISSION, state.primary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.secondary?.action)
+        assertEquals(null, state.tertiary)
+    }
+
+    @Test
+    fun missingDirectPermissionAlsoOffersExplicitRootActionWhenSupported() {
+        val state =
+            resolve(
+                locationMode = LocationMode.DIRECT_FS,
+                storagePermissionGranted = false,
+                sourceConfigured = true,
+                rootSupported = true,
+                rootEnabled = false,
+            )
+
+        assertEquals(LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED, state.kind)
+        assertFalse(state.showProgress)
+        assertEquals(LibraryRecoveryPolicy.Action.GRANT_PERMISSION, state.primary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.secondary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.ENABLE_ROOT, state.tertiary?.action)
     }
 
     @Test
@@ -62,6 +82,7 @@ class LibraryRecoveryPolicyTest {
             )
 
         assertEquals(LibraryRecoveryPolicy.Kind.SOURCE_REQUIRED, state.kind)
+        assertFalse(state.showProgress)
         assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.primary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.ENABLE_ROOT, state.secondary?.action)
     }
@@ -88,10 +109,50 @@ class LibraryRecoveryPolicyTest {
     }
 
     @Test
+    fun sourceUnavailableShowsRetrySourceAndOptionalRootActions() {
+        val state =
+            resolve(
+                libraryStatus = StartupLibraryStatus.SourceUnavailable,
+                locationMode = LocationMode.DIRECT_FS,
+                rootSupported = true,
+                rootEnabled = false,
+            )
+
+        assertEquals(LibraryRecoveryPolicy.Kind.SOURCE_UNAVAILABLE, state.kind)
+        assertFalse(state.showProgress)
+        assertEquals(LibraryRecoveryPolicy.Action.REFRESH, state.primary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.secondary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.ENABLE_ROOT, state.tertiary?.action)
+    }
+
+    @Test
     fun cacheUnavailableShowsRefreshRescanAndSourceActions() {
         val state = resolve(libraryStatus = StartupLibraryStatus.CacheUnavailable)
 
         assertEquals(LibraryRecoveryPolicy.Kind.CACHE_UNAVAILABLE, state.kind)
+        assertFalse(state.showProgress)
+        assertEquals(LibraryRecoveryPolicy.Action.REFRESH, state.primary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.RESCAN, state.secondary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.tertiary?.action)
+    }
+
+    @Test
+    fun confirmedEmptyLibraryShowsRefreshRescanAndSourceActions() {
+        val state = resolve(libraryStatus = StartupLibraryStatus.Empty)
+
+        assertEquals(LibraryRecoveryPolicy.Kind.EMPTY, state.kind)
+        assertFalse(state.showProgress)
+        assertEquals(LibraryRecoveryPolicy.Action.REFRESH, state.primary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.RESCAN, state.secondary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.tertiary?.action)
+    }
+
+    @Test
+    fun usableStatusWithEmptyVisibleLibraryRecoversAsMissingCache() {
+        val state = resolve(empty = true, libraryStatus = StartupLibraryStatus.Usable)
+
+        assertEquals(LibraryRecoveryPolicy.Kind.CACHE_UNAVAILABLE, state.kind)
+        assertFalse(state.showProgress)
         assertEquals(LibraryRecoveryPolicy.Action.REFRESH, state.primary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.RESCAN, state.secondary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.tertiary?.action)
@@ -109,6 +170,7 @@ class LibraryRecoveryPolicyTest {
         assertFalse(state.showProgress)
         assertEquals(LibraryRecoveryPolicy.Action.REFRESH, state.primary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.RESCAN, state.secondary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.tertiary?.action)
     }
 
     @Test
