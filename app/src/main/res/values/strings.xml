@@ -294,8 +294,9 @@
 
 
     <string name="set_ts18_launcher_integration_mode">TS18 launcher integration</string>
-    <string name="set_ts18_launcher_integration_mode_desc">Controls safe in-app Android, Topway broadcast, and Topway command paths for DoFun/Topway launchers.</string>
-    <string name="set_ts18_launcher_integration_mode_auto_all_safe_paths">Auto / all safe paths</string>
+    <string name="set_ts18_launcher_integration_mode_desc">Choose the primary Android media path or an explicit legacy Topway fallback. Generic DoFun media is recommended.</string>
+    <string name="set_ts18_launcher_integration_mode_generic_dofun_media">Generic DoFun media (recommended)</string>
+    <string name="set_ts18_launcher_integration_mode_auto_all_safe_paths">Legacy: all safe paths</string>
     <string name="set_ts18_launcher_integration_mode_android_media_session_only">Android media session only</string>
     <string name="set_ts18_launcher_integration_mode_topway_broadcast_only">Topway broadcast only</string>
     <string name="set_ts18_launcher_integration_mode_topway_command_only">Topway command only</string>
@@ -744,7 +745,19 @@
     <string name="set_startup_restore_overlay">Restore floating controls only</string>
     <string name="set_launcher_integration">Launcher integration</string>
     <string name="set_launcher_integration_desc">Automatic media bridge; advanced protocol options inside</string>
-    <string name="set_launcher_integration_summary">Automatic — recommended</string>
+    <string name="set_launcher_integration_summary">Generic Android media — recommended</string>
+    <string name="set_playback_notification_access">Playback notification access</string>
+    <string name="set_playback_notification_access_desc">Review the exact playback channel used by DoFun and other media controllers</string>
+    <string name="set_playback_notification_access_summary">Package: %1$s
+Notifications: %2$s
+Playback channel: %3$s
+Publication requested this process: %4$s</string>
+    <string name="set_playback_channel_usable">usable (importance %1$s)</string>
+    <string name="set_playback_channel_blocked">blocked (importance %1$s)</string>
+    <string name="set_playback_channel_not_created">not created yet</string>
+    <string name="set_playback_channel_unknown_importance">unknown</string>
+    <string name="set_status_yes">yes</string>
+    <string name="set_status_no">no</string>
     <string name="set_advanced">Advanced</string>
     <string name="set_head_unit_status">Head-unit status</string>
     <string name="set_head_unit_status_desc">High-level readiness for Topway-specific surfaces</string>

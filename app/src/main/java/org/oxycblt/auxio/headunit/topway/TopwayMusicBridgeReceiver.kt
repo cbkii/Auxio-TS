@@ -39,6 +39,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class TopwayMusicBridgeReceiver : BroadcastReceiver() {
     @Inject lateinit var journal: DiagnosticJournal
+    @Inject lateinit var coordinator: TopwayLauncherIntegrationCoordinator
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
@@ -62,6 +63,17 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         }
 
         journal.log(DiagnosticJournal.CAT_TOPWAY_CMD, "Incoming Intent", action)
+        if (!coordinator.mode.handlesTopwayCommands) {
+            journal.log(
+                DiagnosticJournal.CAT_TOPWAY_CMD,
+                "Ignored due to mode",
+                action,
+                coordinator.mode.name,
+            )
+            L.d("Ignoring Topway bridge action in ${coordinator.mode.name}: $action")
+            return
+        }
+
         val serviceClass =
             if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 try {

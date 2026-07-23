@@ -19,6 +19,8 @@
 package org.oxycblt.auxio.playback.service
 
 import android.annotation.SuppressLint
+import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -30,7 +32,7 @@ import androidx.annotation.DrawableRes
 import androidx.car.app.mediaextensions.MetadataExtras
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
-import androidx.media.session.MediaButtonReceiver
+import androidx.media.session.MediaButtonReceiver as AndroidXMediaButtonReceiver
 import coil3.size.Size
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -40,6 +42,7 @@ import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
+import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.CoverProvider
 import org.oxycblt.auxio.image.ImageSettings
@@ -74,6 +77,7 @@ private constructor(
     private val bitmapProvider: BitmapProvider,
     private val imageSettings: ImageSettings,
     private val mediaSessionInterface: MediaSessionInterface,
+    private val launcherCoordinator: TopwayLauncherIntegrationCoordinator,
 ) : PlaybackStateManager.Listener, ImageSettings.Listener {
 
     class Factory
@@ -83,6 +87,7 @@ private constructor(
         private val bitmapProvider: BitmapProvider,
         private val imageSettings: ImageSettings,
         private val mediaSessionInterface: MediaSessionInterface,
+        private val launcherCoordinator: TopwayLauncherIntegrationCoordinator,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             MediaSessionHolder(
@@ -92,16 +97,38 @@ private constructor(
                 bitmapProvider,
                 imageSettings,
                 mediaSessionInterface,
+                launcherCoordinator,
             )
     }
 
-    private val mediaSession = MediaSessionCompat(context, context.packageName)
+    private val mediaButtonReceiver =
+        ComponentName(context, org.oxycblt.auxio.playback.service.MediaButtonReceiver::class.java)
+    private val mediaButtonReceiverIntent =
+        PendingIntent.getBroadcast(
+            context,
+            0,
+            Intent(Intent.ACTION_MEDIA_BUTTON).setComponent(mediaButtonReceiver),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    private val mediaSession =
+        MediaSessionCompat(
+            context,
+            context.packageName,
+            mediaButtonReceiver,
+            mediaButtonReceiverIntent,
+        )
     val token: MediaSessionCompat.Token
         get() = mediaSession.sessionToken
 
     private val artworkRequestToken = AtomicLong()
 
-    private val _notification = PlaybackNotification(context, mediaSession.sessionToken)
+    private val _notification =
+        PlaybackNotification(context, mediaSession.sessionToken) {
+            DofunMediaCompatPolicy.notificationProfile(
+                launcherCoordinator.mode,
+                BuildConfig.TOPWAY_COMPAT_FLAVOR,
+            )
+        }
     val notification: ForegroundServiceNotification
         get() = _notification
 
@@ -109,7 +136,18 @@ private constructor(
         playbackManager.addListener(this)
         imageSettings.registerListener(this)
         mediaSession.apply {
-            isActive = true
+            setFlags(
+                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS or
+                    MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS
+            )
+            setCallback(mediaSessionInterface)
+            setPlaybackState(
+                PlaybackStateCompat.Builder()
+                    .setActions(MediaSessionInterface.ACTIONS)
+                    .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f)
+                    .build()
+            )
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 setSessionActivity(
                     android.app.PendingIntent.getActivity(
@@ -132,12 +170,12 @@ private constructor(
                 setSessionActivity(context.newNowPlayingPendingIntent())
             }
             setQueueTitle(context.getString(R.string.lbl_queue))
-            setCallback(mediaSessionInterface)
+            isActive = true
         }
     }
 
     fun tryMediaButtonIntent(intent: Intent): Boolean =
-        MediaButtonReceiver.handleIntent(mediaSession, intent) != null
+        AndroidXMediaButtonReceiver.handleIntent(mediaSession, intent) != null
 
     /**
      * Release this instance, closing the [MediaSessionCompat] and preventing any further updates to
@@ -561,7 +599,9 @@ private constructor(
         album: CharSequence?,
         durationMs: Long,
     ) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !launcherCoordinator.mode.sendsTopwayBroadcasts) {
+            return
+        }
         try {
             context.sendBroadcast(
                 Intent(ACTION_LEGACY_META_CHANGED)
@@ -578,7 +618,9 @@ private constructor(
     }
 
     private fun broadcastLegacyPlaybackChanged() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !launcherCoordinator.mode.sendsTopwayBroadcasts) {
+            return
+        }
         try {
             context.sendBroadcast(
                 Intent(ACTION_LEGACY_PLAYSTATE_CHANGED)
@@ -620,50 +662,28 @@ private constructor(
 private class PlaybackNotification(
     private val context: Context,
     sessionToken: MediaSessionCompat.Token,
+    private val profileProvider: () -> PlaybackNotificationProfile,
 ) : ForegroundServiceNotification(context, CHANNEL_INFO) {
+    private val sessionToken = sessionToken
+    private var isPlaying = false
+    private var repeatMode = RepeatMode.NONE
+    private var isShuffled = false
+
     init {
         setSmallIcon(R.drawable.ic_auxio_24)
         setCategory(NotificationCompat.CATEGORY_TRANSPORT)
         setShowWhen(false)
         setSilent(true)
+        setOnlyAlertOnce(true)
+        setAutoCancel(false)
         setContentIntent(context.newNowPlayingPendingIntent())
         setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-
-        addAction(buildRepeatAction(context, RepeatMode.NONE))
-        addAction(
-            buildAction(
-                context,
-                PlaybackActions.ACTION_SKIP_PREV,
-                R.drawable.ic_skip_prev_24,
-                context.getString(R.string.desc_skip_prev),
-            )
-        )
-        addAction(buildPlayPauseAction(context, true))
-        addAction(
-            buildAction(
-                context,
-                PlaybackActions.ACTION_SKIP_NEXT,
-                R.drawable.ic_skip_next_24,
-                context.getString(R.string.desc_skip_next),
-            )
-        )
-        addAction(buildShuffleAction(context, false))
-
-        setStyle(
-            MediaStyle(this).setMediaSession(sessionToken).setShowActionsInCompactView(1, 2, 3)
-        )
+        rebuildActions()
     }
 
     override val code: Int
         get() = IntegerTable.PLAYBACK_NOTIFICATION_CODE
 
-    // --- STATE FUNCTIONS ---
-
-    /**
-     * Update the currently shown metadata in this notification.
-     *
-     * @param metadata The [MediaMetadataCompat] to display in this notification.
-     */
     fun updateMetadata(metadata: MediaMetadataCompat) {
         L.d("Updating shown metadata")
         val albumArt =
@@ -673,8 +693,7 @@ private class PlaybackNotification(
         if (albumArt != null) {
             setLargeIcon(albumArt)
         } else {
-            // TS18/DoFun SystemUI crashes when it crops Auxio's previous 1x1 transparent
-            // placeholder. Use a bounded, RemoteViews-safe canvas instead of a tiny bitmap.
+            // TS18/DoFun SystemUI crashes when it crops a 1x1 transparent placeholder.
             setLargeIcon(NotificationBitmapSafety.fallbackBitmap())
         }
         setContentTitle(
@@ -694,48 +713,118 @@ private class PlaybackNotification(
         )
     }
 
-    /**
-     * Update the playing state shown in this notification.
-     *
-     * @param isPlaying Whether playback should be indicated as ongoing or paused.
-     */
     fun updatePlaying(isPlaying: Boolean) {
         L.d("Updating playing state: $isPlaying")
-        mActions[2] = buildPlayPauseAction(context, isPlaying)
+        this.isPlaying = isPlaying
+        rebuildActions()
     }
 
-    /**
-     * Update the secondary action in this notification to show the current [RepeatMode].
-     *
-     * @param repeatMode The current [RepeatMode].
-     */
     fun updateRepeatMode(repeatMode: RepeatMode) {
         L.d("Applying repeat mode action: $repeatMode")
-        mActions[0] = buildRepeatAction(context, repeatMode)
+        this.repeatMode = repeatMode
+        rebuildActions()
     }
 
-    /**
-     * Update the secondary action in this notification to show the current shuffle state.
-     *
-     * @param isShuffled Whether the queue is currently shuffled or not.
-     */
     fun updateShuffled(isShuffled: Boolean) {
         L.d("Applying shuffle action: $isShuffled")
-        mActions[4] = buildShuffleAction(context, isShuffled)
+        this.isShuffled = isShuffled
+        rebuildActions()
     }
 
-    // --- NOTIFICATION ACTION BUILDERS ---
+    private fun rebuildActions() {
+        mActions.clear()
+        when (profileProvider()) {
+            PlaybackNotificationProfile.GenericDofun -> rebuildGenericActions()
+            PlaybackNotificationProfile.RichAuxio -> rebuildRichActions()
+        }
+    }
+
+    private fun rebuildGenericActions() {
+        val keys = DofunMediaCompatPolicy.genericActionKeyCodes(isPlaying)
+        addAction(
+            buildMediaButtonAction(
+                keys[0],
+                R.drawable.ic_skip_prev_24,
+                context.getString(R.string.desc_skip_prev),
+            )
+        )
+        addAction(
+            buildMediaButtonAction(
+                keys[1],
+                if (isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24,
+                context.getString(R.string.desc_play_pause),
+            )
+        )
+        addAction(
+            buildMediaButtonAction(
+                keys[2],
+                R.drawable.ic_skip_next_24,
+                context.getString(R.string.desc_skip_next),
+            )
+        )
+        val stopIntent =
+            AndroidXMediaButtonReceiver.buildMediaButtonPendingIntent(
+                context,
+                android.view.KeyEvent.KEYCODE_MEDIA_STOP,
+            )
+        setDeleteIntent(stopIntent)
+        setOngoing(isPlaying)
+        setStyle(
+            MediaStyle(this)
+                .setMediaSession(sessionToken)
+                .setShowActionsInCompactView(*DofunMediaCompatPolicy.compactActionIndices)
+                .setShowCancelButton(true)
+                .setCancelButtonIntent(stopIntent)
+        )
+    }
+
+    private fun rebuildRichActions() {
+        addAction(buildRepeatAction(context, repeatMode))
+        addAction(
+            buildAction(
+                context,
+                PlaybackActions.ACTION_SKIP_PREV,
+                R.drawable.ic_skip_prev_24,
+                context.getString(R.string.desc_skip_prev),
+            )
+        )
+        addAction(buildPlayPauseAction(context, isPlaying))
+        addAction(
+            buildAction(
+                context,
+                PlaybackActions.ACTION_SKIP_NEXT,
+                R.drawable.ic_skip_next_24,
+                context.getString(R.string.desc_skip_next),
+            )
+        )
+        addAction(buildShuffleAction(context, isShuffled))
+        setDeleteIntent(null)
+        setOngoing(false)
+        setStyle(
+            MediaStyle(this)
+                .setMediaSession(sessionToken)
+                .setShowActionsInCompactView(1, 2, 3)
+                .setShowCancelButton(false)
+        )
+    }
+
+    private fun buildMediaButtonAction(
+        keyCode: Int,
+        @DrawableRes iconRes: Int,
+        title: String,
+    ): NotificationCompat.Action =
+        NotificationCompat.Action.Builder(
+                iconRes,
+                title,
+                AndroidXMediaButtonReceiver.buildMediaButtonPendingIntent(context, keyCode),
+            )
+            .build()
 
     private fun buildPlayPauseAction(
         context: Context,
         isPlaying: Boolean,
     ): NotificationCompat.Action {
-        val drawableRes =
-            if (isPlaying) {
-                R.drawable.ic_pause_24
-            } else {
-                R.drawable.ic_play_24
-            }
+        val drawableRes = if (isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24
         return buildAction(
             context,
             PlaybackActions.ACTION_PLAY_PAUSE,
@@ -747,25 +836,20 @@ private class PlaybackNotification(
     private fun buildRepeatAction(
         context: Context,
         repeatMode: RepeatMode,
-    ): NotificationCompat.Action {
-        return buildAction(
+    ): NotificationCompat.Action =
+        buildAction(
             context,
             PlaybackActions.ACTION_INC_REPEAT_MODE,
             repeatMode.icon,
             context.getString(R.string.desc_change_repeat),
         )
-    }
 
     private fun buildShuffleAction(
         context: Context,
         isShuffled: Boolean,
     ): NotificationCompat.Action {
         val drawableRes =
-            if (isShuffled) {
-                R.drawable.ic_shuffle_on_24
-            } else {
-                R.drawable.ic_shuffle_off_24
-            }
+            if (isShuffled) R.drawable.ic_shuffle_on_24 else R.drawable.ic_shuffle_off_24
         return buildAction(
             context,
             PlaybackActions.ACTION_INVERT_SHUFFLE,
@@ -790,11 +874,7 @@ private class PlaybackNotification(
     companion object {
         const val KEY_PARENT = BuildConfig.APPLICATION_ID + ".metadata.PARENT"
 
-        /** Notification channel used by solely the playback notification. */
         private val CHANNEL_INFO =
-            ChannelInfo(
-                id = BuildConfig.APPLICATION_ID + ".channel.PLAYBACK",
-                nameRes = R.string.lbl_playback,
-            )
+            ChannelInfo(id = PlaybackNotificationChannel.id, nameRes = R.string.lbl_playback)
     }
 }

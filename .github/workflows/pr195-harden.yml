@@ -1,0 +1,110 @@
+name: PR195 Harden Generic Media Compatibility
+
+# Temporary branch-local hardening workflow. Remove before marking the PR ready.
+on:
+  push:
+    branches:
+      - feat/ts18-dofun-generic-media-compat
+    paths:
+      - .github/workflows/pr195-harden.yml
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/pr195-harden.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr195-harden-generic-media-compat
+  cancel-in-progress: true
+
+jobs:
+  harden:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/ts18-dofun-generic-media-compat
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "${sdk_dir}"
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Format Kotlin, compile and preserve exact result
+        shell: bash
+        run: |
+          set +e
+          # The full Spotless task provisions Eclipse/P2 tooling for unrelated formatters and can
+          # fail on a transient upstream socket timeout. This branch changes Kotlin only, so apply
+          # the deterministic Kotlin formatter here; canonical CI still runs the full check.
+          bash ./scripts/ci-gradle.sh --warning-mode all spotlessKotlinApply \
+            > /tmp/pr195-format.log 2>&1
+          format_rc=$?
+          cat /tmp/pr195-format.log
+
+          compile_rc=0
+          if [[ "${format_rc}" -eq 0 ]]; then
+            bash ./scripts/ci-gradle.sh --warning-mode all \
+              :app:assembleStandardDebug \
+              :app:assembleTopwayTwMusicDebug \
+              :app:assembleTopwayTwMediaDebug \
+              > /tmp/pr195-build.log 2>&1
+            compile_rc=$?
+            cat /tmp/pr195-build.log
+          fi
+          set -e
+
+          rm -f docs/ts18/launcher-integration/PR195_FORMAT_ERROR.txt
+          rm -f docs/ts18/launcher-integration/PR195_BUILD_ERROR.txt
+          if [[ "${format_rc}" -ne 0 ]]; then
+            {
+              echo "Temporary Kotlin Spotless output captured by PR #195 hardening workflow."
+              echo "Exit status: ${format_rc}"
+              echo
+              tail -n 4000 /tmp/pr195-format.log
+            } > docs/ts18/launcher-integration/PR195_FORMAT_ERROR.txt
+          elif [[ "${compile_rc}" -ne 0 ]]; then
+            {
+              echo "Temporary compiler output captured by PR #195 hardening workflow."
+              echo "Exit status: ${compile_rc}"
+              echo
+              tail -n 4000 /tmp/pr195-build.log
+            } > docs/ts18/launcher-integration/PR195_BUILD_ERROR.txt
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A app scripts/check-dofun-topway-compat.sh docs/ts18/launcher-integration
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(pr195): apply formatting and preserve hardening result'
+            git push origin HEAD:feat/ts18-dofun-generic-media-compat
+          fi
+
+          if [[ "${format_rc}" -ne 0 ]]; then
+            exit "${format_rc}"
+          fi
+          exit "${compile_rc}"

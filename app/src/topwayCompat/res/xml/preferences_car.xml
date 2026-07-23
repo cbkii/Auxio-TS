@@ -20,9 +20,10 @@
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/set_launcher_integration">
         <Preference app:key="@string/set_key_launcher_integration" app:summary="@string/set_launcher_integration_summary" app:title="@string/set_launcher_integration" />
+        <Preference app:key="@string/set_key_playback_notification_access" app:summary="@string/set_playback_notification_access_desc" app:title="@string/set_playback_notification_access" />
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/set_advanced">
-        <androidx.preference.ListPreference app:defaultValue="AutoAllSafePaths" app:entries="@array/entries_ts18_launcher_integration_mode" app:entryValues="@array/values_ts18_launcher_integration_mode" app:key="@string/set_key_ts18_launcher_integration_mode" app:summary="@string/set_ts18_launcher_integration_mode_desc" app:title="@string/set_ts18_launcher_integration_mode" />
+        <androidx.preference.ListPreference app:defaultValue="GenericDofunMedia" app:entries="@array/entries_ts18_launcher_integration_mode" app:entryValues="@array/values_ts18_launcher_integration_mode" app:key="@string/set_key_ts18_launcher_integration_mode" app:summary="@string/set_ts18_launcher_integration_mode_desc" app:title="@string/set_ts18_launcher_integration_mode" />
         <Preference app:key="@string/set_head_unit_compat_status" app:summary="@string/set_head_unit_compat_status_desc" app:title="@string/set_head_unit_compat_status" />
         <Preference app:key="open_diagnostics" app:summary="@string/set_dofun_launcher_integration_desc" app:title="@string/set_dofun_launcher_integration" />
         <androidx.preference.ListPreference app:defaultValue="Auto" app:entries="@array/entries_topway_seek_unit_policy" app:entryValues="@array/values_topway_seek_unit_policy" app:key="@string/set_key_topway_seek_unit_policy" app:summary="@string/set_topway_seek_unit_policy_desc" app:title="@string/set_topway_seek_unit_policy" />
