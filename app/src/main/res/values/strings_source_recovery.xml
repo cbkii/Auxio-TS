@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recovery_loading_cache">Checking saved music library…</string>
+    <string name="recovery_permission_required">Storage access is required for this music source.</string>
+    <string name="recovery_source_required">Choose where your music is stored.</string>
+    <string name="recovery_source_unavailable">The configured music source is not currently available.</string>
+    <string name="recovery_cache_unavailable">No usable saved library was found. Scan the configured source now.</string>
+    <string name="recovery_indexing">Scanning the music library…</string>
+    <string name="recovery_empty">No supported music was found in the configured source.</string>
+    <string name="recovery_failed">Music library loading failed. Retry or perform a full rescan.</string>
+
+    <string name="recovery_action_grant_permission">Grant access</string>
+    <string name="recovery_action_choose_source">Choose source</string>
+    <string name="recovery_action_refresh">Refresh</string>
+    <string name="recovery_action_rescan">Full rescan</string>
+    <string name="recovery_action_enable_root">Enable root access</string>
+    <string name="recovery_action_open_settings">Open app settings</string>
+
+    <string name="recovery_permission_title">Allow music-library access</string>
+    <string name="recovery_permission_message">Auxio-TS needs Android storage permission to read the selected System Database or Direct music source. File Picker mode does not require this broad permission.</string>
+    <string name="recovery_permission_denied">Storage permission was not granted. Choose File Picker mode or open app settings to grant access.</string>
+
+    <string name="recovery_root_title">Enable root-assisted source access?</string>
+    <string name="recovery_root_message">Auxio-TS will continue trying ordinary /storage paths first. Root is used only for bounded access to configured Direct paths that Android cannot read, such as raw /mnt/media_rw USB paths. This does not grant platform signing, UID 1000, MCU/CAN or firmware authority.</string>
+    <string name="recovery_root_granted">Root-assisted source access is available.</string>
+    <string name="recovery_root_denied">Magisk/root access was denied.</string>
+    <string name="recovery_root_timed_out">The root request timed out. Ordinary storage paths remain available.</string>
+    <string name="recovery_root_unavailable">Root access is unavailable on this build or device.</string>
+
+    <string name="set_key_early_prestart" translatable="false">auxio_early_prestart</string>
+    <string name="set_key_early_prestart_status" translatable="false">auxio_early_prestart_status</string>
+    <string name="set_early_prestart">Root-enabled early preparation</string>
+    <string name="set_early_prestart_desc">At boot, use the existing Auxio service to prepare saved playback and bounded library projections before the UI opens. Requires enabled and verified root access. Never autoplays or performs a full scan.</string>
+    <string name="set_early_prestart_status">Early preparation status</string>
+    <string name="set_early_prestart_status_desc">Tap to refresh the most recent bounded prestart result.</string>
+    <string name="set_early_prestart_requires_root">Enable and grant root-assisted filesystem access before enabling early preparation.</string>
+    <string name="set_early_prestart_status_never">Not run yet</string>
+    <string name="set_early_prestart_status_requested">Preparing saved playback and library projections</string>
+    <string name="set_early_prestart_status_ready">Preparation completed</string>
+    <string name="set_early_prestart_status_timed_out">Preparation timed out safely</string>
+    <string name="set_early_prestart_status_root_disabled">Skipped because root access was disabled</string>
+    <string name="set_early_prestart_status_start_failed">The existing service could not be started</string>
+    <string name="set_early_prestart_status_with_time">%1$s (epoch ms %2$d)</string>
+
+    <string name="notification_early_prestart_channel">Early music preparation</string>
+    <string name="notification_early_prestart_title">Preparing music library</string>
+    <string name="notification_early_prestart_text">Loading saved playback and bounded library data</string>
+</resources>
