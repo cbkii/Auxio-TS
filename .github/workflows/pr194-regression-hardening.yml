@@ -37,6 +37,13 @@ jobs:
         run: |
           python3 .github/pr194_fix_patch_script.py
           python3 .github/pr194_patch.py
+          sed -i 's/[[:space:]]\+$//' \
+            app/src/main/java/org/oxycblt/auxio/headunit/root/RootStateHolder.kt \
+            app/src/main/java/org/oxycblt/auxio/image/CoverProvider.kt \
+            app/src/main/java/org/oxycblt/auxio/playback/ui/visualizer/VisualizerCoordinator.kt \
+            app/src/main/java/org/oxycblt/auxio/playback/ui/visualizer/VisualizerRuntimeMetrics.kt \
+            musikr/src/main/java/org/oxycblt/musikr/fs/direct/DirectFS.kt \
+            musikr/src/androidTest/java/org/oxycblt/musikr/fs/direct/DirectFSInstrumentedTest.kt
 
       - name: Validate and push scoped patch
         shell: bash
