@@ -1,0 +1,60 @@
+name: PR195 Apply Generic Media Compatibility
+
+on:
+  push:
+    branches:
+      - feat/ts18-dofun-generic-media-compat
+    paths:
+      - scripts/pr195_apply_generic_media_compat.py
+      - .github/workflows/pr195-apply-generic-media-compat.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr195-apply-generic-media-compat
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/ts18-dofun-generic-media-compat
+          fetch-depth: 0
+
+      - name: Apply implementation
+        run: python3 scripts/pr195_apply_generic_media_compat.py
+
+      - name: Validate generated text and XML
+        run: |
+          python3 -m py_compile scripts/pr195_apply_generic_media_compat.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for path in (
+              Path('app/src/main/res/values/settings.xml'),
+              Path('app/src/main/res/values/strings.xml'),
+              Path('app/src/topwayCompat/res/xml/preferences_car.xml'),
+          ):
+              ET.parse(path)
+              print(f'XML OK: {path}')
+          PY
+          git diff --check
+          bash -n scripts/check-dofun-topway-compat.sh
+
+      - name: Commit implementation
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo 'No implementation changes were generated.' >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app scripts/check-dofun-topway-compat.sh docs/ts18/launcher-integration/DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md
+          git commit -m 'feat(ts18): add generic DoFun media compatibility profile'
+          git push origin HEAD:feat/ts18-dofun-generic-media-compat
