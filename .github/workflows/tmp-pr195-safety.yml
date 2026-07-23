@@ -1,0 +1,38 @@
+name: Temporary PR195 safety update
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-pr195-safety-update
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: feat/ts18-dofun-generic-media-compat
+          fetch-depth: 0
+      - name: Apply safety assertion update
+        shell: bash
+        run: python3 scripts/tmp-pr195-safety.py
+      - name: Validate and commit
+        shell: bash
+        run: |
+          bash -n scripts/check-dofun-topway-compat.sh
+          bash scripts/check-dofun-topway-compat.sh
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/check-dofun-topway-compat.sh
+          git commit -m 'test: align DoFun safety assertion with explicit receiver'
+          git push origin HEAD:feat/ts18-dofun-generic-media-compat
