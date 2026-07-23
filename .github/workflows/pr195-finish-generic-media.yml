@@ -79,7 +79,11 @@ jobs:
 
       - name: Run focused unit tests
         shell: bash
-        run: bash ./scripts/ci-gradle.sh --warning-mode all :app:testStandardDebugUnitTest
+        run: |
+          bash ./scripts/ci-gradle.sh --warning-mode all :app:testStandardDebugUnitTest \
+            2>&1 | tee "${RUNNER_TEMP}/pr195-unit-tests.log"
+          test_status=${PIPESTATUS[0]}
+          exit "${test_status}"
 
       - name: Build all debug identities
         shell: bash
@@ -112,10 +116,33 @@ jobs:
             app/build/reports/**
             app/build/test-results/**
             build/reports/problems/**
+            ${{ runner.temp }}/pr195-unit-tests.log
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Preserve exact unit-test failure
+        if: failure()
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! -f "${RUNNER_TEMP}/pr195-unit-tests.log" ]]; then
+            echo 'No unit-test log was produced; earlier setup or patching failed.' > "${RUNNER_TEMP}/pr195-unit-tests.log"
+          fi
+          {
+            echo 'Temporary PR #195 unit-test failure output. Remove after the failure is fixed.'
+            echo
+            cat "${RUNNER_TEMP}/pr195-unit-tests.log"
+          } > docs/ts18/launcher-integration/PR195_TEST_ERROR.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/ts18/launcher-integration/PR195_TEST_ERROR.txt
+          git commit -m 'chore(pr195): preserve exact unit-test failure'
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:feat/ts18-dofun-generic-media-compat
+
       - name: Commit verified implementation
+        if: success()
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
