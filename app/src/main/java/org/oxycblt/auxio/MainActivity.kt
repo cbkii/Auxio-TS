@@ -39,6 +39,7 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
 import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
+import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
@@ -95,6 +96,7 @@ class MainActivity : AppCompatActivity() {
             val serviceClass =
                 TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
 
+            StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
             StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
             StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
             startService(
