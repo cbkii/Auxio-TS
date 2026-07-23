@@ -25,7 +25,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.music.RootAccessPolicy
 import org.oxycblt.musikr.fs.RootGate
 
 @Singleton
@@ -76,7 +78,13 @@ constructor(
             state = State.UnsupportedForVariant
             return
         }
-        prefs.edit { putBoolean(KEY_USE_ROOT_FS, enabled) }
+        prefs.edit {
+            putBoolean(KEY_USE_ROOT_FS, enabled)
+            putString(
+                context.getString(R.string.set_key_root_access_policy),
+                if (enabled) RootAccessPolicy.ON_DEMAND.name else RootAccessPolicy.OFF.name,
+            )
+        }
         state = if (enabled) State.Unknown else State.DisabledByUser
     }
 
