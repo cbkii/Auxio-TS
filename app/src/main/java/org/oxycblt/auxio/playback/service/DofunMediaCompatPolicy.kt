@@ -36,25 +36,28 @@ data class GenericPlaybackNotificationState(
 
 /** Pure policy for the Android-standard DoFun compatibility lane. */
 object DofunMediaCompatPolicy {
-    val compactActionIndices: IntArray = intArrayOf(0, 1, 2)
+    /** Return a defensive array so notification callers cannot mutate process-wide policy. */
+    val compactActionIndices: IntArray
+        get() = intArrayOf(0, 1, 2)
 
     fun notificationProfile(
         mode: Ts18LauncherIntegrationMode,
         topwayCompatFlavor: Boolean,
     ): PlaybackNotificationProfile =
-        if (topwayCompatFlavor && mode.usesGenericMediaNotification) {
+        if (topwayCompatFlavor && mode.usesGenericDofunProfile) {
             PlaybackNotificationProfile.GenericDofun
         } else {
             PlaybackNotificationProfile.RichAuxio
         }
 
     /**
-     * The stock-name wrapper widget must stay usable in the generic profile without re-enabling
-     * private Topway command handling. Its controls therefore use Auxio's canonical media-button
-     * service path; explicit legacy profiles retain the stock-compatible Topway actions.
+     * Stock-name wrapper controls must remain live whenever private Topway command handling is not
+     * selected. Generic and Android-only profiles therefore route through the canonical media-button
+     * service path; explicit legacy modes retain their stock-compatible Topway actions.
      */
     fun usesCanonicalWidgetControls(mode: Ts18LauncherIntegrationMode): Boolean =
-        mode.usesGenericMediaNotification
+        mode.usesGenericDofunProfile ||
+            mode == Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
 
     fun genericNotificationState(isPlaying: Boolean): GenericPlaybackNotificationState =
         GenericPlaybackNotificationState(
