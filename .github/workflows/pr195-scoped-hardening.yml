@@ -1,5 +1,6 @@
 name: PR195 Scoped Launcher Hardening
 
+# Second branch push after workflow registration intentionally triggers this temporary job.
 on:
   push:
     branches:
