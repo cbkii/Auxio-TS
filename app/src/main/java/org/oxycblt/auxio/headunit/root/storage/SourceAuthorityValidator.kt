@@ -39,17 +39,15 @@ object SourceAuthorityValidator {
             }
         }
 
-        if (representative != null) {
-            val opened =
-                runCatching {
-                        FileInputStream(representative).use { stream ->
-                            stream.read(ByteArray(1))
-                            true
-                        }
+        val mediaFile = representative ?: return null
+        val opened =
+            runCatching {
+                    FileInputStream(mediaFile).use { stream ->
+                        stream.read(ByteArray(1)) >= -1
                     }
-                    .getOrDefault(false)
-            if (!opened) return null
-        }
+                }
+                .getOrDefault(false)
+        if (!opened) return null
         return if (preparedAlias) SourceAuthority.PREPARED_ALIAS else SourceAuthority.APP_READABLE
     }
 
