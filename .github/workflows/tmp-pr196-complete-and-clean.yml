@@ -91,17 +91,33 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Format and verify final tree
+      - name: Apply formatting
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessApply
+
+      - name: Check formatted diff
+        shell: bash
+        run: git diff --check
+
+      - name: Run unit tests
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+
+      - name: Run lint
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+
+      - name: Run head-unit safety checks
         shell: bash
         run: |
           set -euo pipefail
-          bash ./scripts/ci-gradle.sh spotlessApply
-          git diff --check
-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
-          bash ./scripts/ci-gradle.sh :app:lintStandardDebug
           bash ./scripts/check-headunit-compat-safety.sh
           bash ./scripts/check-dofun-topway-compat.sh
           bash ./scripts/check-ts18-apk-reference-contracts.sh
+
+      - name: Build all debug and release variants
+        shell: bash
+        run: |
           bash ./scripts/ci-gradle.sh \
             :app:assembleStandardDebug \
             :app:assembleTopwayTwMediaDebug \
