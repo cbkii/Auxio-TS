@@ -43,7 +43,7 @@ object RootStorageCommandPolicy {
         val emitScript =
             "root=\$1; shift; for p do " +
                 "rel=\${p#\"\$root\"/}; [ -n \"\$rel\" ] || continue; " +
-                "if printf '%s' \"\$rel\" | LC_ALL=C grep -q '[[:cntrl:]]'; then continue; fi; " +
+                "case \"\$rel\" in *[[:cntrl:]]*) continue;; esac; " +
                 "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
                 "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
                 "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
