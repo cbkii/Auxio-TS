@@ -21,8 +21,27 @@ class RootTreeSnapshotCodecTest {
     }
 
     @Test
-    fun rejectsTraversalAndEntryOverflow() {
+    fun acceptsMaximumConvertibleTimestamp() {
+        val maxSeconds = Long.MAX_VALUE / 1000L
+        val snapshot =
+            RootTreeSnapshotCodec.parse(
+                "/storage/usbdisk0",
+                "f\t$maxSeconds\t1\ttrack.flac\n",
+            )
+        requireNotNull(snapshot)
+        assertEquals(maxSeconds * 1000L, snapshot.entries.single().modifiedMs)
+    }
+
+    @Test
+    fun rejectsMalformedTraversalAndOverflow() {
+        assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "x\t1\t1\tbad.mp3\n"))
         assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "f\t1\t1\t../escape.mp3\n"))
+        assertNull(
+            RootTreeSnapshotCodec.parse(
+                "/storage/usbdisk0",
+                "f\t${Long.MAX_VALUE / 1000L + 1L}\t1\toverflow.mp3\n",
+            )
+        )
         assertNull(
             RootTreeSnapshotCodec.parse(
                 "/storage/usbdisk0",
