@@ -95,5 +95,6 @@ jobs:
             ${{ runner.temp }}/extract.log
             ${{ runner.temp }}/finalizer.log
             ${{ runner.temp }}/status.txt
+            /tmp/pr196-finalize.py
           if-no-files-found: warn
           retention-days: 2
