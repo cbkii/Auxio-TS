@@ -18,23 +18,36 @@
 
 package org.oxycblt.auxio.headunit.root.dofun
 
-import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Ts18DofunIntegrationResolverTest {
-
     @Test
-    fun `resolver checks are defined and tested`() = runBlocking {
+    fun `root integration probes remain read only and package mutation free`() {
         val probes = Ts18RootProbe.entries
         assertTrue(probes.any { it.name == "Id" && it.command == "id" })
-
-        val mutations = Ts18RootMutation.entries
-        assertTrue(mutations.any { it.name == "DisableStockMusicForUser0" })
-        assertTrue(mutations.any { it.name == "EnableStockMusicForUser0" })
 
         val listPackages = probes.first { it.name == "PackageSummary" }
         assertTrue(listPackages.command.contains("pm list packages"))
         assertTrue(listPackages.command.contains("com\\.tw\\.media"))
+
+        val forbiddenMutationTokens =
+            listOf(
+                "pm disable",
+                "pm enable",
+                "disable-user",
+                "mount --bind",
+                "settings put",
+                "setprop ",
+                "rm -rf",
+            )
+        assertFalse(
+            probes.any { probe ->
+                forbiddenMutationTokens.any { token ->
+                    probe.command.contains(token, ignoreCase = true)
+                }
+            }
+        )
     }
 }
