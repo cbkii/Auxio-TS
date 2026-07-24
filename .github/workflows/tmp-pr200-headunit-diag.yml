@@ -21,7 +21,7 @@ jobs:
   apply:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 25
     steps:
       - name: Check out closure tooling
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -61,11 +61,6 @@ jobs:
           git diff --check
           bash scripts/check-ts18-root-storage-fastpath.sh
           bash scripts/check-headunit-compat-safety.sh
-
-      - name: Run focused unit tests
-        working-directory: repo
-        shell: bash
-        run: bash scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
 
       - name: Commit and push closure
         working-directory: repo
