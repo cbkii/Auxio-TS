@@ -172,7 +172,7 @@ grep -Fq 'LocationMode.defaultForFlavor' \
   fail 'DirectFS fresh default missing'
 grep -Fq '/data/adb/auxio-ts-root/volumes.tsv' "$root_holder" ||
   fail 'prepared manifest contract missing'
-grep -Fq '^description=' "$module_prop" || fail 'Magisk module description metadata missing'
+grep -q '^description=' "$module_prop" || fail 'Magisk module description metadata missing'
 
 if grep -Eq 'pm (disable-user|enable)|/system/(app|priv-app)|/vendor/(app|priv-app)' "$helper"; then
   fail 'helper contains forbidden package mutation or protected APK write'
