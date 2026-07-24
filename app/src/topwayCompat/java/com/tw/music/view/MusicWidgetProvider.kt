@@ -38,6 +38,7 @@ import org.oxycblt.auxio.headunit.topway.TopwayMusicContract
 import org.oxycblt.auxio.headunit.topway.TopwayWidgetProviderPolicy
 import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.playback.service.DofunMediaCompatPolicy
+import org.oxycblt.auxio.playback.service.MediaButtonIntentFactory
 import org.oxycblt.auxio.playback.service.PendingIntentRequestCodePolicy
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.widgets.WidgetComponent
@@ -281,10 +282,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
     private fun newMediaButtonServicePendingIntent(context: Context, keyCode: Int): PendingIntent {
         val actionKey = "wrapper-media-button:$keyCode"
         val intent =
-            Intent(context, MusicService::class.java)
-                .setAction(Intent.ACTION_MEDIA_BUTTON)
-                .putExtra(Intent.EXTRA_KEY_EVENT, KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
-                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
+            MediaButtonIntentFactory.serviceIntent(context, MusicService::class.java, keyCode)
 
         return PendingIntent.getService(
             context,
