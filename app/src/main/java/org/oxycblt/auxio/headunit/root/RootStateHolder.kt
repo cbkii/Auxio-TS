@@ -194,18 +194,23 @@ constructor(
             }
         }
 
-    /** Execute only the installed helper's bounded one-shot preparation entrypoint. */
-    fun refreshPreparedVolumeManifestSync(): Boolean =
+    /**
+     * Execute the installed helper once and return its manifest in the same fixed root process.
+     *
+     * Combining helper execution and `cat` avoids a second `su` process for each refresh.
+     */
+    fun refreshPreparedVolumeManifestSync(): String? =
         synchronized(storageOperationLock) {
-            ensureAvailable() ?: return false
+            ensureAvailable() ?: return null
             when (
-                processRunner.runRootCommand(
-                    "'$PREPARED_HELPER_SCRIPT' --once",
-                    timeoutMs = PREPARED_HELPER_TIMEOUT_MS,
-                    maxOutputBytes = PREPARED_HELPER_OUTPUT_BYTES,
-                )
+                val result =
+                    processRunner.runRootCommand(
+                        "'$PREPARED_HELPER_SCRIPT' --once && cat '$PREPARED_VOLUME_MANIFEST'",
+                        timeoutMs = PREPARED_HELPER_TIMEOUT_MS,
+                        maxOutputBytes = MANIFEST_OUTPUT_BYTES,
+                    )
             ) {
-                is RootProcessResult.Success -> true
+                is RootProcessResult.Success -> result.stdout
                 RootProcessResult.TimedOut -> {
                     state = State.TimedOut
                     journal.log(
@@ -213,15 +218,15 @@ constructor(
                         "Prepared-volume helper timed out",
                         "timeoutMs=$PREPARED_HELPER_TIMEOUT_MS",
                     )
-                    false
+                    null
                 }
                 is RootProcessResult.NonZeroExit,
                 RootProcessResult.OutputLimitExceeded,
-                is RootProcessResult.ExecutionFailure -> false
+                is RootProcessResult.ExecutionFailure -> null
             }
         }
 
-    /** Read only the fixed Magisk-prepared volume manifest. */
+    /** Read only the fixed Magisk-prepared volume manifest without refreshing it. */
     fun readPreparedVolumeManifestSync(): String? =
         synchronized(storageOperationLock) {
             ensureAvailable() ?: return null
@@ -262,7 +267,6 @@ constructor(
         const val MAX_ROOT_SNAPSHOT_ENTRIES = 100_000
         const val MAX_STORAGE_TIMEOUT_MS = 20_000L
         const val PREPARED_HELPER_TIMEOUT_MS = 8_000L
-        const val PREPARED_HELPER_OUTPUT_BYTES = 8 * 1024
         const val MANIFEST_READ_TIMEOUT_MS = 3_000L
         const val MANIFEST_OUTPUT_BYTES = 256 * 1024
         const val PREPARED_HELPER_SCRIPT =
