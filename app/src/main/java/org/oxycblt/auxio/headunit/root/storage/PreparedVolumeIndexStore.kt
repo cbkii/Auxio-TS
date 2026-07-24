@@ -145,8 +145,7 @@ constructor(
             return records
         }
         lastRefreshElapsedMs = now
-        rootStateHolder.refreshPreparedVolumeManifestSync()
-        val text = rootStateHolder.readPreparedVolumeManifestSync() ?: return records
+        val text = rootStateHolder.refreshPreparedVolumeManifestSync() ?: return records
         val parsed = PreparedVolumeManifestCodec.parse(text) ?: return records
         if (!writeAtomically(text)) return records
         records = parsed
