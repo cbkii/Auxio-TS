@@ -53,8 +53,33 @@ jobs:
         shell: bash
         run: |
           set +e
+          python3 - <<'PY'
+          from pathlib import Path
+          script = Path('scripts/tmp-pr200-comment-closure.py')
+          text = script.read_text(encoding='utf-8')
+          start = text.index('# Tests for command normalization and picker timeout budget.')
+          test_path = text.index('path = "app/src/test/java/org/oxycblt/auxio/headunit/root/RootStorageCommandPolicyTest.kt"', start)
+          next_path = text.index('path = "app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwaySourcePolicyDiscoveryTest.kt"', test_path)
+          text = text[:test_path] + text[next_path:]
+          script.write_text(text, encoding='utf-8')
+          PY
           python3 scripts/tmp-pr200-comment-closure.py > /tmp/pr200-closure-patch.log 2>&1
           status=$?
+          if [ "$status" -eq 0 ]; then
+            python3 - <<'PY' >> /tmp/pr200-closure-patch.log 2>&1
+          from pathlib import Path
+          path = Path('app/src/test/java/org/oxycblt/auxio/headunit/root/RootStorageCommandPolicyTest.kt')
+          text = path.read_text(encoding='utf-8')
+          old_path = '                "/mnt/media_rw/usbdisk0/Music\'s",\n'
+          new_path = '                "\\\\mnt\\\\media_rw\\\\usbdisk0\\\\Music\'s",\n'
+          old_assert = '        assertTrue(command.contains("Music\'\\"\'\\"\'s"))\n'
+          new_assert = '        assertTrue(command.contains("/mnt/media_rw/usbdisk0/Music\'\\"\'\\"\'s"))\n'
+          if text.count(old_path) != 1 or text.count(old_assert) != 1:
+              raise SystemExit('RootStorageCommandPolicyTest normalization fixture did not match')
+          path.write_text(text.replace(old_path, new_path).replace(old_assert, new_assert), encoding='utf-8')
+          PY
+            status=$?
+          fi
           cat /tmp/pr200-closure-patch.log
           exit "$status"
 
