@@ -96,10 +96,15 @@ prepare_manifest() {
       chmod 0755 "$alias_path" 2>/dev/null || true
       umount "$alias_path" 2>/dev/null || true
       if mount --bind "$raw_path" "$alias_path" 2>/dev/null; then
-        mount -o remount,bind,ro "$raw_path" "$alias_path" 2>/dev/null ||
-          mount -o remount,bind,ro "$alias_path" 2>/dev/null || true
-        selected="$alias_path"
-        state=alias_candidate
+        if mount -o remount,bind,ro "$raw_path" "$alias_path" 2>/dev/null ||
+          mount -o remount,bind,ro "$alias_path" 2>/dev/null; then
+          selected="$alias_path"
+          state=alias_candidate
+        else
+          log_msg "read-only remount failed for $alias_path"
+          umount "$alias_path" 2>/dev/null || true
+          rmdir "$alias_path" 2>/dev/null || true
+        fi
       fi
     fi
 
@@ -110,7 +115,8 @@ prepare_manifest() {
         -o -iname '*.ogg' -o -iname '*.opus' -o -iname '*.aac' \) \
         -print 2>/dev/null | head -n 1)
       case "$sample" in
-        ''|*"	"*) sample=- ;;
+        ''|*"	"*|*"
+"*|*""*) sample=- ;;
       esac
     fi
     generated=$(date +%s 2>/dev/null || echo 0)
