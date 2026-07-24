@@ -28,6 +28,8 @@ jobs:
         shell: bash
         run: |
           set +e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch origin feat/ts18-dofun-generic-media-compat
           git merge --no-edit origin/feat/ts18-dofun-generic-media-compat > "${RUNNER_TEMP}/merge.log" 2>&1
           merge_status=$?
