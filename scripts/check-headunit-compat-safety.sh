@@ -163,6 +163,23 @@ if [ -n "${identity_hits}" ]; then
   done <<< "${identity_hits}"
 fi
 
+root_probe_vendor_ids="$(
+  python3 - "${root_probe_allowlist_test}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8").replace("\\\\.", ".")
+for value in sorted(set(re.findall(r"\bcom\.tw\.[A-Za-z0-9_.]+\b", text))):
+    print(value)
+PY
+)" || fail 'cannot validate the root-probe vendor identifier allowlist'
+expected_root_probe_vendor_ids="$(printf '%s\n'   'com.tw.eq'   'com.tw.media'   'com.tw.music'   'com.tw.music.MusicActivity')"
+if [ "${root_probe_vendor_ids}" != "${expected_root_probe_vendor_ids}" ]; then
+  printf 'Observed root-probe vendor identifiers:\n%s\n' "${root_probe_vendor_ids}" >&2
+  fail 'root-probe test vendor identifiers differ from the approved read-only set'
+fi
+
 vendor_hits="$(search_added_matches 'com\.tw\.[A-Za-z0-9_.]+|com\.android\.launcher\.widget_music_progress' "${product_code_sources[@]}")"
 if [ -n "${vendor_hits}" ]; then
   while IFS= read -r line; do

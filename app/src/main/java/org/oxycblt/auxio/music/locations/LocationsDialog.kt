@@ -536,14 +536,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 authorityDetail = "${resolution.authority}:${resolution.detail}"
             }
 
-            if (locationMode != initiatingMode) {
-                L.d(
-                    "Ignoring accepted source after mode changed from $initiatingMode " +
-                        "to $locationMode"
-                )
-                clearPendingLocationCallback(callback)
-                return@launch
-            }
             val uri = Uri.fromFile(File(resolvedPath))
             val location = Location.Unopened.from(currentContext, uri)
             if (shouldRejectThirdPartyLocation(uri, location, disableThirdParty)) {

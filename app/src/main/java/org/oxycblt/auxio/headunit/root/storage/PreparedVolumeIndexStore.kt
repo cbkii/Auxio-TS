@@ -339,7 +339,10 @@ constructor(@ApplicationContext context: Context, private val rootStateHolder: R
     }
 
     private fun readCachedRecords(): List<PreparedVolumeRecord> =
-        runCatching { PreparedVolumeManifestCodec.parse(cacheFile.readText()) }
+        runCatching {
+                val text = atomicCacheFile.readFully().toString(Charsets.UTF_8)
+                PreparedVolumeManifestCodec.parse(text)
+            }
             .getOrNull()
             .orEmpty()
 
