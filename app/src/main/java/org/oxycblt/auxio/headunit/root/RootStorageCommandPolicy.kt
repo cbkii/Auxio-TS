@@ -15,7 +15,8 @@ object RootStorageCommandPolicy {
     fun isAllowedStorageRoot(value: String): Boolean {
         val path = value.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
         if (
-            path.contains('\n') ||
+            path.contains('\u0000') ||
+                path.contains('\n') ||
                 path.contains('\r') ||
                 path.contains('\t') ||
                 path.contains("/../") ||
