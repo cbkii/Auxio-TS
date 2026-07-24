@@ -12,6 +12,8 @@ class RootStorageCommandPolicyTest {
         assertTrue(RootStorageCommandPolicy.isAllowedStorageRoot("/storage/auxio-root/usbdisk1"))
         assertFalse(RootStorageCommandPolicy.isAllowedStorageRoot("/data/local/tmp"))
         assertFalse(RootStorageCommandPolicy.isAllowedStorageRoot("/storage/usbdisk0/../data"))
+        assertFalse(RootStorageCommandPolicy.isAllowedStorageRoot("/storage/usbdisk0/a\tb"))
+        assertFalse(RootStorageCommandPolicy.isAllowedStorageRoot("/storage/usbdisk0/a\nb"))
     }
 
     @Test
@@ -23,7 +25,12 @@ class RootStorageCommandPolicyTest {
             )
         assertTrue(command.contains("find \"\$root\" -xdev"))
         assertTrue(command.contains("-maxdepth 8"))
+        assertTrue(command.contains("-exec sh -c"))
+        assertTrue(command.contains("{} +"))
+        assertTrue(command.contains("[[:cntrl:]]"))
         assertTrue(command.contains("Music'\"'\"'s"))
+        assertFalse(command.contains("find \"\$root\" -print"))
+        assertFalse(command.contains("while IFS= read -r p"))
         assertFalse(command.contains("pm disable-user"))
     }
 }
