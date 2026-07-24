@@ -22,7 +22,7 @@ object RootTreeSnapshotCodec {
             if (parts.size != 4) return null
             val type = parts[0]
             if (type != "d" && type != "f" && type != "l") return null
-            val relative = normaliseRelative(parts[3]) ?: return null
+            val relative = validateRelative(parts[3]) ?: return null
             val modifiedSeconds = parts[1].toLongOrNull() ?: return null
             val size = parts[2].toLongOrNull() ?: return null
             if (
@@ -44,19 +44,20 @@ object RootTreeSnapshotCodec {
         return RootTreeSnapshot(rootPath = rootPath, entries = entries)
     }
 
-    private fun normaliseRelative(value: String): String? {
-        val clean = value.replace('\\', '/').trim('/')
+    private fun validateRelative(value: String): String? {
         if (
-            clean.isBlank() ||
-                clean.contains('\u0000') ||
-                clean.contains('\n') ||
-                clean.contains('\r') ||
-                clean.contains('\t')
+            value.isBlank() ||
+                value.startsWith('/') ||
+                value.endsWith('/') ||
+                value.contains('\u0000') ||
+                value.contains('\n') ||
+                value.contains('\r') ||
+                value.contains('\t')
         ) {
             return null
         }
-        val segments = clean.split('/')
+        val segments = value.split('/')
         if (segments.any { it.isBlank() || it == "." || it == ".." }) return null
-        return segments.joinToString("/")
+        return value
     }
 }
