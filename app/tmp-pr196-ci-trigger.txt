@@ -1,1 +1,1 @@
-Temporary trigger for PR #196 finalizer diagnostics; removed after checks complete.
+Temporary trigger to export the generated PR #196 finalizer for diagnosis; removed after checks complete.
