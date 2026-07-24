@@ -32,6 +32,9 @@ fi
 grep -Fq 'root_snapshot_without_app_uid_media_access' \
   app/src/main/java/org/oxycblt/auxio/headunit/root/storage/PreparedVolumeIndexStore.kt ||
   fail 'snapshot-only classification missing'
+grep -Fq 'RootStorageAccelerationPolicy.choose' \
+  app/src/main/java/org/oxycblt/auxio/headunit/root/storage/PreparedVolumeIndexStore.kt ||
+  fail 'cost-aware storage ordering missing'
 grep -Fq 'LocationMode.defaultForFlavor' \
   app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt ||
   fail 'DirectFS fresh default missing'
@@ -43,6 +46,13 @@ fi
 if find tools/ts18-root-storage-fastpath/magisk-module -path '*/service.d/*' -type f | grep -q .; then
   fail 'Magisk module must use module-root service.sh, not nested service.d'
 fi
+grep -Fq 'MAX_SAMPLED_VOLUMES=2' "$helper" ||
+  fail 'bounded representative-sample budget missing'
+if grep -Fq 'MAX_VOLUMES=' "$helper"; then
+  fail 'helper must not silently omit detected volumes'
+fi
+grep -Fq 'volumes=$processed sampled=$sampled' "$helper" ||
+  fail 'helper volume/sample accounting missing'
 bash -n "$helper" || fail 'helper shell syntax failed'
 bash -n scripts/package-ts18-root-storage-helper.sh || fail 'packager shell syntax failed'
 bash -n tools/ts18-root-storage-fastpath/tier3/stock-music-selection-test.sh ||

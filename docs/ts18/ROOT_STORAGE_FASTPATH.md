@@ -48,6 +48,8 @@ Auxio cached startup (parallel, never blocked)
 
 The Magisk helper runs independently during late start. Auxio does not start a second boot-time scanner or block its immediate lane waiting for that helper. A later explicit source flow can invoke the same fixed helper with `--once`; helper and app-side refresh requests are locked, serialized and debounced.
 
+Every detected valid `usbdiskN` receives a manifest row. The on-demand acceleration path limits representative-file searches separately to two volumes at two seconds each, so a latency cap cannot silently omit later volumes and remains below the app's bounded helper timeout under the intended TS18 layout.
+
 ## Authority- and cost-aware resolution order
 
 The app does **not** enforce a blanket zero-root-first or root-first rule. It selects the lowest expected-cost safe route for the current source:
@@ -84,6 +86,7 @@ Only `APP_READABLE` and `PREPARED_ALIAS` may be persisted as active DirectFS sou
 - [x] Add a bounded module-root `service.sh` late-start path and module packaging support.
 - [x] Avoid interactive `su` inside the helper, app launch, playback start, cache clearing and full scans.
 - [x] Publish the prepared-volume manifest atomically with timestamps, typed state and a representative-media hint.
+- [x] Include every detected valid volume while bounding expensive representative searches independently.
 - [x] Fail closed when a read-only remount cannot be established.
 - [x] Provide disable/remove rollback and stale-alias cleanup.
 

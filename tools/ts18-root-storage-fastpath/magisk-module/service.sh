@@ -8,8 +8,8 @@ TEMP="$STATE_DIR/volumes.tsv.tmp.$$"
 LOCK_DIR="$STATE_DIR/prepare.lock"
 ALIAS_ROOT=/storage/auxio-root
 BOOT_WAIT_SECONDS=20
-ON_DEMAND_WAIT_SECONDS=3
-MAX_VOLUMES=4
+ON_DEMAND_WAIT_SECONDS=2
+MAX_SAMPLED_VOLUMES=2
 MAX_SAMPLE_DEPTH=6
 SAMPLE_TIMEOUT_SECONDS=2
 
@@ -110,8 +110,8 @@ prepare_manifest() {
   : > "$TEMP" || return 1
 
   processed=0
+  sampled=0
   for raw_path in /mnt/media_rw/usbdisk*; do
-    [ "$processed" -lt "$MAX_VOLUMES" ] || break
     [ -d "$raw_path" ] || continue
     name=${raw_path##*/}
     valid_component "$name" || continue
@@ -141,10 +141,13 @@ prepare_manifest() {
       fi
     fi
 
-    # Boot preparation remains volume-only. An explicit --once refresh may add one contained hint;
-    # Auxio still opens that file as the app UID before granting source authority.
+    # Every detected volume receives a manifest row. Expensive representative discovery is capped
+    # independently so later volumes are not silently omitted and the app's 8-second helper bound
+    # remains achievable even when several valid usbdiskN mounts are present.
     sample=-
-    if [ "$include_sample" -eq 1 ] && [ "$selected" != - ]; then
+    if [ "$include_sample" -eq 1 ] && [ "$selected" != - ] &&
+      [ "$sampled" -lt "$MAX_SAMPLED_VOLUMES" ]; then
+      sampled=$((sampled + 1))
       sample=$(find_representative "$selected" 2>/dev/null || echo -)
       [ -n "$sample" ] || sample=-
     fi
@@ -156,7 +159,7 @@ prepare_manifest() {
 
   chmod 0600 "$TEMP" 2>/dev/null || true
   mv -f "$TEMP" "$MANIFEST" || return 1
-  log_msg "prepared manifest=$MANIFEST waited=${waited}s volumes=$processed samples=$include_sample"
+  log_msg "prepared manifest=$MANIFEST waited=${waited}s volumes=$processed sampled=$sampled"
   return 0
 }
 
