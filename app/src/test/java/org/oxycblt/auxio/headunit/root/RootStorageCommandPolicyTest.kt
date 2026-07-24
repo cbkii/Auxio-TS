@@ -27,10 +27,11 @@ class RootStorageCommandPolicyTest {
         assertTrue(command.contains("-maxdepth 8"))
         assertTrue(command.contains("-exec sh -c"))
         assertTrue(command.contains("{} +"))
-        assertTrue(command.contains("[[:cntrl:]]"))
+        assertTrue(command.contains("case \"\$rel\" in *[[:cntrl:]]*)"))
         assertTrue(command.contains("Music'\"'\"'s"))
         assertFalse(command.contains("find \"\$root\" -print"))
         assertFalse(command.contains("while IFS= read -r p"))
+        assertFalse(command.contains("grep -q"))
         assertFalse(command.contains("pm disable-user"))
     }
 }
