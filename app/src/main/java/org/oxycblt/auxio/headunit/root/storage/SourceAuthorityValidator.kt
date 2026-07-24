@@ -43,7 +43,8 @@ object SourceAuthorityValidator {
         val opened =
             runCatching {
                     FileInputStream(mediaFile).use { stream ->
-                        stream.read(ByteArray(1)) >= -1
+                        stream.read()
+                        true
                     }
                 }
                 .getOrDefault(false)
