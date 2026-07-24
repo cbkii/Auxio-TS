@@ -1,1 +1,1 @@
-Temporary trigger for the base-hosted PR #196 compact finalizer; removed after checks complete.
+Temporary trigger for the aligned base-hosted PR #196 compact finalizer; removed after checks complete.
