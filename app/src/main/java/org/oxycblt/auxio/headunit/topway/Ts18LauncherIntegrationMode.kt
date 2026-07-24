@@ -18,11 +18,14 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.content.SharedPreferences
+import androidx.core.content.edit
 import org.oxycblt.auxio.BuildConfig
 
 enum class Ts18LauncherIntegrationMode {
     Disabled,
     AndroidMediaSessionOnly,
+    GenericDofunMedia,
     TopwayBroadcastOnly,
     TopwayCommandOnly,
     TopwayBroadcastAndCommand,
@@ -44,13 +47,85 @@ enum class Ts18LauncherIntegrationMode {
     val diagnosticsOnly: Boolean
         get() = this == DiagnosticsOnly
 
+    /** Whether the complete standards-first DoFun profile is selected. */
+    val usesGenericDofunProfile: Boolean
+        get() = this == GenericDofunMedia
+
+    val bindsTopwayCommandService: Boolean
+        get() = handlesTopwayCommands || diagnosticsOnly
+
     companion object {
         const val PREF_KEY = "auxio_ts18_launcher_integration_mode"
+        const val PREF_GENERIC_DEFAULT_MIGRATED = "auxio_ts18_launcher_generic_default_migrated_v1"
 
         fun default(): Ts18LauncherIntegrationMode =
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) AutoAllSafePaths else AndroidMediaSessionOnly
+            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) GenericDofunMedia else AndroidMediaSessionOnly
 
         fun fromPreference(value: String?): Ts18LauncherIntegrationMode =
             entries.firstOrNull { it.name == value } ?: default()
+
+        /**
+         * Resolves the one-time default migration without overwriting an explicit selection.
+         *
+         * Preference provenance was not recorded by older releases, so a persisted
+         * [AutoAllSafePaths] value may have been deliberately selected. Only an absent preference
+         * is therefore migrated to the new standards-first default; every persisted valid mode is
+         * preserved.
+         */
+        fun migrationDecision(
+            persistedValue: String?,
+            migrationComplete: Boolean,
+            topwayCompatFlavor: Boolean,
+        ): Ts18LauncherModeMigrationDecision {
+            val parsed = entries.firstOrNull { it.name == persistedValue }
+            if (!topwayCompatFlavor || migrationComplete) {
+                return Ts18LauncherModeMigrationDecision(
+                    mode =
+                        parsed
+                            ?: if (topwayCompatFlavor) {
+                                GenericDofunMedia
+                            } else {
+                                AndroidMediaSessionOnly
+                            },
+                    persistMode = null,
+                    markComplete = false,
+                )
+            }
+
+            val shouldAdoptGenericDefault = parsed == null
+            return Ts18LauncherModeMigrationDecision(
+                mode = parsed ?: GenericDofunMedia,
+                persistMode = if (shouldAdoptGenericDefault) GenericDofunMedia else null,
+                markComplete = true,
+            )
+        }
+
+        /**
+         * Resolve and atomically persist the shared migration decision for any runtime entry point.
+         */
+        fun resolveAndPersist(
+            prefs: SharedPreferences,
+            topwayCompatFlavor: Boolean,
+        ): Ts18LauncherModeMigrationDecision {
+            val decision =
+                migrationDecision(
+                    persistedValue = prefs.getString(PREF_KEY, null),
+                    migrationComplete = prefs.getBoolean(PREF_GENERIC_DEFAULT_MIGRATED, false),
+                    topwayCompatFlavor = topwayCompatFlavor,
+                )
+            if (decision.persistMode != null || decision.markComplete) {
+                prefs.edit {
+                    decision.persistMode?.let { putString(PREF_KEY, it.name) }
+                    if (decision.markComplete) putBoolean(PREF_GENERIC_DEFAULT_MIGRATED, true)
+                }
+            }
+            return decision
+        }
     }
 }
+
+data class Ts18LauncherModeMigrationDecision(
+    val mode: Ts18LauncherIntegrationMode,
+    val persistMode: Ts18LauncherIntegrationMode?,
+    val markComplete: Boolean,
+)

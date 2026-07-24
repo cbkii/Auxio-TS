@@ -38,6 +38,7 @@ import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceClient
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.service.MusicServiceFragment
+import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
 import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber
@@ -190,12 +191,13 @@ open class AuxioService :
         }
 
     private fun isValidMediaId(value: String): Boolean =
-        value.isNotBlank() && value.length <= MAX_MEDIA_ID_LENGTH && value.none(Char::isISOControl)
+        value.length <= MAX_MEDIA_ID_LENGTH && value.isNotBlank() && value.none(Char::isISOControl)
 
     override fun updateForeground(change: ForegroundListener.Change) {
         val mediaNotification = playbackFragment.notification
         if (mediaNotification != null) {
             if (change == ForegroundListener.Change.MEDIA_SESSION) {
+                PlaybackNotificationChannel.markPublicationRequested()
                 startForeground(mediaNotification.code, mediaNotification.build())
             }
             // Nothing changed, but don't show anything music related since we can always

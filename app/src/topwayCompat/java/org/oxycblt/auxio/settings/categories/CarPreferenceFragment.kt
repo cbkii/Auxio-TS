@@ -31,6 +31,8 @@ import org.oxycblt.auxio.car.overlay.CarOverlaySettings
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
+import org.oxycblt.auxio.playback.service.PlaybackChannelState
+import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.navigateSafe
@@ -80,6 +82,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
             getString(R.string.set_key_head_unit_startup_mode) -> setupStartupMode(preference)
             getString(R.string.set_key_overlay_permission) -> setupOverlayPermission(preference)
             getString(R.string.set_key_launcher_integration) -> setupLauncherIntegration(preference)
+            getString(R.string.set_key_playback_notification_access) ->
+                setupPlaybackNotificationAccess(preference)
             "open_diagnostics" -> {
                 preference.setOnPreferenceClickListener {
                     findNavController()
@@ -96,6 +100,8 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         findPreference<Preference>(getString(R.string.set_key_overlay_permission))
             ?.let(::setupOverlayPermission)
         findPreference<Preference>(KEY_CAR_OVERLAY_ENABLED)?.let(::setupCarOverlayEnabled)
+        findPreference<Preference>(getString(R.string.set_key_playback_notification_access))
+            ?.let(::setupPlaybackNotificationAccess)
     }
 
     private fun setupTs18FastResumeStatus(preference: Preference) {
@@ -156,6 +162,38 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         preference.setOnPreferenceClickListener {
             findNavController()
                 .navigateSafe(CarPreferenceFragmentDirections.diagnosticsPreferences())
+            true
+        }
+    }
+
+    private fun setupPlaybackNotificationAccess(preference: Preference) {
+        val snapshot = PlaybackNotificationChannel.inspect(requireContext())
+        val importance =
+            snapshot.importance?.toString()
+                ?: getString(R.string.set_playback_channel_unknown_importance)
+        val channelSummary =
+            when (snapshot.state) {
+                PlaybackChannelState.Usable ->
+                    getString(R.string.set_playback_channel_usable, importance)
+                PlaybackChannelState.Blocked ->
+                    getString(R.string.set_playback_channel_blocked, importance)
+                PlaybackChannelState.NotCreated ->
+                    getString(R.string.set_playback_channel_not_created)
+            }
+        preference.summary =
+            getString(
+                R.string.set_playback_notification_access_summary,
+                BuildConfig.APPLICATION_ID,
+                statusSummary(snapshot.packageNotificationsEnabled),
+                channelSummary,
+                if (snapshot.publicationRequestedThisProcess) {
+                    getString(R.string.set_status_yes)
+                } else {
+                    getString(R.string.set_status_no)
+                },
+            )
+        preference.setOnPreferenceClickListener {
+            startActivity(PlaybackNotificationChannel.settingsIntent(requireContext()))
             true
         }
     }

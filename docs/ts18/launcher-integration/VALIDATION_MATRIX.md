@@ -1,5 +1,7 @@
 # TS18 Launcher Media Integration Validation Matrix
 
+> **Current profile:** validate the standards-first `GenericDofunMedia` path described in [`DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md`](DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md) first. Run legacy Topway broadcast/command rows only when that fallback mode is explicitly selected. Passing Android `MediaSession` and notification checks does not by itself prove acceptance by the fixed DoFun player panel.
+
 Use this matrix after installing a build that includes the comprehensive in-app integration layer.
 
 ## Test apps / sources
@@ -73,7 +75,7 @@ The in-app implementation is wired through `TopwayLauncherIntegrationCoordinator
 
 Implemented settings keys for rollback/device validation:
 
-- `auxio_ts18_launcher_integration_mode` stores `Ts18LauncherIntegrationMode` by enum name. Topway-compatible builds default to `AutoAllSafePaths`; generic builds default to `AndroidMediaSessionOnly`.
+- `auxio_ts18_launcher_integration_mode` stores `Ts18LauncherIntegrationMode` by enum name. Fresh Topway-compatible installs default to `GenericDofunMedia`; standard builds default to `AndroidMediaSessionOnly`. Persisted valid selections, including legacy fallback modes, are preserved because older releases did not record preference provenance.
 - `auxio_ts18_launcher_seek_unit_policy` stores `TopwaySeekUnitPolicy` by enum name and defaults to `Auto`.
 
 TS18 runtime validation is still required against the matrix above. This implementation does not include LSposed hooks, package replacement, root requirements, UID 1000 assumptions, platform signing, `/system` writes, or vendor-service changes.
@@ -84,7 +86,8 @@ Launcher publishing is now driven from playback service state, not from Auxio's 
 
 Mode selection is user-visible in the Topway-compatible UI settings screen:
 
-- `AutoAllSafePaths` (default for Topway-compatible builds): Android media session path plus Topway metadata/progress broadcasts, incoming Topway commands, incoming widget seek, diagnostics, and existing `topwayCompat` identity wrappers where that build variant provides them.
+- `GenericDofunMedia` (fresh-install default for Topway-compatible builds): conventional Android MediaSession/MediaBrowser/MediaStyle controls with legacy Topway TX/RX disabled. Exact fixed-panel recognition still requires TS18 validation.
+- `AutoAllSafePaths` (explicit legacy fallback): Android media session path plus Topway metadata/progress broadcasts, incoming Topway commands, incoming widget seek, diagnostics, and existing `topwayCompat` identity wrappers where that build variant provides them.
 - `AndroidMediaSessionOnly`: standards path only.
 - `TopwayBroadcastOnly`: outgoing Topway broadcasts only; incoming Topway commands are logged and ignored.
 - `TopwayCommandOnly`: incoming Topway commands/seek only; periodic/outgoing broadcasts are suppressed except normal Android standards surfaces.

@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -26,6 +28,7 @@ import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataSnapshot
 import org.oxycblt.auxio.playback.state.Progression
@@ -42,12 +45,60 @@ constructor(
     private var lastProgress: TopwayProgressSnapshot? = null
     private var lastProgressAtMs = 0L
 
+    init {
+        migrateLegacyDefault()
+    }
+
     var mode: Ts18LauncherIntegrationMode
         get() =
             Ts18LauncherIntegrationMode.fromPreference(
                 prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
             )
-        set(value) = prefs.edit { putString(Ts18LauncherIntegrationMode.PREF_KEY, value.name) }
+        set(value) {
+            prefs.edit {
+                putString(Ts18LauncherIntegrationMode.PREF_KEY, value.name)
+                putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
+            }
+            refreshWidgetControls("coordinator-set")
+        }
+
+    private fun migrateLegacyDefault() {
+        val decision =
+            Ts18LauncherIntegrationMode.resolveAndPersist(
+                prefs = prefs,
+                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+            )
+        if (!decision.markComplete && decision.persistMode == null) return
+        logJournalAndTimber(
+            DiagnosticJournal.CAT_TOPWAY_BROADCAST,
+            "Launcher mode migration",
+            "selected=${decision.mode.name}",
+            if (decision.persistMode != null) "migrated" else "preserved",
+        )
+    }
+
+    /** Re-render installed stock-name wrapper widgets after their control-routing mode changes. */
+    fun refreshWidgetControls(reason: String) {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        try {
+            val manager = AppWidgetManager.getInstance(context)
+            val component = ComponentName(context.packageName, STOCK_WIDGET_PROVIDER_CLASS)
+            val ids = manager.getAppWidgetIds(component)
+            context.sendBroadcast(
+                Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                    .setComponent(component)
+                    .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+            )
+            logJournalAndTimber(
+                DiagnosticJournal.CAT_TOPWAY_CMD,
+                "Wrapper widget refresh",
+                reason,
+                "count=${ids.size}",
+            )
+        } catch (e: RuntimeException) {
+            L.w(e, "Unable to refresh Topway wrapper widget controls")
+        }
+    }
 
     var seekUnitPolicy: TopwaySeekUnitPolicy
         get() =
@@ -240,6 +291,7 @@ constructor(
     companion object {
         const val PREF_SEEK_UNIT = "auxio_ts18_launcher_seek_unit_policy"
         private const val DOFUN_PACKAGE = "com.dofun.variety"
+        private const val STOCK_WIDGET_PROVIDER_CLASS = "com.tw.music.view.MusicWidgetProvider"
         private const val MIN_PROGRESS_INTERVAL_MS = 1000L
     }
 }

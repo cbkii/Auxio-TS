@@ -20,7 +20,7 @@ package org.oxycblt.auxio.playback.service
 
 import android.view.KeyEvent
 
-/** Pure policy for deciding whether a media button key event should be forwarded to playback. */
+/** Pure policy for deciding whether an exported media-button event should reach playback. */
 object MediaButtonActionMapper {
     fun shouldForward(event: KeyEvent?, hasCurrentSong: Boolean, isFocusHeld: Boolean): Boolean {
         if (event == null) return false
@@ -40,23 +40,16 @@ object MediaButtonActionMapper {
         hasCurrentSong: Boolean,
         isFocusHeld: Boolean,
     ): Boolean {
-        if (action != KeyEvent.ACTION_DOWN) {
-            return false
-        }
-        if (repeatCount > 0) {
-            return false
-        }
+        if (action != KeyEvent.ACTION_DOWN) return false
+        if (repeatCount > 0) return false
+        if (!isSupportedMediaKey(keyCode)) return false
         if (!isFocusHeld) {
-            return false
+            return DofunMediaCompatPolicy.isColdStartPlayKey(keyCode) ||
+                (hasCurrentSong && keyCode == KeyEvent.KEYCODE_MEDIA_STOP)
         }
-        if (!hasCurrentSong && isPauseOrStop(keyCode)) {
-            return false
-        }
-        return isSupportedMediaKey(keyCode)
+        if (!hasCurrentSong && !DofunMediaCompatPolicy.isColdStartPlayKey(keyCode)) return false
+        return true
     }
-
-    private fun isPauseOrStop(keyCode: Int): Boolean =
-        keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE || keyCode == KeyEvent.KEYCODE_MEDIA_STOP
 
     private fun isSupportedMediaKey(keyCode: Int): Boolean =
         when (keyCode) {

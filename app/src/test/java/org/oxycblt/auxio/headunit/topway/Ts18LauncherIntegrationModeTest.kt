@@ -18,7 +18,9 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.BuildConfig
@@ -28,7 +30,7 @@ class Ts18LauncherIntegrationModeTest {
     fun `default follows build flavor`() {
         val expected =
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                Ts18LauncherIntegrationMode.AutoAllSafePaths
+                Ts18LauncherIntegrationMode.GenericDofunMedia
             } else {
                 Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
             }
@@ -38,6 +40,10 @@ class Ts18LauncherIntegrationModeTest {
 
     @Test
     fun `mode gating matches launcher plan`() {
+        assertTrue(Ts18LauncherIntegrationMode.GenericDofunMedia.usesGenericDofunProfile)
+        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.sendsTopwayBroadcasts)
+        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.handlesTopwayCommands)
+        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.bindsTopwayCommandService)
         assertFalse(Ts18LauncherIntegrationMode.Disabled.sendsTopwayBroadcasts)
         assertFalse(Ts18LauncherIntegrationMode.DiagnosticsOnly.handlesTopwayCommands)
         assertTrue(Ts18LauncherIntegrationMode.TopwayBroadcastOnly.sendsTopwayBroadcasts)
@@ -46,5 +52,72 @@ class Ts18LauncherIntegrationModeTest {
         assertFalse(Ts18LauncherIntegrationMode.TopwayCommandOnly.sendsTopwayBroadcasts)
         assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.sendsTopwayBroadcasts)
         assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.handlesTopwayCommands)
+        assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.bindsTopwayCommandService)
+        assertTrue(Ts18LauncherIntegrationMode.DiagnosticsOnly.bindsTopwayCommandService)
+    }
+
+    @Test
+    fun `unset topway preference adopts generic media once`() {
+        val decision =
+            Ts18LauncherIntegrationMode.migrationDecision(
+                persistedValue = null,
+                migrationComplete = false,
+                topwayCompatFlavor = true,
+            )
+
+        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.mode)
+        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.persistMode)
+        assertTrue(decision.markComplete)
+    }
+
+    @Test
+    fun `persisted all safe paths survives migration`() {
+        val decision =
+            Ts18LauncherIntegrationMode.migrationDecision(
+                persistedValue = Ts18LauncherIntegrationMode.AutoAllSafePaths.name,
+                migrationComplete = false,
+                topwayCompatFlavor = true,
+            )
+
+        assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, decision.mode)
+        assertNull(decision.persistMode)
+        assertTrue(decision.markComplete)
+    }
+
+    @Test
+    fun `explicit legacy fallback survives migration`() {
+        val decision =
+            Ts18LauncherIntegrationMode.migrationDecision(
+                persistedValue = Ts18LauncherIntegrationMode.TopwayCommandOnly.name,
+                migrationComplete = false,
+                topwayCompatFlavor = true,
+            )
+
+        assertEquals(Ts18LauncherIntegrationMode.TopwayCommandOnly, decision.mode)
+        assertNull(decision.persistMode)
+        assertTrue(decision.markComplete)
+    }
+
+    @Test
+    fun `completed or standard migration does not rewrite preferences`() {
+        val completed =
+            Ts18LauncherIntegrationMode.migrationDecision(
+                persistedValue = Ts18LauncherIntegrationMode.AutoAllSafePaths.name,
+                migrationComplete = true,
+                topwayCompatFlavor = true,
+            )
+        assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, completed.mode)
+        assertNull(completed.persistMode)
+        assertFalse(completed.markComplete)
+
+        val standard =
+            Ts18LauncherIntegrationMode.migrationDecision(
+                persistedValue = null,
+                migrationComplete = false,
+                topwayCompatFlavor = false,
+            )
+        assertEquals(Ts18LauncherIntegrationMode.AndroidMediaSessionOnly, standard.mode)
+        assertNull(standard.persistMode)
+        assertFalse(standard.markComplete)
     }
 }

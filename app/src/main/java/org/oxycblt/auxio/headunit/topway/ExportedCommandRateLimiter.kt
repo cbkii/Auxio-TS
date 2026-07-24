@@ -31,9 +31,9 @@ internal class EventRateLimiter(private val elapsedRealtime: () -> Long) {
         require(key.length <= MAX_KEY_LENGTH)
         require(maxEvents > 0)
         require(windowMs > 0)
-        val now = elapsedRealtime()
-        val window = windows.getOrPut(key) { Window(now, 0) }
+        val window = windows.getOrPut(key) { Window(elapsedRealtime(), 0) }
         synchronized(window) {
+            val now = elapsedRealtime()
             if (now < window.startedAtMs || now - window.startedAtMs >= windowMs) {
                 window.startedAtMs = now
                 window.count = 0

@@ -21,6 +21,7 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.session.MediaSessionCompat
@@ -33,6 +34,7 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.service.MediaSessionUID
 import org.oxycblt.auxio.music.service.MusicBrowser
+import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.RepeatMode
@@ -56,6 +58,7 @@ constructor(
     private val musicRepository: MusicRepository,
 ) : MediaSessionCompat.Callback() {
     private val jaroWinkler = JaroWinklerSimilarity()
+    private var lastColdRestoreRequestAtMs = Long.MIN_VALUE
 
     //    STUBS: We already automatically prepare playback.
     //    override fun onPrepare() {
@@ -129,7 +132,23 @@ constructor(
     }
 
     override fun onPlay() {
-        playbackManager.playing(true)
+        if (
+            shouldResumeExistingPlayback(
+                hasCurrentSong = playbackManager.currentSong != null,
+                hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null,
+            )
+        ) {
+            lastColdRestoreRequestAtMs = Long.MIN_VALUE
+            playbackManager.playing(true)
+            return
+        }
+
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!shouldRequestColdRestore(lastColdRestoreRequestAtMs, nowMs)) return
+        lastColdRestoreRequestAtMs = nowMs
+        playbackManager.playDeferred(
+            DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
+        )
     }
 
     override fun onPause() {
@@ -224,9 +243,7 @@ constructor(
                             fuzzy(it.album.name, albumQuery) +
                             it.artists.maxOf { artist -> fuzzy(artist.name, artistQuery) }
                     }
-                if (best != null) {
-                    return expandSongIntoCommand(best, null)
-                }
+                if (best != null) return expandSongIntoCommand(best, null)
             }
             MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE -> {
                 val albumQuery = extras.getString(MediaStore.EXTRA_MEDIA_ALBUM)
@@ -236,30 +253,22 @@ constructor(
                         fuzzy(it.name, albumQuery) +
                             it.artists.maxOf { artist -> fuzzy(artist.name, artistQuery) }
                     }
-                if (best != null) {
-                    return commandFactory.album(best, ShuffleMode.OFF)
-                }
+                if (best != null) return commandFactory.album(best, ShuffleMode.OFF)
             }
             MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE -> {
                 val artistQuery = extras.getString(MediaStore.EXTRA_MEDIA_ARTIST)
                 val best = library.artists.maxByOrNull { fuzzy(it.name, artistQuery) }
-                if (best != null) {
-                    return commandFactory.artist(best, ShuffleMode.OFF)
-                }
+                if (best != null) return commandFactory.artist(best, ShuffleMode.OFF)
             }
             MediaStore.Audio.Genres.ENTRY_CONTENT_TYPE -> {
                 val genreQuery = extras.getString(MediaStore.EXTRA_MEDIA_GENRE)
                 val best = library.genres.maxByOrNull { fuzzy(it.name, genreQuery) }
-                if (best != null) {
-                    return commandFactory.genre(best, ShuffleMode.OFF)
-                }
+                if (best != null) return commandFactory.genre(best, ShuffleMode.OFF)
             }
             MediaStore.Audio.Playlists.ENTRY_CONTENT_TYPE -> {
                 val playlistQuery = extras.getString(MediaStore.EXTRA_MEDIA_PLAYLIST)
                 val best = library.playlists.maxByOrNull { fuzzy(it.name, playlistQuery) }
-                if (best != null) {
-                    return commandFactory.playlist(best, ShuffleMode.OFF)
-                }
+                if (best != null) return commandFactory.playlist(best, ShuffleMode.OFF)
             }
             else -> {}
         }
@@ -313,5 +322,17 @@ constructor(
                 PlaybackStateCompat.ACTION_SEEK_TO or
                 PlaybackStateCompat.ACTION_REWIND or
                 PlaybackStateCompat.ACTION_STOP
+
+        private const val COLD_RESTORE_RETRY_INTERVAL_MS = 5_000L
+
+        internal fun shouldResumeExistingPlayback(
+            hasCurrentSong: Boolean,
+            hasRawPlaybackMetadata: Boolean,
+        ): Boolean = hasCurrentSong || hasRawPlaybackMetadata
+
+        internal fun shouldRequestColdRestore(lastRequestAtMs: Long, nowMs: Long): Boolean =
+            lastRequestAtMs == Long.MIN_VALUE ||
+                nowMs < lastRequestAtMs ||
+                nowMs - lastRequestAtMs >= COLD_RESTORE_RETRY_INTERVAL_MS
     }
 }

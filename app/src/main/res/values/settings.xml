@@ -77,6 +77,7 @@
     <string name="set_key_head_unit_large_controls" translatable="false">auxio_head_unit_large_controls</string>
     <string name="set_key_ts18_launcher_integration_mode" translatable="false">auxio_ts18_launcher_integration_mode</string>
     <string name="set_key_topway_seek_unit_policy" translatable="false">auxio_ts18_launcher_seek_unit_policy</string>
+    <string name="set_key_playback_notification_access" translatable="false">auxio_playback_notification_access</string>
 
     <string name="set_key_search_filters" translatable="false">auxio_search_filters</string>
 
@@ -116,8 +117,9 @@
 
 
     <string-array name="entries_ts18_launcher_integration_mode">
-        <item>@string/set_ts18_launcher_integration_mode_auto_all_safe_paths</item>
+        <item>@string/set_ts18_launcher_integration_mode_generic_dofun_media</item>
         <item>@string/set_ts18_launcher_integration_mode_android_media_session_only</item>
+        <item>@string/set_ts18_launcher_integration_mode_auto_all_safe_paths</item>
         <item>@string/set_ts18_launcher_integration_mode_topway_broadcast_only</item>
         <item>@string/set_ts18_launcher_integration_mode_topway_command_only</item>
         <item>@string/set_ts18_launcher_integration_mode_topway_broadcast_and_command</item>
@@ -125,8 +127,9 @@
         <item>@string/set_ts18_launcher_integration_mode_disabled</item>
     </string-array>
     <string-array name="values_ts18_launcher_integration_mode" translatable="false">
-        <item>AutoAllSafePaths</item>
+        <item>GenericDofunMedia</item>
         <item>AndroidMediaSessionOnly</item>
+        <item>AutoAllSafePaths</item>
         <item>TopwayBroadcastOnly</item>
         <item>TopwayCommandOnly</item>
         <item>TopwayBroadcastAndCommand</item>
