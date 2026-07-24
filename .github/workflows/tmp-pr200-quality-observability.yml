@@ -1,0 +1,90 @@
+name: PR200 Head-unit Log Capture Patch
+
+on:
+  push:
+    branches:
+      - agent/ts18-root-storage-fastpath
+  pull_request:
+    branches:
+      - dev
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr200-headunit-log-capture
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'agent/ts18-root-storage-fastpath')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: agent/ts18-root-storage-fastpath
+          fetch-depth: 0
+          submodules: false
+
+      - name: Add failure-only canonical log capture
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/lint.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''      - name: Run head-unit compatibility safety checks
+        shell: bash
+        run: |
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/check-native-keep-rules.sh
+'''
+          new = '''      - name: Run head-unit compatibility safety checks
+        id: headunit_safety
+        shell: bash
+        run: |
+          set -o pipefail
+          log="${RUNNER_TEMP}/headunit-safety.log"
+          {
+            for script in \\
+              scripts/check-ts18-apk-reference-contracts.sh \\
+              scripts/check-headunit-compat-safety.sh \\
+              scripts/check-dofun-topway-compat.sh \\
+              scripts/check-native-keep-rules.sh; do
+              printf '\\n===== BEGIN %s =====\\n' "${script}"
+              bash "${script}"
+              printf '===== END %s status=0 =====\\n' "${script}"
+            done
+          } 2>&1 | tee "${log}"
+
+      - name: Upload head-unit safety failure log
+        if: failure() && steps.headunit_safety.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-quality-headunit-safety-log
+          path: ${{ runner.temp }}/headunit-safety.log
+          if-no-files-found: error
+          retention-days: 7
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one head-unit safety block, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          rm -f .github/workflows/tmp-pr200-quality-observability.yml
+          ruby -e 'require "yaml"; Psych.safe_load(File.read(".github/workflows/lint.yml"), permitted_classes: [], permitted_symbols: [], aliases: false); puts "lint.yml valid"'
+          git diff --check
+
+      - name: Commit CI observability change
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'ci: retain head-unit safety failure logs'
+          git push origin HEAD:agent/ts18-root-storage-fastpath
