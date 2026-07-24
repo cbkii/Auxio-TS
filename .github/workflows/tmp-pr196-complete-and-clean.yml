@@ -49,6 +49,8 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/tmp-pr196-complete.py
           python3 scripts/tmp-pr196-complete.py
+          python3 -m py_compile scripts/tmp-pr196-compile-fixes.py
+          python3 scripts/tmp-pr196-compile-fixes.py
 
       - name: Remove temporary completion infrastructure
         shell: bash
@@ -64,6 +66,7 @@ jobs:
             .github/workflows/tmp-pr196-debug.yml \
             app/tmp-pr196-ci-trigger.txt \
             scripts/tmp-pr196-complete.py \
+            scripts/tmp-pr196-compile-fixes.py \
             scripts/tmp-pr196-comprehensive-hardening.py \
             scripts/tmp-pr196-service-hardening.py \
             tmp-pr196-hardening-error.log
