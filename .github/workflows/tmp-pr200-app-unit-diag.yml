@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - cx/pr200-unit-diag
+  pull_request:
+    branches:
+      - agent/ts18-root-storage-fastpath
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
