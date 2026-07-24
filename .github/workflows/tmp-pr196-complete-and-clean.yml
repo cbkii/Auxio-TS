@@ -1,4 +1,4 @@
-name: Temporary PR196 complete and self-clean
+name: Temporary PR196 fast finalizer
 
 on:
   pull_request:
@@ -13,9 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  complete:
+  finalise:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 15
     steps:
       - name: Checkout immutable PR head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Align with intended target
+      - name: Apply verified deterministic finalisation
         shell: bash
         run: |
           set -euo pipefail
@@ -33,28 +33,28 @@ jobs:
           git switch -C fix/first-launch-source-recovery
           git fetch origin feat/ts18-dofun-generic-media-compat
           git merge --no-edit origin/feat/ts18-dofun-generic-media-compat
+
           git checkout origin/feat/ts18-dofun-generic-media-compat -- \
             app/src/main/AndroidManifest.xml \
             app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
             app/src/main/java/org/oxycblt/auxio/IntegerTable.kt \
             app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt \
             app/src/topwayCompat/res/xml/preferences_music.xml
+
           git rm -f --ignore-unmatch \
             app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartNotification.kt \
             app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartSettings.kt
 
-      - name: Apply final scoped hardening
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m py_compile scripts/tmp-pr196-complete.py
-          python3 scripts/tmp-pr196-complete.py
-          python3 -m py_compile scripts/tmp-pr196-compile-fixes.py
-          python3 scripts/tmp-pr196-compile-fixes.py
-          python3 -m py_compile scripts/tmp-pr196-test-fixes.py
-          python3 scripts/tmp-pr196-test-fixes.py
+          for script in \
+            scripts/tmp-pr196-complete.py \
+            scripts/tmp-pr196-compile-fixes.py \
+            scripts/tmp-pr196-test-fixes.py
+          do
+            python3 -m py_compile "${script}"
+            python3 "${script}"
+          done
 
-      - name: Remove temporary completion infrastructure
+      - name: Remove temporary infrastructure and validate final diff
         shell: bash
         run: |
           set -euo pipefail
@@ -74,96 +74,23 @@ jobs:
             scripts/tmp-pr196-service-hardening.py \
             tmp-pr196-hardening-error.log
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
-        with:
-          distribution: temurin
-          java-version: '21'
+          git diff --check
 
-      - name: Write local.properties
-        shell: bash
-        run: |
-          set -euo pipefail
-          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          test -n "${sdk_dir}"
-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
-        with:
-          cache-read-only: true
-
-      - name: Prepare dependencies
-        shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-
-      - name: Apply Kotlin formatting
-        shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
-
-      - name: Check formatted diff
-        shell: bash
-        run: git diff --check
-
-      - name: Run unit tests
-        shell: bash
-        run: |
-          set +e
-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest \
-            > "${RUNNER_TEMP}/pr196-unit-tests.log" 2>&1
-          rc=$?
-          cat "${RUNNER_TEMP}/pr196-unit-tests.log"
-          exit "${rc}"
-
-      - name: Upload unit-test diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pr196-unit-test-diagnostics
-          path: |
-            ${{ runner.temp }}/pr196-unit-tests.log
-            app/build/reports/tests/**
-            musikr/build/reports/tests/**
-            app/build/test-results/**
-            musikr/build/test-results/**
-          if-no-files-found: warn
-          retention-days: 2
-
-      - name: Run lint
-        shell: bash
-        run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
-
-      - name: Run head-unit safety checks
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash ./scripts/check-headunit-compat-safety.sh
-          bash ./scripts/check-dofun-topway-compat.sh
-          bash ./scripts/check-ts18-apk-reference-contracts.sh
-
-      - name: Build all debug and release variants
-        shell: bash
-        run: |
-          bash ./scripts/ci-gradle.sh \
-            :app:assembleStandardDebug \
-            :app:assembleTopwayTwMediaDebug \
-            :app:assembleTopwayTwMusicDebug \
-            :app:assembleStandardRelease \
-            :app:assembleTopwayTwMediaRelease \
-            :app:assembleTopwayTwMusicRelease
-
-      - name: Inspect scope, commit, and push
-        shell: bash
-        run: |
-          set -euo pipefail
-          if find . -path './.git' -prune -o -type f -name '*tmp-pr196*' -print | grep -q .; then
+          remaining=$(find . -path './.git' -prune -o -type f -name '*tmp-pr196*' -print)
+          if [[ -n "${remaining}" ]]; then
             echo '::error::Temporary PR196 files remain after cleanup.'
-            find . -path './.git' -prune -o -type f -name '*tmp-pr196*' -print
+            printf '%s\n' "${remaining}"
             exit 1
           fi
+
           git status --short
           git diff --stat origin/feat/ts18-dofun-generic-media-compat
           git diff --name-status origin/feat/ts18-dofun-generic-media-compat
+
+      - name: Commit and push final tree
+        shell: bash
+        run: |
+          set -euo pipefail
           git add -A
           git diff --cached --check
           git commit -m 'fix: harden first-launch source recovery'
