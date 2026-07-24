@@ -1,12 +1,8 @@
 name: Temporary PR196 compact finaliser
 
 on:
-  push:
-    branches:
-      - fix/first-launch-source-recovery
   pull_request:
     branches:
-      - feat/ts18-dofun-generic-media-compat
       - cx/pr196-verify
 
 permissions:
@@ -76,8 +72,6 @@ else:
 
           python3 /tmp/pr196-finalize.py
 
-          # Correct the overlay ownership after the extracted patch: the scroll container, not its
-          # child, owns visibility and the generated binding ID.
           python3 <<'PY'
           from pathlib import Path
 
