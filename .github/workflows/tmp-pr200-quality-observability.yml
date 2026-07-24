@@ -1,6 +1,7 @@
 name: PR200 Head-unit Log Capture Patch
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - agent/ts18-root-storage-fastpath
