@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.content.SharedPreferences
+import androidx.core.content.edit
 import org.oxycblt.auxio.BuildConfig
 
 enum class Ts18LauncherIntegrationMode {
@@ -45,7 +47,8 @@ enum class Ts18LauncherIntegrationMode {
     val diagnosticsOnly: Boolean
         get() = this == DiagnosticsOnly
 
-    val usesGenericMediaNotification: Boolean
+    /** Whether the complete standards-first DoFun profile is selected. */
+    val usesGenericDofunProfile: Boolean
         get() = this == GenericDofunMedia
 
     val bindsTopwayCommandService: Boolean
@@ -62,12 +65,12 @@ enum class Ts18LauncherIntegrationMode {
             entries.firstOrNull { it.name == value } ?: default()
 
         /**
-         * Resolves the one-time default migration without overwriting an explicitly selected mode.
+         * Resolves the one-time default migration without overwriting an explicit selection.
          *
-         * `AutoAllSafePaths` was the former recommended/default Topway mode. Existing users who
-         * never chose a narrower mode should move to the standards-first generic media profile;
-         * explicit broadcast, command, diagnostics, disabled, and Android-only selections remain
-         * untouched.
+         * Preference provenance was not recorded by older releases, so a persisted
+         * [AutoAllSafePaths] value may have been deliberately selected. Only an absent preference is
+         * therefore migrated to the new standards-first default; every persisted valid mode is
+         * preserved.
          */
         fun migrationDecision(
             persistedValue: String?,
@@ -89,17 +92,32 @@ enum class Ts18LauncherIntegrationMode {
                 )
             }
 
-            val shouldAdoptGenericDefault = parsed == null || parsed == AutoAllSafePaths
+            val shouldAdoptGenericDefault = parsed == null
             return Ts18LauncherModeMigrationDecision(
-                mode =
-                    if (shouldAdoptGenericDefault) {
-                        GenericDofunMedia
-                    } else {
-                        requireNotNull(parsed)
-                    },
+                mode = parsed ?: GenericDofunMedia,
                 persistMode = if (shouldAdoptGenericDefault) GenericDofunMedia else null,
                 markComplete = true,
             )
+        }
+
+        /** Resolve and atomically persist the shared migration decision for any runtime entry point. */
+        fun resolveAndPersist(
+            prefs: SharedPreferences,
+            topwayCompatFlavor: Boolean,
+        ): Ts18LauncherModeMigrationDecision {
+            val decision =
+                migrationDecision(
+                    persistedValue = prefs.getString(PREF_KEY, null),
+                    migrationComplete = prefs.getBoolean(PREF_GENERIC_DEFAULT_MIGRATED, false),
+                    topwayCompatFlavor = topwayCompatFlavor,
+                )
+            if (decision.persistMode != null || decision.markComplete) {
+                prefs.edit {
+                    decision.persistMode?.let { putString(PREF_KEY, it.name) }
+                    if (decision.markComplete) putBoolean(PREF_GENERIC_DEFAULT_MIGRATED, true)
+                }
+            }
+            return decision
         }
     }
 }
