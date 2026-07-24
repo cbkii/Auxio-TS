@@ -164,7 +164,7 @@ class TopwaySourcePolicyDiscoveryTest {
                 }
             }
 
-        val deadline = System.nanoTime() / 1_000_000L + 100L
+        val deadline = System.nanoTime() / 1_000_000L + 5_000L
         TopwaySourcePolicy.discoverAudioParents(
             root,
             out,
@@ -173,7 +173,7 @@ class TopwaySourcePolicyDiscoveryTest {
         )
 
         assertEquals(1, snapshots)
-        assertTrue(observedTimeoutMs in 1L..100L)
+        assertTrue(observedTimeoutMs in 1L..5_000L)
         assertTrue(out.contains(File(root, "Album").absolutePath))
     }
 

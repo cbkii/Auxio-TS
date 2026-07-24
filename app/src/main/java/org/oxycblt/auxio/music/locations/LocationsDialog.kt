@@ -49,6 +49,7 @@ import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.root.storage.PreparedVolumeIndexStore
 import org.oxycblt.auxio.headunit.root.storage.RootStorageAccelerationPolicy
 import org.oxycblt.auxio.headunit.root.storage.SourceAuthority
+import org.oxycblt.auxio.headunit.root.storage.SourceResolution
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.ui.ViewBindingMaterialDialogFragment
@@ -460,11 +461,22 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         requiresPlayableSource: Boolean,
         callback: (Location.Unopened) -> Unit,
     ) {
+        val initiatingMode = locationMode
         lifecycleScope.launch {
             val validation =
-                withContext(Dispatchers.IO) { validateManualPath(path, requiresPlayableSource) }
+                withContext(Dispatchers.IO) {
+                    validateManualPath(path, requiresPlayableSource, initiatingMode)
+                }
             val currentContext = context
             if (currentContext == null) {
+                clearPendingLocationCallback(callback)
+                return@launch
+            }
+            if (locationMode != initiatingMode) {
+                L.d(
+                    "Ignoring source validation after mode changed from $initiatingMode " +
+                        "to $locationMode"
+                )
                 clearPendingLocationCallback(callback)
                 return@launch
             }
@@ -480,15 +492,29 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             val directTopwayPlayable =
                 requiresPlayableSource &&
                     BuildConfig.TOPWAY_COMPAT_FLAVOR &&
-                    locationMode == LocationMode.DIRECT_FS
+                    initiatingMode == LocationMode.DIRECT_FS
             if (directTopwayPlayable) {
-                if (!TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
-                    currentContext.showToast(R.string.set_path_unsafe)
+                val resolution =
+                    withContext(Dispatchers.IO) {
+                        if (!TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
+                            SourceResolution(
+                                requestedPath = path,
+                                resolvedPath = null,
+                                authority = SourceAuthority.UNAVAILABLE,
+                                detail = "unsafe_storage_path",
+                            )
+                        } else {
+                            preparedVolumeIndexStore.resolveSourceSync(path)
+                        }
+                    }
+                if (locationMode != initiatingMode) {
+                    L.d(
+                        "Ignoring source resolution after mode changed from $initiatingMode " +
+                            "to $locationMode"
+                    )
                     clearPendingLocationCallback(callback)
                     return@launch
                 }
-                val resolution =
-                    withContext(Dispatchers.IO) { preparedVolumeIndexStore.resolveSourceSync(path) }
                 val resolved = resolution.resolvedPath
                 if (
                     resolved == null ||
@@ -498,7 +524,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     L.w(
                         "Rejecting playable source $path: ${resolution.authority} ${resolution.detail}"
                     )
-                    currentContext.showToast(sourceResolutionFailureToast(path, resolution))
+                    val failureToast =
+                        withContext(Dispatchers.IO) {
+                            sourceResolutionFailureToast(path, resolution)
+                        }
+                    currentContext.showToast(failureToast)
                     clearPendingLocationCallback(callback)
                     return@launch
                 }
@@ -506,6 +536,14 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 authorityDetail = "${resolution.authority}:${resolution.detail}"
             }
 
+            if (locationMode != initiatingMode) {
+                L.d(
+                    "Ignoring accepted source after mode changed from $initiatingMode " +
+                        "to $locationMode"
+                )
+                clearPendingLocationCallback(callback)
+                return@launch
+            }
             val uri = Uri.fromFile(File(resolvedPath))
             val location = Location.Unopened.from(currentContext, uri)
             if (shouldRejectThirdPartyLocation(uri, location, disableThirdParty)) {
@@ -521,7 +559,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 return@launch
             }
             L.i(
-                "Accepted source requested=$path resolved=$resolvedPath mode=$locationMode " +
+                "Accepted source requested=$path resolved=$resolvedPath mode=$initiatingMode " +
                     "playable=$requiresPlayableSource authority=$authorityDetail"
             )
             callback(location)
@@ -541,15 +579,16 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private fun validateManualPath(
         path: String,
         requiresPlayableSource: Boolean,
+        mode: LocationMode,
     ): ManualPathValidation {
         val directTopwayPlayable =
             requiresPlayableSource &&
                 BuildConfig.TOPWAY_COMPAT_FLAVOR &&
-                locationMode == LocationMode.DIRECT_FS
+                mode == LocationMode.DIRECT_FS
         if (directTopwayPlayable && !TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
             return ManualPathValidation.UNSAFE
         }
-        if (!hasStoragePermission && locationMode != LocationMode.SAF) {
+        if (!hasStoragePermission && mode != LocationMode.SAF) {
             return ManualPathValidation.PERMISSION_MISSING
         }
         return try {
@@ -558,10 +597,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 directTopwayPlayable &&
                     rootGate.isUserEnabled() &&
                     RootStorageAccelerationPolicy.isRemovablePath(path)
+            val exists = file.exists()
             when {
-                !file.exists() && !rootRecoveryEligible -> ManualPathValidation.MISSING
-                file.exists() && !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
-                file.exists() && !file.canRead() && !rootRecoveryEligible ->
+                !exists && !rootRecoveryEligible -> ManualPathValidation.MISSING
+                exists && !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
+                exists && !file.canRead() && !rootRecoveryEligible ->
                     ManualPathValidation.UNREADABLE
                 else -> ManualPathValidation.OK
             }
@@ -574,10 +614,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
     }
 
-    private fun sourceResolutionFailureToast(
-        path: String,
-        resolution: org.oxycblt.auxio.headunit.root.storage.SourceResolution,
-    ): Int {
+    private fun sourceResolutionFailureToast(path: String, resolution: SourceResolution): Int {
         if (resolution.detail == "unsafe_storage_path") return R.string.set_path_unsafe
         if (resolution.authority == SourceAuthority.ROOT_SNAPSHOT_ONLY) {
             return R.string.set_path_root_snapshot_only

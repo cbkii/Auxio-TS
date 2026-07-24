@@ -19,12 +19,10 @@
 package org.oxycblt.auxio.headunit.root.storage
 
 import android.content.Context
-import android.os.Build
 import android.os.SystemClock
+import android.util.AtomicFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.headunit.root.RootStateHolder
@@ -140,6 +138,7 @@ class PreparedVolumeIndexStore
 constructor(@ApplicationContext context: Context, private val rootStateHolder: RootStateHolder) {
     private val cacheDir = File(context.filesDir, "ts18-root-storage")
     private val cacheFile = File(cacheDir, "volumes.tsv")
+    private val atomicCacheFile = AtomicFile(cacheFile)
 
     @Volatile private var records: List<PreparedVolumeRecord> = readCachedRecords()
     @Volatile private var lastRefreshElapsedMs = Long.MIN_VALUE
@@ -346,23 +345,18 @@ constructor(@ApplicationContext context: Context, private val rootStateHolder: R
 
     private fun writeAtomically(text: String): Boolean {
         if (!cacheDir.isDirectory && !cacheDir.mkdirs()) return false
-        val temp = File(cacheDir, "volumes.tsv.tmp")
-        return try {
-            temp.writeText(text)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                temp.delete()
-                false
-            } else {
-                Files.move(
-                    temp.toPath(),
-                    cacheFile.toPath(),
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING,
-                )
-                true
+        val output =
+            try {
+                atomicCacheFile.startWrite()
+            } catch (_: Exception) {
+                return false
             }
+        return try {
+            output.write(text.toByteArray(Charsets.UTF_8))
+            atomicCacheFile.finishWrite(output)
+            true
         } catch (_: Exception) {
-            temp.delete()
+            runCatching { atomicCacheFile.failWrite(output) }
             false
         }
     }

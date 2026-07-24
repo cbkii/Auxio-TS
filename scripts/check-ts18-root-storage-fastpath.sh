@@ -134,7 +134,11 @@ for root in (Path("app/src"), Path("musikr/src")):
         if path.suffix not in {".kt", ".java"} or not path.is_file():
             continue
         parts = set(path.parts)
-        if parts.intersection({"test", "androidTest", "benchmark"}):
+        source_set = path.parts[2] if len(path.parts) > 2 else ""
+        if (
+            parts.intersection({"test", "androidTest", "benchmark"})
+            or source_set.endswith("Test")
+        ):
             continue
         files.append(path)
 if not files:

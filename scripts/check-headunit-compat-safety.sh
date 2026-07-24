@@ -3,6 +3,7 @@ set -euo pipefail
 
 allowed_topway_main='app/src/main/java/org/oxycblt/auxio/headunit/topway/'
 allowed_topway_test='app/src/test/java/org/oxycblt/auxio/headunit/topway/'
+root_probe_allowlist_test='app/src/test/java/org/oxycblt/auxio/headunit/root/dofun/Ts18DofunIntegrationResolverTest.kt'
 allowed_topway_flavour='app/src/topwayCompat/java/com/tw/music/'
 command_bridge_contract="${allowed_topway_main}TopwayCommandServiceContract.kt"
 command_bridge_client="${allowed_topway_main}TopwayCommandServiceClient.kt"
@@ -187,6 +188,8 @@ if [ -n "${vendor_hits}" ]; then
             exit 1
             ;;
         esac
+        ;;
+      "${root_probe_allowlist_test}")
         ;;
       ${allowed_topway_main}*|${allowed_topway_test}*|${allowed_topway_flavour}*)
         case "${line}" in

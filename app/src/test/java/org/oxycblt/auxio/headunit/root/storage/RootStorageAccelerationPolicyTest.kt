@@ -54,6 +54,19 @@ class RootStorageAccelerationPolicyTest {
     }
 
     @Test
+    fun enabledButUnavailableRootKeepsRawPathDirectFirst() {
+        assertEquals(
+            RootStorageResolutionOrder.DIRECT_FIRST,
+            RootStorageAccelerationPolicy.choose(
+                requestedPath = "/mnt/media_rw/usbdisk0",
+                rootEnabled = true,
+                rootAvailable = false,
+                hasCachedRecord = false,
+            ),
+        )
+    }
+
+    @Test
     fun traversalAndProtectedPathsNeverGainRootAcceleration() {
         listOf("/storage/usbdisk0/../data", "/mnt/media_rw/usbdisk0/../../data", "/data/local/tmp")
             .forEach { path ->
