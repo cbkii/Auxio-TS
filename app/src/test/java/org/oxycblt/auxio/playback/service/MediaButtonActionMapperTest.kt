@@ -145,7 +145,7 @@ class MediaButtonActionMapperTest {
     }
 
     @Test
-    fun `allows cold play and paused-session controls without focus`() {
+    fun `allows cold play and stop but focus gates exported navigation`() {
         assertTrue(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
@@ -173,19 +173,10 @@ class MediaButtonActionMapperTest {
                 isFocusHeld = false,
             )
         )
-        assertTrue(
+        assertFalse(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
                 keyCode = KeyEvent.KEYCODE_MEDIA_NEXT,
-                repeatCount = 0,
-                hasCurrentSong = true,
-                isFocusHeld = false,
-            )
-        )
-        assertTrue(
-            MediaButtonActionMapper.shouldForward(
-                action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                 repeatCount = 0,
                 hasCurrentSong = true,
                 isFocusHeld = false,
@@ -194,9 +185,9 @@ class MediaButtonActionMapperTest {
         assertFalse(
             MediaButtonActionMapper.shouldForward(
                 action = KeyEvent.ACTION_DOWN,
-                keyCode = KeyEvent.KEYCODE_MEDIA_NEXT,
+                keyCode = KeyEvent.KEYCODE_MEDIA_PREVIOUS,
                 repeatCount = 0,
-                hasCurrentSong = false,
+                hasCurrentSong = true,
                 isFocusHeld = false,
             )
         )
