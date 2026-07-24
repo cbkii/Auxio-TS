@@ -53,7 +53,7 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         }
         if (
             !ExportedCommandRateLimiter.allow(
-                key = "topway:$action",
+                key = "topway",
                 maxEvents = MAX_TOPWAY_EVENTS_PER_WINDOW,
                 windowMs = TOPWAY_RATE_WINDOW_MS,
             )
