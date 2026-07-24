@@ -191,7 +191,7 @@ open class AuxioService :
         }
 
     private fun isValidMediaId(value: String): Boolean =
-        value.isNotBlank() && value.length <= MAX_MEDIA_ID_LENGTH && value.none(Char::isISOControl)
+        value.length <= MAX_MEDIA_ID_LENGTH && value.isNotBlank() && value.none(Char::isISOControl)
 
     override fun updateForeground(change: ForegroundListener.Change) {
         val mediaNotification = playbackFragment.notification

@@ -23,8 +23,11 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -33,9 +36,11 @@ import androidx.car.app.mediaextensions.MetadataExtras
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver as AndroidXMediaButtonReceiver
+import androidx.preference.PreferenceManager
 import coil3.size.Size
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
+import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
@@ -43,6 +48,8 @@ import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
+import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
+import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.CoverProvider
 import org.oxycblt.auxio.image.ImageSettings
@@ -101,6 +108,10 @@ private constructor(
             )
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    private val canonicalServiceClass =
+        TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
     private val mediaButtonReceiver = MediaButtonIntentFactory.receiverComponent(context)
     private val mediaButtonReceiverIntent =
         PendingIntent.getBroadcast(
@@ -122,7 +133,7 @@ private constructor(
     private val artworkRequestToken = AtomicLong()
 
     private val _notification =
-        PlaybackNotification(context, mediaSession.sessionToken, mediaButtonReceiver) {
+        PlaybackNotification(context, mediaSession.sessionToken, canonicalServiceClass) {
             DofunMediaCompatPolicy.notificationProfile(
                 launcherCoordinator.mode,
                 BuildConfig.TOPWAY_COMPAT_FLAVOR,
@@ -131,9 +142,19 @@ private constructor(
     val notification: ForegroundServiceNotification
         get() = _notification
 
+    private var attached = false
+    private val modePreferenceListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key != Ts18LauncherIntegrationMode.PREF_KEY) return@OnSharedPreferenceChangeListener
+            mainHandler.post {
+                if (!attached) return@post
+                _notification.refreshProfile()
+                launcherCoordinator.refreshWidgetControls("mode-preference-change")
+                foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
+            }
+        }
+
     fun attach() {
-        playbackManager.addListener(this)
-        imageSettings.registerListener(this)
         mediaSession.apply {
             setFlags(MediaSessionInitializationPolicy.FLAGS)
             setCallback(mediaSessionInterface)
@@ -160,8 +181,12 @@ private constructor(
                 setSessionActivity(context.newNowPlayingPendingIntent())
             }
             setQueueTitle(context.getString(R.string.lbl_queue))
-            isActive = true
         }
+        attached = true
+        prefs.registerOnSharedPreferenceChangeListener(modePreferenceListener)
+        playbackManager.addListener(this)
+        imageSettings.registerListener(this)
+        mediaSession.isActive = true
     }
 
     fun tryMediaButtonIntent(intent: Intent): Boolean =
@@ -172,6 +197,9 @@ private constructor(
      * the [PlaybackNotification].
      */
     fun release() {
+        attached = false
+        prefs.unregisterOnSharedPreferenceChangeListener(modePreferenceListener)
+        mainHandler.removeCallbacksAndMessages(null)
         // Clear published state before shutdown so external controllers do not keep stale metadata.
         artworkRequestToken.incrementAndGet()
         mediaSession.setMetadata(emptyMetadata)
@@ -652,7 +680,7 @@ private constructor(
 private class PlaybackNotification(
     private val context: Context,
     sessionToken: MediaSessionCompat.Token,
-    private val mediaButtonReceiver: ComponentName,
+    private val canonicalServiceClass: Class<*>,
     private val profileProvider: () -> PlaybackNotificationProfile,
 ) : ForegroundServiceNotification(context, CHANNEL_INFO) {
     private val sessionToken = sessionToken
@@ -719,6 +747,11 @@ private class PlaybackNotification(
     fun updateShuffled(isShuffled: Boolean) {
         L.d("Applying shuffle action: $isShuffled")
         this.isShuffled = isShuffled
+        rebuildActions()
+    }
+
+    fun refreshProfile() {
+        L.i("Refreshing playback notification profile")
         rebuildActions()
     }
 
@@ -805,10 +838,10 @@ private class PlaybackNotification(
             .build()
 
     private fun buildMediaButtonPendingIntent(keyCode: Int): PendingIntent =
-        PendingIntent.getBroadcast(
+        PendingIntent.getService(
             context,
             keyCode,
-            MediaButtonIntentFactory.receiverIntent(context, keyCode),
+            MediaButtonIntentFactory.serviceIntent(context, canonicalServiceClass, keyCode),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 

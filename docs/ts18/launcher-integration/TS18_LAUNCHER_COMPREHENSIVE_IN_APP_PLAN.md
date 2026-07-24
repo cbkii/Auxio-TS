@@ -1,5 +1,7 @@
 # TS18 Launcher Comprehensive In-App Integration Plan
 
+> **Superseded implementation guidance.** The active default and porting decision are defined in [`DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md`](DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md). The multi-bridge `AutoAllSafePaths` design below is retained only as historical rationale and an explicit diagnostic fallback; it is not the Topway-flavour default.
+
 ## Goal
 
 Implement a reversible, settings-selectable Auxio-TS integration layer that makes Auxio satisfy all safe known/plausible DoFun/Topway launcher media paths:
@@ -58,7 +60,7 @@ Expected behaviour:
 - `TopwayBroadcastOnly`: publish metadata/progress/playstate broadcasts, ignore incoming Topway commands except logging.
 - `TopwayCommandOnly`: accept incoming Topway commands/seek, do not publish Topway metadata/progress except on `cmd=update` if needed for response.
 - `TopwayBroadcastAndCommand`: enable outgoing and incoming Topway contract paths.
-- `AutoAllSafePaths`: enable standards path + broadcasts + command bridge + diagnostics. This is the preferred TS18 default.
+- `AutoAllSafePaths`: enable standards path + broadcasts + command bridge + diagnostics as an explicit legacy fallback; it is not the current default.
 - `DiagnosticsOnly`: log detected incoming/outgoing opportunities without sending extra broadcasts or executing incoming commands.
 
 If the project has an existing settings mechanism, integrate with it. If not, implement a small internal preference with a conservative default and expose UI only where the topwayCompat source set already contains TS18 settings UI.

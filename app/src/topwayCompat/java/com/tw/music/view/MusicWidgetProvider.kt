@@ -260,9 +260,11 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
     private fun currentIntegrationMode(context: Context): Ts18LauncherIntegrationMode {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        return Ts18LauncherIntegrationMode.fromPreference(
-            prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
-        )
+        return Ts18LauncherIntegrationMode.resolveAndPersist(
+                prefs = prefs,
+                topwayCompatFlavor = true,
+            )
+            .mode
     }
 
     private fun newActivityPendingIntent(context: Context): PendingIntent {

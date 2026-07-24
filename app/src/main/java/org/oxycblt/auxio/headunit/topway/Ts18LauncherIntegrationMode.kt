@@ -68,8 +68,8 @@ enum class Ts18LauncherIntegrationMode {
          * Resolves the one-time default migration without overwriting an explicit selection.
          *
          * Preference provenance was not recorded by older releases, so a persisted
-         * [AutoAllSafePaths] value may have been deliberately selected. Only an absent preference is
-         * therefore migrated to the new standards-first default; every persisted valid mode is
+         * [AutoAllSafePaths] value may have been deliberately selected. Only an absent preference
+         * is therefore migrated to the new standards-first default; every persisted valid mode is
          * preserved.
          */
         fun migrationDecision(
@@ -100,7 +100,9 @@ enum class Ts18LauncherIntegrationMode {
             )
         }
 
-        /** Resolve and atomically persist the shared migration decision for any runtime entry point. */
+        /**
+         * Resolve and atomically persist the shared migration decision for any runtime entry point.
+         */
         fun resolveAndPersist(
             prefs: SharedPreferences,
             topwayCompatFlavor: Boolean,

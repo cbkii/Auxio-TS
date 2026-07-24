@@ -52,12 +52,12 @@ object DofunMediaCompatPolicy {
 
     /**
      * Stock-name wrapper controls must remain live whenever private Topway command handling is not
-     * selected. Generic and Android-only profiles therefore route through the canonical media-button
-     * service path; explicit legacy modes retain their stock-compatible Topway actions.
+     * selected. Generic and Android-only profiles therefore route through the canonical
+     * media-button service path; explicit legacy modes retain their stock-compatible Topway
+     * actions.
      */
     fun usesCanonicalWidgetControls(mode: Ts18LauncherIntegrationMode): Boolean =
-        mode.usesGenericDofunProfile ||
-            mode == Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
+        mode.usesGenericDofunProfile || mode == Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
 
     fun genericNotificationState(isPlaying: Boolean): GenericPlaybackNotificationState =
         GenericPlaybackNotificationState(

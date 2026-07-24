@@ -125,7 +125,7 @@ These are architectural precedents only. Auxio must not impersonate Kuwo, QQ Mus
 
 ### 1. New generic DoFun compatibility profile
 
-Add a standards-first profile that becomes the default launcher strategy for Topway variants. It must:
+Add a standards-first profile that becomes the fresh-install launcher default for Topway variants. Existing persisted valid selections remain explicit user choices and are not overwritten. It must:
 
 - preserve one canonical Auxio playback service, player, queue, MediaSession, notification and audio-focus owner;
 - use conventional Android media controls as the primary path;
@@ -260,3 +260,7 @@ Requires exact TS18 validation for each installed identity:
 - no direct `/system` or `/vendor` writes;
 - no second player, queue, MediaSession, notification or playback service;
 - no claim of physical DoFun acceptance from CI.
+
+## Migration and authority note
+
+The one-time migration writes `GenericDofunMedia` only when no launcher-mode preference exists. It preserves every persisted valid mode, including `AutoAllSafePaths`, because older versions did not record whether that value was a default or an explicit choice. Generic callback registration and a healthy Android media session are compatibility prerequisites, not proof that DoFun selected Auxio as the active fixed-panel source.

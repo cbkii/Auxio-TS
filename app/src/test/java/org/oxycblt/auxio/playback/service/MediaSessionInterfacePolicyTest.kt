@@ -52,18 +52,14 @@ class MediaSessionInterfacePolicyTest {
     @Test
     fun `rapid repeated cold play requests are coalesced but retry remains bounded`() {
         assertTrue(MediaSessionInterface.shouldRequestColdRestore(Long.MIN_VALUE, nowMs = 100L))
-        assertFalse(MediaSessionInterface.shouldRequestColdRestore(lastRequestAtMs = 100L, nowMs = 101L))
-        assertTrue(
-            MediaSessionInterface.shouldRequestColdRestore(
-                lastRequestAtMs = 100L,
-                nowMs = 5_100L,
-            )
+        assertFalse(
+            MediaSessionInterface.shouldRequestColdRestore(lastRequestAtMs = 100L, nowMs = 101L)
         )
         assertTrue(
-            MediaSessionInterface.shouldRequestColdRestore(
-                lastRequestAtMs = 10_000L,
-                nowMs = 5L,
-            )
+            MediaSessionInterface.shouldRequestColdRestore(lastRequestAtMs = 100L, nowMs = 5_100L)
+        )
+        assertTrue(
+            MediaSessionInterface.shouldRequestColdRestore(lastRequestAtMs = 10_000L, nowMs = 5L)
         )
     }
 }
