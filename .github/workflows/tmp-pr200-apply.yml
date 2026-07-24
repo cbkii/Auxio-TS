@@ -1,0 +1,64 @@
+name: PR200 Apply Root Storage Fast Path
+
+on:
+  push:
+    branches:
+      - agent/ts18-root-storage-fastpath
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr200-apply-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Apply scoped implementation
+        run: |
+          python3 scripts/tmp-pr200-core.py
+          python3 scripts/tmp-pr200-app.py
+          rm -f scripts/tmp-pr200-core.py scripts/tmp-pr200-app.py .github/workflows/tmp-pr200-apply.yml
+
+      - name: Run fast static validation
+        run: |
+          git diff --check
+          bash scripts/check-ts18-root-storage-fastpath.sh
+          find tools/ts18-root-storage-fastpath scripts -type f -name '*.sh' -print -exec bash -n {} \;
+          python3 - <<'PY'
+          from pathlib import Path
+          forbidden = ('tmp-pr200', 'pm disable-user --user 0 com.tw.music')
+          product = [Path('app/src/main'), Path('musikr/src/main')]
+          for root in product:
+              for path in root.rglob('*'):
+                  if not path.is_file():
+                      continue
+                  text = path.read_text(encoding='utf-8', errors='ignore')
+                  for token in forbidden:
+                      if token in text:
+                          raise SystemExit(f'forbidden product marker {token!r} in {path}')
+          PY
+
+      - name: Commit product changes before canonical CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo 'No patch delta produced' >&2
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(ts18): implement root storage fast path'
+          git push origin HEAD:agent/ts18-root-storage-fastpath
