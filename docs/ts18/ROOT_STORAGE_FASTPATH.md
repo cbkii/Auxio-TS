@@ -150,6 +150,8 @@ Only `APP_READABLE` and `PREPARED_ALIAS` may be persisted as active DirectFS sou
 
 Automated tests must prove bounded command construction, one-snapshot traversal, prepared-representative acceleration, cost-aware ordering, index parsing, source classification, invalid-entry rejection, fresh Topway defaults and no standard-flavour root execution.
 
+The canonical safety lane also runs a comment-aware scan across every production Java/Kotlin source and syntax-checks every repository and TS18 helper shell script; build, unit-test, lint, formatting and API 29 checks remain separate canonical CI jobs.
+
 Physical TS18 validation must measure:
 
 - cached library and first-audio latency with root disabled and enabled;
