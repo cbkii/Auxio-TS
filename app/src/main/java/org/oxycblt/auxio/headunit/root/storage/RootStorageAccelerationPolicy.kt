@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.headunit.root.storage
 
+import org.oxycblt.auxio.headunit.root.RootStorageCommandPolicy
+
 /** Resolution order selected from already available, bounded storage authority. */
 enum class RootStorageResolutionOrder {
     CACHED_ROOT_METADATA_FIRST,
@@ -25,14 +27,7 @@ enum class RootStorageResolutionOrder {
     DIRECT_FIRST,
 }
 
-/**
- * Select the lowest expected-cost safe source-resolution order.
- *
- * Cached records do not start `su` and may provide an O(1) representative-file hint. A live root
- * refresh leads for raw/prepared paths after root was explicitly enabled; the caller may perform
- * the bounded consent probe in that explicit source flow. Ordinary `/storage` paths remain
- * direct-first when no acceleration evidence exists.
- */
+/** Select the lowest expected-cost safe source-resolution order. */
 object RootStorageAccelerationPolicy {
     private val rawUsb = Regex("^/mnt/media_rw/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
     private val prepared = Regex("^/storage/auxio-root/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
@@ -45,7 +40,11 @@ object RootStorageAccelerationPolicy {
         rootAvailable: Boolean,
         hasCachedRecord: Boolean,
     ): RootStorageResolutionOrder {
-        if (!rootEnabled) return RootStorageResolutionOrder.DIRECT_FIRST
+        if (
+            !rootEnabled || !RootStorageCommandPolicy.isAllowedCanonicalStorageRoot(requestedPath)
+        ) {
+            return RootStorageResolutionOrder.DIRECT_FIRST
+        }
         if (hasCachedRecord) return RootStorageResolutionOrder.CACHED_ROOT_METADATA_FIRST
         if (rootAvailable && requiresRootPreparation(requestedPath)) {
             return RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST
@@ -54,9 +53,18 @@ object RootStorageAccelerationPolicy {
     }
 
     /** Raw backing and prepared-alias paths cannot be usefully resolved without preparation. */
-    fun requiresRootPreparation(path: String): Boolean =
-        rawUsb.matches(path) || prepared.matches(path)
+    fun requiresRootPreparation(path: String): Boolean {
+        if (!RootStorageCommandPolicy.isAllowedCanonicalStorageRoot(path)) return false
+        val clean = path.replace('\\', '/').trimEnd('/')
+        return rawUsb.matches(clean) || prepared.matches(clean)
+    }
 
-    fun isRemovablePath(path: String): Boolean =
-        appUsb.matches(path) || rawUsb.matches(path) || prepared.matches(path) || uuid.matches(path)
+    fun isRemovablePath(path: String): Boolean {
+        if (!RootStorageCommandPolicy.isAllowedCanonicalStorageRoot(path)) return false
+        val clean = path.replace('\\', '/').trimEnd('/')
+        return appUsb.matches(clean) ||
+            rawUsb.matches(clean) ||
+            prepared.matches(clean) ||
+            uuid.matches(clean)
+    }
 }

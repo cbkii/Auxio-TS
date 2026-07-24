@@ -3,4 +3,4 @@ name=Auxio-TS TS18 Root Storage Fast Path
 version=1.0.0
 versionCode=10000
 author=Auxio-TS
-summary=Bounded late-start TS18 USB discovery and prepared aliases for DirectFS
+description=Bounded late-start TS18 USB discovery and prepared aliases for DirectFS

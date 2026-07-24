@@ -56,18 +56,15 @@ object RootTreeSnapshotCodec {
 
     private fun validateRelative(value: String): String? {
         if (
-            value.isBlank() ||
+            value.isEmpty() ||
                 value.startsWith('/') ||
                 value.endsWith('/') ||
-                value.contains('\u0000') ||
-                value.contains('\n') ||
-                value.contains('\r') ||
-                value.contains('\t')
+                value.any { it.isISOControl() }
         ) {
             return null
         }
         val segments = value.split('/')
-        if (segments.any { it.isBlank() || it == "." || it == ".." }) return null
+        if (segments.any { it.isEmpty() || it == "." || it == ".." }) return null
         return value
     }
 }

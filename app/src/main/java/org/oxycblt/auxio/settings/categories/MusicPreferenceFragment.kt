@@ -157,7 +157,10 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                         // here
                         // instead of surprising the user later from an ordinary source picker.
                         viewLifecycleOwner.lifecycleScope.launch {
-                            withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
+                            val probed = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
+                            findPreference<Preference>(getString(R.string.set_key_root_fs_status))
+                                ?.summary =
+                                RootDiagnosticsHelper.rootStatusSummary(requireContext(), probed)
                         }
                     }
                     true

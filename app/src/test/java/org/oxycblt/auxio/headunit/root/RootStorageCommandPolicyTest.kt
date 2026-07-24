@@ -38,7 +38,7 @@ class RootStorageCommandPolicyTest {
     fun commandIsOneBoundedRecursiveSnapshot() {
         val command =
             RootStorageCommandPolicy.buildSnapshotCommand(
-                "/mnt/media_rw/usbdisk0/Music's",
+                "\\mnt\\media_rw\\usbdisk0\\Music's",
                 maxDepth = 8,
             )
         assertTrue(command.contains("find \"\$root\" -xdev"))
@@ -46,7 +46,7 @@ class RootStorageCommandPolicyTest {
         assertTrue(command.contains("-exec sh -c"))
         assertTrue(command.contains("{} +"))
         assertTrue(command.contains("case \"\$rel\" in *[[:cntrl:]]*)"))
-        assertTrue(command.contains("Music'\"'\"'s"))
+        assertTrue(command.contains("/mnt/media_rw/usbdisk0/Music'\"'\"'s"))
         assertFalse(command.contains("find \"\$root\" -print"))
         assertFalse(command.contains("while IFS= read -r p"))
         assertFalse(command.contains("grep -q"))

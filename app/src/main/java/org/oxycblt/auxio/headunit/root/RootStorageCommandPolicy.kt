@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.headunit.root
 
+import java.io.File
+
 /** Builds the only recursive root command accepted by the storage root gate. */
 object RootStorageCommandPolicy {
     private val usb = Regex("^/storage/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
@@ -25,34 +27,27 @@ object RootStorageCommandPolicy {
     private val prepared = Regex("^/storage/auxio-root/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
     private val uuid = Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
 
-    fun isAllowedStorageRoot(value: String): Boolean {
-        val path = value.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
-        if (
-            path.contains('\u0000') ||
-                path.contains('\n') ||
-                path.contains('\r') ||
-                path.contains('\t') ||
-                path.contains("/../") ||
-                path.endsWith("/..") ||
-                path.contains("/./") ||
-                path.endsWith("/.")
-        ) {
-            return false
-        }
-        return path == "/sdcard" ||
-            path.startsWith("/sdcard/") ||
-            path == "/storage/emulated/0" ||
-            path.startsWith("/storage/emulated/0/") ||
-            usb.matches(path) ||
-            rawUsb.matches(path) ||
-            prepared.matches(path) ||
-            uuid.matches(path)
+    fun isAllowedStorageRoot(value: String): Boolean =
+        normaliseStoragePath(value)?.let(::matchesAllowedNamespace) == true
+
+    /** Fail closed when an allowed-looking path canonically escapes the approved storage roots. */
+    fun isAllowedCanonicalStorageRoot(value: String): Boolean {
+        val normalised = normaliseStoragePath(value) ?: return false
+        if (!matchesAllowedNamespace(normalised)) return false
+        val canonical =
+            runCatching { File(normalised).canonicalPath.replace('\\', '/').trimEnd('/') }
+                .getOrNull()
+                ?.ifEmpty { "/" } ?: return false
+        return matchesAllowedNamespace(canonical)
     }
 
     fun buildSnapshotCommand(rootPath: String, maxDepth: Int): String {
-        require(isAllowedStorageRoot(rootPath)) { "unsafe root storage path" }
+        val normalised = normaliseStoragePath(rootPath)
+        require(normalised != null && matchesAllowedNamespace(normalised)) {
+            "unsafe root storage path"
+        }
         require(maxDepth in 1..32) { "invalid snapshot depth" }
-        val quotedRoot = shellQuote(rootPath.trimEnd('/'))
+        val quotedRoot = shellQuote(normalised)
         val emitScript =
             "root=\$1; shift; for p do " +
                 "rel=\${p#\"\$root\"/}; [ -n \"\$rel\" ] || continue; " +
@@ -66,6 +61,30 @@ object RootStorageCommandPolicy {
             "find \"\$root\" -xdev -mindepth 1 -maxdepth $maxDepth " +
             "-exec sh -c ${shellQuote(emitScript)} sh \"\$root\" {} + 2>/dev/null"
     }
+
+    private fun normaliseStoragePath(value: String): String? {
+        val path = value.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
+        if (
+            path.any { it.isISOControl() } ||
+                path.contains("/../") ||
+                path.endsWith("/..") ||
+                path.contains("/./") ||
+                path.endsWith("/.")
+        ) {
+            return null
+        }
+        return path
+    }
+
+    private fun matchesAllowedNamespace(path: String): Boolean =
+        path == "/sdcard" ||
+            path.startsWith("/sdcard/") ||
+            path == "/storage/emulated/0" ||
+            path.startsWith("/storage/emulated/0/") ||
+            usb.matches(path) ||
+            rawUsb.matches(path) ||
+            prepared.matches(path) ||
+            uuid.matches(path)
 
     internal fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
 }

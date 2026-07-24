@@ -19,9 +19,12 @@
 package org.oxycblt.auxio.headunit.root.storage
 
 import android.content.Context
+import android.os.Build
 import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.headunit.root.RootStateHolder
@@ -166,6 +169,9 @@ constructor(@ApplicationContext context: Context, private val rootStateHolder: R
      */
     fun resolveSourceSync(requestedPath: String): SourceResolution {
         val clean = requestedPath.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
+        if (!RootStorageCommandPolicy.isAllowedCanonicalStorageRoot(clean)) {
+            return SourceResolution(clean, null, SourceAuthority.UNAVAILABLE, "unsafe_storage_path")
+        }
         val rootEnabled = rootStateHolder.isUserEnabled()
         var rootAvailable = rootStateHolder.stateSnapshot() == RootStateHolder.State.Available
         var current = records
@@ -266,7 +272,12 @@ constructor(@ApplicationContext context: Context, private val rootStateHolder: R
     }
 
     private fun resolveDirect(clean: String): SourceResolution? {
-        if (clean.startsWith("/mnt/media_rw/")) return null
+        if (
+            clean.startsWith("/mnt/media_rw/") ||
+                !RootStorageCommandPolicy.isAllowedCanonicalStorageRoot(clean)
+        ) {
+            return null
+        }
         val prepared = clean.startsWith("/storage/auxio-root/")
         val authority = SourceAuthorityValidator.classifyDirect(clean, prepared) ?: return null
         return SourceResolution(clean, clean, authority, "bounded_direct_validation_ok")
@@ -280,6 +291,7 @@ constructor(@ApplicationContext context: Context, private val rootStateHolder: R
         record ?: return null
         val suffix = suffixFor(requestedPath, record)
         for (candidate in candidatePaths(record, suffix)) {
+            if (!RootStorageCommandPolicy.isAllowedCanonicalStorageRoot(candidate)) continue
             val prepared = candidate.startsWith("/storage/auxio-root/")
             val representative = representativeForCandidate(record, candidate, suffix)
             val authority =
@@ -332,18 +344,28 @@ constructor(@ApplicationContext context: Context, private val rootStateHolder: R
             .getOrNull()
             .orEmpty()
 
-    private fun writeAtomically(text: String): Boolean =
-        runCatching {
-                cacheDir.mkdirs()
-                val temp = File(cacheDir, "volumes.tsv.tmp")
-                temp.writeText(text)
-                if (!temp.renameTo(cacheFile)) {
-                    temp.copyTo(cacheFile, overwrite = true)
-                    temp.delete()
-                }
+    private fun writeAtomically(text: String): Boolean {
+        if (!cacheDir.isDirectory && !cacheDir.mkdirs()) return false
+        val temp = File(cacheDir, "volumes.tsv.tmp")
+        return try {
+            temp.writeText(text)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                temp.delete()
+                false
+            } else {
+                Files.move(
+                    temp.toPath(),
+                    cacheFile.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
                 true
             }
-            .getOrDefault(false)
+        } catch (_: Exception) {
+            temp.delete()
+            false
+        }
+    }
 
     private fun candidatePaths(values: List<PreparedVolumeRecord>): List<String> {
         val out = linkedSetOf<String>()

@@ -25,7 +25,7 @@ import org.junit.Test
 
 class SourceAuthorityValidatorTest {
     @Test
-    fun opensRepresentativeAudioAsAppUid() {
+    fun classifiesReadableRepresentativeAudioInCurrentProcess() {
         val root = Files.createTempDirectory("auxio-source-authority").toFile()
         try {
             val music = root.resolve("Music").apply { mkdirs() }
@@ -44,13 +44,12 @@ class SourceAuthorityValidatorTest {
     }
 
     @Test
-    fun preparedRepresentativeBypassesBoundedWalkWithoutBypassingAppUidOpen() {
+    fun preparedRepresentativeBypassesBoundedWalkWithoutBypassingProcessOpen() {
         val root = Files.createTempDirectory("auxio-source-hint").toFile()
         try {
             var directory = root
             repeat(6) { depth -> directory = directory.resolve("d$depth").apply { mkdirs() } }
             val media = directory.resolve("deep.flac").apply { writeBytes(byteArrayOf(7)) }
-
             assertNull(
                 SourceAuthorityValidator.classifyDirect(root.absolutePath, preparedAlias = false)
             )

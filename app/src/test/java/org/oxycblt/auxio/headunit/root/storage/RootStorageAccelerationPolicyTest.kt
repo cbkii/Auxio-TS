@@ -43,41 +43,27 @@ class RootStorageAccelerationPolicyTest {
             ->
             assertEquals(
                 RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST,
-                RootStorageAccelerationPolicy.choose(
-                    requestedPath = path,
-                    rootEnabled = true,
-                    rootAvailable = true,
-                    hasCachedRecord = false,
-                ),
+                RootStorageAccelerationPolicy.choose(path, true, true, false),
             )
             assertTrue(RootStorageAccelerationPolicy.requiresRootPreparation(path))
         }
         assertEquals(
             RootStorageResolutionOrder.DIRECT_FIRST,
-            RootStorageAccelerationPolicy.choose(
-                requestedPath = "/storage/usbdisk0/Music",
-                rootEnabled = true,
-                rootAvailable = true,
-                hasCachedRecord = false,
-            ),
-        )
-        assertFalse(
-            RootStorageAccelerationPolicy.requiresRootPreparation("/storage/usbdisk0/Music")
+            RootStorageAccelerationPolicy.choose("/storage/usbdisk0/Music", true, true, false),
         )
     }
 
     @Test
-    fun enabledButUnprobedRawPathStaysCheapUntilExplicitResolverProbe() {
-        assertEquals(
-            RootStorageResolutionOrder.DIRECT_FIRST,
-            RootStorageAccelerationPolicy.choose(
-                requestedPath = "/mnt/media_rw/usbdisk0",
-                rootEnabled = true,
-                rootAvailable = false,
-                hasCachedRecord = false,
-            ),
-        )
-        assertTrue(RootStorageAccelerationPolicy.requiresRootPreparation("/mnt/media_rw/usbdisk0"))
+    fun traversalAndProtectedPathsNeverGainRootAcceleration() {
+        listOf("/storage/usbdisk0/../data", "/mnt/media_rw/usbdisk0/../../data", "/data/local/tmp")
+            .forEach { path ->
+                assertFalse(RootStorageAccelerationPolicy.isRemovablePath(path))
+                assertFalse(RootStorageAccelerationPolicy.requiresRootPreparation(path))
+                assertEquals(
+                    RootStorageResolutionOrder.DIRECT_FIRST,
+                    RootStorageAccelerationPolicy.choose(path, true, true, true),
+                )
+            }
     }
 
     @Test

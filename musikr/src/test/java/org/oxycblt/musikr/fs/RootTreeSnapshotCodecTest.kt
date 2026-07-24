@@ -25,17 +25,18 @@ import org.junit.Test
 
 class RootTreeSnapshotCodecTest {
     @Test
-    fun parsesBoundedTypedEntries() {
+    fun parsesBoundedTypedEntriesIncludingWhitespaceNames() {
         val snapshot =
             RootTreeSnapshotCodec.parse(
                 "/mnt/media_rw/usbdisk0",
-                "d\t10\t0\tMusic\nf\t11\t4\tMusic/track.flac\nl\t12\t1\tMusic/link\n",
+                "d\t10\t0\tMusic\nf\t11\t4\tMusic/track.flac\nl\t12\t1\tMusic/link\nf\t13\t1\t   \n",
             )
         requireNotNull(snapshot)
-        assertEquals(3, snapshot.entries.size)
+        assertEquals(4, snapshot.entries.size)
         assertTrue(snapshot.entries[0].isDirectory)
         assertEquals(11_000L, snapshot.entries[1].modifiedMs)
         assertTrue(snapshot.entries[2].isSymlink)
+        assertEquals("   ", snapshot.entries[3].relativePath)
     }
 
     @Test
@@ -48,9 +49,10 @@ class RootTreeSnapshotCodecTest {
     }
 
     @Test
-    fun rejectsMalformedTraversalAndOverflow() {
+    fun rejectsMalformedTraversalControlCharactersAndOverflow() {
         assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "x\t1\t1\tbad.mp3\n"))
         assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "f\t1\t1\t../escape.mp3\n"))
+        assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "f\t1\t1\tbad\u001b.mp3\n"))
         assertNull(
             RootTreeSnapshotCodec.parse(
                 "/storage/usbdisk0",

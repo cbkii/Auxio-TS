@@ -8,10 +8,10 @@ TEMP="$STATE_DIR/volumes.tsv.tmp.$$"
 LOCK_DIR="$STATE_DIR/prepare.lock"
 ALIAS_ROOT=/storage/auxio-root
 BOOT_WAIT_SECONDS=20
-ON_DEMAND_WAIT_SECONDS=2
+ON_DEMAND_WAIT_SECONDS=1
 MAX_SAMPLED_VOLUMES=2
 MAX_SAMPLE_DEPTH=6
-SAMPLE_TIMEOUT_SECONDS=2
+SAMPLE_TIMEOUT_SECONDS=1
 
 log_msg() { log -t AuxioRootStorage "$*" 2>/dev/null || true; }
 

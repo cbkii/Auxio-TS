@@ -22,7 +22,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.util.ArrayDeque
 
-/** End-to-end app-UID validation for a DirectFS source or Magisk-prepared alias. */
+/** End-to-end app-process validation for a DirectFS source or Magisk-prepared alias. */
 object SourceAuthorityValidator {
     private val audioExtensions =
         setOf("mp3", "flac", "m4a", "mp4", "wav", "ogg", "opus", "aac", "3gp", "amr", "wma")
@@ -30,7 +30,7 @@ object SourceAuthorityValidator {
     private const val MAX_VISITED = 512
 
     /**
-     * Validate a source as the Auxio UID.
+     * Validate a source in the current Android app process.
      *
      * [representativePath] is an optional prepared-manifest hint. When it is contained by [path],
      * has an audio extension and opens successfully, validation is O(1). Any stale, escaped or
@@ -50,14 +50,23 @@ object SourceAuthorityValidator {
             hintedFile != null &&
                 hintedFile.extension.lowercase() in audioExtensions &&
                 isContainedReadableFile(hintedFile, canonicalRoot) &&
-                opensAsAppUid(hintedFile)
+                opensInAppProcess(hintedFile)
         ) {
             return authority(preparedAlias)
         }
 
         val first = runCatching { root.listFiles() }.getOrNull() ?: return null
         val queue = ArrayDeque<Pair<File, Int>>()
-        first.forEach { queue.add(it to 1) }
+        var enqueued = 0
+        fun enqueueBounded(files: Array<File>, depth: Int) {
+            for (file in files) {
+                if (enqueued >= MAX_VISITED) break
+                queue.addLast(file to depth)
+                enqueued++
+            }
+        }
+        enqueueBounded(first, 1)
+
         var visited = 0
         var representative: File? = null
         while (queue.isNotEmpty() && visited < MAX_VISITED && representative == null) {
@@ -70,12 +79,12 @@ object SourceAuthorityValidator {
             } else if (candidate.isDirectory && depth < MAX_DEPTH) {
                 runCatching { candidate.listFiles() }
                     .getOrNull()
-                    ?.forEach { queue.add(it to depth + 1) }
+                    ?.let { enqueueBounded(it, depth + 1) }
             }
         }
 
         val mediaFile = representative ?: return null
-        if (!opensAsAppUid(mediaFile)) return null
+        if (!opensInAppProcess(mediaFile)) return null
         return authority(preparedAlias)
     }
 
@@ -84,7 +93,7 @@ object SourceAuthorityValidator {
         return candidate.isFile && isWithin(canonical, canonicalRoot)
     }
 
-    private fun opensAsAppUid(file: File): Boolean =
+    private fun opensInAppProcess(file: File): Boolean =
         runCatching {
                 FileInputStream(file).use { stream ->
                     stream.read()

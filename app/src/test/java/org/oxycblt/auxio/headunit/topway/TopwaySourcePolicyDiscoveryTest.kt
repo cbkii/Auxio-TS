@@ -139,6 +139,7 @@ class TopwaySourcePolicyDiscoveryTest {
         val root = File("/storage/usbdisk9/Music")
         val out = linkedSetOf<String>()
         var snapshots = 0
+        var observedTimeoutMs = Long.MAX_VALUE
         val gate =
             object : org.oxycblt.musikr.fs.RootGate {
                 override fun snapshotTreeSync(
@@ -147,6 +148,7 @@ class TopwaySourcePolicyDiscoveryTest {
                     timeoutMs: Long,
                 ): org.oxycblt.musikr.fs.RootTreeSnapshot {
                     snapshots++
+                    observedTimeoutMs = timeoutMs
                     return org.oxycblt.musikr.fs.RootTreeSnapshot(
                         rootPath,
                         listOf(
@@ -162,9 +164,16 @@ class TopwaySourcePolicyDiscoveryTest {
                 }
             }
 
-        TopwaySourcePolicy.discoverAudioParents(root, out, rootGate = gate)
+        val deadline = System.nanoTime() / 1_000_000L + 100L
+        TopwaySourcePolicy.discoverAudioParents(
+            root,
+            out,
+            rootGate = gate,
+            deadlineElapsedMs = deadline,
+        )
 
         assertEquals(1, snapshots)
+        assertTrue(observedTimeoutMs in 1L..100L)
         assertTrue(out.contains(File(root, "Album").absolutePath))
     }
 

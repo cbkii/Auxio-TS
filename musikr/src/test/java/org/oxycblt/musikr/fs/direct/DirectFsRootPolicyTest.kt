@@ -26,11 +26,9 @@ import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isAllowedRoot
 
 class DirectFsRootPolicyTest {
     @Test
-    fun rejectsProtectedRoots() {
-        assertFalse(isAllowedRoot(File("/")))
-        assertFalse(isAllowedRoot(File("/system")))
-        assertFalse(isAllowedRoot(File("/vendor")))
-        assertFalse(isAllowedRoot(File("/data")))
+    fun rejectsProtectedRootsAndDescendants() {
+        listOf("/", "/system", "/system/app", "/vendor", "/vendor/etc", "/data", "/data/media")
+            .forEach { path -> assertFalse(path, isAllowedRoot(File(path))) }
     }
 
     @Test

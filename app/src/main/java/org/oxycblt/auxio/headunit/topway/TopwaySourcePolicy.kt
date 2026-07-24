@@ -210,11 +210,13 @@ object TopwaySourcePolicy {
         if (!directRootReadable && rootGate != null) {
             val remaining = (MAX_CANDIDATES - out.size).coerceAtLeast(0)
             if (remaining == 0) return
+            val remainingElapsedMs = deadlineElapsedMs - monotonicNowMs()
+            if (remainingElapsedMs <= 0L) return
             val snapshot =
                 rootGate.snapshotTreeSync(
                     root.absolutePath,
                     MAX_SCAN_DEPTH,
-                    ROOT_DISCOVERY_SNAPSHOT_TIMEOUT_MS,
+                    minOf(ROOT_DISCOVERY_SNAPSHOT_TIMEOUT_MS, remainingElapsedMs),
                 ) ?: return
             snapshot.entries
                 .asSequence()

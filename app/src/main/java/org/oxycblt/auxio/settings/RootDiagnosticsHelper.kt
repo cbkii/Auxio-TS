@@ -62,7 +62,7 @@ object RootDiagnosticsHelper {
         }
     }
 
-    private fun rootStatusSummary(context: Context, state: RootStateHolder.State): String =
+    fun rootStatusSummary(context: Context, state: RootStateHolder.State): String =
         when (state) {
             RootStateHolder.State.DisabledByUser ->
                 context.getString(R.string.set_root_fs_status_disabled)
