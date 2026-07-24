@@ -1,0 +1,236 @@
+name: Temporary PR196 final verification
+
+on:
+  pull_request:
+    branches:
+      - 'cx/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tmp-pr196-final-verification
+  cancel-in-progress: true
+
+jobs:
+  verify-and-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/first-launch-source-recovery
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Merge current target branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin feat/ts18-dofun-generic-media-compat
+          git merge --no-edit origin/feat/ts18-dofun-generic-media-compat
+
+      - name: Apply scoped finalizer
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git checkout origin/feat/ts18-dofun-generic-media-compat -- \
+            app/src/main/AndroidManifest.xml \
+            app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
+            app/src/main/java/org/oxycblt/auxio/IntegerTable.kt \
+            app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt \
+            app/src/topwayCompat/res/xml/preferences_music.xml
+          git rm -f --ignore-unmatch \
+            app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartNotification.kt \
+            app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartSettings.kt
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          source = Path('.github/workflows/tmp-pr196-apply-hardening.yml').read_text(encoding='utf-8')
+          marker = "          python3 <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          lines = source[start:end].splitlines()
+          code = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          old = "text = replace_once(text, launcher_anchor, launcher_new, 'SongList app settings launcher')"
+          new = """if launcher_anchor in text:
+    text = text.replace(launcher_anchor, launcher_new, 1)
+else:
+    launcher_start = text.index('    private val storagePermissionLauncher =')
+    launcher_end = text.index('\\n\\n    override fun onCreateBinding', launcher_start)
+    text = text[:launcher_end] + launcher_new[len(launcher_anchor):] + text[launcher_end:]"""
+          if old not in code:
+              raise SystemExit('Could not locate SongList launcher replacement in extracted finalizer')
+          code = code.replace(old, new, 1)
+          Path('/tmp/pr196-finalize.py').write_text(code, encoding='utf-8')
+          PY
+
+          python3 /tmp/pr196-finalize.py
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/res/layout/fragment_home_list.xml')
+          text = path.read_text(encoding='utf-8')
+          outer = '''        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="ifContentScrolls">'''
+          outer_with_id = '''        <androidx.core.widget.NestedScrollView
+            android:id="@+id/home_no_music"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="ifContentScrolls"
+            android:visibility="invisible">'''
+          if outer in text:
+              text = text.replace(outer, outer_with_id, 1)
+          child = '''            <LinearLayout
+                android:id="@+id/home_no_music"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_medium"
+                android:visibility="invisible">'''
+          child_fixed = '''            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_medium">'''
+          text = text.replace(child, child_fixed, 1)
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '''                bindingOrNull?.let {
+                    updateModeUI(it)
+                    updateSaveButtonState()
+                }''',
+              '''                if (view != null) {
+                    updateModeUI(requireBinding())
+                    updateSaveButtonState()
+                }''',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git rm -f --ignore-unmatch \
+            .github/workflows/tmp-pr196-apply-hardening.yml \
+            .github/workflows/tmp-pr196-final-verify.yml \
+            .github/workflows/tmp-pr196-runner.yml \
+            .github/workflows/tmp-pr196-debug.yml \
+            app/tmp-pr196-ci-trigger.txt \
+            scripts/tmp-pr196-comprehensive-hardening.py \
+            scripts/tmp-pr196-service-hardening.py \
+            tmp-pr196-hardening-error.log
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "${sdk_dir}"
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Format and verify scoped changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git diff --check
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+          bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/ci-gradle.sh \
+            :app:assembleStandardDebug \
+            :app:assembleTopwayTwMediaDebug \
+            :app:assembleTopwayTwMusicDebug \
+            :app:assembleStandardRelease \
+            :app:assembleTopwayTwMediaRelease \
+            :app:assembleTopwayTwMusicRelease
+
+      - name: Export verified tree delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/pr196-finalized"
+          mkdir -p "${out}/files"
+          git diff --binary origin/feat/ts18-dofun-generic-media-compat...HEAD > "${out}/pre-finalizer-history.patch"
+          git diff --binary origin/feat/ts18-dofun-generic-media-compat > "${out}/final.patch"
+          git diff --name-status origin/feat/ts18-dofun-generic-media-compat > "${out}/name-status.txt"
+          python3 <<'PY'
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import os
+
+          out = Path(os.environ['RUNNER_TEMP']) / 'pr196-finalized'
+          raw = subprocess.check_output(
+              ['git', 'diff', '--name-status', '-z', 'origin/feat/ts18-dofun-generic-media-compat'],
+          )
+          parts = raw.split(b'\0')
+          deleted = []
+          i = 0
+          while i < len(parts) and parts[i]:
+              status = parts[i].decode('utf-8', 'strict')
+              i += 1
+              if status.startswith(('R', 'C')):
+                  old = parts[i].decode('utf-8', 'strict')
+                  new = parts[i + 1].decode('utf-8', 'strict')
+                  i += 2
+                  if status.startswith('R'):
+                      deleted.append(old)
+                  path = new
+              else:
+                  path = parts[i].decode('utf-8', 'strict')
+                  i += 1
+                  if status == 'D':
+                      deleted.append(path)
+                      continue
+              src = Path(path)
+              if src.is_file():
+                  dest = out / 'files' / path
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(src, dest)
+          (out / 'deleted.txt').write_text(
+              ''.join(f'{path}\n' for path in deleted),
+              encoding='utf-8',
+          )
+          PY
+          git status --short > "${out}/git-status.txt"
+          git diff --stat origin/feat/ts18-dofun-generic-media-compat > "${out}/diff-stat.txt"
+
+      - name: Upload verified final patch
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr196-finalized-tree
+          path: ${{ runner.temp }}/pr196-finalized/**
+          if-no-files-found: error
+          retention-days: 3
