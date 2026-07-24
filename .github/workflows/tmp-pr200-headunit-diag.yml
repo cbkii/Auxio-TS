@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: pr200-final-review-closure
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply:
@@ -36,7 +36,14 @@ jobs:
 
       - name: Apply scoped review fixes
         shell: bash
-        run: python3 closure-tooling/scripts/tmp-pr200-final-closure.py repo
+        run: |
+          if grep -Fq 'val initiatingMode = locationMode' \
+            repo/app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt; then
+            echo 'Primary closure already applied.'
+          else
+            python3 closure-tooling/scripts/tmp-pr200-final-closure.py repo
+          fi
+          python3 closure-tooling/scripts/tmp-pr200-headunit-guard-closure.py repo
 
       - name: Validate and format closure
         working-directory: repo
@@ -44,10 +51,12 @@ jobs:
         run: |
           git diff --check
           bash scripts/check-ts18-root-storage-fastpath.sh
+          bash scripts/check-headunit-compat-safety.sh
           bash scripts/bootstrap-dependencies.sh --profile full-build
           bash scripts/ci-gradle.sh spotlessKotlinApply
           git diff --check
           bash scripts/check-ts18-root-storage-fastpath.sh
+          bash scripts/check-headunit-compat-safety.sh
 
       - name: Run focused unit tests
         working-directory: repo
@@ -66,6 +75,7 @@ jobs:
             app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwaySourcePolicyDiscoveryTest.kt \
             app/src/test/java/org/oxycblt/auxio/headunit/root/storage/RootStorageAccelerationPolicyTest.kt \
             scripts/check-ts18-root-storage-fastpath.sh \
+            scripts/check-headunit-compat-safety.sh \
             docs/ts18/ROOT_STORAGE_FASTPATH.md
           git diff --cached --check
           git commit -m 'fix(ts18): close final root storage review findings'
