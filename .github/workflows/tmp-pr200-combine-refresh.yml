@@ -34,13 +34,11 @@ jobs:
           from pathlib import Path
           path = Path('app/src/main/java/org/oxycblt/auxio/headunit/root/storage/PreparedVolumeIndexStore.kt')
           text = path.read_text(encoding='utf-8')
-          old = '''        lastRefreshElapsedMs = now
-          rootStateHolder.refreshPreparedVolumeManifestSync()
-          val text = rootStateHolder.readPreparedVolumeManifestSync() ?: return records
-          '''
-          new = '''        lastRefreshElapsedMs = now
-          val text = rootStateHolder.refreshPreparedVolumeManifestSync() ?: return records
-          '''
+          old = (
+              '        rootStateHolder.refreshPreparedVolumeManifestSync()\n'
+              '        val text = rootStateHolder.readPreparedVolumeManifestSync() ?: return records\n'
+          )
+          new = '        val text = rootStateHolder.refreshPreparedVolumeManifestSync() ?: return records\n'
           if text.count(old) != 1:
               raise SystemExit(f'expected one refresh sequence, found {text.count(old)}')
           path.write_text(text.replace(old, new), encoding='utf-8')
