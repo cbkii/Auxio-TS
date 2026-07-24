@@ -17,6 +17,18 @@ class PreparedVolumeManifestCodecTest {
     }
 
     @Test
+    fun rejectsMismatchedStateAndDuplicateVolumeIdentity() {
+        assertNull(
+            PreparedVolumeManifestCodec.parse(
+                "1\t123\tusbdisk0\t/mnt/media_rw/usbdisk0\t/storage/usbdisk0\t/storage/auxio-root/usbdisk0\t/storage/auxio-root/usbdisk0\tapp_candidate\t-\n"
+            )
+        )
+        val row =
+            "1\t123\tusbdisk0\t/mnt/media_rw/usbdisk0\t/storage/usbdisk0\t/storage/auxio-root/usbdisk0\t-\traw_only\t-\n"
+        assertNull(PreparedVolumeManifestCodec.parse(row + row))
+    }
+
+    @Test
     fun rejectsUnsafeOrEscapedPaths() {
         assertNull(
             PreparedVolumeManifestCodec.parse(
