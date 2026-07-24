@@ -15,8 +15,9 @@ enum class RootStorageResolutionOrder {
  * Select the lowest expected-cost safe source-resolution order.
  *
  * Cached records do not start `su` and may provide an O(1) representative-file hint. A live root
- * refresh leads only for raw/prepared paths after root was explicitly enabled and already granted.
- * Ordinary `/storage` paths remain direct-first when no acceleration evidence exists.
+ * refresh leads for raw/prepared paths after root was explicitly enabled; the caller may perform
+ * the bounded consent probe in that explicit source flow. Ordinary `/storage` paths remain
+ * direct-first when no acceleration evidence exists.
  */
 object RootStorageAccelerationPolicy {
     private val rawUsb = Regex("^/mnt/media_rw/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
@@ -33,11 +34,15 @@ object RootStorageAccelerationPolicy {
     ): RootStorageResolutionOrder {
         if (!rootEnabled) return RootStorageResolutionOrder.DIRECT_FIRST
         if (hasCachedRecord) return RootStorageResolutionOrder.CACHED_ROOT_METADATA_FIRST
-        if (rootAvailable && (rawUsb.matches(requestedPath) || prepared.matches(requestedPath))) {
+        if (rootAvailable && requiresRootPreparation(requestedPath)) {
             return RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST
         }
         return RootStorageResolutionOrder.DIRECT_FIRST
     }
+
+    /** Raw backing and prepared-alias paths cannot be usefully resolved without preparation. */
+    fun requiresRootPreparation(path: String): Boolean =
+        rawUsb.matches(path) || prepared.matches(path)
 
     fun isRemovablePath(path: String): Boolean =
         appUsb.matches(path) || rawUsb.matches(path) || prepared.matches(path) || uuid.matches(path)
