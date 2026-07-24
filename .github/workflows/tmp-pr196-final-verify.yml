@@ -189,8 +189,9 @@ else:
           from pathlib import Path
           import shutil
           import subprocess
+          import os
 
-          out = Path(__import__('os').environ['RUNNER_TEMP']) / 'pr196-finalized'
+          out = Path(os.environ['RUNNER_TEMP']) / 'pr196-finalized'
           raw = subprocess.check_output(
               ['git', 'diff', '--name-status', '-z', 'origin/feat/ts18-dofun-generic-media-compat'],
           )
