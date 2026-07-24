@@ -2,13 +2,13 @@ name: PR195 Scoped Launcher Hardening
 
 # Temporary branch-local completion runner. It is deleted after the verified source commit lands.
 on:
-  push:
+  pull_request:
     branches:
-      - feat/ts18-dofun-generic-media-compat
-    paths:
-      - .github/workflows/pr195-scoped-hardening.yml
-      - scripts/pr195_finish_generic_media.py
-      - scripts/pr195_harden_launcher_media.py
+      - dev
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 permissions:
   contents: write
@@ -19,7 +19,11 @@ concurrency:
 
 jobs:
   harden:
-    if: github.actor != 'github-actions[bot]'
+    if: >-
+      github.actor != 'github-actions[bot]' &&
+      github.event.pull_request.user.login == 'cbkii' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feat/ts18-dofun-generic-media-compat'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
