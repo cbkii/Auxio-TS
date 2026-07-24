@@ -40,7 +40,7 @@ class Ts18LauncherIntegrationModeTest {
 
     @Test
     fun `mode gating matches launcher plan`() {
-        assertTrue(Ts18LauncherIntegrationMode.GenericDofunMedia.usesGenericMediaNotification)
+        assertTrue(Ts18LauncherIntegrationMode.GenericDofunMedia.usesGenericDofunProfile)
         assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.sendsTopwayBroadcasts)
         assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.handlesTopwayCommands)
         assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.bindsTopwayCommandService)
@@ -57,7 +57,21 @@ class Ts18LauncherIntegrationModeTest {
     }
 
     @Test
-    fun `legacy default migrates to generic media once`() {
+    fun `unset topway preference adopts generic media once`() {
+        val decision =
+            Ts18LauncherIntegrationMode.migrationDecision(
+                persistedValue = null,
+                migrationComplete = false,
+                topwayCompatFlavor = true,
+            )
+
+        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.mode)
+        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.persistMode)
+        assertTrue(decision.markComplete)
+    }
+
+    @Test
+    fun `persisted all safe paths survives migration`() {
         val decision =
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = Ts18LauncherIntegrationMode.AutoAllSafePaths.name,
@@ -65,8 +79,8 @@ class Ts18LauncherIntegrationModeTest {
                 topwayCompatFlavor = true,
             )
 
-        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.mode)
-        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.persistMode)
+        assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, decision.mode)
+        assertNull(decision.persistMode)
         assertTrue(decision.markComplete)
     }
 
