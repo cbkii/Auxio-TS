@@ -25,7 +25,7 @@ jobs:
           submodules: false
           persist-credentials: false
 
-      - name: Run head-unit safety with canonical PR environment
+      - name: Run complete canonical head-unit safety sequence
         id: safety
         continue-on-error: true
         shell: bash
@@ -33,16 +33,31 @@ jobs:
           GITHUB_BASE_REF: dev
         run: |
           set +e
-          bash scripts/check-headunit-compat-safety.sh > /tmp/pr200-headunit-safety.log 2>&1
-          status=$?
-          cat /tmp/pr200-headunit-safety.log
+          log=/tmp/pr200-headunit-safety.log
+          : > "$log"
+          status=0
+          for script in \
+            scripts/check-ts18-apk-reference-contracts.sh \
+            scripts/check-headunit-compat-safety.sh \
+            scripts/check-dofun-topway-compat.sh \
+            scripts/check-native-keep-rules.sh; do
+            printf '\n===== BEGIN %s =====\n' "$script" | tee -a "$log"
+            bash "$script" >> "$log" 2>&1
+            script_status=$?
+            printf '===== END %s status=%s =====\n' "$script" "$script_status" | tee -a "$log"
+            if [ "$script_status" -ne 0 ]; then
+              status=$script_status
+              break
+            fi
+          done
+          cat "$log"
           exit "$status"
 
       - name: Upload complete diagnostic output
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr200-headunit-safety-current-merge-log
+          name: pr200-headunit-safety-full-lane-log
           path: /tmp/pr200-headunit-safety.log
           if-no-files-found: error
           retention-days: 1
