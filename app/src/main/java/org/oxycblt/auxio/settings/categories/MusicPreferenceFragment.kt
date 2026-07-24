@@ -144,6 +144,13 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     true
                 }
         }
+        if (preference.key == getString(R.string.set_key_use_root_fs)) {
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, newValue ->
+                    rootStateHolder.setUserEnabled(newValue as? Boolean == true)
+                    true
+                }
+        }
         if (preference.key == getString(R.string.set_key_root_fs_status)) {
             RootDiagnosticsHelper.setupRootFsStatus(
                 requireContext(),

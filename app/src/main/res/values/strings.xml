@@ -646,12 +646,12 @@
 
     <!-- TS18 Settings Additions -->
     <string name="set_key_use_root_fs" translatable="false">auxio_use_root_fs</string>
-    <string name="set_use_root_fs">Use root-assisted file access</string>
-    <string name="set_use_root_fs_desc">Allows Direct source browsing to use root for bounded directory listing only. Does not modify system files.</string>
+    <string name="set_use_root_fs">Root storage fast path</string>
+    <string name="set_use_root_fs_desc">Allow bounded root storage discovery and prepared USB aliases on Topway builds. Ordinary /storage access is always tried first.</string>
 
     <string name="set_key_root_fs_status" translatable="false">auxio_root_fs_status</string>
     <string name="set_root_fs_status">Root file access status</string>
-    <string name="set_root_fs_status_desc">Check current root-assisted DirectFS availability</string>
+    <string name="set_root_fs_status_desc">Check bounded storage-root availability. This does not authorise package mutations or platform privileges.</string>
     <string name="set_root_fs_status_disabled">Disabled by user</string>
     <string name="set_root_fs_status_unsupported">Unsupported in this build</string>
     <string name="set_root_fs_status_unknown">Not checked</string>
@@ -766,4 +766,5 @@ Publication requested this process: %4$s</string>
     <string name="set_advanced_recovery_warning">Use only if stock twmusic package selection is blocking Auxio-TS. Actions require root and are reversible.</string>
     <string name="set_floating_controls_permission">Display over other apps permission</string>
     <string name="set_floating_controls_permission_desc">Open Android permission settings for floating controls</string>
+    <string name="set_path_root_snapshot_only">Root can see this volume, but Auxio cannot open its media yet. Use the matching /storage path or install/repair the prepared-alias helper.</string>
 </resources>

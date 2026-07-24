@@ -7,8 +7,4 @@
         <Preference app:key="@string/set_key_diagnostics_run_check" app:summary="@string/set_run_dofun_check_desc" app:title="@string/set_run_dofun_check" />
         <Preference android:enabled="false" app:key="@string/set_key_diagnostics_export_report" app:summary="@string/set_export_dofun_report_desc" app:title="@string/set_export_dofun_report" />
     </PreferenceCategory>
-    <PreferenceCategory app:iconSpaceReserved="false" app:title="@string/set_category_advanced_recovery">
-        <Preference app:key="@string/set_key_diagnostics_test_stock_disable" app:summary="@string/set_disable_stock_music_desc" app:title="@string/set_disable_stock_music" />
-        <Preference app:key="@string/set_key_diagnostics_restore_stock" app:summary="@string/set_restore_stock_music_desc" app:title="@string/set_restore_stock_music" />
-    </PreferenceCategory>
 </PreferenceScreen>

@@ -135,31 +135,37 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
-    fun rootBackedEntriesPreserveTypesForAudioParentDiscovery() {
+    fun oneRootSnapshotDiscoversAudioParents() {
         val root = File("/storage/usbdisk9/Music")
         val out = linkedSetOf<String>()
+        var snapshots = 0
         val gate =
             object : org.oxycblt.musikr.fs.RootGate {
-                override fun runRootCommandSync(command: String, timeoutMs: Long) =
-                    listOf("f\tf\t0\t4\ttrack.flac")
+                override fun snapshotTreeSync(
+                    rootPath: String,
+                    maxDepth: Int,
+                    timeoutMs: Long,
+                ): org.oxycblt.musikr.fs.RootTreeSnapshot {
+                    snapshots++
+                    return org.oxycblt.musikr.fs.RootTreeSnapshot(
+                        rootPath,
+                        listOf(
+                            org.oxycblt.musikr.fs.RootTreeEntry(
+                                relativePath = "Album/track.flac",
+                                isDirectory = false,
+                                isSymlink = false,
+                                modifiedMs = 0,
+                                size = 4,
+                            )
+                        ),
+                    )
+                }
             }
 
         TopwaySourcePolicy.discoverAudioParents(root, out, rootGate = gate)
 
-        assertTrue(out.contains(root.absolutePath))
-    }
-
-    @Test
-    fun rootEntryParserPreservesDirectoryAndFileTypes() {
-        val parent = File("/storage/usbdisk9")
-        val dir = TopwaySourcePolicy.parseRootEntry(parent, "d\td\t0\t0\tMusic")
-        val file = TopwaySourcePolicy.parseRootEntry(parent, "f\tf\t0\t4\ttrack.mp3")
-
-        assertTrue(dir?.isDirectory == true)
-        assertFalse(dir?.isFile == true)
-        assertTrue(file?.isFile == true)
-        assertFalse(file?.isDirectory == true)
-        assertEquals(File(parent, "Music"), dir?.file)
+        assertEquals(1, snapshots)
+        assertTrue(out.contains(File(root, "Album").absolutePath))
     }
 
     @Test

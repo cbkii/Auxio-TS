@@ -267,4 +267,6 @@ if [ -f app/src/main/java/org/oxycblt/auxio/headunit/overlay/CarOverlayContract.
   fi
 fi
 
+bash scripts/check-ts18-root-storage-fastpath.sh
+
 echo "headunit compat safety checks passed"

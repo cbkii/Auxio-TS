@@ -429,11 +429,16 @@ Direct dependencies on external/vendor `com.tw.*` APIs remain forbidden in produ
 
 `com.tw.media` is an alternate DoFun fixed-entry variant, not a general no-root bypass. It may conflict on some firmware and still requires real-device validation. Private/native integration remains not for production by default and requires the evidence-gated tier process.
 
-## Auxio-TS Topway/TS18 Policy (Updated)
+## Auxio-TS Topway/TS18 root storage policy
+
 - Auxio-TS is a Topway/TS18-focused variant app.
-- TS18 variants may use root/superuser paths as a first-class mechanism for filesystem access.
-- SAF/DocumentsUI must not be assumed on TS18; DirectFS is the primary fallback/alternative.
-- Root use is variant-scoped and centrally gated via `RootStateHolder`.
-- Root operations must be narrow, bounded (2s timeout for probes, 5s for ops), and safely degraded.
-- Playback Stability: All shuffle modes must preserve the currently playing track. Autoplay must not be interrupted by background state refreshes.
-- Album-Art Modes: Reduced to `off`, `as-is`, and `optimised`.
+- DirectFS is the primary source-selection path for fresh Topway-compatible installs; SAF and MediaStore remain explicit alternatives.
+- Root is a first-class **storage** capability on Topway variants, centrally gated by `RootStateHolder` and explicit user consent.
+- Do not block `BOOT_COMPLETED`, cache restore, MediaSession readiness or first audio on interactive `su`. Pre-authorised Magisk late-start storage preparation may run independently and publish a bounded manifest.
+- `/mnt/media_rw/usbdiskN` is an approved internal backing/discovery path. Persist and play only through an app-readable `/storage/...` path or an app-UID-validated prepared alias.
+- A root directory snapshot is discovery evidence only; it does not prove TagLib, artwork or playback file access.
+- Root storage operations must be fixed/typed, read-only, one snapshot per changed volume, bounded to 2s probes and at most 20s storage operations, and safely degraded.
+- Root storage consent must not authorise protected-package disable/enable, system writes, platform identity, MCU/CAN or vendor-service mutations.
+- Product runtime diagnostics remain bounded and user-started; protected-package mutation experiments belong in external Tier 3 tools.
+- Playback Stability: all shuffle modes preserve the current track. Autoplay must not be interrupted by background root/index refreshes.
+- Album-Art Modes remain `off`, `as-is`, and `optimised`.

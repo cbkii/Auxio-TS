@@ -233,12 +233,14 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     override var locationMode: LocationMode
         get() {
+            val fallback =
+                LocationMode.defaultForFlavor(org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR)
             val mode =
                 sharedPreferences.getInt(
                     getString(R.string.set_key_locations_mode),
-                    IntegerTable.LOCATION_MODE_SAF,
+                    fallback.intCode,
                 )
-            return LocationMode.fromInt(mode) ?: LocationMode.SAF
+            return LocationMode.fromInt(mode) ?: fallback
         }
         set(value) {
             sharedPreferences.edit {
