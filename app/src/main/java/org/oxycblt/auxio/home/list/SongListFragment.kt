@@ -18,31 +18,20 @@
 
 package org.oxycblt.auxio.home.list
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings as AndroidSettings
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.activityViewModels
-import androidx.lifecycle.lifecycleScope
-import androidx.preference.PreferenceManager
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Calendar
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.home.HomeViewModel
 import org.oxycblt.auxio.list.ListFragment
@@ -58,6 +47,7 @@ import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.StartupLibraryPolicy
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
+import org.oxycblt.auxio.music.locations.StoragePermissionPolicy
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
 import org.oxycblt.auxio.util.collectImmediately
@@ -83,37 +73,33 @@ class SongListFragment :
     @Inject lateinit var homeSettings: HomeSettings
     @Inject lateinit var listSettings: org.oxycblt.auxio.list.ListSettings
     @Inject lateinit var musicSettings: MusicSettings
-    @Inject lateinit var rootStateHolder: RootStateHolder
     private val songAdapter = SongAdapter(this)
 
     private var listSettingsListener: org.oxycblt.auxio.list.ListSettings.Listener? = null
     private var homeSettingsListener: org.oxycblt.auxio.home.HomeSettings.Listener? = null
     private var currentRecoveryState =
         LibraryRecoveryPolicy.State(LibraryRecoveryPolicy.Kind.HIDDEN, showProgress = false)
-    private var awaitingPermissionSettings = false
 
     private val storagePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            markStoragePermissionRequested()
-            if (granted) {
-                continueAfterStoragePermission()
-            } else if (isAdded) {
-                requireContext().showToast(R.string.recovery_permission_denied)
-            }
-            refreshRecoveryState()
+  markStoragePermissionRequested()
+  if (granted) {
+      continueAfterStoragePermission()
+  } else if (isAdded) {
+      requireContext().showToast(R.string.recovery_permission_denied)
+  }
+  refreshRecoveryState()
+        }
+
+    private val appSettingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+  if (!isAdded) return@registerForActivityResult
+  if (hasStoragePermission()) continueAfterStoragePermission()
+  refreshRecoveryState()
         }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentHomeListBinding.inflate(inflater)
-
-    override fun onResume() {
-        super.onResume()
-        if (awaitingPermissionSettings) {
-            awaitingPermissionSettings = false
-            if (hasStoragePermission()) continueAfterStoragePermission()
-        }
-        if (view != null) refreshRecoveryState()
-    }
 
     override fun onBindingCreated(binding: FragmentHomeListBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
@@ -282,9 +268,6 @@ class SongListFragment :
                         ),
                     storagePermissionRequired = storagePermissionRequiredForCurrentSource(),
                     storagePermissionGranted = hasStoragePermission(),
-                    rootSupported = BuildConfig.TOPWAY_COMPAT_FLAVOR,
-                    rootRequired = rootRequiredForCurrentSource(),
-                    rootState = rootStateHolder.stateSnapshot(),
                     lastScanFailed = musicSettings.lastScanFailed,
                 )
             )
@@ -308,7 +291,6 @@ class SongListFragment :
             LibraryRecoveryPolicy.Action.CHOOSE_SOURCE -> homeModel.startChooseMusicLocations()
             LibraryRecoveryPolicy.Action.REFRESH -> musicModel.refresh()
             LibraryRecoveryPolicy.Action.RESCAN -> confirmFullRescan()
-            LibraryRecoveryPolicy.Action.ENABLE_ROOT -> confirmRootAccess()
             null -> Unit
         }
     }
@@ -338,7 +320,6 @@ class SongListFragment :
             .setTitle(R.string.recovery_permission_title)
             .setMessage(R.string.recovery_permission_message)
             .setPositiveButton(R.string.recovery_action_grant_permission) { _, _ ->
-                markStoragePermissionRequested()
                 storagePermissionLauncher.launch(permission)
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -368,94 +349,33 @@ class SongListFragment :
                         AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", requireContext().packageName, null),
                     )
-                awaitingPermissionSettings = true
-                startActivity(intent)
+                appSettingsLauncher.launch(intent)
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
-
-    private fun confirmRootAccess() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            requireContext().showToast(R.string.recovery_root_unavailable)
-            return
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.recovery_root_title)
-            .setMessage(R.string.recovery_root_message)
-            .setPositiveButton(R.string.recovery_action_enable_root) { _, _ ->
-                rootStateHolder.setUserEnabled(true)
-                viewLifecycleOwner.lifecycleScope.launch {
-                    val state = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
-                    if (!isAdded) return@launch
-                    requireContext().showToast(rootStateMessage(state))
-                    if (state == RootStateHolder.State.Available) {
-                        if (
-                            StartupLibraryPolicy.isMusicSourceConfigured(
-                                musicSettings.locationMode,
-                                musicSettings.configuredSourceCount,
-                            )
-                        ) {
-                            musicModel.refresh()
-                        } else {
-                            homeModel.startChooseMusicLocations()
-                        }
-                    }
-                    refreshRecoveryState()
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun rootStateMessage(state: RootStateHolder.State): Int =
-        when (state) {
-            RootStateHolder.State.Available -> R.string.recovery_root_granted
-            RootStateHolder.State.Denied -> R.string.recovery_root_denied
-            RootStateHolder.State.TimedOut -> R.string.recovery_root_timed_out
-            RootStateHolder.State.Unknown,
-            RootStateHolder.State.Unavailable,
-            RootStateHolder.State.UnsupportedForVariant,
-            RootStateHolder.State.DisabledByUser -> R.string.recovery_root_unavailable
-        }
 
     private fun storagePermissionRequiredForCurrentSource(): Boolean =
         when (musicSettings.locationMode) {
-            org.oxycblt.auxio.music.locations.LocationMode.MEDIA_STORE -> true
-            org.oxycblt.auxio.music.locations.LocationMode.SAF -> false
-            org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS ->
-                musicSettings.safQuery.source.any { location ->
-                    location.uri.path?.startsWith("/storage/") == true
-                }
+  org.oxycblt.auxio.music.locations.LocationMode.MEDIA_STORE -> true
+  org.oxycblt.auxio.music.locations.LocationMode.SAF -> false
+  org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS ->
+      musicSettings.safQuery.source.any { location ->
+          StoragePermissionPolicy.directPathRequiresPermission(location.uri.path)
+      }
         }
-
-    private fun rootRequiredForCurrentSource(): Boolean =
-        musicSettings.locationMode ==
-            org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS &&
-            musicSettings.safQuery.source.any { location ->
-                location.uri.path?.startsWith("/mnt/media_rw/usbdisk") == true
-            }
 
     private fun requiredStoragePermission(): String =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_AUDIO
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
+        StoragePermissionPolicy.requiredPermission()
 
     private fun hasStoragePermission(): Boolean =
-        ContextCompat.checkSelfPermission(requireContext(), requiredStoragePermission()) ==
-            PackageManager.PERMISSION_GRANTED
+        StoragePermissionPolicy.isGranted(requireContext())
 
     private fun storagePermissionRequestedBefore(): Boolean =
-        PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .getBoolean(KEY_STORAGE_PERMISSION_REQUESTED, false)
+        StoragePermissionPolicy.wasRequested(requireContext())
 
     private fun markStoragePermissionRequested() {
-        PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .edit()
-            .putBoolean(KEY_STORAGE_PERMISSION_REQUESTED, true)
-            .apply()
+        StoragePermissionPolicy.markRequested(requireContext())
     }
 
     private fun updateSelection(selection: List<Music>) {

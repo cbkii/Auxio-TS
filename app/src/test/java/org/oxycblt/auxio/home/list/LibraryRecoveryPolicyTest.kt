@@ -22,7 +22,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
@@ -55,75 +54,34 @@ class LibraryRecoveryPolicyTest {
     }
 
     @Test
-    fun missingDirectPermissionAlsoOffersExplicitRootActionWhenSupported() {
+    fun missingDirectPermissionShowsGrantAndSourceActions() {
         val state =
-            resolve(
-                locationMode = LocationMode.DIRECT_FS,
-                storagePermissionGranted = false,
-                sourceConfigured = true,
-                rootSupported = true,
-                rootEnabled = false,
-            )
+  resolve(
+      storagePermissionRequired = true,
+      storagePermissionGranted = false,
+      sourceConfigured = true,
+  )
 
         assertEquals(LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED, state.kind)
         assertFalse(state.showProgress)
         assertEquals(LibraryRecoveryPolicy.Action.GRANT_PERMISSION, state.primary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.secondary?.action)
-        assertEquals(LibraryRecoveryPolicy.Action.ENABLE_ROOT, state.tertiary?.action)
     }
 
-    @Test
-    fun directSourceWithoutRootOffersExplicitRootAction() {
-        val state =
-            resolve(
-                locationMode = LocationMode.DIRECT_FS,
-                sourceConfigured = false,
-                rootSupported = true,
-                rootEnabled = false,
-            )
-
-        assertEquals(LibraryRecoveryPolicy.Kind.SOURCE_REQUIRED, state.kind)
-        assertFalse(state.showProgress)
-        assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.primary?.action)
-        assertEquals(LibraryRecoveryPolicy.Action.ENABLE_ROOT, state.secondary?.action)
-    }
 
     @Test
-    fun ordinaryDirectSourceDoesNotRequireRootWhenAlreadyEnabledOrUnsupported() {
-        val enabled =
-            resolve(
-                locationMode = LocationMode.DIRECT_FS,
-                sourceConfigured = false,
-                rootSupported = true,
-                rootEnabled = true,
-            )
-        val unsupported =
-            resolve(
-                locationMode = LocationMode.DIRECT_FS,
-                sourceConfigured = false,
-                rootSupported = false,
-                rootEnabled = false,
-            )
-
-        assertEquals(null, enabled.secondary)
-        assertEquals(null, unsupported.secondary)
-    }
-
-    @Test
-    fun sourceUnavailableShowsRetrySourceAndOptionalRootActions() {
+    fun sourceUnavailableShowsRetryAndSourceActions() {
         val state =
             resolve(
                 libraryStatus = StartupLibraryStatus.SourceUnavailable,
                 locationMode = LocationMode.DIRECT_FS,
-                rootSupported = true,
-                rootEnabled = false,
             )
 
         assertEquals(LibraryRecoveryPolicy.Kind.SOURCE_UNAVAILABLE, state.kind)
         assertFalse(state.showProgress)
         assertEquals(LibraryRecoveryPolicy.Action.REFRESH, state.primary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.secondary?.action)
-        assertEquals(LibraryRecoveryPolicy.Action.ENABLE_ROOT, state.tertiary?.action)
+        assertEquals(null, state.tertiary)
     }
 
     @Test
@@ -164,6 +122,7 @@ class LibraryRecoveryPolicyTest {
         val state =
             resolve(
                 indexingState = IndexingState.Completed(Exception("failed")),
+                libraryStatus = StartupLibraryStatus.CacheUnavailable,
                 lastScanFailed = true,
             )
 
@@ -207,9 +166,8 @@ class LibraryRecoveryPolicyTest {
         libraryStatus: StartupLibraryStatus = StartupLibraryStatus.NeedsMusicSource,
         locationMode: LocationMode = LocationMode.SAF,
         sourceConfigured: Boolean = true,
+        storagePermissionRequired: Boolean = locationMode == LocationMode.MEDIA_STORE,
         storagePermissionGranted: Boolean = true,
-        rootSupported: Boolean = false,
-        rootEnabled: Boolean = false,
         lastScanFailed: Boolean = false,
     ): LibraryRecoveryPolicy.State =
         LibraryRecoveryPolicy.resolve(
@@ -219,13 +177,8 @@ class LibraryRecoveryPolicyTest {
                 startupState = startupState,
                 libraryStatus = libraryStatus,
                 sourceConfigured = sourceConfigured,
-                storagePermissionRequired = locationMode == LocationMode.MEDIA_STORE,
+                storagePermissionRequired = storagePermissionRequired,
                 storagePermissionGranted = storagePermissionGranted,
-                rootSupported = rootSupported,
-                rootRequired = locationMode == LocationMode.DIRECT_FS && !rootEnabled,
-                rootState =
-                    if (rootEnabled) RootStateHolder.State.Available
-                    else RootStateHolder.State.DisabledByUser,
                 lastScanFailed = lastScanFailed,
             )
         )

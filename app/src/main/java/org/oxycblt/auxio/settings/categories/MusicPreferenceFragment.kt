@@ -25,14 +25,9 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
-import androidx.preference.SwitchPreferenceCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
-import org.oxycblt.auxio.headunit.prestart.EarlyPrestartSettings
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.BasePreferenceFragment
@@ -41,7 +36,6 @@ import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.StartupPerformanceReport
 import org.oxycblt.auxio.util.navigateSafe
-import org.oxycblt.auxio.util.showToast
 import timber.log.Timber as L
 
 /**
@@ -53,7 +47,6 @@ import timber.log.Timber as L
 class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) {
     private val musicModel: MusicViewModel by viewModels()
     @Inject lateinit var rootStateHolder: RootStateHolder
-    @Inject lateinit var earlyPrestartSettings: EarlyPrestartSettings
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
         when (preference.key) {
@@ -151,30 +144,6 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     true
                 }
         }
-        if (
-            preference.key == getString(R.string.set_key_use_root_fs) &&
-                preference is SwitchPreferenceCompat
-        ) {
-            preference.onPreferenceChangeListener =
-                Preference.OnPreferenceChangeListener { _, newValue ->
-                    val enabled = newValue as? Boolean == true
-                    rootStateHolder.setUserEnabled(enabled)
-                    if (!enabled) {
-                        earlyPrestartSettings.enabled = false
-                        findPreference<SwitchPreferenceCompat>(
-                                getString(R.string.set_key_early_prestart)
-                            )
-                            ?.apply {
-                                isChecked = false
-                                isEnabled = false
-                            }
-                        refreshEarlyPrestartStatus()
-                    } else {
-                        probeRootFromSettings()
-                    }
-                    true
-                }
-        }
         if (preference.key == getString(R.string.set_key_root_fs_status)) {
             RootDiagnosticsHelper.setupRootFsStatus(
                 requireContext(),
@@ -182,19 +151,6 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                 rootStateHolder,
                 viewLifecycleOwner.lifecycleScope,
             )
-        }
-        if (
-            preference.key == getString(R.string.set_key_early_prestart) &&
-                preference is SwitchPreferenceCompat
-        ) {
-            setupEarlyPrestartSwitch(preference)
-        }
-        if (preference.key == getString(R.string.set_key_early_prestart_status)) {
-            preference.summary = earlyPrestartSettings.summary()
-            preference.setOnPreferenceClickListener {
-                preference.summary = earlyPrestartSettings.summary()
-                true
-            }
         }
         if (preference.key == getString(R.string.set_key_ts18_source_repair_status)) {
             RootDiagnosticsHelper.setupTs18SourceRepairStatus(
@@ -204,76 +160,4 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
             )
         }
     }
-
-    private fun setupEarlyPrestartSwitch(preference: SwitchPreferenceCompat) {
-        preference.isChecked = earlyPrestartSettings.enabled
-        preference.isEnabled = rootStateHolder.isUserEnabled()
-        preference.onPreferenceChangeListener =
-            Preference.OnPreferenceChangeListener { _, newValue ->
-                val enable = newValue as? Boolean == true
-                if (!enable) {
-                    earlyPrestartSettings.enabled = false
-                    refreshEarlyPrestartStatus()
-                    return@OnPreferenceChangeListener true
-                }
-                if (!rootStateHolder.isUserEnabled()) {
-                    requireContext().showToast(R.string.set_early_prestart_requires_root)
-                    return@OnPreferenceChangeListener false
-                }
-
-                // Keep the switch off until the bounded probe confirms the existing Magisk grant.
-                preference.isEnabled = false
-                viewLifecycleOwner.lifecycleScope.launch {
-                    val state = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
-                    val rootStillEnabled = rootStateHolder.isUserEnabled()
-                    val available = rootStillEnabled && state == RootStateHolder.State.Available
-                    earlyPrestartSettings.enabled = available
-                    preference.isChecked = available
-                    preference.isEnabled = rootStillEnabled
-                    requireContext().showToast(rootStateMessage(state))
-                    refreshRootStatus()
-                    refreshEarlyPrestartStatus()
-                }
-                false
-            }
-    }
-
-    private fun probeRootFromSettings() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val state = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
-            if (!isAdded) return@launch
-            requireContext().showToast(rootStateMessage(state))
-            refreshRootStatus()
-            findPreference<SwitchPreferenceCompat>(getString(R.string.set_key_early_prestart))
-                ?.isEnabled = rootStateHolder.isUserEnabled()
-            refreshEarlyPrestartStatus()
-        }
-    }
-
-    private fun refreshRootStatus() {
-        findPreference<Preference>(getString(R.string.set_key_root_fs_status))?.let { preference ->
-            RootDiagnosticsHelper.setupRootFsStatus(
-                requireContext(),
-                preference,
-                rootStateHolder,
-                viewLifecycleOwner.lifecycleScope,
-            )
-        }
-    }
-
-    private fun refreshEarlyPrestartStatus() {
-        findPreference<Preference>(getString(R.string.set_key_early_prestart_status))?.summary =
-            earlyPrestartSettings.summary()
-    }
-
-    private fun rootStateMessage(state: RootStateHolder.State): Int =
-        when (state) {
-            RootStateHolder.State.Available -> R.string.recovery_root_granted
-            RootStateHolder.State.Denied -> R.string.recovery_root_denied
-            RootStateHolder.State.TimedOut -> R.string.recovery_root_timed_out
-            RootStateHolder.State.Unknown,
-            RootStateHolder.State.Unavailable,
-            RootStateHolder.State.UnsupportedForVariant,
-            RootStateHolder.State.DisabledByUser -> R.string.recovery_root_unavailable
-        }
 }

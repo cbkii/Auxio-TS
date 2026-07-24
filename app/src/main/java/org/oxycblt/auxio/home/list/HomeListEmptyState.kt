@@ -110,5 +110,4 @@ private val LibraryRecoveryPolicy.Action.labelRes: Int
             LibraryRecoveryPolicy.Action.CHOOSE_SOURCE -> R.string.recovery_action_choose_source
             LibraryRecoveryPolicy.Action.REFRESH -> R.string.recovery_action_refresh
             LibraryRecoveryPolicy.Action.RESCAN -> R.string.recovery_action_rescan
-            LibraryRecoveryPolicy.Action.ENABLE_ROOT -> R.string.recovery_action_enable_root
         }

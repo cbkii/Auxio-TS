@@ -24,7 +24,5 @@
     <PreferenceCategory app:title="@string/set_advanced_source_access">
         <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_use_root_fs" app:summary="@string/set_use_root_fs_desc" app:title="@string/set_use_root_fs" />
         <Preference app:key="@string/set_key_root_fs_status" app:summary="@string/set_root_fs_status_desc" app:title="@string/set_root_fs_status" />
-        <SwitchPreferenceCompat app:defaultValue="false" app:dependency="@string/set_key_use_root_fs" app:key="@string/set_key_early_prestart" app:summary="@string/set_early_prestart_desc" app:title="@string/set_early_prestart" />
-        <Preference app:key="@string/set_key_early_prestart_status" app:summary="@string/set_early_prestart_status_desc" app:title="@string/set_early_prestart_status" />
     </PreferenceCategory>
 </PreferenceScreen>

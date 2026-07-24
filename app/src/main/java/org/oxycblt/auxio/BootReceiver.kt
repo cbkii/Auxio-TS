@@ -26,8 +26,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.overlay.TopwayOverlayRestoreBridge
-import org.oxycblt.auxio.headunit.prestart.EarlyPrestartSettings
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.PlaybackSettings
 import timber.log.Timber as L
@@ -37,18 +35,12 @@ import timber.log.Timber as L
  * enabled. Intended for TS18/head-unit use where the device boots directly into the car
  * environment.
  *
- * Root-enabled early preparation is independent from visible UI autostart. It starts only the
- * existing canonical Auxio service, never autoplays, and stops after bounded startup projections
- * become ready or time out.
- *
  * @author Auxio-TS contributors
  */
 @AndroidEntryPoint
 class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var journal: DiagnosticJournal
-    @Inject lateinit var rootStateHolder: RootStateHolder
-    @Inject lateinit var earlyPrestartSettings: EarlyPrestartSettings
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) {
@@ -56,15 +48,16 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        startEarlyPrestartIfEnabled(context)
-
         if (!playbackSettings.autostartOnBoot) {
-            L.d("Visible autostart disabled, leaving any bounded early prestart to finish")
+            L.d("Autostart disabled, ignoring boot")
             return
         }
 
         L.d("Autostart enabled, attempting to launch Auxio-TS on boot")
         journal.log(DiagnosticJournal.CAT_BOOT, "Boot Received", "Autostart enabled")
+        // Do not start Magisk/su work in the cold boot receiver. Root-assisted DirectFS probes on
+        // demand only after playback/session restoration reaches a configured inaccessible source.
+        journal.log(DiagnosticJournal.CAT_BOOT, "Root probe deferred", "on_demand_direct_fs")
 
         // When autoplay is enabled, start the playback service first so that music can begin
         // even if the background activity start is blocked. The service start is only performed
@@ -140,35 +133,6 @@ class BootReceiver : BroadcastReceiver() {
             L.d("Started MainActivity from boot")
         } catch (e: Exception) {
             L.w("Cannot start Activity from boot: $e")
-        }
-    }
-
-    private fun startEarlyPrestartIfEnabled(context: Context) {
-        if (!earlyPrestartSettings.enabled) return
-        if (!rootStateHolder.isUserEnabled()) {
-            earlyPrestartSettings.mark(EarlyPrestartSettings.Outcome.SKIPPED_ROOT_DISABLED)
-            journal.log(
-                DiagnosticJournal.CAT_BOOT,
-                "Early prestart skipped",
-                "root_user_consent_disabled",
-            )
-            return
-        }
-        try {
-            val serviceIntent =
-                Intent(context, AuxioService::class.java)
-                    .setAction(AuxioService.ACTION_EARLY_PRESTART)
-                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
-            ContextCompat.startForegroundService(context, serviceIntent)
-            journal.log(
-                DiagnosticJournal.CAT_BOOT,
-                "Early prestart service requested",
-                "root_enabled=true visible_ui=false autoplay=false",
-            )
-        } catch (e: Exception) {
-            L.w(e, "Cannot start bounded early prestart")
-            earlyPrestartSettings.mark(EarlyPrestartSettings.Outcome.START_FAILED)
-            journal.log(DiagnosticJournal.CAT_BOOT, "Early prestart start failed", e.toString())
         }
     }
 }

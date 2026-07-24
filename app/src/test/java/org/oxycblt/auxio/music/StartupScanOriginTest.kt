@@ -28,21 +28,6 @@ import org.oxycblt.auxio.music.service.StartupScanOrigin
 
 class StartupScanOriginTest {
     @Test
-    fun userVisibleOriginOverridesBackgroundOrigin() {
-        assertEquals(
-            StartupScanOrigin.USER_VISIBLE,
-            StartupScanOrigin.merge(StartupScanOrigin.BACKGROUND, StartupScanOrigin.USER_VISIBLE),
-        )
-        assertEquals(
-            StartupScanOrigin.USER_VISIBLE,
-            StartupScanOrigin.merge(
-                StartupScanOrigin.USER_VISIBLE,
-                StartupScanOrigin.EARLY_PRESTART,
-            ),
-        )
-    }
-
-    @Test
     fun topwayUserVisibleFirstStartMayRequestOneScan() = runBlocking {
         var requests = 0
         val decision =
@@ -72,8 +57,8 @@ class StartupScanOriginTest {
     }
 
     @Test
-    fun topwayBackgroundAndEarlyPrestartDoNotRequestScans() = runBlocking {
-        for (origin in listOf(StartupScanOrigin.BACKGROUND, StartupScanOrigin.EARLY_PRESTART)) {
+    fun topwayBackgroundDoesNotRequestScans() = runBlocking {
+        for (origin in listOf(StartupScanOrigin.BACKGROUND)) {
             var requests = 0
             val decision =
                 StartupLibraryStartup.run(

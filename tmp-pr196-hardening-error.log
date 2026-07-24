@@ -1,3 +1,0 @@
-PR #196 hardening patch failed with status 1
-
-app/src/main/java/org/oxycblt/auxio/music/service/IndexingHolder.kt: expected exactly one match, found 0: '    private var activeStartupOrigin: StartupScanOrigin? = null\n    private var pendingStartupOrigin: StartupScanOrigin? = null\n'

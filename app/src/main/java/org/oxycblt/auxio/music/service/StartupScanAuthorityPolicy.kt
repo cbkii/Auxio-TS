@@ -16,9 +16,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Process
-import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import java.io.File
+import java.util.UUID
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.StartupLibraryPolicy
 import org.oxycblt.auxio.music.locations.LocationMode
@@ -26,92 +26,87 @@ import org.oxycblt.auxio.music.locations.LocationMode
 /** Origin of a service startup request. */
 enum class StartupScanOrigin {
     USER_VISIBLE,
-    BACKGROUND,
-    EARLY_PRESTART;
+    BACKGROUND;
 }
 
-/**
- * Compatibility-boundary policy that maps trusted lifecycle origin and current source authority to
- * automatic scan authority.
- *
- * The shared music startup core receives only the resulting boolean. Topway boot/ACC restrictions,
- * Android permissions and path readability stay outside generic source/cache policy.
- */
+/** Maps trusted lifecycle origin and current source authority to automatic scan authority. */
 object StartupScanAuthorityPolicy {
-    private var trustedUserVisibleUntilElapsedMs = 0L
+    private var trustedUserVisibleNonce: String? = null
 
-    /** Issue a short-lived, process-local token immediately before MainActivity starts the service. */
     @Synchronized
-    fun issueTrustedUserVisibleStart() {
-        trustedUserVisibleUntilElapsedMs =
-            SystemClock.elapsedRealtime() + TRUSTED_USER_VISIBLE_WINDOW_MS
-    }
+    fun issueTrustedUserVisibleStart(): String =
+        UUID.randomUUID().toString().also { trustedUserVisibleNonce = it }
 
-    /** Consume the one-shot token; exported service callers cannot mint it through Intent extras. */
     @Synchronized
-    fun consumeTrustedUserVisibleStart(): Boolean {
-        val trusted =
-            trustedUserVisibleUntilElapsedMs > 0L &&
-                SystemClock.elapsedRealtime() <= trustedUserVisibleUntilElapsedMs
-        trustedUserVisibleUntilElapsedMs = 0L
+    fun consumeTrustedUserVisibleStart(candidate: String?): Boolean {
+        val trusted = candidate != null && candidate == trustedUserVisibleNonce
+        if (trusted) trustedUserVisibleNonce = null
         return trusted
     }
+
+    fun originAllowsAutomaticScan(
+        topwayCompatFlavor: Boolean,
+        origin: StartupScanOrigin,
+    ): Boolean = !topwayCompatFlavor || origin == StartupScanOrigin.USER_VISIBLE
 
     fun allowAutomaticScan(
         topwayCompatFlavor: Boolean,
         origin: StartupScanOrigin,
         sourceAuthority: Boolean,
-    ): Boolean = sourceAuthority && (!topwayCompatFlavor || origin == StartupScanOrigin.USER_VISIBLE)
+    ): Boolean = sourceAuthority && originAllowsAutomaticScan(topwayCompatFlavor, origin)
 
-    /** Lightweight current authority check; never invokes root and never enumerates a source tree. */
+    /** Current source authority check. Never invokes root or enumerates source contents. */
     fun hasCurrentSourceAuthority(context: Context, settings: MusicSettings): Boolean {
         if (
-            !StartupLibraryPolicy.isMusicSourceConfigured(
-                settings.locationMode,
-                settings.configuredSourceCount,
-            )
+  !StartupLibraryPolicy.isMusicSourceConfigured(
+      settings.locationMode,
+      settings.configuredSourceCount,
+  )
         ) {
-            return false
+  return false
         }
+
+        if (settings.locationMode == LocationMode.MEDIA_STORE) return hasStoragePermission(context)
+
+        val sources = settings.safQuery.source
+        if (sources.isEmpty() || sources.size != settings.configuredSourceCount) return false
+
         return when (settings.locationMode) {
-            LocationMode.MEDIA_STORE -> hasStoragePermission(context)
-            LocationMode.SAF -> settings.safQuery.source.all { hasUriReadAuthority(context, it.uri) }
-            LocationMode.DIRECT_FS ->
-                settings.safQuery.source.all { location ->
-                    val path = location.uri.path ?: return@all false
-                    val file = File(path)
-                    file.exists() && file.isDirectory && file.canRead()
-                }
+  LocationMode.MEDIA_STORE -> hasStoragePermission(context)
+  LocationMode.SAF -> sources.all { hasUriReadAuthority(context, it.uri) }
+  LocationMode.DIRECT_FS ->
+      sources.all { location ->
+          val file = location.uri.path?.let(::File) ?: return@all false
+          file.exists() && file.isDirectory && file.canRead()
+      }
         }
     }
 
     private fun hasStoragePermission(context: Context): Boolean {
         val permission =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Manifest.permission.READ_MEDIA_AUDIO
-            } else {
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            }
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      Manifest.permission.READ_MEDIA_AUDIO
+  } else {
+      Manifest.permission.READ_EXTERNAL_STORAGE
+  }
         return ContextCompat.checkSelfPermission(context, permission) ==
-            PackageManager.PERMISSION_GRANTED
+  PackageManager.PERMISSION_GRANTED
     }
 
     private fun hasUriReadAuthority(context: Context, uri: android.net.Uri): Boolean {
         if (uri.scheme == "file") {
-            val file = uri.path?.let(::File) ?: return false
-            return file.exists() && file.canRead()
+  val file = uri.path?.let(::File) ?: return false
+  return file.exists() && file.isDirectory && file.canRead()
         }
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
         if (
-            context.checkUriPermission(uri, Process.myPid(), Process.myUid(), flags) ==
-                PackageManager.PERMISSION_GRANTED
+  context.checkUriPermission(uri, Process.myPid(), Process.myUid(), flags) ==
+      PackageManager.PERMISSION_GRANTED
         ) {
-            return true
+  return true
         }
         return context.contentResolver.persistedUriPermissions.any { permission ->
-            permission.isReadPermission && uri.toString().startsWith(permission.uri.toString())
+  permission.isReadPermission && permission.uri == uri
         }
     }
-
-    private const val TRUSTED_USER_VISIBLE_WINDOW_MS = 5_000L
 }

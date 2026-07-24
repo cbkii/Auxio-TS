@@ -106,14 +106,13 @@
             </intent-filter>
         </activity>
 
+
         <!--
-        Service handling music playback, system components, and state saving. The dataSync type is
-        used only by the optional bounded early-prestart path; normal playback remains the canonical
-        mediaPlayback authority.
+        Service handling music playback, system components, and state saving.
         -->
         <service
             android:name=".AuxioService"
-            android:foregroundServiceType="mediaPlayback|dataSync"
+            android:foregroundServiceType="mediaPlayback"
             android:icon="@mipmap/ic_launcher"
             android:exported="true"
             android:roundIcon="@mipmap/ic_launcher"
@@ -164,7 +163,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- Boot receiver for autostart and optional bounded early preparation on TS18/head-unit -->
+        <!-- Boot receiver for autostart on TS18/head-unit -->
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"

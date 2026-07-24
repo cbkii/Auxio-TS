@@ -49,6 +49,7 @@ constructor(
     }
 
     private val stateLock = Any()
+    private val probeLock = Any()
     private var consentGeneration = 0L
 
     @Volatile
@@ -131,7 +132,7 @@ constructor(
         )
     }
 
-    fun probeSync(): State {
+    fun probeSync(): State = synchronized(probeLock) {
         val generation =
             synchronized(stateLock) {
                 if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
@@ -166,13 +167,11 @@ constructor(
                 is RootProcessResult.ExecutionFailure -> State.Unavailable
             }
 
-        return synchronized(stateLock) {
-            if (generation != consentGeneration || !userEnabled()) {
-                state = if (userEnabled()) State.Unknown else State.DisabledByUser
-            } else {
-                state = probed
-            }
-            state
+        synchronized(stateLock) {
+  if (generation == consentGeneration) {
+      state = if (userEnabled()) probed else State.DisabledByUser
+  }
+  state
         }
     }
 

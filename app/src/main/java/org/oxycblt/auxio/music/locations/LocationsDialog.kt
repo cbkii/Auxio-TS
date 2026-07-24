@@ -18,10 +18,8 @@
 
 package org.oxycblt.auxio.music.locations
 
-import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -37,7 +35,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.PreferenceManager
 import com.google.android.material.R as MR
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -96,6 +93,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private var openDocumentTreeLauncher: ActivityResultLauncher<Uri?>? = null
     private var localOnlyOpenDocumentTreeLauncher: ActivityResultLauncher<Uri?>? = null
     private var storagePermissionLauncher: ActivityResultLauncher<String>? = null
+    private var appSettingsLauncher: ActivityResultLauncher<Intent>? = null
     @Inject lateinit var musicSettings: MusicSettings
     @Inject lateinit var rootGate: RootStateHolder
 
@@ -132,8 +130,22 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 addDocumentTreeUriToDirs(uri, true)
             }
 
+        appSettingsLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                val currentContext = context ?: return@registerForActivityResult
+                hasStoragePermission = StoragePermissionPolicy.isGranted(currentContext)
+                val retry = pendingPermissionRetry
+                pendingPermissionRetry = null
+                if (view != null) {
+                    updateModeUI(requireBinding())
+                    updateSaveButtonState()
+                }
+                if (hasStoragePermission) retry?.invoke()
+            }
+
         storagePermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                StoragePermissionPolicy.markRequested(requireContext())
                 L.d("Storage permission granted: $isGranted")
                 hasStoragePermission = isGranted
                 if (isGranted && !permissionGrantedInSession) {
@@ -251,7 +263,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsModeDirect.isChecked = locationMode == LocationMode.DIRECT_FS
 
         // Check storage permission status
-        hasStoragePermission = checkStoragePermission()
+        hasStoragePermission = StoragePermissionPolicy.isGranted(requireContext())
     }
 
     private fun loadModeData(binding: DialogMusicLocationsBinding) {
@@ -466,12 +478,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     showStoragePermissionExplanation()
                     return@launch
                 }
-                ManualPathValidation.ROOT_UNAVAILABLE -> {
-                    showRootConsentAndRetry {
-                        validateAndAcceptPath(path, disableThirdParty, callback)
-                    }
-                    return@launch
-                }
                 ManualPathValidation.OK -> Unit
                 else -> {
                     L.w("Rejecting music source $path: $result")
@@ -506,7 +512,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         NOT_DIRECTORY(R.string.set_path_not_directory),
         UNREADABLE(R.string.set_path_unreadable),
         PERMISSION_MISSING(R.string.set_path_permission_missing),
-        ROOT_UNAVAILABLE(R.string.set_path_root_unavailable),
         OPEN_FAILED(R.string.set_path_open_failed),
     }
 
@@ -517,21 +522,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             return ManualPathValidation.UNSAFE
         }
         val rawRootCandidate = directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
-        if (!hasStoragePermission && locationMode != LocationMode.SAF && !rawRootCandidate) {
-            return ManualPathValidation.PERMISSION_MISSING
+        if (rawRootCandidate) return ManualPathValidation.UNREADABLE
+        if (!hasStoragePermission && locationMode != LocationMode.SAF) {
+  return ManualPathValidation.PERMISSION_MISSING
         }
         return try {
-            val file = File(path)
-            when {
-                rawRootCandidate &&
-                    rootGate.stateSnapshot() != RootStateHolder.State.Available &&
-                    (!file.exists() || !file.isDirectory || !file.canRead()) ->
-                    ManualPathValidation.ROOT_UNAVAILABLE
-                rawRootCandidate && (!file.exists() || !file.isDirectory || !file.canRead()) ->
-                    // Root can inspect this directory, but current scanning/playback still opens
-                    // app-UID file:// URIs. Keep the raw mount unavailable and direct users to its
-                    // /storage/usbdiskN alias rather than saving a source that cannot play.
-                    ManualPathValidation.UNREADABLE
+  val file = File(path)
+  when {
                 !file.exists() -> ManualPathValidation.MISSING
                 !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
                 !file.canRead() -> ManualPathValidation.UNREADABLE
@@ -539,11 +536,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             }
         } catch (e: SecurityException) {
             L.w(e, "Security exception while validating manual path $path")
-            if (rawRootCandidate) {
-                ManualPathValidation.ROOT_UNAVAILABLE
-            } else {
-                ManualPathValidation.PERMISSION_MISSING
-            }
+            ManualPathValidation.PERMISSION_MISSING
         } catch (e: RuntimeException) {
             L.w(e, "Runtime exception while validating manual path $path")
             ManualPathValidation.UNREADABLE
@@ -991,17 +984,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
     }
 
-    private fun checkStoragePermission(): Boolean {
-        val permission =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                Manifest.permission.READ_MEDIA_AUDIO
-            } else {
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            }
-        return ContextCompat.checkSelfPermission(requireContext(), permission) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
     private fun showStoragePermissionExplanation() {
         if (hasStoragePermission) {
             pendingPermissionRetry?.also { retry ->
@@ -1028,49 +1010,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .show()
     }
 
-    private fun showRootConsentAndRetry(onAvailable: () -> Unit) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-            context?.showToast(R.string.recovery_root_unavailable)
-            pendingLocationCallback = null
-            return
-        }
-        val ctx = context ?: return
-        AlertDialog.Builder(ctx)
-            .setTitle(R.string.recovery_root_title)
-            .setMessage(R.string.recovery_root_message)
-            .setPositiveButton(R.string.recovery_action_enable_root) { _, _ ->
-                rootGate.setUserEnabled(true)
-                lifecycleScope.launch {
-                    val state = withContext(Dispatchers.IO) { rootGate.probeSync() }
-                    val currentContext = context ?: return@launch
-                    val message =
-                        when (state) {
-                            RootStateHolder.State.Available -> R.string.recovery_root_granted
-                            RootStateHolder.State.Denied -> R.string.recovery_root_denied
-                            RootStateHolder.State.TimedOut -> R.string.recovery_root_timed_out
-                            RootStateHolder.State.Unknown,
-                            RootStateHolder.State.Unavailable,
-                            RootStateHolder.State.UnsupportedForVariant,
-                            RootStateHolder.State.DisabledByUser ->
-                                R.string.recovery_root_unavailable
-                        }
-                    currentContext.showToast(message)
-                    if (state == RootStateHolder.State.Available) {
-                        onAvailable()
-                    } else {
-                        pendingLocationCallback = null
-                    }
-                }
-            }
-            .setNegativeButton(R.string.lbl_cancel) { _, _ -> pendingLocationCallback = null }
-            .setOnCancelListener { pendingLocationCallback = null }
-            .show()
-    }
-
     private fun requestStoragePermission() {
-        val permission = requiredStoragePermission()
+        val permission = StoragePermissionPolicy.requiredPermission()
         if (
-            storagePermissionRequestedBefore() &&
+            StoragePermissionPolicy.wasRequested(requireContext()) &&
                 !shouldShowRequestPermissionRationale(permission)
         ) {
             showOpenAppSettingsDialog()
@@ -1084,31 +1027,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         try {
             L.d("Requesting storage permission: $permission")
-            markStoragePermissionRequested()
             launcher.launch(permission)
+            StoragePermissionPolicy.markRequested(requireContext())
         } catch (e: Exception) {
             L.e("Failed to request storage permission")
             L.e(e.stackTraceToString())
             requireContext().showToast(R.string.err_no_app)
         }
-    }
-
-    private fun requiredStoragePermission(): String =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_AUDIO
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-
-    private fun storagePermissionRequestedBefore(): Boolean =
-        PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .getBoolean(KEY_STORAGE_PERMISSION_REQUESTED, false)
-
-    private fun markStoragePermissionRequested() {
-        PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .edit()
-            .putBoolean(KEY_STORAGE_PERMISSION_REQUESTED, true)
-            .apply()
     }
 
     private fun showOpenAppSettingsDialog() {
@@ -1117,7 +1042,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setTitle(R.string.recovery_permission_title)
             .setMessage(R.string.recovery_permission_denied)
             .setPositiveButton(R.string.recovery_action_open_settings) { _, _ ->
-                startActivity(
+                requireNotNull(appSettingsLauncher) {
+                    "App settings launcher was not available"
+                }.launch(
                     Intent(
                         AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", ctx.packageName, null),
@@ -1143,7 +1070,4 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isEnabled
     }
 
-    private companion object {
-        const val KEY_STORAGE_PERMISSION_REQUESTED = "auxio_storage_permission_requested"
-    }
 }

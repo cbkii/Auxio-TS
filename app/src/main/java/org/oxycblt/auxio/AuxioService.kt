@@ -34,21 +34,11 @@ import androidx.media.MediaBrowserServiceCompat
 import androidx.media.utils.MediaConstants
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
-import org.oxycblt.auxio.headunit.prestart.EarlyPrestartNotification
-import org.oxycblt.auxio.headunit.prestart.EarlyPrestartSettings
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceClient
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
-import org.oxycblt.auxio.music.StartupReadinessController
-import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.service.MusicServiceFragment
+import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
 import org.oxycblt.auxio.music.service.StartupScanOrigin
 import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
@@ -66,13 +56,6 @@ open class AuxioService :
 
     @Inject lateinit var journal: DiagnosticJournal
     @Inject lateinit var topwayCommandServiceClient: TopwayCommandServiceClient
-    @Inject lateinit var startupReadinessController: StartupReadinessController
-    @Inject lateinit var earlyPrestartSettings: EarlyPrestartSettings
-    @Inject lateinit var rootStateHolder: RootStateHolder
-
-    private val serviceJob = Job()
-    private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main.immediate)
-    private var earlyPrestartJob: Job? = null
 
     @SuppressLint("WrongConstant")
     override fun onCreate() {
@@ -91,146 +74,37 @@ open class AuxioService :
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return PerfTimer.trace("AuxioService.onStartCommand") {
-            Ts18FirstAudioLatency.mark("service_on_start_command")
-            // TODO: Start command occurring from a foreign service basically implies a detached
-            // service, we might need more handling here.
-            super.onStartCommand(intent, flags, startId)
-            val earlyPrestart = intent?.action == ACTION_EARLY_PRESTART
-            if (earlyPrestart && !isEarlyPrestartAllowed()) {
-                stopSelfResult(startId)
-                return@trace START_NOT_STICKY
-            }
-            if (earlyPrestart && !beginEarlyPrestart()) {
-                stopSelfResult(startId)
-                return@trace START_NOT_STICKY
-            }
-            onHandleForeground(intent, earlyPrestart)
-            if (earlyPrestart) scheduleEarlyPrestartCompletion(startId)
-            journal.log(
-                DiagnosticJournal.CAT_LIFECYCLE,
-                "AuxioService onStartCommand",
-                "Action: ${intent?.action}, StartId: $startId",
-            )
-            // Playback services are expected to survive process churn when possible so that
-            // MediaSession/controller interactions continue to route to the same service endpoint.
-            // Keep ordinary starts sticky. The bounded early-prestart path stops itself after the
-            // saved startup projections become available or the timeout expires.
-            if (earlyPrestart) START_NOT_STICKY else START_STICKY
+        PerfTimer.trace("AuxioService.onStartCommand") {
+  Ts18FirstAudioLatency.mark("service_on_start_command")
+  super.onStartCommand(intent, flags, startId)
+  onHandleForeground(intent, allowTrustedUserVisible = true)
+  journal.log(
+      DiagnosticJournal.CAT_LIFECYCLE,
+      "AuxioService onStartCommand",
+      "Action: ${intent?.action}, StartId: $startId",
+  )
+  return START_STICKY
         }
     }
 
     override fun onBind(intent: Intent): IBinder? {
         val binder = super.onBind(intent)
-        // Binding is a normal MediaBrowser operation. A foreign client cannot opt into the
-        // privileged early-prestart path merely by supplying its action string.
-        onHandleForeground(intent, earlyPrestart = false)
+        onHandleForeground(intent, allowTrustedUserVisible = false)
         return binder
     }
 
-    private fun onHandleForeground(intent: Intent?, earlyPrestart: Boolean) {
-        // TS18 fast-resume priority: handle playback/launcher commands before any heavy
-        // music indexing path. This keeps raw snapshot restore independent from library readiness.
+    private fun onHandleForeground(intent: Intent?, allowTrustedUserVisible: Boolean) {
+        playbackFragment.start(intent)
         val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
-        val origin =
-            when {
-                earlyPrestart -> StartupScanOrigin.EARLY_PRESTART
-                startId == IntegerTable.START_ID_ACTIVITY -> StartupScanOrigin.USER_VISIBLE
-                else -> StartupScanOrigin.BACKGROUND
-            }
-        // Early prestart is preparation-only. Never route its boot start id into playback restore
-        // or autoplay policy; the canonical playback fragment remains attached but unstimulated.
-        if (!earlyPrestart) playbackFragment.start(intent)
-        musicFragment.start(origin)
-    }
-
-    private fun isEarlyPrestartAllowed(): Boolean {
-        val enabled = earlyPrestartSettings.enabled
-        val rootEnabled = rootStateHolder.isUserEnabled()
-        if (enabled && rootEnabled) return true
-
-        if (enabled && !rootEnabled) {
-            earlyPrestartSettings.mark(EarlyPrestartSettings.Outcome.SKIPPED_ROOT_DISABLED)
-        }
-        journal.log(
-            DiagnosticJournal.CAT_BOOT,
-            "Early prestart rejected",
-            "enabled=$enabled root_user_enabled=$rootEnabled",
+        val trustedUserVisible =
+  allowTrustedUserVisible &&
+      startId == IntegerTable.START_ID_ACTIVITY &&
+      StartupScanAuthorityPolicy.consumeTrustedUserVisibleStart(
+          intent.getStringExtra(INTENT_KEY_TRUSTED_SCAN_NONCE)
+      )
+        musicFragment.start(
+  if (trustedUserVisible) StartupScanOrigin.USER_VISIBLE else StartupScanOrigin.BACKGROUND
         )
-        return false
-    }
-
-    private fun beginEarlyPrestart(): Boolean {
-        return try {
-            val notification = EarlyPrestartNotification(this)
-            startForeground(notification.code, notification.build())
-            isForeground = true
-            earlyPrestartSettings.mark(EarlyPrestartSettings.Outcome.REQUESTED)
-            journal.log(
-                DiagnosticJournal.CAT_BOOT,
-                "Early prestart requested",
-                "canonical_service bounded=true autoplay=false",
-            )
-            true
-        } catch (e: Exception) {
-            Timber.w(e, "Unable to enter foreground for early prestart")
-            earlyPrestartSettings.mark(EarlyPrestartSettings.Outcome.START_FAILED)
-            journal.log(DiagnosticJournal.CAT_BOOT, "Early prestart failed", e.toString())
-            false
-        }
-    }
-
-    private fun scheduleEarlyPrestartCompletion(startId: Int) {
-        earlyPrestartJob?.cancel()
-        earlyPrestartJob =
-            serviceScope.launch {
-                val deadline = android.os.SystemClock.elapsedRealtime() + EARLY_PRESTART_TIMEOUT_MS
-                while (
-                    isActive &&
-                        startupReadinessController.capability.rank <
-                            StartupReadinessState.SearchReady.rank &&
-                        android.os.SystemClock.elapsedRealtime() < deadline
-                ) {
-                    delay(EARLY_PRESTART_POLL_MS)
-                }
-                val ready =
-                    startupReadinessController.capability.rank >=
-                        StartupReadinessState.SearchReady.rank
-                earlyPrestartSettings.mark(
-                    if (ready) {
-                        EarlyPrestartSettings.Outcome.READY
-                    } else {
-                        EarlyPrestartSettings.Outcome.TIMED_OUT
-                    }
-                )
-                journal.log(
-                    DiagnosticJournal.CAT_BOOT,
-                    "Early prestart completed",
-                    "ready=$ready capability=${startupReadinessController.capability}",
-                )
-                delay(EARLY_PRESTART_SETTLE_MS)
-
-                // Restore any real playback/indexing foreground owner that became active while
-                // prestart was running. Otherwise remove only the temporary prestart notification.
-                val playbackForeground = playbackFragment.notification != null
-                val musicForeground = musicFragment.hasForegroundWork()
-                if (playbackForeground || musicForeground) {
-                    updateForeground(
-                        if (playbackForeground) {
-                            ForegroundListener.Change.MEDIA_SESSION
-                        } else {
-                            ForegroundListener.Change.INDEXER
-                        }
-                    )
-                } else {
-                    ServiceCompat.stopForeground(
-                        this@AuxioService,
-                        ServiceCompat.STOP_FOREGROUND_REMOVE,
-                    )
-                    isForeground = false
-                    stopSelfResult(startId)
-                }
-            }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -239,9 +113,6 @@ open class AuxioService :
     }
 
     override fun onDestroy() {
-        earlyPrestartJob?.cancel()
-        earlyPrestartJob = null
-        serviceJob.cancel()
         isForeground = false
         topwayCommandServiceClient.release()
         super.onDestroy()
@@ -340,7 +211,7 @@ open class AuxioService :
                 if (it != null) {
                     startForeground(it.code, it.build())
                     isForeground = true
-                } else if (earlyPrestartJob?.isActive != true) {
+                } else {
                     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                     isForeground = false
                 }
@@ -354,7 +225,6 @@ open class AuxioService :
 
     companion object {
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".service.START"
-        const val ACTION_EARLY_PRESTART = BuildConfig.APPLICATION_ID + ".service.EARLY_PRESTART"
 
         @Volatile
         var isForeground = false
@@ -362,15 +232,14 @@ open class AuxioService :
 
         // This is only meant for Auxio to internally ensure that it's state management will work.
         const val INTENT_KEY_START_ID = BuildConfig.APPLICATION_ID + ".service.START_ID"
+        const val INTENT_KEY_TRUSTED_SCAN_NONCE =
+            BuildConfig.APPLICATION_ID + ".service.TRUSTED_SCAN_NONCE"
 
         private const val MAX_CLIENT_PACKAGE_LENGTH = 255
         private const val MAX_MEDIA_ID_LENGTH = 1024
         private const val MAX_SEARCH_QUERY_LENGTH = 256
         private const val DEFAULT_ROOT_CHILDREN_LIMIT = 4
         private const val MAX_ROOT_CHILDREN_LIMIT = 100
-        private const val EARLY_PRESTART_TIMEOUT_MS = 12_000L
-        private const val EARLY_PRESTART_POLL_MS = 100L
-        private const val EARLY_PRESTART_SETTLE_MS = 250L
     }
 }
 
