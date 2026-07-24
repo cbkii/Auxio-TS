@@ -9,7 +9,6 @@ LOCK_DIR="$STATE_DIR/prepare.lock"
 ALIAS_ROOT=/storage/auxio-root
 BOOT_WAIT_SECONDS=20
 ON_DEMAND_WAIT_SECONDS=3
-MAX_SAMPLE_DEPTH=6
 
 log_msg() { log -t AuxioRootStorage "$*" 2>/dev/null || true; }
 
@@ -108,17 +107,9 @@ prepare_manifest() {
       fi
     fi
 
+    # The helper remains volume-only. A root-side file open cannot prove app playback authority;
+    # Auxio performs bounded representative-media validation later as the app UID.
     sample=-
-    if [ "$selected" != - ] && [ -d "$selected" ]; then
-      sample=$(find "$selected" -xdev -maxdepth "$MAX_SAMPLE_DEPTH" -type f \
-        \( -iname '*.mp3' -o -iname '*.flac' -o -iname '*.m4a' -o -iname '*.wav' \
-        -o -iname '*.ogg' -o -iname '*.opus' -o -iname '*.aac' \) \
-        -print 2>/dev/null | head -n 1)
-      case "$sample" in
-        ''|*"	"*|*"
-"*|*""*) sample=- ;;
-      esac
-    fi
     generated=$(date +%s 2>/dev/null || echo 0)
     printf '1\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$generated" "$name" "$raw_path" "$app_path" "$alias_path" \
