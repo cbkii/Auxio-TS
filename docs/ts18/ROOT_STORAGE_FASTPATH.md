@@ -55,7 +55,7 @@ The app does **not** enforce a blanket zero-root-first or root-first rule. It se
 1. **Cached root metadata first** — when root storage is enabled and a cached prepared-volume record matches the requested volume, try its selected path and representative media first. This does not start `su`; it can reduce validation to one app-UID file open.
 2. **Fresh root metadata first** — when root is already granted and the request itself is a raw `/mnt/media_rw/...` backing path or `/storage/auxio-root/...` alias, run the fixed helper once, consume the new manifest and validate the selected path before a direct fallback.
 3. **Direct first** — for ordinary `/storage/usbdiskN`, UUID or internal-storage paths without a useful cached record, avoid paying root-process overhead and perform the bounded app-UID validation first.
-4. **Root after direct miss** — when a removable app-facing path fails and root is enabled plus already available, refresh the prepared index and retry mapped candidates.
+4. **Root after direct miss** — when a removable app-facing path fails and root is enabled, the explicit source flow may perform the bounded consent probe, refresh the prepared index and retry mapped candidates. This restores acceleration after process restart without putting root on the cache/first-audio lane.
 5. **Snapshot only last** — one bounded root snapshot may classify the source as `ROOT_SNAPSHOT_ONLY`, but that state is never persisted for playback.
 
 This policy deliberately allows root-derived acceleration to lead when it is faster, while avoiding unnecessary `su` work and preventing root from delaying first audio.
