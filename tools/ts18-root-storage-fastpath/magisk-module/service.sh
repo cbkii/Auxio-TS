@@ -9,8 +9,9 @@ LOCK_DIR="$STATE_DIR/prepare.lock"
 ALIAS_ROOT=/storage/auxio-root
 BOOT_WAIT_SECONDS=20
 ON_DEMAND_WAIT_SECONDS=3
+MAX_VOLUMES=4
 MAX_SAMPLE_DEPTH=6
-SAMPLE_TIMEOUT_SECONDS=4
+SAMPLE_TIMEOUT_SECONDS=2
 
 log_msg() { log -t AuxioRootStorage "$*" 2>/dev/null || true; }
 
@@ -82,10 +83,8 @@ find_representative() {
     return 1
   fi
   [ -n "$sample" ] || return 1
-  if printf '%s' "$sample" | LC_ALL=C grep -q '[[:cntrl:]]'; then
-    return 1
-  fi
   case "$sample" in
+    *[[:cntrl:]]*) return 1 ;;
     "$source_path"|"$source_path"/*) printf '%s' "$sample" ;;
     *) return 1 ;;
   esac
@@ -110,10 +109,13 @@ prepare_manifest() {
   chmod 0755 "$ALIAS_ROOT" 2>/dev/null || true
   : > "$TEMP" || return 1
 
+  processed=0
   for raw_path in /mnt/media_rw/usbdisk*; do
+    [ "$processed" -lt "$MAX_VOLUMES" ] || break
     [ -d "$raw_path" ] || continue
     name=${raw_path##*/}
     valid_component "$name" || continue
+    processed=$((processed + 1))
     app_path="/storage/$name"
     alias_path="$ALIAS_ROOT/$name"
     selected=-
@@ -154,7 +156,7 @@ prepare_manifest() {
 
   chmod 0600 "$TEMP" 2>/dev/null || true
   mv -f "$TEMP" "$MANIFEST" || return 1
-  log_msg "prepared manifest=$MANIFEST waited=${waited}s samples=$include_sample"
+  log_msg "prepared manifest=$MANIFEST waited=${waited}s volumes=$processed samples=$include_sample"
   return 0
 }
 
