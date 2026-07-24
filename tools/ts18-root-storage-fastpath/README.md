@@ -2,7 +2,7 @@
 
 This optional Magisk module uses module-root `service.sh`, Magisk's supported `late_start service` entrypoint, to perform bounded discovery of `/mnt/media_rw/usbdiskN`. It prefers the normal `/storage/usbdiskN` alias and creates a read-only `/storage/auxio-root/usbdiskN` bind candidate only when the normal alias is absent.
 
-The service runs once during Magisk late start. Auxio may invoke the same fixed script with `--once` from an explicit root-enabled source-recovery flow so USB inserted after boot can be prepared without a persistent polling daemon. Concurrent/repeated requests are locked and coalesced.
+The service runs once during Magisk late start. Auxio may invoke the same fixed script with `--once` from an explicit root-enabled source-recovery flow so USB inserted after boot can be prepared without a persistent polling daemon. Concurrent/repeated requests are locked and coalesced, and app-side refresh requests are also serialized and debounced.
 
 It does not launch Auxio, invoke interactive `su` itself, scan the Auxio library, clear caches, disable packages, write `/system` or `/vendor`, or claim platform signing/UID 1000.
 
