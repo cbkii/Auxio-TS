@@ -54,7 +54,6 @@ enum class Ts18RootProbe(val command: String) {
     ),
 }
 
-
 enum class Ts18DofunDetectedPath {
     StockTwMusicSelected,
     AuxioTwMediaSelected,
@@ -154,5 +153,4 @@ class Ts18DofunIntegrationResolver(
                 recommendedStep,
             )
         }
-
 }

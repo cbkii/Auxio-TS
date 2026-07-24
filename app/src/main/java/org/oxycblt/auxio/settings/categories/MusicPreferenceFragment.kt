@@ -153,7 +153,8 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     val enabled = newValue as? Boolean == true
                     rootStateHolder.setUserEnabled(enabled)
                     if (enabled) {
-                        // This is the explicit consent action. Request the bounded Magisk grant here
+                        // This is the explicit consent action. Request the bounded Magisk grant
+                        // here
                         // instead of surprising the user later from an ordinary source picker.
                         viewLifecycleOwner.lifecycleScope.launch {
                             withContext(Dispatchers.IO) { rootStateHolder.probeSync() }

@@ -1,3 +1,21 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * RootStorageAccelerationPolicyTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package org.oxycblt.auxio.headunit.root.storage
 
 import org.junit.Assert.assertEquals
@@ -21,22 +39,19 @@ class RootStorageAccelerationPolicyTest {
 
     @Test
     fun grantedRootLeadsOnlyForRawOrPreparedPaths() {
-        listOf(
-                "/mnt/media_rw/usbdisk0/Music",
-                "/storage/auxio-root/usbdisk0/Music",
+        listOf("/mnt/media_rw/usbdisk0/Music", "/storage/auxio-root/usbdisk0/Music").forEach { path
+            ->
+            assertEquals(
+                RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST,
+                RootStorageAccelerationPolicy.choose(
+                    requestedPath = path,
+                    rootEnabled = true,
+                    rootAvailable = true,
+                    hasCachedRecord = false,
+                ),
             )
-            .forEach { path ->
-                assertEquals(
-                    RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST,
-                    RootStorageAccelerationPolicy.choose(
-                        requestedPath = path,
-                        rootEnabled = true,
-                        rootAvailable = true,
-                        hasCachedRecord = false,
-                    ),
-                )
-                assertTrue(RootStorageAccelerationPolicy.requiresRootPreparation(path))
-            }
+            assertTrue(RootStorageAccelerationPolicy.requiresRootPreparation(path))
+        }
         assertEquals(
             RootStorageResolutionOrder.DIRECT_FIRST,
             RootStorageAccelerationPolicy.choose(
@@ -62,9 +77,7 @@ class RootStorageAccelerationPolicyTest {
                 hasCachedRecord = false,
             ),
         )
-        assertTrue(
-            RootStorageAccelerationPolicy.requiresRootPreparation("/mnt/media_rw/usbdisk0")
-        )
+        assertTrue(RootStorageAccelerationPolicy.requiresRootPreparation("/mnt/media_rw/usbdisk0"))
     }
 
     @Test

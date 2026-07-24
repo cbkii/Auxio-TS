@@ -1,7 +1,21 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * PreparedVolumeIndexStore.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 package org.oxycblt.auxio.headunit.root.storage
 
 import android.content.Context
@@ -59,12 +73,7 @@ object PreparedVolumeManifestCodec {
             val selected = parts[6].takeUnless { it == "-" }
             val state = parts[7]
             val sample = parts[8].takeUnless { it == "-" }
-            if (
-                generation < 0L ||
-                    !volumeId.matches(id) ||
-                    !seenIds.add(id) ||
-                    state !in states
-            ) {
+            if (generation < 0L || !volumeId.matches(id) || !seenIds.add(id) || state !in states) {
                 return null
             }
             if (
@@ -81,7 +90,8 @@ object PreparedVolumeManifestCodec {
                 when (state) {
                     "app_candidate" -> selected == app
                     "alias_candidate" -> selected == alias
-                    "raw_only", "unavailable" -> selected == null
+                    "raw_only",
+                    "unavailable" -> selected == null
                     else -> false
                 }
             if (!selectedMatchesState) return null
@@ -124,10 +134,7 @@ object PreparedVolumeManifestCodec {
 @Singleton
 class PreparedVolumeIndexStore
 @Inject
-constructor(
-    @ApplicationContext context: Context,
-    private val rootStateHolder: RootStateHolder,
-) {
+constructor(@ApplicationContext context: Context, private val rootStateHolder: RootStateHolder) {
     private val cacheDir = File(context.filesDir, "ts18-root-storage")
     private val cacheFile = File(cacheDir, "volumes.tsv")
 
@@ -154,7 +161,9 @@ constructor(
         return records
     }
 
-    /** Resolve one source using the lowest expected-cost authority that is available or consented. */
+    /**
+     * Resolve one source using the lowest expected-cost authority that is available or consented.
+     */
     fun resolveSourceSync(requestedPath: String): SourceResolution {
         val clean = requestedPath.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
         val rootEnabled = rootStateHolder.isUserEnabled()
@@ -180,28 +189,32 @@ constructor(
 
         when (order) {
             RootStorageResolutionOrder.CACHED_ROOT_METADATA_FIRST -> {
-                resolveFromRecord(clean, match, "cached_root_metadata")?.let { return it }
-                if (rootAvailable) {
-                    resolveFromRecord(
-                            clean,
-                            refreshMatch(force = true),
-                            "refreshed_root_metadata",
-                        )
-                        ?.let { return it }
+                resolveFromRecord(clean, match, "cached_root_metadata")?.let {
+                    return it
                 }
-                resolveDirect(clean)?.let { return it }
+                if (rootAvailable) {
+                    resolveFromRecord(clean, refreshMatch(force = true), "refreshed_root_metadata")
+                        ?.let {
+                            return it
+                        }
+                }
+                resolveDirect(clean)?.let {
+                    return it
+                }
             }
             RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST -> {
-                resolveFromRecord(
-                        clean,
-                        refreshMatch(force = true),
-                        "refreshed_root_metadata",
-                    )
-                    ?.let { return it }
-                resolveDirect(clean)?.let { return it }
+                resolveFromRecord(clean, refreshMatch(force = true), "refreshed_root_metadata")
+                    ?.let {
+                        return it
+                    }
+                resolveDirect(clean)?.let {
+                    return it
+                }
             }
             RootStorageResolutionOrder.DIRECT_FIRST -> {
-                resolveDirect(clean)?.let { return it }
+                resolveDirect(clean)?.let {
+                    return it
+                }
             }
         }
 
@@ -218,7 +231,9 @@ constructor(
                         refreshMatch(force = match == null),
                         "root_after_initial_miss",
                     )
-                    ?.let { return it }
+                    ?.let {
+                        return it
+                    }
             }
         }
 
@@ -299,7 +314,8 @@ constructor(
     ): String? {
         val selectedRoot = record.selectedPath ?: return null
         val sample = record.samplePath ?: return null
-        if (sample != selectedRoot && !sample.startsWith(selectedRoot.trimEnd('/') + "/")) return null
+        if (sample != selectedRoot && !sample.startsWith(selectedRoot.trimEnd('/') + "/"))
+            return null
         val relativeSample = sample.removePrefix(selectedRoot).trimStart('/')
         val tail =
             if (suffix.isBlank()) {
@@ -353,8 +369,7 @@ constructor(
         val root =
             listOfNotNull(record.rawPath, record.appPath, record.aliasPath, record.selectedPath)
                 .filter { path == it || path.startsWith(it.trimEnd('/') + "/") }
-                .maxByOrNull(String::length)
-                ?: return ""
+                .maxByOrNull(String::length) ?: return ""
         return path.removePrefix(root).trimStart('/')
     }
 

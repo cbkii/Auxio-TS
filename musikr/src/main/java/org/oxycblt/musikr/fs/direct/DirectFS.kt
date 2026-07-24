@@ -416,7 +416,6 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         private val protectedRoots =
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
 
-
         fun isSymbolicLinkCompat(file: JavaFile): Boolean =
             try {
                 val stat = android.system.Os.lstat(file.absolutePath)

@@ -90,7 +90,6 @@ class DiagnosticsRecoveryPreferenceFragment :
             }
         }
 
-
         updateUiState()
     }
 
@@ -211,7 +210,6 @@ class DiagnosticsRecoveryPreferenceFragment :
             )
             .show()
     }
-
 
     private fun updateUiState() {
         findPreference<Preference>(getString(R.string.set_key_diagnostics_export_report))

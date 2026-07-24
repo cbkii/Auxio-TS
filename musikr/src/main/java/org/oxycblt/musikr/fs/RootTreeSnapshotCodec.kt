@@ -1,7 +1,21 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * RootTreeSnapshotCodec.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 package org.oxycblt.musikr.fs
 
 /** Strict parser for the fixed TSV emitted by the TS18 root storage snapshot command. */
@@ -25,11 +39,7 @@ object RootTreeSnapshotCodec {
             val relative = validateRelative(parts[3]) ?: return null
             val modifiedSeconds = parts[1].toLongOrNull() ?: return null
             val size = parts[2].toLongOrNull() ?: return null
-            if (
-                modifiedSeconds < 0L ||
-                    modifiedSeconds > Long.MAX_VALUE / 1000L ||
-                    size < 0L
-            ) {
+            if (modifiedSeconds < 0L || modifiedSeconds > Long.MAX_VALUE / 1000L || size < 0L) {
                 return null
             }
             entries +=

@@ -6,7 +6,16 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
 package org.oxycblt.auxio.headunit.root
 
 import android.content.Context
@@ -269,8 +278,7 @@ constructor(
         const val PREPARED_HELPER_TIMEOUT_MS = 8_000L
         const val MANIFEST_READ_TIMEOUT_MS = 3_000L
         const val MANIFEST_OUTPUT_BYTES = 256 * 1024
-        const val PREPARED_HELPER_SCRIPT =
-            "/data/adb/modules/auxio_ts_root_storage/service.sh"
+        const val PREPARED_HELPER_SCRIPT = "/data/adb/modules/auxio_ts_root_storage/service.sh"
         const val PREPARED_VOLUME_MANIFEST = "/data/adb/auxio-ts-root/volumes.tsv"
     }
 }

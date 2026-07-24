@@ -382,7 +382,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             val accessibleCandidates =
                 withContext(Dispatchers.IO) {
                     val preparedRoots =
-                        if (BuildConfig.TOPWAY_COMPAT_FLAVOR && locationMode == LocationMode.DIRECT_FS) {
+                        if (
+                            BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                                locationMode == LocationMode.DIRECT_FS
+                        ) {
                             preparedVolumeIndexStore.refreshFromRootSync()
                             preparedVolumeIndexStore.cachedCandidatePaths()
                         } else {
