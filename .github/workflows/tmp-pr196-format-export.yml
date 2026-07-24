@@ -1,0 +1,72 @@
+name: Temporary PR196 formatting export
+
+on:
+  pull_request:
+    branches:
+      - feat/ts18-dofun-generic-media-compat
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tmp-pr196-format-export-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  format-export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout immutable PR head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "${sdk_dir}"
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply repository formatting and export exact delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git diff --check
+          git diff --binary > "${RUNNER_TEMP}/pr196-format.patch"
+          git diff --name-only > "${RUNNER_TEMP}/pr196-format-files.txt"
+          tar -czf "${RUNNER_TEMP}/pr196-formatted-files.tar.gz" -T "${RUNNER_TEMP}/pr196-format-files.txt"
+          cat "${RUNNER_TEMP}/pr196-format-files.txt"
+          test -s "${RUNNER_TEMP}/pr196-format.patch"
+
+      - name: Upload formatted delta
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr196-formatted-delta
+          path: |
+            ${{ runner.temp }}/pr196-format.patch
+            ${{ runner.temp }}/pr196-format-files.txt
+            ${{ runner.temp }}/pr196-formatted-files.tar.gz
+          if-no-files-found: error
+          retention-days: 2
