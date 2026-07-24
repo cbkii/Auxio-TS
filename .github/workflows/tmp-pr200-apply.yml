@@ -4,23 +4,28 @@ on:
   push:
     branches:
       - agent/ts18-root-storage-fastpath
+  pull_request:
+    branches:
+      - dev
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 concurrency:
-  group: pr200-apply-${{ github.ref }}
+  group: pr200-apply-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'agent/ts18-root-storage-fastpath')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out branch
         uses: actions/checkout@v4
         with:
+          ref: agent/ts18-root-storage-fastpath
           fetch-depth: 0
           submodules: false
 
@@ -50,8 +55,6 @@ jobs:
           PY
 
       - name: Commit product changes before canonical CI
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           if git diff --quiet; then
             echo 'No patch delta produced' >&2
