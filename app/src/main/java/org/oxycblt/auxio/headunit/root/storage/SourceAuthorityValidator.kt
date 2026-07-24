@@ -15,12 +15,33 @@ object SourceAuthorityValidator {
     private const val MAX_DEPTH = 4
     private const val MAX_VISITED = 512
 
-    fun classifyDirect(path: String, preparedAlias: Boolean): SourceAuthority? {
+    /**
+     * Validate a source as the Auxio UID.
+     *
+     * [representativePath] is an optional prepared-manifest hint. When it is contained by [path],
+     * has an audio extension and opens successfully, validation is O(1). Any stale, escaped or
+     * unreadable hint is ignored and falls back to the bounded directory walk.
+     */
+    fun classifyDirect(
+        path: String,
+        preparedAlias: Boolean,
+        representativePath: String? = null,
+    ): SourceAuthority? {
         val root = File(path)
         val canonicalRoot = runCatching { root.canonicalFile }.getOrNull() ?: return null
-        val first = runCatching { root.listFiles() }.getOrNull() ?: return null
         if (!root.exists() || !root.isDirectory || !root.canRead()) return null
 
+        val hintedFile = representativePath?.let(::File)
+        if (
+            hintedFile != null &&
+                hintedFile.extension.lowercase() in audioExtensions &&
+                isContainedReadableFile(hintedFile, canonicalRoot) &&
+                opensAsAppUid(hintedFile)
+        ) {
+            return authority(preparedAlias)
+        }
+
+        val first = runCatching { root.listFiles() }.getOrNull() ?: return null
         val queue = ArrayDeque<Pair<File, Int>>()
         first.forEach { queue.add(it to 1) }
         var visited = 0
@@ -40,17 +61,26 @@ object SourceAuthorityValidator {
         }
 
         val mediaFile = representative ?: return null
-        val opened =
-            runCatching {
-                    FileInputStream(mediaFile).use { stream ->
-                        stream.read()
-                        true
-                    }
-                }
-                .getOrDefault(false)
-        if (!opened) return null
-        return if (preparedAlias) SourceAuthority.PREPARED_ALIAS else SourceAuthority.APP_READABLE
+        if (!opensAsAppUid(mediaFile)) return null
+        return authority(preparedAlias)
     }
+
+    private fun isContainedReadableFile(candidate: File, canonicalRoot: File): Boolean {
+        val canonical = runCatching { candidate.canonicalFile }.getOrNull() ?: return false
+        return candidate.isFile && isWithin(canonical, canonicalRoot)
+    }
+
+    private fun opensAsAppUid(file: File): Boolean =
+        runCatching {
+                FileInputStream(file).use { stream ->
+                    stream.read()
+                    true
+                }
+            }
+            .getOrDefault(false)
+
+    private fun authority(preparedAlias: Boolean): SourceAuthority =
+        if (preparedAlias) SourceAuthority.PREPARED_ALIAS else SourceAuthority.APP_READABLE
 
     private fun isWithin(candidate: File, root: File): Boolean {
         var cursor: File? = candidate
