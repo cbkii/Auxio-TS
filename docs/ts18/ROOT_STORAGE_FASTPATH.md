@@ -120,7 +120,7 @@ Only `APP_READABLE` and `PREPARED_ALIAS` may be persisted as active DirectFS sou
 ### 6. Cached prepared-volume index
 
 - [x] Add an app-private cached index keyed by volume identity and prepared-manifest generation.
-- [x] Load the cached index without `su` during immediate startup.
+- [x] Load the cached index without `su` when an explicit source/recovery flow instantiates it; never require it for immediate startup or first audio.
 - [x] Allow the cached index to lead source resolution when it is cheaper than a directory walk.
 - [x] Refresh atomically only when root storage is enabled, with serialization and debounce.
 - [x] Keep root/index refresh independent from full-library invalidation.
