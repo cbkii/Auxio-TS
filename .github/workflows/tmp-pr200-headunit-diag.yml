@@ -1,68 +1,71 @@
-name: PR200 Head-unit Safety Diagnostic
+name: PR200 Final Review Closure
 
 on:
   push:
     branches:
       - cx/pr200-headunit-diag
-  pull_request:
-    branches:
-      - agent/ts18-root-storage-fastpath
-    types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: pr200-final-review-closure
+  cancel-in-progress: false
 
 jobs:
-  diagnose:
+  apply:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 55
     steps:
-      - name: Check out exact current PR #200 merge commit
+      - name: Check out closure tooling
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: 3afefece5931babf46162dac7e68d66a26a20c04
-          fetch-depth: 0
-          submodules: false
+          ref: cx/pr200-headunit-diag
+          path: closure-tooling
           persist-credentials: false
 
-      - name: Run complete canonical head-unit safety sequence
-        id: safety
-        continue-on-error: true
-        shell: bash
-        env:
-          GITHUB_BASE_REF: dev
-        run: |
-          set +e
-          log=/tmp/pr200-headunit-safety.log
-          : > "$log"
-          status=0
-          for script in \
-            scripts/check-ts18-apk-reference-contracts.sh \
-            scripts/check-headunit-compat-safety.sh \
-            scripts/check-dofun-topway-compat.sh \
-            scripts/check-native-keep-rules.sh; do
-            printf '\n===== BEGIN %s =====\n' "$script" | tee -a "$log"
-            bash "$script" >> "$log" 2>&1
-            script_status=$?
-            printf '===== END %s status=%s =====\n' "$script" "$script_status" | tee -a "$log"
-            if [ "$script_status" -ne 0 ]; then
-              status=$script_status
-              break
-            fi
-          done
-          cat "$log"
-          exit "$status"
-
-      - name: Upload complete diagnostic output
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - name: Check out PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          name: pr200-headunit-safety-full-lane-log
-          path: /tmp/pr200-headunit-safety.log
-          if-no-files-found: error
-          retention-days: 1
+          ref: agent/ts18-root-storage-fastpath
+          path: repo
+          fetch-depth: 0
+          submodules: false
 
-      - name: Preserve diagnostic failure status
-        if: steps.safety.outcome == 'failure'
+      - name: Apply scoped review fixes
         shell: bash
-        run: exit 1
+        run: python3 closure-tooling/scripts/tmp-pr200-final-closure.py repo
+
+      - name: Validate and format closure
+        working-directory: repo
+        shell: bash
+        run: |
+          git diff --check
+          bash scripts/check-ts18-root-storage-fastpath.sh
+          bash scripts/bootstrap-dependencies.sh --profile full-build
+          bash scripts/ci-gradle.sh spotlessKotlinApply
+          git diff --check
+          bash scripts/check-ts18-root-storage-fastpath.sh
+
+      - name: Run focused unit tests
+        working-directory: repo
+        shell: bash
+        run: bash scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+
+      - name: Commit and push closure
+        working-directory: repo
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt \
+            app/src/main/java/org/oxycblt/auxio/headunit/root/storage/PreparedVolumeIndexStore.kt \
+            app/src/test/java/org/oxycblt/auxio/headunit/topway/TopwaySourcePolicyDiscoveryTest.kt \
+            app/src/test/java/org/oxycblt/auxio/headunit/root/storage/RootStorageAccelerationPolicyTest.kt \
+            scripts/check-ts18-root-storage-fastpath.sh \
+            docs/ts18/ROOT_STORAGE_FASTPATH.md
+          git diff --cached --check
+          git commit -m 'fix(ts18): close final root storage review findings'
+          git push origin HEAD:agent/ts18-root-storage-fastpath
