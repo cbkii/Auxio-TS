@@ -14,6 +14,7 @@ Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed 
 - [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — package-conflict and install-lane constraints for real TS18 firmware.
 - [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
 - [`LAUNCH_TO_CURRENTLY_PLAYING.md`](LAUNCH_TO_CURRENTLY_PLAYING.md) — durable startup-panel routing contract and TS18 validation matrix.
+- [`ts18/ROOT_STORAGE_FASTPATH.md`](ts18/ROOT_STORAGE_FASTPATH.md) — DirectFS-first TS18 root storage acceleration, Magisk late-start preparation, source-authority classes, rollback and physical acceptance.
 - [`architecture/FAST_INTERACTION_STARTUP.md`](architecture/FAST_INTERACTION_STARTUP.md) — PR 1 staged startup readiness, bounded startup projections, fast MediaBrowser/search, and DirectFS Fast Start constraints.
 - [`architecture/INCREMENTAL_LIBRARY_PIPELINE.md`](architecture/INCREMENTAL_LIBRARY_PIPELINE.md) — PR 2 source generations, changed-file indexing, metadata profiles and deferred enrichment.
 - [`architecture/STARTUP_PROFILES_BENCHMARKS.md`](architecture/STARTUP_PROFILES_BENCHMARKS.md) — PR 3 profile, fixture, benchmark, trace and regression-gate implementation.
@@ -90,6 +91,7 @@ bash scripts/bootstrap-dependencies.sh --profile full-build
 bash scripts/check-startup-performance-contracts.sh
 bash scripts/check-ts18-apk-reference-contracts.sh
 bash scripts/check-dofun-topway-compat.sh
+bash scripts/check-ts18-root-storage-fastpath.sh
 bash scripts/check-headunit-compat-safety.sh
 status=0; while IFS= read -r -d '' script; do bash -n "$script" || status=1; done < <(find scripts -type f -name '*.sh' -print0); exit "$status"
 ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
