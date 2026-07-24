@@ -135,18 +135,9 @@ private constructor(
         playbackManager.addListener(this)
         imageSettings.registerListener(this)
         mediaSession.apply {
-            setFlags(
-                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS or
-                    MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS
-            )
+            setFlags(MediaSessionInitializationPolicy.FLAGS)
             setCallback(mediaSessionInterface)
-            setPlaybackState(
-                PlaybackStateCompat.Builder()
-                    .setActions(MediaSessionInterface.ACTIONS)
-                    .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f)
-                    .build()
-            )
+            setPlaybackState(MediaSessionInitializationPolicy.initialPlaybackState())
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 setSessionActivity(
                     android.app.PendingIntent.getActivity(
