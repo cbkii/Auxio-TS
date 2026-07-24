@@ -6,14 +6,14 @@ on:
       - 'cx/**'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: tmp-pr196-final-verification
   cancel-in-progress: true
 
 jobs:
-  finalise:
+  verify-and-export:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -22,7 +22,7 @@ jobs:
         with:
           ref: fix/first-launch-source-recovery
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Merge current target branch
         shell: bash
@@ -33,7 +33,7 @@ jobs:
           git fetch origin feat/ts18-dofun-generic-media-compat
           git merge --no-edit origin/feat/ts18-dofun-generic-media-compat
 
-      - name: Extract and run scoped finalizer
+      - name: Apply scoped finalizer
         shell: bash
         run: |
           set -euo pipefail
@@ -157,7 +157,7 @@ else:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Format and verify
+      - name: Format and verify scoped changes
         shell: bash
         run: |
           set -euo pipefail
@@ -168,14 +168,68 @@ else:
           bash ./scripts/check-headunit-compat-safety.sh
           bash ./scripts/check-dofun-topway-compat.sh
           bash ./scripts/check-ts18-apk-reference-contracts.sh
-          bash ./scripts/ci-gradle.sh :app:assembleStandardDebug :app:assembleTopwayTwMediaDebug :app:assembleTopwayTwMusicDebug
+          bash ./scripts/ci-gradle.sh \
+            :app:assembleStandardDebug \
+            :app:assembleTopwayTwMediaDebug \
+            :app:assembleTopwayTwMusicDebug \
+            :app:assembleStandardRelease \
+            :app:assembleTopwayTwMediaRelease \
+            :app:assembleTopwayTwMusicRelease
 
-      - name: Commit and push
+      - name: Export verified tree delta
         shell: bash
         run: |
           set -euo pipefail
-          git add -A
-          git diff --cached --stat
-          git diff --cached --quiet && { echo '::error::No final changes to commit.'; exit 1; }
-          git commit -m 'fix: finalise first-launch source recovery'
-          git push origin HEAD:fix/first-launch-source-recovery
+          out="${RUNNER_TEMP}/pr196-finalized"
+          mkdir -p "${out}/files"
+          git diff --binary origin/feat/ts18-dofun-generic-media-compat...HEAD > "${out}/pre-finalizer-history.patch"
+          git diff --binary origin/feat/ts18-dofun-generic-media-compat > "${out}/final.patch"
+          git diff --name-status origin/feat/ts18-dofun-generic-media-compat > "${out}/name-status.txt"
+          python3 <<'PY'
+          from pathlib import Path
+          import shutil
+          import subprocess
+
+          out = Path(__import__('os').environ['RUNNER_TEMP']) / 'pr196-finalized'
+          raw = subprocess.check_output(
+              ['git', 'diff', '--name-status', '-z', 'origin/feat/ts18-dofun-generic-media-compat'],
+          )
+          parts = raw.split(b'\0')
+          deleted = []
+          i = 0
+          while i < len(parts) and parts[i]:
+              status = parts[i].decode('utf-8', 'strict')
+              i += 1
+              if status.startswith(('R', 'C')):
+                  old = parts[i].decode('utf-8', 'strict')
+                  new = parts[i + 1].decode('utf-8', 'strict')
+                  i += 2
+                  if status.startswith('R'):
+                      deleted.append(old)
+                  path = new
+              else:
+                  path = parts[i].decode('utf-8', 'strict')
+                  i += 1
+                  if status == 'D':
+                      deleted.append(path)
+                      continue
+              src = Path(path)
+              if src.is_file():
+                  dest = out / 'files' / path
+                  dest.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(src, dest)
+          (out / 'deleted.txt').write_text(
+              ''.join(f'{path}\n' for path in deleted),
+              encoding='utf-8',
+          )
+          PY
+          git status --short > "${out}/git-status.txt"
+          git diff --stat origin/feat/ts18-dofun-generic-media-compat > "${out}/diff-stat.txt"
+
+      - name: Upload verified final patch
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr196-finalized-tree
+          path: ${{ runner.temp }}/pr196-finalized/**
+          if-no-files-found: error
+          retention-days: 3
