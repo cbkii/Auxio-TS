@@ -1,0 +1,241 @@
+name: PR200 Wire Root Storage Runtime
+
+on:
+  push:
+    branches:
+      - agent/ts18-root-storage-fastpath
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr200-runtime-wire
+  cancel-in-progress: false
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/ts18-root-storage-fastpath
+          fetch-depth: 0
+          submodules: false
+
+      - name: Wire bounded parallel refresh and root-consent UX
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              target = Path(path)
+              text = target.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}: {old[:100]!r}')
+              target.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_once(
+              'app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt',
+              '''                    val preparedRoots =
+                        if (BuildConfig.TOPWAY_COMPAT_FLAVOR && locationMode == LocationMode.DIRECT_FS) {
+                            preparedVolumeIndexStore.refreshFromRootSync()
+                            preparedVolumeIndexStore.cachedCandidatePaths()
+                        } else {
+                            emptyList()
+                        }
+''',
+              '''                    val preparedRoots =
+                        if (
+                            BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                                locationMode == LocationMode.DIRECT_FS
+                        ) {
+                            // Ordinary /storage discovery remains the zero-root fast path. Refresh
+                            // the prepared manifest here only after the explicit root grant has
+                            // already resolved in this process; otherwise use the app-private cache.
+                            if (rootGate.stateSnapshot() == RootStateHolder.State.Available) {
+                                preparedVolumeIndexStore.refreshFromRootSync()
+                            }
+                            preparedVolumeIndexStore.cachedCandidatePaths()
+                        } else {
+                            emptyList()
+                        }
+''',
+          )
+
+          music_pref = 'app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt'
+          replace_once(
+              music_pref,
+              'import javax.inject.Inject\n',
+              'import javax.inject.Inject\nimport kotlinx.coroutines.Dispatchers\nimport kotlinx.coroutines.launch\nimport kotlinx.coroutines.withContext\n',
+          )
+          replace_once(
+              music_pref,
+              '''            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, newValue ->
+                    rootStateHolder.setUserEnabled(newValue as? Boolean == true)
+                    true
+                }
+''',
+              '''            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, newValue ->
+                    val enabled = newValue as? Boolean == true
+                    rootStateHolder.setUserEnabled(enabled)
+                    if (enabled) {
+                        // The user explicitly enabled the capability, so request the bounded grant
+                        // now rather than surprising them from the source picker later.
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
+                        }
+                    }
+                    true
+                }
+''',
+          )
+
+          auxio = 'app/src/main/java/org/oxycblt/auxio/Auxio.kt'
+          replace_once(
+              auxio,
+              'import javax.inject.Inject\n',
+              'import javax.inject.Inject\nimport javax.inject.Provider\n',
+          )
+          replace_once(
+              auxio,
+              'import org.oxycblt.auxio.headunit.overlay.CarOverlayContract\n',
+              'import org.oxycblt.auxio.headunit.overlay.CarOverlayContract\nimport org.oxycblt.auxio.headunit.root.storage.PreparedVolumeIndexStore\n',
+          )
+          replace_once(
+              auxio,
+              '    @Inject lateinit var musicSettings: MusicSettings\n',
+              '    @Inject lateinit var musicSettings: MusicSettings\n    @Inject lateinit var preparedVolumeIndexStoreProvider: Provider<PreparedVolumeIndexStore>\n',
+          )
+          replace_once(
+              auxio,
+              '''            if (
+                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                    prefs.getBoolean(CarOverlayContract.KEY_ENABLED, false)
+            ) {
+                withContext(Dispatchers.Main.immediate) { registerCarOverlayIfAvailable() }
+            }
+        }
+    }
+
+    private fun registerCarOverlayIfAvailable() {
+''',
+              '''            if (
+                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                    prefs.getBoolean(CarOverlayContract.KEY_ENABLED, false)
+            ) {
+                withContext(Dispatchers.Main.immediate) { registerCarOverlayIfAvailable() }
+            }
+        }
+        scheduleRootStorageWarmup()
+    }
+
+    private fun scheduleRootStorageWarmup() {
+        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        startupScope.launch {
+            val prefs = PreferenceManager.getDefaultSharedPreferences(this@Auxio)
+            if (!prefs.getBoolean(getString(R.string.set_key_use_root_fs), false)) return@launch
+            try {
+                val records = preparedVolumeIndexStoreProvider.get().refreshFromRootSync()
+                journal.log(
+                    DiagnosticJournal.CAT_STORAGE,
+                    "Root storage manifest refreshed",
+                    "volumes=${records.size} parallel_startup=true",
+                )
+            } catch (e: Exception) {
+                Timber.w(e, "Unable to refresh prepared TS18 storage in parallel")
+                journal.log(
+                    DiagnosticJournal.CAT_STORAGE,
+                    "Root storage manifest refresh failed",
+                    e.javaClass.simpleName,
+                )
+            }
+        }
+    }
+
+    private fun registerCarOverlayIfAvailable() {
+''',
+          )
+
+          replace_once(
+              'app/src/main/java/org/oxycblt/auxio/headunit/root/dofun/Ts18DofunIntegrationResolver.kt',
+              '"Enable the existing root/directFS toggle if root-assisted checks are wanted."',
+              '"Enable Root storage fast path, grant the bounded request, then rerun this explicit check."',
+          )
+
+          doc = 'docs/ts18/ROOT_STORAGE_FASTPATH.md'
+          replace_once(doc, 'Magisk late_start service.d', 'Magisk module-root service.sh (late_start service)')
+          replace_once(
+              doc,
+              '- [ ] Add a bounded `service.d` preparation script and module packaging support.',
+              '- [ ] Add a bounded module-root `service.sh` late-start preparation path and packaging support.',
+          )
+          replace_once(
+              doc,
+              '1. `APP_READABLE` — the Auxio UID can list the root and open a representative audio file directly.',
+              '1. `APP_READABLE` — the Auxio UID can list the root and, when audio exists, open a representative file directly.',
+          )
+          replace_once(
+              doc,
+              '2. `PREPARED_ALIAS` — a Magisk-created read-only alias is app-readable and passes the same open test.',
+              '2. `PREPARED_ALIAS` — a Magisk-created read-only alias is app-readable and passes the same conditional media-open test.',
+          )
+
+          codec_test = 'musikr/src/test/java/org/oxycblt/musikr/fs/RootTreeSnapshotCodecTest.kt'
+          replace_once(
+              codec_test,
+              '''        assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "f\\t1\\t1\\t../escape.mp3\\n"))
+''',
+              '''        assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "f\\t1\\t1\\t../escape.mp3\\n"))
+        assertNull(RootTreeSnapshotCodec.parse("/storage/usbdisk0", "x\\t1\\t1\\tbad.mp3\\n"))
+        assertNull(
+            RootTreeSnapshotCodec.parse(
+                "/storage/usbdisk0",
+                "f\\t9223372036854776\\t1\\toverflow.mp3\\n",
+            )
+        )
+''',
+          )
+
+          manifest_test = 'app/src/test/java/org/oxycblt/auxio/headunit/root/storage/PreparedVolumeManifestCodecTest.kt'
+          replace_once(
+              manifest_test,
+              '''    @Test
+    fun rejectsUnsafeOrEscapedPaths() {
+''',
+              '''    @Test
+    fun rejectsMismatchedStateAndDuplicateVolumeIdentity() {
+        assertNull(
+            PreparedVolumeManifestCodec.parse(
+                "1\\t123\\tusbdisk0\\t/mnt/media_rw/usbdisk0\\t/storage/usbdisk0\\t/storage/auxio-root/usbdisk0\\t/storage/auxio-root/usbdisk0\\tapp_candidate\\t-\\n"
+            )
+        )
+        val row =
+            "1\\t123\\tusbdisk0\\t/mnt/media_rw/usbdisk0\\t/storage/usbdisk0\\t/storage/auxio-root/usbdisk0\\t-\\traw_only\\t-\\n"
+        assertNull(PreparedVolumeManifestCodec.parse(row + row))
+    }
+
+    @Test
+    fun rejectsUnsafeOrEscapedPaths() {
+''',
+          )
+          PY
+          rm -f .github/workflows/tmp-pr200-runtime-wire.yml
+
+      - name: Run focused static validation
+        run: |
+          git diff --check
+          bash scripts/check-ts18-root-storage-fastpath.sh
+          bash scripts/check-headunit-compat-safety.sh
+
+      - name: Commit scoped runtime wiring
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(ts18): warm root storage in parallel'
+          git push origin HEAD:agent/ts18-root-storage-fastpath
