@@ -91,28 +91,9 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Apply formatting
+      - name: Apply Kotlin formatting
         shell: bash
-        run: |
-          set +e
-          bash ./scripts/ci-gradle.sh spotlessApply > "${RUNNER_TEMP}/pr196-spotless.log" 2>&1
-          rc=$?
-          cat "${RUNNER_TEMP}/pr196-spotless.log"
-          git status --short > "${RUNNER_TEMP}/pr196-status.txt"
-          git diff --binary > "${RUNNER_TEMP}/pr196-working.patch"
-          exit "${rc}"
-
-      - name: Upload formatting diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pr196-formatting-diagnostics
-          path: |
-            ${{ runner.temp }}/pr196-spotless.log
-            ${{ runner.temp }}/pr196-status.txt
-            ${{ runner.temp }}/pr196-working.patch
-          if-no-files-found: error
-          retention-days: 2
+        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
 
       - name: Check formatted diff
         shell: bash
