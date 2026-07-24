@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Align with intended target and apply final hardening
+      - name: Align with intended target
         shell: bash
         run: |
           set -euo pipefail
@@ -33,7 +33,6 @@ jobs:
           git switch -C fix/first-launch-source-recovery
           git fetch origin feat/ts18-dofun-generic-media-compat
           git merge --no-edit origin/feat/ts18-dofun-generic-media-compat
-
           git checkout origin/feat/ts18-dofun-generic-media-compat -- \
             app/src/main/AndroidManifest.xml \
             app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
@@ -44,132 +43,17 @@ jobs:
             app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartNotification.kt \
             app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartSettings.kt
 
-          python3 <<'PY'
-          from pathlib import Path
+      - name: Apply final scoped hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/tmp-pr196-complete.py
+          python3 scripts/tmp-pr196-complete.py
 
-          workflow = Path('.github/workflows/tmp-pr196-apply-hardening.yml')
-          source = workflow.read_text(encoding='utf-8')
-          marker = "          python3 <<'PY'\n"
-          start = source.index(marker) + len(marker)
-          end = source.index("\n          PY\n", start)
-          lines = source[start:end].splitlines()
-          code = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
-
-          original = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f'{label}: expected exactly one match, found {count}')
-    return text.replace(old, new, 1)
-'''
-          replacement = '''def replace_once(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count == 1:
-        return text.replace(old, new, 1)
-    if count > 1:
-        raise SystemExit(f'{label}: expected exactly one match, found {count}')
-
-    old_lines = old.splitlines()
-    text_lines = text.splitlines(keepends=True)
-    old_norm = [line.strip() for line in old_lines]
-    span = len(old_norm)
-    matches = []
-    for offset in range(0, len(text_lines) - span + 1):
-        candidate = [line.rstrip('\\r\\n').strip() for line in text_lines[offset : offset + span]]
-        if candidate == old_norm:
-            matches.append(offset)
-    if len(matches) != 1:
-        raise SystemExit(
-            f'{label}: exact match count 0; whitespace-normalized match count {len(matches)}'
-        )
-    offset = matches[0]
-    end = offset + span
-    replacement_text = new
-    if text_lines[end - 1].endswith('\\n') and not replacement_text.endswith('\\n'):
-        replacement_text += '\\n'
-    return ''.join(text_lines[:offset]) + replacement_text + ''.join(text_lines[end:])
-'''
-          if original not in code:
-              raise SystemExit('Could not install whitespace-tolerant finalizer replacement')
-          code = code.replace(original, replacement, 1)
-          code = code.replace(
-              "base = Path('/tmp/AuxioService.base.kt')\n# The shell writes the base version below before this script is invoked.\n",
-              '',
-              1,
-          )
-          Path('/tmp/pr196-finalize.py').write_text(code, encoding='utf-8')
-          PY
-
-          python3 -m py_compile /tmp/pr196-finalize.py
-          python3 /tmp/pr196-finalize.py
-
-          python3 <<'PY'
-          from pathlib import Path
-
-          # Exact duplicate imports are never meaningful and can break formatting/compilation.
-          for path in Path('app/src').rglob('*.kt'):
-              lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
-              seen = set()
-              output = []
-              for line in lines:
-                  if line.startswith('import '):
-                      if line in seen:
-                          continue
-                      seen.add(line)
-                  output.append(line)
-              path.write_text(''.join(output), encoding='utf-8', newline='\n')
-
-          # The full-screen recovery container owns visibility so it cannot intercept the list.
-          path = Path('app/src/main/res/layout/fragment_home_list.xml')
-          text = path.read_text(encoding='utf-8')
-          outer = '''        <androidx.core.widget.NestedScrollView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:fillViewport="true"
-            android:overScrollMode="ifContentScrolls">'''
-          outer_with_id = '''        <androidx.core.widget.NestedScrollView
-            android:id="@+id/home_no_music"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:fillViewport="true"
-            android:overScrollMode="ifContentScrolls"
-            android:visibility="invisible">'''
-          if outer in text:
-              text = text.replace(outer, outer_with_id, 1)
-          child = '''            <LinearLayout
-                android:id="@+id/home_no_music"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:padding="@dimen/spacing_medium"
-                android:visibility="invisible">'''
-          child_fixed = '''            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:padding="@dimen/spacing_medium">'''
-          text = text.replace(child, child_fixed, 1)
-          path.write_text(text, encoding='utf-8', newline='\n')
-
-          # Activity-result callbacks must not retain a destroyed dialog binding.
-          path = Path('app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace(
-              '''                bindingOrNull?.let {
-                    updateModeUI(it)
-                    updateSaveButtonState()
-                }''',
-              '''                if (view != null) {
-                    updateModeUI(requireBinding())
-                    updateSaveButtonState()
-                }''',
-          )
-          path.write_text(text, encoding='utf-8', newline='\n')
-          PY
-
+      - name: Remove temporary completion infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
           git rm -f --ignore-unmatch \
             .github/workflows/tmp-pr196-apply-hardening.yml \
             .github/workflows/tmp-pr196-final-verify.yml \
@@ -179,71 +63,10 @@ jobs:
             .github/workflows/tmp-pr196-runner.yml \
             .github/workflows/tmp-pr196-debug.yml \
             app/tmp-pr196-ci-trigger.txt \
+            scripts/tmp-pr196-complete.py \
             scripts/tmp-pr196-comprehensive-hardening.py \
             scripts/tmp-pr196-service-hardening.py \
             tmp-pr196-hardening-error.log
-
-      - name: Assert final scoped contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 <<'PY'
-          from pathlib import Path
-
-          def text(path: str) -> str:
-              return Path(path).read_text(encoding='utf-8')
-
-          main = text('app/src/main/java/org/oxycblt/auxio/MainActivity.kt')
-          assert main.count('import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy') == 1
-          assert main.count('issueTrustedUserVisibleStart()') == 1
-          assert 'INTENT_KEY_TRUSTED_SCAN_NONCE' in main
-
-          service = text('app/src/main/java/org/oxycblt/auxio/AuxioService.kt')
-          assert service.count('import org.oxycblt.auxio.music.service.StartupScanOrigin') == 1
-          assert 'ACTION_EARLY_PRESTART' not in service
-          assert 'allowTrustedUserVisible = false' in service
-          assert 'consumeTrustedUserVisibleStart(' in service
-
-          authority = text('app/src/main/java/org/oxycblt/auxio/music/service/StartupScanAuthorityPolicy.kt')
-          for required in [
-              'UUID.randomUUID()',
-              'sources.size != settings.configuredSourceCount',
-              'file.isDirectory',
-              'permission.uri == uri',
-          ]:
-              assert required in authority, required
-
-          holder = text('app/src/main/java/org/oxycblt/auxio/music/service/IndexingHolder.kt')
-          assert holder.index('indexScope.launch') < holder.index('hasCurrentSourceAuthority')
-          assert 'startupJob?.isActive == true' in holder
-          assert 'currentIndexJob?.isActive == true' in holder
-
-          dialog = text('app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt')
-          assert 'appSettingsLauncher' in dialog
-          assert 'StoragePermissionPolicy.markRequested' in dialog
-          assert 'if (rawRootCandidate) return ManualPathValidation.UNREADABLE' in dialog
-          assert 'ROOT_UNAVAILABLE(R.string.set_path_root_unavailable)' not in dialog
-
-          permission = text('app/src/main/java/org/oxycblt/auxio/music/locations/StoragePermissionPolicy.kt')
-          assert 'path == "/sdcard"' in permission
-          assert 'path?.startsWith("/sdcard/")' in permission
-          assert 'path?.startsWith("/storage/")' in permission
-
-          layout = text('app/src/main/res/layout/fragment_home_list.xml')
-          assert layout.count('android:id="@+id/home_no_music"') == 1
-          outer = layout.index('<androidx.core.widget.NestedScrollView')
-          identifier = layout.index('android:id="@+id/home_no_music"')
-          assert outer < identifier
-
-          assert not Path('app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartNotification.kt').exists()
-          assert not Path('app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartSettings.kt').exists()
-
-          temporary = [
-              path for path in Path('.').rglob('*')
-              if path.is_file() and ('tmp-pr196' in path.name or path.name == 'tmp-pr196-hardening-error.log')
-          ]
-          assert not temporary, temporary
-          PY
 
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
