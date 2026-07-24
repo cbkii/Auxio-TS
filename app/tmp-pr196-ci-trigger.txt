@@ -1,1 +1,1 @@
-Temporary trigger for the final PR #196 verifier/finalizer; removed after checks complete.
+Temporary trigger for the read-only PR #196 final verification and patch export; removed after checks complete.
