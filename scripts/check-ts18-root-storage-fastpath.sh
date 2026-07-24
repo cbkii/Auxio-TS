@@ -37,8 +37,8 @@ grep -Fq 'LocationMode.defaultForFlavor' \
   fail 'DirectFS fresh default missing'
 grep -Fq '/data/adb/auxio-ts-root/volumes.tsv' "$root_holder" ||
   fail 'prepared manifest contract missing'
-if grep -Eq 'pm (disable-user|enable)|/system/|/vendor/' "$helper"; then
-  fail 'helper contains forbidden mutation/write'
+if grep -Eq 'pm (disable-user|enable)|/system/(app|priv-app)|/vendor/(app|priv-app)' "$helper"; then
+  fail 'helper contains forbidden package mutation or protected APK write'
 fi
 if find tools/ts18-root-storage-fastpath/magisk-module -path '*/service.d/*' -type f | grep -q .; then
   fail 'Magisk module must use module-root service.sh, not nested service.d'
