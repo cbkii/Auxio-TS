@@ -116,8 +116,10 @@ object PreparedVolumeManifestCodec {
 /**
  * App-private cache and resolver for the Magisk-prepared TS18 volume manifest.
  *
- * The cache is loaded without `su`. Refreshes are explicit, serialized and coalesced, then accepted
- * only after strict parsing and an atomic app-private write.
+ * The cache is loaded without `su`. Resolution is authority- and cost-aware: a cached prepared
+ * record may lead because its representative-file hint can be validated in O(1), while an actual
+ * root process leads only when root is already granted and the requested path depends on raw or
+ * prepared storage. Normal app-readable paths remain available without a blanket ordering rule.
  */
 @Singleton
 class PreparedVolumeIndexStore
@@ -136,7 +138,7 @@ constructor(
 
     fun cachedCandidatePaths(): List<String> = candidatePaths(records)
 
-    /** Explicit/user-started refresh. This may perform the bounded Magisk consent probe. */
+    /** Explicit/user-started refresh through the already-consented bounded root gate. */
     @Synchronized
     fun refreshFromRootSync(force: Boolean = false): List<PreparedVolumeRecord> {
         if (!rootStateHolder.isUserEnabled()) return records
@@ -152,46 +154,52 @@ constructor(
         return records
     }
 
-    /**
-     * Resolve a requested path without invoking root when ordinary app access already works.
-     *
-     * Root preparation/snapshot work occurs only after the zero-root direct check fails.
-     */
+    /** Resolve one source using the lowest expected-cost authority that is already available. */
     fun resolveSourceSync(requestedPath: String): SourceResolution {
         val clean = requestedPath.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
-        if (!clean.startsWith("/mnt/media_rw/")) {
-            val direct = SourceAuthorityValidator.classifyDirect(clean, preparedAlias = false)
-            if (direct == SourceAuthority.APP_READABLE) {
-                return SourceResolution(clean, clean, direct, "app_uid_direct_access_ok")
+        val rootEnabled = rootStateHolder.isUserEnabled()
+        val rootAvailable = rootStateHolder.stateSnapshot() == RootStateHolder.State.Available
+        var current = records
+        var match = current.firstOrNull { belongsToRecord(clean, it) }
+        val order =
+            RootStorageAccelerationPolicy.choose(
+                requestedPath = clean,
+                rootEnabled = rootEnabled,
+                rootAvailable = rootAvailable,
+                hasCachedRecord = match != null,
+            )
+
+        when (order) {
+            RootStorageResolutionOrder.CACHED_ROOT_METADATA_FIRST -> {
+                resolveFromRecord(clean, match, "cached_root_metadata")?.let { return it }
+                if (rootAvailable) {
+                    current = refreshFromRootSync(force = true)
+                    match = current.firstOrNull { belongsToRecord(clean, it) }
+                    resolveFromRecord(clean, match, "refreshed_root_metadata")?.let { return it }
+                }
+                resolveDirect(clean)?.let { return it }
+            }
+            RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST -> {
+                current = refreshFromRootSync(force = true)
+                match = current.firstOrNull { belongsToRecord(clean, it) }
+                resolveFromRecord(clean, match, "refreshed_root_metadata")?.let { return it }
+                resolveDirect(clean)?.let { return it }
+            }
+            RootStorageResolutionOrder.DIRECT_FIRST -> {
+                resolveDirect(clean)?.let { return it }
+                if (rootEnabled && rootAvailable && RootStorageAccelerationPolicy.isRemovablePath(clean)) {
+                    current = refreshFromRootSync(force = match == null)
+                    match = current.firstOrNull { belongsToRecord(clean, it) }
+                    resolveFromRecord(clean, match, "root_after_direct_miss")?.let { return it }
+                }
             }
         }
 
-        var current = records
-        var match = current.firstOrNull { belongsToRecord(clean, it) }
-        if (rootStateHolder.isUserEnabled()) {
-            current = refreshFromRootSync(force = match == null || clean.startsWith("/mnt/media_rw/"))
-            match = current.firstOrNull { belongsToRecord(clean, it) }
-        }
         val suffix = match?.let { suffixFor(clean, it) }.orEmpty()
-        val candidates = linkedSetOf<String>()
-        if (!clean.startsWith("/mnt/media_rw/")) candidates += clean
-        if (match != null) {
-            candidates += appendSuffix(match.appPath, suffix)
-            match.selectedPath?.let { candidates += appendSuffix(it, suffix) }
-            candidates += appendSuffix(match.aliasPath, suffix)
-        }
-
-        for (candidate in candidates) {
-            if (candidate.startsWith("/mnt/media_rw/")) continue
-            val prepared = candidate.startsWith("/storage/auxio-root/")
-            val authority = SourceAuthorityValidator.classifyDirect(candidate, prepared) ?: continue
-            return SourceResolution(clean, candidate, authority, "app_uid_resolved_access_ok")
-        }
-
         val rawBacking =
             match?.let { appendSuffix(it.rawPath, suffix) }
                 ?: clean.takeIf { it.startsWith("/mnt/media_rw/usbdisk") }
-        if (rawBacking != null && rootStateHolder.isUserEnabled()) {
+        if (rawBacking != null && rootEnabled && rootAvailable) {
             val snapshot =
                 rootStateHolder.snapshotTreeSync(
                     rawBacking,
@@ -215,6 +223,67 @@ constructor(
         )
     }
 
+    private fun resolveDirect(clean: String): SourceResolution? {
+        if (clean.startsWith("/mnt/media_rw/")) return null
+        val prepared = clean.startsWith("/storage/auxio-root/")
+        val authority = SourceAuthorityValidator.classifyDirect(clean, prepared) ?: return null
+        return SourceResolution(clean, clean, authority, "bounded_direct_validation_ok")
+    }
+
+    private fun resolveFromRecord(
+        requestedPath: String,
+        record: PreparedVolumeRecord?,
+        detailPrefix: String,
+    ): SourceResolution? {
+        record ?: return null
+        val suffix = suffixFor(requestedPath, record)
+        for (candidate in candidatePaths(record, suffix)) {
+            val prepared = candidate.startsWith("/storage/auxio-root/")
+            val representative = representativeForCandidate(record, candidate, suffix)
+            val authority =
+                SourceAuthorityValidator.classifyDirect(
+                    path = candidate,
+                    preparedAlias = prepared,
+                    representativePath = representative,
+                ) ?: continue
+            val detail =
+                if (representative != null) {
+                    "${detailPrefix}_representative_open_ok"
+                } else {
+                    "${detailPrefix}_bounded_walk_ok"
+                }
+            return SourceResolution(requestedPath, candidate, authority, detail)
+        }
+        return null
+    }
+
+    private fun candidatePaths(record: PreparedVolumeRecord, suffix: String): List<String> {
+        val roots = linkedSetOf<String>()
+        record.selectedPath?.let(roots::add)
+        roots += record.appPath
+        if (record.state == "alias_candidate") roots += record.aliasPath
+        return roots.map { appendSuffix(it, suffix) }
+    }
+
+    private fun representativeForCandidate(
+        record: PreparedVolumeRecord,
+        candidatePath: String,
+        suffix: String,
+    ): String? {
+        val selectedRoot = record.selectedPath ?: return null
+        val sample = record.samplePath ?: return null
+        if (sample != selectedRoot && !sample.startsWith(selectedRoot.trimEnd('/') + "/")) return null
+        val relativeSample = sample.removePrefix(selectedRoot).trimStart('/')
+        val tail =
+            if (suffix.isBlank()) {
+                relativeSample
+            } else {
+                if (relativeSample != suffix && !relativeSample.startsWith("$suffix/")) return null
+                relativeSample.removePrefix(suffix).trimStart('/')
+            }
+        return appendSuffix(candidatePath, tail)
+    }
+
     private fun readCachedRecords(): List<PreparedVolumeRecord> =
         runCatching { PreparedVolumeManifestCodec.parse(cacheFile.readText()) }
             .getOrNull()
@@ -236,11 +305,12 @@ constructor(
     private fun candidatePaths(values: List<PreparedVolumeRecord>): List<String> {
         val out = linkedSetOf<String>()
         values.forEach { record ->
+            record.selectedPath?.let(out::add)
             when (record.state) {
                 "app_candidate" -> out += record.appPath
                 "alias_candidate" -> {
-                    out += record.appPath
                     out += record.aliasPath
+                    out += record.appPath
                 }
             }
         }
