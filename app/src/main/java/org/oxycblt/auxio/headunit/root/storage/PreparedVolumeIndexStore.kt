@@ -118,8 +118,8 @@ object PreparedVolumeManifestCodec {
  *
  * The cache is loaded without `su`. Resolution is authority- and cost-aware: a cached prepared
  * record may lead because its representative-file hint can be validated in O(1), while an actual
- * root process leads only when root is already granted and the requested path depends on raw or
- * prepared storage. Normal app-readable paths remain available without a blanket ordering rule.
+ * root process leads when the enabled capability can reduce raw/prepared/removable recovery cost.
+ * Normal app-readable paths remain available without a blanket ordering rule.
  */
 @Singleton
 class PreparedVolumeIndexStore
@@ -138,7 +138,7 @@ constructor(
 
     fun cachedCandidatePaths(): List<String> = candidatePaths(records)
 
-    /** Explicit/user-started refresh through the already-consented bounded root gate. */
+    /** Explicit/user-started refresh through the consented bounded root gate. */
     @Synchronized
     fun refreshFromRootSync(force: Boolean = false): List<PreparedVolumeRecord> {
         if (!rootStateHolder.isUserEnabled()) return records
@@ -154,13 +154,22 @@ constructor(
         return records
     }
 
-    /** Resolve one source using the lowest expected-cost authority that is already available. */
+    /** Resolve one source using the lowest expected-cost authority that is available or consented. */
     fun resolveSourceSync(requestedPath: String): SourceResolution {
         val clean = requestedPath.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
         val rootEnabled = rootStateHolder.isUserEnabled()
-        val rootAvailable = rootStateHolder.stateSnapshot() == RootStateHolder.State.Available
+        var rootAvailable = rootStateHolder.stateSnapshot() == RootStateHolder.State.Available
         var current = records
         var match = current.firstOrNull { belongsToRecord(clean, it) }
+        var refreshed = false
+
+        fun refreshMatch(force: Boolean): PreparedVolumeRecord? {
+            current = refreshFromRootSync(force)
+            refreshed = true
+            match = current.firstOrNull { belongsToRecord(clean, it) }
+            return match
+        }
+
         val order =
             RootStorageAccelerationPolicy.choose(
                 requestedPath = clean,
@@ -173,25 +182,43 @@ constructor(
             RootStorageResolutionOrder.CACHED_ROOT_METADATA_FIRST -> {
                 resolveFromRecord(clean, match, "cached_root_metadata")?.let { return it }
                 if (rootAvailable) {
-                    current = refreshFromRootSync(force = true)
-                    match = current.firstOrNull { belongsToRecord(clean, it) }
-                    resolveFromRecord(clean, match, "refreshed_root_metadata")?.let { return it }
+                    resolveFromRecord(
+                            clean,
+                            refreshMatch(force = true),
+                            "refreshed_root_metadata",
+                        )
+                        ?.let { return it }
                 }
                 resolveDirect(clean)?.let { return it }
             }
             RootStorageResolutionOrder.REFRESHED_ROOT_METADATA_FIRST -> {
-                current = refreshFromRootSync(force = true)
-                match = current.firstOrNull { belongsToRecord(clean, it) }
-                resolveFromRecord(clean, match, "refreshed_root_metadata")?.let { return it }
+                resolveFromRecord(
+                        clean,
+                        refreshMatch(force = true),
+                        "refreshed_root_metadata",
+                    )
+                    ?.let { return it }
                 resolveDirect(clean)?.let { return it }
             }
             RootStorageResolutionOrder.DIRECT_FIRST -> {
                 resolveDirect(clean)?.let { return it }
-                if (rootEnabled && rootAvailable && RootStorageAccelerationPolicy.isRemovablePath(clean)) {
-                    current = refreshFromRootSync(force = match == null)
-                    match = current.firstOrNull { belongsToRecord(clean, it) }
-                    resolveFromRecord(clean, match, "root_after_direct_miss")?.let { return it }
-                }
+            }
+        }
+
+        // This is an explicit source-resolution flow and the user has already enabled root storage.
+        // After cheaper cached/direct attempts miss, a bounded consent probe restores acceleration
+        // after process restart without imposing root work on cache restoration or first audio.
+        if (rootEnabled && RootStorageAccelerationPolicy.isRemovablePath(clean)) {
+            if (!rootAvailable) {
+                rootAvailable = rootStateHolder.probeSync() == RootStateHolder.State.Available
+            }
+            if (rootAvailable && !refreshed) {
+                resolveFromRecord(
+                        clean,
+                        refreshMatch(force = match == null),
+                        "root_after_initial_miss",
+                    )
+                    ?.let { return it }
             }
         }
 
