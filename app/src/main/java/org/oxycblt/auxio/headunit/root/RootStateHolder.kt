@@ -46,7 +46,8 @@ constructor(
     private val storageOperationLock = Any()
     private var consentGeneration = 0L
 
-    @Volatile var state: State = State.Unknown
+    @Volatile
+    var state: State = State.Unknown
         private set
 
     init {
@@ -91,8 +92,7 @@ constructor(
 
     /** Fixed read-only TS18 compatibility probes remain separate from storage root authority. */
     fun runTs18ProbeSync(probe: org.oxycblt.auxio.headunit.root.dofun.Ts18RootProbe): String? {
-        if (stateSnapshot() == State.Unknown || stateSnapshot() == State.TimedOut) probeSync()
-        if (stateSnapshot() != State.Available) return null
+        ensureAvailable() ?: return null
         return successfulStdout(
             processRunner.runRootCommand(
                 probe.command,
@@ -156,8 +156,7 @@ constructor(
         synchronized(storageOperationLock) {
             if (!RootStorageCommandPolicy.isAllowedStorageRoot(rootPath)) return null
             if (maxDepth !in 1..32 || timeoutMs !in 1L..MAX_STORAGE_TIMEOUT_MS) return null
-            if (stateSnapshot() == State.Unknown || stateSnapshot() == State.TimedOut) probeSync()
-            if (stateSnapshot() != State.Available) return null
+            ensureAvailable() ?: return null
             val command = RootStorageCommandPolicy.buildSnapshotCommand(rootPath, maxDepth)
             when (
                 val result =
@@ -195,11 +194,37 @@ constructor(
             }
         }
 
+    /** Execute only the installed helper's bounded one-shot preparation entrypoint. */
+    fun refreshPreparedVolumeManifestSync(): Boolean =
+        synchronized(storageOperationLock) {
+            ensureAvailable() ?: return false
+            when (
+                processRunner.runRootCommand(
+                    "'$PREPARED_HELPER_SCRIPT' --once",
+                    timeoutMs = PREPARED_HELPER_TIMEOUT_MS,
+                    maxOutputBytes = PREPARED_HELPER_OUTPUT_BYTES,
+                )
+            ) {
+                is RootProcessResult.Success -> true
+                RootProcessResult.TimedOut -> {
+                    state = State.TimedOut
+                    journal.log(
+                        DiagnosticJournal.CAT_STORAGE,
+                        "Prepared-volume helper timed out",
+                        "timeoutMs=$PREPARED_HELPER_TIMEOUT_MS",
+                    )
+                    false
+                }
+                is RootProcessResult.NonZeroExit,
+                RootProcessResult.OutputLimitExceeded,
+                is RootProcessResult.ExecutionFailure -> false
+            }
+        }
+
     /** Read only the fixed Magisk-prepared volume manifest. */
     fun readPreparedVolumeManifestSync(): String? =
         synchronized(storageOperationLock) {
-            if (stateSnapshot() == State.Unknown || stateSnapshot() == State.TimedOut) probeSync()
-            if (stateSnapshot() != State.Available) return null
+            ensureAvailable() ?: return null
             successfulStdout(
                 processRunner.runRootCommand(
                     "cat '$PREPARED_VOLUME_MANIFEST'",
@@ -208,6 +233,12 @@ constructor(
                 )
             )
         }
+
+    private fun ensureAvailable(): State? {
+        val snapshot = stateSnapshot()
+        if (snapshot == State.Unknown || snapshot == State.TimedOut) probeSync()
+        return stateSnapshot().takeIf { it == State.Available }
+    }
 
     private fun successfulStdout(result: RootProcessResult): String? =
         when (result) {
@@ -230,8 +261,12 @@ constructor(
         const val ROOT_SNAPSHOT_OUTPUT_BYTES = 16 * 1024 * 1024
         const val MAX_ROOT_SNAPSHOT_ENTRIES = 100_000
         const val MAX_STORAGE_TIMEOUT_MS = 20_000L
+        const val PREPARED_HELPER_TIMEOUT_MS = 8_000L
+        const val PREPARED_HELPER_OUTPUT_BYTES = 8 * 1024
         const val MANIFEST_READ_TIMEOUT_MS = 3_000L
         const val MANIFEST_OUTPUT_BYTES = 256 * 1024
+        const val PREPARED_HELPER_SCRIPT =
+            "/data/adb/modules/auxio_ts_root_storage/service.sh"
         const val PREPARED_VOLUME_MANIFEST = "/data/adb/auxio-ts-root/volumes.tsv"
     }
 }
