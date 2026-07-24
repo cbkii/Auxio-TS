@@ -101,7 +101,27 @@ jobs:
 
       - name: Run unit tests
         shell: bash
-        run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+        run: |
+          set +e
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest \
+            > "${RUNNER_TEMP}/pr196-unit-tests.log" 2>&1
+          rc=$?
+          cat "${RUNNER_TEMP}/pr196-unit-tests.log"
+          exit "${rc}"
+
+      - name: Upload unit-test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr196-unit-test-diagnostics
+          path: |
+            ${{ runner.temp }}/pr196-unit-tests.log
+            app/build/reports/tests/**
+            musikr/build/reports/tests/**
+            app/build/test-results/**
+            musikr/build/test-results/**
+          if-no-files-found: warn
+          retention-days: 2
 
       - name: Run lint
         shell: bash
