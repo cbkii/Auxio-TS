@@ -54,10 +54,15 @@ class DofunMediaCompatPolicyTest {
     }
 
     @Test
-    fun `generic wrapper widget uses canonical media controls only`() {
+    fun `non-private wrapper profiles use canonical media controls`() {
         assertTrue(
             DofunMediaCompatPolicy.usesCanonicalWidgetControls(
                 Ts18LauncherIntegrationMode.GenericDofunMedia
+            )
+        )
+        assertTrue(
+            DofunMediaCompatPolicy.usesCanonicalWidgetControls(
+                Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
             )
         )
         assertFalse(
@@ -70,6 +75,13 @@ class DofunMediaCompatPolicyTest {
                 Ts18LauncherIntegrationMode.TopwayCommandOnly
             )
         )
+    }
+
+    @Test
+    fun `compact action indices are defensively copied`() {
+        val first = DofunMediaCompatPolicy.compactActionIndices
+        first[0] = 99
+        assertArrayEquals(intArrayOf(0, 1, 2), DofunMediaCompatPolicy.compactActionIndices)
     }
 
     @Test
