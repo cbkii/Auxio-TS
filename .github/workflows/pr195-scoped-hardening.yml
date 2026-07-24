@@ -25,7 +25,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'feat/ts18-dofun-generic-media-compat'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
     steps:
       - name: Check out PR branch
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -81,18 +81,7 @@ jobs:
           bash ./scripts/check-headunit-compat-safety.sh
           git diff --check
 
-      - name: Verify focused unit tests
-        shell: bash
-        run: bash ./scripts/ci-gradle.sh --warning-mode all :app:testStandardDebugUnitTest
-
-      - name: Build all debug identities
-        shell: bash
-        run: |
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicDebug
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaDebug
-
-      - name: Commit verified source edits
+      - name: Commit source edits for canonical CI
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
