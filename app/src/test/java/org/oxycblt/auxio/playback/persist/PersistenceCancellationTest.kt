@@ -313,7 +313,10 @@ class PersistenceCancellationTest {
 
         override fun requestIndex(withCache: Boolean) = Unit
 
-        override suspend fun startup(worker: MusicRepository.IndexingWorker) = Unit
+        override suspend fun startup(
+            worker: MusicRepository.IndexingWorker,
+            automaticScanAllowed: Boolean,
+        ) = Unit
 
         override suspend fun index(worker: MusicRepository.IndexingWorker, withCache: Boolean) =
             Unit

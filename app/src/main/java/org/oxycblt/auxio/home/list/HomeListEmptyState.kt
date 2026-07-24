@@ -21,11 +21,18 @@ package org.oxycblt.auxio.home.list
 import androidx.annotation.StringRes
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
+import com.google.android.material.button.MaterialButton
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.StartupReadinessState
 
+/**
+ * Legacy compact empty-state renderer used by non-song tabs.
+ *
+ * The song tab uses [updateLibraryRecoveryState] so that first-launch and missing-library recovery
+ * remains actionable while startup capabilities or indexing progress are still advancing.
+ */
 fun FragmentHomeListBinding.updateLibraryEmptyState(
     empty: Boolean,
     indexingState: IndexingState?,
@@ -55,4 +62,52 @@ fun FragmentHomeListBinding.updateLibraryEmptyState(
     homeNoMusicAction.isVisible =
         if (actionVisibleWhenNotEmpty) true else empty && canShowSourceAction
     homeNoMusicAction.isEnabled = homeNoMusicAction.isVisible
+    homeNoMusicSecondaryAction.isVisible = false
+    homeNoMusicTertiaryAction.isVisible = false
 }
+
+/** Render the state-driven first-launch and library-recovery surface used by the Songs tab. */
+fun FragmentHomeListBinding.updateLibraryRecoveryState(state: LibraryRecoveryPolicy.State) {
+    homeRecycler.isInvisible = state.visible
+    homeNoMusic.isInvisible = !state.visible
+    homeNoMusicProgress.isVisible = state.visible && state.showProgress
+    homeNoMusicPlaceholder.isVisible = state.visible && !state.showProgress
+    if (state.visible) {
+        homeNoMusicMsg.setText(state.kind.messageRes)
+    }
+    homeNoMusicAction.bindRecoveryAction(state.primary)
+    homeNoMusicSecondaryAction.bindRecoveryAction(state.secondary)
+    homeNoMusicTertiaryAction.bindRecoveryAction(state.tertiary)
+}
+
+private fun MaterialButton.bindRecoveryAction(item: LibraryRecoveryPolicy.ActionItem?) {
+    isVisible = item != null
+    isEnabled = item?.enabled == true
+    item?.let { setText(it.action.labelRes) }
+}
+
+private val LibraryRecoveryPolicy.Kind.messageRes: Int
+    @StringRes
+    get() =
+        when (this) {
+            LibraryRecoveryPolicy.Kind.HIDDEN -> R.string.lng_empty_songs
+            LibraryRecoveryPolicy.Kind.WAITING -> R.string.recovery_loading_cache
+            LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED -> R.string.recovery_permission_required
+            LibraryRecoveryPolicy.Kind.SOURCE_REQUIRED -> R.string.recovery_source_required
+            LibraryRecoveryPolicy.Kind.SOURCE_UNAVAILABLE -> R.string.recovery_source_unavailable
+            LibraryRecoveryPolicy.Kind.CACHE_UNAVAILABLE -> R.string.recovery_cache_unavailable
+            LibraryRecoveryPolicy.Kind.INDEXING -> R.string.recovery_indexing
+            LibraryRecoveryPolicy.Kind.EMPTY -> R.string.recovery_empty
+            LibraryRecoveryPolicy.Kind.FAILED -> R.string.recovery_failed
+        }
+
+private val LibraryRecoveryPolicy.Action.labelRes: Int
+    @StringRes
+    get() =
+        when (this) {
+            LibraryRecoveryPolicy.Action.GRANT_PERMISSION ->
+                R.string.recovery_action_grant_permission
+            LibraryRecoveryPolicy.Action.CHOOSE_SOURCE -> R.string.recovery_action_choose_source
+            LibraryRecoveryPolicy.Action.REFRESH -> R.string.recovery_action_refresh
+            LibraryRecoveryPolicy.Action.RESCAN -> R.string.recovery_action_rescan
+        }

@@ -37,7 +37,7 @@ class DeferredStartupHydrationTest {
                 priorState = LibraryState.USABLE,
                 deferCachedLoad = true,
                 lastScanFailed = { false },
-                isTopwayCompat = false,
+                automaticScanAllowed = true,
                 loadCachedLibrary = {
                     loadAttempts += 1
                     42
@@ -69,7 +69,7 @@ class DeferredStartupHydrationTest {
                 priorState = LibraryState.NEVER,
                 deferCachedLoad = true,
                 lastScanFailed = { false },
-                isTopwayCompat = false,
+                automaticScanAllowed = true,
                 loadCachedLibrary = {
                     loadAttempts += 1
                     0

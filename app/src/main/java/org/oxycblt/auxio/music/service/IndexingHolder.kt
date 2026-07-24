@@ -86,6 +86,10 @@ private constructor(
     private var currentIndexJob: Job? = null
     private var pendingIndexRequest: IndexRequest? = null
     private var startupJob: Job? = null
+    private var attached = false
+    private var activeStartupOrigin: StartupScanOrigin? = null
+    private var activeStartupAutomaticScanAllowed = false
+    private var pendingStartupOrigin: StartupScanOrigin? = null
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
     private val wakeLock =
@@ -100,6 +104,10 @@ private constructor(
     private val observationBurstGate = ObservationBurstGate()
 
     fun attach() {
+        synchronized(this) {
+            if (attached) return
+            attached = true
+        }
         musicSettings.registerListener(this)
         musicRepository.addUpdateListener(this)
         musicRepository.addIndexingListener(this)
@@ -111,8 +119,18 @@ private constructor(
     }
 
     fun release() {
-        startupJob?.cancel()
-        startupJob = null
+        val startupToCancel =
+            synchronized(this) {
+                if (!attached) return
+                attached = false
+                startupJob.also {
+                    startupJob = null
+                    activeStartupOrigin = null
+                    activeStartupAutomaticScanAllowed = false
+                    pendingStartupOrigin = null
+                }
+            }
+        startupToCancel?.cancel()
         stopTracking()
         observationRequestJob?.cancel()
         observationRequestJob = null
@@ -129,20 +147,84 @@ private constructor(
     }
 
     @Synchronized
-    fun start() {
-        PerfTimer.trace("IndexingHolder.start") {
-            if (startupJob?.isActive == true) {
-                L.d("Startup library load already running; ignoring duplicate start")
+    fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
+        PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
+            if (!attached) {
+                L.d("Ignoring startup request after IndexingHolder release [origin=$origin]")
                 return
             }
+            val originAllowsAutomaticScan =
+                StartupScanAuthorityPolicy.originAllowsAutomaticScan(
+                    topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    origin = origin,
+                )
+            if (startupJob?.isActive == true) {
+                if (originAllowsAutomaticScan && !activeStartupAutomaticScanAllowed) {
+                    pendingStartupOrigin = origin
+                    L.d(
+                        "Queued startup because scan origin authority increased " +
+                            "[active=$activeStartupOrigin pending=$pendingStartupOrigin]"
+                    )
+                } else {
+                    L.d("Startup library load already running; ignoring duplicate [origin=$origin]")
+                }
+                return
+            }
+            activeStartupOrigin = origin
+            activeStartupAutomaticScanAllowed = originAllowsAutomaticScan
             startupJob =
                 indexScope.launch {
-                    // Root probing is intentionally on-demand. Normal startup must restore
-                    // playback/session surfaces without waiting for su.
-                    musicRepository.startup(this@IndexingHolder)
+                    try {
+                        val sourceAuthority =
+                            StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
+                                workerContext,
+                                musicSettings,
+                            )
+                        val automaticScanAllowed =
+                            StartupScanAuthorityPolicy.allowAutomaticScan(
+                                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                                origin = origin,
+                                sourceAuthority = sourceAuthority,
+                            )
+                        val stillAttached =
+                            synchronized(this@IndexingHolder) {
+                                if (attached) {
+                                    activeStartupAutomaticScanAllowed = automaticScanAllowed
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        if (!stillAttached) return@launch
+                        musicRepository.startup(this@IndexingHolder, automaticScanAllowed)
+                    } finally {
+                        val nextOrigin =
+                            synchronized(this@IndexingHolder) {
+                                if (!attached) {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
+                                    pendingStartupOrigin = null
+                                    null
+                                } else {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
+                                    pendingStartupOrigin.also { pendingStartupOrigin = null }
+                                }
+                            }
+                        if (nextOrigin != null) start(nextOrigin)
+                    }
                 }
         }
     }
+
+    @Synchronized
+    fun hasForegroundWork(): Boolean =
+        startupJob?.isActive == true ||
+            currentIndexJob?.isActive == true ||
+            musicRepository.indexingState is IndexingState.Indexing ||
+            musicSettings.shouldBeObserving
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
         val state = musicRepository.indexingState

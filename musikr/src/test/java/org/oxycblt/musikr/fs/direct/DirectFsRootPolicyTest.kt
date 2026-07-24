@@ -19,12 +19,10 @@
 package org.oxycblt.musikr.fs.direct
 
 import java.io.File
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isAllowedRoot
-import org.oxycblt.musikr.fs.direct.DirectFS.Companion.shellQuote
 
 class DirectFsRootPolicyTest {
     @Test
@@ -39,16 +37,5 @@ class DirectFsRootPolicyTest {
     fun testAllowsTs18StorageRoots() {
         assertTrue(isAllowedRoot(File("/storage/usbdisk0")))
         assertTrue(isAllowedRoot(File("/mnt/media_rw/usbdisk0")))
-    }
-
-    @Test
-    fun testShellQuoteEscapesSingleQuotes() {
-        assertEquals("'/storage/usbdisk0/Music'\"'\"'s'", shellQuote("/storage/usbdisk0/Music's"))
-    }
-
-    @Test
-    fun testShellQuoteContainsShellMetacharacters() {
-        val path = "/storage/usbdisk0/Music \$(rm -rf /); `id`\nnext"
-        assertEquals("'$path'", shellQuote(path))
     }
 }

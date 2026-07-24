@@ -223,7 +223,6 @@ object StartupLibraryStartup {
         priorState: LibraryState,
         deferCachedLoad: Boolean = false,
         lastScanFailed: () -> Boolean,
-        isTopwayCompat: Boolean,
         loadCachedLibrary: suspend () -> T,
         cachedSongCount: (T) -> Int,
         emitCachedLibrary: suspend (T) -> Unit,
@@ -233,6 +232,7 @@ object StartupLibraryStartup {
         setStartupReadinessState: (StartupReadinessState) -> Unit = {},
         setStartupLibraryStatus: (StartupLibraryStatus) -> Unit = {},
         sourceConfigured: Boolean = true,
+        automaticScanAllowed: Boolean = true,
     ): StartupLibraryPolicy.Decision {
         setStartupReadinessState(StartupReadinessState.ProcessVisible)
         setStartupLibraryStatus(StartupLibraryStatus.Unknown)
@@ -286,7 +286,9 @@ object StartupLibraryStartup {
                 )
             }
 
-        if (isTopwayCompat) {
+        // Source availability and caller-provided scan authority are separate. The shared
+        // startup core never infers build flavour, boot state or vehicle lifecycle.
+        if (!sourceConfigured || !automaticScanAllowed) {
             decision = decision.copy(requestScan = false)
         }
 

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="recovery_loading_cache">Checking saved music library…</string>
+    <string name="recovery_permission_required">Storage access is required for this music source.</string>
+    <string name="recovery_source_required">Choose where your music is stored.</string>
+    <string name="recovery_source_unavailable">The configured music source is not currently available.</string>
+    <string name="recovery_cache_unavailable">No usable saved library was found. Scan the configured source now.</string>
+    <string name="recovery_indexing">Scanning the music library…</string>
+    <string name="recovery_empty">No supported music was found in the configured source.</string>
+    <string name="recovery_failed">Music library loading failed. Retry or perform a full rescan.</string>
+
+    <string name="recovery_action_grant_permission">Grant access</string>
+    <string name="recovery_action_choose_source">Choose source</string>
+    <string name="recovery_action_refresh">Refresh</string>
+    <string name="recovery_action_rescan">Full rescan</string>
+    <string name="recovery_action_open_settings">Open app settings</string>
+
+    <string name="recovery_permission_title">Allow music-library access</string>
+    <string name="recovery_permission_message">Auxio-TS needs Android storage permission to read the selected System Database or Direct music source. File Picker mode does not require this broad permission.</string>
+    <string name="recovery_permission_denied">Storage permission was not granted. Choose File Picker mode or open app settings to grant access.</string>
+</resources>

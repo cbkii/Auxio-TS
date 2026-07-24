@@ -13,61 +13,89 @@
         android:layout_height="match_parent"
         tools:listitem="@layout/item_song" />
 
-
     <org.oxycblt.auxio.ui.EdgeFrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <LinearLayout
+        <androidx.core.widget.NestedScrollView
             android:id="@+id/home_no_music"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center_horizontal"
-            android:visibility="invisible"
-            android:orientation="vertical"
-            android:padding="@dimen/spacing_medium">
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="ifContentScrolls"
+            android:visibility="invisible">
 
-            <FrameLayout
-                android:layout_width="@dimen/size_fast_scroll_popup"
-                android:layout_height="@dimen/size_fast_scroll_popup"
-                android:layout_marginBottom="@dimen/spacing_small">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_medium"
+>
 
-                <org.oxycblt.auxio.home.list.CookieImageView
-                    android:id="@+id/home_no_music_placeholder"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/ic_song_48"
-                    tools:ignore="ContentDescription"
-                    android:backgroundTint="?attr/colorSurfaceVariant"
-                    app:tint="?attr/colorOnSurfaceVariant" />
+                <FrameLayout
+                    android:layout_width="@dimen/size_fast_scroll_popup"
+                    android:layout_height="@dimen/size_fast_scroll_popup"
+                    android:layout_marginBottom="@dimen/spacing_small">
 
-                <ProgressBar
-                    android:id="@+id/home_no_music_progress"
-                    style="?android:attr/progressBarStyleLarge"
+                    <org.oxycblt.auxio.home.list.CookieImageView
+                        android:id="@+id/home_no_music_placeholder"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:backgroundTint="?attr/colorSurfaceVariant"
+                        android:src="@drawable/ic_song_48"
+                        app:tint="?attr/colorOnSurfaceVariant"
+                        tools:ignore="ContentDescription" />
+
+                    <ProgressBar
+                        android:id="@+id/home_no_music_progress"
+                        style="?android:attr/progressBarStyleLarge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:indeterminate="true"
+                        android:visibility="gone" />
+                </FrameLayout>
+
+                <TextView
+                    android:id="@+id/home_no_music_msg"
+                    android:layout_width="256dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="@dimen/spacing_small"
+                    android:textAlignment="center"
+                    android:textAppearance="?attr/textAppearanceBodyLarge"
+                    tools:text="@string/lng_empty_songs" />
+
+                <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                    android:id="@+id/home_no_music_action"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:indeterminate="true"
-                    android:visibility="gone" />
-            </FrameLayout>
+                    android:minHeight="@dimen/size_touchable_small"
+                    android:text="@string/set_locations" />
 
-            <TextView
-                android:id="@+id/home_no_music_msg"
-                android:layout_width="256dp"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="@dimen/spacing_small"
-                tools:text="@string/lng_empty_songs"
-                android:textAlignment="center"
-                android:textAppearance="?attr/textAppearanceBodyLarge" />
+                <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                    android:id="@+id/home_no_music_secondary_action"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_tiny"
+                    android:minHeight="@dimen/size_touchable_small"
+                    android:visibility="gone"
+                    tools:text="@string/recovery_action_rescan" />
 
-            <org.oxycblt.auxio.ui.RippleFixMaterialButton
-                android:id="@+id/home_no_music_action"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/set_locations" />
+                <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                    android:id="@+id/home_no_music_tertiary_action"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_tiny"
+                    android:minHeight="@dimen/size_touchable_small"
+                    android:visibility="gone"
+                    tools:text="@string/recovery_action_choose_source" />
 
-        </LinearLayout>
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
 
     </org.oxycblt.auxio.ui.EdgeFrameLayout>
 </FrameLayout>

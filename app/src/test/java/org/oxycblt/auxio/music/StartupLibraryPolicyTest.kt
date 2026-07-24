@@ -241,7 +241,7 @@ class StartupLibraryPolicyTest {
                 StartupHarness(
                     priorState = LibraryState.NEVER,
                     revisionKnown = false,
-                    isTopwayCompat = true,
+                    automaticScanAllowed = false,
                     sourceConfigured = false,
                 )
 
@@ -381,7 +381,7 @@ class StartupLibraryPolicyTest {
             StartupHarness(
                 priorState = LibraryState.NEVER,
                 revisionKnown = false,
-                isTopwayCompat = true,
+                automaticScanAllowed = false,
             )
 
         val decision = harness.run()
@@ -392,7 +392,7 @@ class StartupLibraryPolicyTest {
 
     @Test
     fun `topway startup suppresses automatic scan on cached failure`() = runBlocking {
-        val harness = StartupHarness(priorState = LibraryState.USABLE, isTopwayCompat = true)
+        val harness = StartupHarness(priorState = LibraryState.USABLE, automaticScanAllowed = false)
 
         val decision = harness.run(loadFailure = IllegalStateException("bad cache"))
 
@@ -402,7 +402,7 @@ class StartupLibraryPolicyTest {
 
     @Test
     fun `topway startup suppresses automatic scan on unexpected empty cache`() = runBlocking {
-        val harness = StartupHarness(priorState = LibraryState.USABLE, isTopwayCompat = true)
+        val harness = StartupHarness(priorState = LibraryState.USABLE, automaticScanAllowed = false)
 
         val decision = harness.run(cachedSongCount = 0)
 
@@ -463,7 +463,7 @@ class StartupLibraryPolicyTest {
         private val revisionKnown: Boolean = true,
         private val hasInMemoryLibrary: Boolean = false,
         private val lastScanFailed: Boolean = false,
-        private val isTopwayCompat: Boolean = false,
+        private val automaticScanAllowed: Boolean = true,
         private val sourceConfigured: Boolean = true,
     ) {
         var persistedState: LibraryState? = null
@@ -482,7 +482,7 @@ class StartupLibraryPolicyTest {
                 revisionKnown = revisionKnown,
                 priorState = priorState,
                 lastScanFailed = { lastScanFailed },
-                isTopwayCompat = isTopwayCompat,
+                automaticScanAllowed = automaticScanAllowed,
                 loadCachedLibrary = {
                     cachedLoadAttempts++
                     loadFailure?.let { throw it }
