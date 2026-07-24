@@ -26,6 +26,49 @@ class SourceAuthorityValidatorTest {
     }
 
     @Test
+    fun preparedRepresentativeBypassesBoundedWalkWithoutBypassingAppUidOpen() {
+        val root = Files.createTempDirectory("auxio-source-hint").toFile()
+        try {
+            var directory = root
+            repeat(6) { depth -> directory = directory.resolve("d$depth").apply { mkdirs() } }
+            val media = directory.resolve("deep.flac").apply { writeBytes(byteArrayOf(7)) }
+
+            assertNull(
+                SourceAuthorityValidator.classifyDirect(root.absolutePath, preparedAlias = false)
+            )
+            assertEquals(
+                SourceAuthority.APP_READABLE,
+                SourceAuthorityValidator.classifyDirect(
+                    path = root.absolutePath,
+                    preparedAlias = false,
+                    representativePath = media.absolutePath,
+                ),
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun escapedRepresentativeHintIsRejected() {
+        val root = Files.createTempDirectory("auxio-source-contained").toFile()
+        val outside = Files.createTempFile("auxio-source-outside", ".flac").toFile()
+        try {
+            outside.writeBytes(byteArrayOf(1))
+            assertNull(
+                SourceAuthorityValidator.classifyDirect(
+                    path = root.absolutePath,
+                    preparedAlias = false,
+                    representativePath = outside.absolutePath,
+                )
+            )
+        } finally {
+            root.deleteRecursively()
+            outside.delete()
+        }
+    }
+
+    @Test
     fun rejectsDirectoryWithoutRepresentativeAudio() {
         val root = Files.createTempDirectory("auxio-source-empty").toFile()
         try {
