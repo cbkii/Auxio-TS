@@ -35,6 +35,7 @@ class RootStorageAccelerationPolicyTest {
                         hasCachedRecord = false,
                     ),
                 )
+                assertTrue(RootStorageAccelerationPolicy.requiresRootPreparation(path))
             }
         assertEquals(
             RootStorageResolutionOrder.DIRECT_FIRST,
@@ -44,6 +45,25 @@ class RootStorageAccelerationPolicyTest {
                 rootAvailable = true,
                 hasCachedRecord = false,
             ),
+        )
+        assertFalse(
+            RootStorageAccelerationPolicy.requiresRootPreparation("/storage/usbdisk0/Music")
+        )
+    }
+
+    @Test
+    fun enabledButUnprobedRawPathStaysCheapUntilExplicitResolverProbe() {
+        assertEquals(
+            RootStorageResolutionOrder.DIRECT_FIRST,
+            RootStorageAccelerationPolicy.choose(
+                requestedPath = "/mnt/media_rw/usbdisk0",
+                rootEnabled = true,
+                rootAvailable = false,
+                hasCachedRecord = false,
+            ),
+        )
+        assertTrue(
+            RootStorageAccelerationPolicy.requiresRootPreparation("/mnt/media_rw/usbdisk0")
         )
     }
 
