@@ -26,12 +26,31 @@ class SourceAuthorityValidatorTest {
     }
 
     @Test
-    fun rejectsMissingDirectory() {
-        assertNull(
-            SourceAuthorityValidator.classifyDirect(
-                "/definitely/missing/auxio-source",
-                preparedAlias = false,
+    fun rejectsDirectoryWithoutRepresentativeAudio() {
+        val root = Files.createTempDirectory("auxio-source-empty").toFile()
+        try {
+            root.resolve("notes.txt").writeText("not audio")
+            assertNull(
+                SourceAuthorityValidator.classifyDirect(root.absolutePath, preparedAlias = false)
             )
-        )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun rejectsTestOwnedMissingDirectory() {
+        val parent = Files.createTempDirectory("auxio-source-missing").toFile()
+        try {
+            val missing = parent.resolve("not-created")
+            assertNull(
+                SourceAuthorityValidator.classifyDirect(
+                    missing.absolutePath,
+                    preparedAlias = false,
+                )
+            )
+        } finally {
+            parent.deleteRecursively()
+        }
     }
 }
