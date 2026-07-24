@@ -10,6 +10,7 @@ ALIAS_ROOT=/storage/auxio-root
 BOOT_WAIT_SECONDS=20
 ON_DEMAND_WAIT_SECONDS=3
 MAX_SAMPLE_DEPTH=6
+SAMPLE_TIMEOUT_SECONDS=4
 
 log_msg() { log -t AuxioRootStorage "$*" 2>/dev/null || true; }
 
@@ -63,11 +64,23 @@ clean_stale_aliases() {
 
 find_representative() {
   source_path=$1
-  sample=$(find "$source_path" -xdev -maxdepth "$MAX_SAMPLE_DEPTH" -type f \
-    \( -iname '*.mp3' -o -iname '*.flac' -o -iname '*.m4a' -o -iname '*.mp4' \
-    -o -iname '*.wav' -o -iname '*.ogg' -o -iname '*.opus' -o -iname '*.aac' \
-    -o -iname '*.3gp' -o -iname '*.amr' -o -iname '*.wma' \) \
-    -print 2>/dev/null | head -n 1)
+  if command -v timeout >/dev/null 2>&1; then
+    sample=$(timeout -k 1 "$SAMPLE_TIMEOUT_SECONDS" find "$source_path" -xdev \
+      -maxdepth "$MAX_SAMPLE_DEPTH" -type f \
+      \( -iname '*.mp3' -o -iname '*.flac' -o -iname '*.m4a' -o -iname '*.mp4' \
+      -o -iname '*.wav' -o -iname '*.ogg' -o -iname '*.opus' -o -iname '*.aac' \
+      -o -iname '*.3gp' -o -iname '*.amr' -o -iname '*.wma' \) \
+      -print 2>/dev/null | head -n 1)
+  elif command -v toybox >/dev/null 2>&1; then
+    sample=$(toybox timeout -k 1 "$SAMPLE_TIMEOUT_SECONDS" find "$source_path" -xdev \
+      -maxdepth "$MAX_SAMPLE_DEPTH" -type f \
+      \( -iname '*.mp3' -o -iname '*.flac' -o -iname '*.m4a' -o -iname '*.mp4' \
+      -o -iname '*.wav' -o -iname '*.ogg' -o -iname '*.opus' -o -iname '*.aac' \
+      -o -iname '*.3gp' -o -iname '*.amr' -o -iname '*.wma' \) \
+      -print 2>/dev/null | head -n 1)
+  else
+    return 1
+  fi
   [ -n "$sample" ] || return 1
   if printf '%s' "$sample" | LC_ALL=C grep -q '[[:cntrl:]]'; then
     return 1
