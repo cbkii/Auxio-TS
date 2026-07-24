@@ -6,16 +6,7 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.headunit.topway
 
 import java.io.File
@@ -70,6 +61,7 @@ object TopwaySourcePolicy {
     private const val MAX_VISITED_FILES = 2500
     private const val MAX_CANDIDATES = 48
     private const val MAX_SCAN_ELAPSED_MS = 1200L
+    private const val ROOT_DISCOVERY_SNAPSHOT_TIMEOUT_MS = 5_000L
     private const val NANOS_PER_MILLISECOND = 1_000_000L
 
     private fun monotonicNowMs(): Long = System.nanoTime() / NANOS_PER_MILLISECOND
@@ -207,20 +199,23 @@ object TopwaySourcePolicy {
         if (enforceSafeRoot && !isAllowedSourceCandidate(root.absolutePath)) return
         val directRootReadable = runCatching { root.listFiles() }.getOrNull() != null
         if (!directRootReadable && rootGate != null) {
+            val remaining = (MAX_CANDIDATES - out.size).coerceAtLeast(0)
+            if (remaining == 0) return
             val snapshot =
-                rootGate.snapshotTreeSync(root.absolutePath, MAX_SCAN_DEPTH, MAX_SCAN_ELAPSED_MS)
-                    ?: return
+                rootGate.snapshotTreeSync(
+                    root.absolutePath,
+                    MAX_SCAN_DEPTH,
+                    ROOT_DISCOVERY_SNAPSHOT_TIMEOUT_MS,
+                ) ?: return
             snapshot.entries
                 .asSequence()
                 .filter { !it.isDirectory && !it.isSymlink }
                 .filter { entry ->
                     entry.relativePath.substringAfterLast('.', "").lowercase() in AUDIO_EXTENSIONS
                 }
-                .map { entry ->
-                    entry.relativePath.substringBeforeLast('/', "")
-                }
+                .map { entry -> entry.relativePath.substringBeforeLast('/', "") }
                 .distinct()
-                .take(MAX_CANDIDATES - out.size)
+                .take(remaining)
                 .mapTo(out) { relative ->
                     if (relative.isBlank()) root.absolutePath else File(root, relative).absolutePath
                 }
@@ -292,7 +287,11 @@ object TopwaySourcePolicy {
 
     fun canListRootBackedDirectory(path: String, rootGate: RootGate): Boolean =
         isAllowedSourceCandidate(path) &&
-            rootGate.snapshotTreeSync(path, MAX_SCAN_DEPTH, MAX_SCAN_ELAPSED_MS) != null
+            rootGate.snapshotTreeSync(
+                path,
+                MAX_SCAN_DEPTH,
+                ROOT_DISCOVERY_SNAPSHOT_TIMEOUT_MS,
+            ) != null
 
     private fun shouldDescend(
         dir: File,
