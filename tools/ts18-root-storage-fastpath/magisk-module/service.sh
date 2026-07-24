@@ -9,6 +9,7 @@ LOCK_DIR="$STATE_DIR/prepare.lock"
 ALIAS_ROOT=/storage/auxio-root
 BOOT_WAIT_SECONDS=20
 ON_DEMAND_WAIT_SECONDS=3
+MAX_SAMPLE_DEPTH=6
 
 log_msg() { log -t AuxioRootStorage "$*" 2>/dev/null || true; }
 
@@ -60,8 +61,26 @@ clean_stale_aliases() {
   done
 }
 
+find_representative() {
+  source_path=$1
+  sample=$(find "$source_path" -xdev -maxdepth "$MAX_SAMPLE_DEPTH" -type f \
+    \( -iname '*.mp3' -o -iname '*.flac' -o -iname '*.m4a' -o -iname '*.mp4' \
+    -o -iname '*.wav' -o -iname '*.ogg' -o -iname '*.opus' -o -iname '*.aac' \
+    -o -iname '*.3gp' -o -iname '*.amr' -o -iname '*.wma' \) \
+    -print 2>/dev/null | head -n 1)
+  [ -n "$sample" ] || return 1
+  if printf '%s' "$sample" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+    return 1
+  fi
+  case "$sample" in
+    "$source_path"|"$source_path"/*) printf '%s' "$sample" ;;
+    *) return 1 ;;
+  esac
+}
+
 prepare_manifest() {
   max_wait=$1
+  include_sample=$2
   waited=0
   while [ "$waited" -lt "$max_wait" ]; do
     found=0
@@ -107,9 +126,13 @@ prepare_manifest() {
       fi
     fi
 
-    # The helper remains volume-only. A root-side file open cannot prove app playback authority;
-    # Auxio performs bounded representative-media validation later as the app UID.
+    # Boot preparation remains volume-only. An explicit --once refresh may add one contained hint;
+    # Auxio still opens that file as the app UID before granting source authority.
     sample=-
+    if [ "$include_sample" -eq 1 ] && [ "$selected" != - ]; then
+      sample=$(find_representative "$selected" 2>/dev/null || echo -)
+      [ -n "$sample" ] || sample=-
+    fi
     generated=$(date +%s 2>/dev/null || echo 0)
     printf '1\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$generated" "$name" "$raw_path" "$app_path" "$alias_path" \
@@ -118,13 +141,19 @@ prepare_manifest() {
 
   chmod 0600 "$TEMP" 2>/dev/null || true
   mv -f "$TEMP" "$MANIFEST" || return 1
-  log_msg "prepared manifest=$MANIFEST waited=${waited}s"
+  log_msg "prepared manifest=$MANIFEST waited=${waited}s samples=$include_sample"
   return 0
 }
 
 case "${1:-}" in
-  --once) wait_seconds=$ON_DEMAND_WAIT_SECONDS ;;
-  ''|--boot) wait_seconds=$BOOT_WAIT_SECONDS ;;
+  --once)
+    wait_seconds=$ON_DEMAND_WAIT_SECONDS
+    include_sample=1
+    ;;
+  ''|--boot)
+    wait_seconds=$BOOT_WAIT_SECONDS
+    include_sample=0
+    ;;
   *)
     echo "Usage: $0 [--boot|--once]" >&2
     exit 2
@@ -132,5 +161,5 @@ case "${1:-}" in
 esac
 
 acquire_lock || exit 0
-prepare_manifest "$wait_seconds" || exit 1
+prepare_manifest "$wait_seconds" "$include_sample" || exit 1
 exit 0
