@@ -50,8 +50,7 @@ jobs:
             scripts/tmp-pr196-compile-fixes.py \
             scripts/tmp-pr196-test-fixes.py
           do
-            python3 -m py_compile "${script}"
-            python3 "${script}"
+            PYTHONDONTWRITEBYTECODE=1 python3 "${script}"
           done
 
       - name: Remove temporary infrastructure and validate final diff
@@ -74,6 +73,7 @@ jobs:
             scripts/tmp-pr196-service-hardening.py \
             tmp-pr196-hardening-error.log
 
+          find scripts -type f -path '*/__pycache__/*tmp-pr196*.pyc' -delete
           git diff --check
 
           remaining=$(find . -path './.git' -prune -o -type f -name '*tmp-pr196*' -print)
