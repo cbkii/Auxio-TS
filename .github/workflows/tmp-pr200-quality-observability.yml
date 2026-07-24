@@ -5,10 +5,6 @@ on:
   push:
     branches:
       - agent/ts18-root-storage-fastpath
-  pull_request:
-    branches:
-      - dev
-    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
@@ -19,7 +15,7 @@ concurrency:
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'agent/ts18-root-storage-fastpath')
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -30,49 +26,17 @@ jobs:
           fetch-depth: 0
           submodules: false
 
-      - name: Add failure-only canonical log capture
+      - name: Add failure-preserving canonical log capture
         shell: bash
         run: |
           python3 - <<'PY'
+          import base64
           from pathlib import Path
 
           path = Path('.github/workflows/lint.yml')
           text = path.read_text(encoding='utf-8')
-          old = '''      - name: Run head-unit compatibility safety checks
-        shell: bash
-        run: |
-          bash ./scripts/check-ts18-apk-reference-contracts.sh
-          bash ./scripts/check-headunit-compat-safety.sh
-          bash ./scripts/check-dofun-topway-compat.sh
-          bash ./scripts/check-native-keep-rules.sh
-'''
-          new = '''      - name: Run head-unit compatibility safety checks
-        id: headunit_safety
-        shell: bash
-        run: |
-          set -o pipefail
-          log="${RUNNER_TEMP}/headunit-safety.log"
-          {
-            for script in \\
-              scripts/check-ts18-apk-reference-contracts.sh \\
-              scripts/check-headunit-compat-safety.sh \\
-              scripts/check-dofun-topway-compat.sh \\
-              scripts/check-native-keep-rules.sh; do
-              printf '\\n===== BEGIN %s =====\\n' "${script}"
-              bash "${script}"
-              printf '===== END %s status=0 =====\\n' "${script}"
-            done
-          } 2>&1 | tee "${log}"
-
-      - name: Upload head-unit safety failure log
-        if: failure() && steps.headunit_safety.outcome == 'failure'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: android-quality-headunit-safety-log
-          path: ${{ runner.temp }}/headunit-safety.log
-          if-no-files-found: error
-          retention-days: 7
-'''
+          old = base64.b64decode('ICAgICAgLSBuYW1lOiBSdW4gaGVhZC11bml0IGNvbXBhdGliaWxpdHkgc2FmZXR5IGNoZWNrcwogICAgICAgIHNoZWxsOiBiYXNoCiAgICAgICAgcnVuOiB8CiAgICAgICAgICBiYXNoIC4vc2NyaXB0cy9jaGVjay10czE4LWFway1yZWZlcmVuY2UtY29udHJhY3RzLnNoCiAgICAgICAgICBiYXNoIC4vc2NyaXB0cy9jaGVjay1oZWFkdW5pdC1jb21wYXQtc2FmZXR5LnNoCiAgICAgICAgICBiYXNoIC4vc2NyaXB0cy9jaGVjay1kb2Z1bi10b3B3YXktY29tcGF0LnNoCiAgICAgICAgICBiYXNoIC4vc2NyaXB0cy9jaGVjay1uYXRpdmUta2VlcC1ydWxlcy5zaAo=').decode('utf-8')
+          new = base64.b64decode('ICAgICAgLSBuYW1lOiBSdW4gaGVhZC11bml0IGNvbXBhdGliaWxpdHkgc2FmZXR5IGNoZWNrcwogICAgICAgIGlkOiBoZWFkdW5pdF9zYWZldHkKICAgICAgICBzaGVsbDogYmFzaAogICAgICAgIHJ1bjogfAogICAgICAgICAgc2V0IC1vIHBpcGVmYWlsCiAgICAgICAgICBsb2c9IiR7UlVOTkVSX1RFTVB9L2hlYWR1bml0LXNhZmV0eS5sb2ciCiAgICAgICAgICAoCiAgICAgICAgICAgIGZvciBzY3JpcHQgaW4gXAogICAgICAgICAgICAgIHNjcmlwdHMvY2hlY2stdHMxOC1hcGstcmVmZXJlbmNlLWNvbnRyYWN0cy5zaCBcCiAgICAgICAgICAgICAgc2NyaXB0cy9jaGVjay1oZWFkdW5pdC1jb21wYXQtc2FmZXR5LnNoIFwKICAgICAgICAgICAgICBzY3JpcHRzL2NoZWNrLWRvZnVuLXRvcHdheS1jb21wYXQuc2ggXAogICAgICAgICAgICAgIHNjcmlwdHMvY2hlY2stbmF0aXZlLWtlZXAtcnVsZXMuc2g7IGRvCiAgICAgICAgICAgICAgcHJpbnRmICdcbj09PT09IEJFR0lOICVzID09PT09XG4nICIke3NjcmlwdH0iCiAgICAgICAgICAgICAgaWYgYmFzaCAiJHtzY3JpcHR9IjsgdGhlbgogICAgICAgICAgICAgICAgcHJpbnRmICc9PT09PSBFTkQgJXMgc3RhdHVzPTAgPT09PT1cbicgIiR7c2NyaXB0fSIKICAgICAgICAgICAgICBlbHNlCiAgICAgICAgICAgICAgICBzdGF0dXM9JD8KICAgICAgICAgICAgICAgIHByaW50ZiAnPT09PT0gRU5EICVzIHN0YXR1cz0lcyA9PT09PVxuJyAiJHtzY3JpcHR9IiAiJHtzdGF0dXN9IgogICAgICAgICAgICAgICAgZXhpdCAiJHtzdGF0dXN9IgogICAgICAgICAgICAgIGZpCiAgICAgICAgICAgIGRvbmUKICAgICAgICAgICkgMj4mMSB8IHRlZSAiJHtsb2d9IgoKICAgICAgLSBuYW1lOiBVcGxvYWQgaGVhZC11bml0IHNhZmV0eSBmYWlsdXJlIGxvZwogICAgICAgIGlmOiBmYWlsdXJlKCkgJiYgc3RlcHMuaGVhZHVuaXRfc2FmZXR5Lm91dGNvbWUgPT0gJ2ZhaWx1cmUnCiAgICAgICAgdXNlczogYWN0aW9ucy91cGxvYWQtYXJ0aWZhY3RAMDQzZmI0NmQxYTkzYzc3YWFlNjU2ZTdjMWM2NGE4NzVkMWZjNmEwYQogICAgICAgIHdpdGg6CiAgICAgICAgICBuYW1lOiBhbmRyb2lkLXF1YWxpdHktaGVhZHVuaXQtc2FmZXR5LWxvZwogICAgICAgICAgcGF0aDogJHt7IHJ1bm5lci50ZW1wIH19L2hlYWR1bml0LXNhZmV0eS5sb2cKICAgICAgICAgIGlmLW5vLWZpbGVzLWZvdW5kOiBlcnJvcgogICAgICAgICAgcmV0ZW50aW9uLWRheXM6IDcK').decode('utf-8')
           if text.count(old) != 1:
               raise SystemExit(f'expected one head-unit safety block, found {text.count(old)}')
           path.write_text(text.replace(old, new), encoding='utf-8')
