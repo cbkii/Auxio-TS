@@ -48,10 +48,33 @@ jobs:
           cache-read-only: true
 
       - name: Apply scoped closure patch
+        id: patch
+        continue-on-error: true
         shell: bash
         run: |
-          python3 scripts/tmp-pr200-comment-closure.py
-          rm -f scripts/tmp-pr200-comment-closure.py .github/workflows/tmp-pr200-comment-closure.yml
+          set +e
+          python3 scripts/tmp-pr200-comment-closure.py > /tmp/pr200-closure-patch.log 2>&1
+          status=$?
+          cat /tmp/pr200-closure-patch.log
+          exit "$status"
+
+      - name: Upload patch diagnostics
+        if: steps.patch.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr200-comment-closure-patch-log
+          path: /tmp/pr200-closure-patch.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Stop after patch failure
+        if: steps.patch.outcome == 'failure'
+        shell: bash
+        run: exit 1
+
+      - name: Remove temporary closure files
+        shell: bash
+        run: rm -f scripts/tmp-pr200-comment-closure.py .github/workflows/tmp-pr200-comment-closure.yml
 
       - name: Apply repository formatting
         shell: bash
