@@ -1,113 +1,1146 @@
-name: Temporary PR196 apply hardening
+name: Temporary PR196 finalise and self-clean
 
 on:
-  pull_request:
+  push:
     branches:
-      - 'cx/pr196-verify'
+      - fix/first-launch-source-recovery
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: tmp-pr196-apply-hardening-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: tmp-pr196-finalise
+  cancel-in-progress: false
 
 jobs:
-  patch:
+  finalise:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
-      - name: Checkout PR branch without persisted credentials
+      - name: Checkout PR branch
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: fix/first-launch-source-recovery
           fetch-depth: 0
-          persist-credentials: false
-      - name: Apply service hardening
+          persist-credentials: true
+
+      - name: Merge current PR195 base
         shell: bash
-        run: python3 scripts/tmp-pr196-service-hardening.py
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin feat/ts18-dofun-generic-media-compat
+          git merge --no-edit origin/feat/ts18-dofun-generic-media-compat
+
+      - name: Remove speculative prestart and apply scoped hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Restore the established boot/service settings surface. The optional early-prestart
+          # experiment is deferred until an evidence-led mechanism is approved and device-tested.
+          git checkout origin/feat/ts18-dofun-generic-media-compat -- \
+            app/src/main/AndroidManifest.xml \
+            app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
+            app/src/main/java/org/oxycblt/auxio/IntegerTable.kt \
+            app/src/main/java/org/oxycblt/auxio/settings/categories/MusicPreferenceFragment.kt \
+            app/src/topwayCompat/res/xml/preferences_music.xml
+          git rm -f --ignore-unmatch \
+            app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartNotification.kt \
+            app/src/main/java/org/oxycblt/auxio/headunit/prestart/EarlyPrestartSettings.kt
+
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path: str, text: str) -> None:
+              Path(path).write_text(text, encoding='utf-8', newline='\n')
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return text.replace(old, new, 1)
+
+          # MainActivity: one unguessable process-local token per actual activity service start.
+          path = 'app/src/main/java/org/oxycblt/auxio/MainActivity.kt'
+          text = read(path)
+          text = text.replace(
+              'import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy\n'
+              'import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy\n'
+              'import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy\n',
+              'import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy\n',
+          )
+          text = replace_once(
+              text,
+              '            StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()\n'
+              '            StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()\n'
+              '            StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()\n'
+              '            startService(\n'
+              '                Intent(this, serviceClass)\n'
+              '                    .setAction(AuxioService.ACTION_START)\n'
+              '                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)\n'
+              '            )',
+              '            val trustedScanNonce = StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()\n'
+              '            startService(\n'
+              '                Intent(this, serviceClass)\n'
+              '                    .setAction(AuxioService.ACTION_START)\n'
+              '                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)\n'
+              '                    .putExtra(AuxioService.INTENT_KEY_TRUSTED_SCAN_NONCE, trustedScanNonce)\n'
+              '            )',
+              'MainActivity trusted start',
+          )
+          write(path, text)
+
+          # Restore the established service, then add only generic origin classification. Binds are
+          # always background; exported callers cannot mint the activity nonce.
+          path = 'app/src/main/java/org/oxycblt/auxio/AuxioService.kt'
+          base = Path('/tmp/AuxioService.base.kt')
+          # The shell writes the base version below before this script is invoked.
+          text = read(path)
+          for line in [
+              'import kotlinx.coroutines.CoroutineScope\n',
+              'import kotlinx.coroutines.Dispatchers\n',
+              'import kotlinx.coroutines.Job\n',
+              'import kotlinx.coroutines.delay\n',
+              'import kotlinx.coroutines.isActive\n',
+              'import kotlinx.coroutines.launch\n',
+              'import org.oxycblt.auxio.headunit.prestart.EarlyPrestartNotification\n',
+              'import org.oxycblt.auxio.headunit.prestart.EarlyPrestartSettings\n',
+              'import org.oxycblt.auxio.headunit.root.RootStateHolder\n',
+              'import org.oxycblt.auxio.music.StartupReadinessController\n',
+              'import org.oxycblt.auxio.music.StartupReadinessState\n',
+          ]:
+              text = text.replace(line, '')
+          if 'import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy\n' not in text:
+              text = text.replace(
+                  'import org.oxycblt.auxio.music.service.MusicServiceFragment\n',
+                  'import org.oxycblt.auxio.music.service.MusicServiceFragment\n'
+                  'import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy\n'
+                  'import org.oxycblt.auxio.music.service.StartupScanOrigin\n',
+              )
+          text = re.sub(
+              r'\n    @Inject lateinit var startupReadinessController: StartupReadinessController\n'
+              r'    @Inject lateinit var earlyPrestartSettings: EarlyPrestartSettings\n'
+              r'    @Inject lateinit var rootStateHolder: RootStateHolder\n\n'
+              r'    private val serviceJob = Job\(\)\n'
+              r'    private val serviceScope = CoroutineScope\(serviceJob \+ Dispatchers.Main.immediate\)\n'
+              r'    private var earlyPrestartJob: Job\? = null\n',
+              '\n',
+              text,
+              count=1,
+          )
+          start = text.index('    override fun onStartCommand(')
+          end = text.index('    override fun onTaskRemoved(', start)
+          service_block = '''    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        PerfTimer.trace("AuxioService.onStartCommand") {
+            Ts18FirstAudioLatency.mark("service_on_start_command")
+            super.onStartCommand(intent, flags, startId)
+            onHandleForeground(intent, allowTrustedUserVisible = true)
+            journal.log(
+                DiagnosticJournal.CAT_LIFECYCLE,
+                "AuxioService onStartCommand",
+                "Action: ${intent?.action}, StartId: $startId",
+            )
+            return START_STICKY
+        }
+    }
+
+    override fun onBind(intent: Intent): IBinder? {
+        val binder = super.onBind(intent)
+        onHandleForeground(intent, allowTrustedUserVisible = false)
+        return binder
+    }
+
+    private fun onHandleForeground(intent: Intent?, allowTrustedUserVisible: Boolean) {
+        playbackFragment.start(intent)
+        val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
+        val trustedUserVisible =
+            allowTrustedUserVisible &&
+                startId == IntegerTable.START_ID_ACTIVITY &&
+                StartupScanAuthorityPolicy.consumeTrustedUserVisibleStart(
+                    intent.getStringExtra(INTENT_KEY_TRUSTED_SCAN_NONCE)
+                )
+        musicFragment.start(
+            if (trustedUserVisible) StartupScanOrigin.USER_VISIBLE else StartupScanOrigin.BACKGROUND
+        )
+    }
+
+'''
+          text = text[:start] + service_block + text[end:]
+          text = text.replace('        earlyPrestartJob?.cancel()\n        earlyPrestartJob = null\n        serviceJob.cancel()\n', '')
+          text = re.sub(
+              r'\n        private const val EARLY_PRESTART_TIMEOUT_MS = .*?\n'
+              r'        private const val EARLY_PRESTART_POLL_MS = .*?\n'
+              r'        private const val EARLY_PRESTART_SETTLE_MS = .*?\n',
+              '\n',
+              text,
+          )
+          text = text.replace(
+              '        const val ACTION_EARLY_PRESTART = BuildConfig.APPLICATION_ID + ".service.EARLY_PRESTART"\n',
+              '',
+          )
+          text = replace_once(
+              text,
+              '        const val INTENT_KEY_START_ID = BuildConfig.APPLICATION_ID + ".service.START_ID"\n',
+              '        const val INTENT_KEY_START_ID = BuildConfig.APPLICATION_ID + ".service.START_ID"\n'
+              '        const val INTENT_KEY_TRUSTED_SCAN_NONCE =\n'
+              '            BuildConfig.APPLICATION_ID + ".service.TRUSTED_SCAN_NONCE"\n',
+              'AuxioService nonce key',
+          )
+          write(path, text)
+
+          # Generic scan authority: exact one-shot nonce, no prefix URI grants, and full configured
+          # source-count/readability checks. This function is called from the IO worker below.
+          write('app/src/main/java/org/oxycblt/auxio/music/service/StartupScanAuthorityPolicy.kt', '''/*
+ * Copyright (c) 2026 Auxio Project
+ * StartupScanAuthorityPolicy.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.music.service
+
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Process
+import androidx.core.content.ContextCompat
+import java.io.File
+import java.util.UUID
+import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.music.StartupLibraryPolicy
+import org.oxycblt.auxio.music.locations.LocationMode
+
+/** Origin of a service startup request. */
+enum class StartupScanOrigin {
+    USER_VISIBLE,
+    BACKGROUND,
+    EARLY_PRESTART;
+}
+
+/** Maps trusted lifecycle origin and current source authority to automatic scan authority. */
+object StartupScanAuthorityPolicy {
+    private var trustedUserVisibleNonce: String? = null
+
+    @Synchronized
+    fun issueTrustedUserVisibleStart(): String =
+        UUID.randomUUID().toString().also { trustedUserVisibleNonce = it }
+
+    @Synchronized
+    fun consumeTrustedUserVisibleStart(candidate: String?): Boolean {
+        val trusted = candidate != null && candidate == trustedUserVisibleNonce
+        if (trusted) trustedUserVisibleNonce = null
+        return trusted
+    }
+
+    fun originAllowsAutomaticScan(
+        topwayCompatFlavor: Boolean,
+        origin: StartupScanOrigin,
+    ): Boolean = !topwayCompatFlavor || origin == StartupScanOrigin.USER_VISIBLE
+
+    fun allowAutomaticScan(
+        topwayCompatFlavor: Boolean,
+        origin: StartupScanOrigin,
+        sourceAuthority: Boolean,
+    ): Boolean = sourceAuthority && originAllowsAutomaticScan(topwayCompatFlavor, origin)
+
+    /** Current source authority check. Never invokes root or enumerates source contents. */
+    fun hasCurrentSourceAuthority(context: Context, settings: MusicSettings): Boolean {
+        if (
+            !StartupLibraryPolicy.isMusicSourceConfigured(
+                settings.locationMode,
+                settings.configuredSourceCount,
+            )
+        ) {
+            return false
+        }
+
+        if (settings.locationMode == LocationMode.MEDIA_STORE) return hasStoragePermission(context)
+
+        val sources = settings.safQuery.source
+        if (sources.isEmpty() || sources.size != settings.configuredSourceCount) return false
+
+        return when (settings.locationMode) {
+            LocationMode.MEDIA_STORE -> hasStoragePermission(context)
+            LocationMode.SAF -> sources.all { hasUriReadAuthority(context, it.uri) }
+            LocationMode.DIRECT_FS ->
+                sources.all { location ->
+                    val file = location.uri.path?.let(::File) ?: return@all false
+                    file.exists() && file.isDirectory && file.canRead()
+                }
+        }
+    }
+
+    private fun hasStoragePermission(context: Context): Boolean {
+        val permission =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Manifest.permission.READ_MEDIA_AUDIO
+            } else {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+        return ContextCompat.checkSelfPermission(context, permission) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasUriReadAuthority(context: Context, uri: android.net.Uri): Boolean {
+        if (uri.scheme == "file") {
+            val file = uri.path?.let(::File) ?: return false
+            return file.exists() && file.isDirectory && file.canRead()
+        }
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        if (
+            context.checkUriPermission(uri, Process.myPid(), Process.myUid(), flags) ==
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            return true
+        }
+        return context.contentResolver.persistedUriPermissions.any { permission ->
+            permission.isReadPermission && permission.uri == uri
+        }
+    }
+}
+''')
+
+          # IndexingHolder: source I/O is on Dispatchers.IO, origin escalation is coalesced, and
+          # foreground-work snapshots include jobs before the first progress callback.
+          path = 'app/src/main/java/org/oxycblt/auxio/music/service/IndexingHolder.kt'
+          text = read(path)
+          start = text.index('    @Synchronized\n    fun start(origin: StartupScanOrigin')
+          end = text.index('    fun createNotification(', start)
+          block = '''    @Synchronized
+    fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
+        PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
+            if (!attached) {
+                L.d("Ignoring startup request after IndexingHolder release [origin=$origin]")
+                return
+            }
+            val originAllowsAutomaticScan =
+                StartupScanAuthorityPolicy.originAllowsAutomaticScan(
+                    topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    origin = origin,
+                )
+            if (startupJob?.isActive == true) {
+                if (originAllowsAutomaticScan && !activeStartupAutomaticScanAllowed) {
+                    pendingStartupOrigin = origin
+                    L.d(
+                        "Queued startup because scan origin authority increased " +
+                            "[active=$activeStartupOrigin pending=$pendingStartupOrigin]"
+                    )
+                } else {
+                    L.d("Startup library load already running; ignoring duplicate [origin=$origin]")
+                }
+                return
+            }
+            activeStartupOrigin = origin
+            activeStartupAutomaticScanAllowed = originAllowsAutomaticScan
+            startupJob =
+                indexScope.launch {
+                    try {
+                        val sourceAuthority =
+                            StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
+                                workerContext,
+                                musicSettings,
+                            )
+                        val automaticScanAllowed =
+                            StartupScanAuthorityPolicy.allowAutomaticScan(
+                                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                                origin = origin,
+                                sourceAuthority = sourceAuthority,
+                            )
+                        val stillAttached =
+                            synchronized(this@IndexingHolder) {
+                                if (attached) {
+                                    activeStartupAutomaticScanAllowed = automaticScanAllowed
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        if (!stillAttached) return@launch
+                        musicRepository.startup(this@IndexingHolder, automaticScanAllowed)
+                    } finally {
+                        val nextOrigin =
+                            synchronized(this@IndexingHolder) {
+                                if (!attached) {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
+                                    pendingStartupOrigin = null
+                                    null
+                                } else {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
+                                    pendingStartupOrigin.also { pendingStartupOrigin = null }
+                                }
+                            }
+                        if (nextOrigin != null) start(nextOrigin)
+                    }
+                }
+        }
+    }
+
+    @Synchronized
+    fun hasForegroundWork(): Boolean =
+        startupJob?.isActive == true ||
+            currentIndexJob?.isActive == true ||
+            musicRepository.indexingState is IndexingState.Indexing ||
+            musicSettings.shouldBeObserving
+
+'''
+          text = text[:start] + block + text[end:]
+          write(path, text)
+
+          # Recovery policy has only actions that can complete safely with app-UID source access.
+          write('app/src/main/java/org/oxycblt/auxio/home/list/LibraryRecoveryPolicy.kt', '''/*
+ * Copyright (c) 2026 Auxio Project
+ * LibraryRecoveryPolicy.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.home.list
+
+import org.oxycblt.auxio.music.IndexingState
+import org.oxycblt.auxio.music.StartupLibraryStatus
+import org.oxycblt.auxio.music.StartupReadinessState
+
+/** Pure first-launch and missing-library recovery policy. */
+object LibraryRecoveryPolicy {
+    data class Input(
+        val empty: Boolean,
+        val indexingState: IndexingState?,
+        val startupState: StartupReadinessState,
+        val libraryStatus: StartupLibraryStatus,
+        val sourceConfigured: Boolean,
+        val storagePermissionRequired: Boolean,
+        val storagePermissionGranted: Boolean,
+        val lastScanFailed: Boolean,
+    )
+
+    enum class Kind {
+        HIDDEN,
+        WAITING,
+        PERMISSION_REQUIRED,
+        SOURCE_REQUIRED,
+        SOURCE_UNAVAILABLE,
+        CACHE_UNAVAILABLE,
+        INDEXING,
+        EMPTY,
+        FAILED,
+    }
+
+    enum class Action {
+        GRANT_PERMISSION,
+        CHOOSE_SOURCE,
+        REFRESH,
+        RESCAN,
+    }
+
+    data class ActionItem(val action: Action, val enabled: Boolean = true)
+
+    data class State(
+        val kind: Kind,
+        val showProgress: Boolean,
+        val primary: ActionItem? = null,
+        val secondary: ActionItem? = null,
+        val tertiary: ActionItem? = null,
+    ) {
+        val visible: Boolean
+            get() = kind != Kind.HIDDEN
+    }
+
+    fun resolve(input: Input): State {
+        if (!input.empty) return State(Kind.HIDDEN, showProgress = false)
+
+        if (input.storagePermissionRequired && !input.storagePermissionGranted) {
+            return State(
+                kind = Kind.PERMISSION_REQUIRED,
+                showProgress = false,
+                primary = ActionItem(Action.GRANT_PERMISSION),
+                secondary = ActionItem(Action.CHOOSE_SOURCE),
+            )
+        }
+        if (input.indexingState is IndexingState.Indexing) {
+            return State(
+                kind = Kind.INDEXING,
+                showProgress = true,
+                primary = ActionItem(Action.CHOOSE_SOURCE),
+            )
+        }
+        if (
+            input.libraryStatus == StartupLibraryStatus.NeedsMusicSource || !input.sourceConfigured
+        ) {
+            return State(
+                kind = Kind.SOURCE_REQUIRED,
+                showProgress = false,
+                primary = ActionItem(Action.CHOOSE_SOURCE),
+            )
+        }
+        if (input.libraryStatus == StartupLibraryStatus.SourceUnavailable) {
+            return State(
+                kind = Kind.SOURCE_UNAVAILABLE,
+                showProgress = false,
+                primary = ActionItem(Action.REFRESH),
+                secondary = ActionItem(Action.CHOOSE_SOURCE),
+            )
+        }
+        if (
+            input.lastScanFailed ||
+                (input.indexingState is IndexingState.Completed &&
+                    input.indexingState.error != null)
+        ) {
+            return State(
+                kind = Kind.FAILED,
+                showProgress = false,
+                primary = ActionItem(Action.REFRESH),
+                secondary = ActionItem(Action.RESCAN),
+                tertiary = ActionItem(Action.CHOOSE_SOURCE),
+            )
+        }
+        return when (input.libraryStatus) {
+            StartupLibraryStatus.CacheUnavailable ->
+                State(
+                    kind = Kind.CACHE_UNAVAILABLE,
+                    showProgress = false,
+                    primary = ActionItem(Action.REFRESH),
+                    secondary = ActionItem(Action.RESCAN),
+                    tertiary = ActionItem(Action.CHOOSE_SOURCE),
+                )
+            StartupLibraryStatus.Empty ->
+                State(
+                    kind = Kind.EMPTY,
+                    showProgress = false,
+                    primary = ActionItem(Action.REFRESH),
+                    secondary = ActionItem(Action.RESCAN),
+                    tertiary = ActionItem(Action.CHOOSE_SOURCE),
+                )
+            StartupLibraryStatus.Unknown -> {
+                val waiting = input.startupState.rank < StartupReadinessState.FastBrowseReady.rank
+                State(
+                    kind = if (waiting) Kind.WAITING else Kind.CACHE_UNAVAILABLE,
+                    showProgress = waiting,
+                    primary = ActionItem(Action.REFRESH),
+                    secondary = ActionItem(Action.CHOOSE_SOURCE),
+                )
+            }
+            StartupLibraryStatus.Usable ->
+                State(
+                    kind = Kind.CACHE_UNAVAILABLE,
+                    showProgress = false,
+                    primary = ActionItem(Action.REFRESH),
+                    secondary = ActionItem(Action.RESCAN),
+                    tertiary = ActionItem(Action.CHOOSE_SOURCE),
+                )
+            StartupLibraryStatus.NeedsMusicSource,
+            StartupLibraryStatus.SourceUnavailable -> error("Handled above")
+        }
+    }
+}
+''')
+
+          # Shared Android storage-permission contract for Home and source selection.
+          write('app/src/main/java/org/oxycblt/auxio/music/locations/StoragePermissionPolicy.kt', '''/*
+ * Copyright (c) 2026 Auxio Project
+ * StoragePermissionPolicy.kt is part of Auxio.
+ */
+
+package org.oxycblt.auxio.music.locations
+
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
+
+object StoragePermissionPolicy {
+    private const val PREFS_NAME = "source_recovery"
+    private const val KEY_REQUESTED = "storage_permission_requested"
+
+    fun requiredPermission(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+    fun isGranted(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, requiredPermission()) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun directPathRequiresPermission(path: String?): Boolean =
+        path == "/sdcard" ||
+            path?.startsWith("/sdcard/") == true ||
+            path == "/storage" ||
+            path?.startsWith("/storage/") == true
+
+    fun wasRequested(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_REQUESTED, false)
+
+    fun markRequested(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_REQUESTED, true)
+            .apply()
+    }
+}
+''')
+
+          # Home recovery: no duplicate root orchestration; settings round-trips use ActivityResult.
+          path = 'app/src/main/java/org/oxycblt/auxio/home/list/SongListFragment.kt'
+          text = read(path)
+          for line in [
+              'import android.Manifest\n',
+              'import android.content.pm.PackageManager\n',
+              'import android.os.Build\n',
+              'import androidx.core.content.ContextCompat\n',
+              'import androidx.lifecycle.lifecycleScope\n',
+              'import androidx.preference.PreferenceManager\n',
+              'import kotlinx.coroutines.Dispatchers\n',
+              'import kotlinx.coroutines.launch\n',
+              'import kotlinx.coroutines.withContext\n',
+              'import org.oxycblt.auxio.BuildConfig\n',
+              'import org.oxycblt.auxio.headunit.root.RootStateHolder\n',
+          ]:
+              text = text.replace(line, '')
+          if 'import org.oxycblt.auxio.music.locations.StoragePermissionPolicy\n' not in text:
+              text = text.replace(
+                  'import org.oxycblt.auxio.music.StartupReadinessState\n',
+                  'import org.oxycblt.auxio.music.StartupReadinessState\n'
+                  'import org.oxycblt.auxio.music.locations.StoragePermissionPolicy\n',
+              )
+          text = text.replace('    @Inject lateinit var rootStateHolder: RootStateHolder\n', '')
+          text = text.replace('    private var awaitingPermissionSettings = false\n', '')
+          text = re.sub(
+              r'\n    override fun onResume\(\) \{.*?\n    \}\n\n    override fun onBindingCreated',
+              '\n    override fun onBindingCreated',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          launcher_anchor = '''    private val storagePermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            markStoragePermissionRequested()
+            if (granted) {
+                continueAfterStoragePermission()
+            } else if (isAdded) {
+                requireContext().showToast(R.string.recovery_permission_denied)
+            }
+            refreshRecoveryState()
+        }
+'''
+          launcher_new = launcher_anchor + '''
+    private val appSettingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            if (!isAdded) return@registerForActivityResult
+            if (hasStoragePermission()) continueAfterStoragePermission()
+            refreshRecoveryState()
+        }
+'''
+          text = replace_once(text, launcher_anchor, launcher_new, 'SongList app settings launcher')
+          text = re.sub(
+              r'\n                    rootSupported = BuildConfig.TOPWAY_COMPAT_FLAVOR,\n'
+              r'                    rootRequired = rootRequiredForCurrentSource\(\),\n'
+              r'                    rootState = rootStateHolder.stateSnapshot\(\),',
+              '',
+              text,
+              count=1,
+          )
+          text = text.replace(
+              '            LibraryRecoveryPolicy.Action.ENABLE_ROOT -> confirmRootAccess()\n',
+              '',
+          )
+          text = text.replace(
+              '                markStoragePermissionRequested()\n                storagePermissionLauncher.launch(permission)',
+              '                storagePermissionLauncher.launch(permission)',
+          )
+          text = text.replace(
+              '                awaitingPermissionSettings = true\n                startActivity(intent)',
+              '                appSettingsLauncher.launch(intent)',
+          )
+          text = re.sub(
+              r'\n    private fun confirmRootAccess\(\) \{.*?\n    private fun storagePermissionRequiredForCurrentSource',
+              '\n    private fun storagePermissionRequiredForCurrentSource',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          start = text.index('    private fun storagePermissionRequiredForCurrentSource(): Boolean =')
+          end = text.index('    private fun updateSelection(', start)
+          helpers = '''    private fun storagePermissionRequiredForCurrentSource(): Boolean =
+        when (musicSettings.locationMode) {
+            org.oxycblt.auxio.music.locations.LocationMode.MEDIA_STORE -> true
+            org.oxycblt.auxio.music.locations.LocationMode.SAF -> false
+            org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS ->
+                musicSettings.safQuery.source.any { location ->
+                    StoragePermissionPolicy.directPathRequiresPermission(location.uri.path)
+                }
+        }
+
+    private fun requiredStoragePermission(): String =
+        StoragePermissionPolicy.requiredPermission()
+
+    private fun hasStoragePermission(): Boolean =
+        StoragePermissionPolicy.isGranted(requireContext())
+
+    private fun storagePermissionRequestedBefore(): Boolean =
+        StoragePermissionPolicy.wasRequested(requireContext())
+
+    private fun markStoragePermissionRequested() {
+        StoragePermissionPolicy.markRequested(requireContext())
+    }
+
+'''
+          text = text[:start] + helpers + text[end:]
+          write(path, text)
+
+          # Source dialog: raw /mnt/media_rw is rejected as app-unreadable; permission state and
+          # pending retry are revalidated after app-settings return.
+          path = 'app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt'
+          text = read(path)
+          for line in [
+              'import android.Manifest\n',
+              'import android.content.pm.PackageManager\n',
+              'import android.os.Build\n',
+              'import androidx.core.content.ContextCompat\n',
+              'import androidx.preference.PreferenceManager\n',
+          ]:
+              text = text.replace(line, '')
+          text = text.replace(
+              '    private var storagePermissionLauncher: ActivityResultLauncher<String>? = null\n',
+              '    private var storagePermissionLauncher: ActivityResultLauncher<String>? = null\n'
+              '    private var appSettingsLauncher: ActivityResultLauncher<Intent>? = null\n',
+          )
+          register_anchor = '''        storagePermissionLauncher =
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                L.d("Storage permission granted: $isGranted")
+'''
+          text = replace_once(
+              text,
+              register_anchor,
+              '''        appSettingsLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                val currentContext = context ?: return@registerForActivityResult
+                hasStoragePermission = StoragePermissionPolicy.isGranted(currentContext)
+                val retry = pendingPermissionRetry
+                pendingPermissionRetry = null
+                bindingOrNull?.let {
+                    updateModeUI(it)
+                    updateSaveButtonState()
+                }
+                if (hasStoragePermission) retry?.invoke()
+            }
+
+        storagePermissionLauncher =
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                StoragePermissionPolicy.markRequested(requireContext())
+                L.d("Storage permission granted: $isGranted")
+''',
+              'Locations settings launcher',
+          )
+          text = re.sub(
+              r'\n                ManualPathValidation.ROOT_UNAVAILABLE -> \{.*?\n                \}',
+              '',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          text = text.replace('        ROOT_UNAVAILABLE(R.string.set_path_root_unavailable),\n', '')
+          old_validation = '''        val rawRootCandidate = directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
+        if (!hasStoragePermission && locationMode != LocationMode.SAF && !rawRootCandidate) {
+            return ManualPathValidation.PERMISSION_MISSING
+        }
+        return try {
+            val file = File(path)
+            when {
+                rawRootCandidate &&
+                    rootGate.stateSnapshot() != RootStateHolder.State.Available &&
+                    (!file.exists() || !file.isDirectory || !file.canRead()) ->
+                    ManualPathValidation.ROOT_UNAVAILABLE
+                rawRootCandidate && (!file.exists() || !file.isDirectory || !file.canRead()) ->
+                    // Root can inspect this directory, but current scanning/playback still opens
+                    // app-UID file:// URIs. Keep the raw mount unavailable and direct users to its
+                    // /storage/usbdiskN alias rather than saving a source that cannot play.
+                    ManualPathValidation.UNREADABLE
+'''
+          new_validation = '''        val rawRootCandidate = directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
+        if (rawRootCandidate) return ManualPathValidation.UNREADABLE
+        if (!hasStoragePermission && locationMode != LocationMode.SAF) {
+            return ManualPathValidation.PERMISSION_MISSING
+        }
+        return try {
+            val file = File(path)
+            when {
+'''
+          text = replace_once(text, old_validation, new_validation, 'raw path validation')
+          text = text.replace(
+              '''        } catch (e: SecurityException) {
+            L.w(e, "Security exception while validating manual path $path")
+            if (rawRootCandidate) {
+                ManualPathValidation.ROOT_UNAVAILABLE
+            } else {
+                ManualPathValidation.PERMISSION_MISSING
+            }
+''',
+              '''        } catch (e: SecurityException) {
+            L.w(e, "Security exception while validating manual path $path")
+            ManualPathValidation.PERMISSION_MISSING
+''',
+          )
+          text = replace_once(
+              text,
+              '            L.d("Requesting storage permission: $permission")\n'
+              '            markStoragePermissionRequested()\n'
+              '            launcher.launch(permission)',
+              '            L.d("Requesting storage permission: $permission")\n'
+              '            launcher.launch(permission)\n'
+              '            markStoragePermissionRequested()',
+              'permission marker order',
+          )
+          text = text.replace(
+              '''    private fun requiredStoragePermission(): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+    private fun storagePermissionRequestedBefore(): Boolean =
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .getBoolean(KEY_STORAGE_PERMISSION_REQUESTED, false)
+
+    private fun markStoragePermissionRequested() {
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .edit()
+            .putBoolean(KEY_STORAGE_PERMISSION_REQUESTED, true)
+            .apply()
+    }
+''',
+              '''    private fun requiredStoragePermission(): String =
+        StoragePermissionPolicy.requiredPermission()
+
+    private fun storagePermissionRequestedBefore(): Boolean =
+        StoragePermissionPolicy.wasRequested(requireContext())
+
+    private fun markStoragePermissionRequested() {
+        StoragePermissionPolicy.markRequested(requireContext())
+    }
+''',
+          )
+          text = text.replace(
+              '''                startActivity(
+                    Intent(
+                        AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", ctx.packageName, null),
+                    )
+                )''',
+              '''                requireNotNull(appSettingsLauncher) {
+                    "App settings launcher was not available"
+                }.launch(
+                    Intent(
+                        AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", ctx.packageName, null),
+                    )
+                )''',
+          )
+          text = re.sub(
+              r'\n    private companion object \{\n        const val KEY_STORAGE_PERMISSION_REQUESTED = .*?\n    \}\n',
+              '\n',
+              text,
+              count=1,
+          )
+          write(path, text)
+
+          # Root probe is single-flight per process; stale generations preserve newer state.
+          path = 'app/src/main/java/org/oxycblt/auxio/headunit/root/RootStateHolder.kt'
+          text = read(path)
+          text = text.replace(
+              '    private val stateLock = Any()\n    private var consentGeneration = 0L\n',
+              '    private val stateLock = Any()\n    private val probeLock = Any()\n    private var consentGeneration = 0L\n',
+          )
+          text = text.replace(
+              '    fun probeSync(): State {\n',
+              '    fun probeSync(): State = synchronized(probeLock) {\n',
+              1,
+          )
+          text = replace_once(
+              text,
+              '''        return synchronized(stateLock) {
+            if (generation != consentGeneration || !userEnabled()) {
+                state = if (userEnabled()) State.Unknown else State.DisabledByUser
+            } else {
+                state = probed
+            }
+            state
+        }
+    }
+''',
+              '''        synchronized(stateLock) {
+            if (generation == consentGeneration) {
+                state = if (userEnabled()) probed else State.DisabledByUser
+            }
+            state
+        }
+    }
+''',
+              'RootState stale probe',
+          )
+          write(path, text)
+
+          # Hide the entire overlay container so it cannot intercept RecyclerView touches.
+          path = 'app/src/main/res/layout/fragment_home_list.xml'
+          text = read(path)
+          text = text.replace(
+              '''        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="ifContentScrolls">''',
+              '''        <androidx.core.widget.NestedScrollView
+            android:id="@+id/home_no_music"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            android:overScrollMode="ifContentScrolls"
+            android:visibility="invisible">''',
+          )
+          text = text.replace('                android:id="@+id/home_no_music"\n', '')
+          text = text.replace('                android:visibility="invisible">\n', '>\n', 1)
+          write(path, text)
+
+          # Policy tests cover every status and the actual DirectFS permission input.
+          path = 'app/src/test/java/org/oxycblt/auxio/home/list/LibraryRecoveryPolicyTest.kt'
+          text = read(path)
+          text = text.replace('import org.oxycblt.auxio.headunit.root.RootStateHolder\n', '')
+          text = re.sub(
+              r'\n    @Test\n    fun missingDirectPermissionAlsoOffersExplicitRootActionWhenSupported\(\) \{.*?\n    \}\n',
+              '''
+    @Test
+    fun missingDirectPermissionShowsGrantAndSourceActions() {
+        val state =
+            resolve(
+                storagePermissionRequired = true,
+                storagePermissionGranted = false,
+                sourceConfigured = true,
+            )
+
+        assertEquals(LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED, state.kind)
+        assertFalse(state.showProgress)
+        assertEquals(LibraryRecoveryPolicy.Action.GRANT_PERMISSION, state.primary?.action)
+        assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.secondary?.action)
+    }
+''',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          text = re.sub(
+              r'\n    @Test\n    fun directSourceWithoutRootOffersExplicitRootAction\(\) \{.*?\n    \}\n'
+              r'\n    @Test\n    fun ordinaryDirectSourceDoesNotRequireRootWhenAlreadyEnabledOrUnsupported\(\) \{.*?\n    \}\n',
+              '\n',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          text = text.replace(
+              '''                locationMode = LocationMode.DIRECT_FS,
+                rootSupported = true,
+                rootEnabled = false,
+''',
+              '                locationMode = LocationMode.DIRECT_FS,\n',
+          )
+          text = text.replace(
+              '        assertEquals(LibraryRecoveryPolicy.Action.ENABLE_ROOT, state.tertiary?.action)\n',
+              '        assertEquals(null, state.tertiary)\n',
+          )
+          text = text.replace(
+              '                indexingState = IndexingState.Completed(Exception("failed")),\n'
+              '                lastScanFailed = true,',
+              '                indexingState = IndexingState.Completed(Exception("failed")),\n'
+              '                libraryStatus = StartupLibraryStatus.CacheUnavailable,\n'
+              '                lastScanFailed = true,',
+          )
+          text = text.replace(
+              '''        locationMode: LocationMode = LocationMode.SAF,
+        sourceConfigured: Boolean = true,
+        storagePermissionGranted: Boolean = true,
+        rootSupported: Boolean = false,
+        rootEnabled: Boolean = false,
+        lastScanFailed: Boolean = false,
+''',
+              '''        locationMode: LocationMode = LocationMode.SAF,
+        sourceConfigured: Boolean = true,
+        storagePermissionRequired: Boolean = locationMode == LocationMode.MEDIA_STORE,
+        storagePermissionGranted: Boolean = true,
+        lastScanFailed: Boolean = false,
+''',
+          )
+          text = text.replace(
+              '''                storagePermissionRequired = locationMode == LocationMode.MEDIA_STORE,
+                storagePermissionGranted = storagePermissionGranted,
+                rootSupported = rootSupported,
+                rootRequired = locationMode == LocationMode.DIRECT_FS && !rootEnabled,
+                rootState =
+                    if (rootEnabled) RootStateHolder.State.Available
+                    else RootStateHolder.State.DisabledByUser,
+''',
+              '''                storagePermissionRequired = storagePermissionRequired,
+                storagePermissionGranted = storagePermissionGranted,
+''',
+          )
+          write(path, text)
+
+          # Remove deferred early-prestart and unsupported raw-root claims from resources/docs.
+          write('app/src/main/res/values/strings_source_recovery.xml', '''<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="recovery_loading_cache">Checking saved music library…</string>
+    <string name="recovery_permission_required">Storage access is required for this music source.</string>
+    <string name="recovery_source_required">Choose where your music is stored.</string>
+    <string name="recovery_source_unavailable">The configured music source is not currently available.</string>
+    <string name="recovery_cache_unavailable">No usable saved library was found. Scan the configured source now.</string>
+    <string name="recovery_indexing">Scanning the music library…</string>
+    <string name="recovery_empty">No supported music was found in the configured source.</string>
+    <string name="recovery_failed">Music library loading failed. Retry or perform a full rescan.</string>
+
+    <string name="recovery_action_grant_permission">Grant access</string>
+    <string name="recovery_action_choose_source">Choose source</string>
+    <string name="recovery_action_refresh">Refresh</string>
+    <string name="recovery_action_rescan">Full rescan</string>
+    <string name="recovery_action_open_settings">Open app settings</string>
+
+    <string name="recovery_permission_title">Allow music-library access</string>
+    <string name="recovery_permission_message">Auxio-TS needs Android storage permission to read the selected System Database or Direct music source. File Picker mode does not require this broad permission.</string>
+    <string name="recovery_permission_denied">Storage permission was not granted. Choose File Picker mode or open app settings to grant access.</string>
+</resources>
+''')
+
+          write('docs/ts18/FIRST_LAUNCH_SOURCE_RECOVERY.md', '''# First-launch and missing-library source recovery
+
+**Confidence:** High for repository behaviour verified by unit/build checks; physical TS18 behaviour remains unverified.
+
+**Porting decision:** Implement the generic Android 10/API 29 recovery path now. Defer root-only raw-mount access and boot-time early preparation until an evidence-led, separately approved design can provide app-readable descriptors end to end and pass physical TS18 validation.
+
+## Purpose
+
+Restore an explicit recovery path when Auxio-TS has no usable music library. The user must see a concise state and a safe action instead of a permanent indeterminate loader.
+
+## Implemented behaviour
+
+- Distinguish cache wait, permission required, source required, source unavailable, indexing, confirmed empty, cache unavailable, and failed scan states.
+- Keep `Choose source` available during indexing.
+- Offer `Grant access`, `Refresh`, and confirmed `Full rescan` only when applicable.
+- Request Android storage permission for MediaStore and ordinary DirectFS paths that require it; do not request it for SAF unnecessarily.
+- Revalidate permission after the system Settings round-trip and continue exactly one pending recovery action.
+- Treat the activity-start scan token as process-local and one-shot; exported service callers and MediaBrowser binds remain background origins.
+- Require complete current source authority before any automatic scan. Missing/revoked SAF grants, partial source sets, unreadable paths, and non-directory sources suppress automatic scanning and preserve prior library generations.
+- Perform source-authority file/provider checks on the existing IO worker, not the service main thread.
+
+## TS18 storage boundary
+
+**Observed:** TS18 USB volumes are exposed to normal apps as `/storage/usbdiskN`; raw mounts are under `/mnt/media_rw/usbdiskN`.
+
+**Porting decision:** Auxio-TS accepts only app-readable source paths. A raw `/mnt/media_rw/...` path is rejected with guidance to select its `/storage/usbdiskN` alias. A bounded root probe cannot make later app-UID scanning and playback descriptors readable, so this PR does not claim root-assisted raw-path support.
+
+## Scan authority
+
+- Standard builds retain their established automatic startup behaviour when current source authority is valid.
+- Topway-compatible builds allow the first automatic recovery scan only for a trusted, user-visible activity start.
+- Boot, ACC, exported-service, and MediaBrowser bind paths cannot mint or consume that authority.
+- User actions may request one refresh/rescan; active requests are coalesced by the existing indexing worker.
+
+## Deferred scope
+
+- Root-only DirectFS traversal and playback.
+- App-managed Magisk module lifecycle.
+- Boot-time/early-prestart service work.
+- Continuous or durable new diagnostic capture. Existing bounded journal events remain sufficient for this PR; deeper captures stay under external `tools/` diagnostics.
+
+## Verification
+
+Repository checks must cover formatting, unit tests, Android lint, standard and Topway-compatible builds, API 29 runtime smoke tests, and head-unit safety scripts.
+
+## Physical TS18 acceptance — requires device validation
+
+- Fresh-install permission grant, denial, permanent-denial, and Settings-return recovery.
+- `/storage/usbdiskN` selection without an unnecessary Magisk prompt.
+- Raw `/mnt/media_rw/usbdiskN` rejection with a clear app-readable alias path.
+- One scan after a valid source save or permission grant; no duplicate scan after recreation.
+- Missing cache/source actions, USB removal/reinsert, permission revocation, reboot, sleep/wake, and ACC cycles without scan storms.
+
+No CI result is evidence of DoFun fixed-widget control, platform signing/UID 1000, MCU/CAN authority, or physical TS18 acceptance.
+''')
+          PY
+
+          # Drop all one-off repair artefacts before the commit they helped produce.
+          git rm -f --ignore-unmatch \
+            .github/workflows/tmp-pr196-apply-hardening.yml \
+            .github/workflows/tmp-pr196-final-verify.yml \
+            app/tmp-pr196-ci-trigger.txt \
+            scripts/tmp-pr196-comprehensive-hardening.py \
+            scripts/tmp-pr196-service-hardening.py \
+            tmp-pr196-hardening-error.log
+
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
           java-version: '21'
+
       - name: Write local.properties
         shell: bash
         run: |
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [[ -z "${sdk_dir}" ]]; then
-            echo '::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set.'
-            exit 1
-          fi
+          test -n "${sdk_dir}"
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
           cache-read-only: true
-      - name: Prepare CI environment
+
+      - name: Prepare dependencies
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-      - name: Format and capture scoped verification
-        id: verify
+
+      - name: Format and verify scoped changes
         shell: bash
         run: |
-          format_status=0
-          test_status=0
-          diff_status=0
-          mkdir -p "${RUNNER_TEMP}/pr196-verified/app/src/main/java/org/oxycblt/auxio"
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh spotlessApply
+          git diff --check
+          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
+          bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+          bash ./scripts/check-headunit-compat-safety.sh
+          bash ./scripts/check-dofun-topway-compat.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          bash ./scripts/ci-gradle.sh :app:assembleStandardDebug :app:assembleTopwayTwMediaDebug :app:assembleTopwayTwMusicDebug
 
-          bash ./scripts/ci-gradle.sh spotlessKotlinApply \
-            > "${RUNNER_TEMP}/pr196-format.log" 2>&1 || format_status=$?
-          cat "${RUNNER_TEMP}/pr196-format.log"
-
-          if [[ "${format_status}" -eq 0 ]]; then
-            bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest \
-              > "${RUNNER_TEMP}/pr196-tests.log" 2>&1 || test_status=$?
-            cat "${RUNNER_TEMP}/pr196-tests.log"
-          fi
-
-          git diff --check > "${RUNNER_TEMP}/pr196-diff-check.log" 2>&1 || diff_status=$?
-          cat "${RUNNER_TEMP}/pr196-diff-check.log"
-
-          cp app/src/main/java/org/oxycblt/auxio/AuxioService.kt \
-            "${RUNNER_TEMP}/pr196-verified/app/src/main/java/org/oxycblt/auxio/AuxioService.kt"
-          cp app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
-            "${RUNNER_TEMP}/pr196-verified/app/src/main/java/org/oxycblt/auxio/BootReceiver.kt"
-          cp "${RUNNER_TEMP}/pr196-format.log" "${RUNNER_TEMP}/pr196-verified/"
-          cp "${RUNNER_TEMP}/pr196-tests.log" "${RUNNER_TEMP}/pr196-verified/" 2>/dev/null || true
-          cp "${RUNNER_TEMP}/pr196-diff-check.log" "${RUNNER_TEMP}/pr196-verified/"
-          git diff -- app/src/main/java/org/oxycblt/auxio/AuxioService.kt \
-            app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
-            > "${RUNNER_TEMP}/pr196-verified/pr196-service.patch"
-
-          printf 'format_status=%s\n' "${format_status}" >> "${GITHUB_OUTPUT}"
-          printf 'test_status=%s\n' "${test_status}" >> "${GITHUB_OUTPUT}"
-          printf 'diff_status=%s\n' "${diff_status}" >> "${GITHUB_OUTPUT}"
-      - name: Upload patched sources and full logs
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pr196-verified-service-patch
-          path: ${{ runner.temp }}/pr196-verified/**
-          if-no-files-found: error
-          retention-days: 3
-      - name: Preserve verification result
-        if: always()
+      - name: Commit and push final branch
         shell: bash
-        env:
-          FORMAT_STATUS: ${{ steps.verify.outputs.format_status }}
-          TEST_STATUS: ${{ steps.verify.outputs.test_status }}
-          DIFF_STATUS: ${{ steps.verify.outputs.diff_status }}
         run: |
-          if [[ "${FORMAT_STATUS:-1}" -ne 0 ]]; then
-            echo "::error::Formatting failed with status ${FORMAT_STATUS:-1}."
-            exit "${FORMAT_STATUS:-1}"
+          set -euo pipefail
+          git status --short
+          git diff --stat origin/feat/ts18-dofun-generic-media-compat...HEAD || true
+          git add -A
+          if git diff --cached --quiet; then
+            echo '::error::Finaliser produced no commit.'
+            exit 1
           fi
-          if [[ "${TEST_STATUS:-1}" -ne 0 ]]; then
-            echo "::error::Unit tests failed with status ${TEST_STATUS:-1}."
-            exit "${TEST_STATUS:-1}"
-          fi
-          if [[ "${DIFF_STATUS:-1}" -ne 0 ]]; then
-            echo "::error::git diff --check failed with status ${DIFF_STATUS:-1}."
-            exit "${DIFF_STATUS:-1}"
-          fi
+          git commit -m 'fix: finalise first-launch source recovery'
+          git push origin HEAD:fix/first-launch-source-recovery
