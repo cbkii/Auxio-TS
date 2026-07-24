@@ -26,8 +26,8 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
-import android.provider.Settings as AndroidSettings
 import android.provider.MediaStore.Audio.Media as AndroidAudioMedia
+import android.provider.Settings as AndroidSettings
 import android.view.LayoutInflater
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -524,11 +524,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         val rawRootCandidate = directTs18Path && path.startsWith("/mnt/media_rw/usbdisk")
         if (rawRootCandidate) return ManualPathValidation.UNREADABLE
         if (!hasStoragePermission && locationMode != LocationMode.SAF) {
-  return ManualPathValidation.PERMISSION_MISSING
+            return ManualPathValidation.PERMISSION_MISSING
         }
         return try {
-  val file = File(path)
-  when {
+            val file = File(path)
+            when {
                 !file.exists() -> ManualPathValidation.MISSING
                 !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
                 !file.canRead() -> ManualPathValidation.UNREADABLE
@@ -1042,14 +1042,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             .setTitle(R.string.recovery_permission_title)
             .setMessage(R.string.recovery_permission_denied)
             .setPositiveButton(R.string.recovery_action_open_settings) { _, _ ->
-                requireNotNull(appSettingsLauncher) {
-                    "App settings launcher was not available"
-                }.launch(
-                    Intent(
-                        AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.fromParts("package", ctx.packageName, null),
+                requireNotNull(appSettingsLauncher) { "App settings launcher was not available" }
+                    .launch(
+                        Intent(
+                            AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", ctx.packageName, null),
+                        )
                     )
-                )
             }
             .setNegativeButton(R.string.lbl_cancel, null)
             .show()
@@ -1069,5 +1068,4 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isEnabled
     }
-
 }

@@ -98,7 +98,6 @@ class StartupScanOriginTest {
         )
     }
 
-
     @Test
     fun missingSourceAuthorityAlwaysSuppressesAutomaticScan() {
         assertFalse(

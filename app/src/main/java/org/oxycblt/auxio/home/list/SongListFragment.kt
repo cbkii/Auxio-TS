@@ -82,20 +82,20 @@ class SongListFragment :
 
     private val storagePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-  markStoragePermissionRequested()
-  if (granted) {
-      continueAfterStoragePermission()
-  } else if (isAdded) {
-      requireContext().showToast(R.string.recovery_permission_denied)
-  }
-  refreshRecoveryState()
+            markStoragePermissionRequested()
+            if (granted) {
+                continueAfterStoragePermission()
+            } else if (isAdded) {
+                requireContext().showToast(R.string.recovery_permission_denied)
+            }
+            refreshRecoveryState()
         }
 
     private val appSettingsLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-  if (!isAdded) return@registerForActivityResult
-  if (hasStoragePermission()) continueAfterStoragePermission()
-  refreshRecoveryState()
+            if (!isAdded) return@registerForActivityResult
+            if (hasStoragePermission()) continueAfterStoragePermission()
+            refreshRecoveryState()
         }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
@@ -357,16 +357,15 @@ class SongListFragment :
 
     private fun storagePermissionRequiredForCurrentSource(): Boolean =
         when (musicSettings.locationMode) {
-  org.oxycblt.auxio.music.locations.LocationMode.MEDIA_STORE -> true
-  org.oxycblt.auxio.music.locations.LocationMode.SAF -> false
-  org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS ->
-      musicSettings.safQuery.source.any { location ->
-          StoragePermissionPolicy.directPathRequiresPermission(location.uri.path)
-      }
+            org.oxycblt.auxio.music.locations.LocationMode.MEDIA_STORE -> true
+            org.oxycblt.auxio.music.locations.LocationMode.SAF -> false
+            org.oxycblt.auxio.music.locations.LocationMode.DIRECT_FS ->
+                musicSettings.safQuery.source.any { location ->
+                    StoragePermissionPolicy.directPathRequiresPermission(location.uri.path)
+                }
         }
 
-    private fun requiredStoragePermission(): String =
-        StoragePermissionPolicy.requiredPermission()
+    private fun requiredStoragePermission(): String = StoragePermissionPolicy.requiredPermission()
 
     private fun hasStoragePermission(): Boolean =
         StoragePermissionPolicy.isGranted(requireContext())

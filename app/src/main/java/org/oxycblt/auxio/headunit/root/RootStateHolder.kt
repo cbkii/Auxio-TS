@@ -132,48 +132,49 @@ constructor(
         )
     }
 
-    fun probeSync(): State = synchronized(probeLock) {
-        val generation =
+    fun probeSync(): State =
+        synchronized(probeLock) {
+            val generation =
+                synchronized(stateLock) {
+                    if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                        state = State.UnsupportedForVariant
+                        return state
+                    }
+                    if (!userEnabled()) {
+                        state = State.DisabledByUser
+                        return state
+                    }
+                    if (state == State.DisabledByUser) state = State.Unknown
+                    // A timeout is retryable. Other resolved states remain cached for this consent
+                    // generation.
+                    if (state != State.Unknown && state != State.TimedOut) return state
+                    consentGeneration
+                }
+
+            val probed =
+                when (
+                    val result =
+                        processRunner.runRootCommand(
+                            "id",
+                            timeoutMs = ROOT_PROBE_TIMEOUT_MS,
+                            maxOutputBytes = ROOT_PROBE_OUTPUT_BYTES,
+                        )
+                ) {
+                    is RootProcessResult.Success ->
+                        if (result.stdout.contains("uid=0")) State.Available else State.Denied
+                    is RootProcessResult.NonZeroExit -> State.Denied
+                    RootProcessResult.TimedOut -> State.TimedOut
+                    RootProcessResult.OutputLimitExceeded -> State.Denied
+                    is RootProcessResult.ExecutionFailure -> State.Unavailable
+                }
+
             synchronized(stateLock) {
-                if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                    state = State.UnsupportedForVariant
-                    return state
+                if (generation == consentGeneration) {
+                    state = if (userEnabled()) probed else State.DisabledByUser
                 }
-                if (!userEnabled()) {
-                    state = State.DisabledByUser
-                    return state
-                }
-                if (state == State.DisabledByUser) state = State.Unknown
-                // A timeout is retryable. Other resolved states remain cached for this consent
-                // generation.
-                if (state != State.Unknown && state != State.TimedOut) return state
-                consentGeneration
+                state
             }
-
-        val probed =
-            when (
-                val result =
-                    processRunner.runRootCommand(
-                        "id",
-                        timeoutMs = ROOT_PROBE_TIMEOUT_MS,
-                        maxOutputBytes = ROOT_PROBE_OUTPUT_BYTES,
-                    )
-            ) {
-                is RootProcessResult.Success ->
-                    if (result.stdout.contains("uid=0")) State.Available else State.Denied
-                is RootProcessResult.NonZeroExit -> State.Denied
-                RootProcessResult.TimedOut -> State.TimedOut
-                RootProcessResult.OutputLimitExceeded -> State.Denied
-                is RootProcessResult.ExecutionFailure -> State.Unavailable
-            }
-
-        synchronized(stateLock) {
-  if (generation == consentGeneration) {
-      state = if (userEnabled()) probed else State.DisabledByUser
-  }
-  state
         }
-    }
 
     // Prevent free-form shell execution. Only accept known-safe deterministic commands.
     override fun runRootCommandSync(command: String, timeoutMs: Long): List<String>? {

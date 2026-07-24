@@ -378,29 +378,6 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         LimitExceeded,
     }
 
-    private fun parseRootEntry(parent: JavaFile, line: String): DirectEntry? {
-        val parts = line.split('\t', limit = 5)
-        if (parts.size != 5) return null
-        val name = parts[4]
-        if (
-            name.isBlank() ||
-                name == "." ||
-                name == ".." ||
-                name.contains('/') ||
-                name.contains('\t')
-        ) {
-            return null
-        }
-        return DirectEntry(
-            javaFile = JavaFile(parent, name),
-            name = name,
-            isDirectory = parts[0] == "d",
-            isSymlink = parts[1] == "l",
-            modifiedMs = (parts[2].toLongOrNull() ?: 0L) * 1000L,
-            size = parts[3].toLongOrNull() ?: 0L,
-        )
-    }
-
     private fun getMimeType(file: JavaFile): String =
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
             ?: "application/octet-stream"
@@ -417,20 +394,6 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
 
         private val protectedRoots =
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
-
-        fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
-
-        fun buildRootListCommand(directory: String): String {
-            val quoted = shellQuote(directory)
-            return "for p in $quoted/* $quoted/.*; do " +
-                "[ -e \"\$p\" ] || continue; " +
-                "b=\${p##*/}; [ \"\$b\" = . ] && continue; [ \"\$b\" = .. ] && continue; " +
-                "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
-                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
-                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
-                "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
-                "done"
-        }
 
         fun isSymbolicLinkCompat(file: JavaFile): Boolean =
             try {

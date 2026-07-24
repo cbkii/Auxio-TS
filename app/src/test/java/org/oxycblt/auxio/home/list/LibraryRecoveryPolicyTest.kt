@@ -56,18 +56,17 @@ class LibraryRecoveryPolicyTest {
     @Test
     fun missingDirectPermissionShowsGrantAndSourceActions() {
         val state =
-  resolve(
-      storagePermissionRequired = true,
-      storagePermissionGranted = false,
-      sourceConfigured = true,
-  )
+            resolve(
+                storagePermissionRequired = true,
+                storagePermissionGranted = false,
+                sourceConfigured = true,
+            )
 
         assertEquals(LibraryRecoveryPolicy.Kind.PERMISSION_REQUIRED, state.kind)
         assertFalse(state.showProgress)
         assertEquals(LibraryRecoveryPolicy.Action.GRANT_PERMISSION, state.primary?.action)
         assertEquals(LibraryRecoveryPolicy.Action.CHOOSE_SOURCE, state.secondary?.action)
     }
-
 
     @Test
     fun sourceUnavailableShowsRetryAndSourceActions() {

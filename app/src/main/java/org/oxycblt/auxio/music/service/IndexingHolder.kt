@@ -149,82 +149,82 @@ private constructor(
     @Synchronized
     fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
         PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
-  if (!attached) {
-      L.d("Ignoring startup request after IndexingHolder release [origin=$origin]")
-      return
-  }
-  val originAllowsAutomaticScan =
-      StartupScanAuthorityPolicy.originAllowsAutomaticScan(
-          topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
-          origin = origin,
-      )
-  if (startupJob?.isActive == true) {
-      if (originAllowsAutomaticScan && !activeStartupAutomaticScanAllowed) {
-          pendingStartupOrigin = origin
-          L.d(
-              "Queued startup because scan origin authority increased " +
-                  "[active=$activeStartupOrigin pending=$pendingStartupOrigin]"
-          )
-      } else {
-          L.d("Startup library load already running; ignoring duplicate [origin=$origin]")
-      }
-      return
-  }
-  activeStartupOrigin = origin
-  activeStartupAutomaticScanAllowed = originAllowsAutomaticScan
-  startupJob =
-      indexScope.launch {
-          try {
-              val sourceAuthority =
-                  StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
-                      workerContext,
-                      musicSettings,
-                  )
-              val automaticScanAllowed =
-                  StartupScanAuthorityPolicy.allowAutomaticScan(
-                      topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
-                      origin = origin,
-                      sourceAuthority = sourceAuthority,
-                  )
-              val stillAttached =
-                  synchronized(this@IndexingHolder) {
-                      if (attached) {
-                          activeStartupAutomaticScanAllowed = automaticScanAllowed
-                          true
-                      } else {
-                          false
-                      }
-                  }
-              if (!stillAttached) return@launch
-              musicRepository.startup(this@IndexingHolder, automaticScanAllowed)
-          } finally {
-              val nextOrigin =
-                  synchronized(this@IndexingHolder) {
-                      if (!attached) {
-                          startupJob = null
-                          activeStartupOrigin = null
-                          activeStartupAutomaticScanAllowed = false
-                          pendingStartupOrigin = null
-                          null
-                      } else {
-                          startupJob = null
-                          activeStartupOrigin = null
-                          activeStartupAutomaticScanAllowed = false
-                          pendingStartupOrigin.also { pendingStartupOrigin = null }
-                      }
-                  }
-              if (nextOrigin != null) start(nextOrigin)
-          }
-      }
+            if (!attached) {
+                L.d("Ignoring startup request after IndexingHolder release [origin=$origin]")
+                return
+            }
+            val originAllowsAutomaticScan =
+                StartupScanAuthorityPolicy.originAllowsAutomaticScan(
+                    topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    origin = origin,
+                )
+            if (startupJob?.isActive == true) {
+                if (originAllowsAutomaticScan && !activeStartupAutomaticScanAllowed) {
+                    pendingStartupOrigin = origin
+                    L.d(
+                        "Queued startup because scan origin authority increased " +
+                            "[active=$activeStartupOrigin pending=$pendingStartupOrigin]"
+                    )
+                } else {
+                    L.d("Startup library load already running; ignoring duplicate [origin=$origin]")
+                }
+                return
+            }
+            activeStartupOrigin = origin
+            activeStartupAutomaticScanAllowed = originAllowsAutomaticScan
+            startupJob =
+                indexScope.launch {
+                    try {
+                        val sourceAuthority =
+                            StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
+                                workerContext,
+                                musicSettings,
+                            )
+                        val automaticScanAllowed =
+                            StartupScanAuthorityPolicy.allowAutomaticScan(
+                                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                                origin = origin,
+                                sourceAuthority = sourceAuthority,
+                            )
+                        val stillAttached =
+                            synchronized(this@IndexingHolder) {
+                                if (attached) {
+                                    activeStartupAutomaticScanAllowed = automaticScanAllowed
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        if (!stillAttached) return@launch
+                        musicRepository.startup(this@IndexingHolder, automaticScanAllowed)
+                    } finally {
+                        val nextOrigin =
+                            synchronized(this@IndexingHolder) {
+                                if (!attached) {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
+                                    pendingStartupOrigin = null
+                                    null
+                                } else {
+                                    startupJob = null
+                                    activeStartupOrigin = null
+                                    activeStartupAutomaticScanAllowed = false
+                                    pendingStartupOrigin.also { pendingStartupOrigin = null }
+                                }
+                            }
+                        if (nextOrigin != null) start(nextOrigin)
+                    }
+                }
         }
     }
 
     @Synchronized
     fun hasForegroundWork(): Boolean =
         startupJob?.isActive == true ||
-  currentIndexJob?.isActive == true ||
-  musicRepository.indexingState is IndexingState.Indexing ||
-  musicSettings.shouldBeObserving
+            currentIndexJob?.isActive == true ||
+            musicRepository.indexingState is IndexingState.Indexing ||
+            musicSettings.shouldBeObserving
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
         val state = musicRepository.indexingState

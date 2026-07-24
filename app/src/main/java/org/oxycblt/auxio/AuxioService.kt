@@ -75,15 +75,15 @@ open class AuxioService :
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         PerfTimer.trace("AuxioService.onStartCommand") {
-  Ts18FirstAudioLatency.mark("service_on_start_command")
-  super.onStartCommand(intent, flags, startId)
-  onHandleForeground(intent, allowTrustedUserVisible = true)
-  journal.log(
-      DiagnosticJournal.CAT_LIFECYCLE,
-      "AuxioService onStartCommand",
-      "Action: ${intent?.action}, StartId: $startId",
-  )
-  return START_STICKY
+            Ts18FirstAudioLatency.mark("service_on_start_command")
+            super.onStartCommand(intent, flags, startId)
+            onHandleForeground(intent, allowTrustedUserVisible = true)
+            journal.log(
+                DiagnosticJournal.CAT_LIFECYCLE,
+                "AuxioService onStartCommand",
+                "Action: ${intent?.action}, StartId: $startId",
+            )
+            return START_STICKY
         }
     }
 
@@ -97,13 +97,13 @@ open class AuxioService :
         playbackFragment.start(intent)
         val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
         val trustedUserVisible =
-  allowTrustedUserVisible &&
-      startId == IntegerTable.START_ID_ACTIVITY &&
-      StartupScanAuthorityPolicy.consumeTrustedUserVisibleStart(
-          intent.getStringExtra(INTENT_KEY_TRUSTED_SCAN_NONCE)
-      )
+            allowTrustedUserVisible &&
+                startId == IntegerTable.START_ID_ACTIVITY &&
+                StartupScanAuthorityPolicy.consumeTrustedUserVisibleStart(
+                    intent.getStringExtra(INTENT_KEY_TRUSTED_SCAN_NONCE)
+                )
         musicFragment.start(
-  if (trustedUserVisible) StartupScanOrigin.USER_VISIBLE else StartupScanOrigin.BACKGROUND
+            if (trustedUserVisible) StartupScanOrigin.USER_VISIBLE else StartupScanOrigin.BACKGROUND
         )
     }
 
