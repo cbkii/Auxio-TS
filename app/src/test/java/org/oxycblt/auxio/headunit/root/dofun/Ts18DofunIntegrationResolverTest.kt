@@ -24,9 +24,9 @@ import org.junit.Test
 class Ts18DofunIntegrationResolverTest {
     @Test
     fun `root integration probes match the explicit read only allowlist`() {
-        // The Kotlin map assertion fixes every approved command. The shell safety guard separately
-        // fixes the exact com.tw.* identifier set extracted from this file, so adding either a probe
-        // command or a vendor identifier requires an explicit review of both boundaries.
+        // The Kotlin map assertion fixes every approved command.
+        // The shell safety guard fixes the exact com.tw.* identifier set extracted here.
+        // Adding a probe or vendor identifier requires explicit review of both boundaries.
         val approved =
             mapOf(
                 Ts18RootProbe.Id to "id",
