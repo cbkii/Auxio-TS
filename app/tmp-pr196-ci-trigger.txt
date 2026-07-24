@@ -1,1 +1,1 @@
-Temporary trigger for the aligned PR #196 verification/export workflow; removed after checks complete.
+Temporary trigger for corrected PR #196 final verification/export; removed after checks complete.
