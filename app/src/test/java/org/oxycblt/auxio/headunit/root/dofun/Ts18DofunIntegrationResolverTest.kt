@@ -24,8 +24,9 @@ import org.junit.Test
 class Ts18DofunIntegrationResolverTest {
     @Test
     fun `root integration probes match the explicit read only allowlist`() {
-        // This exact command map is the only non-runtime test path admitted by the vendor-string
-        // safety guard; any new probe must remain read-only and be reviewed here explicitly.
+        // The Kotlin map assertion fixes every approved command. The shell safety guard separately
+        // fixes the exact com.tw.* identifier set extracted from this file, so adding either a probe
+        // command or a vendor identifier requires an explicit review of both boundaries.
         val approved =
             mapOf(
                 Ts18RootProbe.Id to "id",
