@@ -5,6 +5,7 @@
 package org.oxycblt.auxio.headunit.root.storage
 
 import android.content.Context
+import android.os.SystemClock
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -45,21 +46,45 @@ object PreparedVolumeManifestCodec {
 
     fun parse(text: String): List<PreparedVolumeRecord>? {
         val out = mutableListOf<PreparedVolumeRecord>()
+        val seenIds = mutableSetOf<String>()
         for (line in text.lineSequence()) {
             if (line.isBlank() || line.startsWith("#")) continue
             val parts = line.split('\t', limit = 9)
-            if (parts.size != 9 || parts[0] != "1") return null
+            if (parts.size != 9 || parts[0] != MANIFEST_VERSION) return null
             val generation = parts[1].toLongOrNull() ?: return null
-            val id = parts[2]
+            val id = parts[2].lowercase()
             val raw = parts[3]
             val app = parts[4]
             val alias = parts[5]
             val selected = parts[6].takeUnless { it == "-" }
             val state = parts[7]
             val sample = parts[8].takeUnless { it == "-" }
-            if (generation < 0 || !volumeId.matches(id) || state !in states) return null
-            if (!validPath(raw) || !validPath(app) || !validPath(alias)) return null
-            if (selected != null && !validPath(selected)) return null
+            if (
+                generation < 0L ||
+                    !volumeId.matches(id) ||
+                    !seenIds.add(id) ||
+                    state !in states
+            ) {
+                return null
+            }
+            if (
+                raw != "/mnt/media_rw/$id" ||
+                    app != "/storage/$id" ||
+                    alias != "/storage/auxio-root/$id" ||
+                    !validPath(raw) ||
+                    !validPath(app) ||
+                    !validPath(alias)
+            ) {
+                return null
+            }
+            val selectedMatchesState =
+                when (state) {
+                    "app_candidate" -> selected == app
+                    "alias_candidate" -> selected == alias
+                    "raw_only", "unavailable" -> selected == null
+                    else -> false
+                }
+            if (!selectedMatchesState) return null
             if (sample != null && (selected == null || !isWithin(sample, selected))) return null
             out +=
                 PreparedVolumeRecord(
@@ -73,7 +98,10 @@ object PreparedVolumeManifestCodec {
                     samplePath = sample,
                 )
         }
-        return out.sortedWith(compareByDescending<PreparedVolumeRecord> { it.generationSeconds }.thenBy { it.volumeId })
+        return out.sortedWith(
+            compareByDescending<PreparedVolumeRecord> { it.generationSeconds }
+                .thenBy { it.volumeId }
+        )
     }
 
     private fun validPath(path: String): Boolean =
@@ -81,13 +109,15 @@ object PreparedVolumeManifestCodec {
 
     private fun isWithin(candidate: String, root: String): Boolean =
         candidate == root || candidate.startsWith(root.trimEnd('/') + "/")
+
+    private const val MANIFEST_VERSION = "1"
 }
 
 /**
  * App-private cache and resolver for the Magisk-prepared TS18 volume manifest.
  *
- * The cache is loaded without `su`. A refresh is user-started or otherwise asynchronous and is
- * accepted only after strict parsing and an atomic app-private write.
+ * The cache is loaded without `su`. Refreshes are explicit, serialized and coalesced, then accepted
+ * only after strict parsing and an atomic app-private write.
  */
 @Singleton
 class PreparedVolumeIndexStore
@@ -100,6 +130,7 @@ constructor(
     private val cacheFile = File(cacheDir, "volumes.tsv")
 
     @Volatile private var records: List<PreparedVolumeRecord> = readCachedRecords()
+    @Volatile private var lastRefreshElapsedMs = Long.MIN_VALUE
 
     fun cachedRecords(): List<PreparedVolumeRecord> = records
 
@@ -107,8 +138,14 @@ constructor(
 
     /** Explicit/user-started refresh. This may perform the bounded Magisk consent probe. */
     @Synchronized
-    fun refreshFromRootSync(): List<PreparedVolumeRecord> {
+    fun refreshFromRootSync(force: Boolean = false): List<PreparedVolumeRecord> {
         if (!rootStateHolder.isUserEnabled()) return records
+        val now = SystemClock.elapsedRealtime()
+        if (!force && now - lastRefreshElapsedMs in 0 until MIN_REFRESH_INTERVAL_MS) {
+            return records
+        }
+        lastRefreshElapsedMs = now
+        rootStateHolder.refreshPreparedVolumeManifestSync()
         val text = rootStateHolder.readPreparedVolumeManifestSync() ?: return records
         val parsed = PreparedVolumeManifestCodec.parse(text) ?: return records
         if (!writeAtomically(text)) return records
@@ -116,10 +153,26 @@ constructor(
         return records
     }
 
+    /**
+     * Resolve a requested path without invoking root when ordinary app access already works.
+     *
+     * Root preparation/snapshot work occurs only after the zero-root direct check fails.
+     */
     fun resolveSourceSync(requestedPath: String): SourceResolution {
         val clean = requestedPath.replace('\\', '/').trimEnd('/').ifEmpty { "/" }
-        val current = if (rootStateHolder.isUserEnabled()) refreshFromRootSync() else records
-        val match = current.firstOrNull { belongsToRecord(clean, it) }
+        if (!clean.startsWith("/mnt/media_rw/")) {
+            val direct = SourceAuthorityValidator.classifyDirect(clean, preparedAlias = false)
+            if (direct == SourceAuthority.APP_READABLE) {
+                return SourceResolution(clean, clean, direct, "app_uid_direct_access_ok")
+            }
+        }
+
+        var current = records
+        var match = current.firstOrNull { belongsToRecord(clean, it) }
+        if (rootStateHolder.isUserEnabled()) {
+            current = refreshFromRootSync(force = match == null || clean.startsWith("/mnt/media_rw/"))
+            match = current.firstOrNull { belongsToRecord(clean, it) }
+        }
         val suffix = match?.let { suffixFor(clean, it) }.orEmpty()
         val candidates = linkedSetOf<String>()
         if (!clean.startsWith("/mnt/media_rw/")) candidates += clean
@@ -133,14 +186,19 @@ constructor(
             if (candidate.startsWith("/mnt/media_rw/")) continue
             val prepared = candidate.startsWith("/storage/auxio-root/")
             val authority = SourceAuthorityValidator.classifyDirect(candidate, prepared) ?: continue
-            return SourceResolution(clean, candidate, authority, "app_uid_open_ok")
+            return SourceResolution(clean, candidate, authority, "app_uid_resolved_access_ok")
         }
 
-        val rawBacking = match?.let { appendSuffix(it.rawPath, suffix) } ?: clean.takeIf {
-            it.startsWith("/mnt/media_rw/usbdisk")
-        }
+        val rawBacking =
+            match?.let { appendSuffix(it.rawPath, suffix) }
+                ?: clean.takeIf { it.startsWith("/mnt/media_rw/usbdisk") }
         if (rawBacking != null && rootStateHolder.isUserEnabled()) {
-            val snapshot = rootStateHolder.snapshotTreeSync(rawBacking, maxDepth = 4, timeoutMs = 5_000L)
+            val snapshot =
+                rootStateHolder.snapshotTreeSync(
+                    rawBacking,
+                    maxDepth = ROOT_AUTHORITY_DEPTH,
+                    timeoutMs = ROOT_AUTHORITY_TIMEOUT_MS,
+                )
             if (snapshot != null) {
                 return SourceResolution(
                     clean,
@@ -150,7 +208,12 @@ constructor(
                 )
             }
         }
-        return SourceResolution(clean, null, SourceAuthority.UNAVAILABLE, "no_valid_app_readable_path")
+        return SourceResolution(
+            clean,
+            null,
+            SourceAuthority.UNAVAILABLE,
+            "no_valid_app_readable_path",
+        )
     }
 
     private fun readCachedRecords(): List<PreparedVolumeRecord> =
@@ -174,9 +237,13 @@ constructor(
     private fun candidatePaths(values: List<PreparedVolumeRecord>): List<String> {
         val out = linkedSetOf<String>()
         values.forEach { record ->
-            out += record.appPath
-            record.selectedPath?.let(out::add)
-            out += record.aliasPath
+            when (record.state) {
+                "app_candidate" -> out += record.appPath
+                "alias_candidate" -> {
+                    out += record.appPath
+                    out += record.aliasPath
+                }
+            }
         }
         return out.toList()
     }
@@ -197,4 +264,10 @@ constructor(
 
     private fun appendSuffix(root: String, suffix: String): String =
         if (suffix.isBlank()) root else root.trimEnd('/') + "/" + suffix
+
+    private companion object {
+        const val MIN_REFRESH_INTERVAL_MS = 2_000L
+        const val ROOT_AUTHORITY_DEPTH = 4
+        const val ROOT_AUTHORITY_TIMEOUT_MS = 5_000L
+    }
 }
