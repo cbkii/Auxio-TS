@@ -84,6 +84,10 @@ jobs:
           PY
             status=$?
           fi
+          if [ "$status" -eq 0 ]; then
+            python3 scripts/tmp-pr200-guard-fix.py >> /tmp/pr200-closure-patch.log 2>&1
+            status=$?
+          fi
           cat /tmp/pr200-closure-patch.log
           exit "$status"
 
@@ -103,7 +107,11 @@ jobs:
 
       - name: Remove temporary closure files
         shell: bash
-        run: rm -f scripts/tmp-pr200-comment-closure.py .github/workflows/tmp-pr200-comment-closure.yml
+        run: |
+          rm -f \
+            scripts/tmp-pr200-comment-closure.py \
+            scripts/tmp-pr200-guard-fix.py \
+            .github/workflows/tmp-pr200-comment-closure.yml
 
       - name: Apply Kotlin formatting
         id: format
@@ -149,6 +157,7 @@ jobs:
               diff -u <(printf '%s\n' customize.sh module.prop service.sh | sort) "$tmp_dir/entries.txt"
             ) &&
             test ! -e scripts/tmp-pr200-comment-closure.py &&
+            test ! -e scripts/tmp-pr200-guard-fix.py &&
             test ! -e .github/workflows/tmp-pr200-comment-closure.yml
           } > /tmp/pr200-closure-validation.log 2>&1
           status=$?
