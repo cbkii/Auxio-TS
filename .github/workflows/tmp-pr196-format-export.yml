@@ -1,6 +1,9 @@
 name: Temporary PR196 formatting export
 
 on:
+  push:
+    branches:
+      - fix/first-launch-source-recovery
   pull_request:
     branches:
       - feat/ts18-dofun-generic-media-compat
@@ -9,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tmp-pr196-format-export-${{ github.event.pull_request.number }}
+  group: tmp-pr196-format-export-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -17,10 +20,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Checkout immutable PR head
+      - name: Checkout immutable head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           submodules: false
           persist-credentials: false
