@@ -1,6 +1,7 @@
 name: PR200 Final Review Closure
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - cx/pr200-headunit-diag
