@@ -1,1 +1,1 @@
-Temporary trigger for corrected final PR #196 verification on cx/pr196-verify; removed after checks complete.
+Temporary trigger for the PR #196 compact finalizer on cx/pr196-verify; removed after checks complete.
