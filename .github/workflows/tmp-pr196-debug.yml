@@ -51,13 +51,13 @@ jobs:
           end = source.index("\n          PY\n", start)
           lines = source[start:end].splitlines()
           code = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
-          old = "          text = replace_once(text, launcher_anchor, launcher_new, 'SongList app settings launcher')"
-          new = """          if launcher_anchor in text:
-              text = text.replace(launcher_anchor, launcher_new, 1)
-          else:
-              launcher_start = text.index('    private val storagePermissionLauncher =')
-              launcher_end = text.index('\\n\\n    override fun onCreateBinding', launcher_start)
-              text = text[:launcher_end] + launcher_new[len(launcher_anchor):] + text[launcher_end:]"""
+          old = "text = replace_once(text, launcher_anchor, launcher_new, 'SongList app settings launcher')"
+          new = """if launcher_anchor in text:
+    text = text.replace(launcher_anchor, launcher_new, 1)
+else:
+    launcher_start = text.index('    private val storagePermissionLauncher =')
+    launcher_end = text.index('\\n\\n    override fun onCreateBinding', launcher_start)
+    text = text[:launcher_end] + launcher_new[len(launcher_anchor):] + text[launcher_end:]"""
           if old not in code:
               raise SystemExit('Could not locate SongList launcher replacement in extracted finalizer')
           code = code.replace(old, new, 1)
