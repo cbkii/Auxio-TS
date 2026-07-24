@@ -21,10 +21,17 @@ object RootTreeSnapshotCodec {
             val parts = line.split('\t', limit = 4)
             if (parts.size != 4) return null
             val type = parts[0]
+            if (type != "d" && type != "f" && type != "l") return null
             val relative = normaliseRelative(parts[3]) ?: return null
             val modifiedSeconds = parts[1].toLongOrNull() ?: return null
             val size = parts[2].toLongOrNull() ?: return null
-            if (modifiedSeconds < 0L || size < 0L) return null
+            if (
+                modifiedSeconds < 0L ||
+                    modifiedSeconds > Long.MAX_VALUE / 1000L ||
+                    size < 0L
+            ) {
+                return null
+            }
             entries +=
                 RootTreeEntry(
                     relativePath = relative,
@@ -33,14 +40,19 @@ object RootTreeSnapshotCodec {
                     modifiedMs = modifiedSeconds * 1000L,
                     size = size,
                 )
-            if (type != "d" && type != "f" && type != "l") return null
         }
         return RootTreeSnapshot(rootPath = rootPath, entries = entries)
     }
 
     private fun normaliseRelative(value: String): String? {
         val clean = value.replace('\\', '/').trim('/')
-        if (clean.isBlank() || clean.contains('\n') || clean.contains('\r') || clean.contains('\t')) {
+        if (
+            clean.isBlank() ||
+                clean.contains('\u0000') ||
+                clean.contains('\n') ||
+                clean.contains('\r') ||
+                clean.contains('\t')
+        ) {
             return null
         }
         val segments = clean.split('/')
