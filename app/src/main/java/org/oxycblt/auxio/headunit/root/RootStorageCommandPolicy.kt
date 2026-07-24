@@ -39,16 +39,19 @@ object RootStorageCommandPolicy {
     fun buildSnapshotCommand(rootPath: String, maxDepth: Int): String {
         require(isAllowedStorageRoot(rootPath)) { "unsafe root storage path" }
         require(maxDepth in 1..32) { "invalid snapshot depth" }
-        val quoted = shellQuote(rootPath.trimEnd('/'))
-        return "root=$quoted; [ -d \"\$root\" ] || exit 4; " +
-            "find \"\$root\" -xdev -mindepth 1 -maxdepth $maxDepth -print 2>/dev/null | " +
-            "while IFS= read -r p; do " +
-            "rel=\${p#\"\$root\"/}; [ -n \"\$rel\" ] || continue; " +
-            "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
-            "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
-            "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
-            "printf '%s\\t%s\\t%s\\t%s\\n' \"\$t\" \"\$m\" \"\$s\" \"\$rel\"; " +
-            "done"
+        val quotedRoot = shellQuote(rootPath.trimEnd('/'))
+        val emitScript =
+            "root=\$1; shift; for p do " +
+                "rel=\${p#\"\$root\"/}; [ -n \"\$rel\" ] || continue; " +
+                "if printf '%s' \"\$rel\" | LC_ALL=C grep -q '[[:cntrl:]]'; then continue; fi; " +
+                "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
+                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
+                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
+                "printf '%s\\t%s\\t%s\\t%s\\n' \"\$t\" \"\$m\" \"\$s\" \"\$rel\"; " +
+                "done"
+        return "root=$quotedRoot; [ -d \"\$root\" ] || exit 4; " +
+            "find \"\$root\" -xdev -mindepth 1 -maxdepth $maxDepth " +
+            "-exec sh -c ${shellQuote(emitScript)} sh \"\$root\" {} + 2>/dev/null"
     }
 
     internal fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
