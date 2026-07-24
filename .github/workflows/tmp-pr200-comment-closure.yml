@@ -131,21 +131,43 @@ jobs:
         run: exit 1
 
       - name: Run focused validation
+        id: validate
+        continue-on-error: true
         shell: bash
         run: |
-          git diff --check
-          bash scripts/check-ts18-root-storage-fastpath.sh
-          tmp_dir="$(mktemp -d)"
-          trap 'rm -rf "$tmp_dir"' EXIT
-          (
-            cd "$tmp_dir" || exit 2
-            bash "$GITHUB_WORKSPACE/scripts/package-ts18-root-storage-helper.sh" relative-helper.zip
-            test -f "$tmp_dir/relative-helper.zip"
-            unzip -Z1 "$tmp_dir/relative-helper.zip" | sort > "$tmp_dir/entries.txt"
-            diff -u <(printf '%s\n' customize.sh module.prop service.sh | sort) "$tmp_dir/entries.txt"
-          )
-          test ! -e scripts/tmp-pr200-comment-closure.py
-          test ! -e .github/workflows/tmp-pr200-comment-closure.yml
+          set +e
+          {
+            git diff --check &&
+            bash scripts/check-ts18-root-storage-fastpath.sh &&
+            tmp_dir="$(mktemp -d)" &&
+            (
+              trap 'rm -rf "$tmp_dir"' EXIT
+              cd "$tmp_dir" || exit 2
+              bash "$GITHUB_WORKSPACE/scripts/package-ts18-root-storage-helper.sh" relative-helper.zip &&
+              test -f "$tmp_dir/relative-helper.zip" &&
+              unzip -Z1 "$tmp_dir/relative-helper.zip" | sort > "$tmp_dir/entries.txt" &&
+              diff -u <(printf '%s\n' customize.sh module.prop service.sh | sort) "$tmp_dir/entries.txt"
+            ) &&
+            test ! -e scripts/tmp-pr200-comment-closure.py &&
+            test ! -e .github/workflows/tmp-pr200-comment-closure.yml
+          } > /tmp/pr200-closure-validation.log 2>&1
+          status=$?
+          cat /tmp/pr200-closure-validation.log
+          exit "$status"
+
+      - name: Upload validation diagnostics
+        if: steps.validate.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr200-comment-closure-validation-log
+          path: /tmp/pr200-closure-validation.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Stop after validation failure
+        if: steps.validate.outcome == 'failure'
+        shell: bash
+        run: exit 1
 
       - name: Commit closure changes
         shell: bash
