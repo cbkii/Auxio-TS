@@ -104,11 +104,12 @@ internal object MusicSourcePathNormalizer {
     private fun repairDuplicatedStoragePath(path: String): String? {
         val dynamicRoots =
             listOf(
-                Regex("^/storage/usbdisk\\d+", RegexOption.IGNORE_CASE),
-                Regex("^/mnt/media_rw/usbdisk\\d+", RegexOption.IGNORE_CASE),
-                Regex("^/storage/auxio-root/usbdisk\\d+", RegexOption.IGNORE_CASE),
-                Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
-            ).mapNotNull { it.find(path)?.value }
+                    Regex("^/storage/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                    Regex("^/mnt/media_rw/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                    Regex("^/storage/auxio-root/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                    Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
+                )
+                .mapNotNull { it.find(path)?.value }
         val prefixes = listOf("/storage/emulated/0", "/sdcard") + dynamicRoots
         for (prefix in prefixes.distinct()) {
             val duplicated = prefix + prefix
