@@ -45,6 +45,17 @@ class MusicSourcePathNormalizerTest {
     }
 
     @Test
+    fun directFsMigratesRawUsbBackingPathToAppFacingStorage() {
+        assertEquals(
+            "file:///storage/usbdisk3/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "/mnt/media_rw/usbdisk3/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
     fun directFsKeepsInternalSharedStorageRoot() {
         assertEquals(
             "file:///storage/emulated/0",
