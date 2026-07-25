@@ -23,6 +23,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isAllowedRoot
+import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isExpectedRestrictedSharedStorageChild
 
 class DirectFsRootPolicyTest {
     @Test
@@ -32,9 +33,40 @@ class DirectFsRootPolicyTest {
     }
 
     @Test
-    fun allowsAppFacingPreparedAndRawBackingRoots() {
+    fun allowsInternalAppFacingPreparedAndRawBackingRoots() {
+        assertTrue(isAllowedRoot(File("/storage/emulated/0")))
+        assertTrue(isAllowedRoot(File("/storage/emulated/0/My Audio")))
         assertTrue(isAllowedRoot(File("/storage/usbdisk0")))
         assertTrue(isAllowedRoot(File("/storage/auxio-root/usbdisk0")))
         assertTrue(isAllowedRoot(File("/mnt/media_rw/usbdisk0")))
+    }
+
+    @Test
+    fun onlyTreatsPlatformRestrictedChildrenAsIgnorableFromSharedStorageRoot() {
+        val sharedRoot = File("/storage/emulated/0")
+        assertTrue(
+            isExpectedRestrictedSharedStorageChild(
+                File("/storage/emulated/0/Android/data"),
+                sharedRoot,
+            )
+        )
+        assertTrue(
+            isExpectedRestrictedSharedStorageChild(
+                File("/storage/emulated/0/Android/obb/example"),
+                sharedRoot,
+            )
+        )
+        assertFalse(
+            isExpectedRestrictedSharedStorageChild(
+                File("/storage/emulated/0/Download/data"),
+                sharedRoot,
+            )
+        )
+        assertFalse(
+            isExpectedRestrictedSharedStorageChild(
+                File("/storage/emulated/0/Android/data/example"),
+                File("/storage/emulated/0/Android/data"),
+            )
+        )
     }
 }
