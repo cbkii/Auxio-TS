@@ -128,6 +128,13 @@ sealed interface IndexingProgress {
     data object Indeterminate : IndexingProgress
 }
 
+/** No configured source completed or reused, so an empty result is not authoritative. */
+class SourceScanFailureException(val failures: Map<String, String>) :
+    IllegalStateException(
+        "Every attempted music source failed: " +
+            failures.entries.joinToString { (source, detail) -> "$source=$detail" }
+    )
+
 private class MusikrImpl(
     private val config: Config,
     private val exploreStep: ExploreStep,
@@ -196,6 +203,15 @@ private class MusikrImpl(
                     "Committed ${commit.committedSources.size} source generation(s), " +
                         "${commit.changedRows} changed and ${commit.removedRows} removed rows",
                 )
+                if (
+                    commit.failedSources.isNotEmpty() &&
+                        commit.committedSources.isEmpty() &&
+                        commit.reusedSources.isEmpty()
+                ) {
+                    // A failed provider/mount must not become a successful empty library. The
+                    // incremental store has already preserved every prior committed generation.
+                    throw SourceScanFailureException(commit.failedSources)
+                }
             }
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
             LibraryResultImpl(config, library, commit?.failedSources.orEmpty())
