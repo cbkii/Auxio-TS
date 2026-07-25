@@ -574,14 +574,24 @@ constructor(
                 )
             val rawFs = createFileSystem()
             val prepared =
-                IncrementalIndexPlanner.prepare(
-                    fs = rawFs,
-                    cache = cache,
-                    withCache = withCache,
-                    profile = resolvedProfile,
-                    configurationRevision = sourceConfigurationRevision(),
-                    legacyWriteOnly = ::WriteOnlyMutableCache,
-                )
+                try {
+                    IncrementalIndexPlanner.prepare(
+                        fs = rawFs,
+                        cache = cache,
+                        withCache = withCache,
+                        profile = resolvedProfile,
+                        configurationRevision = sourceConfigurationRevision(),
+                        legacyWriteOnly = ::WriteOnlyMutableCache,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    musicSettings.lastScanFailed = true
+                    emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                    L.w(e, "Music-source preflight failed; preserving the last readable library")
+                    emitIndexingCompletion(e)
+                    return@traceSuspend
+                }
             val plan = prepared.plan
             L.i(
                 "Resolved scan policy [workers=$workerCount profile=$resolvedProfile " +
@@ -900,7 +910,10 @@ constructor(
             LocationMode.MEDIA_STORE -> {
                 val query =
                     musicSettings.mediaStoreQuery.copy(
-                        useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
+                        // Keep the shared MediaStore adapter variant-neutral. Topway compatibility
+                        // selects the relaxed provider heuristic at this app integration boundary;
+                        // physical TS18 outcomes still require device validation.
+                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter
                     )
                 MediaStore.from(context, query)
             }

@@ -27,16 +27,16 @@ class MediaStoreFilterPolicyTest {
     fun standardVariantRetainsExcludeNonMusicSetting() {
         assertTrue(
             MediaStoreFilterPolicy.shouldRequireIsMusic(
-                query(excludeNonMusic = true, useDefaultSystemFilter = false)
+                query(excludeNonMusic = true, relaxIsMusicHeuristic = false)
             )
         )
     }
 
     @Test
-    fun topwayCompatibilityModeDoesNotTrustStaleIsMusicFlags() {
+    fun relaxedHeuristicBypassesIsMusicConstraint() {
         assertFalse(
             MediaStoreFilterPolicy.shouldRequireIsMusic(
-                query(excludeNonMusic = true, useDefaultSystemFilter = true)
+                query(excludeNonMusic = true, relaxIsMusicHeuristic = true)
             )
         )
     }
@@ -45,16 +45,16 @@ class MediaStoreFilterPolicyTest {
     fun disabledExcludeNonMusicNeverAddsTheConstraint() {
         assertFalse(
             MediaStoreFilterPolicy.shouldRequireIsMusic(
-                query(excludeNonMusic = false, useDefaultSystemFilter = false)
+                query(excludeNonMusic = false, relaxIsMusicHeuristic = false)
             )
         )
     }
 
-    private fun query(excludeNonMusic: Boolean, useDefaultSystemFilter: Boolean) =
+    private fun query(excludeNonMusic: Boolean, relaxIsMusicHeuristic: Boolean) =
         MediaStore.Query(
             mode = MediaStore.FilterMode.EXCLUDE,
             filtered = emptyList(),
             excludeNonMusic = excludeNonMusic,
-            useDefaultSystemFilter = useDefaultSystemFilter,
+            relaxIsMusicHeuristic = relaxIsMusicHeuristic,
         )
 }

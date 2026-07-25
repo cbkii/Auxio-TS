@@ -45,7 +45,7 @@ import org.oxycblt.musikr.util.tryAsync
 class FilteredFSTest {
     @Test
     fun exploreForwardsOrdinaryFilesAndClosesDownstream() = runTest {
-        val fs = FilteredFS(EmittingFS(this, file("Music/song.mp3")), this, setOf("Android"))
+        val fs = FilteredFS(EmittingFS(this, file("Music/song.mp3")), this)
         val output = Channel<File>(Channel.UNLIMITED)
 
         val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
@@ -56,7 +56,7 @@ class FilteredFSTest {
     }
 
     @Test
-    fun exploreHonoursArbitraryUserAuthorisedFolders() = runTest {
+    fun exploreForwardsPreviouslyFilteredDirectoryNames() = runTest {
         val fs =
             FilteredFS(
                 EmittingFS(
@@ -69,8 +69,6 @@ class FilteredFSTest {
                     file("system/live-recording.flac"),
                 ),
                 this,
-                noisyDirs = setOf("Download", "DCIM", "Movies", "data", "system"),
-                pathKeywords = listOf("music"),
             )
         val output = Channel<File>(Channel.UNLIMITED)
 
@@ -92,7 +90,6 @@ class FilteredFSTest {
             FilteredFS(
                 EmittingFS(this, file("Android/data/org.oxycblt.auxio/files/song.mp3")),
                 this,
-                setOf("Android"),
             )
         val output = Channel<File>(Channel.UNLIMITED)
 
@@ -109,7 +106,7 @@ class FilteredFSTest {
     @Test
     fun exploreClosesDownstreamWhenDelegateReturnsFailure() = runTest {
         val failure = IllegalStateException("boom")
-        val fs = FilteredFS(FailingFS(failure), this, setOf("Android"))
+        val fs = FilteredFS(FailingFS(failure), this)
         val output = Channel<File>(Channel.UNLIMITED)
 
         val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
@@ -124,7 +121,7 @@ class FilteredFSTest {
     @Test
     fun exploreClosesDownstreamWhenDelegateThrows() = runTest {
         val failure = IllegalArgumentException("thrown")
-        val fs = FilteredFS(ThrowingFS(failure), this, setOf("Android"))
+        val fs = FilteredFS(ThrowingFS(failure), this)
         val output = Channel<File>(Channel.UNLIMITED)
 
         val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
@@ -138,8 +135,7 @@ class FilteredFSTest {
 
     @Test
     fun exploreDoesNotHangWhenDelegateLeavesChannelOpen() = runTest {
-        val fs =
-            FilteredFS(LeakyButCompletedFS(this, file("Music/song.mp3")), this, setOf("Android"))
+        val fs = FilteredFS(LeakyButCompletedFS(this, file("Music/song.mp3")), this)
         val output = Channel<File>(Channel.UNLIMITED)
 
         val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }

@@ -34,7 +34,7 @@ import org.oxycblt.musikr.util.tryAsync
 internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
-    @Suppress("UNUSED_PARAMETER") noisyDirs: Set<String>,
+    @Suppress("UNUSED_PARAMETER") noisyDirs: Set<String> = emptySet(),
     @Suppress("UNUSED_PARAMETER") pathKeywords: List<String> = emptyList(),
 ) : FS {
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {

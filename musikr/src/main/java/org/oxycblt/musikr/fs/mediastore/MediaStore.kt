@@ -53,7 +53,7 @@ import org.oxycblt.musikr.util.tryAsyncWith
 
 internal object MediaStoreFilterPolicy {
     fun shouldRequireIsMusic(query: MediaStore.Query): Boolean =
-        query.excludeNonMusic && !query.useDefaultSystemFilter
+        query.excludeNonMusic && !query.relaxIsMusicHeuristic
 }
 
 /** MediaStore adapter with source-scoped, cheap invalidation planning. */
@@ -205,11 +205,8 @@ private constructor(
         if (MediaStoreFilterPolicy.shouldRequireIsMusic(query)) {
             selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
         }
-        // TS18's MediaProvider commonly leaves IS_MUSIC stale and stores valid audio outside
-        // folder names such as Music, Download, or Media. useDefaultSystemFilter identifies that
-        // compatibility mode, so it relaxes those OEM heuristics while standard builds retain the
-        // user's exclude-non-music setting. Explicit include/exclude selections remain
-        // authoritative.
+        // Explicit include/exclude selections remain authoritative. This flag only decides
+        // whether provider-maintained IS_MUSIC metadata is required by the shared adapter.
         when (query.mode) {
             FilterMode.INCLUDE -> {
                 pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
@@ -252,10 +249,9 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
-        // TS18 compatibility mode: bypass unreliable IS_MUSIC/folder-name heuristics while
-        // retaining
-        // explicit include/exclude filters. The standard variant leaves this false.
-        val useDefaultSystemFilter: Boolean = false,
+        // Variant-neutral switch for providers whose IS_MUSIC metadata is not authoritative.
+        // App integration code owns the decision to enable it.
+        val relaxIsMusicHeuristic: Boolean = false,
     )
 
     enum class FilterMode {
