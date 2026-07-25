@@ -44,6 +44,20 @@ class RepositoryIndexRequestQueueTest {
     }
 
     @Test
+    fun cacheBypassCannotBeWeakenedByALaterCachedRefresh() {
+        val queue = RepositoryIndexRequestQueue()
+
+        queue.offer(
+            RepositoryIndexRequest(withCache = false, metadataProfile = MetadataProfile.LEAN)
+        )
+        queue.offer(RepositoryIndexRequest(withCache = true, metadataProfile = null))
+
+        val request = requireNotNull(queue.drain())
+        assertFalse(request.withCache)
+        assertEquals(MetadataProfile.LEAN, request.metadataProfile)
+    }
+
+    @Test
     fun leanProfileSurvivesARequestWithoutAnExplicitProfile() {
         val queue = RepositoryIndexRequestQueue()
 
