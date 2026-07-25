@@ -54,11 +54,6 @@ enum class Ts18RootProbe(val command: String) {
     ),
 }
 
-enum class Ts18RootMutation(val command: String) {
-    DisableStockMusicForUser0("pm disable-user --user 0 com.tw.music"),
-    EnableStockMusicForUser0("pm enable --user 0 com.tw.music"),
-}
-
 enum class Ts18DofunDetectedPath {
     StockTwMusicSelected,
     AuxioTwMediaSelected,
@@ -157,19 +152,5 @@ class Ts18DofunIntegrationResolver(
                 detectedPath,
                 recommendedStep,
             )
-        }
-
-    suspend fun testStockSelectionDisabledUser0(): Boolean =
-        withContext(Dispatchers.IO) {
-            if (rootStateHolder.stateSnapshot() != RootStateHolder.State.Available)
-                return@withContext false
-            rootStateHolder.runTs18MutationSync(Ts18RootMutation.DisableStockMusicForUser0) != null
-        }
-
-    suspend fun restoreStockSelectionDisabledUser0(): Boolean =
-        withContext(Dispatchers.IO) {
-            if (rootStateHolder.stateSnapshot() != RootStateHolder.State.Available)
-                return@withContext false
-            rootStateHolder.runTs18MutationSync(Ts18RootMutation.EnableStockMusicForUser0) != null
         }
 }

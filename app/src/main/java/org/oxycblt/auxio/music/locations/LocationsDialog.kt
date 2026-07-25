@@ -46,6 +46,10 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.DialogMusicLocationsBinding
 import org.oxycblt.auxio.headunit.root.RootStateHolder
+import org.oxycblt.auxio.headunit.root.storage.PreparedVolumeIndexStore
+import org.oxycblt.auxio.headunit.root.storage.RootStorageAccelerationPolicy
+import org.oxycblt.auxio.headunit.root.storage.SourceAuthority
+import org.oxycblt.auxio.headunit.root.storage.SourceResolution
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.ui.ViewBindingMaterialDialogFragment
@@ -95,12 +99,14 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private var storagePermissionLauncher: ActivityResultLauncher<String>? = null
     @Inject lateinit var musicSettings: MusicSettings
     @Inject lateinit var rootGate: RootStateHolder
+    @Inject lateinit var preparedVolumeIndexStore: PreparedVolumeIndexStore
 
     private var locationMode = LocationMode.SAF
     private var isIncludeMode = true
     private var hasStoragePermission = false
     private var isExtrasExpanded = false
     private var pendingLocationCallback: ((Location.Unopened) -> Unit)? = null
+    private var pendingRequiresPlayableSource = true
     private var candidateDiscoveryGeneration = 0L
     private var permissionGrantedInSession = false
 
@@ -172,6 +178,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsFilterAdd.contentDescription = getString(R.string.desc_add_folder)
         binding.locationsExtrasDropdown.setText(R.string.set_extra_settings)
         binding.locationsAutoDetect.setOnClickListener {
+            pendingRequiresPlayableSource = true
             pendingLocationCallback = { location -> addIncludeLocation(location) }
             showCandidatePathPicker(disableThirdParty = false)
         }
@@ -200,10 +207,12 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         // Set up add folder buttons
         binding.locationsIncludeAdd.setOnClickListener {
+            pendingRequiresPlayableSource = true
             pendingLocationCallback = { location -> addIncludeLocation(location) }
             onNewLocation(openDocumentTreeLauncher, disableThirdParty = false)
         }
         binding.locationsExcludeAdd.setOnClickListener {
+            pendingRequiresPlayableSource = false
             pendingLocationCallback = { location ->
                 excludeLocationAdapter.add(location)
                 updateSaveButtonState()
@@ -211,6 +220,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             onNewLocation(openDocumentTreeLauncher, disableThirdParty = false)
         }
         binding.locationsFilterAdd.setOnClickListener {
+            pendingRequiresPlayableSource = false
             pendingLocationCallback = { location ->
                 filterLocationAdapter.add(location)
                 updateSaveButtonState()
@@ -345,11 +355,13 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private fun clearPendingLocationCallback(callback: (Location.Unopened) -> Unit) {
         if (pendingLocationCallback === callback) {
             pendingLocationCallback = null
+            pendingRequiresPlayableSource = true
         }
     }
 
     private fun showCandidatePathPicker(disableThirdParty: Boolean) {
         val callback = pendingLocationCallback ?: return
+        val requiresPlayableSource = pendingRequiresPlayableSource
         val generation = ++candidateDiscoveryGeneration
         var loadingDialog: AlertDialog? = null
         loadingDialog =
@@ -360,7 +372,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
                         candidateDiscoveryGeneration++
                         loadingDialog?.dismiss()
-                        showManualPathEntry(disableThirdParty, callback)
+                        showManualPathEntry(disableThirdParty, requiresPlayableSource, callback)
                     }
                     .setNegativeButton(R.string.lbl_cancel) { _, _ ->
                         candidateDiscoveryGeneration++
@@ -378,10 +390,20 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         lifecycleScope.launch {
             val accessibleCandidates =
                 withContext(Dispatchers.IO) {
+                    val preparedRoots =
+                        if (
+                            BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                                locationMode == LocationMode.DIRECT_FS
+                        ) {
+                            preparedVolumeIndexStore.refreshFromRootSync()
+                            preparedVolumeIndexStore.cachedCandidatePaths()
+                        } else {
+                            emptyList()
+                        }
                     TopwaySourcePolicy.discoverMusicSourceCandidates(
                         savedPaths = includeLocationAdapter.locations.map { it.uri.toString() },
                         mediaStoreParents = discoverMediaStoreAudioParents(),
-                        storageRoots = discoverStorageRoots(),
+                        storageRoots = discoverStorageRoots() + preparedRoots,
                         // This picker is explicitly user-started and may suggest new removable
                         // roots.
                         allowUnconfiguredUsb = true,
@@ -408,17 +430,22 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     }
 
             if (accessibleCandidates.isEmpty()) {
-                showManualPathEntry(disableThirdParty, callback)
+                showManualPathEntry(disableThirdParty, requiresPlayableSource, callback)
                 return@launch
             }
 
             AlertDialog.Builder(ctx)
                 .setTitle(R.string.set_select_source)
                 .setItems(accessibleCandidates.toTypedArray()) { _, which ->
-                    validateAndAcceptPath(accessibleCandidates[which], disableThirdParty, callback)
+                    validateAndAcceptPath(
+                        accessibleCandidates[which],
+                        disableThirdParty,
+                        requiresPlayableSource,
+                        callback,
+                    )
                 }
                 .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
-                    showManualPathEntry(disableThirdParty, callback)
+                    showManualPathEntry(disableThirdParty, requiresPlayableSource, callback)
                 }
                 .setNegativeButton(R.string.lbl_cancel) { _, _ ->
                     clearPendingLocationCallback(callback)
@@ -431,35 +458,102 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private fun validateAndAcceptPath(
         path: String,
         disableThirdParty: Boolean,
+        requiresPlayableSource: Boolean,
         callback: (Location.Unopened) -> Unit,
     ) {
+        val initiatingMode = locationMode
         lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) { validateManualPath(path) }
+            val validation =
+                withContext(Dispatchers.IO) {
+                    validateManualPath(path, requiresPlayableSource, initiatingMode)
+                }
             val currentContext = context
             if (currentContext == null) {
                 clearPendingLocationCallback(callback)
                 return@launch
             }
-            if (result != ManualPathValidation.OK && result != ManualPathValidation.ROOT_BACKED) {
-                L.w("Rejecting music source $path: $result")
-                currentContext.showToast(result.toastRes)
+            if (locationMode != initiatingMode) {
+                L.d(
+                    "Ignoring source validation after mode changed from $initiatingMode " +
+                        "to $locationMode"
+                )
                 clearPendingLocationCallback(callback)
                 return@launch
             }
-            val uri = Uri.fromFile(File(path))
+            if (validation != ManualPathValidation.OK) {
+                L.w("Rejecting source path $path: $validation")
+                currentContext.showToast(validation.toastRes)
+                clearPendingLocationCallback(callback)
+                return@launch
+            }
+
+            var resolvedPath = path
+            var authorityDetail = "directory_validation"
+            val directTopwayPlayable =
+                requiresPlayableSource &&
+                    BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                    initiatingMode == LocationMode.DIRECT_FS
+            if (directTopwayPlayable) {
+                val resolution =
+                    withContext(Dispatchers.IO) {
+                        if (!TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
+                            SourceResolution(
+                                requestedPath = path,
+                                resolvedPath = null,
+                                authority = SourceAuthority.UNAVAILABLE,
+                                detail = "unsafe_storage_path",
+                            )
+                        } else {
+                            preparedVolumeIndexStore.resolveSourceSync(path)
+                        }
+                    }
+                if (locationMode != initiatingMode) {
+                    L.d(
+                        "Ignoring source resolution after mode changed from $initiatingMode " +
+                            "to $locationMode"
+                    )
+                    clearPendingLocationCallback(callback)
+                    return@launch
+                }
+                val resolved = resolution.resolvedPath
+                if (
+                    resolved == null ||
+                        (resolution.authority != SourceAuthority.APP_READABLE &&
+                            resolution.authority != SourceAuthority.PREPARED_ALIAS)
+                ) {
+                    L.w(
+                        "Rejecting playable source $path: ${resolution.authority} ${resolution.detail}"
+                    )
+                    val failureToast =
+                        withContext(Dispatchers.IO) {
+                            sourceResolutionFailureToast(path, resolution)
+                        }
+                    currentContext.showToast(failureToast)
+                    clearPendingLocationCallback(callback)
+                    return@launch
+                }
+                resolvedPath = resolved
+                authorityDetail = "${resolution.authority}:${resolution.detail}"
+            }
+
+            val uri = Uri.fromFile(File(resolvedPath))
             val location = Location.Unopened.from(currentContext, uri)
             if (shouldRejectThirdPartyLocation(uri, location, disableThirdParty)) {
-                L.w("Rejecting music source $path: third-party volume disabled")
+                L.w("Rejecting source $resolvedPath: third-party volume disabled")
                 currentContext.showToast(R.string.err_bad_location)
                 clearPendingLocationCallback(callback)
                 return@launch
             }
             if (location.open(currentContext) == null) {
-                L.w("Rejecting music source $path: Location.open returned null")
-                currentContext.showToast(ManualPathValidation.OPEN_FAILED.toastRes)
+                L.w("Rejecting source $resolvedPath: Location.open returned null")
+                currentContext.showToast(R.string.set_path_open_failed)
                 clearPendingLocationCallback(callback)
                 return@launch
             }
+            L.i(
+                "Accepted source requested=$path resolved=$resolvedPath mode=$initiatingMode " +
+                    "playable=$requiresPlayableSource authority=$authorityDetail"
+            )
             callback(location)
             clearPendingLocationCallback(callback)
         }
@@ -472,28 +566,35 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         NOT_DIRECTORY(R.string.set_path_not_directory),
         UNREADABLE(R.string.set_path_unreadable),
         PERMISSION_MISSING(R.string.set_path_permission_missing),
-        ROOT_UNAVAILABLE(R.string.set_path_root_unavailable),
-        ROOT_BACKED(R.string.lbl_ok),
-        OPEN_FAILED(R.string.set_path_open_failed),
     }
 
-    private fun validateManualPath(path: String): ManualPathValidation {
-        val directTs18Path =
-            BuildConfig.TOPWAY_COMPAT_FLAVOR && locationMode == LocationMode.DIRECT_FS
-        if (directTs18Path && !TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
+    private fun validateManualPath(
+        path: String,
+        requiresPlayableSource: Boolean,
+        mode: LocationMode,
+    ): ManualPathValidation {
+        val directTopwayPlayable =
+            requiresPlayableSource &&
+                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                mode == LocationMode.DIRECT_FS
+        if (directTopwayPlayable && !TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
             return ManualPathValidation.UNSAFE
         }
-        if (!hasStoragePermission && locationMode != LocationMode.SAF) {
+        if (!hasStoragePermission && mode != LocationMode.SAF) {
             return ManualPathValidation.PERMISSION_MISSING
         }
         return try {
             val file = File(path)
+            val rootRecoveryEligible =
+                directTopwayPlayable &&
+                    rootGate.isUserEnabled() &&
+                    RootStorageAccelerationPolicy.isRemovablePath(path)
+            val exists = file.exists()
             when {
-                isRootBackedRawDirectPath(path, file, directTs18Path) ->
-                    ManualPathValidation.ROOT_BACKED
-                !file.exists() -> ManualPathValidation.MISSING
-                !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
-                !file.canRead() -> ManualPathValidation.UNREADABLE
+                !exists && !rootRecoveryEligible -> ManualPathValidation.MISSING
+                exists && !file.isDirectory -> ManualPathValidation.NOT_DIRECTORY
+                exists && !file.canRead() && !rootRecoveryEligible ->
+                    ManualPathValidation.UNREADABLE
                 else -> ManualPathValidation.OK
             }
         } catch (e: SecurityException) {
@@ -505,15 +606,22 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         }
     }
 
-    private fun isRootBackedRawDirectPath(
-        path: String,
-        file: File,
-        directTs18Path: Boolean,
-    ): Boolean {
-        if (!directTs18Path || !path.startsWith("/mnt/media_rw/usbdisk")) return false
-        if (file.exists() && file.isDirectory && file.canRead()) return false
-        if (rootGate.stateSnapshot() != RootStateHolder.State.Available) return false
-        return TopwaySourcePolicy.canListRootBackedDirectory(path, rootGate)
+    private fun sourceResolutionFailureToast(path: String, resolution: SourceResolution): Int {
+        if (resolution.detail == "unsafe_storage_path") return R.string.set_path_unsafe
+        if (resolution.authority == SourceAuthority.ROOT_SNAPSHOT_ONLY) {
+            return R.string.set_path_root_snapshot_only
+        }
+        return try {
+            val file = File(path)
+            when {
+                !file.exists() -> R.string.set_path_missing
+                !file.isDirectory -> R.string.set_path_not_directory
+                !file.canRead() -> R.string.set_path_unreadable
+                else -> R.string.set_path_no_supported_audio
+            }
+        } catch (_: RuntimeException) {
+            R.string.set_path_unreadable
+        }
     }
 
     private fun shouldRejectThirdPartyLocation(
@@ -587,6 +695,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun showManualPathEntry(
         disableThirdParty: Boolean,
+        requiresPlayableSource: Boolean,
         callback: (Location.Unopened) -> Unit,
     ) {
         val ctx =
@@ -624,7 +733,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     clearPendingLocationCallback(callback)
                     return@setPositiveButton
                 }
-                validateAndAcceptPath(pathText, disableThirdParty, callback)
+                validateAndAcceptPath(pathText, disableThirdParty, requiresPlayableSource, callback)
             }
             .setNegativeButton(R.string.lbl_cancel) { _, _ ->
                 clearPendingLocationCallback(callback)

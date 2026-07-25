@@ -3,6 +3,7 @@ set -euo pipefail
 
 allowed_topway_main='app/src/main/java/org/oxycblt/auxio/headunit/topway/'
 allowed_topway_test='app/src/test/java/org/oxycblt/auxio/headunit/topway/'
+root_probe_allowlist_test='app/src/test/java/org/oxycblt/auxio/headunit/root/dofun/Ts18DofunIntegrationResolverTest.kt'
 allowed_topway_flavour='app/src/topwayCompat/java/com/tw/music/'
 command_bridge_contract="${allowed_topway_main}TopwayCommandServiceContract.kt"
 command_bridge_client="${allowed_topway_main}TopwayCommandServiceClient.kt"
@@ -162,6 +163,27 @@ if [ -n "${identity_hits}" ]; then
   done <<< "${identity_hits}"
 fi
 
+if ! root_probe_vendor_ids="$(
+  python3 - "${root_probe_allowlist_test}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8").replace("\\\\.", ".")
+for value in sorted(set(re.findall(r"\bcom\.tw\.[A-Za-z0-9_.]+\b", text))):
+    print(value)
+PY
+)"; then
+  echo 'Cannot validate the root-probe vendor identifier allowlist' >&2
+  exit 1
+fi
+expected_root_probe_vendor_ids="$(printf '%s\n'   'com.tw.eq'   'com.tw.media'   'com.tw.music'   'com.tw.music.MusicActivity')"
+if [ "${root_probe_vendor_ids}" != "${expected_root_probe_vendor_ids}" ]; then
+  printf 'Observed root-probe vendor identifiers:\n%s\n' "${root_probe_vendor_ids}" >&2
+  echo 'Root-probe test vendor identifiers differ from the approved read-only set' >&2
+  exit 1
+fi
+
 vendor_hits="$(search_added_matches 'com\.tw\.[A-Za-z0-9_.]+|com\.android\.launcher\.widget_music_progress' "${product_code_sources[@]}")"
 if [ -n "${vendor_hits}" ]; then
   while IFS= read -r line; do
@@ -187,6 +209,8 @@ if [ -n "${vendor_hits}" ]; then
             exit 1
             ;;
         esac
+        ;;
+      "${root_probe_allowlist_test}")
         ;;
       ${allowed_topway_main}*|${allowed_topway_test}*|${allowed_topway_flavour}*)
         case "${line}" in
@@ -266,5 +290,7 @@ if [ -f app/src/main/java/org/oxycblt/auxio/headunit/overlay/CarOverlayContract.
     exit 1
   fi
 fi
+
+bash scripts/check-ts18-root-storage-fastpath.sh
 
 echo "headunit compat safety checks passed"

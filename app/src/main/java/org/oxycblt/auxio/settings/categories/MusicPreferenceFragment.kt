@@ -27,6 +27,9 @@ import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.MusicViewModel
@@ -141,6 +144,25 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                 Preference.OnPreferenceChangeListener { _, _ ->
                     L.d("TS18 system source filter changed, reloading music")
                     musicModel.refresh()
+                    true
+                }
+        }
+        if (preference.key == getString(R.string.set_key_use_root_fs)) {
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, newValue ->
+                    val enabled = newValue as? Boolean == true
+                    rootStateHolder.setUserEnabled(enabled)
+                    if (enabled) {
+                        // This is the explicit consent action. Request the bounded Magisk grant
+                        // here
+                        // instead of surprising the user later from an ordinary source picker.
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val probed = withContext(Dispatchers.IO) { rootStateHolder.probeSync() }
+                            findPreference<Preference>(getString(R.string.set_key_root_fs_status))
+                                ?.summary =
+                                RootDiagnosticsHelper.rootStatusSummary(requireContext(), probed)
+                        }
+                    }
                     true
                 }
         }

@@ -55,9 +55,14 @@ class BootReceiver : BroadcastReceiver() {
 
         L.d("Autostart enabled, attempting to launch Auxio-TS on boot")
         journal.log(DiagnosticJournal.CAT_BOOT, "Boot Received", "Autostart enabled")
-        // Do not start Magisk/su work in the cold boot receiver. Root-assisted DirectFS probes on
-        // demand only after playback/session restoration reaches a configured inaccessible source.
-        journal.log(DiagnosticJournal.CAT_BOOT, "Root probe deferred", "on_demand_direct_fs")
+        // Cached playback/session restoration is never blocked by an interactive su process.
+        // Optional root storage preparation runs independently in the Magisk late-start service;
+        // the app consumes its cached manifest and refreshes it only from an explicit source flow.
+        journal.log(
+            DiagnosticJournal.CAT_BOOT,
+            "Root storage preparation",
+            "parallel_magisk_late_start",
+        )
 
         // When autoplay is enabled, start the playback service first so that music can begin
         // even if the background activity start is blocked. The service start is only performed

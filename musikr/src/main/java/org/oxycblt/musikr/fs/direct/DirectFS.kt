@@ -56,6 +56,8 @@ import org.oxycblt.musikr.util.tryAsyncWith
 class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
     SourceAwareFS {
     private val sourceFailures = ConcurrentHashMap<String, String>()
+    private val rootSnapshotChecked = ConcurrentHashMap.newKeySet<String>()
+    private val rootSnapshotOnly = ConcurrentHashMap.newKeySet<String>()
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         kotlinx.coroutines.withContext(Dispatchers.IO) {
@@ -322,7 +324,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             try {
                 directory.listFiles()
             } catch (e: RuntimeException) {
-                Log.d(TAG, "Direct listing unavailable for ${directory.path}; trying root", e)
+                Log.d(TAG, "Direct listing unavailable for ${directory.path}", e)
                 null
             }
         if (local != null) {
@@ -337,19 +339,34 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                 )
             }
         }
-        val rootList =
-            try {
-                rootGate
-                    ?.runRootCommandSync(buildRootListCommand(directory.absolutePath))
-                    ?.mapNotNull { parseRootEntry(directory, it) }
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "Root-assisted DirectFS listing failed for ${directory.path}", e)
-                null
+
+        val configuredRoot = configuredRootFor(directory)
+        if (configuredRoot != null && rootGate != null) {
+            val key = configuredRoot.absolutePath
+            if (rootSnapshotChecked.add(key)) {
+                if (rootGate.snapshotTreeSync(key, MAX_DEPTH, ROOT_SNAPSHOT_TIMEOUT_MS) != null) {
+                    rootSnapshotOnly.add(key)
+                }
             }
-        if (rootList != null) return rootList
-        Log.w(TAG, "DirectFS root is unavailable or inaccessible: ${directory.path}")
+            if (key in rootSnapshotOnly) {
+                Log.w(
+                    TAG,
+                    "Root can snapshot $key but Auxio cannot open it as the app UID; " +
+                        "use a validated /storage or prepared alias",
+                )
+            }
+        }
+        Log.w(TAG, "DirectFS source is unavailable or inaccessible: ${directory.path}")
         return null
     }
+
+    private fun configuredRootFor(directory: JavaFile): JavaFile? =
+        roots
+            .asSequence()
+            .mapNotNull { it.uri.path?.let(::JavaFile) }
+            .mapNotNull(::canonicalFileOrNull)
+            .filter { root -> isWithinCanonicalRoot(directory, root) }
+            .maxByOrNull { it.absolutePath.length }
 
     private data class RootSnapshot(
         val location: Location.Opened,
@@ -381,29 +398,6 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         LimitExceeded,
     }
 
-    private fun parseRootEntry(parent: JavaFile, line: String): DirectEntry? {
-        val parts = line.split('\t', limit = 5)
-        if (parts.size != 5) return null
-        val name = parts[4]
-        if (
-            name.isBlank() ||
-                name == "." ||
-                name == ".." ||
-                name.contains('/') ||
-                name.contains('\t')
-        ) {
-            return null
-        }
-        return DirectEntry(
-            javaFile = JavaFile(parent, name),
-            name = name,
-            isDirectory = parts[0] == "d",
-            isSymlink = parts[1] == "l",
-            modifiedMs = (parts[2].toLongOrNull() ?: 0L) * 1000L,
-            size = parts[3].toLongOrNull() ?: 0L,
-        )
-    }
-
     private fun getMimeType(file: JavaFile): String =
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
             ?: "application/octet-stream"
@@ -417,23 +411,10 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         internal const val MAX_PENDING_DIRECTORIES = 512
         internal const val MAX_VISITED_DIRECTORIES = 100_000
         private const val QUEUE_POLL_INTERVAL_MS = 100L
+        private const val ROOT_SNAPSHOT_TIMEOUT_MS = 15_000L
 
         private val protectedRoots =
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
-
-        fun shellQuote(value: String): String = "'${value.replace("'", "'\"'\"'")}'"
-
-        fun buildRootListCommand(directory: String): String {
-            val quoted = shellQuote(directory)
-            return "for p in $quoted/* $quoted/.*; do " +
-                "[ -e \"\$p\" ] || continue; " +
-                "b=\${p##*/}; [ \"\$b\" = . ] && continue; [ \"\$b\" = .. ] && continue; " +
-                "t=f; [ -d \"\$p\" ] && t=d; [ -L \"\$p\" ] && t=l; " +
-                "m=\$(stat -c %Y \"\$p\" 2>/dev/null || echo 0); " +
-                "s=\$(stat -c %s \"\$p\" 2>/dev/null || echo 0); " +
-                "printf '%s\t%s\t%s\t%s\t%s\n' \"\$t\" \"\$t\" \"\$m\" \"\$s\" \"\$b\"; " +
-                "done"
-        }
 
         fun isSymbolicLinkCompat(file: JavaFile): Boolean =
             try {

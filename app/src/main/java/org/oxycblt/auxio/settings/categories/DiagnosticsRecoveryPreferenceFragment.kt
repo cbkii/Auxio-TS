@@ -23,7 +23,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import dagger.hilt.android.AndroidEntryPoint
@@ -87,20 +86,6 @@ class DiagnosticsRecoveryPreferenceFragment :
         if (preference.key == getString(R.string.set_key_diagnostics_export_report)) {
             preference.setOnPreferenceClickListener {
                 exportReport()
-                true
-            }
-        }
-
-        if (preference.key == getString(R.string.set_key_diagnostics_test_stock_disable)) {
-            preference.setOnPreferenceClickListener {
-                showDisableStockConfirmation()
-                true
-            }
-        }
-
-        if (preference.key == getString(R.string.set_key_diagnostics_restore_stock)) {
-            preference.setOnPreferenceClickListener {
-                restoreStock()
                 true
             }
         }
@@ -226,90 +211,7 @@ class DiagnosticsRecoveryPreferenceFragment :
             .show()
     }
 
-    private fun showDisableStockConfirmation() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.set_diagnostics_disable_title))
-            .setMessage(getString(R.string.set_diagnostics_disable_message))
-            .setPositiveButton(getString(R.string.set_diagnostics_disable_btn)) { _, _ ->
-                val pref =
-                    findPreference<Preference>(
-                        getString(R.string.set_key_diagnostics_test_stock_disable)
-                    )
-                pref?.isEnabled = false
-                viewLifecycleOwner.lifecycleScope.launch {
-                    try {
-                        val success =
-                            withContext(Dispatchers.IO) {
-                                resolver.testStockSelectionDisabledUser0()
-                            }
-                        val ctx = context ?: return@launch
-                        val msg =
-                            if (success) {
-                                ctx.getString(R.string.set_diagnostics_disable_success)
-                            } else {
-                                ctx.getString(R.string.set_diagnostics_disable_failed)
-                            }
-                        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
-                    } catch (e: Exception) {
-                        if (e is CancellationException) throw e
-                        val ctx = context ?: return@launch
-                        Toast.makeText(
-                                ctx,
-                                ctx.getString(R.string.set_diagnostics_disable_failed),
-                                Toast.LENGTH_SHORT,
-                            )
-                            .show()
-                    } finally {
-                        if (isAdded) {
-                            pref?.isEnabled = true
-                            updateUiState()
-                        }
-                    }
-                }
-            }
-            .setNegativeButton(getString(R.string.set_diagnostics_cancel_btn), null)
-            .show()
-    }
-
-    private fun restoreStock() {
-        val pref = findPreference<Preference>(getString(R.string.set_key_diagnostics_restore_stock))
-        pref?.isEnabled = false
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val success =
-                    withContext(Dispatchers.IO) { resolver.restoreStockSelectionDisabledUser0() }
-                val ctx = context ?: return@launch
-                val msg =
-                    if (success) {
-                        ctx.getString(R.string.set_diagnostics_restore_success)
-                    } else {
-                        ctx.getString(R.string.set_diagnostics_restore_failed)
-                    }
-                Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                val ctx = context ?: return@launch
-                Toast.makeText(
-                        ctx,
-                        ctx.getString(R.string.set_diagnostics_restore_failed),
-                        Toast.LENGTH_SHORT,
-                    )
-                    .show()
-            } finally {
-                if (isAdded) {
-                    pref?.isEnabled = true
-                    updateUiState()
-                }
-            }
-        }
-    }
-
     private fun updateUiState() {
-        val isRootAvailable = rootStateHolder.stateSnapshot() == RootStateHolder.State.Available
-        findPreference<Preference>(getString(R.string.set_key_diagnostics_test_stock_disable))
-            ?.isVisible = isRootAvailable
-        findPreference<Preference>(getString(R.string.set_key_diagnostics_restore_stock))
-            ?.isVisible = isRootAvailable
         findPreference<Preference>(getString(R.string.set_key_diagnostics_export_report))
             ?.isEnabled = lastReportStr != null
     }

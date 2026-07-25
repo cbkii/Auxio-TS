@@ -18,6 +18,28 @@
 
 package org.oxycblt.musikr.fs
 
+/** One bounded read-only root snapshot entry, relative to [RootTreeSnapshot.rootPath]. */
+data class RootTreeEntry(
+    val relativePath: String,
+    val isDirectory: Boolean,
+    val isSymlink: Boolean,
+    val modifiedMs: Long,
+    val size: Long,
+)
+
+/** A single-process, bounded snapshot of one configured storage root. */
+data class RootTreeSnapshot(val rootPath: String, val entries: List<RootTreeEntry>)
+
+/**
+ * Narrow storage-only root authority exposed to Musikr.
+ *
+ * Implementations must construct the command internally. Callers cannot submit free-form shell
+ * commands, package mutations or vendor-service operations through this boundary.
+ */
 interface RootGate {
-    fun runRootCommandSync(command: String, timeoutMs: Long = 5000): List<String>?
+    fun snapshotTreeSync(
+        rootPath: String,
+        maxDepth: Int = 32,
+        timeoutMs: Long = 15_000L,
+    ): RootTreeSnapshot?
 }

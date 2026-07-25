@@ -38,6 +38,9 @@ enum class LocationMode {
             }
 
     companion object {
+        fun defaultForFlavor(topwayCompat: Boolean): LocationMode =
+            if (topwayCompat) DIRECT_FS else SAF
+
         fun fromInt(int: Int): LocationMode? {
             return when (int) {
                 IntegerTable.LOCATION_MODE_SAF -> SAF

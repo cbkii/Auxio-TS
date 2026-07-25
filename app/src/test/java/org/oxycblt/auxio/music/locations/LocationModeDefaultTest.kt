@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * DirectFsRootPolicyTest.kt is part of Auxio.
+ * LocationModeDefaultTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,25 +16,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.oxycblt.musikr.fs.direct
+package org.oxycblt.auxio.music.locations
 
-import java.io.File
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isAllowedRoot
 
-class DirectFsRootPolicyTest {
+class LocationModeDefaultTest {
     @Test
-    fun rejectsProtectedRootsAndDescendants() {
-        listOf("/", "/system", "/system/app", "/vendor", "/vendor/etc", "/data", "/data/media")
-            .forEach { path -> assertFalse(path, isAllowedRoot(File(path))) }
+    fun topwayFreshInstallUsesDirectFs() {
+        assertEquals(LocationMode.DIRECT_FS, LocationMode.defaultForFlavor(true))
     }
 
     @Test
-    fun allowsAppFacingPreparedAndRawBackingRoots() {
-        assertTrue(isAllowedRoot(File("/storage/usbdisk0")))
-        assertTrue(isAllowedRoot(File("/storage/auxio-root/usbdisk0")))
-        assertTrue(isAllowedRoot(File("/mnt/media_rw/usbdisk0")))
+    fun standardFreshInstallKeepsSaf() {
+        assertEquals(LocationMode.SAF, LocationMode.defaultForFlavor(false))
     }
 }

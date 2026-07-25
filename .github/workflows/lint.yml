@@ -378,9 +378,33 @@ jobs:
           persist-credentials: false
 
       - name: Run head-unit compatibility safety checks
+        id: headunit_safety
         shell: bash
         run: |
-          bash ./scripts/check-ts18-apk-reference-contracts.sh
-          bash ./scripts/check-headunit-compat-safety.sh
-          bash ./scripts/check-dofun-topway-compat.sh
-          bash ./scripts/check-native-keep-rules.sh
+          set -o pipefail
+          log="${RUNNER_TEMP}/headunit-safety.log"
+          (
+            for script in \
+              scripts/check-ts18-apk-reference-contracts.sh \
+              scripts/check-headunit-compat-safety.sh \
+              scripts/check-dofun-topway-compat.sh \
+              scripts/check-native-keep-rules.sh; do
+              printf '\n===== BEGIN %s =====\n' "${script}"
+              if bash "${script}"; then
+                printf '===== END %s status=0 =====\n' "${script}"
+              else
+                status=$?
+                printf '===== END %s status=%s =====\n' "${script}" "${status}"
+                exit "${status}"
+              fi
+            done
+          ) 2>&1 | tee "${log}"
+
+      - name: Upload head-unit safety failure log
+        if: failure() && steps.headunit_safety.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-quality-headunit-safety-log
+          path: ${{ runner.temp }}/headunit-safety.log
+          if-no-files-found: error
+          retention-days: 7
