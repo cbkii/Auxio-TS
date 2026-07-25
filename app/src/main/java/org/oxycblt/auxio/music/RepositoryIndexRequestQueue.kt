@@ -33,7 +33,7 @@ internal data class RepositoryIndexRequest(
     }
 }
 
-/** Coalesces requests received before the service-owned indexing worker is attached. */
+/** Coalesces requests received before the service indexing worker is attached. */
 internal class RepositoryIndexRequestQueue {
     private var pending: RepositoryIndexRequest? = null
 
