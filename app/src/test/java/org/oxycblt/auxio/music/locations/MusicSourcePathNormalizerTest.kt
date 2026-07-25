@@ -55,7 +55,7 @@ class MusicSourcePathNormalizerTest {
     @Test
     fun directFsKeepsArbitraryInternalSharedStorageChild() {
         assertEquals(
-            "file:///storage/emulated/0/My Audio Archive",
+            "file:///storage/emulated/0/My%20Audio%20Archive",
             MusicSourcePathNormalizer.normalizePersistedLocation(
                 "/storage/emulated/0/My Audio Archive",
                 true,
