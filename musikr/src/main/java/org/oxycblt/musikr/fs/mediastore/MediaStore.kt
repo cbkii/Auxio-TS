@@ -197,12 +197,10 @@ private constructor(
     private fun buildSelector(): Pair<String, Array<String>> {
         var selector = BASE_SELECTOR
         val args = mutableListOf<String>()
-        if (query.excludeNonMusic) {
-            selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
-        }
-        // Do not infer music folders from names such as "music", "download", or "media". Users may
-        // store valid audio anywhere under /storage/emulated/0 or removable storage. Explicit
-        // include/exclude selections remain the only path restriction authority.
+        // Do not trust IS_MUSIC or folder-name heuristics as hard authority. Vendor Android 10
+        // MediaProviders commonly leave those fields stale or unset even for valid audio rows.
+        // The Audio.Media endpoint plus Musikr's bounded MIME/extension classifier is the reliable
+        // authority, while explicit include/exclude selections remain fully respected.
         when (query.mode) {
             FilterMode.INCLUDE -> {
                 pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
@@ -244,6 +242,7 @@ private constructor(
     data class Query(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
+        // Retained for settings compatibility. IS_MUSIC is advisory and no longer suppresses rows.
         val excludeNonMusic: Boolean,
         // Retained for settings compatibility. Folder-name filtering is intentionally no longer
         // applied because it excluded valid user-selected internal and removable directories.
