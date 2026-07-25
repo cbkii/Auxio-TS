@@ -19,8 +19,8 @@
 package org.oxycblt.auxio.music
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.musikr.library.MetadataProfile
 
@@ -38,7 +38,7 @@ class RepositoryIndexRequestQueueTest {
         )
 
         val request = requireNotNull(queue.drain())
-        assertTrue(!request.withCache)
+        assertFalse(request.withCache)
         assertEquals(MetadataProfile.FULL, request.metadataProfile)
         assertNull(queue.drain())
     }
