@@ -129,7 +129,7 @@ sealed interface IndexingProgress {
     data object Indeterminate : IndexingProgress
 }
 
-/** No configured source completed or reused, so an empty result is not authoritative. */
+/** No configured source completed, reused, or retained readable rows. */
 class SourceScanFailureException(val failures: Map<String, String>) :
     IllegalStateException(
         "Every attempted music source failed: " +
@@ -137,10 +137,15 @@ class SourceScanFailureException(val failures: Map<String, String>) :
     )
 
 internal object SourceScanCommitPolicy {
-    fun rejectsAsAuthoritativeEmpty(commit: IncrementalScanCommit): Boolean =
+    fun allAttemptedSourcesFailed(commit: IncrementalScanCommit): Boolean =
         commit.failedSources.isNotEmpty() &&
             commit.committedSources.isEmpty() &&
             commit.reusedSources.isEmpty()
+
+    fun rejectsAsAuthoritativeEmpty(
+        commit: IncrementalScanCommit,
+        hasPreservedReadableRows: Boolean,
+    ): Boolean = allAttemptedSourcesFailed(commit) && !hasPreservedReadableRows
 }
 
 private class MusikrImpl(
@@ -211,10 +216,19 @@ private class MusikrImpl(
                     "Committed ${commit.committedSources.size} source generation(s), " +
                         "${commit.changedRows} changed and ${commit.removedRows} removed rows",
                 )
-                if (SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(commit)) {
-                    // A failed provider/mount must not become a successful empty library. The
-                    // incremental store has already preserved every prior committed generation.
-                    throw SourceScanFailureException(commit.failedSources)
+                if (SourceScanCommitPolicy.allAttemptedSourcesFailed(commit)) {
+                    // An existing committed generation may still be readable when an advisory
+                    // provider operation fails. Check only on this exceptional path. If rows remain,
+                    // the repository will reload and publish them instead of the empty work graph.
+                    val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
+                    if (
+                        SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(
+                            commit,
+                            hasPreservedRows,
+                        )
+                    ) {
+                        throw SourceScanFailureException(commit.failedSources)
+                    }
                 }
             }
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
