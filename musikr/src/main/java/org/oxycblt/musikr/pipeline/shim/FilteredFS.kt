@@ -76,7 +76,8 @@ internal class FilteredFS(
                         if (isProtected) continue
 
                         // A configured source is authoritative. Do not discard valid audio merely
-                        // because it lives below Download, DCIM, Movies, Pictures, or a folder whose
+                        // because it lives below Download, DCIM, Movies, Pictures, or a folder
+                        // whose
                         // name lacks "music". This is essential for arbitrary
                         // /storage/emulated/0/* and removable-storage layouts.
                         files.send(file)
