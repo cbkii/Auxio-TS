@@ -180,7 +180,8 @@ private constructor(
                                 origin = origin,
                                 sourceAuthority = sourceAuthority,
                             )
-                        // Root probing remains on-demand. Cache and playback restoration do not wait
+                        // Root probing remains on-demand. Cache and playback restoration do not
+                        // wait
                         // for su, source traversal, or a library scan.
                         musicRepository.startup(this@IndexingHolder)
                         if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
