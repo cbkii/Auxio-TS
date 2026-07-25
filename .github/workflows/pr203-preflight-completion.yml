@@ -1,0 +1,116 @@
+name: PR 203 Preflight Completion Guard
+
+on:
+  push:
+    branches:
+      - fix/reliable-music-source-loading
+    paths:
+      - ".github/workflows/pr203-preflight-completion.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr203-preflight-completion
+  cancel-in-progress: false
+
+jobs:
+  patch-format-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/reliable-music-source-loading
+          fetch-depth: 0
+          submodules: false
+          persist-credentials: true
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [[ -z "${sdk_dir}" ]]; then
+            printf 'ERROR: Android SDK path is unavailable.\n' >&2
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Handle preflight failures at the repository boundary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt")
+          text = path.read_text(encoding="utf-8")
+          old = '''            val prepared =
+                IncrementalIndexPlanner.prepare(
+                    fs = rawFs,
+                    cache = cache,
+                    withCache = withCache,
+                    profile = resolvedProfile,
+                    configurationRevision = sourceConfigurationRevision(),
+                    legacyWriteOnly = ::WriteOnlyMutableCache,
+                )
+          '''
+          new = '''            val prepared =
+                try {
+                    IncrementalIndexPlanner.prepare(
+                        fs = rawFs,
+                        cache = cache,
+                        withCache = withCache,
+                        profile = resolvedProfile,
+                        configurationRevision = sourceConfigurationRevision(),
+                        legacyWriteOnly = ::WriteOnlyMutableCache,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    musicSettings.lastScanFailed = true
+                    emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                    L.w(e, "Music-source preflight failed; preserving the last readable library")
+                    emitIndexingCompletion(e)
+                    return@traceSuspend
+                }
+          '''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f"STOP: expected one preflight block, found {count}")
+          path.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
+          PY
+
+      - name: Apply repository Kotlin formatting
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
+
+      - name: Remove temporary workflow and commit
+        shell: bash
+        run: |
+          rm -- .github/workflows/pr203-preflight-completion.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt .github/workflows/pr203-preflight-completion.yml
+          if git diff --cached --quiet; then
+            printf 'STOP: no preflight-completion changes were produced.\n' >&2
+            exit 1
+          fi
+          git diff --cached --check
+          git commit -m "fix: complete failed source preflight state"
+          git push origin "HEAD:fix/reliable-music-source-loading"
