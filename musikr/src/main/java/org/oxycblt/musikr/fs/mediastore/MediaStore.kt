@@ -100,7 +100,8 @@ private constructor(
                     available = volumeAccessible,
                     fingerprint = version?.let { "$it:${query.hashCode()}" },
                     // Android 10 exposes an opaque volume version but not per-row generation
-                    // counters. Without that optional token the planner must perform the real query.
+                    // counters. Without that optional token the planner must perform the real
+                    // query.
                     fingerprintStrength =
                         if (version != null) SourceFingerprintStrength.ADVISORY
                         else SourceFingerprintStrength.NONE,
