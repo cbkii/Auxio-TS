@@ -70,6 +70,9 @@ jobs:
           def write(path: Path, text: str) -> None:
               path.write_text(text, encoding="utf-8", newline="\n")
 
+          def block(*lines: str) -> str:
+              return "\n".join(lines) + "\n"
+
           def replace_once(path: Path, old: str, new: str, label: str) -> None:
               text = read(path)
               count = text.count(old)
@@ -83,8 +86,9 @@ jobs:
           filtered_fs = Path("musikr/src/main/java/org/oxycblt/musikr/pipeline/shim/FilteredFS.kt")
           filtered_fs_test = Path("musikr/src/test/java/org/oxycblt/musikr/pipeline/shim/FilteredFSTest.kt")
 
-          old_preflight = "\n".join(
-              [
+          replace_once(
+              music_repository,
+              block(
                   "            val prepared =",
                   "                IncrementalIndexPlanner.prepare(",
                   "                    fs = rawFs,",
@@ -94,11 +98,8 @@ jobs:
                   "                    configurationRevision = sourceConfigurationRevision(),",
                   "                    legacyWriteOnly = ::WriteOnlyMutableCache,",
                   "                )",
-                  "",
-              ]
-          )
-          new_preflight = "\n".join(
-              [
+              ),
+              block(
                   "            val prepared =",
                   "                try {",
                   "                    IncrementalIndexPlanner.prepare(",
@@ -118,13 +119,7 @@ jobs:
                   "                    emitIndexingCompletion(e)",
                   "                    return@traceSuspend",
                   "                }",
-                  "",
-              ]
-          )
-          replace_once(
-              music_repository,
-              old_preflight,
-              new_preflight,
+              ),
               "repository preflight failure boundary",
           )
 
@@ -137,43 +132,49 @@ jobs:
 
           replace_once(
               media_store,
-              """        // TS18's MediaProvider commonly leaves IS_MUSIC stale and stores valid audio outside
-        // folder names such as Music, Download, or Media. relaxIsMusicHeuristic identifies that
-        // compatibility mode, so it relaxes those OEM heuristics while standard builds retain the
-        // user's exclude-non-music setting. Explicit include/exclude selections remain
-        // authoritative.
-""",
-              """        // Explicit include/exclude selections remain authoritative. This flag only decides
-        // whether provider-maintained IS_MUSIC metadata is required by the shared adapter.
-""",
+              block(
+                  "        // TS18's MediaProvider commonly leaves IS_MUSIC stale and stores valid audio outside",
+                  "        // folder names such as Music, Download, or Media. relaxIsMusicHeuristic identifies that",
+                  "        // compatibility mode, so it relaxes those OEM heuristics while standard builds retain the",
+                  "        // user's exclude-non-music setting. Explicit include/exclude selections remain",
+                  "        // authoritative.",
+              ),
+              block(
+                  "        // Explicit include/exclude selections remain authoritative. This flag only decides",
+                  "        // whether provider-maintained IS_MUSIC metadata is required by the shared adapter.",
+              ),
               "shared MediaStore selector comment",
           )
           replace_once(
               media_store,
-              """        // TS18 compatibility mode: bypass unreliable IS_MUSIC/folder-name heuristics while
-        // retaining
-        // explicit include/exclude filters. The standard variant leaves this false.
-        val relaxIsMusicHeuristic: Boolean = false,
-""",
-              """        // Variant-neutral switch for providers whose IS_MUSIC metadata is not authoritative.
-        // App integration code owns the decision to enable it.
-        val relaxIsMusicHeuristic: Boolean = false,
-""",
+              block(
+                  "        // TS18 compatibility mode: bypass unreliable IS_MUSIC/folder-name heuristics while",
+                  "        // retaining",
+                  "        // explicit include/exclude filters. The standard variant leaves this false.",
+                  "        val relaxIsMusicHeuristic: Boolean = false,",
+              ),
+              block(
+                  "        // Variant-neutral switch for providers whose IS_MUSIC metadata is not authoritative.",
+                  "        // App integration code owns the decision to enable it.",
+                  "        val relaxIsMusicHeuristic: Boolean = false,",
+              ),
               "shared MediaStore query comment",
           )
           replace_once(
               music_repository,
-              """                    musicSettings.mediaStoreQuery.copy(
-                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter
-                    )
-""",
-              """                    musicSettings.mediaStoreQuery.copy(
-                        // Keep the shared MediaStore adapter variant-neutral. Topway compatibility
-                        // selects the relaxed provider heuristic at this app integration boundary;
-                        // physical TS18 outcomes still require device validation.
-                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter
-                    )
-""",
+              block(
+                  "                    musicSettings.mediaStoreQuery.copy(",
+                  "                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter",
+                  "                    )",
+              ),
+              block(
+                  "                    musicSettings.mediaStoreQuery.copy(",
+                  "                        // Keep the shared MediaStore adapter variant-neutral. Topway compatibility",
+                  "                        // selects the relaxed provider heuristic at this app integration boundary;",
+                  "                        // physical TS18 outcomes still require device validation.",
+                  "                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter",
+                  "                    )",
+              ),
               "Topway MediaStore integration decision",
           )
           replace_once(
@@ -197,12 +198,12 @@ jobs:
           )
           replace_once(
               filtered_fs_test,
-              """                this,
-                noisyDirs = setOf("Download", "DCIM", "Movies", "data", "system"),
-                pathKeywords = listOf("music"),
-""",
-              """                this,
-""",
+              block(
+                  "                this,",
+                  '                noisyDirs = setOf("Download", "DCIM", "Movies", "data", "system"),',
+                  '                pathKeywords = listOf("music"),',
+              ),
+              block("                this,"),
               "obsolete FilteredFS test configuration",
           )
 
@@ -216,8 +217,8 @@ jobs:
                   'FilteredFS(ThrowingFS(failure), this)',
               'FilteredFS(LeakyButCompletedFS(this, file("Music/song.mp3")), this, setOf("Android"))':
                   'FilteredFS(LeakyButCompletedFS(this, file("Music/song.mp3")), this)',
-              "                this,\n                setOf(\"Android\"),\n":
-                  "                this,\n",
+              block("                this,", '                setOf("Android"),'):
+                  block("                this,"),
           }
           for old, new in replacements.items():
               text = text.replace(old, new)
