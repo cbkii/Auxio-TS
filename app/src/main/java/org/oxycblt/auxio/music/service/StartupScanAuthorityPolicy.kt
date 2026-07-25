@@ -84,11 +84,14 @@ object StartupScanAuthorityPolicy {
             LocationMode.MEDIA_STORE -> hasStoragePermission(context)
             LocationMode.SAF -> sources.any { hasUriReadAuthority(context, it.uri) }
             LocationMode.DIRECT_FS ->
-                hasStoragePermission(context) &&
-                    sources.any { location ->
-                        val file = location.uri.path?.let(::File) ?: return@any false
-                        file.exists() && file.isDirectory && file.canRead()
-                    }
+                // File-process readability is the authority. Internal shared storage naturally
+                // remains unreadable without Android storage permission, while a validated
+                // app-readable USB or prepared alias must not be blocked by an unrelated blanket
+                // permission gate.
+                sources.any { location ->
+                    val file = location.uri.path?.let(::File) ?: return@any false
+                    file.exists() && file.isDirectory && file.canRead()
+                }
         }
     }
 
