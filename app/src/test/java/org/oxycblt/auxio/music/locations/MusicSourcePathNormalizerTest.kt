@@ -64,6 +64,14 @@ class MusicSourcePathNormalizerTest {
     }
 
     @Test
+    fun directFsNormalisesSdcardAliasToInternalSharedStorage() {
+        assertEquals(
+            "file:///storage/emulated/0/Recordings",
+            MusicSourcePathNormalizer.normalizePersistedLocation("/sdcard/Recordings", true),
+        )
+    }
+
+    @Test
     fun directFsKeepsFileUriWithoutDuplicatingPath() {
         assertEquals(
             "file:///storage/usbdisk0/Music",
@@ -125,6 +133,17 @@ class MusicSourcePathNormalizerTest {
             "file:///storage/usbdisk0/Music",
             MusicSourcePathNormalizer.normalizePersistedLocation(
                 "file:///storage/usbdisk0/storage/usbdisk0/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun duplicatedDynamicUsbPathIsRepairedWhenSafe() {
+        assertEquals(
+            "file:///storage/usbdisk7/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "file:///storage/usbdisk7/storage/usbdisk7/Music",
                 true,
             ),
         )
