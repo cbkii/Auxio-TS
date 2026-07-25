@@ -130,7 +130,8 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
 
     internal companion object {
         private val UUID_STORAGE_PATH = Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
-        private val UUID_MEDIA_RW_PATH = Regex("^/mnt/media_rw/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
+        private val UUID_MEDIA_RW_PATH =
+            Regex("^/mnt/media_rw/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(/.*)?$")
         private val UUID_VOLUME_TOKEN = Regex("(?:^|[/=:])[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}(?=[:/]|$)")
         private val USB_DISK_PATH = Regex("^/storage/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
         private val MEDIA_RW_USB_PATH =
