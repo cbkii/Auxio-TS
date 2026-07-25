@@ -30,7 +30,7 @@ import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.util.tryAsync
 
-/** A wrapper [FS] that rejects protected paths without guessing where users store music. */
+/** Compatibility wrapper that preserves bounded channel and failure propagation. */
 internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
@@ -51,37 +51,14 @@ internal class FilteredFS(
                 return CompletableDeferred(Result.failure(t))
             }
 
-        val filterTask =
+        val forwardingTask =
             scope.tryAsync(EmptyCoroutineContext) {
                 try {
-                    for (file in delegateChannel) {
-                        val componentsLower = file.path.components.components.map { it.lowercase() }
-                        val fullPathStr = file.path.toString().lowercase()
-
-                        // Hard-deny protected roots only when they appear near the root, not as an
-                        // arbitrary user folder name. Android app-runtime paths used by Auxio and
-                        // the dedicated Topway identities remain exempt.
-                        val isProtected =
-                            componentsLower.withIndex().any { (idx, comp) ->
-                                val isProtectedName =
-                                    comp in
-                                        setOf("android", "data", "system", "vendor", "proc", "dev")
-                                val isSafeRuntime =
-                                    fullPathStr.contains("org.oxycblt.auxio") ||
-                                        fullPathStr.contains("com.tw.music") ||
-                                        fullPathStr.contains("com.tw.media") ||
-                                        fullPathStr.contains("com.dofun.variety")
-                                isProtectedName && idx <= 3 && !isSafeRuntime
-                            }
-                        if (isProtected) continue
-
-                        // A configured source is authoritative. Do not discard valid audio merely
-                        // because it lives below Download, DCIM, Movies, Pictures, or a folder
-                        // whose
-                        // name lacks "music". This is essential for arbitrary
-                        // /storage/emulated/0/* and removable-storage layouts.
-                        files.send(file)
-                    }
+                    // The selected MediaStore query, SAF tree, or canonical DirectFS root is the
+                    // source authority. Do not guess from child folder names: users may keep valid
+                    // audio anywhere below /storage/emulated/0 or removable storage. Musikr's
+                    // MIME/extension classifier rejects non-audio rows after this bounded forward.
+                    for (file in delegateChannel) files.send(file)
                     files.close()
                 } catch (t: Throwable) {
                     delegateChannel.close(t)
@@ -108,8 +85,8 @@ internal class FilteredFS(
                 // channels where kotlinx.coroutines channels support them.
                 delegateChannel.close(delegateResult.exceptionOrNull())
 
-                val filterResult = filterTask.await()
-                filterResult.getOrThrow()
+                val forwardingResult = forwardingTask.await()
+                forwardingResult.getOrThrow()
                 delegateResult.getOrThrow()
             } finally {
                 delegateChannel.cancel()
