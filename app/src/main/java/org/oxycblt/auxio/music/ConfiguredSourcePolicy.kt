@@ -134,6 +134,8 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
         private val USB_DISK_PATH = Regex("^/storage/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
         private val MEDIA_RW_USB_PATH =
             Regex("^/mnt/media_rw/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
+        private val PREPARED_USB_PATH =
+            Regex("^/storage/auxio-root/usbdisk\\d+(/.*)?$", RegexOption.IGNORE_CASE)
 
         fun isUsbUri(uri: Uri): Boolean {
             val decoded = Uri.decode(uri.toString()).replace('\\', '/')
@@ -180,6 +182,10 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
 
         private fun toAppFacingPath(path: String): String {
             val clean = path.trimEnd('/').ifEmpty { "/" }
+            if (clean == "/sdcard") return "/storage/emulated/0"
+            if (clean.startsWith("/sdcard/")) {
+                return "/storage/emulated/0/" + clean.removePrefix("/sdcard/")
+            }
             val match =
                 Regex("^/mnt/media_rw/(usbdisk\\d+)(/.*)?$", RegexOption.IGNORE_CASE)
                     .matchEntire(clean)
@@ -191,16 +197,17 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
         }
 
         private fun isAllowedRoot(path: String): Boolean =
-            path == "/sdcard" ||
-                path.startsWith("/sdcard/") ||
-                path == "/storage/emulated/0" ||
+            path == "/storage/emulated/0" ||
                 path.startsWith("/storage/emulated/0/") ||
                 USB_DISK_PATH.matches(path) ||
+                PREPARED_USB_PATH.matches(path) ||
                 UUID_STORAGE_PATH.matches(path)
 
         private fun isRemovablePath(file: File): Boolean {
             val path = file.absolutePath.replace('\\', '/').trimEnd('/')
-            return USB_DISK_PATH.matches(path) || UUID_STORAGE_PATH.matches(path)
+            return USB_DISK_PATH.matches(path) ||
+                PREPARED_USB_PATH.matches(path) ||
+                UUID_STORAGE_PATH.matches(path)
         }
 
         private fun configurationRevision(mode: LocationMode, uris: List<Uri>): Long {
