@@ -32,9 +32,13 @@ object SourceAuthorityValidator {
     /**
      * Validate a source in the current Android app process.
      *
-     * [representativePath] is an optional prepared-manifest hint. When it is contained by [path],
-     * has an audio extension and opens successfully, validation is O(1). Any stale, escaped or
-     * unreadable hint is ignored and falls back to the bounded directory walk.
+     * Ordinary app-facing `/storage/...` directories are accepted once this process can list the
+     * directory. They may legitimately be empty, contain audio below the bounded validation depth,
+     * or receive music later. The real Musikr scan is the authority for contents.
+     *
+     * Prepared Magisk aliases retain the stronger requirement: [representativePath] may prove media
+     * access in O(1), otherwise a bounded walk must find and open a contained audio file. This
+     * prevents a root-visible mount from being saved when the Auxio app UID cannot open its media.
      */
     fun classifyDirect(
         path: String,
@@ -45,6 +49,9 @@ object SourceAuthorityValidator {
         val canonicalRoot = runCatching { root.canonicalFile }.getOrNull() ?: return null
         if (!root.exists() || !root.isDirectory || !root.canRead()) return null
 
+        val first = runCatching { root.listFiles() }.getOrNull() ?: return null
+        if (!preparedAlias) return SourceAuthority.APP_READABLE
+
         val hintedFile = representativePath?.let(::File)
         if (
             hintedFile != null &&
@@ -52,10 +59,9 @@ object SourceAuthorityValidator {
                 isContainedReadableFile(hintedFile, canonicalRoot) &&
                 opensInAppProcess(hintedFile)
         ) {
-            return authority(preparedAlias)
+            return SourceAuthority.PREPARED_ALIAS
         }
 
-        val first = runCatching { root.listFiles() }.getOrNull() ?: return null
         val queue = ArrayDeque<Pair<File, Int>>()
         var enqueued = 0
         fun enqueueBounded(files: Array<File>, depth: Int) {
@@ -85,7 +91,7 @@ object SourceAuthorityValidator {
 
         val mediaFile = representative ?: return null
         if (!opensInAppProcess(mediaFile)) return null
-        return authority(preparedAlias)
+        return SourceAuthority.PREPARED_ALIAS
     }
 
     private fun isContainedReadableFile(candidate: File, canonicalRoot: File): Boolean {
@@ -101,9 +107,6 @@ object SourceAuthorityValidator {
                 }
             }
             .getOrDefault(false)
-
-    private fun authority(preparedAlias: Boolean): SourceAuthority =
-        if (preparedAlias) SourceAuthority.PREPARED_ALIAS else SourceAuthority.APP_READABLE
 
     private fun isWithin(candidate: File, root: File): Boolean {
         var cursor: File? = candidate
