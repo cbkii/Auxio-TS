@@ -58,7 +58,8 @@ internal object IncrementalIndexPlanner {
             }
 
         if (observedSnapshots.isEmpty()) {
-            // MediaStore implementations on vendor Android 10 builds can fail volume discovery while
+            // MediaStore implementations on vendor Android 10 builds can fail volume discovery
+            // while
             // the ordinary external audio query still works. Let the real adapter decide.
             L.w("Source preflight returned no snapshots; falling back to a complete source scan")
             return legacyPrepared(fs, cache, withCache, legacyWriteOnly)
@@ -103,10 +104,5 @@ internal object IncrementalIndexPlanner {
         cache: MutableCache,
         withCache: Boolean,
         legacyWriteOnly: (MutableCache) -> MutableCache,
-    ) =
-        Prepared(
-            fs = fs,
-            cache = if (withCache) cache else legacyWriteOnly(cache),
-            plan = null,
-        )
+    ) = Prepared(fs = fs, cache = if (withCache) cache else legacyWriteOnly(cache), plan = null)
 }
