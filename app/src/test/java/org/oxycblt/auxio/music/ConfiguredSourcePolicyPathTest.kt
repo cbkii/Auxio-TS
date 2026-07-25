@@ -33,9 +33,7 @@ class ConfiguredSourcePolicyPathTest {
     fun recognisesTopwayPreparedAndUuidRemovableRoots() {
         assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/usbdisk0/Music")))
         assertTrue(
-            ConfiguredSourcePolicy.isUsbUri(
-                Uri.parse("file:///storage/auxio-root/usbdisk2/Music")
-            )
+            ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/auxio-root/usbdisk2/Music"))
         )
         assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/ABCD-1234/Music")))
         assertTrue(
