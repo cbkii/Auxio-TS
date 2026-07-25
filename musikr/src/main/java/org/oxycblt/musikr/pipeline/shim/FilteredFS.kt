@@ -30,15 +30,13 @@ import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.util.tryAsync
 
-/** A wrapper [FS] that rejects protected paths and known non-library directories. */
+/** A wrapper [FS] that rejects protected paths without guessing where users store music. */
 internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
-    private val noisyDirs: Set<String>,
+    @Suppress("UNUSED_PARAMETER") noisyDirs: Set<String>,
     @Suppress("UNUSED_PARAMETER") pathKeywords: List<String> = emptyList(),
 ) : FS {
-    private val lowercaseNoisyDirs = noisyDirs.mapTo(hashSetOf()) { it.lowercase() }
-
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
         val delegateChannel =
             Channel<File>(org.oxycblt.musikr.pipeline.PipelinePolicy.BUFFER_CAPACITY)
@@ -77,15 +75,10 @@ internal class FilteredFS(
                             }
                         if (isProtected) continue
 
-                        // A folder selected by the user is authoritative regardless of whether its
-                        // name contains "music", "download", or "media". Only explicit noisy
-                        // directories are skipped, and a nested music-named path may still override
-                        // those generic exclusions.
-                        val isMusicPath = componentsLower.dropLast(1).any { it.contains("music") }
-                        val isNoisy =
-                            !isMusicPath && componentsLower.any { it in lowercaseNoisyDirs }
-                        if (isNoisy) continue
-
+                        // A configured source is authoritative. Do not discard valid audio merely
+                        // because it lives below Download, DCIM, Movies, Pictures, or a folder whose
+                        // name lacks "music". This is essential for arbitrary
+                        // /storage/emulated/0/* and removable-storage layouts.
                         files.send(file)
                     }
                     files.close()
