@@ -218,14 +218,12 @@ private class MusikrImpl(
                 )
                 if (SourceScanCommitPolicy.allAttemptedSourcesFailed(commit)) {
                     // An existing committed generation may still be readable when an advisory
-                    // provider operation fails. Check only on this exceptional path. If rows remain,
+                    // provider operation fails. Check only on this exceptional path. If rows
+                    // remain,
                     // the repository will reload and publish them instead of the empty work graph.
                     val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
                     if (
-                        SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(
-                            commit,
-                            hasPreservedRows,
-                        )
+                        SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(commit, hasPreservedRows)
                     ) {
                         throw SourceScanFailureException(commit.failedSources)
                     }
