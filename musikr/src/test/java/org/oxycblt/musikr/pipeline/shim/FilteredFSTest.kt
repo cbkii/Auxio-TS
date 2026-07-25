@@ -65,9 +65,11 @@ class FilteredFSTest {
                     file("DCIM/recorder/session.flac"),
                     file("Movies/live-set.m4a"),
                     file("My Audio Archive/track.ogg"),
+                    file("data/private-recording.mp3"),
+                    file("system/live-recording.flac"),
                 ),
                 this,
-                noisyDirs = setOf("Download", "DCIM", "Movies"),
+                noisyDirs = setOf("Download", "DCIM", "Movies", "data", "system"),
                 pathKeywords = listOf("music"),
             )
         val output = Channel<File>(Channel.UNLIMITED)
@@ -79,33 +81,13 @@ class FilteredFSTest {
         assertEquals("DCIM/recorder/session.flac", output.receive().path.components.toString())
         assertEquals("Movies/live-set.m4a", output.receive().path.components.toString())
         assertEquals("My Audio Archive/track.ogg", output.receive().path.components.toString())
+        assertEquals("data/private-recording.mp3", output.receive().path.components.toString())
+        assertEquals("system/live-recording.flac", output.receive().path.components.toString())
         assertTrue(output.receiveCatching().isClosed)
     }
 
     @Test
-    fun exploreRejectsProtectedStorageRoots() = runTest {
-        val fs =
-            FilteredFS(
-                EmittingFS(
-                    this,
-                    file("Android/cache/noise.mp3"),
-                    file("data/private.mp3"),
-                    file("Music/song.mp3"),
-                ),
-                this,
-                emptySet(),
-            )
-        val output = Channel<File>(Channel.UNLIMITED)
-
-        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
-
-        assertTrue(result.isSuccess)
-        assertEquals("Music/song.mp3", output.receive().path.components.toString())
-        assertTrue(output.receiveCatching().isClosed)
-    }
-
-    @Test
-    fun exploreAllowsAuxioRuntimePathException() = runTest {
+    fun exploreAllowsAppRuntimePathWithinAnAuthorisedTree() = runTest {
         val fs =
             FilteredFS(
                 EmittingFS(this, file("Android/data/org.oxycblt.auxio/files/song.mp3")),
