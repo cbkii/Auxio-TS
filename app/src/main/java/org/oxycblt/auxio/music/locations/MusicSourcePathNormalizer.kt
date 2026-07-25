@@ -77,12 +77,20 @@ internal object MusicSourcePathNormalizer {
         return Uri.fromFile(canonical)
     }
 
-    private fun normaliseSharedStorageAlias(path: String): String =
-        when {
-            path == "/sdcard" -> "/storage/emulated/0"
-            path.startsWith("/sdcard/") -> "/storage/emulated/0/" + path.removePrefix("/sdcard/")
-            else -> path
+    private fun normaliseSharedStorageAlias(path: String): String {
+        if (path == "/sdcard") return "/storage/emulated/0"
+        if (path.startsWith("/sdcard/")) {
+            return "/storage/emulated/0/" + path.removePrefix("/sdcard/")
         }
+        val rawUsb =
+            Regex("^/mnt/media_rw/(usbdisk\\d+)(/.*)?$", RegexOption.IGNORE_CASE)
+                .matchEntire(path.trimEnd('/'))
+        return if (rawUsb != null) {
+            "/storage/${rawUsb.groupValues[1]}${rawUsb.groupValues[2]}"
+        } else {
+            path
+        }
+    }
 
     private fun containsDotSegment(path: String): Boolean {
         val clean = path.replace('\\', '/')
