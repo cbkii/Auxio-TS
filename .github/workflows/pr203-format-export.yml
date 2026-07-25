@@ -65,13 +65,18 @@ jobs:
       - name: Export exact Spotless changes
         shell: bash
         run: |
-          set -euo pipefail
-          bash ./scripts/ci-gradle.sh spotlessApply
+          set -u
           mkdir -p "${RUNNER_TEMP}/spotless-export"
+          set +e
+          bash ./scripts/ci-gradle.sh spotlessApply > "${RUNNER_TEMP}/spotless-export/spotless.log" 2>&1
+          status=$?
+          set -e
+          cat "${RUNNER_TEMP}/spotless-export/spotless.log"
+          printf '%s\n' "${status}" > "${RUNNER_TEMP}/spotless-export/status.txt"
           git diff --binary -- . ':(exclude)local.properties' > "${RUNNER_TEMP}/spotless-export/spotless.patch"
           git diff --name-only -- . ':(exclude)local.properties' > "${RUNNER_TEMP}/spotless-export/files.txt"
           if [[ ! -s "${RUNNER_TEMP}/spotless-export/spotless.patch" ]]; then
-            printf 'No Spotless changes were required.\n' > "${RUNNER_TEMP}/spotless-export/clean.txt"
+            printf 'No Spotless changes were produced.\n' > "${RUNNER_TEMP}/spotless-export/clean.txt"
           fi
 
       - name: Upload Spotless export
