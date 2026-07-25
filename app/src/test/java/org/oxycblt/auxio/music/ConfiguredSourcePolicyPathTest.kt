@@ -30,8 +30,13 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class ConfiguredSourcePolicyPathTest {
     @Test
-    fun recognisesTopwayAndUuidRemovableRoots() {
+    fun recognisesTopwayPreparedAndUuidRemovableRoots() {
         assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/usbdisk0/Music")))
+        assertTrue(
+            ConfiguredSourcePolicy.isUsbUri(
+                Uri.parse("file:///storage/auxio-root/usbdisk2/Music")
+            )
+        )
         assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/ABCD-1234/Music")))
         assertTrue(
             ConfiguredSourcePolicy.isUsbUri(
@@ -51,6 +56,18 @@ class ConfiguredSourcePolicyPathTest {
         assertEquals(
             "/storage/emulated/0/Music",
             ConfiguredSourcePolicy.normaliseConfiguredRoot("file:///storage/emulated/0/Music")
+                ?.absolutePath,
+        )
+        assertEquals(
+            "/storage/emulated/0/Recordings",
+            ConfiguredSourcePolicy.normaliseConfiguredRoot("file:///sdcard/Recordings")
+                ?.absolutePath,
+        )
+        assertEquals(
+            "/storage/auxio-root/usbdisk2/Music",
+            ConfiguredSourcePolicy.normaliseConfiguredRoot(
+                    "file:///storage/auxio-root/usbdisk2/Music"
+                )
                 ?.absolutePath,
         )
         assertNull(
