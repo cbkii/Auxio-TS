@@ -67,14 +67,22 @@ internal object MusicSourcePathNormalizer {
             L.w("Skipping DirectFS source with path traversal segment: $uri")
             return null
         }
+        val appFacingPath = normaliseSharedStorageAlias(rawPath)
         val canonical =
             try {
-                File(rawPath).canonicalFile
+                File(appFacingPath).canonicalFile
             } catch (_: Exception) {
-                File(rawPath).absoluteFile
+                File(appFacingPath).absoluteFile
             }
         return Uri.fromFile(canonical)
     }
+
+    private fun normaliseSharedStorageAlias(path: String): String =
+        when {
+            path == "/sdcard" -> "/storage/emulated/0"
+            path.startsWith("/sdcard/") -> "/storage/emulated/0/" + path.removePrefix("/sdcard/")
+            else -> path
+        }
 
     private fun containsDotSegment(path: String): Boolean {
         val clean = path.replace('\\', '/')
@@ -94,16 +102,15 @@ internal object MusicSourcePathNormalizer {
     }
 
     private fun repairDuplicatedStoragePath(path: String): String? {
-        val prefixes =
+        val dynamicRoots =
             listOf(
-                "/storage/emulated/0",
-                "/storage/usbdisk0",
-                "/storage/usbdisk1",
-                "/mnt/media_rw/usbdisk0",
-                "/mnt/media_rw/usbdisk1",
-                "/sdcard",
-            )
-        for (prefix in prefixes) {
+                Regex("^/storage/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                Regex("^/mnt/media_rw/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                Regex("^/storage/auxio-root/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
+            ).mapNotNull { it.find(path)?.value }
+        val prefixes = listOf("/storage/emulated/0", "/sdcard") + dynamicRoots
+        for (prefix in prefixes.distinct()) {
             val duplicated = prefix + prefix
             if (path == duplicated || path.startsWith(duplicated + "/")) {
                 return prefix + path.removePrefix(duplicated)
