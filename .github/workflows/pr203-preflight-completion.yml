@@ -1,4 +1,4 @@
-name: PR 203 Preflight Completion Guard
+name: PR 203 Final Hardening Guard
 
 on:
   push:
@@ -16,14 +16,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: pr203-preflight-completion
+  group: pr203-final-hardening
   cancel-in-progress: false
 
 jobs:
-  patch-format-push:
+  patch-validate-push:
     if: github.event_name == 'push' || github.head_ref == 'fix/reliable-music-source-loading'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -58,53 +58,181 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Handle preflight failures at the repository boundary
+      - name: Apply scoped final-hardening fixes
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt")
-          text = path.read_text(encoding="utf-8")
-          old = '''            val prepared =
-                IncrementalIndexPlanner.prepare(
-                    fs = rawFs,
-                    cache = cache,
-                    withCache = withCache,
-                    profile = resolvedProfile,
-                    configurationRevision = sourceConfigurationRevision(),
-                    legacyWriteOnly = ::WriteOnlyMutableCache,
-                )
-          '''
-          new = '''            val prepared =
-                try {
-                    IncrementalIndexPlanner.prepare(
-                        fs = rawFs,
-                        cache = cache,
-                        withCache = withCache,
-                        profile = resolvedProfile,
-                        configurationRevision = sourceConfigurationRevision(),
-                        legacyWriteOnly = ::WriteOnlyMutableCache,
+          def read(path: Path) -> str:
+              return path.read_text(encoding="utf-8")
+
+          def write(path: Path, text: str) -> None:
+              path.write_text(text, encoding="utf-8", newline="\n")
+
+          def replace_once(path: Path, old: str, new: str, label: str) -> None:
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"STOP: {label}: expected one match in {path}, found {count}")
+              write(path, text.replace(old, new, 1))
+
+          music_repository = Path("app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt")
+          media_store = Path("musikr/src/main/java/org/oxycblt/musikr/fs/mediastore/MediaStore.kt")
+          media_store_test = Path("musikr/src/test/java/org/oxycblt/musikr/fs/mediastore/MediaStoreFilterPolicyTest.kt")
+          filtered_fs = Path("musikr/src/main/java/org/oxycblt/musikr/pipeline/shim/FilteredFS.kt")
+          filtered_fs_test = Path("musikr/src/test/java/org/oxycblt/musikr/pipeline/shim/FilteredFSTest.kt")
+
+          old_preflight = "\n".join(
+              [
+                  "            val prepared =",
+                  "                IncrementalIndexPlanner.prepare(",
+                  "                    fs = rawFs,",
+                  "                    cache = cache,",
+                  "                    withCache = withCache,",
+                  "                    profile = resolvedProfile,",
+                  "                    configurationRevision = sourceConfigurationRevision(),",
+                  "                    legacyWriteOnly = ::WriteOnlyMutableCache,",
+                  "                )",
+                  "",
+              ]
+          )
+          new_preflight = "\n".join(
+              [
+                  "            val prepared =",
+                  "                try {",
+                  "                    IncrementalIndexPlanner.prepare(",
+                  "                        fs = rawFs,",
+                  "                        cache = cache,",
+                  "                        withCache = withCache,",
+                  "                        profile = resolvedProfile,",
+                  "                        configurationRevision = sourceConfigurationRevision(),",
+                  "                        legacyWriteOnly = ::WriteOnlyMutableCache,",
+                  "                    )",
+                  "                } catch (e: CancellationException) {",
+                  "                    throw e",
+                  "                } catch (e: Exception) {",
+                  "                    musicSettings.lastScanFailed = true",
+                  "                    emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)",
+                  "                    L.w(e, \"Music-source preflight failed; preserving the last readable library\")",
+                  "                    emitIndexingCompletion(e)",
+                  "                    return@traceSuspend",
+                  "                }",
+                  "",
+              ]
+          )
+          replace_once(
+              music_repository,
+              old_preflight,
+              new_preflight,
+              "repository preflight failure boundary",
+          )
+
+          for path in (music_repository, media_store, media_store_test):
+              text = read(path)
+              count = text.count("useDefaultSystemFilter")
+              if count == 0:
+                  raise SystemExit(f"STOP: MediaStore heuristic rename found no matches in {path}")
+              write(path, text.replace("useDefaultSystemFilter", "relaxIsMusicHeuristic"))
+
+          replace_once(
+              media_store,
+              """        // TS18's MediaProvider commonly leaves IS_MUSIC stale and stores valid audio outside
+        // folder names such as Music, Download, or Media. relaxIsMusicHeuristic identifies that
+        // compatibility mode, so it relaxes those OEM heuristics while standard builds retain the
+        // user's exclude-non-music setting. Explicit include/exclude selections remain
+        // authoritative.
+""",
+              """        // Explicit include/exclude selections remain authoritative. This flag only decides
+        // whether provider-maintained IS_MUSIC metadata is required by the shared adapter.
+""",
+              "shared MediaStore selector comment",
+          )
+          replace_once(
+              media_store,
+              """        // TS18 compatibility mode: bypass unreliable IS_MUSIC/folder-name heuristics while
+        // retaining
+        // explicit include/exclude filters. The standard variant leaves this false.
+        val relaxIsMusicHeuristic: Boolean = false,
+""",
+              """        // Variant-neutral switch for providers whose IS_MUSIC metadata is not authoritative.
+        // App integration code owns the decision to enable it.
+        val relaxIsMusicHeuristic: Boolean = false,
+""",
+              "shared MediaStore query comment",
+          )
+          replace_once(
+              music_repository,
+              """                    musicSettings.mediaStoreQuery.copy(
+                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter
                     )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    musicSettings.lastScanFailed = true
-                    emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
-                    L.w(e, "Music-source preflight failed; preserving the last readable library")
-                    emitIndexingCompletion(e)
-                    return@traceSuspend
-                }
-          '''
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit(f"STOP: expected one preflight block, found {count}")
-          path.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
+""",
+              """                    musicSettings.mediaStoreQuery.copy(
+                        // Keep the shared MediaStore adapter variant-neutral. Topway compatibility
+                        // selects the relaxed provider heuristic at this app integration boundary;
+                        // physical TS18 outcomes still require device validation.
+                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter
+                    )
+""",
+              "Topway MediaStore integration decision",
+          )
+          replace_once(
+              media_store_test,
+              "fun topwayCompatibilityModeDoesNotTrustStaleIsMusicFlags()",
+              "fun relaxedHeuristicBypassesIsMusicConstraint()",
+              "variant-neutral MediaStore test name",
+          )
+
+          replace_once(
+              filtered_fs,
+              '@Suppress("UNUSED_PARAMETER") noisyDirs: Set<String>,',
+              '@Suppress("UNUSED_PARAMETER") noisyDirs: Set<String> = emptySet(),',
+              "FilteredFS compatibility parameter default",
+          )
+          replace_once(
+              filtered_fs_test,
+              "fun exploreHonoursArbitraryUserAuthorisedFolders()",
+              "fun exploreForwardsPreviouslyFilteredDirectoryNames()",
+              "FilteredFS forwarding test name",
+          )
+          replace_once(
+              filtered_fs_test,
+              """                this,
+                noisyDirs = setOf("Download", "DCIM", "Movies", "data", "system"),
+                pathKeywords = listOf("music"),
+""",
+              """                this,
+""",
+              "obsolete FilteredFS test configuration",
+          )
+
+          text = read(filtered_fs_test)
+          replacements = {
+              'FilteredFS(EmittingFS(this, file("Music/song.mp3")), this, setOf("Android"))':
+                  'FilteredFS(EmittingFS(this, file("Music/song.mp3")), this)',
+              'FilteredFS(FailingFS(failure), this, setOf("Android"))':
+                  'FilteredFS(FailingFS(failure), this)',
+              'FilteredFS(ThrowingFS(failure), this, setOf("Android"))':
+                  'FilteredFS(ThrowingFS(failure), this)',
+              'FilteredFS(LeakyButCompletedFS(this, file("Music/song.mp3")), this, setOf("Android"))':
+                  'FilteredFS(LeakyButCompletedFS(this, file("Music/song.mp3")), this)',
+              "                this,\n                setOf(\"Android\"),\n":
+                  "                this,\n",
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+          write(filtered_fs_test, text)
           PY
 
-      - name: Apply repository Kotlin formatting
+      - name: Apply and verify Kotlin formatting
         shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
+        run: |
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply
+          bash ./scripts/ci-gradle.sh spotlessCheck
+
+      - name: Run focused JVM regression suite
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest :musikr:testDebugUnitTest
 
       - name: Remove temporary workflow and commit
         shell: bash
@@ -112,11 +240,17 @@ jobs:
           rm -- .github/workflows/pr203-preflight-completion.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt .github/workflows/pr203-preflight-completion.yml
+          git add -- \
+            app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt \
+            musikr/src/main/java/org/oxycblt/musikr/fs/mediastore/MediaStore.kt \
+            musikr/src/main/java/org/oxycblt/musikr/pipeline/shim/FilteredFS.kt \
+            musikr/src/test/java/org/oxycblt/musikr/fs/mediastore/MediaStoreFilterPolicyTest.kt \
+            musikr/src/test/java/org/oxycblt/musikr/pipeline/shim/FilteredFSTest.kt \
+            .github/workflows/pr203-preflight-completion.yml
           if git diff --cached --quiet; then
-            printf 'STOP: no preflight-completion changes were produced.\n' >&2
+            printf 'STOP: no final-hardening changes were produced.\n' >&2
             exit 1
           fi
           git diff --cached --check
-          git commit -m "fix: complete failed source preflight state"
+          git commit -m "fix: harden source recovery and review boundaries"
           git push origin "HEAD:fix/reliable-music-source-loading"
