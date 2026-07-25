@@ -74,10 +74,13 @@ internal object MusicSourcePathNormalizer {
             } catch (_: Exception) {
                 File(appFacingPath).absoluteFile
             }
-        return Uri.fromFile(canonical)
+        // On TS18, canonicalising /storage/usbdiskN may resolve its vold symlink back to the raw
+        // /mnt/media_rw path. Persist the app-facing namespace again after canonicalisation so the
+        // normal app UID can enumerate and play the selected source.
+        return Uri.fromFile(File(normaliseSharedStorageAlias(canonical.absolutePath)))
     }
 
-    private fun normaliseSharedStorageAlias(path: String): String {
+    internal fun normaliseSharedStorageAlias(path: String): String {
         if (path == "/sdcard") return "/storage/emulated/0"
         if (path.startsWith("/sdcard/")) {
             return "/storage/emulated/0/" + path.removePrefix("/sdcard/")
