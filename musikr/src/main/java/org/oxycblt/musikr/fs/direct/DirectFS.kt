@@ -151,6 +151,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                         parent = null,
                         depth = 0,
                         sourceKey = sourceKey,
+                        configuredRootTask = true,
                     )
                 when (enqueueDirectory(queue, pending, discoveredDirectories, task)) {
                     EnqueueResult.Enqueued -> Unit
@@ -189,10 +190,20 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
 
         val entries = listFilesSafe(task.directory)
         if (entries == null) {
-            recordFailure(
-                task.sourceKey,
-                "DirectFS source became unavailable at ${task.directory.path}",
-            )
+            if (
+                !task.configuredRootTask &&
+                    isExpectedRestrictedSharedStorageChild(task.directory, task.canonicalRoot)
+            ) {
+                // Android deliberately hides these children from ordinary app UIDs even when the
+                // user selected the shared-storage root. They cannot contain files this process can
+                // open, so skipping them must not invalidate the rest of /storage/emulated/0.
+                Log.w(TAG, "Skipping restricted shared-storage child ${task.directory.path}")
+            } else {
+                recordFailure(
+                    task.sourceKey,
+                    "DirectFS source became unavailable at ${task.directory.path}",
+                )
+            }
             return
         }
 
@@ -248,6 +259,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                     parent = directoryDeferred,
                     depth = task.depth + 1,
                     sourceKey = task.sourceKey,
+                    configuredRootTask = false,
                 )
             when (enqueueDirectory(queue, pending, discoveredDirectories, childTask)) {
                 EnqueueResult.Enqueued -> Unit
@@ -341,7 +353,14 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         }
 
         val configuredRoot = configuredRootFor(directory)
-        if (configuredRoot != null && rootGate != null) {
+        val canonicalDirectory = canonicalFileOrNull(directory)
+        // A root snapshot is evidence about the configured root only. Never launch or reuse a root
+        // snapshot merely because one inaccessible child exists below an otherwise readable source.
+        if (
+            configuredRoot != null &&
+                canonicalDirectory == configuredRoot &&
+                rootGate != null
+        ) {
             val key = configuredRoot.absolutePath
             if (rootSnapshotChecked.add(key)) {
                 if (rootGate.snapshotTreeSync(key, MAX_DEPTH, ROOT_SNAPSHOT_TIMEOUT_MS) != null) {
@@ -390,6 +409,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         val parent: Deferred<Directory>?,
         val depth: Int,
         val sourceKey: String,
+        val configuredRootTask: Boolean,
     )
 
     private enum class EnqueueResult {
@@ -433,6 +453,20 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
                 if (cursor == canonicalRoot) return true
                 cursor = cursor.parentFile ?: return false
             }
+        }
+
+        internal fun isExpectedRestrictedSharedStorageChild(
+            directory: JavaFile,
+            canonicalRoot: JavaFile,
+        ): Boolean {
+            if (canonicalRoot.path.trimEnd('/') != "/storage/emulated/0") return false
+            val canonicalDirectory = canonicalFileOrNull(directory) ?: return false
+            val rootPath = canonicalRoot.path.trimEnd('/')
+            val relative = canonicalDirectory.path.removePrefix(rootPath).trimStart('/')
+            return relative == "Android/data" ||
+                relative.startsWith("Android/data/") ||
+                relative == "Android/obb" ||
+                relative.startsWith("Android/obb/")
         }
 
         private fun canonicalFileOrNull(file: JavaFile): JavaFile? =
