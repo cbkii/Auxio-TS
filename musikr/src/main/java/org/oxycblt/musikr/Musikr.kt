@@ -60,6 +60,7 @@ interface Musikr {
             rootGate: org.oxycblt.musikr.fs.RootGate? = null,
         ): Musikr =
             MusikrImpl(
+                context,
                 config,
                 ExploreStep.from(config, noisyDirs, pathKeywords, rootGate),
                 ExtractStep.from(context, config),
@@ -149,6 +150,7 @@ internal object SourceScanCommitPolicy {
 }
 
 private class MusikrImpl(
+    private val context: Context,
     private val config: Config,
     private val exploreStep: ExploreStep,
     private val extractStep: ExtractStep,
@@ -206,7 +208,7 @@ private class MusikrImpl(
                     emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
                     emitProgress(IndexingProgress.Indeterminate)
                 }
-            val library = evaluateStep.evaluate(trackedExtractedChannel)
+            var resultLibrary = evaluateStep.evaluate(trackedExtractedChannel)
             merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
 
             val commit = if (plan != null) incremental?.commitScan() else null
@@ -217,20 +219,21 @@ private class MusikrImpl(
                         "${commit.changedRows} changed and ${commit.removedRows} removed rows",
                 )
                 if (SourceScanCommitPolicy.allAttemptedSourcesFailed(commit)) {
-                    // An existing committed generation may still be readable when an advisory
-                    // provider operation fails. Check only on this exceptional path. If rows
-                    // remain,
-                    // the repository will reload and publish them instead of the empty work graph.
+                    // A transient provider or mount failure may leave an older committed generation
+                    // readable. Reload that generation instead of publishing the empty in-flight
+                    // graph. When no readable rows remain, fail explicitly so callers preserve their
+                    // previous library state and expose source recovery rather than confirmed empty.
                     val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
                     if (
                         SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(commit, hasPreservedRows)
                     ) {
                         throw SourceScanFailureException(commit.failedSources)
                     }
+                    resultLibrary = Musikr.loadCached(context, config)
                 }
             }
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
-            LibraryResultImpl(config, library, commit?.failedSources.orEmpty())
+            LibraryResultImpl(config, resultLibrary, commit?.failedSources.orEmpty())
         } catch (e: CancellationException) {
             abortIncremental(plan, incremental, e)
             throw e
