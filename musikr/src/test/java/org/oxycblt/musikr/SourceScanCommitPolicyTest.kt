@@ -29,7 +29,18 @@ class SourceScanCommitPolicyTest {
     fun allFailedSourcesCannotPublishAuthoritativeEmptyLibrary() {
         assertTrue(
             SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(
-                commit(failed = mapOf("source" to "unreadable"))
+                commit(failed = mapOf("source" to "unreadable")),
+                hasPreservedReadableRows = false,
+            )
+        )
+    }
+
+    @Test
+    fun allFailedSourcesMayReloadAReadableCommittedGeneration() {
+        assertFalse(
+            SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(
+                commit(failed = mapOf("source" to "temporary provider failure")),
+                hasPreservedReadableRows = true,
             )
         )
     }
@@ -37,7 +48,10 @@ class SourceScanCommitPolicyTest {
     @Test
     fun successfulEmptySourceMayPublishConfirmedEmptyLibrary() {
         assertFalse(
-            SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(commit(committed = setOf("source")))
+            SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(
+                commit(committed = setOf("source")),
+                hasPreservedReadableRows = false,
+            )
         )
     }
 
@@ -45,7 +59,8 @@ class SourceScanCommitPolicyTest {
     fun mixedFailureAndReusedGenerationRemainsReadable() {
         assertFalse(
             SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(
-                commit(reused = setOf("internal"), failed = mapOf("usb" to "unmounted"))
+                commit(reused = setOf("internal"), failed = mapOf("usb" to "unmounted")),
+                hasPreservedReadableRows = false,
             )
         )
     }
