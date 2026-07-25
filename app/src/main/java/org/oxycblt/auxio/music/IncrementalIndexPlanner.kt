@@ -24,7 +24,6 @@ import org.oxycblt.musikr.cache.IncrementalScanPlan
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.SourceAwareFS
-import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.library.MetadataProfile
 import timber.log.Timber as L
 
@@ -59,39 +58,35 @@ internal object IncrementalIndexPlanner {
 
         if (observedSnapshots.isEmpty()) {
             // MediaStore implementations on vendor Android 10 builds can fail volume discovery
-            // while
-            // the ordinary external audio query still works. Let the real adapter decide.
+            // while the ordinary external audio query still works. Let the real adapter decide.
             L.w("Source preflight returned no snapshots; falling back to a complete source scan")
             return legacyPrepared(fs, cache, withCache, legacyWriteOnly)
         }
 
-        val retryableSnapshots =
-            observedSnapshots.map { snapshot ->
-                if (snapshot.available) {
-                    snapshot
-                } else {
-                    // Availability probes are advisory. Actual enumeration is the authority and can
-                    // record a source-local failure without deleting the previous committed rows.
-                    snapshot.copy(
-                        available = true,
-                        fingerprint = null,
-                        fingerprintStrength = SourceFingerprintStrength.NONE,
-                    )
-                }
-            }
-        val retriedKeys =
-            observedSnapshots.filterNot { it.available }.mapTo(linkedSetOf()) { it.sourceKey }
-        if (retriedKeys.isNotEmpty()) {
-            L.w("Retrying sources rejected by advisory preflight: $retriedKeys")
-        }
-
-        val plan =
+        val initialPlan =
             incremental.planScan(
-                snapshots = retryableSnapshots,
+                snapshots = observedSnapshots,
                 force = !withCache,
                 metadataProfile = profile,
                 configurationRevision = configurationRevision,
             )
+        val advisoryRejected = observedSnapshots.filterNot { it.available }
+        val retriedKeys = advisoryRejected.mapTo(linkedSetOf()) { it.sourceKey }
+        val plan =
+            if (advisoryRejected.isEmpty()) {
+                initialPlan
+            } else {
+                // Preserve the observed unavailable state in the source ledger, but still attempt
+                // the real adapter enumeration. Successful enumeration promotes the ledger back to
+                // available; a source-local failure keeps the previous committed generation and
+                // the truthful unavailable/incomplete state.
+                L.w("Retrying sources rejected by advisory preflight: $retriedKeys")
+                initialPlan.copy(
+                    scanSources =
+                        (initialPlan.scanSources + advisoryRejected).distinctBy { it.sourceKey },
+                    unavailableSourceKeys = initialPlan.unavailableSourceKeys - retriedKeys,
+                )
+            }
         return Prepared(
             fs = sourceAware.selectSources(plan.scanSourceKeys),
             cache = cache,
