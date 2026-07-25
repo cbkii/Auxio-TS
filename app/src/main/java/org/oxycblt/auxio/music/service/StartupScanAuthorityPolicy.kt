@@ -74,16 +74,19 @@ object StartupScanAuthorityPolicy {
 
         if (settings.locationMode == LocationMode.MEDIA_STORE) return hasStoragePermission(context)
 
+        // Persisted entries that can no longer be opened are ignored here. One surviving authorised
+        // source is enough to recover the library; the real scan will retain prior generations for
+        // any unavailable siblings and report their individual failure.
         val sources = settings.safQuery.source
-        if (sources.isEmpty() || sources.size != settings.configuredSourceCount) return false
+        if (sources.isEmpty()) return false
 
         return when (settings.locationMode) {
             LocationMode.MEDIA_STORE -> hasStoragePermission(context)
-            LocationMode.SAF -> sources.all { hasUriReadAuthority(context, it.uri) }
+            LocationMode.SAF -> sources.any { hasUriReadAuthority(context, it.uri) }
             LocationMode.DIRECT_FS ->
                 hasStoragePermission(context) &&
-                    sources.all { location ->
-                        val file = location.uri.path?.let(::File) ?: return@all false
+                    sources.any { location ->
+                        val file = location.uri.path?.let(::File) ?: return@any false
                         file.exists() && file.isDirectory && file.canRead()
                     }
         }
