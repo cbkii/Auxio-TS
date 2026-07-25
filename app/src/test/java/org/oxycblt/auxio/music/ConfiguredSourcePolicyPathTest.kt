@@ -36,6 +36,7 @@ class ConfiguredSourcePolicyPathTest {
             ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/auxio-root/usbdisk2/Music"))
         )
         assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/ABCD-1234/Music")))
+        assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///mnt/media_rw/ABCD-1234/Music")))
         assertTrue(
             ConfiguredSourcePolicy.isUsbUri(
                 Uri.parse("content://com.android.externalstorage.documents/tree/ABCD-1234%3AMusic")
@@ -49,6 +50,11 @@ class ConfiguredSourcePolicyPathTest {
         assertEquals(
             "/storage/usbdisk0/Music",
             ConfiguredSourcePolicy.normaliseConfiguredRoot("file:///mnt/media_rw/usbdisk0/Music")
+                ?.absolutePath,
+        )
+        assertEquals(
+            "/storage/ABCD-1234/Music",
+            ConfiguredSourcePolicy.normaliseConfiguredRoot("file:///mnt/media_rw/ABCD-1234/Music")
                 ?.absolutePath,
         )
         assertEquals(
