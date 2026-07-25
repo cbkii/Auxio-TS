@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -74,12 +75,13 @@ class IncrementalIndexPlannerTest {
                 legacyWriteOnly = { it },
             )
 
-        val retried = requireNotNull(cache.plannedSnapshots).single()
-        assertTrue(retried.available)
-        assertNull(retried.fingerprint)
-        assertEquals(SourceFingerprintStrength.NONE, retried.fingerprintStrength)
+        val observed = requireNotNull(cache.plannedSnapshots).single()
+        assertFalse(observed.available)
+        assertNull(observed.fingerprint)
+        assertEquals(SourceFingerprintStrength.NONE, observed.fingerprintStrength)
         assertEquals(setOf(sourceKey), original.selectedSourceKeys)
         assertEquals(setOf(sourceKey), prepared.plan?.scanSourceKeys)
+        assertTrue(prepared.plan?.unavailableSourceKeys.orEmpty().isEmpty())
     }
 
     @Test
@@ -140,9 +142,10 @@ class IncrementalIndexPlannerTest {
             plannedSnapshots = snapshots
             return IncrementalScanPlan(
                 scanId = "scan",
-                scanSources = snapshots,
+                scanSources = snapshots.filter { it.available },
                 reuseSourceKeys = emptySet(),
-                unavailableSourceKeys = emptySet(),
+                unavailableSourceKeys =
+                    snapshots.filterNot { it.available }.mapTo(linkedSetOf()) { it.sourceKey },
                 metadataProfile = metadataProfile,
                 configurationRevision = configurationRevision,
                 force = force,
