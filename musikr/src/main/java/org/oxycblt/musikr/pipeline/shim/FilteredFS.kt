@@ -30,15 +30,14 @@ import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.util.tryAsync
 
-/** A wrapper [FS] that filters files based on their path components. */
+/** A wrapper [FS] that rejects protected paths and known non-library directories. */
 internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
     private val noisyDirs: Set<String>,
-    pathKeywords: List<String> = emptyList(),
+    @Suppress("UNUSED_PARAMETER") pathKeywords: List<String> = emptyList(),
 ) : FS {
-    // Pre-lowercase keywords once to avoid repeated allocations during filtering.
-    private val lowercaseKeywords = pathKeywords.map { it.lowercase() }
+    private val lowercaseNoisyDirs = noisyDirs.mapTo(hashSetOf()) { it.lowercase() }
 
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
         val delegateChannel =
@@ -61,8 +60,9 @@ internal class FilteredFS(
                         val componentsLower = file.path.components.components.map { it.lowercase() }
                         val fullPathStr = file.path.toString().lowercase()
 
-                        // Hard-deny protected roots (only if they appear at the root level, not
-                        // arbitrary children)
+                        // Hard-deny protected roots only when they appear near the root, not as an
+                        // arbitrary user folder name. Android app-runtime paths used by Auxio and
+                        // the dedicated Topway identities remain exempt.
                         val isProtected =
                             componentsLower.withIndex().any { (idx, comp) ->
                                 val isProtectedName =
@@ -75,25 +75,16 @@ internal class FilteredFS(
                                         fullPathStr.contains("com.dofun.variety")
                                 isProtectedName && idx <= 3 && !isSafeRuntime
                             }
+                        if (isProtected) continue
 
-                        if (isProtected) {
-                            continue
-                        }
-
-                        // Check for music keyword to bypass noisy directory filtering
+                        // A folder selected by the user is authoritative regardless of whether its
+                        // name contains "music", "download", or "media". Only explicit noisy
+                        // directories are skipped, and a nested music-named path may still override
+                        // those generic exclusions.
                         val isMusicPath = componentsLower.dropLast(1).any { it.contains("music") }
-
-                        // Then apply noisy-directory filtering. Bypass if it contains music
                         val isNoisy =
-                            !isMusicPath && file.path.components.components.any { it in noisyDirs }
+                            !isMusicPath && componentsLower.any { it in lowercaseNoisyDirs }
                         if (isNoisy) continue
-
-                        // If pathKeywords are configured, require the full path to contain
-                        // at least one keyword (case-insensitive). This prevents scanning
-                        // huge irrelevant directory trees on TS18.
-                        if (lowercaseKeywords.isNotEmpty()) {
-                            if (lowercaseKeywords.none { fullPathStr.contains(it) }) continue
-                        }
 
                         files.send(file)
                     }
