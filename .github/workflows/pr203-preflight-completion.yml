@@ -6,6 +6,11 @@ on:
       - fix/reliable-music-source-loading
     paths:
       - ".github/workflows/pr203-preflight-completion.yml"
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - ".github/workflows/pr203-preflight-completion.yml"
 
 permissions:
   contents: write
@@ -16,6 +21,7 @@ concurrency:
 
 jobs:
   patch-format-push:
+    if: github.event_name == 'push' || github.head_ref == 'fix/reliable-music-source-loading'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
