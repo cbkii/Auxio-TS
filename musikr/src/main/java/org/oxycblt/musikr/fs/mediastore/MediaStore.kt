@@ -51,6 +51,11 @@ import org.oxycblt.musikr.fs.saf.useQuery
 import org.oxycblt.musikr.fs.track.LocationObserver
 import org.oxycblt.musikr.util.tryAsyncWith
 
+internal object MediaStoreFilterPolicy {
+    fun shouldRequireIsMusic(query: MediaStore.Query): Boolean =
+        query.excludeNonMusic && !query.relaxIsMusicHeuristic
+}
+
 /** MediaStore adapter with source-scoped, cheap invalidation planning. */
 class MediaStore
 private constructor(
@@ -72,43 +77,40 @@ private constructor(
                     return@mapNotNull null
                 }
                 val uri = contentUri(volumeName)
-                try {
-                    val version =
+                val volumeAccessible = volume?.isAccessible() != false
+                val version =
+                    try {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             AOSPMediaStore.getVersion(context, volumeName)
                         } else {
                             AOSPMediaStore.getVersion(context)
                         }
-                    SourceSnapshot(
-                        sourceKey = sourceKey,
-                        sourceType = SOURCE_TYPE,
-                        rootUri = uri.toString(),
-                        rootPath = volume?.components?.unixString?.let { "/$it" },
-                        available = version != null && volume?.isAccessible() != false,
-                        fingerprint = version?.let { "$it:${query.hashCode()}" },
-                        // Android 10 exposes an opaque volume version but not per-row generation
-                        // counters. ContentObserver invalidations cover live changes and the ledger
-                        // periodically refreshes advisory snapshots after process death.
-                        fingerprintStrength =
-                            if (version != null) SourceFingerprintStrength.ADVISORY
-                            else SourceFingerprintStrength.NONE,
-                    )
-                } catch (e: Exception) {
-                    android.util.Log.w(
-                        TAG,
-                        "Unable to read MediaStore version for volume $volumeName",
-                        e,
-                    )
-                    SourceSnapshot(
-                        sourceKey = sourceKey,
-                        sourceType = SOURCE_TYPE,
-                        rootUri = uri.toString(),
-                        rootPath = volume?.components?.unixString?.let { "/$it" },
-                        available = false,
-                        fingerprint = null,
-                        fingerprintStrength = SourceFingerprintStrength.NONE,
-                    )
-                }
+                    } catch (e: Exception) {
+                        // Several vendor Android 10 MediaProviders omit or break this optional
+                        // generation token while their ordinary audio query remains fully usable.
+                        // A missing token therefore disables scan suppression, not the source.
+                        android.util.Log.w(
+                            TAG,
+                            "Unable to read MediaStore version for volume $volumeName; " +
+                                "the source will still be queried",
+                            e,
+                        )
+                        null
+                    }
+                SourceSnapshot(
+                    sourceKey = sourceKey,
+                    sourceType = SOURCE_TYPE,
+                    rootUri = uri.toString(),
+                    rootPath = volume?.components?.unixString?.let { "/$it" },
+                    available = volumeAccessible,
+                    fingerprint = version?.let { "$it:${query.hashCode()}" },
+                    // Android 10 exposes an opaque volume version but not per-row generation
+                    // counters. Without that optional token the planner must perform the real
+                    // query.
+                    fingerprintStrength =
+                        if (version != null) SourceFingerprintStrength.ADVISORY
+                        else SourceFingerprintStrength.NONE,
+                )
             }
         }
 
@@ -200,16 +202,11 @@ private constructor(
     private fun buildSelector(): Pair<String, Array<String>> {
         var selector = BASE_SELECTOR
         val args = mutableListOf<String>()
-        if (query.excludeNonMusic) {
+        if (MediaStoreFilterPolicy.shouldRequireIsMusic(query)) {
             selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
         }
-        if (query.useDefaultSystemFilter) {
-            selector +=
-                " AND (" +
-                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%music%' OR " +
-                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%download%' OR " +
-                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%media%')"
-        }
+        // Explicit include/exclude selections remain authoritative. This flag only decides
+        // whether provider-maintained IS_MUSIC metadata is required by the shared adapter.
         when (query.mode) {
             FilterMode.INCLUDE -> {
                 pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
@@ -252,7 +249,9 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
-        val useDefaultSystemFilter: Boolean = false,
+        // Variant-neutral switch for providers whose IS_MUSIC metadata is not authoritative.
+        // App integration code owns the decision to enable it.
+        val relaxIsMusicHeuristic: Boolean = false,
     )
 
     enum class FilterMode {

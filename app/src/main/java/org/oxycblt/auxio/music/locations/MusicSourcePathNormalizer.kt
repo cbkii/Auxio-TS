@@ -67,13 +67,35 @@ internal object MusicSourcePathNormalizer {
             L.w("Skipping DirectFS source with path traversal segment: $uri")
             return null
         }
+        val appFacingPath = normaliseSharedStorageAlias(rawPath)
         val canonical =
             try {
-                File(rawPath).canonicalFile
+                File(appFacingPath).canonicalFile
             } catch (_: Exception) {
-                File(rawPath).absoluteFile
+                File(appFacingPath).absoluteFile
             }
-        return Uri.fromFile(canonical)
+        // Canonicalising an app-facing vold path may resolve it back to /mnt/media_rw. Persist the
+        // app-facing namespace again so the normal app UID can enumerate and play the source.
+        return Uri.fromFile(File(normaliseSharedStorageAlias(canonical.absolutePath)))
+    }
+
+    internal fun normaliseSharedStorageAlias(path: String): String {
+        val clean = path.trimEnd('/').ifEmpty { "/" }
+        if (clean == "/sdcard") return "/storage/emulated/0"
+        if (clean.startsWith("/sdcard/")) {
+            return "/storage/emulated/0/" + clean.removePrefix("/sdcard/")
+        }
+        val rawVolume =
+            Regex(
+                    "^/mnt/media_rw/(usbdisk\\d+|[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})(/.*)?$",
+                    RegexOption.IGNORE_CASE,
+                )
+                .matchEntire(clean)
+        return if (rawVolume != null) {
+            "/storage/${rawVolume.groupValues[1]}${rawVolume.groupValues[2]}"
+        } else {
+            clean
+        }
     }
 
     private fun containsDotSegment(path: String): Boolean {
@@ -94,16 +116,17 @@ internal object MusicSourcePathNormalizer {
     }
 
     private fun repairDuplicatedStoragePath(path: String): String? {
-        val prefixes =
+        val dynamicRoots =
             listOf(
-                "/storage/emulated/0",
-                "/storage/usbdisk0",
-                "/storage/usbdisk1",
-                "/mnt/media_rw/usbdisk0",
-                "/mnt/media_rw/usbdisk1",
-                "/sdcard",
-            )
-        for (prefix in prefixes) {
+                    Regex("^/storage/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                    Regex("^/mnt/media_rw/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                    Regex("^/storage/auxio-root/usbdisk\\d+", RegexOption.IGNORE_CASE),
+                    Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
+                    Regex("^/mnt/media_rw/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
+                )
+                .mapNotNull { it.find(path)?.value }
+        val prefixes = listOf("/storage/emulated/0", "/sdcard") + dynamicRoots
+        for (prefix in prefixes.distinct()) {
             val duplicated = prefix + prefix
             if (path == duplicated || path.startsWith(duplicated + "/")) {
                 return prefix + path.removePrefix(duplicated)

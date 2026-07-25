@@ -312,6 +312,7 @@ constructor(
     private val startupReadinessListeners =
         CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
+    private val pendingIndexRequests = RepositoryIndexRequestQueue()
     private val deviceLibraryGeneration = AtomicLong(0L)
     private val userLibraryGeneration = AtomicLong(0L)
     private val compatibilityHydrationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -380,14 +381,21 @@ constructor(
         }
     }
 
-    @Synchronized
     override fun registerWorker(worker: IndexingWorker) {
-        if (indexingWorker != null) {
-            L.w("Worker is already registered")
-            return
+        val pending =
+            synchronized(this) {
+                if (indexingWorker != null) {
+                    L.w("Worker is already registered")
+                    return
+                }
+                L.d("Registering worker $worker")
+                indexingWorker = worker
+                pendingIndexRequests.drain()
+            }
+        pending?.also {
+            L.i("Dispatching scan request queued before worker attachment [request=$it]")
+            it.dispatch(worker)
         }
-        L.d("Registering worker $worker")
-        indexingWorker = worker
     }
 
     @Synchronized
@@ -452,11 +460,27 @@ constructor(
     }
 
     override fun requestIndex(withCache: Boolean) {
-        indexingWorker?.requestIndex(withCache)
+        dispatchOrQueue(RepositoryIndexRequest(withCache, metadataProfile = null))
     }
 
     override fun requestIndex(withCache: Boolean, metadataProfile: MetadataProfile) {
-        indexingWorker?.requestIndex(withCache, metadataProfile)
+        dispatchOrQueue(RepositoryIndexRequest(withCache, metadataProfile))
+    }
+
+    private fun dispatchOrQueue(request: RepositoryIndexRequest) {
+        val worker =
+            synchronized(this) {
+                indexingWorker
+                    ?: run {
+                        pendingIndexRequests.offer(request)
+                        null
+                    }
+            }
+        if (worker != null) {
+            request.dispatch(worker)
+        } else {
+            L.i("Queued scan request until worker attachment [request=$request]")
+        }
     }
 
     override suspend fun invalidateSource(sourceKey: String?) {
@@ -550,14 +574,24 @@ constructor(
                 )
             val rawFs = createFileSystem()
             val prepared =
-                IncrementalIndexPlanner.prepare(
-                    fs = rawFs,
-                    cache = cache,
-                    withCache = withCache,
-                    profile = resolvedProfile,
-                    configurationRevision = sourceConfigurationRevision(),
-                    legacyWriteOnly = ::WriteOnlyMutableCache,
-                )
+                try {
+                    IncrementalIndexPlanner.prepare(
+                        fs = rawFs,
+                        cache = cache,
+                        withCache = withCache,
+                        profile = resolvedProfile,
+                        configurationRevision = sourceConfigurationRevision(),
+                        legacyWriteOnly = ::WriteOnlyMutableCache,
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    musicSettings.lastScanFailed = true
+                    emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                    L.w(e, "Music-source preflight failed; preserving the last readable library")
+                    emitIndexingCompletion(e)
+                    return@traceSuspend
+                }
             val plan = prepared.plan
             L.i(
                 "Resolved scan policy [workers=$workerCount profile=$resolvedProfile " +
@@ -876,7 +910,10 @@ constructor(
             LocationMode.MEDIA_STORE -> {
                 val query =
                     musicSettings.mediaStoreQuery.copy(
-                        useDefaultSystemFilter = musicSettings.ts18SystemSourceFilter
+                        // Keep the shared MediaStore adapter variant-neutral. Topway compatibility
+                        // selects the relaxed provider heuristic at this app integration boundary;
+                        // physical TS18 outcomes still require device validation.
+                        relaxIsMusicHeuristic = musicSettings.ts18SystemSourceFilter
                     )
                 MediaStore.from(context, query)
             }

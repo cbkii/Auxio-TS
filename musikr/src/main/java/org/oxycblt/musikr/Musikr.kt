@@ -33,6 +33,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.cache.IncrementalCache
+import org.oxycblt.musikr.cache.IncrementalScanCommit
 import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.pipeline.EvaluateStep
@@ -59,6 +60,7 @@ interface Musikr {
             rootGate: org.oxycblt.musikr.fs.RootGate? = null,
         ): Musikr =
             MusikrImpl(
+                context,
                 config,
                 ExploreStep.from(config, noisyDirs, pathKeywords, rootGate),
                 ExtractStep.from(context, config),
@@ -128,7 +130,27 @@ sealed interface IndexingProgress {
     data object Indeterminate : IndexingProgress
 }
 
+/** No configured source completed, reused, or retained readable rows. */
+class SourceScanFailureException(val failures: Map<String, String>) :
+    IllegalStateException(
+        "Every attempted music source failed: " +
+            failures.entries.joinToString { (source, detail) -> "$source=$detail" }
+    )
+
+internal object SourceScanCommitPolicy {
+    fun allAttemptedSourcesFailed(commit: IncrementalScanCommit): Boolean =
+        commit.failedSources.isNotEmpty() &&
+            commit.committedSources.isEmpty() &&
+            commit.reusedSources.isEmpty()
+
+    fun rejectsAsAuthoritativeEmpty(
+        commit: IncrementalScanCommit,
+        hasPreservedReadableRows: Boolean,
+    ): Boolean = allAttemptedSourcesFailed(commit) && !hasPreservedReadableRows
+}
+
 private class MusikrImpl(
+    private val context: Context,
     private val config: Config,
     private val exploreStep: ExploreStep,
     private val extractStep: ExtractStep,
@@ -186,7 +208,7 @@ private class MusikrImpl(
                     emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
                     emitProgress(IndexingProgress.Indeterminate)
                 }
-            val library = evaluateStep.evaluate(trackedExtractedChannel)
+            var resultLibrary = evaluateStep.evaluate(trackedExtractedChannel)
             merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
 
             val commit = if (plan != null) incremental?.commitScan() else null
@@ -196,9 +218,24 @@ private class MusikrImpl(
                     "Committed ${commit.committedSources.size} source generation(s), " +
                         "${commit.changedRows} changed and ${commit.removedRows} removed rows",
                 )
+                if (SourceScanCommitPolicy.allAttemptedSourcesFailed(commit)) {
+                    // A transient provider or mount failure may leave an older committed generation
+                    // readable. Reload that generation instead of publishing the empty in-flight
+                    // graph. When no readable rows remain, fail explicitly so callers preserve
+                    // their
+                    // previous library state and expose source recovery rather than confirmed
+                    // empty.
+                    val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
+                    if (
+                        SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(commit, hasPreservedRows)
+                    ) {
+                        throw SourceScanFailureException(commit.failedSources)
+                    }
+                    resultLibrary = Musikr.loadCached(context, config)
+                }
             }
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
-            LibraryResultImpl(config, library, commit?.failedSources.orEmpty())
+            LibraryResultImpl(config, resultLibrary, commit?.failedSources.orEmpty())
         } catch (e: CancellationException) {
             abortIncremental(plan, incremental, e)
             throw e

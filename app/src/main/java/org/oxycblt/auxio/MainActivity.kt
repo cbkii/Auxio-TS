@@ -35,8 +35,7 @@ import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
 import org.oxycblt.auxio.headunit.StartupPanelCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
-import org.oxycblt.auxio.music.MusicRepository
-import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.PlaybackViewModel
@@ -60,8 +59,6 @@ class MainActivity : AppCompatActivity() {
     private val startupPanelCoordinator: StartupPanelCoordinator by viewModels()
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
-    @Inject lateinit var musicRepository: MusicRepository
-    @Inject lateinit var musicSettings: MusicSettings
     private var isFirstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,11 +89,13 @@ class MainActivity : AppCompatActivity() {
 
             val serviceClass =
                 TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
+            val trustedScanNonce = StartupScanAuthorityPolicy.issueTrustedUserVisibleStart()
 
             startService(
                 Intent(this, serviceClass)
                     .setAction(AuxioService.ACTION_START)
                     .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
+                    .putExtra(AuxioService.INTENT_KEY_TRUSTED_SCAN_NONCE, trustedScanNonce)
             )
 
             if (!startIntentAction(intent)) {

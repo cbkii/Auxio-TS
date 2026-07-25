@@ -45,6 +45,55 @@ class MusicSourcePathNormalizerTest {
     }
 
     @Test
+    fun directFsMigratesRawUsbBackingPathToAppFacingStorage() {
+        assertEquals(
+            "file:///storage/usbdisk3/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "/mnt/media_rw/usbdisk3/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun directFsMigratesRawUuidBackingPathToAppFacingStorage() {
+        assertEquals(
+            "file:///storage/ABCD-1234/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "/mnt/media_rw/ABCD-1234/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun directFsKeepsInternalSharedStorageRoot() {
+        assertEquals(
+            "file:///storage/emulated/0",
+            MusicSourcePathNormalizer.normalizePersistedLocation("/storage/emulated/0", true),
+        )
+    }
+
+    @Test
+    fun directFsKeepsArbitraryInternalSharedStorageChild() {
+        assertEquals(
+            "file:///storage/emulated/0/My%20Audio%20Archive",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "/storage/emulated/0/My Audio Archive",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun directFsNormalisesSdcardAliasToInternalSharedStorage() {
+        assertEquals(
+            "file:///storage/emulated/0/Recordings",
+            MusicSourcePathNormalizer.normalizePersistedLocation("/sdcard/Recordings", true),
+        )
+    }
+
+    @Test
     fun directFsKeepsFileUriWithoutDuplicatingPath() {
         assertEquals(
             "file:///storage/usbdisk0/Music",
@@ -61,6 +110,17 @@ class MusicSourcePathNormalizerTest {
             "file:///storage/emulated/0/Music",
             MusicSourcePathNormalizer.normalizePersistedLocation(
                 "content://com.android.externalstorage.documents/tree/primary%3AMusic",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun directFsConvertsPrimaryExternalStorageRootTreeUri() {
+        assertEquals(
+            "file:///storage/emulated/0",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "content://com.android.externalstorage.documents/tree/primary%3A",
                 true,
             ),
         )
@@ -95,6 +155,17 @@ class MusicSourcePathNormalizerTest {
             "file:///storage/usbdisk0/Music",
             MusicSourcePathNormalizer.normalizePersistedLocation(
                 "file:///storage/usbdisk0/storage/usbdisk0/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
+    fun duplicatedDynamicUsbPathIsRepairedWhenSafe() {
+        assertEquals(
+            "file:///storage/usbdisk7/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "file:///storage/usbdisk7/storage/usbdisk7/Music",
                 true,
             ),
         )

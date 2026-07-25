@@ -30,16 +30,13 @@ import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.util.tryAsync
 
-/** A wrapper [FS] that filters files based on their path components. */
+/** Compatibility wrapper that preserves bounded channel and failure propagation. */
 internal class FilteredFS(
     private val delegate: FS,
     private val scope: CoroutineScope,
-    private val noisyDirs: Set<String>,
-    pathKeywords: List<String> = emptyList(),
+    @Suppress("UNUSED_PARAMETER") noisyDirs: Set<String> = emptySet(),
+    @Suppress("UNUSED_PARAMETER") pathKeywords: List<String> = emptyList(),
 ) : FS {
-    // Pre-lowercase keywords once to avoid repeated allocations during filtering.
-    private val lowercaseKeywords = pathKeywords.map { it.lowercase() }
-
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> {
         val delegateChannel =
             Channel<File>(org.oxycblt.musikr.pipeline.PipelinePolicy.BUFFER_CAPACITY)
@@ -54,49 +51,14 @@ internal class FilteredFS(
                 return CompletableDeferred(Result.failure(t))
             }
 
-        val filterTask =
+        val forwardingTask =
             scope.tryAsync(EmptyCoroutineContext) {
                 try {
-                    for (file in delegateChannel) {
-                        val componentsLower = file.path.components.components.map { it.lowercase() }
-                        val fullPathStr = file.path.toString().lowercase()
-
-                        // Hard-deny protected roots (only if they appear at the root level, not
-                        // arbitrary children)
-                        val isProtected =
-                            componentsLower.withIndex().any { (idx, comp) ->
-                                val isProtectedName =
-                                    comp in
-                                        setOf("android", "data", "system", "vendor", "proc", "dev")
-                                val isSafeRuntime =
-                                    fullPathStr.contains("org.oxycblt.auxio") ||
-                                        fullPathStr.contains("com.tw.music") ||
-                                        fullPathStr.contains("com.tw.media") ||
-                                        fullPathStr.contains("com.dofun.variety")
-                                isProtectedName && idx <= 3 && !isSafeRuntime
-                            }
-
-                        if (isProtected) {
-                            continue
-                        }
-
-                        // Check for music keyword to bypass noisy directory filtering
-                        val isMusicPath = componentsLower.dropLast(1).any { it.contains("music") }
-
-                        // Then apply noisy-directory filtering. Bypass if it contains music
-                        val isNoisy =
-                            !isMusicPath && file.path.components.components.any { it in noisyDirs }
-                        if (isNoisy) continue
-
-                        // If pathKeywords are configured, require the full path to contain
-                        // at least one keyword (case-insensitive). This prevents scanning
-                        // huge irrelevant directory trees on TS18.
-                        if (lowercaseKeywords.isNotEmpty()) {
-                            if (lowercaseKeywords.none { fullPathStr.contains(it) }) continue
-                        }
-
-                        files.send(file)
-                    }
+                    // The selected MediaStore query, SAF tree, or canonical DirectFS root is the
+                    // source authority. Do not guess from child folder names: users may keep valid
+                    // audio anywhere below /storage/emulated/0 or removable storage. Musikr's
+                    // MIME/extension classifier rejects non-audio rows after this bounded forward.
+                    for (file in delegateChannel) files.send(file)
                     files.close()
                 } catch (t: Throwable) {
                     delegateChannel.close(t)
@@ -123,8 +85,8 @@ internal class FilteredFS(
                 // channels where kotlinx.coroutines channels support them.
                 delegateChannel.close(delegateResult.exceptionOrNull())
 
-                val filterResult = filterTask.await()
-                filterResult.getOrThrow()
+                val forwardingResult = forwardingTask.await()
+                forwardingResult.getOrThrow()
                 delegateResult.getOrThrow()
             } finally {
                 delegateChannel.cancel()

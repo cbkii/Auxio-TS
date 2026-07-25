@@ -580,7 +580,9 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         if (directTopwayPlayable && !TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
             return ManualPathValidation.UNSAFE
         }
-        if (!hasStoragePermission && mode != LocationMode.SAF) {
+        if (
+            !hasStoragePermission && LocationPermissionPolicy.requiresStoragePermission(mode, path)
+        ) {
             return ManualPathValidation.PERMISSION_MISSING
         }
         return try {
@@ -808,9 +810,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     // Direct FS mode
                     locationsModeDesc.setText(R.string.lng_direct_fs)
 
-                    // Update permission section
-                    locationsPermsDesc.setText(R.string.set_grant_storage)
-                    locationsPermsSubtitle.setText(R.string.lng_grant_storage_required)
+                    // DirectFS checks actual app-process readability per selected
+                    // path. Permission is required for internal shared storage, but an
+                    // independently readable USB/prepared alias remains selectable.
+                    locationsPermsDesc.setText(R.string.set_grant_storage_anyway)
+                    locationsPermsSubtitle.setText(R.string.lng_grant_storage_anyway)
                 }
             }
 
@@ -837,9 +841,10 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun updatePermissionDependentUI(binding: DialogMusicLocationsBinding) {
         with(binding) {
-            // Only disable views in System Database and Direct FS mode when permission not granted
-            // File Picker mode doesn't require storage permission
-            val isEnabled = locationMode == LocationMode.SAF || hasStoragePermission
+            // MediaStore requires framework storage permission. SAF uses URI grants,
+            // while DirectFS validates the selected path in the app process.
+            val isEnabled =
+                LocationPermissionPolicy.isSourceUiEnabled(locationMode, hasStoragePermission)
 
             locationsIncludeListHeader.isEnabled = isEnabled
             locationsIncludeAdd.isEnabled = isEnabled
@@ -871,9 +876,19 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun updatePermissionCardColors(binding: DialogMusicLocationsBinding) {
         val context = requireContext()
+        val useErrorColors = locationMode == LocationMode.MEDIA_STORE && !hasStoragePermission
         with(binding.locationsPermsCard) {
-            if (locationMode == LocationMode.SAF) {
-                // File Picker mode - use secondary colors
+            if (useErrorColors) {
+                setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorErrorContainer))
+                binding.locationsPermsDesc.setTextColor(
+                    context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                )
+                binding.locationsPermsSubtitle.setTextColor(
+                    context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+                )
+                binding.locationsPermsOpen.imageTintList =
+                    context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
+            } else {
                 setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorSecondaryContainer))
                 binding.locationsPermsDesc.setTextColor(
                     context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
@@ -883,33 +898,6 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 )
                 binding.locationsPermsOpen.imageTintList =
                     context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-            } else {
-                // System Database mode - use error colors if no permission, secondary colors if
-                // granted
-                if (hasStoragePermission) {
-                    // Has permission - use secondary colors
-                    setCardBackgroundColor(
-                        context.getAttrColorCompat(MR.attr.colorSecondaryContainer)
-                    )
-                    binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-                    )
-                    binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-                    )
-                    binding.locationsPermsOpen.imageTintList =
-                        context.getAttrColorCompat(MR.attr.colorOnSecondaryContainer)
-                } else {
-                    setCardBackgroundColor(context.getAttrColorCompat(MR.attr.colorErrorContainer))
-                    binding.locationsPermsDesc.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
-                    )
-                    binding.locationsPermsSubtitle.setTextColor(
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
-                    )
-                    binding.locationsPermsOpen.imageTintList =
-                        context.getAttrColorCompat(MR.attr.colorOnErrorContainer)
-                }
             }
         }
     }

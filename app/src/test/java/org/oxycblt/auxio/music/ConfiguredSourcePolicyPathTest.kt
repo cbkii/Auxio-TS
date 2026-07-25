@@ -30,9 +30,15 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class ConfiguredSourcePolicyPathTest {
     @Test
-    fun recognisesTopwayAndUuidRemovableRoots() {
+    fun recognisesTopwayPreparedAndUuidRemovableRoots() {
         assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/usbdisk0/Music")))
+        assertTrue(
+            ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/auxio-root/usbdisk2/Music"))
+        )
         assertTrue(ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///storage/ABCD-1234/Music")))
+        assertTrue(
+            ConfiguredSourcePolicy.isUsbUri(Uri.parse("file:///mnt/media_rw/ABCD-1234/Music"))
+        )
         assertTrue(
             ConfiguredSourcePolicy.isUsbUri(
                 Uri.parse("content://com.android.externalstorage.documents/tree/ABCD-1234%3AMusic")
@@ -49,8 +55,25 @@ class ConfiguredSourcePolicyPathTest {
                 ?.absolutePath,
         )
         assertEquals(
+            "/storage/ABCD-1234/Music",
+            ConfiguredSourcePolicy.normaliseConfiguredRoot("file:///mnt/media_rw/ABCD-1234/Music")
+                ?.absolutePath,
+        )
+        assertEquals(
             "/storage/emulated/0/Music",
             ConfiguredSourcePolicy.normaliseConfiguredRoot("file:///storage/emulated/0/Music")
+                ?.absolutePath,
+        )
+        assertEquals(
+            "/storage/emulated/0/Recordings",
+            ConfiguredSourcePolicy.normaliseConfiguredRoot("file:///sdcard/Recordings")
+                ?.absolutePath,
+        )
+        assertEquals(
+            "/storage/auxio-root/usbdisk2/Music",
+            ConfiguredSourcePolicy.normaliseConfiguredRoot(
+                    "file:///storage/auxio-root/usbdisk2/Music"
+                )
                 ?.absolutePath,
         )
         assertNull(

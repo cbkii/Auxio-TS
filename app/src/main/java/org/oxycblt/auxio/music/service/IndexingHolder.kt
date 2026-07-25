@@ -31,10 +31,12 @@ import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.IndexingState
+import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.ObservationMode
 import org.oxycblt.auxio.music.RootAccessPolicy
+import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.util.PerfTimer
@@ -86,6 +88,10 @@ private constructor(
     private var currentIndexJob: Job? = null
     private var pendingIndexRequest: IndexRequest? = null
     private var startupJob: Job? = null
+    private var startupRecoveryJob: Job? = null
+    private var attached = false
+    private var activeStartupOrigin: StartupScanOrigin? = null
+    private var pendingStartupOrigin: StartupScanOrigin? = null
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
     private val wakeLock =
@@ -100,6 +106,10 @@ private constructor(
     private val observationBurstGate = ObservationBurstGate()
 
     fun attach() {
+        synchronized(this) {
+            if (attached) return
+            attached = true
+        }
         musicSettings.registerListener(this)
         musicRepository.addUpdateListener(this)
         musicRepository.addIndexingListener(this)
@@ -111,8 +121,16 @@ private constructor(
     }
 
     fun release() {
+        synchronized(this) {
+            if (!attached) return
+            attached = false
+            activeStartupOrigin = null
+            pendingStartupOrigin = null
+        }
         startupJob?.cancel()
         startupJob = null
+        startupRecoveryJob?.cancel()
+        startupRecoveryJob = null
         stopTracking()
         observationRequestJob?.cancel()
         observationRequestJob = null
@@ -129,19 +147,96 @@ private constructor(
     }
 
     @Synchronized
-    fun start() {
-        PerfTimer.trace("IndexingHolder.start") {
-            if (startupJob?.isActive == true) {
-                L.d("Startup library load already running; ignoring duplicate start")
+    fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
+        PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
+            if (!attached) {
+                L.d("Ignoring startup request after IndexingHolder release [origin=$origin]")
                 return
             }
+            if (startupJob?.isActive == true) {
+                if (
+                    origin == StartupScanOrigin.USER_VISIBLE &&
+                        activeStartupOrigin != StartupScanOrigin.USER_VISIBLE
+                ) {
+                    pendingStartupOrigin = StartupScanOrigin.USER_VISIBLE
+                    L.d("Queued trusted visible startup behind active background startup")
+                } else {
+                    L.d("Startup library load already running; ignoring duplicate [origin=$origin]")
+                }
+                return
+            }
+            activeStartupOrigin = origin
             startupJob =
                 indexScope.launch {
-                    // Root probing is intentionally on-demand. Normal startup must restore
-                    // playback/session surfaces without waiting for su.
-                    musicRepository.startup(this@IndexingHolder)
+                    try {
+                        val sourceAuthority =
+                            StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
+                                workerContext,
+                                musicSettings,
+                            )
+                        val automaticScanAllowed =
+                            StartupScanAuthorityPolicy.allowAutomaticScan(
+                                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                                origin = origin,
+                                sourceAuthority = sourceAuthority,
+                            )
+                        // Root probing remains on-demand. Cache and playback restoration do not
+                        // wait
+                        // for su, source traversal, or a library scan.
+                        musicRepository.startup(this@IndexingHolder)
+                        if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
+                            requestVisibleRecoveryScan(sourceAuthority)
+                        }
+                    } finally {
+                        val nextOrigin =
+                            synchronized(this@IndexingHolder) {
+                                startupJob = null
+                                activeStartupOrigin = null
+                                if (attached) {
+                                    pendingStartupOrigin.also { pendingStartupOrigin = null }
+                                } else {
+                                    pendingStartupOrigin = null
+                                    null
+                                }
+                            }
+                        if (nextOrigin != null) start(nextOrigin)
+                    }
                 }
         }
+    }
+
+    private fun requestVisibleRecoveryScan(sourceAuthority: Boolean) {
+        if (!sourceAuthority) return
+        val needsImmediateScan =
+            musicSettings.revision == null || musicSettings.libraryState != LibraryState.USABLE
+        if (needsImmediateScan) {
+            L.i(
+                "Trusted visible startup is repairing the library " +
+                    "[state=${musicSettings.libraryState} revision=${musicSettings.revision}]"
+            )
+            requestIndex(true)
+            return
+        }
+        // A previous failure must not permanently strand an empty or unusable library,
+        // but it should suppress delayed retry loops once a usable generation exists.
+        if (musicSettings.lastScanFailed) return
+
+        startupRecoveryJob?.cancel()
+        startupRecoveryJob =
+            indexScope.launch {
+                delay(STARTUP_RECOVERY_GRACE_MS)
+                val shouldRecover =
+                    synchronized(this@IndexingHolder) {
+                        attached && currentIndexJob?.isActive != true
+                    } &&
+                        !musicSettings.lastScanFailed &&
+                        (musicRepository.library == null ||
+                            musicRepository.startupLibraryStatus != StartupLibraryStatus.Usable)
+                if (shouldRecover) {
+                    L.w("Cached library did not become usable; requesting one recovery scan")
+                    requestIndex(true)
+                }
+            }
     }
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
@@ -381,5 +476,6 @@ private constructor(
     companion object {
         const val WAKELOCK_TIMEOUT_MS = 60 * 1000L
         internal const val OBSERVATION_DEBOUNCE_MS = 750L
+        internal const val STARTUP_RECOVERY_GRACE_MS = 3_000L
     }
 }
