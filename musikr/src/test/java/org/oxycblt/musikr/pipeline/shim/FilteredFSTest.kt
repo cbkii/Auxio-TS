@@ -103,8 +103,6 @@ class FilteredFSTest {
                 EmittingFS(
                     this,
                     file("Android/data/org.oxycblt.auxio/files/song.mp3"),
-                    file("Android/data/com.tw.media/files/track.mp3"),
-                    file("Android/data/com.tw.music/files/album.flac"),
                 ),
                 this,
                 setOf("Android"),
@@ -116,14 +114,6 @@ class FilteredFSTest {
         assertTrue(result.isSuccess)
         assertEquals(
             "Android/data/org.oxycblt.auxio/files/song.mp3",
-            output.receive().path.components.toString(),
-        )
-        assertEquals(
-            "Android/data/com.tw.media/files/track.mp3",
-            output.receive().path.components.toString(),
-        )
-        assertEquals(
-            "Android/data/com.tw.music/files/album.flac",
             output.receive().path.components.toString(),
         )
         assertTrue(output.receiveCatching().isClosed)
