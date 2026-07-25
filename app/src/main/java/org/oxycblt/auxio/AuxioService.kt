@@ -38,6 +38,8 @@ import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceClient
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.service.MusicServiceFragment
+import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
+import org.oxycblt.auxio.music.service.StartupScanOrigin
 import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
 import org.oxycblt.auxio.util.PerfTimer
@@ -74,34 +76,36 @@ open class AuxioService :
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         PerfTimer.trace("AuxioService.onStartCommand") {
             Ts18FirstAudioLatency.mark("service_on_start_command")
-            // TODO: Start command occurring from a foreign service basically implies a detached
-            // service, we might need more handling here.
             super.onStartCommand(intent, flags, startId)
-            onHandleForeground(intent)
+            onHandleForeground(intent, allowTrustedUserVisible = true)
             journal.log(
                 DiagnosticJournal.CAT_LIFECYCLE,
                 "AuxioService onStartCommand",
                 "Action: ${intent?.action}, StartId: $startId",
             )
-            // Playback services are expected to survive process churn when possible so that
-            // MediaSession/controller interactions continue to route to the same service endpoint.
-            // Keep this service sticky and let playback/session state restoration decide whether
-            // playback should resume.
             return START_STICKY
         }
     }
 
     override fun onBind(intent: Intent): IBinder? {
         val binder = super.onBind(intent)
-        onHandleForeground(intent)
+        onHandleForeground(intent, allowTrustedUserVisible = false)
         return binder
     }
 
-    private fun onHandleForeground(intent: Intent?) {
-        // TS18 fast-resume priority: handle playback/launcher commands before any heavy
-        // music indexing path. This keeps raw snapshot restore independent from library readiness.
+    private fun onHandleForeground(intent: Intent?, allowTrustedUserVisible: Boolean) {
+        // Playback/session restoration remains first and never waits for library-source validation.
         playbackFragment.start(intent)
-        musicFragment.start()
+        val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
+        val trustedUserVisible =
+            allowTrustedUserVisible &&
+                startId == IntegerTable.START_ID_ACTIVITY &&
+                StartupScanAuthorityPolicy.consumeTrustedUserVisibleStart(
+                    intent.getStringExtra(INTENT_KEY_TRUSTED_SCAN_NONCE)
+                )
+        musicFragment.start(
+            if (trustedUserVisible) StartupScanOrigin.USER_VISIBLE else StartupScanOrigin.BACKGROUND
+        )
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -229,6 +233,8 @@ open class AuxioService :
 
         // This is only meant for Auxio to internally ensure that it's state management will work.
         const val INTENT_KEY_START_ID = BuildConfig.APPLICATION_ID + ".service.START_ID"
+        const val INTENT_KEY_TRUSTED_SCAN_NONCE =
+            BuildConfig.APPLICATION_ID + ".service.TRUSTED_SCAN_NONCE"
 
         private const val MAX_CLIENT_PACKAGE_LENGTH = 255
         private const val MAX_MEDIA_ID_LENGTH = 1024
