@@ -56,6 +56,17 @@ class MusicSourcePathNormalizerTest {
     }
 
     @Test
+    fun directFsMigratesRawUuidBackingPathToAppFacingStorage() {
+        assertEquals(
+            "file:///storage/ABCD-1234/Music",
+            MusicSourcePathNormalizer.normalizePersistedLocation(
+                "/mnt/media_rw/ABCD-1234/Music",
+                true,
+            ),
+        )
+    }
+
+    @Test
     fun directFsKeepsInternalSharedStorageRoot() {
         assertEquals(
             "file:///storage/emulated/0",
