@@ -72,43 +72,39 @@ private constructor(
                     return@mapNotNull null
                 }
                 val uri = contentUri(volumeName)
-                try {
-                    val version =
+                val volumeAccessible = volume?.isAccessible() != false
+                val version =
+                    try {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             AOSPMediaStore.getVersion(context, volumeName)
                         } else {
                             AOSPMediaStore.getVersion(context)
                         }
-                    SourceSnapshot(
-                        sourceKey = sourceKey,
-                        sourceType = SOURCE_TYPE,
-                        rootUri = uri.toString(),
-                        rootPath = volume?.components?.unixString?.let { "/$it" },
-                        available = version != null && volume?.isAccessible() != false,
-                        fingerprint = version?.let { "$it:${query.hashCode()}" },
-                        // Android 10 exposes an opaque volume version but not per-row generation
-                        // counters. ContentObserver invalidations cover live changes and the ledger
-                        // periodically refreshes advisory snapshots after process death.
-                        fingerprintStrength =
-                            if (version != null) SourceFingerprintStrength.ADVISORY
-                            else SourceFingerprintStrength.NONE,
-                    )
-                } catch (e: Exception) {
-                    android.util.Log.w(
-                        TAG,
-                        "Unable to read MediaStore version for volume $volumeName",
-                        e,
-                    )
-                    SourceSnapshot(
-                        sourceKey = sourceKey,
-                        sourceType = SOURCE_TYPE,
-                        rootUri = uri.toString(),
-                        rootPath = volume?.components?.unixString?.let { "/$it" },
-                        available = false,
-                        fingerprint = null,
-                        fingerprintStrength = SourceFingerprintStrength.NONE,
-                    )
-                }
+                    } catch (e: Exception) {
+                        // Several vendor Android 10 MediaProviders omit or break this optional
+                        // generation token while their ordinary audio query remains fully usable.
+                        // A missing token therefore disables scan suppression, not the source.
+                        android.util.Log.w(
+                            TAG,
+                            "Unable to read MediaStore version for volume $volumeName; " +
+                                "the source will still be queried",
+                            e,
+                        )
+                        null
+                    }
+                SourceSnapshot(
+                    sourceKey = sourceKey,
+                    sourceType = SOURCE_TYPE,
+                    rootUri = uri.toString(),
+                    rootPath = volume?.components?.unixString?.let { "/$it" },
+                    available = volumeAccessible,
+                    fingerprint = version?.let { "$it:${query.hashCode()}" },
+                    // Android 10 exposes an opaque volume version but not per-row generation
+                    // counters. Without that optional token the planner must perform the real query.
+                    fingerprintStrength =
+                        if (version != null) SourceFingerprintStrength.ADVISORY
+                        else SourceFingerprintStrength.NONE,
+                )
             }
         }
 
@@ -203,13 +199,9 @@ private constructor(
         if (query.excludeNonMusic) {
             selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
         }
-        if (query.useDefaultSystemFilter) {
-            selector +=
-                " AND (" +
-                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%music%' OR " +
-                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%download%' OR " +
-                    "${AOSPMediaStore.Audio.AudioColumns.DATA} LIKE '%media%')"
-        }
+        // Do not infer music folders from names such as "music", "download", or "media". Users may
+        // store valid audio anywhere under /storage/emulated/0 or removable storage. Explicit
+        // include/exclude selections remain the only path restriction authority.
         when (query.mode) {
             FilterMode.INCLUDE -> {
                 pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
@@ -252,6 +244,8 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
+        // Retained for settings compatibility. Folder-name filtering is intentionally no longer
+        // applied because it excluded valid user-selected internal and removable directories.
         val useDefaultSystemFilter: Boolean = false,
     )
 
