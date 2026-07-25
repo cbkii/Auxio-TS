@@ -24,8 +24,13 @@ import org.oxycblt.musikr.cache.IncrementalScanPlan
 import org.oxycblt.musikr.cache.MutableCache
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.SourceAwareFS
+import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.library.MetadataProfile
 import timber.log.Timber as L
+
+/** Source-aware planning could not safely classify any configured source. */
+internal class SourcePreflightException(message: String, cause: Throwable? = null) :
+    IllegalStateException(message, cause)
 
 internal object IncrementalIndexPlanner {
     data class Prepared(val fs: FS, val cache: MutableCache, val plan: IncrementalScanPlan?)
@@ -50,43 +55,45 @@ internal object IncrementalIndexPlanner {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Snapshot metadata is only an optimisation. A broken OEM provider version/root
-                // query must never suppress the real MediaStore, SAF, or DirectFS enumeration.
-                L.w(e, "Source preflight failed; falling back to a complete source scan")
-                return legacyPrepared(fs, cache, withCache, legacyWriteOnly)
+                // Once source generations are active, bypassing the ledger can turn an OEM probe
+                // failure into a successful empty library. Preserve the last committed generation
+                // and surface an actionable scan failure instead.
+                throw SourcePreflightException("Music-source preflight failed", e)
             }
 
         if (observedSnapshots.isEmpty()) {
-            // MediaStore implementations on vendor Android 10 builds can fail volume discovery
-            // while the ordinary external audio query still works. Let the real adapter decide.
-            L.w("Source preflight returned no snapshots; falling back to a complete source scan")
-            return legacyPrepared(fs, cache, withCache, legacyWriteOnly)
+            throw SourcePreflightException("Music-source preflight returned no configured sources")
         }
 
-        val initialPlan =
+        val retryableSnapshots =
+            observedSnapshots.map { snapshot ->
+                if (snapshot.available) {
+                    snapshot
+                } else {
+                    // Availability probes are advisory. Actual enumeration remains authoritative.
+                    // Clear the fingerprint so the ledger plans a real scan and writes a readable
+                    // generation when enumeration succeeds. A source-local enumeration failure is
+                    // still recorded by markSourceFailed without deleting the previous generation.
+                    snapshot.copy(
+                        available = true,
+                        fingerprint = null,
+                        fingerprintStrength = SourceFingerprintStrength.NONE,
+                    )
+                }
+            }
+        val retriedKeys =
+            observedSnapshots.filterNot { it.available }.mapTo(linkedSetOf()) { it.sourceKey }
+        if (retriedKeys.isNotEmpty()) {
+            L.w("Retrying sources rejected by advisory preflight: $retriedKeys")
+        }
+
+        val plan =
             incremental.planScan(
-                snapshots = observedSnapshots,
+                snapshots = retryableSnapshots,
                 force = !withCache,
                 metadataProfile = profile,
                 configurationRevision = configurationRevision,
             )
-        val advisoryRejected = observedSnapshots.filterNot { it.available }
-        val retriedKeys = advisoryRejected.mapTo(linkedSetOf()) { it.sourceKey }
-        val plan =
-            if (advisoryRejected.isEmpty()) {
-                initialPlan
-            } else {
-                // Preserve the observed unavailable state in the source ledger, but still attempt
-                // the real adapter enumeration. Successful enumeration promotes the ledger back to
-                // available; a source-local failure keeps the previous committed generation and
-                // the truthful unavailable/incomplete state.
-                L.w("Retrying sources rejected by advisory preflight: $retriedKeys")
-                initialPlan.copy(
-                    scanSources =
-                        (initialPlan.scanSources + advisoryRejected).distinctBy { it.sourceKey },
-                    unavailableSourceKeys = initialPlan.unavailableSourceKeys - retriedKeys,
-                )
-            }
         return Prepared(
             fs = sourceAware.selectSources(plan.scanSourceKeys),
             cache = cache,
