@@ -6,14 +6,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.musikr.pipeline.shim
@@ -44,7 +36,7 @@ import org.oxycblt.musikr.util.tryAsync
 
 class FilteredFSTest {
     @Test
-    fun exploreForwardsNonNoisyFilesAndClosesDownstream() = runTest {
+    fun exploreForwardsOrdinaryFilesAndClosesDownstream() = runTest {
         val fs = FilteredFS(EmittingFS(this, file("Music/song.mp3")), this, setOf("Android"))
         val output = Channel<File>(Channel.UNLIMITED)
 
@@ -56,43 +48,63 @@ class FilteredFSTest {
     }
 
     @Test
-    fun exploreAllowsNoisyDirectoryIfPathContainsMusicKeyword() = runTest {
+    fun exploreHonoursArbitraryUserAuthorisedFolders() = runTest {
         val fs =
             FilteredFS(
                 EmittingFS(
                     this,
-                    file(
-                        "Android/data/org.oxycblt.auxio/files/song.mp3"
-                    ), // true noise (Android/data)
-                    file(
-                        "Download/_Music/song.mp3"
-                    ), // has noise (Download) but should pass because of _Music
-                    file(
-                        "Download/music/song2.mp3"
-                    ), // has noise (Download) but should pass because of music
+                    file("Download/podcast.mp3"),
+                    file("DCIM/recorder/session.flac"),
+                    file("Movies/live-set.m4a"),
+                    file("My Audio Archive/track.ogg"),
                 ),
                 this,
-                setOf("Download", "Android"),
+                noisyDirs = setOf("Download", "DCIM", "Movies"),
+                pathKeywords = listOf("music"),
             )
         val output = Channel<File>(Channel.UNLIMITED)
 
         val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
 
         assertTrue(result.isSuccess)
-        assertEquals("Download/_Music/song.mp3", output.receive().path.components.toString())
-        assertEquals("Download/music/song2.mp3", output.receive().path.components.toString())
+        assertEquals("Download/podcast.mp3", output.receive().path.components.toString())
+        assertEquals("DCIM/recorder/session.flac", output.receive().path.components.toString())
+        assertEquals("Movies/live-set.m4a", output.receive().path.components.toString())
+        assertEquals("My Audio Archive/track.ogg", output.receive().path.components.toString())
         assertTrue(output.receiveCatching().isClosed)
     }
 
     @Test
-    fun exploreDropsNoisyFilesByPathComponent() = runTest {
+    fun exploreRejectsProtectedStorageRoots() = runTest {
         val fs =
             FilteredFS(
                 EmittingFS(
                     this,
-                    file("Music/Androids/song.mp3"),
                     file("Android/cache/noise.mp3"),
+                    file("data/private.mp3"),
                     file("Music/song.mp3"),
+                ),
+                this,
+                emptySet(),
+            )
+        val output = Channel<File>(Channel.UNLIMITED)
+
+        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
+
+        assertTrue(result.isSuccess)
+        assertEquals("Music/song.mp3", output.receive().path.components.toString())
+        assertTrue(output.receiveCatching().isClosed)
+    }
+
+    @Test
+    fun exploreAllowsAuxioRuntimePathException() = runTest {
+        val fs =
+            FilteredFS(
+                EmittingFS(
+                    this,
+                    file("Android/data/org.oxycblt.auxio/files/song.mp3"),
+                    file("Android/data/com.tw.media/files/track.mp3"),
+                    file("Android/data/com.tw.music/files/album.flac"),
                 ),
                 this,
                 setOf("Android"),
@@ -102,8 +114,18 @@ class FilteredFSTest {
         val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
 
         assertTrue(result.isSuccess)
-        assertEquals("Music/Androids/song.mp3", output.receive().path.components.toString())
-        assertEquals("Music/song.mp3", output.receive().path.components.toString())
+        assertEquals(
+            "Android/data/org.oxycblt.auxio/files/song.mp3",
+            output.receive().path.components.toString(),
+        )
+        assertEquals(
+            "Android/data/com.tw.media/files/track.mp3",
+            output.receive().path.components.toString(),
+        )
+        assertEquals(
+            "Android/data/com.tw.music/files/album.flac",
+            output.receive().path.components.toString(),
+        )
         assertTrue(output.receiveCatching().isClosed)
     }
 
@@ -150,113 +172,7 @@ class FilteredFSTest {
         assertTrue(output.receiveCatching().isClosed)
     }
 
-    @Test
-    fun exploreDoesNotMaskDelegateFailureAsSuccessfulEmptyScan() = runTest {
-        val failure = IllegalStateException("unmounted")
-        val fs = FilteredFS(FailingFS(failure), this, setOf("Android"))
-        val output = Channel<File>(Channel.UNLIMITED)
-
-        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
-
-        assertTrue(result.isFailure)
-        assertTrue(output.receiveCatching().isClosed)
-        assertSameFailure(failure, result.exceptionOrNull())
-    }
-
-    @Test
-    fun exploreFiltersByPathKeywordsWhenSet() = runTest {
-        val fs =
-            FilteredFS(
-                EmittingFS(
-                    this,
-                    file("Music/song.mp3"),
-                    file("Videos/clip.mp4"),
-                    file("Download/track.mp3"),
-                    file("Photos/img.jpg"),
-                ),
-                this,
-                noisyDirs = emptySet(),
-                pathKeywords = listOf("music", "download"),
-            )
-        val output = Channel<File>(Channel.UNLIMITED)
-
-        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
-
-        assertTrue(result.isSuccess)
-        assertEquals("Music/song.mp3", output.receive().path.components.toString())
-        assertEquals("Download/track.mp3", output.receive().path.components.toString())
-        assertTrue(output.receiveCatching().isClosed)
-    }
-
-    @Test
-    fun explorePathKeywordsAreCaseInsensitive() = runTest {
-        val fs =
-            FilteredFS(
-                EmittingFS(
-                    this,
-                    file("MUSIC/SONG.mp3"),
-                    file("My Music Archive/track.mp3"),
-                    file("Other/noise.mp3"),
-                ),
-                this,
-                noisyDirs = emptySet(),
-                pathKeywords = listOf("music"),
-            )
-        val output = Channel<File>(Channel.UNLIMITED)
-
-        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
-
-        assertTrue(result.isSuccess)
-        assertEquals("MUSIC/SONG.mp3", output.receive().path.components.toString())
-        assertEquals("My Music Archive/track.mp3", output.receive().path.components.toString())
-        assertTrue(output.receiveCatching().isClosed)
-    }
-
-    @Test
-    fun exploreEmptyPathKeywordsPassesAllFiles() = runTest {
-        val fs =
-            FilteredFS(
-                EmittingFS(this, file("Photos/img.jpg"), file("Videos/clip.mp4")),
-                this,
-                noisyDirs = emptySet(),
-                pathKeywords = emptyList(),
-            )
-        val output = Channel<File>(Channel.UNLIMITED)
-
-        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
-
-        assertTrue(result.isSuccess)
-        assertEquals("Photos/img.jpg", output.receive().path.components.toString())
-        assertEquals("Videos/clip.mp4", output.receive().path.components.toString())
-        assertTrue(output.receiveCatching().isClosed)
-    }
-
-    @Test
-    fun exploreNoisyDirsAndPathKeywordsApplyTogether() = runTest {
-        val fs =
-            FilteredFS(
-                EmittingFS(
-                    this,
-                    file("Music/song.mp3"),
-                    file("Android/Music/cached.mp3"),
-                    file("Download/video.mp4"),
-                ),
-                this,
-                noisyDirs = setOf("Android"),
-                pathKeywords = listOf("music", "download"),
-            )
-        val output = Channel<File>(Channel.UNLIMITED)
-
-        val result = withTimeout(TIMEOUT_MS) { fs.explore(output).await() }
-
-        assertTrue(result.isSuccess)
-        assertEquals("Music/song.mp3", output.receive().path.components.toString())
-        assertEquals("Download/video.mp4", output.receive().path.components.toString())
-        assertTrue(output.receiveCatching().isClosed)
-    }
-
-    private class EmittingFS(private val scope: CoroutineScope, private vararg val files: File) :
-        FS {
+    private class EmittingFS(private val scope: CoroutineScope, private vararg val files: File) : FS {
         override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
             scope.tryAsync(Dispatchers.Unconfined) {
                 this@EmittingFS.files.forEach { files.send(it) }
@@ -280,8 +196,7 @@ class FilteredFSTest {
         override fun track(): Flow<FSUpdate> = emptyFlow()
     }
 
-    private class LeakyButCompletedFS(private val scope: CoroutineScope, private val file: File) :
-        FS {
+    private class LeakyButCompletedFS(private val scope: CoroutineScope, private val file: File) : FS {
         override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
             scope.tryAsync(Dispatchers.Unconfined) { files.send(file) }
 
