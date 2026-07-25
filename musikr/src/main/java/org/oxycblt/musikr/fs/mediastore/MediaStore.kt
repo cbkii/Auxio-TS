@@ -51,6 +51,11 @@ import org.oxycblt.musikr.fs.saf.useQuery
 import org.oxycblt.musikr.fs.track.LocationObserver
 import org.oxycblt.musikr.util.tryAsyncWith
 
+internal object MediaStoreFilterPolicy {
+    fun shouldRequireIsMusic(query: MediaStore.Query): Boolean =
+        query.excludeNonMusic && !query.useDefaultSystemFilter
+}
+
 /** MediaStore adapter with source-scoped, cheap invalidation planning. */
 class MediaStore
 private constructor(
@@ -197,10 +202,13 @@ private constructor(
     private fun buildSelector(): Pair<String, Array<String>> {
         var selector = BASE_SELECTOR
         val args = mutableListOf<String>()
-        // Do not trust IS_MUSIC or folder-name heuristics as hard authority. Vendor Android 10
-        // MediaProviders commonly leave those fields stale or unset even for valid audio rows.
-        // The Audio.Media endpoint plus Musikr's bounded MIME/extension classifier is the reliable
-        // authority, while explicit include/exclude selections remain fully respected.
+        if (MediaStoreFilterPolicy.shouldRequireIsMusic(query)) {
+            selector += " AND ${AOSPMediaStore.Audio.AudioColumns.IS_MUSIC}=1"
+        }
+        // TS18's MediaProvider commonly leaves IS_MUSIC stale and stores valid audio outside
+        // folder names such as Music, Download, or Media. useDefaultSystemFilter identifies that
+        // compatibility mode, so it relaxes those OEM heuristics while standard builds retain the
+        // user's exclude-non-music setting. Explicit include/exclude selections remain authoritative.
         when (query.mode) {
             FilterMode.INCLUDE -> {
                 pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
@@ -242,10 +250,9 @@ private constructor(
     data class Query(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
-        // Retained for settings compatibility. IS_MUSIC is advisory and no longer suppresses rows.
         val excludeNonMusic: Boolean,
-        // Retained for settings compatibility. Folder-name filtering is intentionally no longer
-        // applied because it excluded valid user-selected internal and removable directories.
+        // TS18 compatibility mode: bypass unreliable IS_MUSIC/folder-name heuristics while retaining
+        // explicit include/exclude filters. The standard variant leaves this false.
         val useDefaultSystemFilter: Boolean = false,
     )
 
