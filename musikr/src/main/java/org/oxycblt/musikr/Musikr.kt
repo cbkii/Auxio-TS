@@ -221,8 +221,10 @@ private class MusikrImpl(
                 if (SourceScanCommitPolicy.allAttemptedSourcesFailed(commit)) {
                     // A transient provider or mount failure may leave an older committed generation
                     // readable. Reload that generation instead of publishing the empty in-flight
-                    // graph. When no readable rows remain, fail explicitly so callers preserve their
-                    // previous library state and expose source recovery rather than confirmed empty.
+                    // graph. When no readable rows remain, fail explicitly so callers preserve
+                    // their
+                    // previous library state and expose source recovery rather than confirmed
+                    // empty.
                     val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
                     if (
                         SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(commit, hasPreservedRows)

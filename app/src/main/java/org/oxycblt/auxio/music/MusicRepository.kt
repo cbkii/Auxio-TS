@@ -312,6 +312,7 @@ constructor(
     private val startupReadinessListeners =
         CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
+    private val pendingIndexRequests = RepositoryIndexRequestQueue()
     private val deviceLibraryGeneration = AtomicLong(0L)
     private val userLibraryGeneration = AtomicLong(0L)
     private val compatibilityHydrationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -380,14 +381,21 @@ constructor(
         }
     }
 
-    @Synchronized
     override fun registerWorker(worker: IndexingWorker) {
-        if (indexingWorker != null) {
-            L.w("Worker is already registered")
-            return
+        val pending =
+            synchronized(this) {
+                if (indexingWorker != null) {
+                    L.w("Worker is already registered")
+                    return
+                }
+                L.d("Registering worker $worker")
+                indexingWorker = worker
+                pendingIndexRequests.drain()
+            }
+        pending?.also {
+            L.i("Dispatching scan request queued before worker attachment [request=$it]")
+            it.dispatch(worker)
         }
-        L.d("Registering worker $worker")
-        indexingWorker = worker
     }
 
     @Synchronized
@@ -452,11 +460,27 @@ constructor(
     }
 
     override fun requestIndex(withCache: Boolean) {
-        indexingWorker?.requestIndex(withCache)
+        dispatchOrQueue(RepositoryIndexRequest(withCache, metadataProfile = null))
     }
 
     override fun requestIndex(withCache: Boolean, metadataProfile: MetadataProfile) {
-        indexingWorker?.requestIndex(withCache, metadataProfile)
+        dispatchOrQueue(RepositoryIndexRequest(withCache, metadataProfile))
+    }
+
+    private fun dispatchOrQueue(request: RepositoryIndexRequest) {
+        val worker =
+            synchronized(this) {
+                indexingWorker
+                    ?: run {
+                        pendingIndexRequests.offer(request)
+                        null
+                    }
+            }
+        if (worker != null) {
+            request.dispatch(worker)
+        } else {
+            L.i("Queued scan request until worker attachment [request=$request]")
+        }
     }
 
     override suspend fun invalidateSource(sourceKey: String?) {

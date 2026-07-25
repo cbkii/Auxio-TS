@@ -356,11 +356,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         val canonicalDirectory = canonicalFileOrNull(directory)
         // A root snapshot is evidence about the configured root only. Never launch or reuse a root
         // snapshot merely because one inaccessible child exists below an otherwise readable source.
-        if (
-            configuredRoot != null &&
-                canonicalDirectory == configuredRoot &&
-                rootGate != null
-        ) {
+        if (configuredRoot != null && canonicalDirectory == configuredRoot && rootGate != null) {
             val key = configuredRoot.absolutePath
             if (rootSnapshotChecked.add(key)) {
                 if (rootGate.snapshotTreeSync(key, MAX_DEPTH, ROOT_SNAPSHOT_TIMEOUT_MS) != null) {

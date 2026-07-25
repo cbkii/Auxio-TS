@@ -206,7 +206,7 @@ private constructor(
     }
 
     private fun requestVisibleRecoveryScan(sourceAuthority: Boolean) {
-        if (!sourceAuthority || musicSettings.lastScanFailed) return
+        if (!sourceAuthority) return
         val needsImmediateScan =
             musicSettings.revision == null || musicSettings.libraryState != LibraryState.USABLE
         if (needsImmediateScan) {
@@ -217,6 +217,9 @@ private constructor(
             requestIndex(true)
             return
         }
+        // A previous failure must not permanently strand an empty or unusable library,
+        // but it should suppress delayed retry loops once a usable generation exists.
+        if (musicSettings.lastScanFailed) return
 
         startupRecoveryJob?.cancel()
         startupRecoveryJob =

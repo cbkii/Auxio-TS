@@ -208,7 +208,8 @@ private constructor(
         // TS18's MediaProvider commonly leaves IS_MUSIC stale and stores valid audio outside
         // folder names such as Music, Download, or Media. useDefaultSystemFilter identifies that
         // compatibility mode, so it relaxes those OEM heuristics while standard builds retain the
-        // user's exclude-non-music setting. Explicit include/exclude selections remain authoritative.
+        // user's exclude-non-music setting. Explicit include/exclude selections remain
+        // authoritative.
         when (query.mode) {
             FilterMode.INCLUDE -> {
                 pathInterpreterFactory.createSelector(query.filtered.map { it.path })?.let {
@@ -251,7 +252,8 @@ private constructor(
         val mode: FilterMode,
         val filtered: List<Location.Unopened>,
         val excludeNonMusic: Boolean,
-        // TS18 compatibility mode: bypass unreliable IS_MUSIC/folder-name heuristics while retaining
+        // TS18 compatibility mode: bypass unreliable IS_MUSIC/folder-name heuristics while
+        // retaining
         // explicit include/exclude filters. The standard variant leaves this false.
         val useDefaultSystemFilter: Boolean = false,
     )
