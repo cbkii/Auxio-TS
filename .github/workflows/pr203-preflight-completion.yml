@@ -228,7 +228,7 @@ jobs:
       - name: Apply and verify Kotlin formatting
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh spotlessKotlinApply
+          bash ./scripts/ci-gradle.sh spotlessApply
           bash ./scripts/ci-gradle.sh spotlessCheck
 
       - name: Run focused JVM regression suite
