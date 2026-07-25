@@ -25,10 +25,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.oxycblt.musikr.cache.CacheResult
 import org.oxycblt.musikr.cache.CachedFile
@@ -58,8 +57,8 @@ class IncrementalIndexPlannerTest {
                             rootUri = "file:///storage/emulated/0/Audio",
                             rootPath = "/storage/emulated/0/Audio",
                             available = false,
-                            fingerprint = null,
-                            fingerprintStrength = SourceFingerprintStrength.NONE,
+                            fingerprint = "untrusted",
+                            fingerprintStrength = SourceFingerprintStrength.ADVISORY,
                         )
                     )
             )
@@ -75,21 +74,21 @@ class IncrementalIndexPlannerTest {
                 legacyWriteOnly = { it },
             )
 
-        val observed = requireNotNull(cache.plannedSnapshots).single()
-        assertFalse(observed.available)
-        assertNull(observed.fingerprint)
-        assertEquals(SourceFingerprintStrength.NONE, observed.fingerprintStrength)
+        val retried = requireNotNull(cache.plannedSnapshots).single()
+        assertTrue(retried.available)
+        assertNull(retried.fingerprint)
+        assertEquals(SourceFingerprintStrength.NONE, retried.fingerprintStrength)
         assertEquals(setOf(sourceKey), original.selectedSourceKeys)
         assertEquals(setOf(sourceKey), prepared.plan?.scanSourceKeys)
         assertTrue(prepared.plan?.unavailableSourceKeys.orEmpty().isEmpty())
     }
 
     @Test
-    fun brokenPreflightFallsBackToCompleteAdapterScan() = runBlocking {
+    fun brokenPreflightFailsWithoutBypassingIncrementalAccounting() = runBlocking {
         val original = FakeSourceAwareFs(preflightFailure = IllegalStateException("OEM probe"))
         val cache = FakeIncrementalCache()
 
-        val prepared =
+        expectPreflightFailure {
             IncrementalIndexPlanner.prepare(
                 fs = original,
                 cache = cache,
@@ -98,11 +97,39 @@ class IncrementalIndexPlannerTest {
                 configurationRevision = 1L,
                 legacyWriteOnly = { it },
             )
+        }
 
-        assertSame(original, prepared.fs)
-        assertSame(cache, prepared.cache)
-        assertNull(prepared.plan)
         assertNull(cache.plannedSnapshots)
+        assertNull(original.selectedSourceKeys)
+    }
+
+    @Test
+    fun emptyPreflightFailsWithoutPublishingAnEmptyScan() = runBlocking {
+        val original = FakeSourceAwareFs()
+        val cache = FakeIncrementalCache()
+
+        expectPreflightFailure {
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = true,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 1L,
+                legacyWriteOnly = { it },
+            )
+        }
+
+        assertNull(cache.plannedSnapshots)
+        assertNull(original.selectedSourceKeys)
+    }
+
+    private suspend fun expectPreflightFailure(block: suspend () -> Unit) {
+        try {
+            block()
+            fail("Expected SourcePreflightException")
+        } catch (_: SourcePreflightException) {
+            // Expected.
+        }
     }
 
     private class FakeSourceAwareFs(
