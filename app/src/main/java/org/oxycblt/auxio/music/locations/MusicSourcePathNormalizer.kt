@@ -74,24 +74,27 @@ internal object MusicSourcePathNormalizer {
             } catch (_: Exception) {
                 File(appFacingPath).absoluteFile
             }
-        // On TS18, canonicalising /storage/usbdiskN may resolve its vold symlink back to the raw
-        // /mnt/media_rw path. Persist the app-facing namespace again after canonicalisation so the
-        // normal app UID can enumerate and play the selected source.
+        // Canonicalising an app-facing vold path may resolve it back to /mnt/media_rw. Persist the
+        // app-facing namespace again so the normal app UID can enumerate and play the source.
         return Uri.fromFile(File(normaliseSharedStorageAlias(canonical.absolutePath)))
     }
 
     internal fun normaliseSharedStorageAlias(path: String): String {
-        if (path == "/sdcard") return "/storage/emulated/0"
-        if (path.startsWith("/sdcard/")) {
-            return "/storage/emulated/0/" + path.removePrefix("/sdcard/")
+        val clean = path.trimEnd('/').ifEmpty { "/" }
+        if (clean == "/sdcard") return "/storage/emulated/0"
+        if (clean.startsWith("/sdcard/")) {
+            return "/storage/emulated/0/" + clean.removePrefix("/sdcard/")
         }
-        val rawUsb =
-            Regex("^/mnt/media_rw/(usbdisk\\d+)(/.*)?$", RegexOption.IGNORE_CASE)
-                .matchEntire(path.trimEnd('/'))
-        return if (rawUsb != null) {
-            "/storage/${rawUsb.groupValues[1]}${rawUsb.groupValues[2]}"
+        val rawVolume =
+            Regex(
+                    "^/mnt/media_rw/(usbdisk\\d+|[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})(/.*)?$",
+                    RegexOption.IGNORE_CASE,
+                )
+                .matchEntire(clean)
+        return if (rawVolume != null) {
+            "/storage/${rawVolume.groupValues[1]}${rawVolume.groupValues[2]}"
         } else {
-            path
+            clean
         }
     }
 
@@ -119,6 +122,7 @@ internal object MusicSourcePathNormalizer {
                     Regex("^/mnt/media_rw/usbdisk\\d+", RegexOption.IGNORE_CASE),
                     Regex("^/storage/auxio-root/usbdisk\\d+", RegexOption.IGNORE_CASE),
                     Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
+                    Regex("^/mnt/media_rw/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
                 )
                 .mapNotNull { it.find(path)?.value }
         val prefixes = listOf("/storage/emulated/0", "/sdcard") + dynamicRoots
