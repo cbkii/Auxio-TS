@@ -35,8 +35,6 @@ import org.oxycblt.auxio.headunit.HeadUnitRoute
 import org.oxycblt.auxio.headunit.HeadUnitRoutePolicy
 import org.oxycblt.auxio.headunit.StartupPanelCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
-import org.oxycblt.auxio.music.MusicRepository
-import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackSettings
@@ -61,8 +59,6 @@ class MainActivity : AppCompatActivity() {
     private val startupPanelCoordinator: StartupPanelCoordinator by viewModels()
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var playbackSettings: PlaybackSettings
-    @Inject lateinit var musicRepository: MusicRepository
-    @Inject lateinit var musicSettings: MusicSettings
     private var isFirstResume = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
