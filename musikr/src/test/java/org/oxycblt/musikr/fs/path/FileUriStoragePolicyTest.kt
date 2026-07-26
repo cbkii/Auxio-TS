@@ -23,9 +23,10 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.Volume
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -58,27 +59,44 @@ class FileUriStoragePolicyTest {
 
     @Test
     fun `file URI primary root uses internal volume`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
         val path =
             requireNotNull(
-                DocumentPathFactory.from(context)
-                    .unpackFileUri(Uri.parse("file:///storage/emulated/0"))
+                pathFactory().unpackFileUri(Uri.parse("file:///storage/emulated/0"))
             )
 
-        assertTrue(path.volume is Volume.Internal)
+        assertSame(InternalVolume, path.volume)
         assertEquals("", path.components.unixString)
     }
 
     @Test
     fun `file URI primary descendant uses internal volume and relative components`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
         val path =
             requireNotNull(
-                DocumentPathFactory.from(context)
+                pathFactory()
                     .unpackFileUri(Uri.parse("file:///storage/emulated/0/Music/Album/song.flac"))
             )
 
-        assertTrue(path.volume is Volume.Internal)
+        assertSame(InternalVolume, path.volume)
         assertEquals("Music/Album/song.flac", path.components.unixString)
+    }
+
+    private fun pathFactory(): DocumentPathFactory {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val volumeManager =
+            object : VolumeManager {
+                override fun getInternalVolume() = InternalVolume
+
+                override fun getVolumes(): List<Volume> = emptyList()
+            }
+        return DocumentPathFactory.create(context, volumeManager)
+    }
+
+    private object InternalVolume : Volume.Internal {
+        override val mediaStoreName = "external_primary"
+        override val components = Components.parseUnix("/storage/emulated/0")
+
+        override fun resolveName(context: Context) = "Internal storage"
+
+        override fun isAccessible() = true
     }
 }
