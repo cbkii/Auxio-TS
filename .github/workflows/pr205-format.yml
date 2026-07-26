@@ -49,15 +49,8 @@ jobs:
 
           path = Path('.github/workflows/lint.yml')
           text = path.read_text(encoding='utf-8')
-          old = '''      - name: Check formatting
-                  if: steps.format_scope.outputs.run_spotless == 'true'
-                  shell: bash
-                  run: bash ./scripts/ci-gradle.sh spotlessCheck
-          '''
-          new = '''      - name: Check formatting
-                  if: steps.format_scope.outputs.run_spotless == 'true'
-                  shell: bash
-                  env:
+          old = "        run: bash ./scripts/ci-gradle.sh spotlessCheck\n"
+          new = """        env:
                     EVENT_NAME: ${{ github.event_name }}
                     PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
                     PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -91,9 +84,9 @@ jobs:
                     fi
 
                     bash ./scripts/ci-gradle.sh "${tasks[@]}"
-          '''
+          """
           if text.count(old) != 1:
-              raise SystemExit('STOP: canonical formatting block did not match exactly once')
+              raise SystemExit('STOP: canonical formatting command did not match exactly once')
           path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
           PY
 
