@@ -41,6 +41,62 @@ jobs:
       - name: Prepare pinned dependencies
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
+      - name: Isolate canonical formatting targets
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/lint.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '''      - name: Check formatting
+                  if: steps.format_scope.outputs.run_spotless == 'true'
+                  shell: bash
+                  run: bash ./scripts/ci-gradle.sh spotlessCheck
+          '''
+          new = '''      - name: Check formatting
+                  if: steps.format_scope.outputs.run_spotless == 'true'
+                  shell: bash
+                  env:
+                    EVENT_NAME: ${{ github.event_name }}
+                    PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+                    PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+                    PUSH_BEFORE_SHA: ${{ github.event.before }}
+                  run: |
+                    set -euo pipefail
+                    tasks=(spotlessKotlinCheck)
+
+                    case "${EVENT_NAME}" in
+                      workflow_dispatch)
+                        tasks+=(spotlessCppCheck)
+                        ;;
+                      pull_request)
+                        comparison="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+                        ;;
+                      push)
+                        comparison="${PUSH_BEFORE_SHA}..${GITHUB_SHA}"
+                        ;;
+                      *)
+                        comparison=""
+                        ;;
+                    esac
+
+                    if [[ "${EVENT_NAME}" != "workflow_dispatch" ]]; then
+                      if [[ -z "${comparison:-}" ]] ||
+                         ! git cat-file -e "${comparison%%.*}^{commit}" 2>/dev/null; then
+                        tasks+=(spotlessCppCheck)
+                      elif git diff --name-only "${comparison}" | grep -Eq '(^|/)(build.gradle|NOTICE|eclipse-cdt.xml)$|\\.(cpp|h|hpp)$'; then
+                        tasks+=(spotlessCppCheck)
+                      fi
+                    fi
+
+                    bash ./scripts/ci-gradle.sh "${tasks[@]}"
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('STOP: canonical formatting block did not match exactly once')
+          path.write_text(text.replace(old, new), encoding='utf-8', newline='\n')
+          PY
+
       - name: Apply Kotlin formatting
         run: ./gradlew --no-daemon --console=plain spotlessKotlinApply
 
@@ -56,5 +112,5 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'style: apply PR 205 repository formatting'
+          git commit -m 'style: apply PR 205 formatting and scope checks'
           git push origin "HEAD:${BRANCH}"
