@@ -21,11 +21,13 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.content.Intent
 import android.support.v4.media.session.MediaSessionCompat
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.AuxioService.Companion.INTENT_KEY_START_ID
 import org.oxycblt.auxio.ForegroundListener
@@ -95,6 +97,7 @@ private constructor(
     private val scope = CoroutineScope(Dispatchers.Main + waitJob)
     private var autoStopJob: Job? = null
     private var restoreWatchdogJob: Job? = null
+    private val restoreWatchdogGeneration = RestoreWatchdogGeneration()
     private var lastTopwayIsPlaying: Boolean? = null
     private var topwayProgressTickerJob: Job? = null
     private val exoHolder = exoHolderFactory.create()
@@ -116,23 +119,39 @@ private constructor(
 
     private fun scheduleRestoreWatchdog() {
         restoreWatchdogJob?.cancel()
+        val generation = restoreWatchdogGeneration.next()
         restoreWatchdogJob =
             scope.launch {
-                delay(RESTORE_STARTUP_TIMEOUT_MS)
-                val outcome = playbackManager.restoreOutcome
-                if (
-                    outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                        outcome == RestoreOutcome.WAITING_FOR_LIBRARY
-                ) {
-                    L.w(
-                        "Playback restore remained transient for ${RESTORE_STARTUP_TIMEOUT_MS}ms; " +
-                            "releasing startup readiness without blocking the library"
-                    )
-                    playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
-                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                try {
+                    delay(RESTORE_STARTUP_TIMEOUT_MS)
+                    coroutineContext.ensureActive()
+                    if (!restoreWatchdogGeneration.isCurrent(generation)) return@launch
+                    val outcome = playbackManager.restoreOutcome
+                    if (
+                        outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                            outcome == RestoreOutcome.WAITING_FOR_LIBRARY
+                    ) {
+                        L.w(
+                            "Playback restore remained transient for ${RESTORE_STARTUP_TIMEOUT_MS}ms; " +
+                                "releasing startup readiness without blocking the library"
+                        )
+                        playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
+                        startupReadinessController.publishCapability(
+                            StartupReadinessState.QueueReady
+                        )
+                    }
+                } finally {
+                    if (restoreWatchdogGeneration.isCurrent(generation)) {
+                        restoreWatchdogJob = null
+                    }
                 }
-                restoreWatchdogJob = null
             }
+    }
+
+    private fun cancelRestoreWatchdog() {
+        restoreWatchdogGeneration.invalidate()
+        restoreWatchdogJob?.cancel()
+        restoreWatchdogJob = null
     }
 
     private fun scheduleAutoStop() {
@@ -305,8 +324,7 @@ private constructor(
 
     fun release() {
         autoStopJob?.cancel()
-        restoreWatchdogJob?.cancel()
-        restoreWatchdogJob = null
+        cancelRestoreWatchdog()
         topwayProgressTickerJob?.cancel()
         topwayProgressTickerJob = null
         waitJob.cancel()
@@ -351,8 +369,7 @@ private constructor(
             outcome != RestoreOutcome.WAITING_FOR_PLAYER &&
                 outcome != RestoreOutcome.WAITING_FOR_LIBRARY
         ) {
-            restoreWatchdogJob?.cancel()
-            restoreWatchdogJob = null
+            cancelRestoreWatchdog()
             startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
         }
     }
@@ -447,4 +464,16 @@ private constructor(
         private const val RESTORE_STARTUP_TIMEOUT_MS = 8_000L
         private const val TOPWAY_PROGRESS_TICK_MS = 1000L
     }
+}
+
+internal class RestoreWatchdogGeneration {
+    private val current = AtomicLong()
+
+    fun next(): Long = current.incrementAndGet()
+
+    fun invalidate() {
+        current.incrementAndGet()
+    }
+
+    fun isCurrent(generation: Long): Boolean = current.get() == generation
 }
