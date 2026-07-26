@@ -60,9 +60,7 @@ class FileUriStoragePolicyTest {
     @Test
     fun `file URI primary root uses internal volume`() {
         val path =
-            requireNotNull(
-                pathFactory().unpackFileUri(Uri.parse("file:///storage/emulated/0"))
-            )
+            requireNotNull(pathFactory().unpackFileUri(Uri.parse("file:///storage/emulated/0")))
 
         assertSame(InternalVolume, path.volume)
         assertEquals("", path.components.unixString)
