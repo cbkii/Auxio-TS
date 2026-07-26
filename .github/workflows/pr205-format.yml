@@ -93,6 +93,17 @@ jobs:
       - name: Apply Kotlin formatting
         run: ./gradlew --no-daemon --console=plain spotlessKotlinApply
 
+      - name: Export formatting patch
+        run: git diff --binary > pr205-format.patch
+
+      - name: Upload formatting patch
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr205-format-patch
+          path: pr205-format.patch
+          if-no-files-found: error
+          retention-days: 2
+
       - name: Remove temporary workflow and push formatting
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
