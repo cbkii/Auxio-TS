@@ -23,6 +23,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.withTransaction
+import kotlinx.coroutines.yield
 
 /**
  * DAO for the bounded, restart-safe backfill of legacy [CachedFileData] rows into the normalized
@@ -110,6 +111,9 @@ internal class LibraryBackfill(private val db: CacheDatabase) {
             if (migrated == 0) break
             total += migrated
             onProgress?.invoke(total)
+            // Do not monopolise Room's transaction executor while source scanning and playback
+            // restoration are becoming ready on low-end Android 10 head units.
+            yield()
         }
         return total
     }
@@ -255,7 +259,7 @@ internal class LibraryBackfill(private val db: CacheDatabase) {
             )
 
     companion object {
-        const val DEFAULT_BATCH_SIZE = 128
+        const val DEFAULT_BATCH_SIZE = 32
         internal const val LEGACY_SOURCE_KEY = "legacy-cache"
         private const val ROLE_ARTIST = "artist"
         private const val ROLE_ALBUM_ARTIST = "albumartist"
