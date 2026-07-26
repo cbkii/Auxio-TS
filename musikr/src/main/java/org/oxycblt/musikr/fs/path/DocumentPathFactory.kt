@@ -61,8 +61,9 @@ internal interface DocumentPathFactory {
     fun unpackFileUri(uri: Uri): Path?
 
     companion object {
-        fun from(context: Context): DocumentPathFactory {
-            val volumeManager = VolumeManager.from(context)
+        fun from(context: Context): DocumentPathFactory = create(context, VolumeManager.from(context))
+
+        internal fun create(context: Context, volumeManager: VolumeManager): DocumentPathFactory {
             val pathInterpreter = MediaStorePathInterpreter.Factory.from(volumeManager)
             return DocumentPathFactoryImpl(context, volumeManager, pathInterpreter)
         }
