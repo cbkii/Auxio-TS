@@ -34,21 +34,22 @@ sealed interface StartupReadinessState {
         override val rank = 1
     }
 
-    /**
-     * Primitive queue restore has resolved to a playable window, raw fallback, or explicit empty
-     * state.
-     */
-    data object QueueReady : StartupReadinessState {
-        override val rank = 2
-    }
-
     /** Bounded database/source projections are available for Fast Start browsing. */
     data object FastBrowseReady : StartupReadinessState {
-        override val rank = 3
+        override val rank = 2
     }
 
     /** Quick database search may run without full library hydration. */
     data object SearchReady : StartupReadinessState {
+        override val rank = 3
+    }
+
+    /**
+     * Primitive queue restore has resolved to a playable window, raw fallback, or explicit empty
+     * state. This is intentionally later than browse/search so playback persistence cannot block
+     * the library UI.
+     */
+    data object QueueReady : StartupReadinessState {
         override val rank = 4
     }
 
