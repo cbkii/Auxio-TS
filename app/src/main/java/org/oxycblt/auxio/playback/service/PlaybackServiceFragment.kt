@@ -21,11 +21,13 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.content.Intent
 import android.support.v4.media.session.MediaSessionCompat
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.AuxioService.Companion.INTENT_KEY_START_ID
 import org.oxycblt.auxio.ForegroundListener
@@ -45,6 +47,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
@@ -93,6 +96,8 @@ private constructor(
     private val waitJob = Job()
     private val scope = CoroutineScope(Dispatchers.Main + waitJob)
     private var autoStopJob: Job? = null
+    private var restoreWatchdogJob: Job? = null
+    private val restoreWatchdogGeneration = RestoreWatchdogGeneration()
     private var lastTopwayIsPlaying: Boolean? = null
     private var topwayProgressTickerJob: Job? = null
     private val exoHolder = exoHolderFactory.create()
@@ -109,6 +114,44 @@ private constructor(
         if (playbackManager.currentSong != null) return
         L.i("Requesting cached saved-state restore on playback service attach")
         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+        scheduleRestoreWatchdog()
+    }
+
+    private fun scheduleRestoreWatchdog() {
+        restoreWatchdogJob?.cancel()
+        val generation = restoreWatchdogGeneration.next()
+        restoreWatchdogJob =
+            scope.launch {
+                try {
+                    delay(RESTORE_STARTUP_TIMEOUT_MS)
+                    coroutineContext.ensureActive()
+                    if (!restoreWatchdogGeneration.isCurrent(generation)) return@launch
+                    val outcome = playbackManager.restoreOutcome
+                    if (
+                        outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                            outcome == RestoreOutcome.WAITING_FOR_LIBRARY
+                    ) {
+                        L.w(
+                            "Playback restore remained transient for ${RESTORE_STARTUP_TIMEOUT_MS}ms; " +
+                                "releasing startup readiness without blocking the library"
+                        )
+                        playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
+                        startupReadinessController.publishCapability(
+                            StartupReadinessState.QueueReady
+                        )
+                    }
+                } finally {
+                    if (restoreWatchdogGeneration.isCurrent(generation)) {
+                        restoreWatchdogJob = null
+                    }
+                }
+            }
+    }
+
+    private fun cancelRestoreWatchdog() {
+        restoreWatchdogGeneration.invalidate()
+        restoreWatchdogJob?.cancel()
+        restoreWatchdogJob = null
     }
 
     private fun scheduleAutoStop() {
@@ -219,6 +262,7 @@ private constructor(
         if (action != null) {
             L.d("Initing service fragment using action $action")
             playbackManager.playDeferred(action)
+            if (action is DeferredPlayback.RestoreState) scheduleRestoreWatchdog()
         }
     }
 
@@ -251,6 +295,7 @@ private constructor(
                                 fallback = DeferredPlayback.ShuffleAll(),
                             )
                         )
+                        scheduleRestoreWatchdog()
                     }
                 }
 
@@ -258,6 +303,7 @@ private constructor(
                     if (playbackManager.currentSong == null) {
                         L.i("Topway update received with no current song; requesting state restore")
                         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+                        scheduleRestoreWatchdog()
                     }
                     publishTopwayState("cmd-update", force = true)
                     widgetComponent.update(force = true)
@@ -278,6 +324,7 @@ private constructor(
 
     fun release() {
         autoStopJob?.cancel()
+        cancelRestoreWatchdog()
         topwayProgressTickerJob?.cancel()
         topwayProgressTickerJob = null
         waitJob.cancel()
@@ -315,6 +362,16 @@ private constructor(
         val playStateChanged = lastTopwayIsPlaying != progression.isPlaying
         lastTopwayIsPlaying = progression.isPlaying
         publishTopwayProgress("progression", force = playStateChanged)
+    }
+
+    override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {
+        if (
+            outcome != RestoreOutcome.WAITING_FOR_PLAYER &&
+                outcome != RestoreOutcome.WAITING_FOR_LIBRARY
+        ) {
+            cancelRestoreWatchdog()
+            startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+        }
     }
 
     override fun onRawPlaybackMetadataChanged(
@@ -404,6 +461,19 @@ private constructor(
 
     private companion object {
         private const val AUTO_STOP_DELAY_MS = 30L * 60L * 1000L
+        private const val RESTORE_STARTUP_TIMEOUT_MS = 8_000L
         private const val TOPWAY_PROGRESS_TICK_MS = 1000L
     }
+}
+
+internal class RestoreWatchdogGeneration {
+    private val current = AtomicLong()
+
+    fun next(): Long = current.incrementAndGet()
+
+    fun invalidate() {
+        current.incrementAndGet()
+    }
+
+    fun isCurrent(generation: Long): Boolean = current.get() == generation
 }

@@ -44,6 +44,17 @@ class StartupReadinessControllerTest {
 
         assertEquals(StartupReadinessState.ProcessVisible, controller.capability)
         assertTrue(StartupCapability.SEARCH_READY in controller.state.achieved)
+        assertTrue(StartupCapability.FAST_BROWSE_READY !in controller.state.achieved)
+    }
+
+    @Test
+    fun `fast browse advances without queue restore`() {
+        val controller = StartupReadinessController()
+        controller.publishCapability(StartupReadinessState.PlaybackServiceReady)
+        controller.publishCapability(StartupReadinessState.FastBrowseReady)
+        controller.publishCapability(StartupReadinessState.SearchReady)
+
+        assertEquals(StartupReadinessState.SearchReady, controller.capability)
         assertTrue(StartupCapability.QUEUE_READY !in controller.state.achieved)
     }
 
@@ -52,7 +63,6 @@ class StartupReadinessControllerTest {
         val controller = StartupReadinessController()
         controller.publishCapability(StartupReadinessState.SearchReady)
         controller.publishCapability(StartupReadinessState.PlaybackServiceReady)
-        controller.publishCapability(StartupReadinessState.QueueReady)
         controller.publishCapability(StartupReadinessState.FastBrowseReady)
 
         assertEquals(StartupReadinessState.SearchReady, controller.capability)
@@ -62,9 +72,9 @@ class StartupReadinessControllerTest {
     fun `library status changes do not regress capabilities`() {
         val controller = StartupReadinessController()
         controller.publishCapability(StartupReadinessState.PlaybackServiceReady)
-        controller.publishCapability(StartupReadinessState.QueueReady)
         controller.publishCapability(StartupReadinessState.FastBrowseReady)
         controller.publishCapability(StartupReadinessState.SearchReady)
+        controller.publishCapability(StartupReadinessState.QueueReady)
         controller.publishCapability(StartupReadinessState.FullLibraryReady)
         controller.publishLibraryStatus(StartupLibraryStatus.SourceUnavailable)
         controller.publishLibraryStatus(StartupLibraryStatus.Usable)

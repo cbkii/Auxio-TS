@@ -61,8 +61,10 @@ internal interface DocumentPathFactory {
     fun unpackFileUri(uri: Uri): Path?
 
     companion object {
-        fun from(context: Context): DocumentPathFactory {
-            val volumeManager = VolumeManager.from(context)
+        fun from(context: Context): DocumentPathFactory =
+            create(context, VolumeManager.from(context))
+
+        internal fun create(context: Context, volumeManager: VolumeManager): DocumentPathFactory {
             val pathInterpreter = MediaStorePathInterpreter.Factory.from(volumeManager)
             return DocumentPathFactoryImpl(context, volumeManager, pathInterpreter)
         }
@@ -127,6 +129,15 @@ private class DocumentPathFactoryImpl(
             } catch (e: Exception) {
                 pathFile.absolutePath
             }
+
+        // Some TS18 firmware omits primary shared storage from StorageManager's volume list. Never
+        // demote /storage/emulated/0 to a ThirdParty volume: doing so changes source identity
+        // across
+        // launches and can strand incremental generations even though the same files remain
+        // present.
+        FileUriStoragePolicy.relativeToPrimarySharedStorage(pathString)?.let { relativePath ->
+            return Path(volumeManager.getInternalVolume(), Components.parseUnix(relativePath))
+        }
 
         val volumes = volumeManager.getVolumes()
 
@@ -202,4 +213,15 @@ private class DocumentPathFactoryImpl(
                 Uri.parse("content://downloads/my_downloads"),
             )
     }
+}
+
+internal object FileUriStoragePolicy {
+    private const val PRIMARY_SHARED_STORAGE = "/storage/emulated/0"
+
+    fun relativeToPrimarySharedStorage(path: String): String? =
+        when {
+            path == PRIMARY_SHARED_STORAGE -> ""
+            path.startsWith("$PRIMARY_SHARED_STORAGE/") -> path.removePrefix(PRIMARY_SHARED_STORAGE)
+            else -> null
+        }
 }

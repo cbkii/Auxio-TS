@@ -188,8 +188,14 @@ private constructor(
 
     override suspend fun populateNormalizedLibrary(): Int = backfill.run()
 
-    override suspend fun prepareStartupProjections(): Int =
-        backfill.runOneBatch(STARTUP_SEED_BATCH_SIZE)
+    override suspend fun prepareStartupProjections(): Int {
+        // Normalized tables are created by Room migration and are safe to query while empty. Do not
+        // perform a write transaction here: MusicRepository.startup waits for this method before it
+        // can request the source scan, and slow/corrupt legacy rows on TS18 previously left the app
+        // permanently at "Loading your music library". The existing compatibility backfill runs
+        // asynchronously after readiness is published and remains restart-safe.
+        return 0
+    }
 
     override suspend fun write(cachedFile: CachedFile) {
         if (incrementalStore.stage(cachedFile)) return
@@ -235,8 +241,6 @@ private constructor(
         )
 
     companion object {
-        private const val STARTUP_SEED_BATCH_SIZE = 32
-
         fun from(context: Context): MutableDBCache = from(CacheDatabase.from(context))
 
         internal fun from(db: CacheDatabase): MutableDBCache {
