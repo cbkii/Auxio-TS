@@ -80,7 +80,7 @@ Observed private/system/vendor hooks from stock TS18 apps have been treated as r
 Stock TS* / Topway / DoFun environment has some limits users should know about.
 
 The target TS18 firmware already includes the stock music app as a protected system app `com.tw.music`.
-Because of this, the `topwayTwMusicRelease` APK may not install like a normal app on locked stock firmware; To install this (most-integrated) variant, some units may require an advanced install method, such as ADB, Shizuku, root, disabling the stock app for the current user, or matching the system app signature.
+Because of this, the `topwayTwMusicRelease` APK may not install like a normal app on locked stock firmware; to install this most-integrated variant, some units may require an advanced install method, such as ADB, Shizuku, root, disabling the stock app for the current user, or matching the system app signature.
 
 Storage and memory may have some practical limits on TS18 units; for this reason, Auxio-TS can limit TS18 system scans to likely music folders by looking for familiar folder-names **containing** keywords such as `music`, `download`, or `media` (case-insensitive).
 
@@ -94,7 +94,7 @@ ensure path contains: *music|media|download*
 
 Avoid unusual folder names, including names with emoji, invisible characters, excessive punctuation, very long names, or names that only differ by capitalisation or symbols.
 
-**Note:** Auxio-TS includes a manual **Storage Health** diagnostic screen (under Settings > Music > Storage Health) to help debug USB mount points, alias duplication, and noisy folders on TS18 hardware. It runs only on-demand and can export a plain-text report for troubleshooting.
+Auxio-TS no longer includes the former in-app **TS18 Health Diagnostics / Storage Health** screen. For troubleshooting, use the external Magisk/service.d collector under [`tools/ts18-auxio-media-diag-pack-v3-recommended/`](tools/ts18-auxio-media-diag-pack-v3-recommended/) and follow [`docs/TS18_RUNTIME_VALIDATION.md`](docs/TS18_RUNTIME_VALIDATION.md).
 
 See [`docs/TS18_INSTALLATION_CONSTRAINTS.md`](docs/TS18_INSTALLATION_CONSTRAINTS.md) before treating a Topway APK as installable on locked stock firmware.
 
@@ -108,14 +108,15 @@ Auxio relies on a patched Media3 setup and native metadata dependencies, so a wo
 - Android SDK
 - CMake / native build tooling where required
 - `ninja-build`
-- Git submodules initialised recursively
+- Git with network access to the pinned submodules
 
 Initial setup:
 
 ```sh
-git submodule update --init --recursive
-bash scripts/prepare-ci-environment.sh
+bash scripts/bootstrap-dependencies.sh --profile full-build
 ```
+
+The repository bootstrap initialises and verifies the exact pinned root and nested submodules, applies only approved fallback mirrors, and prepares known upstream compatibility stubs. `scripts/prepare-ci-environment.sh` remains a backwards-compatible wrapper for the same full-build profile.
 
 Build the standard development APK:
 
