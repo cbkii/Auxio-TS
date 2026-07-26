@@ -45,6 +45,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
@@ -93,6 +94,7 @@ private constructor(
     private val waitJob = Job()
     private val scope = CoroutineScope(Dispatchers.Main + waitJob)
     private var autoStopJob: Job? = null
+    private var restoreWatchdogJob: Job? = null
     private var lastTopwayIsPlaying: Boolean? = null
     private var topwayProgressTickerJob: Job? = null
     private val exoHolder = exoHolderFactory.create()
@@ -109,6 +111,28 @@ private constructor(
         if (playbackManager.currentSong != null) return
         L.i("Requesting cached saved-state restore on playback service attach")
         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+        scheduleRestoreWatchdog()
+    }
+
+    private fun scheduleRestoreWatchdog() {
+        restoreWatchdogJob?.cancel()
+        restoreWatchdogJob =
+            scope.launch {
+                delay(RESTORE_STARTUP_TIMEOUT_MS)
+                val outcome = playbackManager.restoreOutcome
+                if (
+                    outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                        outcome == RestoreOutcome.WAITING_FOR_LIBRARY
+                ) {
+                    L.w(
+                        "Playback restore remained transient for ${RESTORE_STARTUP_TIMEOUT_MS}ms; " +
+                            "releasing startup readiness without blocking the library"
+                    )
+                    playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
+                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                }
+                restoreWatchdogJob = null
+            }
     }
 
     private fun scheduleAutoStop() {
@@ -219,6 +243,7 @@ private constructor(
         if (action != null) {
             L.d("Initing service fragment using action $action")
             playbackManager.playDeferred(action)
+            if (action is DeferredPlayback.RestoreState) scheduleRestoreWatchdog()
         }
     }
 
@@ -251,6 +276,7 @@ private constructor(
                                 fallback = DeferredPlayback.ShuffleAll(),
                             )
                         )
+                        scheduleRestoreWatchdog()
                     }
                 }
 
@@ -258,6 +284,7 @@ private constructor(
                     if (playbackManager.currentSong == null) {
                         L.i("Topway update received with no current song; requesting state restore")
                         playbackManager.playDeferred(DeferredPlayback.RestoreState(play = false))
+                        scheduleRestoreWatchdog()
                     }
                     publishTopwayState("cmd-update", force = true)
                     widgetComponent.update(force = true)
@@ -278,6 +305,8 @@ private constructor(
 
     fun release() {
         autoStopJob?.cancel()
+        restoreWatchdogJob?.cancel()
+        restoreWatchdogJob = null
         topwayProgressTickerJob?.cancel()
         topwayProgressTickerJob = null
         waitJob.cancel()
@@ -315,6 +344,17 @@ private constructor(
         val playStateChanged = lastTopwayIsPlaying != progression.isPlaying
         lastTopwayIsPlaying = progression.isPlaying
         publishTopwayProgress("progression", force = playStateChanged)
+    }
+
+    override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {
+        if (
+            outcome != RestoreOutcome.WAITING_FOR_PLAYER &&
+                outcome != RestoreOutcome.WAITING_FOR_LIBRARY
+        ) {
+            restoreWatchdogJob?.cancel()
+            restoreWatchdogJob = null
+            startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+        }
     }
 
     override fun onRawPlaybackMetadataChanged(
@@ -404,6 +444,7 @@ private constructor(
 
     private companion object {
         private const val AUTO_STOP_DELAY_MS = 30L * 60L * 1000L
+        private const val RESTORE_STARTUP_TIMEOUT_MS = 8_000L
         private const val TOPWAY_PROGRESS_TICK_MS = 1000L
     }
 }
