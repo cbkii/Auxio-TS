@@ -18,10 +18,20 @@
 
 package org.oxycblt.musikr.fs.path
 
+import android.content.Context
+import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.oxycblt.musikr.fs.Volume
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29])
 class FileUriStoragePolicyTest {
     @Test
     fun `primary shared-storage root maps to internal root`() {
@@ -44,5 +54,31 @@ class FileUriStoragePolicyTest {
             FileUriStoragePolicy.relativeToPrimarySharedStorage("/storage/emulated/01/Music")
         )
         assertNull(FileUriStoragePolicy.relativeToPrimarySharedStorage("/storage/usbdisk0/Music"))
+    }
+
+    @Test
+    fun `file URI primary root uses internal volume`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val path =
+            requireNotNull(
+                DocumentPathFactory.from(context)
+                    .unpackFileUri(Uri.parse("file:///storage/emulated/0"))
+            )
+
+        assertTrue(path.volume is Volume.Internal)
+        assertEquals("", path.components.unixString)
+    }
+
+    @Test
+    fun `file URI primary descendant uses internal volume and relative components`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val path =
+            requireNotNull(
+                DocumentPathFactory.from(context)
+                    .unpackFileUri(Uri.parse("file:///storage/emulated/0/Music/Album/song.flac"))
+            )
+
+        assertTrue(path.volume is Volume.Internal)
+        assertEquals("Music/Album/song.flac", path.components.unixString)
     }
 }
