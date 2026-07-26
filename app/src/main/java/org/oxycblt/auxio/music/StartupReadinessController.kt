@@ -28,8 +28,11 @@ import org.oxycblt.auxio.util.PerfTimer
  * Process-wide startup capability coordinator.
  *
  * Capability milestones are recorded independently and the public contiguous stage advances only
- * when every prerequisite has actually been achieved. Recoverable library/source conditions are
- * tracked orthogonally and never compete with capability ordering.
+ * when every prerequisite in the interaction lane has actually been achieved. Recoverable
+ * library/source conditions are tracked orthogonally and never compete with capability ordering.
+ *
+ * Fast browse and search deliberately precede queue restoration: a slow, corrupt, or unavailable
+ * playback-persistence database must never hold the music library UI in a permanent loading state.
  */
 @Singleton
 class StartupReadinessController @Inject constructor() {
@@ -100,9 +103,9 @@ class StartupReadinessController @Inject constructor() {
 enum class StartupCapability {
     PROCESS_VISIBLE,
     PLAYBACK_SERVICE_READY,
-    QUEUE_READY,
     FAST_BROWSE_READY,
     SEARCH_READY,
+    QUEUE_READY,
     FULL_LIBRARY_READY,
     ENRICHMENT_COMPLETE,
 }
@@ -111,9 +114,9 @@ private fun StartupReadinessState.toCapability(): StartupCapability =
     when (this) {
         StartupReadinessState.ProcessVisible -> StartupCapability.PROCESS_VISIBLE
         StartupReadinessState.PlaybackServiceReady -> StartupCapability.PLAYBACK_SERVICE_READY
-        StartupReadinessState.QueueReady -> StartupCapability.QUEUE_READY
         StartupReadinessState.FastBrowseReady -> StartupCapability.FAST_BROWSE_READY
         StartupReadinessState.SearchReady -> StartupCapability.SEARCH_READY
+        StartupReadinessState.QueueReady -> StartupCapability.QUEUE_READY
         StartupReadinessState.FullLibraryReady -> StartupCapability.FULL_LIBRARY_READY
         StartupReadinessState.EnrichmentComplete -> StartupCapability.ENRICHMENT_COMPLETE
     }
@@ -122,9 +125,9 @@ private fun StartupCapability.toReadinessState(): StartupReadinessState =
     when (this) {
         StartupCapability.PROCESS_VISIBLE -> StartupReadinessState.ProcessVisible
         StartupCapability.PLAYBACK_SERVICE_READY -> StartupReadinessState.PlaybackServiceReady
-        StartupCapability.QUEUE_READY -> StartupReadinessState.QueueReady
         StartupCapability.FAST_BROWSE_READY -> StartupReadinessState.FastBrowseReady
         StartupCapability.SEARCH_READY -> StartupReadinessState.SearchReady
+        StartupCapability.QUEUE_READY -> StartupReadinessState.QueueReady
         StartupCapability.FULL_LIBRARY_READY -> StartupReadinessState.FullLibraryReady
         StartupCapability.ENRICHMENT_COMPLETE -> StartupReadinessState.EnrichmentComplete
     }
