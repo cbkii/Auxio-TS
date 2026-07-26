@@ -104,6 +104,17 @@ jobs:
           if-no-files-found: error
           retention-days: 2
 
+      - name: Upload formatted files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr205-formatted-files
+          path: |
+            .github/workflows/lint.yml
+            musikr/src/main/java/org/oxycblt/musikr/fs/path/DocumentPathFactory.kt
+            musikr/src/test/java/org/oxycblt/musikr/fs/path/FileUriStoragePolicyTest.kt
+          if-no-files-found: error
+          retention-days: 2
+
       - name: Remove temporary workflow and push formatting
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
