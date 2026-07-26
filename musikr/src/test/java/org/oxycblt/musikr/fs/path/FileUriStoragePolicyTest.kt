@@ -40,7 +40,9 @@ class FileUriStoragePolicyTest {
 
     @Test
     fun `similarly prefixed and removable paths do not map to primary storage`() {
-        assertNull(FileUriStoragePolicy.relativeToPrimarySharedStorage("/storage/emulated/01/Music"))
+        assertNull(
+            FileUriStoragePolicy.relativeToPrimarySharedStorage("/storage/emulated/01/Music")
+        )
         assertNull(FileUriStoragePolicy.relativeToPrimarySharedStorage("/storage/usbdisk0/Music"))
     }
 }

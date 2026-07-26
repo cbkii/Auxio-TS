@@ -129,13 +129,12 @@ private class DocumentPathFactoryImpl(
             }
 
         // Some TS18 firmware omits primary shared storage from StorageManager's volume list. Never
-        // demote /storage/emulated/0 to a ThirdParty volume: doing so changes source identity across
-        // launches and can strand incremental generations even though the same files remain present.
+        // demote /storage/emulated/0 to a ThirdParty volume: doing so changes source identity
+        // across
+        // launches and can strand incremental generations even though the same files remain
+        // present.
         FileUriStoragePolicy.relativeToPrimarySharedStorage(pathString)?.let { relativePath ->
-            return Path(
-                volumeManager.getInternalVolume(),
-                Components.parseUnix(relativePath),
-            )
+            return Path(volumeManager.getInternalVolume(), Components.parseUnix(relativePath))
         }
 
         val volumes = volumeManager.getVolumes()
@@ -220,8 +219,7 @@ internal object FileUriStoragePolicy {
     fun relativeToPrimarySharedStorage(path: String): String? =
         when {
             path == PRIMARY_SHARED_STORAGE -> ""
-            path.startsWith("$PRIMARY_SHARED_STORAGE/") ->
-                path.removePrefix(PRIMARY_SHARED_STORAGE)
+            path.startsWith("$PRIMARY_SHARED_STORAGE/") -> path.removePrefix(PRIMARY_SHARED_STORAGE)
             else -> null
         }
 }

@@ -222,7 +222,40 @@ jobs:
       - name: Check formatting
         if: steps.format_scope.outputs.run_spotless == 'true'
         shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessCheck
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          tasks=(spotlessKotlinCheck)
+
+          case "${EVENT_NAME}" in
+            workflow_dispatch)
+              tasks+=(spotlessCppCheck)
+              ;;
+            pull_request)
+              comparison="${PR_BASE_SHA}...${PR_HEAD_SHA}"
+              ;;
+            push)
+              comparison="${PUSH_BEFORE_SHA}..${GITHUB_SHA}"
+              ;;
+            *)
+              comparison=""
+              ;;
+          esac
+
+          if [[ "${EVENT_NAME}" != "workflow_dispatch" ]]; then
+            if [[ -z "${comparison:-}" ]] ||
+               ! git cat-file -e "${comparison%%.*}^{commit}" 2>/dev/null; then
+              tasks+=(spotlessCppCheck)
+            elif git diff --name-only "${comparison}" | grep -Eq '(^|/)(build.gradle|NOTICE|eclipse-cdt.xml)$|\.(cpp|h|hpp)$'; then
+              tasks+=(spotlessCppCheck)
+            fi
+          fi
+
+          bash ./scripts/ci-gradle.sh "${tasks[@]}"
 
       - name: Formatting not required
         if: steps.format_scope.outputs.run_spotless != 'true'
