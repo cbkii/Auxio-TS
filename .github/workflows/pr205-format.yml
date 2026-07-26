@@ -42,9 +42,27 @@ jobs:
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
       - name: Apply Spotless formatting
-        run: ./gradlew --no-daemon --console=plain spotlessApply
+        id: spotless
+        continue-on-error: true
+        run: |
+          set +e
+          ./gradlew --no-daemon --console=plain spotlessApply > spotless-apply.log 2>&1
+          rc=$?
+          cat spotless-apply.log
+          printf 'rc=%s\n' "$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Upload Spotless diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr205-spotless-apply
+          path: spotless-apply.log
+          if-no-files-found: error
+          retention-days: 2
 
       - name: Remove temporary workflow and push formatting
+        if: steps.spotless.outcome == 'success'
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
@@ -58,3 +76,9 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'style: apply PR 205 repository formatting'
           git push origin "HEAD:${BRANCH}"
+
+      - name: Fail after preserving diagnostics
+        if: steps.spotless.outcome == 'failure'
+        run: |
+          echo "Spotless failed with status ${{ steps.spotless.outputs.rc }}" >&2
+          exit 1
