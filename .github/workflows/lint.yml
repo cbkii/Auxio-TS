@@ -247,8 +247,11 @@ jobs:
           esac
 
           if [[ "${EVENT_NAME}" != "workflow_dispatch" ]]; then
+            comparison_start="${comparison%%.*}"
+            comparison_end="${comparison##*.}"
             if [[ -z "${comparison:-}" ]] ||
-               ! git cat-file -e "${comparison%%.*}^{commit}" 2>/dev/null; then
+               ! git cat-file -e "${comparison_start}^{commit}" 2>/dev/null ||
+               ! git cat-file -e "${comparison_end}^{commit}" 2>/dev/null; then
               tasks+=(spotlessCppCheck)
             elif git diff --name-only "${comparison}" | grep -Eq '(^|/)(build.gradle|NOTICE|eclipse-cdt.xml)$|\.(cpp|h|hpp)$'; then
               tasks+=(spotlessCppCheck)
