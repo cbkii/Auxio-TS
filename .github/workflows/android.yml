@@ -315,6 +315,8 @@ jobs:
 
       - name: Build maintained debug APKs
         shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-debug-gradle.log
         run: |
           bash ./scripts/ci-gradle.sh --warning-mode all \
             :app:assembleTopwayTwMediaDebug \
@@ -323,6 +325,8 @@ jobs:
       - name: Build maintained release APKs
         if: github.event_name != 'pull_request'
         shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
         run: |
           bash ./scripts/ci-gradle.sh --warning-mode all \
             :app:assembleTopwayTwMediaRelease \
@@ -349,6 +353,8 @@ jobs:
           path: |
             app/build/reports/**
             build/reports/problems/**
+            ${{ runner.temp }}/android-build-debug-gradle.log
+            ${{ runner.temp }}/android-build-release-gradle.log
           if-no-files-found: ignore
           retention-days: 7
 
@@ -380,6 +386,10 @@ jobs:
             echo "- Exact-package compatibility variant: \`topwayTwMusic\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            [[ -n "${REPORTS_URL}" ]] && echo "- Failure reports: ${REPORTS_URL}"
-            [[ -n "${DEBUG_APKS_URL}" ]] && echo "- Debug APKs: ${DEBUG_APKS_URL}"
+            if [[ -n "${REPORTS_URL}" ]]; then
+              echo "- Failure reports: ${REPORTS_URL}"
+            fi
+            if [[ -n "${DEBUG_APKS_URL}" ]]; then
+              echo "- Debug APKs: ${DEBUG_APKS_URL}"
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
