@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
-# Fast PR-safe checks for the manual release workflow and Topway Magisk packager.
+# Fast PR-safe checks for the maintained Topway release workflow and Magisk packager.
 
 set -euo pipefail
 
-fail() {
-  printf '::error::%s\n' "$*" >&2
-  exit 1
-}
-
-log() {
-  printf '[INFO] %s\n' "$*" >&2
-}
+fail() { printf '::error::%s\n' "$*" >&2; exit 1; }
+log() { printf '[INFO] %s\n' "$*" >&2; }
 
 workflow='.github/workflows/manual-release.yml'
 packager='scripts/package-topway-twmusic-magisk-module.sh'
@@ -21,23 +15,13 @@ packager='scripts/package-topway-twmusic-magisk-module.sh'
 ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
 bash -n "${packager}"
 
-if command -v actionlint >/dev/null 2>&1; then
-  actionlint "${workflow}"
-else
-  log "actionlint is not installed; skipping actionlint ${workflow}"
-fi
-
-if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "${packager}"
-else
-  log "shellcheck is not installed; skipping shellcheck ${packager}"
-fi
+if command -v actionlint >/dev/null 2>&1; then actionlint "${workflow}"; else log 'actionlint unavailable; skipped'; fi
+if command -v shellcheck >/dev/null 2>&1; then shellcheck "${packager}"; else log 'shellcheck unavailable; skipped'; fi
 
 python3 - <<'PY'
 from pathlib import Path
-text = Path('.github/workflows/manual-release.yml').read_text()
+text = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
 required = {
-    'include_standard_apk': 'default: false',
     'include_topway_twmedia_apk': 'default: true',
     'include_topway_twmusic_magisk': 'default: false',
 }
@@ -46,22 +30,29 @@ for key, default in required.items():
     pos = text.find(marker)
     if pos < 0:
         raise SystemExit(f'Missing workflow_dispatch input: {key}')
-    next_pos = min([candidate for candidate in (text.find('\n      include_', pos + len(marker)), text.find('\n      replace_existing_assets:', pos + len(marker)), text.find('\n\npermissions:', pos + len(marker))) if candidate != -1] or [len(text)])
-    block = text[pos:next_pos]
-    if default not in block:
+    next_candidates = [
+        text.find('\n      include_', pos + len(marker)),
+        text.find('\n      replace_existing_assets:', pos + len(marker)),
+        text.find('\n\npermissions:', pos + len(marker)),
+    ]
+    next_pos = min([candidate for candidate in next_candidates if candidate != -1] or [len(text)])
+    if default not in text[pos:next_pos]:
         raise SystemExit(f'{key} does not contain expected {default}')
-if 'At least one release asset must be selected' not in text:
+for forbidden in ('include_standard_apk', 'assembleStandardRelease', 'standard-release.apk'):
+    if forbidden in text:
+        raise SystemExit(f'Retired standard release token remains: {forbidden}')
+if 'At least one maintained release asset must be selected' not in text:
     raise SystemExit('Missing empty-selection guard')
 if 'topway-twmusic-release.apk' not in text or 'Raw topwayTwMusic APK asset is forbidden' not in text:
-    raise SystemExit('Missing forbidden raw topwayTwMusic APK asset guard')
+    raise SystemExit('Missing forbidden raw topwayTwMusic APK guard')
 if 'gh release delete-asset' not in text or 'gh release upload' not in text:
     raise SystemExit('Missing release replacement/upload flow')
-if text.find('gh release delete-asset') < text.find('Build, verify, and stage selected release assets'):
+if text.find('gh release delete-asset') < text.find('Build, verify and stage selected release assets'):
     raise SystemExit('Release asset deletion appears before rebuilt assets are staged')
 if 'path: ${{ steps.assets.outputs.artifact_dir }}/*' not in text:
-    raise SystemExit('Upload artifact step must use the selected-asset artifact directory, not all possible asset names')
+    raise SystemExit('Artifact upload must use only selected staged assets')
 if 'persist-credentials: false' not in text:
-    raise SystemExit('Checkout must not persist the contents:write credential')
+    raise SystemExit('Checkout must not persist contents:write credentials')
 for pinned in (
     'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
     'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
@@ -75,13 +66,11 @@ for suffix in ('.sha256', '.metadata.txt'):
         raise SystemExit(f'Missing release evidence sidecar: {suffix}')
 if 'apksigner certificates' not in text or 'asset_sha256=' not in text:
     raise SystemExit('Release metadata does not record signing and checksum evidence')
-print('OK manual-release selectable asset invariants')
+print('OK manual-release maintained asset invariants')
 PY
 
 tmpdir="$(mktemp -d)"
-cleanup() {
-  rm -rf -- "${tmpdir}"
-}
+cleanup() { rm -rf -- "${tmpdir}"; }
 trap cleanup EXIT
 
 printf 'fake apk payload\n' > "${tmpdir}/fake.apk"
@@ -90,43 +79,35 @@ printf 'fake apk payload\n' > "${tmpdir}/fake.apk"
   "${OLDPWD}/${packager}" --apk fake.apk --output ./artifact.zip --version 1.2.3 --version-code 123 >/dev/null
 )
 zip_path="${tmpdir}/artifact.zip"
-[[ -f "${zip_path}" ]] || fail "Packager did not create relative output path ${zip_path}"
+[[ -f "${zip_path}" ]] || fail "Packager did not create ${zip_path}"
 unzip -t "${zip_path}" >/dev/null
-unzip -l "${zip_path}" "module.prop" >/dev/null 2>&1 || fail "ZIP missing module.prop"
-unzip -l "${zip_path}" "customize.sh" >/dev/null 2>&1 || fail "ZIP missing customize.sh"
-unzip -l "${zip_path}" "system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk" >/dev/null 2>&1 || fail "ZIP missing Topway APK payload"
+for entry in module.prop customize.sh system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk; do
+  unzip -l "${zip_path}" "${entry}" >/dev/null 2>&1 || fail "ZIP missing ${entry}"
+done
 
 has_updater_script=false
 has_unnecessary_script=false
 while IFS= read -r entry; do
   [[ -n "${entry}" ]] || continue
-  [[ "${entry}" != ./* ]] || fail "ZIP entry has ./ prefix: ${entry}"
-  [[ "${entry}" != /* ]] || fail "ZIP entry is absolute: ${entry}"
+  [[ "${entry}" != ./* && "${entry}" != /* ]] || fail "Unsafe ZIP entry: ${entry}"
   [[ "${entry}" != *'../'* && "${entry}" != ../* ]] || fail "ZIP entry escapes module root: ${entry}"
-  [[ "${entry}" != *auxio-ts-magisk* ]] || fail "ZIP entry includes temporary parent prefix: ${entry}"
+  [[ "${entry}" != *auxio-ts-magisk* ]] || fail "ZIP entry includes temporary prefix: ${entry}"
   [[ "${entry}" != 'META-INF/com/google/android/updater-script' ]] || has_updater_script=true
-  if [[ "${entry}" =~ (^|/)install\.sh$|(^|/)post-fs-data\.sh$|(^|/)service\.sh$ ]]; then
-    has_unnecessary_script=true
-  fi
+  if [[ "${entry}" =~ (^|/)install\.sh$|(^|/)post-fs-data\.sh$|(^|/)service\.sh$ ]]; then has_unnecessary_script=true; fi
 done < <(unzip -Z -1 "${zip_path}")
 
-if [[ "${has_updater_script}" == "true" ]]; then
-  updater_contents="$(unzip -p "${zip_path}" 'META-INF/com/google/android/updater-script')"
-  [[ "${updater_contents}" == '#MAGISK' ]] || fail "updater-script must contain exactly #MAGISK"
+if [[ "${has_updater_script}" == true ]]; then
+  [[ "$(unzip -p "${zip_path}" 'META-INF/com/google/android/updater-script')" == '#MAGISK' ]] ||
+    fail 'updater-script must contain exactly #MAGISK'
 fi
-
-if [[ "${has_unnecessary_script}" == "true" ]]; then
-  fail "Static overlay module ZIP contains unnecessary installer/boot scripts"
-fi
+[[ "${has_unnecessary_script}" == false ]] || fail 'Static overlay ZIP contains unnecessary installer/boot scripts'
 
 customize_contents="$(unzip -p "${zip_path}" customize.sh)"
-for forbidden in '/tmp' 'mktemp' 'mapfile' 'readarray' 'exit'; do
-  if grep -F -- "${forbidden}" <<< "${customize_contents}" >/dev/null; then
-    fail "Generated customize.sh contains forbidden device-side token: ${forbidden}"
-  fi
+for forbidden in /tmp mktemp mapfile readarray exit; do
+  grep -F -- "${forbidden}" <<< "${customize_contents}" >/dev/null && fail "Generated customize.sh contains forbidden token: ${forbidden}"
 done
 if grep -E '(^|[^[:alnum:]_])([[:alnum:]_]+)=\(' <<< "${customize_contents}" >/dev/null; then
-  fail "Generated customize.sh appears to contain a Bash array assignment"
+  fail 'Generated customize.sh appears to contain a Bash array assignment'
 fi
 
-log "manual release workflow and Magisk packager checks passed"
+log 'manual release workflow and Magisk packager checks passed'
