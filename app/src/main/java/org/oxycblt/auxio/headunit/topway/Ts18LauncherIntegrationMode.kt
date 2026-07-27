@@ -6,14 +6,6 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.topway
@@ -58,8 +50,11 @@ enum class Ts18LauncherIntegrationMode {
         const val PREF_KEY = "auxio_ts18_launcher_integration_mode"
         const val PREF_GENERIC_DEFAULT_MIGRATED = "auxio_ts18_launcher_generic_default_migrated_v1"
 
-        fun default(): Ts18LauncherIntegrationMode =
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) GenericDofunMedia else AndroidMediaSessionOnly
+        /** Pure policy helper retained independently from distributable product flavours. */
+        fun defaultFor(topwayCompatFlavor: Boolean): Ts18LauncherIntegrationMode =
+            if (topwayCompatFlavor) GenericDofunMedia else AndroidMediaSessionOnly
+
+        fun default(): Ts18LauncherIntegrationMode = defaultFor(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         fun fromPreference(value: String?): Ts18LauncherIntegrationMode =
             entries.firstOrNull { it.name == value } ?: default()
@@ -80,13 +75,7 @@ enum class Ts18LauncherIntegrationMode {
             val parsed = entries.firstOrNull { it.name == persistedValue }
             if (!topwayCompatFlavor || migrationComplete) {
                 return Ts18LauncherModeMigrationDecision(
-                    mode =
-                        parsed
-                            ?: if (topwayCompatFlavor) {
-                                GenericDofunMedia
-                            } else {
-                                AndroidMediaSessionOnly
-                            },
+                    mode = parsed ?: defaultFor(topwayCompatFlavor),
                     persistMode = null,
                     markComplete = false,
                 )
@@ -100,9 +89,7 @@ enum class Ts18LauncherIntegrationMode {
             )
         }
 
-        /**
-         * Resolve and atomically persist the shared migration decision for any runtime entry point.
-         */
+        /** Resolve and atomically persist the shared migration decision for any runtime entry point. */
         fun resolveAndPersist(
             prefs: SharedPreferences,
             topwayCompatFlavor: Boolean,
