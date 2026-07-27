@@ -33,13 +33,6 @@ android {
     flavorDimensions += "distribution"
 
     productFlavors {
-        standard {
-            dimension "distribution"
-            buildConfigField "boolean", "TOPWAY_TWMUSIC_FLAVOR", "false"
-            buildConfigField "boolean", "TOPWAY_TWMEDIA_FLAVOR", "false"
-            buildConfigField "boolean", "TOPWAY_COMPAT_FLAVOR", "false"
-        }
-
         topwayTwMusic {
             dimension "distribution"
             applicationId "com.tw.music"
@@ -331,6 +324,5 @@ tasks.withType(Test).configureEach { testTask ->
     }
 }
 
-// Roborazzi tasks (record/verify/compareRoborazziStandardDebug and
-// record/verify/compareRoborazziTopwayTwMusicDebug) are automatically registered by the
-// Roborazzi Gradle plugin applied in the plugins block above.
+// Roborazzi record/verify/compare tasks for TopwayTwMediaDebug and TopwayTwMusicDebug are
+// automatically registered by the plugin applied above.
