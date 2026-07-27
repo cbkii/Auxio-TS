@@ -1,20 +1,4 @@
-/*
- * Copyright (c) 2026 Auxio Project
- * Ts18LauncherIntegrationModeTest.kt is part of Auxio.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
+/* Copyright (c) 2026 Auxio Project; GPL-3.0-or-later. */
 
 package org.oxycblt.auxio.headunit.topway
 
@@ -23,19 +7,18 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.oxycblt.auxio.BuildConfig
 
 class Ts18LauncherIntegrationModeTest {
     @Test
-    fun `default follows build flavor`() {
-        val expected =
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
-                Ts18LauncherIntegrationMode.GenericDofunMedia
-            } else {
-                Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
-            }
-        assertTrue(Ts18LauncherIntegrationMode.default() == expected)
-        assertTrue(Ts18LauncherIntegrationMode.fromPreference("not-a-mode") == expected)
+    fun `default policy is explicit for both compatibility states`() {
+        assertEquals(
+            Ts18LauncherIntegrationMode.GenericDofunMedia,
+            Ts18LauncherIntegrationMode.defaultFor(topwayCompatFlavor = true),
+        )
+        assertEquals(
+            Ts18LauncherIntegrationMode.AndroidMediaSessionOnly,
+            Ts18LauncherIntegrationMode.defaultFor(topwayCompatFlavor = false),
+        )
     }
 
     @Test
@@ -64,7 +47,6 @@ class Ts18LauncherIntegrationModeTest {
                 migrationComplete = false,
                 topwayCompatFlavor = true,
             )
-
         assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.mode)
         assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.persistMode)
         assertTrue(decision.markComplete)
@@ -78,7 +60,6 @@ class Ts18LauncherIntegrationModeTest {
                 migrationComplete = false,
                 topwayCompatFlavor = true,
             )
-
         assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, decision.mode)
         assertNull(decision.persistMode)
         assertTrue(decision.markComplete)
@@ -92,14 +73,13 @@ class Ts18LauncherIntegrationModeTest {
                 migrationComplete = false,
                 topwayCompatFlavor = true,
             )
-
         assertEquals(Ts18LauncherIntegrationMode.TopwayCommandOnly, decision.mode)
         assertNull(decision.persistMode)
         assertTrue(decision.markComplete)
     }
 
     @Test
-    fun `completed or standard migration does not rewrite preferences`() {
+    fun `completed or non Topway migration does not rewrite preferences`() {
         val completed =
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = Ts18LauncherIntegrationMode.AutoAllSafePaths.name,
@@ -110,14 +90,14 @@ class Ts18LauncherIntegrationModeTest {
         assertNull(completed.persistMode)
         assertFalse(completed.markComplete)
 
-        val standard =
+        val nonTopway =
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = null,
                 migrationComplete = false,
                 topwayCompatFlavor = false,
             )
-        assertEquals(Ts18LauncherIntegrationMode.AndroidMediaSessionOnly, standard.mode)
-        assertNull(standard.persistMode)
-        assertFalse(standard.markComplete)
+        assertEquals(Ts18LauncherIntegrationMode.AndroidMediaSessionOnly, nonTopway.mode)
+        assertNull(nonTopway.persistMode)
+        assertFalse(nonTopway.markComplete)
     }
 }
