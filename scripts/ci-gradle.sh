@@ -43,8 +43,8 @@ args=(
 
 # Android variant builds that involve AGP, Kotlin/KSP, Hilt and generated sources are more reliable
 # when isolated. Parallel execution remains available as an explicit opt-in for a dedicated
-# compatibility pass, but PR CI defaults to sequential execution so Topway/standard variants do not
-# race through shared generated-source/report directories.
+# compatibility pass, but PR CI defaults to sequential execution so maintained Topway variants do
+# not race through shared generated-source/report directories.
 if [[ "${AUXIO_TS_CI_GRADLE_PARALLEL:-0}" == "1" ]]; then
   args+=(--parallel)
 fi
@@ -158,12 +158,28 @@ end=$(date +%s)
 elapsed=$((end - start))
 
 if (( rc == 0 )); then
+  result=success
   log "Gradle completed successfully in $((elapsed / 60))m $((elapsed % 60))s."
 else
+  result=failure
   printf '::error::Gradle failed with exit code %d after %dm %02ds.\n' \
     "${rc}" \
     $((elapsed / 60)) \
     $((elapsed % 60)) >&2
+fi
+
+if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
+  task_summary=''
+  printf -v task_summary '%q ' "$@"
+  {
+    echo '### Gradle invocation'
+    echo
+    echo "- Result: \`${result}\` (exit \`${rc}\`)"
+    echo "- Duration: \`${elapsed}s\`"
+    echo "- Tasks/options: \`${task_summary% }\`"
+    echo "- Configuration cache: \`${AUXIO_TS_CI_CONFIGURATION_CACHE:-0}\`"
+    echo "- Parallel execution: \`${AUXIO_TS_CI_GRADLE_PARALLEL:-0}\`"
+  } >> "${GITHUB_STEP_SUMMARY}" || warn "Could not append Gradle timing to ${GITHUB_STEP_SUMMARY}."
 fi
 
 exit "${rc}"
