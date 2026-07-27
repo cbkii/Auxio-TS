@@ -1,104 +1,67 @@
-# Auxio-TS Documentation Index
+# Auxio-TS documentation index
 
-Auxio-TS is a TS18/Topway/DoFun Variety-targeted Auxio variant for the observed DoFun/Topway stock-music contract. Start here for current product, CI, release, and compatibility guidance.
+Auxio-TS targets TS18/Topway/DoFun Variety. Start here for current product, CI, release and exact-device guidance.
 
 [Evidence confidence: Requires TS18 validation] [Porting decision: Requires TS18 runtime validation]
 
-## Current docs
+## Current guidance
 
-- [`DEVELOPMENT.md`](DEVELOPMENT.md) — local setup, canonical CI coverage, Roborazzi UI workflow, and deleted-workflow audit notes.
-- [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — manual signed release flow and expected APK/module assets.
-- [`UPSTREAM_AUXIO_MONITORING.md`](UPSTREAM_AUXIO_MONITORING.md) — monthly upstream Auxio change monitor, no-clutter baseline rules, and generated issue workflow.
-- [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — DoFun/Topway compatibility contract and private-hook boundaries.
-- [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — compact APK-derived reference evidence for DoFun Variety and stock `twmusic`.
-- [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — package-conflict and install-lane constraints for real TS18 firmware.
-- [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — on-device TS18 validation checklist and evidence expectations.
-- [`LAUNCH_TO_CURRENTLY_PLAYING.md`](LAUNCH_TO_CURRENTLY_PLAYING.md) — durable startup-panel routing contract and TS18 validation matrix.
-- [`ts18/ROOT_STORAGE_FASTPATH.md`](ts18/ROOT_STORAGE_FASTPATH.md) — DirectFS-first TS18 root storage acceleration, Magisk late-start preparation, source-authority classes, rollback and physical acceptance.
-- [`architecture/FAST_INTERACTION_STARTUP.md`](architecture/FAST_INTERACTION_STARTUP.md) — PR 1 staged startup readiness, bounded startup projections, fast MediaBrowser/search, and DirectFS Fast Start constraints.
-- [`architecture/INCREMENTAL_LIBRARY_PIPELINE.md`](architecture/INCREMENTAL_LIBRARY_PIPELINE.md) — PR 2 source generations, changed-file indexing, metadata profiles and deferred enrichment.
-- [`architecture/STARTUP_PROFILES_BENCHMARKS.md`](architecture/STARTUP_PROFILES_BENCHMARKS.md) — PR 3 profile, fixture, benchmark, trace and regression-gate implementation.
-- [`validation/EXACT_TS18_STARTUP_VALIDATION.md`](validation/EXACT_TS18_STARTUP_VALIDATION.md) — bounded exact-device test procedures, evidence, pass/fail criteria and rollback.
-- [`TS18_COMPATIBILITY_AUDIT.md`](TS18_COMPATIBILITY_AUDIT.md) — repo-wide TS18/Topway/DoFun compatibility surface classification.
-- [`topway/README.md`](topway/README.md) — local Topway decompile/source-led compatibility notes.
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — setup, maintained variants, Gradle tasks and CI architecture.
+- [`CI_TASK_POLICY.md`](CI_TASK_POLICY.md) — changed-file classification, consolidated quality/build lanes and optimisation pilot.
+- [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — signed `com.tw.media` APK and `com.tw.music` Magisk release flow.
+- [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — launcher/widget compatibility contract and private-hook boundaries.
+- [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — APK-derived DoFun and stock `twmusic` evidence.
+- [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — package/signing/root/install constraints.
+- [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — physical TS18 validation checklist.
+- [`CODEX_TS18_DEVICE_CONTEXT.md`](CODEX_TS18_DEVICE_CONTEXT.md) — exact `s9863a1h10` Android 10 device context.
+- [`architecture/FAST_INTERACTION_STARTUP.md`](architecture/FAST_INTERACTION_STARTUP.md) — staged readiness and fast resume.
+- [`architecture/INCREMENTAL_LIBRARY_PIPELINE.md`](architecture/INCREMENTAL_LIBRARY_PIPELINE.md) — source generations, scanning and enrichment.
+- [`architecture/STARTUP_PROFILES_BENCHMARKS.md`](architecture/STARTUP_PROFILES_BENCHMARKS.md) — profile/benchmark evidence model.
+- [`validation/EXACT_TS18_STARTUP_VALIDATION.md`](validation/EXACT_TS18_STARTUP_VALIDATION.md) — exact-device startup test procedure.
+- [`ts18/ROOT_STORAGE_FASTPATH.md`](ts18/ROOT_STORAGE_FASTPATH.md) — bounded root storage path and rollback.
+- [`topway/README.md`](topway/README.md) — local Topway decompile/source-led notes.
 
-## DoFun Variety / TS18 APK reference baseline
+## Maintained package contract
 
-Use the APK reference docs before changing package identity, Topway broadcasts, media/session wiring, release workflows, or guardrail scripts.
+The old `standard` distributable is retired.
 
-[Evidence confidence: Observed APK/reference evidence] [Porting decision: Directly reusable as compatibility requirements and guardrails]
+| Variant | Package | Role |
+| --- | --- | --- |
+| `topwayTwMedia` | `com.tw.media` | Primary automatic CI and APK release; exposes `com.tw.music.MusicActivity` |
+| `topwayTwMusic` | `com.tw.music` | Exact stock-package compatibility; published only as a Magisk module |
 
-Primary compatibility target:
-
-- DoFun Variety Theme: `com.dofun.variety`
-
-[Evidence confidence: Observed in DoFun APK metadata/config and exact-device package listing] [Porting decision: Primary launcher/theme target]
-
-Primary replacement contract:
-
-- stock `twmusic` / `com.tw.music`
-- release package/application ID: `com.tw.music`
-- launcher/activity component: `com.tw.music.MusicActivity`
-- release variants: `topwayTwMusicRelease` (`com.tw.music`) and `topwayTwMediaRelease` (`com.tw.media`)
-
-[Evidence confidence: Observed in DoFun APK config, stock twmusic APK references, and exact-device package paths] [Porting decision: Directly reusable replacement contract with install-lane constraints]
-
-Alternate DoFun fixed entry to support after implementation:
-
-- package/application ID: `com.tw.media`
-- launcher/activity component: `com.tw.music.MusicActivity`
-- intended release variant: `topwayTwMediaRelease`
-
-[Evidence confidence: Observed DoFun APK config; not yet an implemented release variant unless added by a later PR] [Porting decision: Reusable alternate-entry requirement, not a universal no-root bypass]
-
-Observed Cardoor/private services and vendor hooks are evidence only, not production implementation. They are not for production by default and require the formal gap-and-promotion process before any native/private investigation can become product code.
-
-[Evidence confidence: Observed APK/string evidence] [Porting decision: Evidence only; do not implement without proven protocol]
+DoFun Variety (`com.dofun.variety`) recognises both package/component combinations. This matching evidence does not prove fixed-widget control on every firmware. Private Cardoor/vendor services remain evidence only unless promoted through the formal gap-and-promotion process.
 
 ## Exact-device installation warning
 
-The exact target TS18 diagnostics show stock `com.tw.music` installed as a system priv-app at:
+The target unit contains stock `com.tw.music` at:
 
 ```text
 /system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
 ```
 
-A normal user-signed Auxio-TS APK using package `com.tw.music` cannot be assumed to install over that stock package. See [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) before editing release/install docs or claiming install compatibility.
+A normal APK cannot be assumed to replace that platform/UID 1000 package. Root does not provide platform signing. Read `TS18_INSTALLATION_CONSTRAINTS.md` before any installation claim or stock-package mutation.
 
 ## CI entry points
 
-**Canonical validation and release workflows:**
-
-- `.github/workflows/android.yml` builds standard and Topway/DoFun variants and runs APK/reference compatibility checks on relevant PR and `dev` changes.
-- `.github/workflows/lint.yml` runs workflow/shell syntax checks, formatting, unit tests, Android lint, and head-unit safety guardrails.
-- `.github/workflows/startup-performance.yml` compiles the benchmark/profile stack, runs startup architecture gates, builds all maintained debug/release variants and verifies compiled profile artefacts plus TS18/DoFun contracts.
-- `.github/workflows/startup-benchmarks.yml` provides bounded manual Baseline Profile generation on an API 35 managed emulator and runtime-compatible macrobenchmark evidence on an API 29 managed emulator, with selectable flavour, fixture size and iteration count.
-- `.github/workflows/manual-release.yml` builds, signs, profile-checks and publishes selected standard/`com.tw.media` APKs or the systemless `com.tw.music` Magisk ZIP, with SHA-256 and signing/package metadata sidecars.
-- `.github/workflows/ui-screenshots.yml` provides manually triggered Roborazzi screenshot/report bundles for UI review.
-
-[Evidence confidence: Observed workflow configuration] [Porting decision: CI/release artefact coverage only; requires separate TS18 runtime validation]
-
-**Auxiliary maintenance:**
-
-- `.github/workflows/upstream-auxio-monitor.yml` checks `OxygenCobalt/Auxio` monthly and opens an issue only when upstream has new commits to review.
-
-There is no permanent branch-mutating formatter workflow. Dependabot update PRs pass through the canonical Android Build and Android Quality checks, and formatting remains a required check fixed on the originating branch.
+- `android.yml` — changed-file scope, both maintained builds and conditional API 29.
+- `lint.yml` — syntax/static checks plus one consolidated formatting/test/lint Gradle lane and stable required-check gates.
+- `startup-performance.yml` — manual exhaustive two-variant profile/release validation.
+- `startup-benchmarks.yml` — manual API 29 macrobenchmark or API 35 Baseline Profile generation, defaulting to `topwayTwMedia`.
+- `ui-screenshots.yml` — manual Roborazzi for the two maintained variants.
+- `ci-gradle-optimisation-pilot.yml` — manual configuration-cache and parallelism evidence.
+- `manual-release.yml` — selected maintained release assets and evidence sidecars.
 
 Local preflight:
 
 ```bash
 bash scripts/bootstrap-dependencies.sh --profile full-build
+bash scripts/ci-scope.sh --self-test
+bash scripts/check-ci-variant-contracts.sh
 bash scripts/check-startup-performance-contracts.sh
 bash scripts/check-ts18-apk-reference-contracts.sh
 bash scripts/check-dofun-topway-compat.sh
-bash scripts/check-ts18-root-storage-fastpath.sh
 bash scripts/check-headunit-compat-safety.sh
-status=0; while IFS= read -r -d '' script; do bash -n "$script" || status=1; done < <(find scripts -type f -name '*.sh' -print0); exit "$status"
-ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
 ```
 
-## Exact-device context
-
-- [`CODEX_TS18_DEVICE_CONTEXT.md`](CODEX_TS18_DEVICE_CONTEXT.md) — redacted `s9863a1h10` Android 10 TS18 profile for agent work.
-- [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — install lanes, stock package conflicts, and recovery notes.
-- [`evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md`](evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md) — concise redacted device evidence.
+CI/emulator results remain repository evidence, not proof of exact TS18 widget, USB/ACC, MCU/CAN, DSP/radio or physical performance.
