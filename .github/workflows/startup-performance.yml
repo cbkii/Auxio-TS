@@ -21,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
           persist-credentials: false
 
@@ -54,10 +54,7 @@ jobs:
         shell: bash
         run: |
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [[ -z "${sdk_dir}" ]]; then
-            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
-            exit 1
-          fi
+          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
       - name: Set up Gradle
@@ -81,37 +78,33 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Validate static startup contracts
-        shell: bash
-        run: bash ./scripts/check-startup-performance-contracts.sh
-
-      - name: Check formatting
-        shell: bash
-        run: bash ./scripts/check-format-with-diff.sh
-
-      - name: Run unit tests
+      - name: Validate static startup and variant contracts
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh :app:testStandardDebugUnitTest
-          bash ./scripts/ci-gradle.sh :musikr:testDebugUnitTest
+          bash ./scripts/check-startup-performance-contracts.sh
+          bash ./scripts/check-ci-variant-contracts.sh
 
-      - name: Run Android lint
+      - name: Run maintained quality tasks
         shell: bash
-        run: bash ./scripts/ci-gradle.sh :app:lintStandardDebug
+        run: |
+          bash ./scripts/ci-gradle.sh --continue \
+            spotlessKotlinCheck \
+            :app:testTopwayTwMediaDebugUnitTest \
+            :musikr:testDebugUnitTest \
+            :app:lintTopwayTwMediaDebug
 
       - name: Run head-unit safety checks
         shell: bash
         run: bash ./scripts/check-headunit-compat-safety.sh
 
-      - name: Compile benchmark and profile instrumentation
+      - name: Compile maintained benchmark and profile instrumentation
         shell: bash
         run: |
           mkdir -p build/reports/startup-performance
           set +e
           bash ./scripts/ci-gradle.sh \
-            :startup-benchmark:assembleStandardBenchmarkBenchmark \
-            :startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark \
-            :startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark 2>&1 |
+            :startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark \
+            :startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark 2>&1 |
             tee build/reports/startup-performance/benchmark-compile.log
           status=${PIPESTATUS[0]}
           set -e
@@ -120,19 +113,18 @@ jobs:
       - name: Build maintained debug variants
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh :app:assembleStandardDebug
-          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicDebug
-          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
+          bash ./scripts/ci-gradle.sh \
+            :app:assembleTopwayTwMediaDebug \
+            :app:assembleTopwayTwMusicDebug
 
-      - name: Build maintained release variants and standard bundle
+      - name: Build maintained release variants
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh :app:assembleStandardRelease
-          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicRelease
-          bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
-          bash ./scripts/ci-gradle.sh :app:bundleStandardRelease
+          bash ./scripts/ci-gradle.sh \
+            :app:assembleTopwayTwMediaRelease \
+            :app:assembleTopwayTwMusicRelease
 
-      - name: Validate compiled profile and startup-layout artefacts
+      - name: Validate compiled Baseline Profile artefacts
         shell: bash
         run: |
           set -o pipefail
@@ -140,38 +132,18 @@ jobs:
           mkdir -p "$(dirname "${report}")"
           set +e
           {
-            set -u
             mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
-            mapfile -t aabs < <(find app/build/outputs/bundle -type f -name '*.aab' | sort)
-
             printf 'Release APK count: %s\n' "${#apks[@]}"
             printf '%s\n' "${apks[@]:-}"
-            printf 'Release AAB count: %s\n' "${#aabs[@]}"
-            printf '%s\n' "${aabs[@]:-}"
-
+            if ((${#apks[@]} != 2)); then
+              printf 'Expected the two maintained Topway release APKs, found %s\n' "${#apks[@]}" >&2
+              exit 1
+            fi
             for apk in "${apks[@]}"; do
               printf '\n[%s]\n' "${apk}"
-              unzip -Z1 "${apk}" | grep -E '^assets/dexopt/baseline\.(prof|profm)$' || true
+              unzip -Z1 "${apk}" | grep -E '^assets/dexopt/baseline\.(prof|profm)$'
             done
-            for aab in "${aabs[@]}"; do
-              printf '\n[%s]\n' "${aab}"
-              unzip -Z1 "${aab}" | grep -E '(^|/)BUNDLE-METADATA/.+(r8|profile|dexopt)' || true
-              while IFS= read -r entry; do
-                [[ -n "${entry}" ]] || continue
-                printf '%s: ' "${entry}"
-                unzip -p "${aab}" "${entry}" 2>/dev/null | grep -Eo '"startup"[[:space:]]*:[[:space:]]*(true|false)' | head -n 3 || true
-              done < <(unzip -Z1 "${aab}" | grep -E '(^|/)BUNDLE-METADATA/.+\.json$' || true)
-            done
-
-            if ((${#apks[@]} != 3)); then
-              printf 'Expected three release APKs, found %s\n' "${#apks[@]}" >&2
-              exit 1
-            fi
-            if ((${#aabs[@]} < 1)); then
-              echo 'Expected at least the standard release AAB' >&2
-              exit 1
-            fi
-            bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}" "${aabs[0]}"
+            bash ./scripts/check-startup-performance-contracts.sh "${apks[@]}"
           } 2>&1 | tee "${report}"
           status=${PIPESTATUS[0]}
           set -e
@@ -181,7 +153,7 @@ jobs:
         shell: bash
         run: bash ./scripts/check-ts18-apk-reference-contracts.sh
 
-      - name: Validate DoFun and Topway compatibility sources
+      - name: Validate DoFun and Topway compatibility sources and outputs
         shell: bash
         run: |
           set -o pipefail
@@ -218,8 +190,9 @@ jobs:
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Trigger: manual only; routine pull requests use Android Build and Android Quality."
-            echo "- Includes workflow/shell/Python syntax, startup contracts, formatting, unit tests, lint, head-unit safety, benchmark/profile instrumentation, maintained debug/release variants, Baseline Profile packaging, R8 startup DEX metadata, TS18 APK contracts and DoFun/Topway source contracts."
+            echo "- Primary validation package: \`com.tw.media\`"
+            echo "- Exact-package compatibility package: \`com.tw.music\`"
+            echo "- Includes syntax, maintained-variant contracts, formatting, unit tests, lint, head-unit safety, both benchmark configurations, both debug/release APKs, Baseline Profile packaging, TS18 APK contracts and DoFun/Topway output checks."
             echo "- No hosted-runner wall-clock threshold or exact-device latency claim is produced."
             echo "- Exact TS18 runtime behaviour: Requires device validation."
           } >> "${GITHUB_STEP_SUMMARY}"
