@@ -44,8 +44,9 @@ internal class ConfiguredSourceAwareFS(
                 it.sourceKey
             }
         for ((sourceKey, grouped) in specs.groupBy { it.sourceKey }) {
-            val unavailable =
-                grouped.firstOrNull { it.accessState != ConfiguredSourceSpec.AccessState.AVAILABLE }
+            val unavailable = grouped.firstOrNull {
+                it.accessState != ConfiguredSourceSpec.AccessState.AVAILABLE
+            }
             if (unavailable != null || sourceKey !in actual) {
                 val first = unavailable ?: grouped.first()
                 actual[sourceKey] =

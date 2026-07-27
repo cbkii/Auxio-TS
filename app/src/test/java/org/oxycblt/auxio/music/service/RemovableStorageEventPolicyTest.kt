@@ -22,9 +22,12 @@ import android.net.Uri
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.oxycblt.auxio.music.ConfiguredSourceSpec
 import org.oxycblt.auxio.music.locations.LocationMode
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class RemovableStorageEventPolicyTest {
     @Test
     fun `mount root maps to configured direct child only`() {

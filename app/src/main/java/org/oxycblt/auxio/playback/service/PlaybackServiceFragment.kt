@@ -120,32 +120,29 @@ private constructor(
     private fun scheduleRestoreWatchdog() {
         restoreWatchdogJob?.cancel()
         val generation = restoreWatchdogGeneration.next()
-        restoreWatchdogJob =
-            scope.launch {
-                try {
-                    delay(RESTORE_STARTUP_TIMEOUT_MS)
-                    coroutineContext.ensureActive()
-                    if (!restoreWatchdogGeneration.isCurrent(generation)) return@launch
-                    val outcome = playbackManager.restoreOutcome
-                    if (
-                        outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
-                            outcome == RestoreOutcome.WAITING_FOR_LIBRARY
-                    ) {
-                        L.w(
-                            "Playback restore remained transient for ${RESTORE_STARTUP_TIMEOUT_MS}ms; " +
-                                "releasing startup readiness without blocking the library"
-                        )
-                        playbackManager.cancelDeferredRestore()
-                        startupReadinessController.publishCapability(
-                            StartupReadinessState.QueueReady
-                        )
-                    }
-                } finally {
-                    if (restoreWatchdogGeneration.isCurrent(generation)) {
-                        restoreWatchdogJob = null
-                    }
+        restoreWatchdogJob = scope.launch {
+            try {
+                delay(RESTORE_STARTUP_TIMEOUT_MS)
+                coroutineContext.ensureActive()
+                if (!restoreWatchdogGeneration.isCurrent(generation)) return@launch
+                val outcome = playbackManager.restoreOutcome
+                if (
+                    outcome == RestoreOutcome.WAITING_FOR_PLAYER ||
+                        outcome == RestoreOutcome.WAITING_FOR_LIBRARY
+                ) {
+                    L.w(
+                        "Playback restore remained transient for ${RESTORE_STARTUP_TIMEOUT_MS}ms; " +
+                            "releasing startup readiness without blocking the library"
+                    )
+                    playbackManager.cancelDeferredRestore()
+                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                }
+            } finally {
+                if (restoreWatchdogGeneration.isCurrent(generation)) {
+                    restoreWatchdogJob = null
                 }
             }
+        }
     }
 
     private fun cancelRestoreWatchdog() {
@@ -156,14 +153,11 @@ private constructor(
 
     private fun scheduleAutoStop() {
         autoStopJob?.cancel()
-        autoStopJob =
-            scope.launch {
-                delay(AUTO_STOP_DELAY_MS)
-                L.d(
-                    "Auto-stop timer expired after ${AUTO_STOP_DELAY_MS / 60000} minutes of inactivity"
-                )
-                playbackManager.endSession()
-            }
+        autoStopJob = scope.launch {
+            delay(AUTO_STOP_DELAY_MS)
+            L.d("Auto-stop timer expired after ${AUTO_STOP_DELAY_MS / 60000} minutes of inactivity")
+            playbackManager.endSession()
+        }
     }
 
     private fun cancelAutoStop() {
@@ -385,15 +379,14 @@ private constructor(
 
     private fun startTopwayProgressTicker() {
         topwayProgressTickerJob?.cancel()
-        topwayProgressTickerJob =
-            scope.launch {
-                while (true) {
-                    if (playbackManager.progression.isPlaying) {
-                        publishTopwayProgress("periodic", force = false)
-                    }
-                    delay(TOPWAY_PROGRESS_TICK_MS)
+        topwayProgressTickerJob = scope.launch {
+            while (true) {
+                if (playbackManager.progression.isPlaying) {
+                    publishTopwayProgress("periodic", force = false)
                 }
+                delay(TOPWAY_PROGRESS_TICK_MS)
             }
+        }
     }
 
     private fun publishTopwayState(reason: String, force: Boolean) {

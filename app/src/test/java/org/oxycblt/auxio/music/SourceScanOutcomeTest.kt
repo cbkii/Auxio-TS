@@ -39,7 +39,8 @@ class SourceScanOutcomeTest {
             )
 
         assertTrue(success is SourceScanOutcome.AuthoritativeEmpty)
-        assertTrue(unavailable is SourceScanOutcome.TemporarilyUnavailable)
+        assertTrue(unavailable is SourceScanOutcome.Partial)
+        assertEquals(setOf("b"), unavailable.unresolvedSourceKeys)
     }
 
     @Test

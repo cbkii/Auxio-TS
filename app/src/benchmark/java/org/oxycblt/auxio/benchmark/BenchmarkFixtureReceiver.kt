@@ -63,8 +63,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
     private fun seedAsync(context: Context, intent: Intent) {
         val songCount = intent.getIntExtra(EXTRA_SONG_COUNT, DEFAULT_SONG_COUNT)
         val sourceMode = intent.getStringExtra(EXTRA_SOURCE_MODE) ?: SOURCE_MODE_NORMAL
-        val generatedPlaylistsEnabled =
-            intent.getBooleanExtra(EXTRA_GENERATED_PLAYLISTS, false)
+        val generatedPlaylistsEnabled = intent.getBooleanExtra(EXTRA_GENERATED_PLAYLISTS, false)
         if (songCount !in SUPPORTED_SONG_COUNTS || sourceMode !in SUPPORTED_SOURCE_MODES) {
             resultCode = Activity.RESULT_CANCELED
             resultData = "Unsupported fixture request: songs=$songCount sourceMode=$sourceMode"

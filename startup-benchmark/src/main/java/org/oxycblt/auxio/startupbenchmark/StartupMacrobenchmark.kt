@@ -134,16 +134,19 @@ class StartupMacrobenchmark {
         }
 
     @Test
-    fun pauseDuringRestore() =
-        journeyBenchmark { CriticalJourneys.run { exercisePauseDuringRestore() } }
+    fun pauseDuringRestore() = journeyBenchmark {
+        CriticalJourneys.run { exercisePauseDuringRestore() }
+    }
 
     @Test
-    fun nextDuringRestore() =
-        journeyBenchmark { CriticalJourneys.run { exerciseNextDuringRestore() } }
+    fun nextDuringRestore() = journeyBenchmark {
+        CriticalJourneys.run { exerciseNextDuringRestore() }
+    }
 
     @Test
-    fun seekDuringRestore() =
-        journeyBenchmark { CriticalJourneys.run { exerciseSeekDuringRestore() } }
+    fun seekDuringRestore() = journeyBenchmark {
+        CriticalJourneys.run { exerciseSeekDuringRestore() }
+    }
 
     @Test
     fun generatedPlaylistsDoNotBlockFiveThousandSongResume() =

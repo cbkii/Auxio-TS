@@ -323,56 +323,55 @@ class ExoPlaybackStateHolder(
     private fun startDirectOpen(action: DeferredPlayback.Open) {
         cancelActiveRestore("direct-open", notify = false)
         val generation = ++restoreGeneration
-        currentRestoreJob =
-            restoreScope.launch {
-                try {
-                    val uri = action.uri
-                    val snapshot =
-                        FastResumeSnapshot(
-                            uri = uri.toString(),
-                            path =
-                                uri.path.takeIf {
-                                    uri.scheme.isNullOrBlank() || uri.scheme == "file"
-                                },
-                            title = uri.lastPathSegment,
-                            artist = null,
-                            album = null,
-                            durationMs = 0L,
-                            positionMs = 0L,
-                            playing = true,
-                            savedAtMs = System.currentTimeMillis(),
-                        )
-                    val validation =
-                        RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
-                    withContext(Dispatchers.Main) {
-                        if (generation != restoreGeneration) return@withContext
-                        when (validation) {
-                            is RawFastResumeValidator.Result.Valid -> {
-                                startRawFastResume(validation.item, play = true)
-                                completeRestore(generation, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
-                            }
-                            is RawFastResumeValidator.Result.Invalid -> {
-                                L.w(
-                                    "Ignoring invalid Fast Start media ${action.uri}: " +
-                                        "${validation.reason} ${validation.detail}"
-                                )
-                                completeRestore(generation, RestoreOutcome.FAILED)
-                            }
+        currentRestoreJob = restoreScope.launch {
+            try {
+                val uri = action.uri
+                val snapshot =
+                    FastResumeSnapshot(
+                        uri = uri.toString(),
+                        path =
+                            uri.path.takeIf {
+                                uri.scheme.isNullOrBlank() || uri.scheme == "file"
+                            },
+                        title = uri.lastPathSegment,
+                        artist = null,
+                        album = null,
+                        durationMs = 0L,
+                        positionMs = 0L,
+                        playing = true,
+                        savedAtMs = System.currentTimeMillis(),
+                    )
+                val validation =
+                    RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
+                withContext(Dispatchers.Main) {
+                    if (generation != restoreGeneration) return@withContext
+                    when (validation) {
+                        is RawFastResumeValidator.Result.Valid -> {
+                            startRawFastResume(validation.item, play = true)
+                            completeRestore(generation, RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
                         }
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    L.w(e, "Unable to open Fast Start media ${action.uri}")
-                    withContext(Dispatchers.Main) {
-                        if (generation == restoreGeneration) {
+                        is RawFastResumeValidator.Result.Invalid -> {
+                            L.w(
+                                "Ignoring invalid Fast Start media ${action.uri}: " +
+                                    "${validation.reason} ${validation.detail}"
+                            )
                             completeRestore(generation, RestoreOutcome.FAILED)
                         }
                     }
-                } finally {
-                    if (generation == restoreGeneration) currentRestoreJob = null
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w(e, "Unable to open Fast Start media ${action.uri}")
+                withContext(Dispatchers.Main) {
+                    if (generation == restoreGeneration) {
+                        completeRestore(generation, RestoreOutcome.FAILED)
+                    }
+                }
+            } finally {
+                if (generation == restoreGeneration) currentRestoreJob = null
             }
+        }
     }
 
     private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {
@@ -385,111 +384,104 @@ class ExoPlaybackStateHolder(
         optionalWorkGate.onRestoreStarted()
         playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
         val generation = ++restoreGeneration
-        currentRestoreJob =
-            restoreScope.launch {
-                try {
-                    Ts18FirstAudioLatency.mark("queue_descriptor_read_start")
-                    val descriptor = persistenceRepository.readQueueDescriptor()
-                    Ts18FirstAudioLatency.mark("queue_descriptor_read_end")
-                    if (descriptor == null) {
+        currentRestoreJob = restoreScope.launch {
+            try {
+                Ts18FirstAudioLatency.mark("queue_descriptor_read_start")
+                val descriptor = persistenceRepository.readQueueDescriptor()
+                Ts18FirstAudioLatency.mark("queue_descriptor_read_end")
+                if (descriptor == null) {
+                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                    startRawFallback(generation)
+                    return@launch
+                }
+
+                var attempts = 0
+                while (generation == restoreGeneration) {
+                    val intent = restoreIntentArbiter.snapshot()
+                    val target =
+                        (descriptor.currentLogicalPosition.toLong() + intent.skipDelta)
+                            .coerceIn(0L, (descriptor.totalCount - 1).coerceAtLeast(0).toLong())
+                            .toInt()
+                    val requested = descriptor.copy(currentLogicalPosition = target)
+                    Ts18FirstAudioLatency.mark("queue_window_read_start")
+                    var window = persistenceRepository.readQueueWindowAround(requested, target)
+                    Ts18FirstAudioLatency.mark("queue_window_read_end")
+                    var current = window?.currentItem
+                    if (current?.hasPlayableReference != true) {
+                        val snapshot = persistenceRepository.readFastResumeSnapshot()
+                        if (snapshot != null) {
+                            persistenceRepository.enrichQueueItem(requested, target, snapshot)
+                            window = persistenceRepository.readQueueWindowAround(requested, target)
+                            current = window?.currentItem
+                        }
+                    }
+                    val playableWindow = window?.contiguousPlayableWindow()
+                    if (playableWindow == null || current?.hasPlayableReference != true) {
                         startupReadinessController.publishCapability(
                             StartupReadinessState.QueueReady
                         )
-                        withContext(Dispatchers.Main) { startRawFallback(generation) }
+                        startRawFallback(generation)
                         return@launch
                     }
 
-                    var attempts = 0
-                    while (generation == restoreGeneration) {
-                        val intent = restoreIntentArbiter.snapshot()
-                        val target =
-                            (descriptor.currentLogicalPosition.toLong() + intent.skipDelta)
-                                .coerceIn(0L, (descriptor.totalCount - 1).coerceAtLeast(0).toLong())
-                                .toInt()
-                        val requested = descriptor.copy(currentLogicalPosition = target)
-                        Ts18FirstAudioLatency.mark("queue_window_read_start")
-                        var window = persistenceRepository.readQueueWindowAround(requested, target)
-                        Ts18FirstAudioLatency.mark("queue_window_read_end")
-                        var current = window?.currentItem
-                        if (current?.hasPlayableReference != true) {
-                            val snapshot = persistenceRepository.readFastResumeSnapshot()
-                            if (snapshot != null) {
-                                persistenceRepository.enrichQueueItem(requested, target, snapshot)
-                                window =
-                                    persistenceRepository.readQueueWindowAround(requested, target)
-                                current = window?.currentItem
+                    val attached =
+                        withContext(Dispatchers.Main) {
+                            if (generation != restoreGeneration) return@withContext true
+                            val latest = restoreIntentArbiter.snapshot()
+                            if (latest.version != intent.version && attempts < 3) {
+                                return@withContext false
                             }
-                        }
-                        val playableWindow = window?.contiguousPlayableWindow()
-                        if (playableWindow == null || current?.hasPlayableReference != true) {
+                            val latestTarget =
+                                (descriptor.currentLogicalPosition.toLong() + latest.skipDelta)
+                                    .coerceIn(
+                                        0L,
+                                        (descriptor.totalCount - 1).coerceAtLeast(0).toLong(),
+                                    )
+                                    .toInt()
+                            if (
+                                latestTarget != target &&
+                                    playableWindow.globalToLocal(latestTarget) == null
+                            ) {
+                                return@withContext false
+                            }
+                            val finalIntent = restoreIntentArbiter.finish()
+                            val position =
+                                finalIntent.seekPositionMs
+                                    ?: if (finalIntent.skipDelta != 0) 0L else descriptor.positionMs
+                            attachPrimitiveWindow(
+                                window = playableWindow,
+                                targetLogicalPosition = latestTarget,
+                                positionMs = position,
+                                play = shouldPlayImmediately(finalIntent.play),
+                            )
+                            Ts18FirstAudioLatency.mark("primitive_window_attached")
                             startupReadinessController.publishCapability(
                                 StartupReadinessState.QueueReady
                             )
-                            withContext(Dispatchers.Main) { startRawFallback(generation) }
-                            return@launch
+                            completeRestore(
+                                generation,
+                                RestoreOutcome.RESTORED_EXISTING_SESSION,
+                            )
+                            true
                         }
-
-                        val attached =
-                            withContext(Dispatchers.Main) {
-                                if (generation != restoreGeneration) return@withContext true
-                                val latest = restoreIntentArbiter.snapshot()
-                                if (latest.version != intent.version && attempts < 3) {
-                                    return@withContext false
-                                }
-                                val latestTarget =
-                                    (descriptor.currentLogicalPosition.toLong() + latest.skipDelta)
-                                        .coerceIn(
-                                            0L,
-                                            (descriptor.totalCount - 1).coerceAtLeast(0).toLong(),
-                                        )
-                                        .toInt()
-                                if (
-                                    latestTarget != target &&
-                                        playableWindow.globalToLocal(latestTarget) == null
-                                ) {
-                                    return@withContext false
-                                }
-                                val finalIntent = restoreIntentArbiter.finish()
-                                val position =
-                                    finalIntent.seekPositionMs
-                                        ?: if (finalIntent.skipDelta != 0) 0L
-                                        else descriptor.positionMs
-                                attachPrimitiveWindow(
-                                    window = playableWindow,
-                                    targetLogicalPosition = latestTarget,
-                                    positionMs = position,
-                                    play = shouldPlayImmediately(finalIntent.play),
-                                )
-                                Ts18FirstAudioLatency.mark("primitive_window_attached")
-                                startupReadinessController.publishCapability(
-                                    StartupReadinessState.QueueReady
-                                )
-                                completeRestore(
-                                    generation,
-                                    RestoreOutcome.RESTORED_EXISTING_SESSION,
-                                )
-                                true
-                            }
-                        if (attached) return@launch
-                        attempts += 1
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    L.w(e, "Unable to restore primitive playback queue")
-                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
-                    withContext(Dispatchers.Main) {
-                        if (generation == restoreGeneration) {
-                            startRawFallback(generation)
-                        }
-                    }
-                } finally {
-                    if (generation == restoreGeneration) currentRestoreJob = null
+                    if (attached) return@launch
+                    attempts += 1
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                L.w(e, "Unable to restore primitive playback queue")
+                startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                if (generation == restoreGeneration) {
+                    startRawFallback(generation)
+                }
+            } finally {
+                if (generation == restoreGeneration) currentRestoreJob = null
             }
+        }
     }
 
-    private fun startRawFallback(generation: Long) {
+    private suspend fun startRawFallback(generation: Long) {
         if (generation != restoreGeneration) return
         playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_LIBRARY)
         tryStartRawFastResume(generation)
@@ -595,49 +587,48 @@ class ExoPlaybackStateHolder(
         synchronized(this) {
             pendingPrimitiveTarget = safeTarget
             if (primitiveNavigationJob?.isActive == true) return
-            primitiveNavigationJob =
-                restoreScope.launch {
-                    try {
-                        while (true) {
-                            val target =
-                                synchronized(this@ExoPlaybackStateHolder) {
-                                    pendingPrimitiveTarget?.also { pendingPrimitiveTarget = null }
-                                } ?: break
-                            val descriptor = activePrimitiveWindow?.descriptor ?: break
-                            val requested = descriptor.copy(currentLogicalPosition = target)
-                            val loaded =
-                                persistenceRepository
-                                    .readQueueWindowAround(requested, target)
-                                    ?.contiguousPlayableWindow()
-                            withContext(Dispatchers.Main) {
-                                val currentDescriptor = activePrimitiveWindow?.descriptor
-                                if (
-                                    loaded != null &&
-                                        currentDescriptor?.sessionId == descriptor.sessionId &&
-                                        currentDescriptor.revision == descriptor.revision
-                                ) {
-                                    attachPrimitiveWindow(
-                                        window = loaded,
-                                        targetLogicalPosition = target,
-                                        positionMs = 0L,
-                                        play = play,
-                                    )
-                                } else {
-                                    L.w("Unable to load primitive queue target $target")
-                                }
-                            }
-                        }
-                    } finally {
-                        val pending =
+            primitiveNavigationJob = restoreScope.launch {
+                try {
+                    while (true) {
+                        val target =
                             synchronized(this@ExoPlaybackStateHolder) {
-                                primitiveNavigationJob = null
                                 pendingPrimitiveTarget?.also { pendingPrimitiveTarget = null }
+                            } ?: break
+                        val descriptor = activePrimitiveWindow?.descriptor ?: break
+                        val requested = descriptor.copy(currentLogicalPosition = target)
+                        val loaded =
+                            persistenceRepository
+                                .readQueueWindowAround(requested, target)
+                                ?.contiguousPlayableWindow()
+                        withContext(Dispatchers.Main) {
+                            val currentDescriptor = activePrimitiveWindow?.descriptor
+                            if (
+                                loaded != null &&
+                                    currentDescriptor?.sessionId == descriptor.sessionId &&
+                                    currentDescriptor.revision == descriptor.revision
+                            ) {
+                                attachPrimitiveWindow(
+                                    window = loaded,
+                                    targetLogicalPosition = target,
+                                    positionMs = 0L,
+                                    play = play,
+                                )
+                            } else {
+                                L.w("Unable to load primitive queue target $target")
                             }
-                        if (pending != null) {
-                            withContext(Dispatchers.Main) { navigatePrimitive(pending, play) }
                         }
                     }
+                } finally {
+                    val pending =
+                        synchronized(this@ExoPlaybackStateHolder) {
+                            primitiveNavigationJob = null
+                            pendingPrimitiveTarget?.also { pendingPrimitiveTarget = null }
+                        }
+                    if (pending != null) {
+                        withContext(Dispatchers.Main) { navigatePrimitive(pending, play) }
+                    }
                 }
+            }
         }
     }
 
@@ -652,48 +643,47 @@ class ExoPlaybackStateHolder(
         }
         if (window.items.size >= QueueWindowPolicy.MAX_LOADED_ITEMS) return
         if (primitivePrefetchJob?.isActive == true) return
-        primitivePrefetchJob =
-            restoreScope.launch {
-                val descriptor = window.descriptor
-                val range =
-                    QueueWindowPolicy.around(
-                        descriptor.totalCount,
-                        current,
-                        QueueWindowPolicy.MAX_LOADED_ITEMS / 2,
+        primitivePrefetchJob = restoreScope.launch {
+            val descriptor = window.descriptor
+            val range =
+                QueueWindowPolicy.around(
+                    descriptor.totalCount,
+                    current,
+                    QueueWindowPolicy.MAX_LOADED_ITEMS / 2,
+                )
+            val expanded =
+                persistenceRepository
+                    .readQueueWindow(descriptor, range.startInclusive, range.endExclusive)
+                    ?.contiguousPlayableWindow()
+            if (expanded == null || expanded.items.size <= window.items.size) return@launch
+            withContext(Dispatchers.Main) {
+                val active = activePrimitiveWindow ?: return@withContext
+                if (
+                    active.descriptor.sessionId != descriptor.sessionId ||
+                        active.descriptor.revision != descriptor.revision ||
+                        active.descriptor.currentLogicalPosition != current
+                ) {
+                    return@withContext
+                }
+                val expandedWithPosition =
+                    expanded.copy(
+                        descriptor =
+                            expanded.descriptor.copy(
+                                currentLogicalPosition = current,
+                                positionMs = player.currentPosition.coerceAtLeast(0L),
+                                updatedAtMs = System.currentTimeMillis(),
+                            )
                     )
-                val expanded =
-                    persistenceRepository
-                        .readQueueWindow(descriptor, range.startInclusive, range.endExclusive)
-                        ?.contiguousPlayableWindow()
-                if (expanded == null || expanded.items.size <= window.items.size) return@launch
-                withContext(Dispatchers.Main) {
-                    val active = activePrimitiveWindow ?: return@withContext
-                    if (
-                        active.descriptor.sessionId != descriptor.sessionId ||
-                            active.descriptor.revision != descriptor.revision ||
-                            active.descriptor.currentLogicalPosition != current
-                    ) {
-                        return@withContext
-                    }
-                    val expandedWithPosition =
-                        expanded.copy(
-                            descriptor =
-                                expanded.descriptor.copy(
-                                    currentLogicalPosition = current,
-                                    positionMs = player.currentPosition.coerceAtLeast(0L),
-                                    updatedAtMs = System.currentTimeMillis(),
-                                )
-                        )
-                    if (!expandPrimitiveWindowInPlace(expandedWithPosition)) {
-                        attachPrimitiveWindow(
-                            expandedWithPosition,
-                            current,
-                            player.currentPosition.coerceAtLeast(0L),
-                            player.playWhenReady,
-                        )
-                    }
+                if (!expandPrimitiveWindowInPlace(expandedWithPosition)) {
+                    attachPrimitiveWindow(
+                        expandedWithPosition,
+                        current,
+                        player.currentPosition.coerceAtLeast(0L),
+                        player.playWhenReady,
+                    )
                 }
             }
+        }
     }
 
     private fun expandPrimitiveWindowInPlace(expanded: QueueWindow): Boolean {
@@ -1480,10 +1470,10 @@ class ExoPlaybackStateHolder(
                 reconcileRawFastResume(library)
                 return
             }
-            pendingLibraryRestoreAfterRawFailure?.let { pending ->
+            pendingLibraryRestoreAfterRawFailure?.let {
                 L.d("Library obtained after raw fast-resume miss; replaying saved-state restore")
                 pendingLibraryRestoreAfterRawFailure = null
-                playbackManager.playDeferred(pending)
+                playbackManager.playDeferred(restoreIntentArbiter.snapshot().toRestoreState())
                 return
             }
             L.d("Library obtained, requesting action")
@@ -1553,16 +1543,56 @@ class ExoPlaybackStateHolder(
     }
 
     // --- PLAYBACKSETTINGS OVERRIDES ---
-    private fun tryStartRawFastResume(generation: Long) {
+    private suspend fun tryStartRawFastResume(generation: Long) {
         pendingLibraryRestoreAfterRawFailure = restoreIntentArbiter.snapshot().toRestoreState()
-        restoreScope.launch {
-            Ts18FirstAudioLatency.mark("snapshot_read_start")
-            val snapshot = persistenceRepository.readFastResumeSnapshot()
-            Ts18FirstAudioLatency.mark("snapshot_read_end")
-            if (snapshot == null) {
-                L.d("No TS18 fast-resume snapshot available")
-                optionalWorkGate.onNoSavedSession()
-                withContext(Dispatchers.Main) {
+        Ts18FirstAudioLatency.mark("snapshot_read_start")
+        val snapshot = persistenceRepository.readFastResumeSnapshot()
+        Ts18FirstAudioLatency.mark("snapshot_read_end")
+        if (snapshot == null) {
+            L.d("No TS18 fast-resume snapshot available")
+            optionalWorkGate.onNoSavedSession()
+            withContext(Dispatchers.Main) {
+                if (generation == restoreGeneration && musicRepository.library != null) {
+                    pendingLibraryRestoreAfterRawFailure = null
+                    val finalIntent = restoreIntentArbiter.finish()
+                    if (finalIntent.fallback != null) {
+                        completeRestore(generation, RestoreOutcome.FALLBACK_QUEUE_CREATED)
+                        playbackManager.playDeferred(finalIntent.fallback)
+                    } else {
+                        completeRestore(generation, RestoreOutcome.NO_SAVED_SESSION)
+                    }
+                }
+            }
+            return
+        }
+        Ts18FirstAudioLatency.mark("raw_media_validation_start")
+        val validation = RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
+        Ts18FirstAudioLatency.mark("raw_media_validation_end")
+        withContext(Dispatchers.Main) {
+            when (validation) {
+                is RawFastResumeValidator.Result.Valid -> {
+                    if (generation != restoreGeneration) {
+                        L.d(
+                            "Skipping late TS18 raw fast-resume result; restore was already consumed"
+                        )
+                        return@withContext
+                    }
+                    pendingLibraryRestoreAfterRawFailure = null
+                    val finalIntent = restoreIntentArbiter.finish()
+                    val shouldPlay = shouldPlayImmediately(finalIntent.play)
+                    startRawFastResume(validation.item, shouldPlay)
+                    finalIntent.seekPositionMs?.let(player::seekTo)
+                    optionalWorkGate.onRestoreFinished()
+                    playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                }
+                is RawFastResumeValidator.Result.Invalid -> {
+                    optionalWorkGate.onNoSavedSession()
+                    L.w(
+                        "Ignoring invalid TS18 fast-resume snapshot: " +
+                            validation.reason +
+                            " " +
+                            validation.detail
+                    )
                     if (generation == restoreGeneration && musicRepository.library != null) {
                         pendingLibraryRestoreAfterRawFailure = null
                         val finalIntent = restoreIntentArbiter.finish()
@@ -1571,49 +1601,6 @@ class ExoPlaybackStateHolder(
                             playbackManager.playDeferred(finalIntent.fallback)
                         } else {
                             completeRestore(generation, RestoreOutcome.NO_SAVED_SESSION)
-                        }
-                    }
-                }
-                return@launch
-            }
-            Ts18FirstAudioLatency.mark("raw_media_validation_start")
-            val validation =
-                RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
-            Ts18FirstAudioLatency.mark("raw_media_validation_end")
-            withContext(Dispatchers.Main) {
-                when (validation) {
-                    is RawFastResumeValidator.Result.Valid -> {
-                        if (generation != restoreGeneration) {
-                            L.d(
-                                "Skipping late TS18 raw fast-resume result; restore was already consumed"
-                            )
-                            return@withContext
-                        }
-                        pendingLibraryRestoreAfterRawFailure = null
-                        val finalIntent = restoreIntentArbiter.finish()
-                        val shouldPlay = shouldPlayImmediately(finalIntent.play)
-                        startRawFastResume(validation.item, shouldPlay)
-                        finalIntent.seekPositionMs?.let(player::seekTo)
-                        optionalWorkGate.onRestoreFinished()
-                        playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
-                    }
-                    is RawFastResumeValidator.Result.Invalid -> {
-                        optionalWorkGate.onNoSavedSession()
-                        L.w(
-                            "Ignoring invalid TS18 fast-resume snapshot: " +
-                                validation.reason +
-                                " " +
-                                validation.detail
-                        )
-                        if (generation == restoreGeneration && musicRepository.library != null) {
-                            pendingLibraryRestoreAfterRawFailure = null
-                            val finalIntent = restoreIntentArbiter.finish()
-                            if (finalIntent.fallback != null) {
-                                completeRestore(generation, RestoreOutcome.FALLBACK_QUEUE_CREATED)
-                                playbackManager.playDeferred(finalIntent.fallback)
-                            } else {
-                                completeRestore(generation, RestoreOutcome.NO_SAVED_SESSION)
-                            }
                         }
                     }
                 }

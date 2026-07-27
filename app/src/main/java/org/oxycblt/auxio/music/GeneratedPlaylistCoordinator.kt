@@ -28,6 +28,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber as L
 
 enum class GeneratedPlaylistStatus {
@@ -50,9 +52,12 @@ class GeneratedPlaylistCoordinator
 @Inject
 constructor(private val optionalWorkGate: StartupOptionalWorkGate) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val projectionMutex = Mutex()
     private val mutableStatus = MutableStateFlow(GeneratedPlaylistStatus.OFF)
     private var job: Job? = null
     private var publishedFingerprint: String? = null
+    private var activeFingerprint: String? = null
+    private var requestGeneration = 0L
 
     val status: StateFlow<GeneratedPlaylistStatus> = mutableStatus
 
@@ -63,56 +68,86 @@ constructor(private val optionalWorkGate: StartupOptionalWorkGate) {
         force: Boolean,
         project: suspend (enabled: Boolean) -> Boolean,
     ) {
-        if (!enabled) {
-            job?.cancel()
-            job = null
-            publishedFingerprint = null
-            mutableStatus.value = GeneratedPlaylistStatus.OFF
-            scope.launch { runProjection(enabled = false, fingerprint, project) }
-            return
-        }
-        if (!force && publishedFingerprint == fingerprint) {
+        if (enabled && !force && publishedFingerprint == fingerprint) {
             mutableStatus.value = GeneratedPlaylistStatus.UP_TO_DATE
             return
         }
-        if (!force && job?.isActive == true) return
+        if (enabled && !force && job?.isActive == true && activeFingerprint == fingerprint) return
 
-        job?.cancel()
-        mutableStatus.value = GeneratedPlaylistStatus.WAITING_FOR_LIBRARY
-        job =
-            scope.launch {
+        val generation = ++requestGeneration
+        if (!enabled) {
+            job?.cancel()
+            job = null
+            activeFingerprint = null
+            publishedFingerprint = null
+            mutableStatus.value = GeneratedPlaylistStatus.OFF
+            job = scope.launch {
                 try {
-                    optionalWorkGate.awaitOpen()
-                    mutableStatus.value = GeneratedPlaylistStatus.GENERATING
-                    if (project(true)) {
-                        synchronized(this@GeneratedPlaylistCoordinator) {
-                            publishedFingerprint = fingerprint
-                        }
-                    }
-                    mutableStatus.value = GeneratedPlaylistStatus.UP_TO_DATE
+                    projectionMutex.withLock { project(false) }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    mutableStatus.value = GeneratedPlaylistStatus.FAILED
-                    L.w(e, "Generated playlists failed; base library remains available")
+                    synchronized(this@GeneratedPlaylistCoordinator) {
+                        if (generation == requestGeneration) {
+                            mutableStatus.value = GeneratedPlaylistStatus.FAILED
+                        }
+                    }
+                    L.w(e, "Unable to remove generated-playlist projections")
                 } finally {
-                    synchronized(this@GeneratedPlaylistCoordinator) { job = null }
+                    synchronized(this@GeneratedPlaylistCoordinator) {
+                        if (generation == requestGeneration) job = null
+                    }
                 }
             }
-    }
+            return
+        }
 
-    private suspend fun runProjection(
-        enabled: Boolean,
-        fingerprint: String,
-        project: suspend (enabled: Boolean) -> Boolean,
-    ) {
-        try {
-            project(enabled)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            mutableStatus.value = GeneratedPlaylistStatus.FAILED
-            L.w(e, "Unable to remove generated-playlist projections")
+        job?.cancel()
+        activeFingerprint = fingerprint
+        mutableStatus.value = GeneratedPlaylistStatus.WAITING_FOR_LIBRARY
+        job = scope.launch {
+            try {
+                optionalWorkGate.awaitOpen()
+                val current =
+                    synchronized(this@GeneratedPlaylistCoordinator) {
+                        if (generation != requestGeneration) {
+                            false
+                        } else {
+                            mutableStatus.value = GeneratedPlaylistStatus.GENERATING
+                            true
+                        }
+                    }
+                if (!current) return@launch
+                val projected = projectionMutex.withLock { project(true) }
+                if (projected) {
+                    synchronized(this@GeneratedPlaylistCoordinator) {
+                        if (generation == requestGeneration) {
+                            publishedFingerprint = fingerprint
+                        }
+                    }
+                }
+                synchronized(this@GeneratedPlaylistCoordinator) {
+                    if (generation == requestGeneration) {
+                        mutableStatus.value = GeneratedPlaylistStatus.UP_TO_DATE
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                synchronized(this@GeneratedPlaylistCoordinator) {
+                    if (generation == requestGeneration) {
+                        mutableStatus.value = GeneratedPlaylistStatus.FAILED
+                    }
+                }
+                L.w(e, "Generated playlists failed; base library remains available")
+            } finally {
+                synchronized(this@GeneratedPlaylistCoordinator) {
+                    if (generation == requestGeneration) {
+                        job = null
+                        activeFingerprint = null
+                    }
+                }
+            }
         }
     }
 }

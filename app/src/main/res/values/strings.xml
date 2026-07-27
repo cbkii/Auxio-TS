@@ -785,6 +785,7 @@ Publication requested this process: %4$s</string>
 Configured sources: %2$d
 Checkpoint: %3$s
 Unavailable or permission required: %4$s
-Last attempt: %5$s</string>
+Last attempt: %5$s
+Last outcome: %6$s</string>
     <string name="set_source_checkpoint_none">none</string>
 </resources>

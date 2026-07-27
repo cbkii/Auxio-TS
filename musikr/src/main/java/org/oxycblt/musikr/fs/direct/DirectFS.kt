@@ -58,13 +58,12 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         kotlinx.coroutines.withContext(Dispatchers.IO) {
             roots.groupBy(SourceIdentity::forLocation).map { (sourceKey, locations) ->
-                val evaluated =
-                    locations.map { location ->
-                        val root = location.uri.path?.let(::JavaFile)
-                        val allowed = root != null && isAllowedRoot(root)
-                        val readable = allowed && listFilesSafe(requireNotNull(root)) != null
-                        RootSnapshot(location, root, readable)
-                    }
+                val evaluated = locations.map { location ->
+                    val root = location.uri.path?.let(::JavaFile)
+                    val allowed = root != null && isAllowedRoot(root)
+                    val readable = allowed && listFilesSafe(requireNotNull(root)) != null
+                    RootSnapshot(location, root, readable)
+                }
                 val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
                 SourceSnapshot(
                     sourceKey = sourceKey,

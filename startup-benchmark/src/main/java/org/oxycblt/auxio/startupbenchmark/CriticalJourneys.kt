@@ -161,7 +161,9 @@ internal object CriticalJourneys {
         }
     }
 
-    /** Starts the playback service exactly as BOOT_COMPLETED does, without launching the activity. */
+    /**
+     * Starts the playback service exactly as BOOT_COMPLETED does, without launching the activity.
+     */
     fun MacrobenchmarkScope.exerciseBootRestore() {
         traceSection(TRACE_BOOT_RESTORE_TO_FIRST_AUDIO) {
             startRestoreService(START_ID_BOOT)

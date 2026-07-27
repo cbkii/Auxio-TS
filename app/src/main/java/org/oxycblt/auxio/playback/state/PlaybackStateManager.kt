@@ -666,8 +666,9 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun cancelDeferredRestore() {
-        pendingDeferredPlayback =
-            pendingDeferredPlayback?.takeUnless { it is DeferredPlayback.RestoreState }
+        pendingDeferredPlayback = pendingDeferredPlayback?.takeUnless {
+            it is DeferredPlayback.RestoreState
+        }
         stateHolder?.cancelDeferredRestore()
     }
 
