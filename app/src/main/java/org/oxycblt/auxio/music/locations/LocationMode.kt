@@ -38,8 +38,8 @@ enum class LocationMode {
             }
 
     companion object {
-        fun defaultForFlavor(topwayCompat: Boolean): LocationMode =
-            if (topwayCompat) DIRECT_FS else SAF
+        fun defaultForFlavor(@Suppress("UNUSED_PARAMETER") topwayCompat: Boolean): LocationMode =
+            SAF
 
         fun fromInt(int: Int): LocationMode? {
             return when (int) {

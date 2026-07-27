@@ -23,8 +23,8 @@ import org.junit.Test
 
 class LocationModeDefaultTest {
     @Test
-    fun topwayFreshInstallUsesDirectFs() {
-        assertEquals(LocationMode.DIRECT_FS, LocationMode.defaultForFlavor(true))
+    fun topwayFreshInstallUsesSafRecoveryBaseline() {
+        assertEquals(LocationMode.SAF, LocationMode.defaultForFlavor(true))
     }
 
     @Test

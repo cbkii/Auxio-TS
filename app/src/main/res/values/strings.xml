@@ -768,4 +768,6 @@ Publication requested this process: %4$s</string>
     <string name="set_floating_controls_permission_desc">Open Android permission settings for floating controls</string>
     <string name="set_path_root_snapshot_only">Root can see this volume, but Auxio cannot open its media yet. Use the matching /storage path or install/repair the prepared-alias helper.</string>
     <string name="set_path_no_supported_audio">No supported audio file could be opened within the bounded source check.</string>
+    <string name="set_generated_playlists">Generated playlists</string>
+    <string name="set_generated_playlists_desc">Create Recently added and decade playlists only after the main music library has loaded. Disabled by default.</string>
 </resources>

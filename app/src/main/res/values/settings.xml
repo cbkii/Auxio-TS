@@ -30,6 +30,7 @@
     <string name="set_key_root_access_policy" translatable="false">auxio_root_access_policy</string>
     <string name="set_key_dynamic_shortcuts" translatable="false">auxio_dynamic_shortcuts</string>
     <string name="set_key_performance_capture" translatable="false">auxio_performance_capture</string>
+    <string name="set_key_generated_playlists" translatable="false">auxio_generated_playlists</string>
     <string name="set_key_music_dirs" translatable="false">auxio_music_dirs</string>
     <string name="set_key_excluded_dirs" translatable="false">auxio_excluded_dirs</string>
     <string name="set_key_fs_cache" translatable="false">auxio_fs_cache</string>

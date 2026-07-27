@@ -46,18 +46,14 @@ import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.Path
-import org.oxycblt.musikr.fs.RootGate
 import org.oxycblt.musikr.fs.SourceAwareFS
 import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.SourceSnapshot
 import org.oxycblt.musikr.util.tryAsyncWith
 
-class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
-    SourceAwareFS {
+class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
     private val sourceFailures = ConcurrentHashMap<String, String>()
-    private val rootSnapshotChecked = ConcurrentHashMap.newKeySet<String>()
-    private val rootSnapshotOnly = ConcurrentHashMap.newKeySet<String>()
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         kotlinx.coroutines.withContext(Dispatchers.IO) {
@@ -94,7 +90,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
-        DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys }, rootGate)
+        DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys })
 
     override fun drainSourceFailures(): Map<String, String> =
         sourceFailures.toMap().also { sourceFailures.clear() }
@@ -174,10 +170,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         discoveredDirectories: AtomicInteger,
     ) {
         if (task.depth > MAX_DEPTH) {
-            recordFailure(
-                task.sourceKey,
-                "DirectFS maximum depth exceeded at ${task.directory.path}",
-            )
+            Log.w(TAG, "DirectFS maximum depth exceeded at ${task.directory.path}")
             return
         }
         if (!isWithinCanonicalRoot(task.directory, task.canonicalRoot)) {
@@ -190,19 +183,11 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
 
         val entries = listFilesSafe(task.directory)
         if (entries == null) {
-            if (
-                !task.configuredRootTask &&
-                    isExpectedRestrictedSharedStorageChild(task.directory, task.canonicalRoot)
-            ) {
-                // Android deliberately hides these children from ordinary app UIDs even when the
-                // user selected the shared-storage root. They cannot contain files this process can
-                // open, so skipping them must not invalidate the rest of /storage/emulated/0.
-                Log.w(TAG, "Skipping restricted shared-storage child ${task.directory.path}")
+            val detail = "DirectFS directory is unavailable at ${task.directory.path}"
+            if (task.configuredRootTask) {
+                recordFailure(task.sourceKey, detail)
             } else {
-                recordFailure(
-                    task.sourceKey,
-                    "DirectFS source became unavailable at ${task.directory.path}",
-                )
+                Log.w(TAG, "Skipping unreadable child directory ${task.directory.path}")
             }
             return
         }
@@ -245,10 +230,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             if (entry.isSymlink || !entry.isDirectory) continue
             val item = entry.javaFile
             if (!isWithinCanonicalRoot(item, task.canonicalRoot)) {
-                recordFailure(
-                    task.sourceKey,
-                    "DirectFS rejected an escaped directory at ${item.path}",
-                )
+                Log.w(TAG, "DirectFS skipped an escaped directory at ${item.path}")
                 continue
             }
             val childTask =
@@ -281,7 +263,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             if (current >= MAX_VISITED_DIRECTORIES) {
                 recordFailure(
                     task.sourceKey,
-                    "DirectFS directory limit exceeded at ${task.directory.path}",
+                    "DirectFS directory limit reached at ${task.directory.path}",
                 )
                 return EnqueueResult.LimitExceeded
             }
@@ -352,36 +334,9 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             }
         }
 
-        val configuredRoot = configuredRootFor(directory)
-        val canonicalDirectory = canonicalFileOrNull(directory)
-        // A root snapshot is evidence about the configured root only. Never launch or reuse a root
-        // snapshot merely because one inaccessible child exists below an otherwise readable source.
-        if (configuredRoot != null && canonicalDirectory == configuredRoot && rootGate != null) {
-            val key = configuredRoot.absolutePath
-            if (rootSnapshotChecked.add(key)) {
-                if (rootGate.snapshotTreeSync(key, MAX_DEPTH, ROOT_SNAPSHOT_TIMEOUT_MS) != null) {
-                    rootSnapshotOnly.add(key)
-                }
-            }
-            if (key in rootSnapshotOnly) {
-                Log.w(
-                    TAG,
-                    "Root can snapshot $key but Auxio cannot open it as the app UID; " +
-                        "use a validated /storage or prepared alias",
-                )
-            }
-        }
         Log.w(TAG, "DirectFS source is unavailable or inaccessible: ${directory.path}")
         return null
     }
-
-    private fun configuredRootFor(directory: JavaFile): JavaFile? =
-        roots
-            .asSequence()
-            .mapNotNull { it.uri.path?.let(::JavaFile) }
-            .mapNotNull(::canonicalFileOrNull)
-            .filter { root -> isWithinCanonicalRoot(directory, root) }
-            .maxByOrNull { it.absolutePath.length }
 
     private data class RootSnapshot(
         val location: Location.Opened,
@@ -427,7 +382,6 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         internal const val MAX_PENDING_DIRECTORIES = 512
         internal const val MAX_VISITED_DIRECTORIES = 100_000
         private const val QUEUE_POLL_INTERVAL_MS = 100L
-        private const val ROOT_SNAPSHOT_TIMEOUT_MS = 15_000L
 
         private val protectedRoots =
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")

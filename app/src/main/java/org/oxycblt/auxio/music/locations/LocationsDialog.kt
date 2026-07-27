@@ -315,11 +315,16 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     }
 
     private fun onNewLocation(launcher: ActivityResultLauncher<Uri?>?, disableThirdParty: Boolean) {
-        L.d("Opening launcher")
-        val launcher = requireNotNull(launcher) { "Document tree launcher was not available" }
+        L.d("Opening music-source selector [mode=$locationMode]")
+        if (locationMode == LocationMode.DIRECT_FS) {
+            showCandidatePathPicker(disableThirdParty)
+            return
+        }
 
+        val documentTreeLauncher =
+            requireNotNull(launcher) { "Document tree launcher was not available" }
         try {
-            launcher.launch(null)
+            documentTreeLauncher.launch(null)
         } catch (e: ActivityNotFoundException) {
             L.w(e, "SAF tree picker activity not found; showing fallback sources.")
             showPickerUnavailableFallback(disableThirdParty)
@@ -992,64 +997,43 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun saveChanges() {
         val binding = requireBinding()
-
-        // Check if configuration has actually changed
-        val currentMode = musicSettings.locationMode
-        val modeChanged = currentMode != locationMode
-
-        var configChanged = modeChanged
-
-        if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
-            // Check if SAF/Direct query changed
-            val currentSafQuery = musicSettings.safQuery
-            val newSafQuery =
+        val currentSafQuery = musicSettings.safQuery
+        val currentMediaStoreQuery = musicSettings.mediaStoreQuery
+        val newSafQuery =
+            if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
                 SAF.Query(
                     source = includeLocationAdapter.locations,
                     exclude = excludeLocationAdapter.locations,
                     withHidden = binding.locationsWithHiddenSwitch.isChecked,
                     multithread = binding.locationsMultithreadSwitch.isChecked,
                 )
-
-            if (
-                !modeChanged &&
-                    (currentMode == LocationMode.SAF || currentMode == LocationMode.DIRECT_FS)
-            ) {
-                configChanged = currentSafQuery != newSafQuery
+            } else {
+                currentSafQuery
             }
-
-            // Save the new SAF/Direct query
-            musicSettings.safQuery = newSafQuery
-        } else {
-            // Check if MediaStore query changed
-            val currentMediaStoreQuery = musicSettings.mediaStoreQuery
-            val filterMode =
-                if (isIncludeMode) {
-                    MediaStore.FilterMode.INCLUDE
-                } else {
-                    MediaStore.FilterMode.EXCLUDE
-                }
-            val newMediaStoreQuery =
+        val newMediaStoreQuery =
+            if (locationMode == LocationMode.MEDIA_STORE) {
                 MediaStore.Query(
-                    mode = filterMode,
+                    mode =
+                        if (isIncludeMode) {
+                            MediaStore.FilterMode.INCLUDE
+                        } else {
+                            MediaStore.FilterMode.EXCLUDE
+                        },
                     filtered = filterLocationAdapter.locations,
                     excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
                 )
-
-            if (!modeChanged && currentMode == LocationMode.MEDIA_STORE) {
-                configChanged = currentMediaStoreQuery != newMediaStoreQuery
+            } else {
+                currentMediaStoreQuery
             }
 
-            // Save the new MediaStore query
-            musicSettings.mediaStoreQuery = newMediaStoreQuery
-        }
-
-        // Save the mode setting
-        musicSettings.locationMode = locationMode
-
-        // If no configuration changed but permission was granted in this session,
-        // force a location update
-        if (!configChanged && permissionGrantedInSession) {
-            L.d("No config changes detected, but permission was granted - forcing location update")
+        val changed =
+            musicSettings.applySourceConfiguration(
+                mode = locationMode,
+                safQuery = newSafQuery,
+                mediaStoreQuery = newMediaStoreQuery,
+            )
+        if (!changed && permissionGrantedInSession) {
+            L.d("Storage permission changed; queuing one source-authoritative scan")
             musicSettings.forceLocationUpdate()
         }
     }
