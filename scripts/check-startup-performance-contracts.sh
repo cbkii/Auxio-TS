@@ -149,11 +149,12 @@ require_contains "$deferred_startup_test" 'cached-library-hydration-deferred'
 require_contains "$capture_restore_test" 'settings construction restores persisted performance capture preference'
 
 # Benchmark decisions must be seeded independently of a developer/emulator preference state.
-require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences(context)'
+require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences(context, generatedPlaylistsEnabled)'
 require_contains "$fixture_receiver" 'FIXTURE_LIBRARY_REVISION'
 require_contains "$fixture_receiver" 'LibraryState.USABLE.name'
 require_contains "$fixture_receiver" 'IntegerTable.LOCATION_MODE_DIRECT_FS'
 require_contains "$fixture_receiver" 'file:///storage/usbdisk0;file:///storage/usbdisk1'
+require_contains "$fixture_receiver" 'EXTRA_GENERATED_PLAYLISTS'
 
 # Canonical stacked-branch checks must see benchmark module changes and use immutable actions.
 for workflow in "$android_workflow" "$quality_workflow"; do
@@ -179,6 +180,13 @@ for journey in \
   warmStartupWithBaselineProfile \
   hotStartupWithBaselineProfile \
   savedSessionColdStartupWithBaselineProfile \
+  attachThenBootRestoreCold \
+  attachThenRestoreBurstCold \
+  pauseDuringRestore \
+  nextDuringRestore \
+  seekDuringRestore \
+  generatedPlaylistsDoNotBlockFiveThousandSongResume \
+  generatedPlaylistsDoNotBlockTwentyThousandSongResume \
   primitiveQueueControlsJourney \
   findAndPlayJourney \
   usbFolderPlaybackJourney \
@@ -191,12 +199,19 @@ for journey in \
   require_contains "$macrobenchmark" "$journey"
 done
 require_contains "$journeys" 'exerciseSavedSessionResume'
+require_contains "$journeys" 'exerciseBootRestore'
+require_contains "$journeys" 'exerciseRestoreBurst'
+require_contains "$journeys" 'exercisePauseDuringRestore'
+require_contains "$journeys" 'exerciseNextDuringRestore'
+require_contains "$journeys" 'exerciseSeekDuringRestore'
 require_contains "$journeys" 'exerciseEarlyMediaBrowser'
 require_contains "$journeys" 'exerciseUsbFolder(sourceIndex: Int = 0)'
 require_contains "$journeys" 'waitForAudioPlayback'
 require_contains "$journeys" 'Required UI object not found'
 require_contains "$journeys" 'TRACE_NEXT_COMMAND_TO_NEXT_AUDIO'
 require_contains "$journeys" 'TRACE_MEDIA_BROWSER_FIRST_PAGE'
+require_contains "$journeys" 'TRACE_BOOT_RESTORE_TO_FIRST_AUDIO'
+require_contains "$journeys" 'TRACE_RESTORE_BURST_TO_FIRST_AUDIO'
 require_contains "$journeys" 'Next after Quick Find'
 require_contains "$journeys" 'first Album track'
 # Public journeys must fail when a required control or row is unavailable. Do not

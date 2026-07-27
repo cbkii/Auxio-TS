@@ -751,23 +751,29 @@ constructor(
 
     override suspend fun refreshGeneratedPlaylists() {
         val current = synchronized(this) { library } ?: return
-        val startingRevision = musicSettings.revision
-        val startingDeviceGeneration = deviceLibraryGeneration.get()
-        val enabled = musicSettings.generatedPlaylistsEnabled
-        val projected = withContext(Dispatchers.Default) { current.withGeneratedPlaylists(enabled) }
-        val stillCurrent =
-            synchronized(this) {
-                library === current &&
-                    musicSettings.revision == startingRevision &&
-                    deviceLibraryGeneration.get() == startingDeviceGeneration
+        PerfTimer.point("startup.generated_playlist_start")
+        try {
+            val startingRevision = musicSettings.revision
+            val startingDeviceGeneration = deviceLibraryGeneration.get()
+            val enabled = musicSettings.generatedPlaylistsEnabled
+            val projected =
+                withContext(Dispatchers.Default) { current.withGeneratedPlaylists(enabled) }
+            val stillCurrent =
+                synchronized(this) {
+                    library === current &&
+                        musicSettings.revision == startingRevision &&
+                        deviceLibraryGeneration.get() == startingDeviceGeneration
+                }
+            if (!stillCurrent) {
+                L.d("Skipping generated-playlist projection superseded by a newer library")
+                return
             }
-        if (!stillCurrent) {
-            L.d("Skipping generated-playlist projection superseded by a newer library")
-            return
+            if (projected === current) return
+            emitLibrary(projected, device = false, user = true)
+            L.i("Generated playlists ${if (enabled) "enabled" else "disabled"}")
+        } finally {
+            PerfTimer.point("startup.generated_playlist_end")
         }
-        if (projected === current) return
-        emitLibrary(projected, device = false, user = true)
-        L.i("Generated playlists ${if (enabled) "enabled" else "disabled"}")
     }
 
     private fun requestGeneratedPlaylistRefresh() {
@@ -787,6 +793,7 @@ constructor(
 
     private fun startCompatibilityBackfill() {
         compatibilityHydrationScope.launch {
+            PerfTimer.point("startup.compatibility_backfill_start")
             try {
                 val migrated = cache.populateNormalizedLibrary()
                 if (migrated > 0) {
@@ -796,6 +803,8 @@ constructor(
                 throw e
             } catch (e: Exception) {
                 L.w(e, "Normalized library backfill failed; last valid library remains available")
+            } finally {
+                PerfTimer.point("startup.compatibility_backfill_end")
             }
         }
     }
@@ -812,6 +821,7 @@ constructor(
             )
         compatibilityHydrationJob =
             compatibilityHydrationScope.launch {
+                PerfTimer.point("startup.compatibility_hydration_start")
                 try {
                     val cached = loadCachedLibrary()
                     val songCount = cached.songs.size
@@ -896,6 +906,8 @@ constructor(
                             sourceConfigured,
                         )
                     }
+                } finally {
+                    PerfTimer.point("startup.compatibility_hydration_end")
                 }
             }
     }

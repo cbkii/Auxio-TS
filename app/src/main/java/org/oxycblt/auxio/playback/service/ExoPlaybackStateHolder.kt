@@ -268,7 +268,7 @@ class ExoPlaybackStateHolder(
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
         if (action is DeferredPlayback.RestoreState) {
-            Ts18FirstAudioLatency.mark("restore_request_received")
+            Ts18FirstAudioLatency.mark("restore_requested")
             startPrimitiveQueueRestore(action)
             return true
         }
@@ -379,9 +379,9 @@ class ExoPlaybackStateHolder(
         currentRestoreJob =
             restoreScope.launch {
                 try {
-                    Ts18FirstAudioLatency.mark("primitive_session_read_start")
+                    Ts18FirstAudioLatency.mark("queue_descriptor_read_start")
                     val descriptor = persistenceRepository.readQueueDescriptor()
-                    Ts18FirstAudioLatency.mark("primitive_session_read_end")
+                    Ts18FirstAudioLatency.mark("queue_descriptor_read_end")
                     if (descriptor == null) {
                         startupReadinessController.publishCapability(
                             StartupReadinessState.QueueReady
@@ -390,7 +390,9 @@ class ExoPlaybackStateHolder(
                         return@launch
                     }
 
+                    Ts18FirstAudioLatency.mark("queue_window_read_start")
                     var window = persistenceRepository.readQueueWindowAround(descriptor)
+                    Ts18FirstAudioLatency.mark("queue_window_read_end")
                     var current = window?.currentItem
                     if (current?.hasPlayableReference != true) {
                         val snapshot = persistenceRepository.readFastResumeSnapshot()
@@ -421,6 +423,7 @@ class ExoPlaybackStateHolder(
                             positionMs = descriptor.positionMs,
                             play = shouldPlayImmediately(action.play),
                         )
+                        Ts18FirstAudioLatency.mark("primitive_window_attached")
                         startupReadinessController.publishCapability(
                             StartupReadinessState.QueueReady
                         )
@@ -494,6 +497,7 @@ class ExoPlaybackStateHolder(
                 RepeatMode.TRACK -> Player.REPEAT_MODE_ONE
             }
         player.seekTo(localTarget, positionMs.coerceAtLeast(0L))
+        Ts18FirstAudioLatency.mark("player_prepare")
         player.prepare()
         sessionOngoing = true
         if (play) playing(true) else player.playWhenReady = false
@@ -1301,7 +1305,7 @@ class ExoPlaybackStateHolder(
         // in an ExoPlayer callback anyway. This doesn't really cause issues anywhere.
         if (player.isPlaying && !markedFirstPlaying) {
             markedFirstPlaying = true
-            Ts18FirstAudioLatency.mark("first_playing_state")
+            Ts18FirstAudioLatency.mark("first_audio")
         }
         if (
             events.containsAny(
@@ -1556,6 +1560,7 @@ class ExoPlaybackStateHolder(
         player.setMediaItems(listOf(item.buildMediaItem()))
         player.seekTo(0, item.positionMs)
         Ts18FirstAudioLatency.mark("raw_seek")
+        Ts18FirstAudioLatency.mark("player_prepare")
         player.prepare()
         Ts18FirstAudioLatency.mark("raw_prepare")
         sessionOngoing = true

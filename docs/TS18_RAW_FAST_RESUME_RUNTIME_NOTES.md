@@ -106,7 +106,7 @@ Resolved:
 - Raw reconciliation performs the potentially large library search off the main thread, then revalidates the raw item on the main thread before replacing playback state.
 - Late raw validation results are ignored once the pending restore has already been consumed by normal library restore.
 - Raw fast-resume snapshot saving uses `playbackManager.progression`, not direct ExoPlayer-backed progression, from the IO save path.
-- The `first_playing_state` marker is latched so it records the first observed playing transition once per holder lifecycle.
+- The `first_audio` marker is latched so it records the first observed playing transition once per holder lifecycle.
 - Source repair detection descends into nested directories while preserving a bounded entry cap.
 - Source repair settings refresh runs filesystem probing off the UI thread and renders localized state labels for both summary and per-path details.
 

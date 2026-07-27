@@ -47,11 +47,12 @@ internal object BenchmarkFixtureController {
             InstrumentationRegistry.getArguments()
                 .getString("auxio.iterations")
                 ?.toIntOrNull()
-                ?.coerceIn(3, 30) ?: 7
+                ?.coerceIn(15, 30) ?: 15
 
     fun MacrobenchmarkScope.seedCommittedFixture(
         songCount: Int = requestedSongCount,
         sourceMode: String = SOURCE_MODE_NORMAL,
+        generatedPlaylistsEnabled: Boolean = false,
     ) {
         require(songCount in BenchmarkFixtures.supportedSongCounts)
         require(
@@ -65,7 +66,8 @@ internal object BenchmarkFixtureController {
         val output =
             device.executeShellCommand(
                 "am broadcast -W --include-stopped-packages -a $ACTION_SEED " +
-                    "-n $component --ei song_count $songCount --es source_mode $sourceMode"
+                    "-n $component --ei song_count $songCount --es source_mode $sourceMode " +
+                    "--ez generated_playlists $generatedPlaylistsEnabled"
             )
         check(Regex("result=-1(?:,|\\s)").containsMatchIn(output)) {
             "Fixture seed broadcast failed: $output"
