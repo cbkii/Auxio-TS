@@ -76,11 +76,7 @@ classify_path() {
       return
       ;;
     app/build.gradle|startup-benchmark/build.gradle|musikr/build.gradle)
-      gradle_configuration=true
-      gradle_quality=true
-      topway_build=true
-      formatting=true
-      static_only=false
+      mark_full
       [[ "$path" == startup-benchmark/* ]] && benchmark=true
       return
       ;;
@@ -232,6 +228,11 @@ self_test() {
   classify_path 'app/src/topwayTwMedia/res/values/strings.xml'
   [[ "$topway_twmedia" == true && "$topway_twmusic" == false && "$topway_build" == true ]] ||
     fail 'Self-test: topwayTwMedia-specific classification is not focused.'
+
+  reset_flags
+  classify_path 'app/build.gradle'
+  [[ "$full" == true && "$api29" == true && "$topway_twmedia" == true && "$topway_twmusic" == true ]] ||
+    fail 'Self-test: module build configuration changes must run full maintained CI.'
 
   reset_flags
   classify_path '.github/workflows/android.yml'
