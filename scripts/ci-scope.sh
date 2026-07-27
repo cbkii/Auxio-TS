@@ -58,6 +58,15 @@ mark_full() {
   api29=true
 }
 
+mark_topway_app_work() {
+  app_core=true
+  topway_shared=true
+  gradle_quality=true
+  topway_build=true
+  formatting=true
+  static_only=false
+}
+
 classify_path() {
   local path=$1
 
@@ -87,33 +96,23 @@ classify_path() {
   esac
 
   case "$path" in
-    app/src/topwayCompat/*|app/src/topwayTwMedia/*|app/src/topwayTwMediaDebug/*)
-      app_core=true
-      topway_shared=true
+    app/src/topwayCompat/*)
+      mark_topway_app_work
       topway_twmedia=true
-      gradle_quality=true
-      topway_build=true
-      formatting=true
-      static_only=false
+      topway_twmusic=true
+      ;;
+    app/src/topwayTwMedia/*|app/src/topwayTwMediaDebug/*)
+      mark_topway_app_work
+      topway_twmedia=true
       ;;
     app/src/topwayTwMusic/*|app/src/topwayTwMusicDebug/*)
-      app_core=true
-      topway_shared=true
+      mark_topway_app_work
       topway_twmusic=true
-      gradle_quality=true
-      topway_build=true
-      formatting=true
-      static_only=false
       ;;
     app/src/*)
-      app_core=true
-      topway_shared=true
+      mark_topway_app_work
       topway_twmedia=true
       topway_twmusic=true
-      gradle_quality=true
-      topway_build=true
-      formatting=true
-      static_only=false
       ;;
     musikr/src/*)
       musikr=true
@@ -223,6 +222,11 @@ self_test() {
   classify_path 'app/src/main/java/example/MusicRepository.kt'
   [[ "$gradle_quality" == true && "$topway_build" == true && "$api29" == true ]] ||
     fail 'Self-test: app runtime classification missed maintained validation.'
+
+  reset_flags
+  classify_path 'app/src/topwayCompat/java/com/tw/music/MusicService.kt'
+  [[ "$topway_shared" == true && "$topway_twmedia" == true && "$topway_twmusic" == true ]] ||
+    fail 'Self-test: shared Topway source must select both maintained variants.'
 
   reset_flags
   classify_path 'app/src/topwayTwMedia/res/values/strings.xml'
