@@ -44,9 +44,8 @@ constructor(private val readinessController: StartupReadinessController) {
     private var restoreActive = true
     private var noSessionGeneration = 0L
 
-    private val readinessListener = StartupReadinessController.Listener {
-        synchronized(this) { maybeOpenLocked() }
-    }
+    private val readinessListener =
+        StartupReadinessController.Listener { synchronized(this) { maybeOpenLocked() } }
 
     init {
         readinessController.addListener(readinessListener)

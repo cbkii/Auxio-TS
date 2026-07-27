@@ -73,12 +73,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         val pending = goAsync()
         thread(name = "auxio-benchmark-fixture") {
             try {
-                seed(
-                    context.applicationContext,
-                    songCount,
-                    sourceMode,
-                    generatedPlaylistsEnabled,
-                )
+                seed(context.applicationContext, songCount, sourceMode, generatedPlaylistsEnabled)
                 pending.resultCode = Activity.RESULT_OK
                 pending.resultData =
                     "Seeded $songCount committed rows and primitive queue ($sourceMode)"

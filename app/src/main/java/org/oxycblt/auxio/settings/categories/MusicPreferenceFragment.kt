@@ -168,27 +168,30 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
         }
         if (preference.key == getString(R.string.set_key_cover_mode)) {
             L.d("Configuring cover mode setting")
-            preference.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, _ ->
-                L.d("Cover mode changed, reloading music")
-                musicModel.refresh()
-                true
-            }
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, _ ->
+                    L.d("Cover mode changed, reloading music")
+                    musicModel.refresh()
+                    true
+                }
         }
         if (preference.key == getString(R.string.set_key_with_hidden)) {
             L.d("Configuring ignore hidden files setting")
-            preference.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, _ ->
-                L.d("Ignore hidden files setting changed, reloading music")
-                musicModel.refresh()
-                true
-            }
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, _ ->
+                    L.d("Ignore hidden files setting changed, reloading music")
+                    musicModel.refresh()
+                    true
+                }
         }
         if (preference.key == getString(R.string.set_key_ts18_system_source_filter)) {
             L.d("Configuring ts18 system source filter setting")
-            preference.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, _ ->
-                L.d("TS18 system source filter changed, reloading music")
-                musicModel.refresh()
-                true
-            }
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, _ ->
+                    L.d("TS18 system source filter changed, reloading music")
+                    musicModel.refresh()
+                    true
+                }
         }
         if (preference.key == getString(R.string.set_key_use_root_fs)) {
             preference.onPreferenceChangeListener =

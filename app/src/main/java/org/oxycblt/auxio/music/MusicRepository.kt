@@ -351,11 +351,12 @@ constructor(
 ) : MusicRepository {
     private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
     private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
-    private val readinessAdapter = StartupReadinessController.Listener {
-        for (listener in startupReadinessListeners) {
-            listener.onStartupReadinessStateChanged()
+    private val readinessAdapter =
+        StartupReadinessController.Listener {
+            for (listener in startupReadinessListeners) {
+                listener.onStartupReadinessStateChanged()
+            }
         }
-    }
     private val startupReadinessListeners =
         CopyOnWriteArrayList<MusicRepository.StartupReadinessListener>()
     @Volatile private var indexingWorker: IndexingWorker? = null
@@ -1082,97 +1083,98 @@ constructor(
                 musicSettings.locationMode,
                 musicSettings.configuredSourceCount,
             )
-        compatibilityHydrationJob = compatibilityHydrationScope.launch {
-            optionalWorkGate.awaitOpen()
-            PerfTimer.point("startup.compatibility_hydration_start")
-            try {
-                val cached = loadCachedLibrary()
-                val songCount = cached.songs.size
-                val decision =
-                    StartupLibraryPolicy.onCachedLoadSucceeded(
-                        priorState,
-                        songCount,
-                        musicSettings.lastScanFailed,
-                    )
-                withContext(Dispatchers.Main) {
-                    val publishLibrary =
-                        songCount > 0 || decision.libraryState == LibraryState.EMPTY
-                    val accepted =
-                        synchronized(this@MusicRepositoryImpl) {
-                            val superseded =
+        compatibilityHydrationJob =
+            compatibilityHydrationScope.launch {
+                optionalWorkGate.awaitOpen()
+                PerfTimer.point("startup.compatibility_hydration_start")
+                try {
+                    val cached = loadCachedLibrary()
+                    val songCount = cached.songs.size
+                    val decision =
+                        StartupLibraryPolicy.onCachedLoadSucceeded(
+                            priorState,
+                            songCount,
+                            musicSettings.lastScanFailed,
+                        )
+                    withContext(Dispatchers.Main) {
+                        val publishLibrary =
+                            songCount > 0 || decision.libraryState == LibraryState.EMPTY
+                        val accepted =
+                            synchronized(this@MusicRepositoryImpl) {
+                                val superseded =
+                                    deviceLibraryGeneration.get() != startingDeviceGeneration ||
+                                        musicSettings.revision != startingRevision
+                                if (superseded) {
+                                    false
+                                } else {
+                                    if (publishLibrary) library = cached
+                                    true
+                                }
+                            }
+                        if (!accepted) {
+                            L.d("Skipping compatibility hydration superseded by a newer scan")
+                            return@withContext
+                        }
+                        musicSettings.libraryState = decision.libraryState
+                        if (publishLibrary) {
+                            dispatchLibraryChange(device = true, user = true)
+                        }
+                        emitStartupLibraryStatus(
+                            StartupLibraryPolicy.startupReadinessAfterDecision(
+                                decision,
+                                sourceConfigured,
+                                songCount,
+                            )
+                        )
+                        if (songCount > 0) {
+                            emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                            requestGeneratedPlaylistRefresh()
+                        }
+                        requestCompatibilityRecoveryIfNeeded(
+                            worker,
+                            priorState,
+                            decision,
+                            sourceConfigured,
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w(e, "Compatibility cached-library hydration failed")
+                    val decision =
+                        StartupLibraryPolicy.onCachedLoadFailed(
+                            priorState,
+                            musicSettings.lastScanFailed,
+                        )
+                    withContext(Dispatchers.Main) {
+                        val superseded =
+                            synchronized(this@MusicRepositoryImpl) {
                                 deviceLibraryGeneration.get() != startingDeviceGeneration ||
                                     musicSettings.revision != startingRevision
-                            if (superseded) {
-                                false
-                            } else {
-                                if (publishLibrary) library = cached
-                                true
                             }
+                        if (superseded) {
+                            L.d("Skipping compatibility recovery superseded by a newer scan")
+                            return@withContext
                         }
-                    if (!accepted) {
-                        L.d("Skipping compatibility hydration superseded by a newer scan")
-                        return@withContext
-                    }
-                    musicSettings.libraryState = decision.libraryState
-                    if (publishLibrary) {
-                        dispatchLibraryChange(device = true, user = true)
-                    }
-                    emitStartupLibraryStatus(
-                        StartupLibraryPolicy.startupReadinessAfterDecision(
+                        musicSettings.libraryState = decision.libraryState
+                        emitStartupLibraryStatus(
+                            StartupLibraryPolicy.startupReadinessAfterDecision(
+                                decision,
+                                sourceConfigured,
+                                cachedSongCount = null,
+                            )
+                        )
+                        requestCompatibilityRecoveryIfNeeded(
+                            worker,
+                            priorState,
                             decision,
                             sourceConfigured,
-                            songCount,
                         )
-                    )
-                    if (songCount > 0) {
-                        emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
-                        requestGeneratedPlaylistRefresh()
                     }
-                    requestCompatibilityRecoveryIfNeeded(
-                        worker,
-                        priorState,
-                        decision,
-                        sourceConfigured,
-                    )
+                } finally {
+                    PerfTimer.point("startup.compatibility_hydration_end")
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                L.w(e, "Compatibility cached-library hydration failed")
-                val decision =
-                    StartupLibraryPolicy.onCachedLoadFailed(
-                        priorState,
-                        musicSettings.lastScanFailed,
-                    )
-                withContext(Dispatchers.Main) {
-                    val superseded =
-                        synchronized(this@MusicRepositoryImpl) {
-                            deviceLibraryGeneration.get() != startingDeviceGeneration ||
-                                musicSettings.revision != startingRevision
-                        }
-                    if (superseded) {
-                        L.d("Skipping compatibility recovery superseded by a newer scan")
-                        return@withContext
-                    }
-                    musicSettings.libraryState = decision.libraryState
-                    emitStartupLibraryStatus(
-                        StartupLibraryPolicy.startupReadinessAfterDecision(
-                            decision,
-                            sourceConfigured,
-                            cachedSongCount = null,
-                        )
-                    )
-                    requestCompatibilityRecoveryIfNeeded(
-                        worker,
-                        priorState,
-                        decision,
-                        sourceConfigured,
-                    )
-                }
-            } finally {
-                PerfTimer.point("startup.compatibility_hydration_end")
             }
-        }
     }
 
     private fun requestCompatibilityRecoveryIfNeeded(

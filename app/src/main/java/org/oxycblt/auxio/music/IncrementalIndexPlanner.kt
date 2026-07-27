@@ -78,23 +78,24 @@ internal object IncrementalIndexPlanner {
                 .filterNot { it.available }
                 .filter { targetSourceKeys == null || it.sourceKey in targetSourceKeys }
                 .mapTo(linkedSetOf()) { it.sourceKey }
-        val retryableSnapshots = observedSnapshots.map { snapshot ->
-            val targetedForRetry =
-                targetSourceKeys == null || snapshot.sourceKey in targetSourceKeys
-            if (snapshot.available || !targetedForRetry) {
-                snapshot
-            } else {
-                // Availability probes are advisory. Actual enumeration remains authoritative.
-                // Clear the fingerprint so the ledger plans a real scan and writes a readable
-                // generation when enumeration succeeds. A source-local enumeration failure is
-                // still recorded by markSourceFailed without deleting the previous generation.
-                snapshot.copy(
-                    available = true,
-                    fingerprint = null,
-                    fingerprintStrength = SourceFingerprintStrength.NONE,
-                )
+        val retryableSnapshots =
+            observedSnapshots.map { snapshot ->
+                val targetedForRetry =
+                    targetSourceKeys == null || snapshot.sourceKey in targetSourceKeys
+                if (snapshot.available || !targetedForRetry) {
+                    snapshot
+                } else {
+                    // Availability probes are advisory. Actual enumeration remains authoritative.
+                    // Clear the fingerprint so the ledger plans a real scan and writes a readable
+                    // generation when enumeration succeeds. A source-local enumeration failure is
+                    // still recorded by markSourceFailed without deleting the previous generation.
+                    snapshot.copy(
+                        available = true,
+                        fingerprint = null,
+                        fingerprintStrength = SourceFingerprintStrength.NONE,
+                    )
+                }
             }
-        }
         if (retriedKeys.isNotEmpty()) {
             L.w("Retrying sources rejected by advisory preflight: $retriedKeys")
         }

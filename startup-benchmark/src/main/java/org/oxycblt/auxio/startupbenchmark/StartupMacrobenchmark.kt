@@ -417,9 +417,6 @@ class StartupMacrobenchmark {
                 )
         val REQUIRED_GENERATED_PLAYLIST_LABELS =
             REQUIRED_IMMEDIATE_LABELS +
-                setOf(
-                    "startup.generated_playlist_start",
-                    "startup.generated_playlist_end",
-                )
+                setOf("startup.generated_playlist_start", "startup.generated_playlist_end")
     }
 }

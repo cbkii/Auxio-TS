@@ -81,9 +81,58 @@ constructor(private val optionalWorkGate: StartupOptionalWorkGate) {
             activeFingerprint = null
             publishedFingerprint = null
             mutableStatus.value = GeneratedPlaylistStatus.OFF
-            job = scope.launch {
+            job =
+                scope.launch {
+                    try {
+                        projectionMutex.withLock { project(false) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        synchronized(this@GeneratedPlaylistCoordinator) {
+                            if (generation == requestGeneration) {
+                                mutableStatus.value = GeneratedPlaylistStatus.FAILED
+                            }
+                        }
+                        L.w(e, "Unable to remove generated-playlist projections")
+                    } finally {
+                        synchronized(this@GeneratedPlaylistCoordinator) {
+                            if (generation == requestGeneration) job = null
+                        }
+                    }
+                }
+            return
+        }
+
+        job?.cancel()
+        activeFingerprint = fingerprint
+        mutableStatus.value = GeneratedPlaylistStatus.WAITING_FOR_LIBRARY
+        job =
+            scope.launch {
                 try {
-                    projectionMutex.withLock { project(false) }
+                    optionalWorkGate.awaitOpen()
+                    val current =
+                        synchronized(this@GeneratedPlaylistCoordinator) {
+                            if (generation != requestGeneration) {
+                                false
+                            } else {
+                                mutableStatus.value = GeneratedPlaylistStatus.GENERATING
+                                true
+                            }
+                        }
+                    if (!current) return@launch
+                    val projected = projectionMutex.withLock { project(true) }
+                    if (projected) {
+                        synchronized(this@GeneratedPlaylistCoordinator) {
+                            if (generation == requestGeneration) {
+                                publishedFingerprint = fingerprint
+                            }
+                        }
+                    }
+                    synchronized(this@GeneratedPlaylistCoordinator) {
+                        if (generation == requestGeneration) {
+                            mutableStatus.value = GeneratedPlaylistStatus.UP_TO_DATE
+                        }
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -92,62 +141,15 @@ constructor(private val optionalWorkGate: StartupOptionalWorkGate) {
                             mutableStatus.value = GeneratedPlaylistStatus.FAILED
                         }
                     }
-                    L.w(e, "Unable to remove generated-playlist projections")
+                    L.w(e, "Generated playlists failed; base library remains available")
                 } finally {
                     synchronized(this@GeneratedPlaylistCoordinator) {
-                        if (generation == requestGeneration) job = null
-                    }
-                }
-            }
-            return
-        }
-
-        job?.cancel()
-        activeFingerprint = fingerprint
-        mutableStatus.value = GeneratedPlaylistStatus.WAITING_FOR_LIBRARY
-        job = scope.launch {
-            try {
-                optionalWorkGate.awaitOpen()
-                val current =
-                    synchronized(this@GeneratedPlaylistCoordinator) {
-                        if (generation != requestGeneration) {
-                            false
-                        } else {
-                            mutableStatus.value = GeneratedPlaylistStatus.GENERATING
-                            true
-                        }
-                    }
-                if (!current) return@launch
-                val projected = projectionMutex.withLock { project(true) }
-                if (projected) {
-                    synchronized(this@GeneratedPlaylistCoordinator) {
                         if (generation == requestGeneration) {
-                            publishedFingerprint = fingerprint
+                            job = null
+                            activeFingerprint = null
                         }
                     }
                 }
-                synchronized(this@GeneratedPlaylistCoordinator) {
-                    if (generation == requestGeneration) {
-                        mutableStatus.value = GeneratedPlaylistStatus.UP_TO_DATE
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                synchronized(this@GeneratedPlaylistCoordinator) {
-                    if (generation == requestGeneration) {
-                        mutableStatus.value = GeneratedPlaylistStatus.FAILED
-                    }
-                }
-                L.w(e, "Generated playlists failed; base library remains available")
-            } finally {
-                synchronized(this@GeneratedPlaylistCoordinator) {
-                    if (generation == requestGeneration) {
-                        job = null
-                        activeFingerprint = null
-                    }
-                }
             }
-        }
     }
 }

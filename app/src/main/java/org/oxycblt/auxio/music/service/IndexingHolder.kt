@@ -178,63 +178,64 @@ private constructor(
                 return
             }
             activeStartupOrigin = origin
-            startupJob = indexScope.launch {
-                try {
-                    val sourceAuthority =
-                        StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
-                            workerContext,
-                            musicSettings,
-                        )
-                    val automaticScanAllowed =
-                        StartupScanAuthorityPolicy.allowAutomaticScan(
-                            topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
-                            origin = origin,
-                            sourceAuthority = sourceAuthority,
-                        )
-                    // Root probing remains on-demand. Cache and playback restoration do not
-                    // wait
-                    // for su, source traversal, or a library scan.
-                    musicRepository.startup(this@IndexingHolder)
-                    val pendingConfiguration =
-                        synchronized(this@IndexingHolder) {
-                            musicSettings.claimPendingConfiguration()?.also { checkpoint ->
-                                lastHandledSourceConfigurationGeneration = checkpoint.generation
-                            }
-                        }
-                    if (pendingConfiguration != null) {
-                        L.i(
-                            "Claiming durable source configuration for a simple initial scan " +
-                                "[generation=${pendingConfiguration.generation}]"
-                        )
-                        requestIndex(
-                            IndexRequest(
-                                reason = IndexReason.INITIAL_CONFIGURATION,
-                                withCache = false,
-                                configurationGeneration = pendingConfiguration.generation,
-                                sourceKeys =
-                                    musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) {
-                                        it.sourceKey
-                                    },
+            startupJob =
+                indexScope.launch {
+                    try {
+                        val sourceAuthority =
+                            StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
+                                workerContext,
+                                musicSettings,
                             )
-                        )
-                    } else if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
-                        requestVisibleRecoveryScan(sourceAuthority)
-                    }
-                } finally {
-                    val nextOrigin =
-                        synchronized(this@IndexingHolder) {
-                            startupJob = null
-                            activeStartupOrigin = null
-                            if (attached) {
-                                pendingStartupOrigin.also { pendingStartupOrigin = null }
-                            } else {
-                                pendingStartupOrigin = null
-                                null
+                        val automaticScanAllowed =
+                            StartupScanAuthorityPolicy.allowAutomaticScan(
+                                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                                origin = origin,
+                                sourceAuthority = sourceAuthority,
+                            )
+                        // Root probing remains on-demand. Cache and playback restoration do not
+                        // wait
+                        // for su, source traversal, or a library scan.
+                        musicRepository.startup(this@IndexingHolder)
+                        val pendingConfiguration =
+                            synchronized(this@IndexingHolder) {
+                                musicSettings.claimPendingConfiguration()?.also { checkpoint ->
+                                    lastHandledSourceConfigurationGeneration = checkpoint.generation
+                                }
                             }
+                        if (pendingConfiguration != null) {
+                            L.i(
+                                "Claiming durable source configuration for a simple initial scan " +
+                                    "[generation=${pendingConfiguration.generation}]"
+                            )
+                            requestIndex(
+                                IndexRequest(
+                                    reason = IndexReason.INITIAL_CONFIGURATION,
+                                    withCache = false,
+                                    configurationGeneration = pendingConfiguration.generation,
+                                    sourceKeys =
+                                        musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) {
+                                            it.sourceKey
+                                        },
+                                )
+                            )
+                        } else if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
+                            requestVisibleRecoveryScan(sourceAuthority)
                         }
-                    if (nextOrigin != null) start(nextOrigin)
+                    } finally {
+                        val nextOrigin =
+                            synchronized(this@IndexingHolder) {
+                                startupJob = null
+                                activeStartupOrigin = null
+                                if (attached) {
+                                    pendingStartupOrigin.also { pendingStartupOrigin = null }
+                                } else {
+                                    pendingStartupOrigin = null
+                                    null
+                                }
+                            }
+                        if (nextOrigin != null) start(nextOrigin)
+                    }
                 }
-            }
         }
     }
 
@@ -261,26 +262,27 @@ private constructor(
         if (musicSettings.lastScanFailed) return
 
         startupRecoveryJob?.cancel()
-        startupRecoveryJob = indexScope.launch {
-            delay(STARTUP_RECOVERY_GRACE_MS)
-            val shouldRecover =
-                synchronized(this@IndexingHolder) {
-                    attached && currentIndexJob?.isActive != true
-                } &&
-                    !musicSettings.lastScanFailed &&
-                    (musicRepository.library == null ||
-                        musicRepository.startupLibraryStatus != StartupLibraryStatus.Usable)
-            if (shouldRecover) {
-                L.w("Cached library did not become usable; requesting one recovery scan")
-                requestIndex(
-                    IndexRequest(
-                        reason = IndexReason.COMPATIBILITY_RECOVERY,
-                        withCache = true,
-                        configurationGeneration = musicSettings.sourceConfigurationGeneration,
+        startupRecoveryJob =
+            indexScope.launch {
+                delay(STARTUP_RECOVERY_GRACE_MS)
+                val shouldRecover =
+                    synchronized(this@IndexingHolder) {
+                        attached && currentIndexJob?.isActive != true
+                    } &&
+                        !musicSettings.lastScanFailed &&
+                        (musicRepository.library == null ||
+                            musicRepository.startupLibraryStatus != StartupLibraryStatus.Usable)
+                if (shouldRecover) {
+                    L.w("Cached library did not become usable; requesting one recovery scan")
+                    requestIndex(
+                        IndexRequest(
+                            reason = IndexReason.COMPATIBILITY_RECOVERY,
+                            withCache = true,
+                            configurationGeneration = musicSettings.sourceConfigurationGeneration,
+                        )
                     )
-                )
+                }
             }
-        }
     }
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
@@ -375,28 +377,29 @@ private constructor(
     private fun startIndexLocked(request: IndexRequest) {
         L.i("Starting new indexing job [request=$request]")
         activeIndexRequest = request
-        currentIndexJob = indexScope.launch {
-            try {
-                musicRepository.index(this@IndexingHolder, request)
-            } finally {
-                synchronized(this@IndexingHolder) {
-                    currentIndexJob = null
-                    activeIndexRequest = null
-                    val pending = pendingIndexRequest
-                    if (pending != null) {
-                        val playbackActive = playbackActiveSnapshot()
-                        val mustWaitForIdle =
-                            playbackActive &&
-                                (pending.metadataProfile == MetadataProfile.FULL ||
-                                    musicSettings.observationMode == ObservationMode.WHEN_IDLE)
-                        if (!mustWaitForIdle) {
-                            pendingIndexRequest = null
-                            startIndexLocked(pending)
+        currentIndexJob =
+            indexScope.launch {
+                try {
+                    musicRepository.index(this@IndexingHolder, request)
+                } finally {
+                    synchronized(this@IndexingHolder) {
+                        currentIndexJob = null
+                        activeIndexRequest = null
+                        val pending = pendingIndexRequest
+                        if (pending != null) {
+                            val playbackActive = playbackActiveSnapshot()
+                            val mustWaitForIdle =
+                                playbackActive &&
+                                    (pending.metadataProfile == MetadataProfile.FULL ||
+                                        musicSettings.observationMode == ObservationMode.WHEN_IDLE)
+                            if (!mustWaitForIdle) {
+                                pendingIndexRequest = null
+                                startIndexLocked(pending)
+                            }
                         }
                     }
                 }
             }
-        }
     }
 
     override fun onProgressionChanged(progression: org.oxycblt.auxio.playback.state.Progression) {
@@ -438,50 +441,52 @@ private constructor(
                 LocationMode.SAF -> SAF.from(workerContext, musicSettings.safQuery)
                 LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source)
             }
-        trackingJob = indexScope.launch {
-            fs.track().collect { update ->
-                val location = (update as? FSUpdate.LocationChanged)?.location
-                val sourceKey = location?.let(SourceIdentity::forLocation)
-                musicRepository.invalidateSource(sourceKey)
-                synchronized(this@IndexingHolder) {
-                    if (sourceKey != null) pendingObservedSourceKeys += sourceKey
-                }
-                if (update is FSUpdate.LocationChanged) {
-                    // Check if the location that changed is still accessible
-                    if (location != null && !location.path.volume.isAccessible()) {
-                        L.i("Source became inaccessible (unmounted?): ${location.uri}")
-                        cancelCurrentIndex()
-                        // Keep the tracker alive and continue to the debounced planner so the
-                        // source ledger records unavailability without publishing an empty
-                        // generation.
+        trackingJob =
+            indexScope.launch {
+                fs.track().collect { update ->
+                    val location = (update as? FSUpdate.LocationChanged)?.location
+                    val sourceKey = location?.let(SourceIdentity::forLocation)
+                    musicRepository.invalidateSource(sourceKey)
+                    synchronized(this@IndexingHolder) {
+                        if (sourceKey != null) pendingObservedSourceKeys += sourceKey
                     }
-                }
+                    if (update is FSUpdate.LocationChanged) {
+                        // Check if the location that changed is still accessible
+                        if (location != null && !location.path.volume.isAccessible()) {
+                            L.i("Source became inaccessible (unmounted?): ${location.uri}")
+                            cancelCurrentIndex()
+                            // Keep the tracker alive and continue to the debounced planner so the
+                            // source ledger records unavailability without publishing an empty
+                            // generation.
+                        }
+                    }
 
-                val token = observationBurstGate.nextToken()
-                observationRequestJob?.cancel()
-                observationRequestJob = indexScope.launch {
-                    delay(OBSERVATION_DEBOUNCE_MS)
-                    if (observationBurstGate.isLatest(token)) {
-                        L.i("Storage notification burst settled; planning cached refresh")
-                        val sourceKeys =
-                            synchronized(this@IndexingHolder) {
-                                pendingObservedSourceKeys.toSet().also {
-                                    pendingObservedSourceKeys.clear()
-                                }
+                    val token = observationBurstGate.nextToken()
+                    observationRequestJob?.cancel()
+                    observationRequestJob =
+                        indexScope.launch {
+                            delay(OBSERVATION_DEBOUNCE_MS)
+                            if (observationBurstGate.isLatest(token)) {
+                                L.i("Storage notification burst settled; planning cached refresh")
+                                val sourceKeys =
+                                    synchronized(this@IndexingHolder) {
+                                        pendingObservedSourceKeys.toSet().also {
+                                            pendingObservedSourceKeys.clear()
+                                        }
+                                    }
+                                requestIndex(
+                                    IndexRequest(
+                                        reason = IndexReason.SOURCE_OBSERVER,
+                                        withCache = true,
+                                        configurationGeneration =
+                                            musicSettings.sourceConfigurationGeneration,
+                                        sourceKeys = sourceKeys.takeIf { it.isNotEmpty() },
+                                    )
+                                )
                             }
-                        requestIndex(
-                            IndexRequest(
-                                reason = IndexReason.SOURCE_OBSERVER,
-                                withCache = true,
-                                configurationGeneration =
-                                    musicSettings.sourceConfigurationGeneration,
-                                sourceKeys = sourceKeys.takeIf { it.isNotEmpty() },
-                            )
-                        )
-                    }
+                        }
                 }
             }
-        }
     }
 
     private fun stopTracking() {
@@ -512,11 +517,12 @@ private constructor(
             L.i("Cancelling indexing work targeting removed sources $sourceKeys")
             currentIndexJob?.cancel()
         }
-        pendingIndexRequest = pendingIndexRequest?.let { pending ->
-            val pendingSources = pending.sourceKeys ?: return@let pending
-            val remaining = pendingSources - sourceKeys
-            if (remaining.isEmpty()) null else pending.copy(sourceKeys = remaining)
-        }
+        pendingIndexRequest =
+            pendingIndexRequest?.let { pending ->
+                val pendingSources = pending.sourceKeys ?: return@let pending
+                val remaining = pendingSources - sourceKeys
+                if (remaining.isEmpty()) null else pending.copy(sourceKeys = remaining)
+            }
     }
 
     private fun updateRemovableStorageReceiver() {
@@ -570,41 +576,45 @@ private constructor(
     private fun scheduleMountedSourceRetry(sourceKeys: Set<String>) {
         val eventKey = sourceKeys.sorted().joinToString("|")
         removableStorageJobs.remove(eventKey)?.cancel()
-        removableStorageJobs[eventKey] = indexScope.launch {
-            try {
-                optionalWorkGate.awaitOpen()
-                for (settleDelay in RemovableStorageEventPolicy.settleDelaysMs) {
-                    delay(settleDelay)
-                    val readable =
-                        musicSettings.configuredSourceSpecs
-                            .asSequence()
-                            .filter { it.sourceKey in sourceKeys }
-                            .filter { spec ->
-                                runCatching {
-                                        spec.normalizedUri.path?.let(::File)?.let {
-                                            it.canRead() && it.isDirectory && it.listFiles() != null
-                                        } ?: false
-                                    }
-                                    .getOrDefault(false)
-                            }
-                            .mapTo(linkedSetOf()) { it.sourceKey }
-                    if (readable.isEmpty()) continue
-                    for (sourceKey in readable) musicRepository.invalidateSource(sourceKey)
-                    musicRepository.requestIndex(
-                        IndexRequest(
-                            reason = IndexReason.STORAGE_MOUNTED,
-                            withCache = true,
-                            configurationGeneration = musicSettings.sourceConfigurationGeneration,
-                            sourceKeys = readable,
+        removableStorageJobs[eventKey] =
+            indexScope.launch {
+                try {
+                    optionalWorkGate.awaitOpen()
+                    for (settleDelay in RemovableStorageEventPolicy.settleDelaysMs) {
+                        delay(settleDelay)
+                        val readable =
+                            musicSettings.configuredSourceSpecs
+                                .asSequence()
+                                .filter { it.sourceKey in sourceKeys }
+                                .filter { spec ->
+                                    runCatching {
+                                            spec.normalizedUri.path?.let(::File)?.let {
+                                                it.canRead() &&
+                                                    it.isDirectory &&
+                                                    it.listFiles() != null
+                                            } ?: false
+                                        }
+                                        .getOrDefault(false)
+                                }
+                                .mapTo(linkedSetOf()) { it.sourceKey }
+                        if (readable.isEmpty()) continue
+                        for (sourceKey in readable) musicRepository.invalidateSource(sourceKey)
+                        musicRepository.requestIndex(
+                            IndexRequest(
+                                reason = IndexReason.STORAGE_MOUNTED,
+                                withCache = true,
+                                configurationGeneration =
+                                    musicSettings.sourceConfigurationGeneration,
+                                sourceKeys = readable,
+                            )
                         )
-                    )
-                    return@launch
+                        return@launch
+                    }
+                    L.w("Mounted source did not become app-readable after bounded settle attempts")
+                } finally {
+                    synchronized(this@IndexingHolder) { removableStorageJobs.remove(eventKey) }
                 }
-                L.w("Mounted source did not become app-readable after bounded settle attempts")
-            } finally {
-                synchronized(this@IndexingHolder) { removableStorageJobs.remove(eventKey) }
             }
-        }
     }
 
     private fun handleSourcesRemoved(sourceKeys: Set<String>) {
