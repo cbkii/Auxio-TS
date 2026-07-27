@@ -51,6 +51,17 @@ Observed reusable requirements:
 
 Observed but not approved for product use include Cardoor media services, `android.uid.system`, `sharedUserId`, `android.tw.john.TWUtil`, and `com.tw.service.xt` private AIDL. Do not fake these services, copy smali, require platform signing or claim a normal APK has UID 1000 authority.
 
+## Approved evidence and research sources
+
+Use source-led evidence before device poking:
+
+- `docs/reference/ts18-apk/` and `docs/topway/`;
+- exact-device diagnostics and evidence packs already committed or supplied for the task;
+- proven public head-unit implementations and upstream Android documentation;
+- decompiled APK and firmware strings only as compatibility evidence.
+
+Do not treat related TS10/TS10M/8581 units as exact proof. Preserve Chinese filenames, paths, dates and grouping when they are evidence. Separate Android framework authority, Topway/TW service authority, DoFun launcher authority, HAL/sysfs authority, MCU/CAN authority and root/Magisk authority.
+
 ## TS18 native parity tiers
 
 See `docs/TS18_INTEGRATION_ARCHITECTURE.md`.
@@ -89,6 +100,17 @@ Porting decisions: **Directly reusable requirement**, **Reusable validation idea
 - Preserve one playback service, one queue authority, one MediaSession and one notification authority.
 - Keep Android Bluetooth, audio focus and MediaSession separate from Topway Bluetooth, DSP/radio, MCU/CAN and launcher control.
 
+## Architecture and implementation principles
+
+- Keep TS18 integration behind small adapters/facades; core library/playback code should remain usable without OEM dependencies.
+- A compatibility model, registry, status object or documentation entry is not implemented until consumed by a meaningful runtime call-site.
+- Metadata policy is not implemented until used by MediaSession, notification, widget or another runtime publisher.
+- Parity maps are not implemented until they drive or verify route/action completeness.
+- Settings/status are not implemented until surfaced through established UI/settings patterns.
+- Preserve API 29 runtime compatibility and gate newer APIs.
+- Keep I/O bounded and off the main thread. Treat notifications, RemoteViews, Material inflation, media scanning, startup and tag parsing as OEM-crash-sensitive.
+- Avoid duplicate services, sessions, queues, notifications or launch authorities.
+
 ## Hard constraints
 
 - Do not add a third distributable flavour or restore `standard` CI tasks.
@@ -102,6 +124,15 @@ Porting decisions: **Directly reusable requirement**, **Reusable validation idea
 - Do not restore the abandoned in-app TS18 Health Diagnostics / Storage Health screen.
 - Never claim tasks/build/test/lint success unless that exact command passed for the current head.
 - Inspect complete CI logs before changing code. Do not repeatedly rerun an unchanged deterministic failure.
+
+## Code quality and test expectations
+
+- Follow the existing Kotlin/Java style and architectural boundaries.
+- Prefer focused tests for the changed authority and failure mode.
+- Keep tests deterministic; use fake services, fixtures and local repositories rather than live external systems.
+- Build the exact variant or artefact that will be published when packaging can change behaviour.
+- Review final diffs for generated APKs, reports, credentials, temporary workflows, scratch scripts and stale comments.
+- Do not replace scoped tasks with generic `build`, `check`, `test` or `lint` aggregates unless repository policy deliberately changes.
 
 ## Validation baseline
 
@@ -121,8 +152,6 @@ bash ./scripts/ci-gradle.sh \
   :app:assembleTopwayTwMediaDebug \
   :app:assembleTopwayTwMusicDebug
 ```
-
-Avoid generic aggregate `build`, `check`, `test` and `lint` as PR proof unless repository policy is deliberately changed.
 
 ## CI scope and required checks
 
@@ -148,7 +177,7 @@ Current required check names remain:
 - `Android Quality / Android lint`
 - `Android Quality / Head-unit safety`
 
-## Checkout and dependency policy
+## Dependency bootstrap authority
 
 The canonical bootstrap is:
 
@@ -156,18 +185,45 @@ The canonical bootstrap is:
 bash ./scripts/bootstrap-dependencies.sh --profile full-build
 ```
 
+`scripts/prepare-ci-environment.sh` is a backwards-compatible wrapper. `scripts/check-submodules.sh` is read-only validation/delegation. Shared profile, manifest, gitlink, mirror and classification logic lives in `scripts/dependency-lib.sh`; do not duplicate it.
+
 Profiles:
 
-- `static-review`: may degrade honestly to `DEGRADED_STATIC_ONLY`.
-- `jvm-tests`: strict because Gradle configuration still needs pinned submodules.
-- `full-build`: strict app/CI build profile.
-- `release`: strictest signed-release profile.
+| Profile | Use | Failure policy |
+| --- | --- | --- |
+| `static-review` | Source/YAML/script review | May degrade honestly to `DEGRADED_STATIC_ONLY` |
+| `jvm-tests` | JVM tests | Strict because Gradle configuration still needs the media/taglib/FFmpeg graph |
+| `full-build` | CI/debug/release-equivalent builds | Strict |
+| `release` | Signed release | Fail closed |
+
+Repo-owned manifests under `ci/dependencies/` define required paths, exact pins, approved mirrors and SDK/tool versions. Mirrors may fetch only the exact pinned gitlink commit. Do not use dependency HEADs.
+
+Outcome labels:
+
+| Label | Meaning |
+| --- | --- |
+| `READY` | Bootstrap completed for the selected profile |
+| `SNAPSHOT_LIMITATION` | No `.git`; only degraded static review may continue |
+| `SUBMODULE_BLOCKER` | Required submodule/sentinel missing or fetch failed |
+| `DEPENDENCY_DIRTY_SUBMODULE` | Dependency checkout contains local modifications |
+| `DEPENDENCY_MIRROR_USED` | Approved mirror supplied the exact pinned commit |
+| `DEPENDENCY_PIN_MISMATCH` | Actual submodule HEAD differs from parent gitlink |
+| `SDK_BLOCKER` | Required Java/Android/native tooling is unavailable |
+| `DEGRADED_STATIC_ONLY` | Static review only; no Gradle/build/test claim |
+| `REAL_BUILD_FAILURE` | Bootstrap was ready and Gradle/app work failed |
+
+Required submodules include `media/`, nested FFmpeg, TagLib and utfcpp. The bootstrap may create the known empty `media/libraries/common_ktx/proguard-rules.txt` stub only when the pinned directory exists. Do not copy submodule files manually into ZIP/snapshot environments.
+
+### Jules and snapshot environments
+
+- In Jules, inspect `.jules/setup-status.env`; run `scripts/setup-jules-env.sh` if absent.
+- `FULL_BUILD_READY` permits exact Gradle validation.
+- `STATIC_REVIEW_ONLY` permits source/script review only.
+- ZIP/snapshot checkouts without `.git` cannot prove gitlink pins and cannot claim Gradle success.
+
+### Checkout policy
 
 Build/test jobs use `fetch-depth: 1`, `submodules: false`, then the repository bootstrap resolves current gitlinks. The scope job fetches only the comparison boundary. Release workflows retain full history and tags because versioning/tag/release logic requires them. Do not reintroduce recursive checkout ahead of repository mirror/pin policy.
-
-Classify bootstrap outcomes accurately: `READY`, `SNAPSHOT_LIMITATION`, `SUBMODULE_BLOCKER`, `DEPENDENCY_DIRTY_SUBMODULE`, `DEPENDENCY_MIRROR_USED`, `DEPENDENCY_PIN_MISMATCH`, `SDK_BLOCKER`, `DEGRADED_STATIC_ONLY`, `REAL_BUILD_FAILURE`.
-
-ZIP/snapshot environments without `.git` cannot prove gitlink pins. They may perform static review only.
 
 ## Gradle execution policy
 
@@ -180,9 +236,18 @@ All CI Gradle calls go through `scripts/ci-gradle.sh`.
 - Use `Gradle Optimisation Pilot (manual)` to collect configuration-cache reuse and parallelism evidence.
 - Do not enable either optimisation automatically until a current-head pilot proves the exact maintained task set and generated-source/report outputs are race-free.
 
+## CI audit methodology
+
+- Fetch complete job logs, not tails or bot summaries.
+- Identify the earliest root failure above Gradle stack traces and separate cascades.
+- Prove bootstrap status before classifying an app/build defect.
+- Record run, attempt, event, branch and exact SHA.
+- Do not repeatedly rerun unchanged deterministic failures.
+- Preserve failure reports and Gradle logs when a job can fail during long compilation or instrumentation.
+
 ## UI and startup validation
 
-Roborazzi supports only `topway_twmedia` and `topway_twmusic`; `topway_twmedia` is the default. Screenshots are 1280×720 and development-only.
+Roborazzi supports only `topway_twmedia` and `topway_twmusic`; `topway_twmedia` is the default. Screenshots are 1280×720 and development-only. Include playback controls, queue state and relevant LHD/RHD layout when touched.
 
 Startup benchmark/profile work supports only the two maintained flavours. API 29 macrobenchmarks are Android 10 evidence; API 35 is used for Baseline Profile generation. Exact TS18 timing still requires physical validation.
 
@@ -192,18 +257,35 @@ Startup benchmark/profile work supports only the two maintained flavours. API 29
 - Maintained install assets are the `com.tw.media` APK and optional `com.tw.music` Magisk module.
 - Never publish a raw `topwayTwMusic` APK release asset.
 - Never print secrets or commit keystores.
+- Keep decoded keystores only in runner temporary storage.
 - Stage and validate rebuilt assets before replacing existing release assets.
-- Preserve package, SDK, ABI, signing certificate and SHA-256 sidecars.
+- Preserve package, version, SDK, ABI, signing certificate and SHA-256 evidence sidecars.
+- Existing-release append mode must build from the immutable tag and verify tag/version consistency.
 - Root/Magisk does not grant platform identity; exact-package installation requires verified stock path, rollback media and boot-loop recovery.
 
 ## Large-scope delivery protocol
 
-- Large tasks are delivery contracts, not suggestion lists.
-- Implement real executable/runtime/workflow behaviour; docs/tests are supporting proof.
-- Continue through local implementation despite environment-limited Gradle proof.
-- A task is not complete while a core requested workstream remains locally fixable.
-- Keep final diffs free of temporary workflows, generated APKs, logs, credentials, benchmark outputs and stale stacked-branch references.
-- “Ready to merge” applies only after current-head checks and actionable review comments are resolved.
+1. Large tasks are delivery contracts, not suggestion lists.
+2. Implement real executable/runtime/workflow behaviour; docs/tests are supporting proof.
+3. Continue through local implementation despite environment-limited Gradle proof.
+4. Do not finish while a core requested workstream remains partial and locally implementable.
+5. Keep final diffs free of temporary workflows, generated APKs, logs, credentials, benchmark outputs and stale stacked-branch references.
+6. “Ready to merge” applies only after current-head checks and actionable review comments are resolved.
+
+Implementation status terms:
+
+- **Implemented** — runtime code or executable workflow is wired and usable.
+- **Implemented — requires TS18 validation** — implementation exists; exact hardware parity remains unproven.
+- **Partially implemented** — user-visible behaviour/call-site wiring is incomplete.
+- **Scaffold only** — models/docs/templates exist without runtime integration.
+- **Blocked** — a specific external dependency prevents completion.
+- **Deferred** — intentionally outside current scope, with reason.
+
+Ready states:
+
+- **Ready for Draft PR** — implementation is complete enough for review.
+- **Needs another agent pass** — a core locally fixable item remains.
+- **Ready to merge** — current-head checks and actionable review are closed.
 
 ## Exact-device and root storage context
 
@@ -213,4 +295,17 @@ Read before exact TS18 install/runtime work:
 - `docs/TS18_INSTALLATION_CONSTRAINTS.md`
 - `docs/evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md`
 
-DirectFS is the primary source path for fresh Topway-compatible installs; SAF and MediaStore remain explicit alternatives. Root storage is consent-gated, typed, read-only and bounded. `/mnt/media_rw/usbdiskN` is internal backing/discovery only; persist and play through app-readable `/storage/...` paths or app-UID-validated aliases. Root consent never authorises protected-package mutation, system writes, platform identity, MCU/CAN or vendor-service changes. Playback refreshes must preserve the current track and not interrupt autoplay.
+DirectFS is the primary source path for fresh Topway-compatible installs; SAF and MediaStore remain explicit alternatives. Root storage is consent-gated, typed, read-only and bounded. `/mnt/media_rw/usbdiskN` is internal backing/discovery only; persist and play through app-readable `/storage/...` paths or app-UID-validated aliases. A root directory snapshot does not prove TagLib, artwork or playback access.
+
+Do not block `BOOT_COMPLETED`, cache restore, MediaSession readiness or first audio on interactive `su`. Root storage operations must be fixed/typed, read-only, one snapshot per changed volume, bounded to short probes/operations and safely degraded. Root consent never authorises protected-package mutation, system writes, platform identity, MCU/CAN or vendor-service changes. Playback refreshes must preserve the current track and not interrupt autoplay. Album-art modes remain `off`, `as-is` and `optimised`.
+
+## Final response discipline
+
+Always report:
+
+- runtime/workflow areas actually implemented;
+- scaffold-only or partial areas;
+- exact validation commands and current SHA;
+- environment or physical-device boundaries;
+- whether the output is a review snapshot or complete;
+- why any remaining next scope is genuinely separate from current acceptance criteria.
