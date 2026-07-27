@@ -32,13 +32,33 @@ jobs:
               if line.startswith('      - name:'):
                   break
               body.append(line[10:] if line.startswith('          ') else line)
-          Path('/tmp/pr206-apply.sh').write_text('\n'.join(body) + '\n', encoding='utf-8')
+          script_text = '\n'.join(body) + '\n'
+          start = script_text.index('# Fresh installs return to the last known-good SAF default.')
+          end = script_text.index('# Make source configuration one durable operation')
+          script_text = script_text[:start] + script_text[end:]
+          Path('/tmp/pr206-apply.sh').write_text(script_text, encoding='utf-8')
           PY
 
       - name: Apply, format, and publish or preserve diagnostics
         shell: bash
         run: |
           set +e
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('app/src/main/java/org/oxycblt/auxio/music/locations/LocationMode.kt')
+          text = path.read_text(encoding='utf-8')
+          updated, count = re.subn(
+              r'        fun defaultForFlavor\(topwayCompat: Boolean\): LocationMode =\s*\n\s*if \(topwayCompat\) DIRECT_FS else SAF',
+              '        fun defaultForFlavor(\n            @Suppress("UNUSED_PARAMETER") topwayCompat: Boolean\n        ): LocationMode = SAF',
+              text,
+              count=1,
+          )
+          if count != 1 and '): LocationMode = SAF' not in text:
+              raise SystemExit(f'LocationMode default replacement count={count}')
+          path.write_text(updated if count else text, encoding='utf-8')
+          PY
           bash /tmp/pr206-apply.sh > /tmp/pr206-applicator.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
@@ -70,6 +90,7 @@ jobs:
           rm -f .github/workflows/tmp-restore-v607-library-loading.yml
           rm -f .github/pr206-applicator-trigger.txt
           rm -f .github/pr206-applicator-trigger-2.txt
+          rm -f .github/pr206-applicator-trigger-3.txt
           rm -f .github/pr206-applicator-failure.log
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
