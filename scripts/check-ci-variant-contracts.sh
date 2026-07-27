@@ -51,7 +51,7 @@ require_absent "$app_gradle" '        standard {' 'standard app flavour is retir
 require_contains "$benchmark_gradle" 'topwayTwMedia {' 'topwayTwMedia benchmark flavour exists'
 require_contains "$benchmark_gradle" 'topwayTwMusic {' 'topwayTwMusic benchmark flavour exists'
 require_absent "$benchmark_gradle" '        standard {' 'standard benchmark flavour is retired'
-require_absent "$benchmark_gradle" 'org.oxycblt.auxio' 'benchmark module has no retired standard target package'
+require_absent "$benchmark_gradle" '"org.oxycblt.auxio"' 'benchmark module has no retired standard target package'
 
 require_contains "$android_workflow" ':app:assembleTopwayTwMediaDebug' 'automatic build compiles primary Topway lane'
 require_contains "$android_workflow" ':app:assembleTopwayTwMusicDebug' 'automatic build compiles exact-package Topway lane'
