@@ -1,0 +1,79 @@
+name: PR206 library-loading applicator v3
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/restore-v607-library-loading'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/restore-v607-library-loading
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Extract proven source patch
+        shell: bash
+        run: |
+          git show 62d1e6bd8af2aa3b7f59359dddf1d4d7ec7cb0d7:.github/workflows/tmp-pr206-applicator.yml > /tmp/pr206-source.yml
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lines = Path('/tmp/pr206-source.yml').read_text(encoding='utf-8').splitlines()
+          step = next(i for i, line in enumerate(lines) if 'Apply source-loading restoration' in line)
+          run_line = next(i for i in range(step + 1, len(lines)) if lines[i].strip() == 'run: |')
+          body = []
+          for line in lines[run_line + 1:]:
+              if line.startswith('      - name:'):
+                  break
+              body.append(line[10:] if line.startswith('          ') else line)
+          Path('/tmp/pr206-apply.sh').write_text('\n'.join(body) + '\n', encoding='utf-8')
+          PY
+
+      - name: Apply source patch
+        shell: bash
+        run: |
+          set -o pipefail
+          bash /tmp/pr206-apply.sh 2>&1 | tee /tmp/pr206-patch.log
+
+      - name: Apply repository formatter
+        shell: bash
+        run: |
+          set -o pipefail
+          bash ./scripts/ci-gradle.sh spotlessApply 2>&1 | tee /tmp/pr206-format.log
+
+      - name: Publish implementation
+        shell: bash
+        run: |
+          rm -f .github/workflows/tmp-restore-v607-library-loading.yml
+          rm -f .github/pr206-applicator-trigger*.txt
+          rm -f .github/pr206-applicator-failure.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: restore reliable music source loading"
+          git push origin HEAD:fix/restore-v607-library-loading
+
+      - name: Preserve failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          cp /tmp/pr206-patch.log /tmp/pr206-combined.log 2>/dev/null || true
+          if [ -f /tmp/pr206-format.log ]; then
+            printf '\n=== FORMATTER ===\n' >> /tmp/pr206-combined.log
+            cat /tmp/pr206-format.log >> /tmp/pr206-combined.log
+          fi
+          git reset --hard HEAD
+          cp /tmp/pr206-combined.log .github/pr206-applicator-failure.log 2>/dev/null || printf '%s\n' 'PR206 v3 applicator failed before logging' > .github/pr206-applicator-failure.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/pr206-applicator-failure.log
+          git commit -m "chore: preserve PR206 v3 failure" || true
+          git push origin HEAD:fix/restore-v607-library-loading || true
