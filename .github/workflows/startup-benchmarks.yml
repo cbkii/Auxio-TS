@@ -9,11 +9,10 @@ on:
         description: Application flavour to benchmark
         required: true
         type: choice
-        default: standard
+        default: topwayTwMedia
         options:
-          - standard
-          - topwayTwMusic
           - topwayTwMedia
+          - topwayTwMusic
       fixture_song_count:
         description: Deterministic committed-library fixture size
         required: true
@@ -53,7 +52,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
           persist-credentials: false
 
@@ -67,10 +66,7 @@ jobs:
         shell: bash
         run: |
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [[ -z "${sdk_dir}" ]]; then
-            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not set" >&2
-            exit 1
-          fi
+          [[ -n "${sdk_dir}" ]] || { echo "ANDROID_HOME/ANDROID_SDK_ROOT is not set" >&2; exit 1; }
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
       - name: Set up Gradle
@@ -105,6 +101,7 @@ jobs:
             exit 1
           fi
           bash ./scripts/check-startup-performance-contracts.sh
+          bash ./scripts/check-ci-variant-contracts.sh
 
       - name: Resolve managed-device task and test class
         id: task
@@ -114,9 +111,8 @@ jobs:
           SUITE: ${{ inputs.suite }}
         run: |
           case "${FLAVOUR}" in
-            standard) flavour_token='Standard' ;;
-            topwayTwMusic) flavour_token='TopwayTwMusic' ;;
             topwayTwMedia) flavour_token='TopwayTwMedia' ;;
+            topwayTwMusic) flavour_token='TopwayTwMusic' ;;
             *) echo "Unsupported flavour: ${FLAVOUR}" >&2; exit 1 ;;
           esac
           case "${SUITE}" in
@@ -156,9 +152,7 @@ jobs:
             "-Pandroid.testInstrumentationRunnerArguments.auxio.iterations=${ITERATIONS}"
           )
           if [[ "${SUITE}" == "baseline-profile" ]]; then
-            gradle_args+=(
-              "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile"
-            )
+            gradle_args+=("-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile")
           fi
           bash ./scripts/ci-gradle.sh "${gradle_args[@]}"
           mkdir -p startup-benchmark/build/reports/startup-performance
@@ -169,7 +163,7 @@ jobs:
             echo "testClass=${TEST_CLASS}"
             echo "fixtureSongCount=${FIXTURE_SONG_COUNT}"
             echo "sourceCount=2"
-            echo "fixtureSchema=2"
+            echo "fixtureSchema=3"
             echo "fixtureSeed=18022026"
             echo "iterations=${ITERATIONS}"
             echo "warmups=AndroidX framework-managed; no separately configured warm-up iterations"
@@ -192,7 +186,7 @@ jobs:
           )
           if ((${#profiles[@]} < 2)); then
             echo "Expected generated baseline and startup profile files" >&2
-            find startup-benchmark/build/outputs -type f -maxdepth 8 -print >&2 || true
+            find startup-benchmark/build/outputs -maxdepth 8 -type f -print >&2 || true
             exit 1
           fi
           bash ./scripts/check-startup-performance-contracts.sh "${profiles[@]}"
