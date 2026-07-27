@@ -42,6 +42,25 @@ jobs:
           set -o pipefail
           bash /tmp/pr206-apply.sh 2>&1 | tee /tmp/pr206-patch.log
 
+      - name: Repair generated escape literal
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('musikr/src/main/java/org/oxycblt/musikr/fs/direct/DirectFS.kt')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          found = 0
+          for index, line in enumerate(lines):
+              if 'val clean = value.replace(' in line:
+                  indent = line[: len(line) - len(line.lstrip())]
+                  lines[index] = indent + r"val clean = value.replace('\\', '/').trim('/')"
+                  found += 1
+          if found != 1:
+              raise SystemExit(f'Expected one snapshot path normalizer, found {found}')
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
       - name: Apply Kotlin formatter
         shell: bash
         run: |
