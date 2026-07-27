@@ -25,6 +25,7 @@ import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -76,7 +77,7 @@ class MusicSourceConfigurationTest {
         assertEquals(1, settings.configuredSourceCount)
         assertEquals(before + 1L, settings.sourceConfigurationGeneration)
         assertFalse(settings.lastScanFailed)
-        assertTrue(settings.consumePendingInitialScan())
-        assertFalse(settings.consumePendingInitialScan())
+        assertEquals(before + 1L, settings.consumePendingInitialScan())
+        assertNull(settings.consumePendingInitialScan())
     }
 }

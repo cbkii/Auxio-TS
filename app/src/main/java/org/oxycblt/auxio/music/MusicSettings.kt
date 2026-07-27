@@ -87,8 +87,8 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
         return changed
     }
 
-    /** Consume a durable first-scan marker after the indexing worker is attached. */
-    fun consumePendingInitialScan(): Boolean = false
+    /** Atomically consume a first-scan marker and return its source generation. */
+    fun consumePendingInitialScan(): Long? = null
 
     /** Resource priority used for the next immutable Musikr scan pipeline. */
     val scanPriority: ScanPriority
@@ -412,10 +412,11 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     }
 
     @Synchronized
-    override fun consumePendingInitialScan(): Boolean {
-        if (!sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) return false
+    override fun consumePendingInitialScan(): Long? {
+        if (!sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) return null
+        val generation = sourceConfigurationGeneration
         sharedPreferences.edit(commit = true) { putBoolean(KEY_PENDING_INITIAL_SCAN, false) }
-        return true
+        return generation
     }
 
     override fun forceLocationUpdate() {

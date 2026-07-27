@@ -21,6 +21,7 @@ package org.oxycblt.musikr.fs.path
 import android.content.Context
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
+import java.io.File
 import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.Volume
 
@@ -48,7 +49,11 @@ internal interface VolumeManager {
 
 private class VolumeManagerImpl(private val storageManager: StorageManager) : VolumeManager {
     override fun getInternalVolume(): Volume.Internal =
-        InternalVolumeImpl(storageManager.primaryStorageVolume)
+        try {
+            InternalVolumeImpl(storageManager.primaryStorageVolume)
+        } catch (_: RuntimeException) {
+            FallbackInternalVolume
+        }
 
     override fun getVolumes() =
         storageManager.storageVolumesCompat.map {
@@ -90,5 +95,21 @@ private class VolumeManagerImpl(private val storageManager: StorageManager) : Vo
             return storageVolume.stateCompat == android.os.Environment.MEDIA_MOUNTED ||
                 storageVolume.stateCompat == android.os.Environment.MEDIA_MOUNTED_READ_ONLY
         }
+    }
+
+    private object FallbackInternalVolume : Volume.Internal {
+        private val root = File("/storage/emulated/0")
+
+        override val mediaStoreName = "external_primary"
+        override val components = Components.parseUnix(root.absolutePath)
+
+        override fun resolveName(context: Context) = root.absolutePath
+
+        override fun isAccessible(): Boolean =
+            try {
+                root.exists() && root.isDirectory && root.canRead()
+            } catch (_: RuntimeException) {
+                false
+            }
     }
 }

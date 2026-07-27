@@ -598,9 +598,6 @@ constructor(
                             legacyWriteOnly = ::WriteOnlyMutableCache,
                         )
                     } catch (e: CancellationException) {
-                        withContext(NonCancellable) {
-                            emitIndexingCompletion(Exception("Music-source preflight cancelled", e))
-                        }
                         throw e
                     } catch (e: Exception) {
                         musicSettings.lastScanFailed = true
@@ -698,7 +695,6 @@ constructor(
                     }
                 }
 
-                musicSettings.revision = newRevision
                 val publishedLibrary =
                     if (result.failedSources.isEmpty() || result.library.songs.isNotEmpty()) {
                         if (result.failedSources.isNotEmpty()) {
@@ -711,6 +707,7 @@ constructor(
                     } else {
                         throw SourceScanFailureException(result.failedSources)
                     }
+                musicSettings.revision = newRevision
                 emitLibrary(publishedLibrary)
                 try {
                     result.cleanup()
@@ -994,11 +991,7 @@ constructor(
                     )
                 MediaStore.from(context, query)
             }
-            LocationMode.DIRECT_FS ->
-                DirectFS(
-                    musicSettings.safQuery.source,
-                    rootGate.takeIf { musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND },
-                )
+            LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source)
         }
 
     private fun sourceConfigurationRevision(): Long {

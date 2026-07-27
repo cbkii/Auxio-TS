@@ -29,13 +29,11 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
-import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.ObservationMode
-import org.oxycblt.auxio.music.RootAccessPolicy
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
@@ -56,7 +54,6 @@ private constructor(
     private val playbackManager: PlaybackStateManager,
     private val musicRepository: MusicRepository,
     private val musicSettings: MusicSettings,
-    private val rootGate: RootStateHolder,
 ) :
     MusicRepository.IndexingWorker,
     MusicRepository.IndexingListener,
@@ -69,17 +66,9 @@ private constructor(
         private val playbackManager: PlaybackStateManager,
         private val musicRepository: MusicRepository,
         private val musicSettings: MusicSettings,
-        private val rootGate: RootStateHolder,
     ) {
         fun create(context: Context, listener: ForegroundListener) =
-            IndexingHolder(
-                context,
-                listener,
-                playbackManager,
-                musicRepository,
-                musicSettings,
-                rootGate,
-            )
+            IndexingHolder(context, listener, playbackManager, musicRepository, musicSettings)
     }
 
     private val indexJob = Job()
@@ -185,13 +174,17 @@ private constructor(
                         // wait
                         // for su, source traversal, or a library scan.
                         musicRepository.startup(this@IndexingHolder)
-                        val pendingInitialScan = musicSettings.consumePendingInitialScan()
-                        if (pendingInitialScan) {
+                        val pendingInitialScanGeneration =
                             synchronized(this@IndexingHolder) {
-                                lastHandledSourceConfigurationGeneration =
-                                    musicSettings.sourceConfigurationGeneration
+                                musicSettings.consumePendingInitialScan()?.also { generation ->
+                                    lastHandledSourceConfigurationGeneration = generation
+                                }
                             }
-                            L.i("Consuming durable source configuration with a simple initial scan")
+                        if (pendingInitialScanGeneration != null) {
+                            L.i(
+                                "Consuming durable source configuration with a simple initial scan " +
+                                    "[generation=$pendingInitialScanGeneration]"
+                            )
                             requestIndex(false)
                         } else if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
                             requestVisibleRecoveryScan(sourceAuthority)
@@ -379,13 +372,7 @@ private constructor(
                 LocationMode.MEDIA_STORE ->
                     MediaStore.from(workerContext, musicSettings.mediaStoreQuery)
                 LocationMode.SAF -> SAF.from(workerContext, musicSettings.safQuery)
-                LocationMode.DIRECT_FS ->
-                    DirectFS(
-                        musicSettings.safQuery.source,
-                        rootGate.takeIf {
-                            musicSettings.rootAccessPolicy == RootAccessPolicy.ON_DEMAND
-                        },
-                    )
+                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source)
             }
         trackingJob =
             indexScope.launch {
@@ -436,14 +423,16 @@ private constructor(
 
     override fun onMusicLocationsChanged() {
         super.onMusicLocationsChanged()
-        val generation = musicSettings.sourceConfigurationGeneration
-        val shouldHandle =
+        val (generation, initialScan, shouldHandle) =
             synchronized(this) {
-                if (generation == lastHandledSourceConfigurationGeneration) {
-                    false
+                val pendingGeneration = musicSettings.consumePendingInitialScan()
+                val currentGeneration =
+                    pendingGeneration ?: musicSettings.sourceConfigurationGeneration
+                if (currentGeneration == lastHandledSourceConfigurationGeneration) {
+                    Triple(currentGeneration, pendingGeneration != null, false)
                 } else {
-                    lastHandledSourceConfigurationGeneration = generation
-                    true
+                    lastHandledSourceConfigurationGeneration = currentGeneration
+                    Triple(currentGeneration, pendingGeneration != null, true)
                 }
             }
         if (!shouldHandle) {
@@ -451,7 +440,6 @@ private constructor(
             return
         }
         if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
-        val initialScan = musicSettings.consumePendingInitialScan()
         indexScope.launch {
             musicRepository.invalidateSource()
             musicRepository.requestIndex(withCache = !initialScan)

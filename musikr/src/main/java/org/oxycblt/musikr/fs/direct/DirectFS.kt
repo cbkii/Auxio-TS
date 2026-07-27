@@ -46,19 +46,14 @@ import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.Path
-import org.oxycblt.musikr.fs.RootGate
-import org.oxycblt.musikr.fs.RootTreeSnapshot
 import org.oxycblt.musikr.fs.SourceAwareFS
 import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.SourceSnapshot
 import org.oxycblt.musikr.util.tryAsyncWith
 
-class DirectFS(private val roots: List<Location.Opened>, private val rootGate: RootGate? = null) :
-    SourceAwareFS {
+class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
     private val sourceFailures = ConcurrentHashMap<String, String>()
-    private val rootSnapshotChecked = ConcurrentHashMap.newKeySet<String>()
-    private val rootSnapshotEntries = ConcurrentHashMap<String, Map<String, List<DirectEntry>>>()
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         kotlinx.coroutines.withContext(Dispatchers.IO) {
@@ -95,7 +90,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
-        DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys }, rootGate)
+        DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys })
 
     override fun drainSourceFailures(): Map<String, String> =
         sourceFailures.toMap().also { sourceFailures.clear() }
@@ -175,9 +170,7 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         discoveredDirectories: AtomicInteger,
     ) {
         if (task.depth > MAX_DEPTH) {
-            val detail = "DirectFS maximum depth exceeded at ${task.directory.path}"
-            if (task.configuredRootTask) recordFailure(task.sourceKey, detail)
-            else Log.w(TAG, detail)
+            Log.w(TAG, "DirectFS maximum depth exceeded at ${task.directory.path}")
             return
         }
         if (!isWithinCanonicalRoot(task.directory, task.canonicalRoot)) {
@@ -268,7 +261,10 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         while (true) {
             val current = discoveredDirectories.get()
             if (current >= MAX_VISITED_DIRECTORIES) {
-                Log.w(TAG, "DirectFS directory limit reached at ${task.directory.path}")
+                recordFailure(
+                    task.sourceKey,
+                    "DirectFS directory limit reached at ${task.directory.path}",
+                )
                 return EnqueueResult.LimitExceeded
             }
             if (discoveredDirectories.compareAndSet(current, current + 1)) break
@@ -338,91 +334,9 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
             }
         }
 
-        val canonicalRoot = configuredRootFor(directory)
-        val canonicalDirectory = canonicalFileOrNull(directory)
-        if (canonicalRoot != null && canonicalDirectory != null && rootGate != null) {
-            val requestedRoot = configuredRequestedRootFor(canonicalRoot)
-            val key = canonicalRoot.absolutePath
-            if (rootSnapshotChecked.add(key)) {
-                rootGate
-                    .snapshotTreeSync(
-                        requestedRoot.absolutePath,
-                        MAX_DEPTH,
-                        ROOT_SNAPSHOT_TIMEOUT_MS,
-                    )
-                    ?.let { snapshot ->
-                        rootSnapshotEntries[key] = indexRootSnapshot(requestedRoot, snapshot)
-                    }
-            }
-            rootSnapshotEntries[key]?.let { index ->
-                val relative = relativePathWithin(canonicalDirectory, canonicalRoot)
-                if (relative != null && index.containsKey(relative)) {
-                    Log.d(TAG, "Using bounded root snapshot for ${directory.path}")
-                    return index.getValue(relative)
-                }
-            }
-        }
         Log.w(TAG, "DirectFS source is unavailable or inaccessible: ${directory.path}")
         return null
     }
-
-    private fun indexRootSnapshot(
-        requestedRoot: JavaFile,
-        snapshot: RootTreeSnapshot,
-    ): Map<String, List<DirectEntry>> {
-        val children = linkedMapOf<String, MutableList<DirectEntry>>()
-        children.getOrPut("") { mutableListOf() }
-        for (entry in snapshot.entries) {
-            val relative = normalizeSnapshotRelativePath(entry.relativePath) ?: continue
-            val parent = relative.substringBeforeLast('/', "")
-            val name = relative.substringAfterLast('/')
-            children.getOrPut(parent) { mutableListOf() } +=
-                DirectEntry(
-                    javaFile = JavaFile(requestedRoot, relative),
-                    name = name,
-                    isDirectory = entry.isDirectory,
-                    isSymlink = entry.isSymlink,
-                    modifiedMs = entry.modifiedMs,
-                    size = entry.size,
-                )
-            if (entry.isDirectory) children.getOrPut(relative) { mutableListOf() }
-        }
-        return children.mapValues { (_, entries) ->
-            entries.sortedBy { it.name.lowercase(Locale.ROOT) }
-        }
-    }
-
-    private fun normalizeSnapshotRelativePath(value: String): String? {
-        val clean = value.replace('\\', '/').trim('/')
-        if (clean.isBlank()) return null
-        val segments = clean.split('/')
-        if (segments.any { it.isBlank() || it == "." || it == ".." }) return null
-        return segments.joinToString("/")
-    }
-
-    private fun relativePathWithin(directory: JavaFile, configuredRoot: JavaFile): String? {
-        val rootPath = configuredRoot.absolutePath.trimEnd('/')
-        val directoryPath = directory.absolutePath.trimEnd('/')
-        return when {
-            directoryPath == rootPath -> ""
-            directoryPath.startsWith("$rootPath/") -> directoryPath.removePrefix("$rootPath/")
-            else -> null
-        }
-    }
-
-    private fun configuredRequestedRootFor(canonicalRoot: JavaFile): JavaFile =
-        roots
-            .asSequence()
-            .mapNotNull { it.uri.path?.let(::JavaFile) }
-            .firstOrNull { canonicalFileOrNull(it) == canonicalRoot } ?: canonicalRoot
-
-    private fun configuredRootFor(directory: JavaFile): JavaFile? =
-        roots
-            .asSequence()
-            .mapNotNull { it.uri.path?.let(::JavaFile) }
-            .mapNotNull(::canonicalFileOrNull)
-            .filter { root -> isWithinCanonicalRoot(directory, root) }
-            .maxByOrNull { it.absolutePath.length }
 
     private data class RootSnapshot(
         val location: Location.Opened,
@@ -468,7 +382,6 @@ class DirectFS(private val roots: List<Location.Opened>, private val rootGate: R
         internal const val MAX_PENDING_DIRECTORIES = 512
         internal const val MAX_VISITED_DIRECTORIES = 100_000
         private const val QUEUE_POLL_INTERVAL_MS = 100L
-        private const val ROOT_SNAPSHOT_TIMEOUT_MS = 15_000L
 
         private val protectedRoots =
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
