@@ -1,0 +1,52 @@
+name: PR206 library-loading applicator
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/restore-v607-library-loading'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/restore-v607-library-loading
+          fetch-depth: 0
+
+      - name: Extract and run staged applicator
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/tmp-restore-v607-library-loading.yml')
+          lines = workflow.read_text(encoding='utf-8').splitlines()
+          step = next(i for i, line in enumerate(lines) if 'Apply focused source-loading restoration' in line)
+          run_line = next(i for i in range(step + 1, len(lines)) if lines[i].strip() == 'run: |')
+          body = []
+          for line in lines[run_line + 1:]:
+              if line.startswith('      - name:'):
+                  break
+              body.append(line[10:] if line.startswith('          ') else line)
+          script = Path('/tmp/pr206-apply.sh')
+          script.write_text('\n'.join(body) + '\n', encoding='utf-8')
+          PY
+          bash /tmp/pr206-apply.sh
+
+      - name: Format and publish implementation
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew spotlessApply --no-daemon
+          rm -f .github/workflows/tmp-restore-v607-library-loading.yml
+          rm -f .github/pr206-applicator-trigger.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: restore reliable music source loading"
+          git push origin HEAD:fix/restore-v607-library-loading
