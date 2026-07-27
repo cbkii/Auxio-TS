@@ -5,6 +5,14 @@ Status: **Requires device validation**. Repository, JVM and managed-emulator res
 - **Evidence confidence:** Requires TS18 validation.
 - **Porting decision:** Reusable validation procedure; runtime results apply only to the recorded exact build, APK, source layout and power state.
 
+## Required exact-device context
+
+This procedure assumes the operator has read and is applying:
+
+- [`CODEX_TS18_DEVICE_CONTEXT.md`](../CODEX_TS18_DEVICE_CONTEXT.md)
+- [`TS18_INSTALLATION_CONSTRAINTS.md`](../TS18_INSTALLATION_CONSTRAINTS.md)
+- [the canonical `s9863a1h10` Android 10 device profile](../evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md)
+
 ## Exact target identity
 
 - Product/build identity: `s9863a1h10_Natv`

@@ -116,8 +116,8 @@ class ExoPlaybackStateHolder(
     private val saveScope = CoroutineScope(Dispatchers.IO + saveJob)
     private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
     private var currentSaveJob: Job? = null
-    private var currentRestoreJob: Job? = null
-    private var restoreGeneration = 0L
+    @Volatile private var currentRestoreJob: Job? = null
+    @Volatile private var restoreGeneration = 0L
     private val restoreIntentArbiter = RestoreIntentArbiter()
     private var openAudioEffectSession = false
     private val audioManager = context.getSystemService(AudioManager::class.java)
@@ -381,6 +381,7 @@ class ExoPlaybackStateHolder(
             L.d("Coalescing saved-state restore into the active restore generation")
             return
         }
+        currentRestoreJob?.cancel()
         optionalWorkGate.onRestoreStarted()
         playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
         val generation = ++restoreGeneration
@@ -390,7 +391,7 @@ class ExoPlaybackStateHolder(
                 val descriptor = persistenceRepository.readQueueDescriptor()
                 Ts18FirstAudioLatency.mark("queue_descriptor_read_end")
                 if (descriptor == null) {
-                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+                    if (!publishQueueReadyIfCurrent(generation)) return@launch
                     startRawFallback(generation)
                     return@launch
                 }
@@ -417,9 +418,7 @@ class ExoPlaybackStateHolder(
                     }
                     val playableWindow = window?.contiguousPlayableWindow()
                     if (playableWindow == null || current?.hasPlayableReference != true) {
-                        startupReadinessController.publishCapability(
-                            StartupReadinessState.QueueReady
-                        )
+                        if (!publishQueueReadyIfCurrent(generation)) return@launch
                         startRawFallback(generation)
                         return@launch
                     }
@@ -455,9 +454,7 @@ class ExoPlaybackStateHolder(
                                 play = shouldPlayImmediately(finalIntent.play),
                             )
                             Ts18FirstAudioLatency.mark("primitive_window_attached")
-                            startupReadinessController.publishCapability(
-                                StartupReadinessState.QueueReady
-                            )
+                            if (!publishQueueReadyIfCurrent(generation)) return@withContext true
                             completeRestore(
                                 generation,
                                 RestoreOutcome.RESTORED_EXISTING_SESSION,
@@ -471,14 +468,19 @@ class ExoPlaybackStateHolder(
                 throw e
             } catch (e: Exception) {
                 L.w(e, "Unable to restore primitive playback queue")
-                startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
-                if (generation == restoreGeneration) {
+                if (publishQueueReadyIfCurrent(generation)) {
                     startRawFallback(generation)
                 }
             } finally {
                 if (generation == restoreGeneration) currentRestoreJob = null
             }
         }
+    }
+
+    private fun publishQueueReadyIfCurrent(generation: Long): Boolean {
+        if (generation != restoreGeneration) return false
+        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+        return true
     }
 
     private suspend fun startRawFallback(generation: Long) {

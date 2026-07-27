@@ -708,8 +708,12 @@ constructor(
                     isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     availableProcessors = Runtime.getRuntime().availableProcessors(),
                 )
+            val requestedSourceKeys = request.sourceKeys?.takeIf { it.isNotEmpty() }
+            val allConfiguredSourceKeys =
+                musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
+            val attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
             val rawFs =
-                createFileSystem(sourceKeys = request.sourceKeys.takeIf { !request.withCache })
+                createFileSystem(sourceKeys = requestedSourceKeys.takeIf { !request.withCache })
             val prepared =
                 if (!request.withCache) {
                     L.i("Using simple source-authoritative scan; incremental preflight bypassed")
@@ -726,6 +730,7 @@ constructor(
                             withCache = true,
                             profile = resolvedProfile,
                             configurationRevision = sourceConfigurationRevision(),
+                            targetSourceKeys = requestedSourceKeys,
                             legacyWriteOnly = ::WriteOnlyMutableCache,
                         )
                     } catch (e: CancellationException) {
@@ -738,11 +743,7 @@ constructor(
                             )
                         }
                         lastSourceScanOutcome =
-                            SourceScanOutcome.TemporarilyUnavailable(
-                                musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) {
-                                    it.sourceKey
-                                }
-                            )
+                            SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys)
                         musicSettings.lastScanFailed = true
                         emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
                         L.w(
@@ -846,13 +847,16 @@ constructor(
                         )
                         .run(::emitIndexingProgress)
                 L.d("Index finished in ${System.currentTimeMillis() - start}ms")
-                val allConfiguredSourceKeys =
-                    musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
-                val attemptedSourceKeys = request.sourceKeys ?: allConfiguredSourceKeys
+                val scopedFailures =
+                    if (requestedSourceKeys == null) {
+                        result.failedSources
+                    } else {
+                        result.failedSources.filterKeys { it in attemptedSourceKeys }
+                    }
                 val sourceOutcome =
                     SourceScanOutcome.classify(
                         configuredSourceKeys = attemptedSourceKeys,
-                        failedSources = result.failedSources,
+                        failedSources = scopedFailures,
                         songCount = result.library.songs.size,
                     )
                 lastSourceScanOutcome = sourceOutcome
@@ -871,11 +875,11 @@ constructor(
                 }
 
                 val publishedLibrary =
-                    if (result.failedSources.isEmpty() || result.library.songs.isNotEmpty()) {
-                        if (result.failedSources.isNotEmpty()) {
+                    if (scopedFailures.isEmpty() || result.library.songs.isNotEmpty()) {
+                        if (scopedFailures.isNotEmpty()) {
                             L.w(
                                 "Publishing readable partial library; source warnings: " +
-                                    result.failedSources.keys
+                                    scopedFailures.keys
                             )
                         }
                         result.library
@@ -891,9 +895,7 @@ constructor(
                                 }
                                 emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
                                 musicSettings.lastScanFailed = true
-                                emitIndexingCompletion(
-                                    SourceScanFailureException(result.failedSources)
-                                )
+                                emitIndexingCompletion(SourceScanFailureException(scopedFailures))
                                 return@traceSuspend
                             }
                             is SourceScanOutcome.Partial,
@@ -911,12 +913,10 @@ constructor(
                                 }
                                 musicSettings.lastScanFailed = true
                                 emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
-                                emitIndexingCompletion(
-                                    SourceScanFailureException(result.failedSources)
-                                )
+                                emitIndexingCompletion(SourceScanFailureException(scopedFailures))
                                 return@traceSuspend
                             }
-                            else -> throw SourceScanFailureException(result.failedSources)
+                            else -> throw SourceScanFailureException(scopedFailures)
                         }
                     }
                 musicSettings.revision = newRevision

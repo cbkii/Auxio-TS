@@ -84,6 +84,49 @@ class IncrementalIndexPlannerTest {
     }
 
     @Test
+    fun scopedCachedRequestPlansAllSourcesButEnumeratesOnlyTheTarget() = runBlocking {
+        val sourceA =
+            SourceSnapshot(
+                sourceKey = "direct:a",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk0",
+                rootPath = "/storage/usbdisk0",
+                available = true,
+                fingerprint = "a",
+                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+            )
+        val sourceB =
+            SourceSnapshot(
+                sourceKey = "direct:b",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk1",
+                rootPath = "/storage/usbdisk1",
+                available = true,
+                fingerprint = "b",
+                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+            )
+        val original = FakeSourceAwareFs(snapshots = listOf(sourceA, sourceB))
+        val cache = FakeIncrementalCache()
+
+        val prepared =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = true,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 1L,
+                targetSourceKeys = setOf(sourceA.sourceKey),
+                legacyWriteOnly = { it },
+            )
+
+        assertEquals(setOf(sourceA.sourceKey, sourceB.sourceKey), cache.plannedSnapshotKeys)
+        assertEquals(setOf(sourceA.sourceKey), original.selectedSourceKeys)
+        assertEquals(setOf(sourceA.sourceKey), prepared.plan?.scanSourceKeys)
+        assertEquals(setOf(sourceB.sourceKey), prepared.plan?.reuseSourceKeys)
+        assertTrue(prepared.plan?.unavailableSourceKeys.orEmpty().isEmpty())
+    }
+
+    @Test
     fun brokenPreflightFailsWithoutBypassingIncrementalAccounting() = runBlocking {
         val original = FakeSourceAwareFs(preflightFailure = IllegalStateException("OEM probe"))
         val cache = FakeIncrementalCache()
@@ -158,6 +201,9 @@ class IncrementalIndexPlannerTest {
 
     private class FakeIncrementalCache : MutableCache, IncrementalCache {
         var plannedSnapshots: List<SourceSnapshot>? = null
+        val plannedSnapshotKeys: Set<String>?
+            get() = plannedSnapshots?.mapTo(linkedSetOf()) { it.sourceKey }
+
         private var active: IncrementalScanPlan? = null
 
         override suspend fun planScan(
