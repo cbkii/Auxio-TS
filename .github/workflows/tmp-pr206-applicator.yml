@@ -36,6 +36,10 @@ jobs:
           start = script_text.index('# Fresh installs return to the last known-good SAF default.')
           end = script_text.index('# Make source configuration one durable operation')
           script_text = script_text[:start] + script_text[end:]
+          script_text = script_text.replace(
+              'raise SystemExit(f"{path}: expected one exact match, found {count}")',
+              'raise SystemExit(f"{path}: expected one exact match, found {count}; old={old[:240]!r}")',
+          )
           Path('/tmp/pr206-apply.sh').write_text(script_text, encoding='utf-8')
           PY
 
@@ -91,6 +95,7 @@ jobs:
           rm -f .github/pr206-applicator-trigger.txt
           rm -f .github/pr206-applicator-trigger-2.txt
           rm -f .github/pr206-applicator-trigger-3.txt
+          rm -f .github/pr206-applicator-trigger-4.txt
           rm -f .github/pr206-applicator-failure.log
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
