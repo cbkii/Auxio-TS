@@ -91,6 +91,13 @@ jobs:
             printf 'selected_summary=%s\n' "$(IFS=', '; echo "${selected[*]}")"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Validate current release workflow contracts
+        shell: bash
+        run: |
+          bash ./scripts/check-manual-release-workflow.sh
+          bash ./scripts/check-ci-variant-contracts.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
+
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
@@ -127,10 +134,16 @@ jobs:
           input_tag="$(printf '%s' "${INPUT_TAG}" | xargs)"
           current_name="$(sed -n -E 's/^[[:space:]]*versionName "([^"]+)".*/\1/p' app/build.gradle | head -n1)"
           current_code="$(sed -n -E 's/^[[:space:]]*versionCode ([0-9]+).*/\1/p' app/build.gradle | head -n1)"
-          [[ -n "${current_name}" && -n "${current_code}" ]] || { echo "::error::Cannot read app version metadata."; exit 1; }
+          [[ -n "${current_name}" && -n "${current_code}" ]] || {
+            echo "::error::Cannot read current app version metadata."
+            exit 1
+          }
           previous_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
           if [[ -n "${input_tag}" ]]; then
-            [[ "${input_tag}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Invalid version tag: ${input_tag}"; exit 1; }
+            [[ "${input_tag}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "::error::Invalid version tag: ${input_tag}"
+              exit 1
+            }
             [[ "${input_tag}" == v* ]] && release_tag="${input_tag}" || release_tag="v${input_tag}"
           else
             base="${previous_tag#v}"
@@ -138,6 +151,7 @@ jobs:
             IFS=. read -r major minor patch <<< "${base}"
             release_tag="v${major}.${minor}.$((patch + 1))"
           fi
+
           tag_exists=false
           release_exists=false
           git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null && tag_exists=true
@@ -146,16 +160,29 @@ jobs:
             echo "::error::Auto-computed tag ${release_tag} already exists."
             exit 1
           fi
-          [[ "${tag_exists}" == "${release_exists}" ]] || { echo "::error::Release/tag state is inconsistent for ${release_tag}."; exit 1; }
+          [[ "${tag_exists}" == "${release_exists}" ]] || {
+            echo "::error::Release/tag state is inconsistent for ${release_tag}."
+            exit 1
+          }
+
           if [[ "${release_exists}" == true ]]; then
             tag_sha="$(git rev-list -n1 "${release_tag}")"
-            release_name="${release_tag#v}"
+            release_name="$(git show "${release_tag}:app/build.gradle" | sed -n -E 's/^[[:space:]]*versionName "([^"]+)".*/\1/p' | head -n1)"
             release_code="$(git show "${release_tag}:app/build.gradle" | sed -n -E 's/^[[:space:]]*versionCode ([0-9]+).*/\1/p' | head -n1)"
+            [[ -n "${tag_sha}" && -n "${release_name}" && -n "${release_code}" ]] || {
+              echo "::error::Cannot read immutable version metadata from existing tag ${release_tag}."
+              exit 1
+            }
+            [[ "v${release_name}" == "${release_tag}" ]] || {
+              echo "::error::Existing tag ${release_tag} does not match its app versionName ${release_name}."
+              exit 1
+            }
           else
             tag_sha=''
             release_name="${release_tag#v}"
             release_code="$((current_code + 1))"
           fi
+
           asset_names=()
           while IFS= read -r variant; do
             case "${variant}" in
@@ -195,7 +222,7 @@ jobs:
             fi
           done <<< "${ASSET_NAMES}"
 
-      - name: Preserve Magisk packager
+      - name: Preserve current Magisk packager
         id: tooling
         shell: bash
         run: |
@@ -209,7 +236,13 @@ jobs:
         shell: bash
         env:
           TAG_SHA: ${{ steps.version.outputs.tag_commit_sha }}
-        run: git checkout --detach "${TAG_SHA}"
+        run: |
+          set -euo pipefail
+          git checkout --detach "${TAG_SHA}"
+          [[ "$(git rev-parse HEAD)" == "${TAG_SHA}" ]] || {
+            echo "::error::Existing release checkout does not match the resolved tag commit."
+            exit 1
+          }
 
       - name: Prepare CI environment
         shell: bash
@@ -226,7 +259,10 @@ jobs:
         run: |
           set -euo pipefail
           for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
-            [[ -n "${!name:-}" ]] || { echo "::error::Missing signing secret ${name}."; exit 1; }
+            [[ -n "${!name:-}" ]] || {
+              echo "::error::Missing signing secret ${name}."
+              exit 1
+            }
           done
           echo "::add-mask::${KEYSTORE_PASSWORD}"
           echo "::add-mask::${KEY_ALIAS}"
@@ -273,19 +309,24 @@ jobs:
           tools="$(find "${sdk_root}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
           apksigner="${tools}/apksigner"
           aapt="${tools}/aapt"
+          [[ -x "${apksigner}" && -x "${aapt}" ]] || {
+            echo "::error::Required Android build tools are unavailable under ${tools}."
+            exit 1
+          }
           artifact_dir="${RUNNER_TEMP}/selected-release-assets"
           mkdir -p "${artifact_dir}"
-          tasks=()
-          grep -Fxq topway_twmedia <<< "${SELECTED_VARIANTS}" && tasks+=(:app:assembleTopwayTwMediaRelease)
-          grep -Fxq topway_twmusic_magisk <<< "${SELECTED_VARIANTS}" && tasks+=(:app:assembleTopwayTwMusicRelease)
-          bash ./scripts/ci-gradle.sh "${tasks[@]}"
 
           find_apk() {
             local dir=$1
+            local found=()
             mapfile -t found < <(find "${dir}" -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' | sort)
-            ((${#found[@]} == 1)) || { echo "::error::Expected one signed APK in ${dir}, found ${#found[@]}."; exit 1; }
+            ((${#found[@]} == 1)) || {
+              echo "::error::Expected one signed APK in ${dir}, found ${#found[@]}."
+              exit 1
+            }
             printf '%s\n' "${found[0]}"
           }
+
           write_sidecars() {
             local asset=$1 name=$2 apk=$3 kind=$4
             local digest metadata badging
@@ -313,6 +354,7 @@ jobs:
             [[ -n "${variant}" ]] || continue
             case "${variant}" in
               topway_twmedia)
+                bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
                 apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/release)"
                 asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-release.apk"
                 asset_path="${artifact_dir}/${asset_name}"
@@ -320,18 +362,36 @@ jobs:
                 asset_kind=signed-apk
                 ;;
               topway_twmusic_magisk)
+                bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicRelease
                 apk_path="$(find_apk app/build/outputs/apk/topwayTwMusic/release)"
                 asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmusic-magisk.zip"
                 asset_path="${artifact_dir}/${asset_name}"
-                bash "${PACKAGER}" --apk "${apk_path}" --output "${asset_path}" --version "${VERSION_NAME}" --version-code "${VERSION_CODE}"
+                bash "${PACKAGER}" \
+                  --apk "${apk_path}" \
+                  --output "${asset_path}" \
+                  --version "${VERSION_NAME}" \
+                  --version-code "${VERSION_CODE}"
                 unzip -t "${asset_path}"
                 asset_kind=magisk-systemless-overlay
                 ;;
+              *)
+                echo "::error::Unknown selected variant during build: ${variant}"
+                exit 1
+                ;;
             esac
+
             "${apksigner}" verify --verbose "${apk_path}"
-            bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"
+            if [[ -f scripts/check-startup-performance-contracts.sh ]]; then
+              bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"
+            else
+              echo "::warning::Historical tag lacks startup profile contract script; package/profile metadata remains recorded in sidecars."
+            fi
             write_sidecars "${asset_path}" "${asset_name}" "${apk_path}" "${asset_kind}"
-            asset_paths+=("${asset_path}" "${artifact_dir}/${asset_name}.sha256" "${artifact_dir}/${asset_name}.metadata.txt")
+            asset_paths+=(
+              "${asset_path}"
+              "${artifact_dir}/${asset_name}.sha256"
+              "${artifact_dir}/${asset_name}.metadata.txt"
+            )
             asset_names+=("${asset_name}" "${asset_name}.sha256" "${asset_name}.metadata.txt")
           done <<< "${SELECTED_VARIANTS}"
           {
@@ -340,7 +400,8 @@ jobs:
             echo "artifact_dir=${artifact_dir}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Validate maintained release contracts
+      - name: Validate new-release source contracts
+        if: steps.version.outputs.existing_release != 'true'
         shell: bash
         env:
           SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
@@ -370,7 +431,10 @@ jobs:
           set -euo pipefail
           gh auth setup-git
           git fetch origin dev
-          [[ "$(git rev-parse "${RELEASE_SHA}^")" == "$(git rev-parse origin/dev)" ]] || { echo "::error::Remote dev moved while building."; exit 1; }
+          [[ "$(git rev-parse "${RELEASE_SHA}^")" == "$(git rev-parse origin/dev)" ]] || {
+            echo "::error::Remote dev moved while building. Re-run from the latest dev."
+            exit 1
+          }
           git push origin "${RELEASE_SHA}:refs/heads/dev"
           git tag "${RELEASE_TAG}" "${RELEASE_SHA}"
           git push origin "refs/tags/${RELEASE_TAG}"
@@ -394,12 +458,17 @@ jobs:
           mapfile -t paths <<< "${ASSET_PATHS}"
           mapfile -t names <<< "${ASSET_NAMES}"
           upload=()
-          for i in "${!paths[@]}"; do upload+=("${paths[$i]}#${names[$i]}"); done
+          for i in "${!paths[@]}"; do
+            upload+=("${paths[$i]}#${names[$i]}")
+          done
+
           if [[ "${EXISTING_RELEASE}" == true ]]; then
             if [[ "${REPLACE}" == true ]]; then
               existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
               for name in "${names[@]}"; do
-                grep -Fxq -- "${name}" <<< "${existing}" && gh release delete-asset "${RELEASE_TAG}" "${name}" --yes
+                if grep -Fxq -- "${name}" <<< "${existing}"; then
+                  gh release delete-asset "${RELEASE_TAG}" "${name}" --yes
+                fi
               done
             fi
             gh release upload "${RELEASE_TAG}" "${upload[@]}"
@@ -408,7 +477,11 @@ jobs:
             {
               echo "## What's changed"
               echo
-              [[ -n "${PREVIOUS_TAG}" ]] && git log --reverse --pretty='- %s' "${PREVIOUS_TAG}..${RELEASE_TAG}" || echo '- Initial maintained Topway release.'
+              if [[ -n "${PREVIOUS_TAG}" ]]; then
+                git log --reverse --pretty='- %s' "${PREVIOUS_TAG}..${RELEASE_TAG}"
+              else
+                echo '- Initial maintained Topway release.'
+              fi
               echo
               echo '## Assets'
               echo '- topwayTwMedia is the primary signed APK.'
@@ -418,9 +491,38 @@ jobs:
             args=()
             [[ "${DRAFT}" == true ]] && args+=(--draft)
             [[ "${PRERELEASE}" == true ]] && args+=(--prerelease)
-            gh release create "${RELEASE_TAG}" "${upload[@]}" --title "${RELEASE_TAG}" --notes-file "${notes}" --verify-tag "${args[@]}"
+            gh release create "${RELEASE_TAG}" "${upload[@]}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file "${notes}" \
+              --verify-tag \
+              "${args[@]}"
           fi
           echo "release_url=$(gh release view "${RELEASE_TAG}" --json url --jq .url)" >> "${GITHUB_OUTPUT}"
+
+      - name: Cleanup release tag after failed release creation
+        if: ${{ failure() && steps.publish_ref.outputs.tag_pushed == 'true' && steps.release.outcome != 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          RELEASE_COMMIT_SHA: ${{ steps.version_commit.outputs.release_commit_sha }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} exists; keeping remote tag."
+            exit 0
+          fi
+          remote_tag_sha="$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}' || true)"
+          if [[ -z "${remote_tag_sha}" ]]; then
+            echo "Remote tag ${RELEASE_TAG} is already absent."
+            exit 0
+          fi
+          if [[ "${remote_tag_sha}" != "${RELEASE_COMMIT_SHA}" ]]; then
+            echo "::warning::Remote tag ${RELEASE_TAG} does not point at this workflow's release commit; refusing cleanup."
+            exit 0
+          fi
+          git push origin ":refs/tags/${RELEASE_TAG}" || true
 
       - name: Verify selected release assets
         shell: bash
@@ -433,7 +535,10 @@ jobs:
           actual="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
           while IFS= read -r name; do
             [[ -n "${name}" ]] || continue
-            grep -Fxq -- "${name}" <<< "${actual}" || { echo "::error::Release is missing ${name}."; exit 1; }
+            grep -Fxq -- "${name}" <<< "${actual}" || {
+              echo "::error::Release is missing ${name}."
+              exit 1
+            }
           done <<< "${ASSET_NAMES}"
           forbidden="Auxio-TS-${RELEASE_TAG}-topway-twmusic-release.apk"
           if grep -Fxq -- "${forbidden}" <<< "${actual}"; then
@@ -449,14 +554,30 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SELECTED: ${{ steps.selection.outputs.selected_summary }}
+          EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
+          ASSET_NAMES: ${{ steps.assets.outputs.asset_names }}
+          RELEASE_ARTIFACT_URL: ${{ steps.release_artifact.outputs.artifact-url }}
         run: |
           {
             echo '# Manual release summary'
             echo
             echo "- Result: \`${RESULT}\`"
             echo "- Tag: ${RELEASE_TAG:-not computed}"
+            echo "- Existing-release append mode: ${EXISTING_RELEASE:-false}"
             echo "- Maintained assets: ${SELECTED:-not selected}"
             [[ -n "${RELEASE_URL:-}" ]] && echo "- Release: ${RELEASE_URL}"
+            [[ -n "${RELEASE_ARTIFACT_URL:-}" ]] && echo "- Workflow artifact: ${RELEASE_ARTIFACT_URL}"
+            echo
+            echo '## Selected assets'
+            if [[ -n "${ASSET_NAMES:-}" ]]; then
+              while IFS= read -r asset; do
+                [[ -n "${asset}" ]] && echo "- ${asset}"
+              done <<< "${ASSET_NAMES}"
+            else
+              echo '- No assets reached staging.'
+            fi
+            echo
+            echo '- Each selected variant is built in an independent sequential Gradle invocation.'
             echo '- topwayTwMedia remains the primary APK.'
             echo '- topwayTwMusic remains a Magisk-only exact-package lane.'
           } >> "${GITHUB_STEP_SUMMARY}"
