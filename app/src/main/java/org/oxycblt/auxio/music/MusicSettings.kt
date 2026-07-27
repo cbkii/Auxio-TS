@@ -63,6 +63,33 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** The currently configured MediaStore query (if any) * */
     var mediaStoreQuery: MediaStore.Query
 
+    /** Monotonic generation for an atomically persisted source configuration. */
+    val sourceConfigurationGeneration: Long
+        get() = 0L
+
+    /** Optional post-load generated playlists. Disabled by default. */
+    val generatedPlaylistsEnabled: Boolean
+        get() = false
+
+    /** Persist all source fields together and queue one cache-bypassing initial scan. */
+    fun applySourceConfiguration(
+        mode: LocationMode,
+        safQuery: SAF.Query,
+        mediaStoreQuery: MediaStore.Query,
+    ): Boolean {
+        val changed =
+            locationMode != mode ||
+                this.safQuery != safQuery ||
+                this.mediaStoreQuery != mediaStoreQuery
+        locationMode = mode
+        this.safQuery = safQuery
+        this.mediaStoreQuery = mediaStoreQuery
+        return changed
+    }
+
+    /** Consume a durable first-scan marker after the indexing worker is attached. */
+    fun consumePendingInitialScan(): Boolean = false
+
     /** Resource priority used for the next immutable Musikr scan pipeline. */
     val scanPriority: ScanPriority
 
@@ -108,6 +135,9 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
 
         /** Called when the [shouldBeObserving] configuration has changed. */
         fun onObservingChanged() {}
+
+        /** Rebuild optional generated playlists without rescanning sources. */
+        fun onGeneratedPlaylistsChanged() {}
     }
 }
 
@@ -200,6 +230,12 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     override val performanceCaptureEnabled: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_performance_capture), false)
+
+    override val sourceConfigurationGeneration: Long
+        get() = sharedPreferences.getLong(KEY_SOURCE_CONFIGURATION_GENERATION, 0L)
+
+    override val generatedPlaylistsEnabled: Boolean
+        get() = sharedPreferences.getBoolean(getString(R.string.set_key_generated_playlists), false)
 
     override var separators: String
         // Differ from convention and store a string of separator characters instead of an int
@@ -333,10 +369,68 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             }
         }
 
+    @Synchronized
+    override fun applySourceConfiguration(
+        mode: LocationMode,
+        safQuery: SAF.Query,
+        mediaStoreQuery: MediaStore.Query,
+    ): Boolean {
+        val changed =
+            locationMode != mode ||
+                this.safQuery != safQuery ||
+                this.mediaStoreQuery != mediaStoreQuery
+        if (!changed) return false
+
+        val nextGeneration = sourceConfigurationGeneration + 1L
+        sharedPreferences.edit(commit = true) {
+            putInt(getString(R.string.set_key_locations_mode), mode.intCode)
+            putString(getString(R.string.set_key_music_locations), safQuery.source.stringify())
+            putString(getString(R.string.set_key_excluded_locations), safQuery.exclude.stringify())
+            putBoolean(getString(R.string.set_key_with_hidden), safQuery.withHidden)
+            putBoolean(getString(R.string.set_key_saf_multithread), safQuery.multithread)
+
+            val filterMode =
+                when (mediaStoreQuery.mode) {
+                    MediaStore.FilterMode.INCLUDE -> IntegerTable.FILTER_MODE_INCLUDE
+                    MediaStore.FilterMode.EXCLUDE -> IntegerTable.FILTER_MODE_EXCLUDE
+                }
+            putInt(getString(R.string.set_key_filter_mode), filterMode)
+            putString(
+                getString(R.string.set_key_filtered_locations),
+                mediaStoreQuery.filtered.stringify(),
+            )
+            putBoolean(
+                getString(R.string.set_key_exclude_non_music),
+                mediaStoreQuery.excludeNonMusic,
+            )
+            putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
+            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
+            putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+        }
+        L.i("Persisted source configuration generation $nextGeneration [mode=$mode]")
+        return true
+    }
+
+    @Synchronized
+    override fun consumePendingInitialScan(): Boolean {
+        if (!sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) return false
+        sharedPreferences.edit(commit = true) { putBoolean(KEY_PENDING_INITIAL_SCAN, false) }
+        return true
+    }
+
     override fun forceLocationUpdate() {
-        // Notify listeners directly when persisted location settings are unchanged but callers need
-        // a refresh.
+        markInitialScanPending()
         listeners.forEach { it.onMusicLocationsChanged() }
+    }
+
+    @Synchronized
+    private fun markInitialScanPending() {
+        val nextGeneration = sourceConfigurationGeneration + 1L
+        sharedPreferences.edit(commit = true) {
+            putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
+            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
+            putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+        }
     }
 
     override fun onSettingChanged(key: String, listener: MusicSettings.Listener) {
@@ -367,6 +461,10 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             getString(R.string.set_key_root_access_policy) -> {
                 L.d("Dispatching indexing setting change for $key")
                 listener.onIndexingSettingChanged()
+            }
+            getString(R.string.set_key_generated_playlists) -> {
+                L.d("Applying generated-playlist preference without source reindex")
+                listener.onGeneratedPlaylistsChanged()
             }
             getString(R.string.set_key_performance_capture) -> {
                 // Diagnostics-only toggle: refresh the bounded capture state without
@@ -440,6 +538,8 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     private companion object {
         const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
+        const val KEY_PENDING_INITIAL_SCAN = "auxio_pending_initial_music_scan"
+        const val KEY_SOURCE_CONFIGURATION_GENERATION = "auxio_source_configuration_generation"
     }
 }
 

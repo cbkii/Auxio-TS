@@ -29,6 +29,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -53,6 +54,7 @@ import org.oxycblt.musikr.Musikr
 import org.oxycblt.musikr.MutableLibrary
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.SourceScanFailureException
 import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.IncrementalScanPlan
@@ -203,6 +205,9 @@ interface MusicRepository {
     /** Persist a source invalidation without performing a provider query. */
     suspend fun invalidateSource(sourceKey: String? = null) = Unit
 
+    /** Rebuild only optional generated playlists from the current base library. */
+    suspend fun refreshGeneratedPlaylists() = Unit
+
     /**
      * Start the music system. This should be called by the application at startup.
      *
@@ -317,6 +322,7 @@ constructor(
     private val userLibraryGeneration = AtomicLong(0L)
     private val compatibilityHydrationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var compatibilityHydrationJob: Job? = null
+    @Volatile private var generatedPlaylistJob: Job? = null
 
     @Volatile override var library: MutableLibrary? = null
     @Volatile private var previousCompletedState: IndexingState.Completed? = null
@@ -574,23 +580,38 @@ constructor(
                 )
             val rawFs = createFileSystem()
             val prepared =
-                try {
-                    IncrementalIndexPlanner.prepare(
+                if (!withCache) {
+                    L.i("Using simple source-authoritative scan; incremental preflight bypassed")
+                    IncrementalIndexPlanner.Prepared(
                         fs = rawFs,
-                        cache = cache,
-                        withCache = withCache,
-                        profile = resolvedProfile,
-                        configurationRevision = sourceConfigurationRevision(),
-                        legacyWriteOnly = ::WriteOnlyMutableCache,
+                        cache = WriteOnlyMutableCache(cache),
+                        plan = null,
                     )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    musicSettings.lastScanFailed = true
-                    emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
-                    L.w(e, "Music-source preflight failed; preserving the last readable library")
-                    emitIndexingCompletion(e)
-                    return@traceSuspend
+                } else {
+                    try {
+                        IncrementalIndexPlanner.prepare(
+                            fs = rawFs,
+                            cache = cache,
+                            withCache = true,
+                            profile = resolvedProfile,
+                            configurationRevision = sourceConfigurationRevision(),
+                            legacyWriteOnly = ::WriteOnlyMutableCache,
+                        )
+                    } catch (e: CancellationException) {
+                        withContext(NonCancellable) {
+                            emitIndexingCompletion(Exception("Music-source preflight cancelled", e))
+                        }
+                        throw e
+                    } catch (e: Exception) {
+                        musicSettings.lastScanFailed = true
+                        emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                        L.w(
+                            e,
+                            "Music-source preflight failed; preserving the last readable library",
+                        )
+                        emitIndexingCompletion(e)
+                        return@traceSuspend
+                    }
                 }
             val plan = prepared.plan
             L.i(
@@ -631,7 +652,11 @@ constructor(
                     LocationMode.DIRECT_FS -> musicSettings.safQuery.source
                     LocationMode.MEDIA_STORE -> emptyList()
                 }
-            if (plan == null && locations.any { !it.path.volume.isAccessible() }) {
+            if (
+                plan == null &&
+                    musicSettings.locationMode == LocationMode.SAF &&
+                    locations.any { !it.path.volume.isAccessible() }
+            ) {
                 L.w("One or more legacy music sources are inaccessible. Preserving cache.")
                 musicSettings.lastScanFailed = true
                 emitIndexingCompletion(Exception("Music source inaccessible"))
@@ -660,7 +685,11 @@ constructor(
                         .run(::emitIndexingProgress)
                 L.d("Index finished in ${System.currentTimeMillis() - start}ms")
 
-                if (plan == null && result.library.songs.isEmpty()) {
+                if (
+                    plan == null &&
+                        musicSettings.locationMode == LocationMode.SAF &&
+                        result.library.songs.isEmpty()
+                ) {
                     if (locations.any { !it.path.volume.isAccessible() }) {
                         L.w("Legacy scan became inaccessible. Preserving cache.")
                         musicSettings.lastScanFailed = true
@@ -671,20 +700,23 @@ constructor(
 
                 musicSettings.revision = newRevision
                 val publishedLibrary =
-                    if (result.failedSources.isEmpty()) {
+                    if (result.failedSources.isEmpty() || result.library.songs.isNotEmpty()) {
+                        if (result.failedSources.isNotEmpty()) {
+                            L.w(
+                                "Publishing readable partial library; source warnings: " +
+                                    result.failedSources.keys
+                            )
+                        }
                         result.library
                     } else {
-                        L.w(
-                            "Source-local failures preserved prior generations: " +
-                                result.failedSources.keys
-                        )
-                        Musikr.loadCached(
-                            context,
-                            config.copy(scanPlan = null, cleanupCovers = false),
-                        )
+                        throw SourceScanFailureException(result.failedSources)
                     }
                 emitLibrary(publishedLibrary)
-                result.cleanup()
+                try {
+                    result.cleanup()
+                } catch (cleanupFailure: Exception) {
+                    L.w(cleanupFailure, "Post-publication cover cleanup failed")
+                }
                 val isEmpty = publishedLibrary.songs.isEmpty()
                 musicSettings.libraryState =
                     if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
@@ -692,7 +724,10 @@ constructor(
                 emitStartupLibraryStatus(
                     if (isEmpty) StartupLibraryStatus.Empty else StartupLibraryStatus.Usable
                 )
-                if (!isEmpty) emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                if (!isEmpty) {
+                    emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                    requestGeneratedPlaylistRefresh()
+                }
                 if (resolvedProfile == MetadataProfile.FULL) {
                     emitStartupReadinessState(StartupReadinessState.EnrichmentComplete)
                 }
@@ -704,6 +739,11 @@ constructor(
                     worker.requestIndex(true, MetadataProfile.FULL)
                 }
             } catch (e: CancellationException) {
+                withContext(NonCancellable) {
+                    emitIndexingCompletion(
+                        Exception("Music indexing cancelled before completion", e)
+                    )
+                }
                 throw e
             } catch (e: Exception) {
                 musicSettings.lastScanFailed = true
@@ -711,6 +751,42 @@ constructor(
                 emitIndexingCompletion(e)
             }
         }
+
+    override suspend fun refreshGeneratedPlaylists() {
+        val current = synchronized(this) { library } ?: return
+        val startingRevision = musicSettings.revision
+        val startingDeviceGeneration = deviceLibraryGeneration.get()
+        val enabled = musicSettings.generatedPlaylistsEnabled
+        val projected = withContext(Dispatchers.Default) { current.withGeneratedPlaylists(enabled) }
+        val stillCurrent =
+            synchronized(this) {
+                library === current &&
+                    musicSettings.revision == startingRevision &&
+                    deviceLibraryGeneration.get() == startingDeviceGeneration
+            }
+        if (!stillCurrent) {
+            L.d("Skipping generated-playlist projection superseded by a newer library")
+            return
+        }
+        if (projected === current) return
+        emitLibrary(projected, device = false, user = true)
+        L.i("Generated playlists ${if (enabled) "enabled" else "disabled"}")
+    }
+
+    private fun requestGeneratedPlaylistRefresh() {
+        if (!musicSettings.generatedPlaylistsEnabled) return
+        generatedPlaylistJob?.cancel()
+        generatedPlaylistJob =
+            compatibilityHydrationScope.launch {
+                try {
+                    refreshGeneratedPlaylists()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    L.w(e, "Generated playlists failed; base library remains available")
+                }
+            }
+    }
 
     private fun startCompatibilityBackfill() {
         compatibilityHydrationScope.launch {
@@ -780,6 +856,7 @@ constructor(
                         )
                         if (songCount > 0) {
                             emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                            requestGeneratedPlaylistRefresh()
                         }
                         requestCompatibilityRecoveryIfNeeded(
                             worker,
@@ -953,7 +1030,11 @@ constructor(
         }
     }
 
-    private suspend fun emitLibrary(newLibrary: MutableLibrary) {
+    private suspend fun emitLibrary(
+        newLibrary: MutableLibrary,
+        device: Boolean = true,
+        user: Boolean = true,
+    ) {
         val emitStart = System.currentTimeMillis()
         val changed =
             synchronized(this) {
@@ -972,7 +1053,7 @@ constructor(
         // A completed Musikr publication is a deliberate generation boundary. Avoid comparing all
         // songs/albums/artists/genres/playlists under the repository monitor; consumers invalidate
         // from monotonic generations instead.
-        withContext(Dispatchers.Main) { dispatchLibraryChange(device = true, user = true) }
+        withContext(Dispatchers.Main) { dispatchLibraryChange(device = device, user = user) }
         L.d("emitLibrary completed in ${System.currentTimeMillis() - emitStart}ms")
     }
 

@@ -13,6 +13,7 @@
         <ListPreference app:defaultValue="ON_DEMAND" app:entries="@array/entries_root_access_policy" app:entryValues="@array/values_root_access_policy" app:key="@string/set_key_root_access_policy" app:title="@string/set_root_access_policy" app:useSimpleSummaryProvider="true" />
         <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_dynamic_shortcuts" app:summary="@string/set_dynamic_shortcuts_desc" app:title="@string/set_dynamic_shortcuts" />
         <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_performance_capture" app:summary="@string/set_performance_capture_desc" app:title="@string/set_performance_capture" />
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_generated_playlists" app:summary="@string/set_generated_playlists_desc" app:title="@string/set_generated_playlists" />
         <Preference app:key="@string/set_key_export_startup_report" app:summary="@string/set_export_startup_report_desc" app:title="@string/set_export_startup_report" />
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/set_metadata">

@@ -46,6 +46,14 @@ internal data class LibraryImpl(
 
     override fun empty() = songs.isEmpty()
 
+    override fun withGeneratedPlaylists(enabled: Boolean): MutableLibrary {
+        val ordinary =
+            playlists.filterNotTo(mutableSetOf()) { it.origin == Playlist.Origin.GENERATED }
+        val projected =
+            if (enabled) ordinary + LibraryFactoryImpl.generatedPlaylists(songs) else ordinary
+        return if (projected == playlists) this else copy(playlists = projected)
+    }
+
     // Compat hack. See TagInterpreter for why this needs to be done
     override fun findSong(uid: Music.UID) =
         songUidMap[uid] ?: v400SongUidMap[uid] ?: v401SongUidMap[uid]

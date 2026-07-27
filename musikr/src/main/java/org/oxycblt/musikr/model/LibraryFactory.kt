@@ -48,11 +48,38 @@ internal interface LibraryFactory {
     ): MutableLibrary
 
     companion object {
+        internal fun generatedPlaylists(songs: Collection<Song>): Set<PlaylistImpl> {
+            val definitions =
+                GeneratedPlaylistCompiler.compile(
+                    songs.map { song ->
+                        GeneratedPlaylistCompiler.Entry(
+                            value = song,
+                            stableKey = song.uid.toString(),
+                            addedMs = song.addedMs,
+                            year = song.album.dates?.min?.year,
+                            albumSort = song.album.name.sortKey(),
+                            disc = song.disc?.number ?: 0,
+                            track = song.track ?: 0,
+                            titleSort = song.name.sort ?: song.name.raw,
+                        )
+                    }
+                )
+            return definitions.mapTo(mutableSetOf()) { definition ->
+                PlaylistImpl(
+                    GeneratedPlaylistCore(
+                        id = definition.id,
+                        displayName = definition.name,
+                        songs = definition.values,
+                    )
+                )
+            }
+        }
+
         fun new(): LibraryFactory = LibraryFactoryImpl()
     }
 }
 
-private class LibraryFactoryImpl : LibraryFactory {
+internal class LibraryFactoryImpl : LibraryFactory {
     override fun create(
         graph: MusicGraph,
         storedPlaylists: StoredPlaylists,
@@ -78,35 +105,6 @@ private class LibraryFactoryImpl : LibraryFactory {
             graph.playlistVertex.mapTo(mutableSetOf()) { vertex ->
                 PlaylistImpl(PlaylistVertexCore(vertex))
             }
-
-        // Generated playlists are deterministic projections of this one committed rich library.
-        // They are rebuilt after both cached and scanned graph construction, so there is no second
-        // playlist database or partially committed generated state.
-        val generatedDefinitions =
-            GeneratedPlaylistCompiler.compile(
-                songs.map { song ->
-                    GeneratedPlaylistCompiler.Entry(
-                        value = song,
-                        stableKey = song.uid.toString(),
-                        addedMs = song.addedMs,
-                        year = song.album.dates?.min?.year,
-                        albumSort = song.album.name.sortKey(),
-                        disc = song.disc?.number ?: 0,
-                        track = song.track ?: 0,
-                        titleSort = song.name.sort ?: song.name.raw,
-                    )
-                }
-            )
-        generatedDefinitions.forEach { definition ->
-            playlists +=
-                PlaylistImpl(
-                    GeneratedPlaylistCore(
-                        id = definition.id,
-                        displayName = definition.name,
-                        songs = definition.values,
-                    )
-                )
-        }
 
         return LibraryImpl(
             songs,
@@ -217,7 +215,7 @@ private class LibraryFactoryImpl : LibraryFactory {
         }
     }
 
-    private companion object {
+    companion object {
         fun Name.sortKey(): String = (this as? Name.Known)?.let { it.sort ?: it.raw }.orEmpty()
 
         private inline fun <reified T : Music> tag(vertex: Vertex): T {

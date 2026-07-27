@@ -92,6 +92,7 @@ private constructor(
     private var attached = false
     private var activeStartupOrigin: StartupScanOrigin? = null
     private var pendingStartupOrigin: StartupScanOrigin? = null
+    private var lastHandledSourceConfigurationGeneration = Long.MIN_VALUE
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
     private val wakeLock =
@@ -184,7 +185,15 @@ private constructor(
                         // wait
                         // for su, source traversal, or a library scan.
                         musicRepository.startup(this@IndexingHolder)
-                        if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
+                        val pendingInitialScan = musicSettings.consumePendingInitialScan()
+                        if (pendingInitialScan) {
+                            synchronized(this@IndexingHolder) {
+                                lastHandledSourceConfigurationGeneration =
+                                    musicSettings.sourceConfigurationGeneration
+                            }
+                            L.i("Consuming durable source configuration with a simple initial scan")
+                            requestIndex(false)
+                        } else if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
                             requestVisibleRecoveryScan(sourceAuthority)
                         }
                     } finally {
@@ -214,7 +223,7 @@ private constructor(
                 "Trusted visible startup is repairing the library " +
                     "[state=${musicSettings.libraryState} revision=${musicSettings.revision}]"
             )
-            requestIndex(true)
+            requestIndex(false)
             return
         }
         // A previous failure must not permanently strand an empty or unusable library,
@@ -427,11 +436,30 @@ private constructor(
 
     override fun onMusicLocationsChanged() {
         super.onMusicLocationsChanged()
+        val generation = musicSettings.sourceConfigurationGeneration
+        val shouldHandle =
+            synchronized(this) {
+                if (generation == lastHandledSourceConfigurationGeneration) {
+                    false
+                } else {
+                    lastHandledSourceConfigurationGeneration = generation
+                    true
+                }
+            }
+        if (!shouldHandle) {
+            L.d("Ignoring duplicate source callback [generation=$generation]")
+            return
+        }
         if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
+        val initialScan = musicSettings.consumePendingInitialScan()
         indexScope.launch {
             musicRepository.invalidateSource()
-            musicRepository.requestIndex(true)
+            musicRepository.requestIndex(withCache = !initialScan)
         }
+    }
+
+    override fun onGeneratedPlaylistsChanged() {
+        indexScope.launch { musicRepository.refreshGeneratedPlaylists() }
     }
 
     override fun onIndexingSettingChanged() {

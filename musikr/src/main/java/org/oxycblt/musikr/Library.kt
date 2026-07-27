@@ -105,6 +105,9 @@ interface Library {
  * state handling.
  */
 interface MutableLibrary : Library {
+    /** Add or remove generated playlists without rescanning music sources. */
+    fun withGeneratedPlaylists(enabled: Boolean): MutableLibrary = this
+
     /**
      * Create a new [Playlist] with the given name and songs.
      *

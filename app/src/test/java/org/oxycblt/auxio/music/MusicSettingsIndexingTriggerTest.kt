@@ -44,6 +44,7 @@ class MusicSettingsIndexingTriggerTest {
         var indexingSettingChanges = 0
         var locationChanges = 0
         var observingChanges = 0
+        var generatedPlaylistChanges = 0
 
         override fun onIndexingSettingChanged() {
             indexingSettingChanges++
@@ -55,6 +56,10 @@ class MusicSettingsIndexingTriggerTest {
 
         override fun onObservingChanged() {
             observingChanges++
+        }
+
+        override fun onGeneratedPlaylistsChanged() {
+            generatedPlaylistChanges++
         }
     }
 
@@ -87,6 +92,14 @@ class MusicSettingsIndexingTriggerTest {
         dispatch(context.getString(R.string.set_key_root_access_policy))
         dispatch(context.getString(R.string.set_key_separators))
         assertEquals(3, listener.indexingSettingChanges)
+    }
+
+    @Test
+    fun `generated playlists toggle does not initiate a source scan`() {
+        dispatch(context.getString(R.string.set_key_generated_playlists))
+        assertEquals(0, listener.indexingSettingChanges)
+        assertEquals(0, listener.locationChanges)
+        assertEquals(1, listener.generatedPlaylistChanges)
     }
 
     @Test
