@@ -24,7 +24,10 @@ find_merged_manifest() {
     -path "*$1*AndroidManifest.xml" -print 2>/dev/null | sort | head -n 1
 }
 find_apk() {
-  local variant_dir=$1 build_type=$2 apk_dir="app/build/outputs/apk/${variant_dir}/${build_type}" signed
+  local variant_dir=$1
+  local build_type=$2
+  local apk_dir="app/build/outputs/apk/${variant_dir}/${build_type}"
+  local signed
   signed="$(find "${apk_dir}" -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' -print 2>/dev/null | sort | head -n1)"
   [[ -n "$signed" ]] && { printf '%s\n' "$signed"; return; }
   find "${apk_dir}" -maxdepth 1 -type f -name '*.apk' -print 2>/dev/null | sort | head -n1
