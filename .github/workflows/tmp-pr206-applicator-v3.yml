@@ -42,11 +42,11 @@ jobs:
           set -o pipefail
           bash /tmp/pr206-apply.sh 2>&1 | tee /tmp/pr206-patch.log
 
-      - name: Apply repository formatter
+      - name: Apply Kotlin formatter
         shell: bash
         run: |
           set -o pipefail
-          bash ./scripts/ci-gradle.sh spotlessApply 2>&1 | tee /tmp/pr206-format.log
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply 2>&1 | tee /tmp/pr206-format.log
 
       - name: Publish implementation
         shell: bash
