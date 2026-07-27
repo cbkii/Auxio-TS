@@ -1,0 +1,1 @@
+Trigger applicator with detailed mismatch diagnostics.
