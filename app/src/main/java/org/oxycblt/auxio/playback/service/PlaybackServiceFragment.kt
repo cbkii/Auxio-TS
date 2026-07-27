@@ -135,7 +135,7 @@ private constructor(
                             "Playback restore remained transient for ${RESTORE_STARTUP_TIMEOUT_MS}ms; " +
                                 "releasing startup readiness without blocking the library"
                         )
-                        playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
+                        playbackManager.cancelDeferredRestore()
                         startupReadinessController.publishCapability(
                             StartupReadinessState.QueueReady
                         )

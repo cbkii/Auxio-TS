@@ -106,6 +106,57 @@ class StartupMacrobenchmark {
     }
 
     @Test
+    fun attachThenBootRestoreCold() =
+        journeyBenchmark(
+            metrics =
+                listOf(
+                    traceMetric(
+                        CriticalJourneys.TRACE_BOOT_RESTORE_TO_FIRST_AUDIO,
+                        "bootRestoreToFirstAudio",
+                    )
+                )
+        ) {
+            CriticalJourneys.run { exerciseBootRestore() }
+        }
+
+    @Test
+    fun attachThenRestoreBurstCold() =
+        journeyBenchmark(
+            metrics =
+                listOf(
+                    traceMetric(
+                        CriticalJourneys.TRACE_RESTORE_BURST_TO_FIRST_AUDIO,
+                        "restoreBurstToFirstAudio",
+                    )
+                )
+        ) {
+            CriticalJourneys.run { exerciseRestoreBurst() }
+        }
+
+    @Test
+    fun pauseDuringRestore() = journeyBenchmark {
+        CriticalJourneys.run { exercisePauseDuringRestore() }
+    }
+
+    @Test
+    fun nextDuringRestore() = journeyBenchmark {
+        CriticalJourneys.run { exerciseNextDuringRestore() }
+    }
+
+    @Test
+    fun seekDuringRestore() = journeyBenchmark {
+        CriticalJourneys.run { exerciseSeekDuringRestore() }
+    }
+
+    @Test
+    fun generatedPlaylistsDoNotBlockFiveThousandSongResume() =
+        generatedPlaylistIsolationBenchmark(5_000)
+
+    @Test
+    fun generatedPlaylistsDoNotBlockTwentyThousandSongResume() =
+        generatedPlaylistIsolationBenchmark(20_000)
+
+    @Test
     fun primitiveQueueControlsJourney() =
         journeyBenchmark(
             metrics =
@@ -292,6 +343,38 @@ class StartupMacrobenchmark {
         captureReport(reportLabels)
     }
 
+    private fun generatedPlaylistIsolationBenchmark(songCount: Int) {
+        var seeded = false
+        benchmarkRule.measureRepeated(
+            packageName = BuildConfig.TARGET_PACKAGE,
+            metrics =
+                startupMetrics(
+                    traceMetric(
+                        CriticalJourneys.TRACE_SAVED_SESSION_TO_FIRST_AUDIO,
+                        "generatedPlaylistsSavedSessionToFirstAudio",
+                    )
+                ),
+            compilationMode =
+                CompilationMode.Partial(baselineProfileMode = BaselineProfileMode.Require),
+            startupMode = StartupMode.COLD,
+            iterations = iterations,
+            setupBlock = {
+                if (!seeded) {
+                    BenchmarkFixtureController.run {
+                        seedCommittedFixture(
+                            songCount = songCount,
+                            generatedPlaylistsEnabled = true,
+                        )
+                    }
+                    seeded = true
+                }
+                pressHome()
+            },
+            measureBlock = { CriticalJourneys.run { exerciseSavedSessionResume() } },
+        )
+        captureReport(REQUIRED_GENERATED_PLAYLIST_LABELS)
+    }
+
     private fun captureReport(requiredLabels: Set<String>) {
         printReport(BenchmarkFixtureController.captureStartupReport(device, requiredLabels))
     }
@@ -324,6 +407,16 @@ class StartupMacrobenchmark {
                 "startup.fast_home_first_rows",
             )
         val REQUIRED_COMPLETE_LIBRARY_LABELS =
-            REQUIRED_IMMEDIATE_LABELS + "startup.capability.FULL_LIBRARY_READY"
+            REQUIRED_IMMEDIATE_LABELS +
+                setOf(
+                    "startup.capability.FULL_LIBRARY_READY",
+                    "startup.compatibility_hydration_start",
+                    "startup.compatibility_hydration_end",
+                    "startup.compatibility_backfill_start",
+                    "startup.compatibility_backfill_end",
+                )
+        val REQUIRED_GENERATED_PLAYLIST_LABELS =
+            REQUIRED_IMMEDIATE_LABELS +
+                setOf("startup.generated_playlist_start", "startup.generated_playlist_end")
     }
 }

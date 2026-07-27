@@ -84,6 +84,53 @@ class IncrementalIndexPlannerTest {
     }
 
     @Test
+    fun scopedCachedRequestPlansAllSourcesButEnumeratesOnlyTheTarget() = runBlocking {
+        val sourceA =
+            SourceSnapshot(
+                sourceKey = "direct:a",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk0",
+                rootPath = "/storage/usbdisk0",
+                available = true,
+                fingerprint = "a",
+                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+            )
+        val sourceB =
+            SourceSnapshot(
+                sourceKey = "direct:b",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk1",
+                rootPath = "/storage/usbdisk1",
+                available = false,
+                fingerprint = "b",
+                fingerprintStrength = SourceFingerprintStrength.ADVISORY,
+            )
+        val original = FakeSourceAwareFs(snapshots = listOf(sourceA, sourceB))
+        val cache = FakeIncrementalCache()
+
+        val prepared =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = true,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 1L,
+                targetSourceKeys = setOf(sourceA.sourceKey),
+                legacyWriteOnly = { it },
+            )
+
+        assertEquals(setOf(sourceA.sourceKey, sourceB.sourceKey), cache.plannedSnapshotKeys)
+        assertEquals(
+            false,
+            cache.plannedSnapshots?.single { it.sourceKey == sourceB.sourceKey }?.available,
+        )
+        assertEquals(setOf(sourceA.sourceKey), original.selectedSourceKeys)
+        assertEquals(setOf(sourceA.sourceKey), prepared.plan?.scanSourceKeys)
+        assertEquals(setOf(sourceB.sourceKey), prepared.plan?.reuseSourceKeys)
+        assertEquals(setOf(sourceB.sourceKey), prepared.plan?.unavailableSourceKeys)
+    }
+
+    @Test
     fun brokenPreflightFailsWithoutBypassingIncrementalAccounting() = runBlocking {
         val original = FakeSourceAwareFs(preflightFailure = IllegalStateException("OEM probe"))
         val cache = FakeIncrementalCache()
@@ -158,6 +205,9 @@ class IncrementalIndexPlannerTest {
 
     private class FakeIncrementalCache : MutableCache, IncrementalCache {
         var plannedSnapshots: List<SourceSnapshot>? = null
+        val plannedSnapshotKeys: Set<String>?
+            get() = plannedSnapshots?.mapTo(linkedSetOf()) { it.sourceKey }
+
         private var active: IncrementalScanPlan? = null
 
         override suspend fun planScan(

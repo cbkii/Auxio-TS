@@ -1,4 +1,4 @@
-# Fast interaction startup — PR 1
+# Fast interaction startup
 
 Auxio-TS now treats launch readiness as staged capabilities plus orthogonal recoverable library/source status. The first PR keeps one playback service/session/notification, but makes early MediaBrowser and quick database search consume bounded Room projections before the complete Musikr graph is available.
 
@@ -6,9 +6,9 @@ Startup stages:
 
 1. `ProcessVisible`
 2. `PlaybackServiceReady`
-3. `QueueReady`
-4. `FastBrowseReady`
-5. `SearchReady`
+3. `FastBrowseReady`
+4. `SearchReady`
+5. `QueueReady`
 6. `FullLibraryReady`
 7. `EnrichmentComplete`
 
@@ -21,6 +21,15 @@ Readiness ownership:
 - `ExoPlaybackStateHolder` owns `QueueReady` after primitive queue restore resolves to a playable window, raw fallback, or explicit empty/failure state;
 - `MusicRepository` owns `FastBrowseReady` and `SearchReady` only after normalized projection backfill/readiness work has run;
 - `MusicRepository` owns `FullLibraryReady` only after publishing the legacy rich Musikr graph.
+
+Saved-state restore has one generation and one `RestoreIntentArbiter`. Duplicate restore requests
+coalesce; latest play/pause and seek win; Next/Previous fold into a bounded logical delta. Direct
+Open/new playback and the startup watchdog cancel the underlying restore job, so a late descriptor
+or queue-window read cannot attach stale state.
+
+`StartupOptionalWorkGate` opens only after Queue Ready and a terminal restore outcome. Compatibility
+graph hydration, normalized-cache backfill, and generated-playlist compilation wait behind this
+gate. A short no-saved-session grace is a deadlock escape, not the scheduling policy.
 
 Recoverable statuses such as no source, empty library, cache unavailable, and source unavailable live in `StartupLibraryStatus` and do not regress capability milestones. This is required for USB removal/reinsertion and empty-to-populated recovery.
 
@@ -37,10 +46,16 @@ projections, and both search rows and the in-app USB folder dialog can start val
 through the existing single playback service/session. Rich `Song` objects, relationships and artwork
 enrich later without replacing current audio.
 
-## PR 2 compatibility bridge
+## Compatibility bridge and generated projections
 
 Complete Home category materialisation, subscriber-driven category paging, source-scoped committed
 generations, changed-file-only extraction and Lean/Full enrichment remain intentionally deferred to
 the stacked incremental-library PR. `DBCache.snapshot()` and `Musikr.loadCached()` remain explicit,
-background compatibility paths for screens not yet migrated; neither path gates queue restore, bounded
-Home rows, Quick Find, USB browsing or MediaBrowser startup projections.
+background compatibility paths for screens not yet migrated; neither path gates queue restore,
+bounded Home rows, Quick Find, USB browsing or MediaBrowser startup projections.
+
+Generated playlists are disabled by default and owned by `GeneratedPlaylistCoordinator`, not the
+indexer. Its device-generation fingerprint coalesces duplicate publications, status is exposed in
+Music settings, and explicit refresh performs no source invalidation or scan. The
+`GeneratedPlaylistLibraryView` delegates song/album/artist/genre collections and finders to the base
+library and overlays only generated playlist rows.

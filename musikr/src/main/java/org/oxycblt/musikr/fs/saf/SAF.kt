@@ -145,7 +145,14 @@ private constructor(
                                 )
                                 .await()
                         result.exceptionOrNull()?.let { error ->
-                            sourceFailures[sourceKey] = error.message ?: error.javaClass.simpleName
+                            val kind =
+                                if (error.hasSecurityCause()) {
+                                    "PERMISSION_REQUIRED"
+                                } else {
+                                    "TEMPORARILY_UNAVAILABLE"
+                                }
+                            sourceFailures[sourceKey] =
+                                "$kind|${error.message ?: error.javaClass.simpleName}"
                         }
                     }
                 }
@@ -163,6 +170,15 @@ private constructor(
             observers.add(observer)
         }
         awaitClose { observers.forEach(LocationObserver::release) }
+    }
+
+    private fun Throwable.hasSecurityCause(): Boolean {
+        var cursor: Throwable? = this
+        while (cursor != null) {
+            if (cursor is SecurityException) return true
+            cursor = cursor.cause
+        }
+        return false
     }
 
     private fun CoroutineScope.exploreDirectoryImpl(

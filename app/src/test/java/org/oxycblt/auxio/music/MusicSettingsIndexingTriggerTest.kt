@@ -22,6 +22,7 @@ import android.content.Context
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,9 +67,15 @@ class MusicSettingsIndexingTriggerTest {
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
+        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
         settings = MusicSettingsImpl(context)
         listener = RecordingListener()
         settings.registerListener(listener)
+    }
+
+    @Test
+    fun `generated playlists default off in fresh preferences`() {
+        assertFalse(settings.generatedPlaylistsEnabled)
     }
 
     private fun dispatch(key: String) {

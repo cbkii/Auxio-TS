@@ -78,6 +78,9 @@ constructor(
     /** Recoverable library/source condition independent of startup capability ordering. */
     val startupLibraryStatus: StateFlow<StartupLibraryStatus> = _startupLibraryStatus
 
+    val generatedPlaylistStatus: StateFlow<GeneratedPlaylistStatus> =
+        musicRepository.generatedPlaylistStatus
+
     private val _statistics = MutableStateFlow<Statistics?>(null)
 
     /** [Statistics] about the last completed music load. */
@@ -162,6 +165,15 @@ constructor(
     fun rescan() {
         L.d("Rescanning library")
         musicRepository.requestIndex(MusicScanRequestMode.RESCAN_WITH_CACHE)
+    }
+
+    /** Rebuild optional playlists from the current library without scanning any source. */
+    fun refreshGeneratedPlaylists() {
+        viewModelScope.launch { musicRepository.refreshGeneratedPlaylists(force = true) }
+    }
+
+    fun retrySourceConfiguration() {
+        musicRepository.retrySourceConfiguration()
     }
 
     /**

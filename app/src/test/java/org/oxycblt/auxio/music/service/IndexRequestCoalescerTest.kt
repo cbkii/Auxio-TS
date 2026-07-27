@@ -20,17 +20,59 @@ package org.oxycblt.auxio.music.service
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.music.IndexReason
+import org.oxycblt.auxio.music.IndexRequest
 import org.oxycblt.musikr.library.MetadataProfile
 
 class IndexRequestCoalescerTest {
     @Test
+    fun `every reason pair resolves to the stronger authority`() {
+        val strongestFirst =
+            listOf(
+                IndexReason.INITIAL_CONFIGURATION,
+                IndexReason.USER_RETRY,
+                IndexReason.USER_REFRESH,
+                IndexReason.STORAGE_MOUNTED,
+                IndexReason.SOURCE_OBSERVER,
+                IndexReason.COMPATIBILITY_RECOVERY,
+                IndexReason.METADATA_ENRICHMENT,
+            )
+        for (first in IndexReason.entries) {
+            for (second in IndexReason.entries) {
+                val merged =
+                    IndexRequestCoalescer.merge(
+                        IndexRequest(first, withCache = true, configurationGeneration = 9L),
+                        IndexRequest(second, withCache = true, configurationGeneration = 9L),
+                    )
+                val expected =
+                    if (strongestFirst.indexOf(first) <= strongestFirst.indexOf(second)) {
+                        first
+                    } else {
+                        second
+                    }
+                assertEquals("$first + $second", expected, merged.reason)
+            }
+        }
+    }
+
+    @Test
     fun `cache bypass and full enrichment win a request burst`() {
-        val first = IndexRequest(withCache = true, metadataProfile = MetadataProfile.LEAN)
+        val first =
+            IndexRequest(
+                IndexReason.SOURCE_OBSERVER,
+                withCache = true,
+                metadataProfile = MetadataProfile.LEAN,
+            )
         val merged =
             IndexRequestCoalescer.merge(
                 first,
-                IndexRequest(withCache = false, metadataProfile = MetadataProfile.FULL),
+                IndexRequest(
+                    IndexReason.USER_REFRESH,
+                    withCache = false,
+                    metadataProfile = MetadataProfile.FULL,
+                ),
             )
 
         assertFalse(merged.withCache)
@@ -41,10 +83,78 @@ class IndexRequestCoalescerTest {
     fun `automatic requests remain automatic when coalesced`() {
         val merged =
             IndexRequestCoalescer.merge(
-                IndexRequest(withCache = true, metadataProfile = null),
-                IndexRequest(withCache = true, metadataProfile = null),
+                IndexRequest(IndexReason.SOURCE_OBSERVER, withCache = true),
+                IndexRequest(IndexReason.SOURCE_OBSERVER, withCache = true),
             )
 
-        assertEquals(IndexRequest(withCache = true, metadataProfile = null), merged)
+        assertEquals(IndexRequest(IndexReason.SOURCE_OBSERVER, withCache = true), merged)
+    }
+
+    @Test
+    fun `full enrichment cannot alter cache bypassing initial configuration`() {
+        val initial =
+            IndexRequest(
+                IndexReason.INITIAL_CONFIGURATION,
+                withCache = false,
+                metadataProfile = MetadataProfile.LEAN,
+                configurationGeneration = 11L,
+            )
+
+        val merged =
+            IndexRequestCoalescer.merge(
+                initial,
+                IndexRequest(
+                    IndexReason.METADATA_ENRICHMENT,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.FULL,
+                    configurationGeneration = 11L,
+                ),
+            )
+
+        assertEquals(initial, merged)
+    }
+
+    @Test
+    fun `mount bursts combine source keys within one generation`() {
+        val merged =
+            IndexRequestCoalescer.merge(
+                IndexRequest(
+                    IndexReason.STORAGE_MOUNTED,
+                    withCache = true,
+                    configurationGeneration = 3L,
+                    sourceKeys = setOf("usb:a"),
+                ),
+                IndexRequest(
+                    IndexReason.STORAGE_MOUNTED,
+                    withCache = true,
+                    configurationGeneration = 3L,
+                    sourceKeys = setOf("usb:b"),
+                ),
+            )
+
+        assertEquals(setOf("usb:a", "usb:b"), merged.sourceKeys)
+    }
+
+    @Test
+    fun `requests from different generations never merge source scopes`() {
+        val older =
+            IndexRequest(
+                IndexReason.USER_RETRY,
+                withCache = false,
+                configurationGeneration = 40L,
+                sourceKeys = setOf("old"),
+            )
+        val newer =
+            IndexRequest(
+                IndexReason.SOURCE_OBSERVER,
+                withCache = true,
+                configurationGeneration = 41L,
+                sourceKeys = setOf("new"),
+            )
+
+        val merged = IndexRequestCoalescer.merge(older, newer)
+
+        assertEquals(newer, merged)
+        assertTrue("old" !in requireNotNull(merged.sourceKeys))
     }
 }

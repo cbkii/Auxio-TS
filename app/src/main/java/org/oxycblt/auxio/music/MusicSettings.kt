@@ -22,6 +22,7 @@ import android.content.Context
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import org.oxycblt.auxio.IntegerTable
@@ -32,6 +33,7 @@ import org.oxycblt.auxio.settings.Settings
 import org.oxycblt.auxio.util.PerfTimer
 import org.oxycblt.auxio.util.unlikelyToBeNull
 import org.oxycblt.musikr.fs.Location
+import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import timber.log.Timber as L
@@ -60,6 +62,10 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** Raw persisted SAF/DirectFS source count, without requiring paths to open successfully. */
     val configuredSourceCount: Int
 
+    /** Raw configured roots retained even when they cannot currently be opened. */
+    val configuredSourceSpecs: List<ConfiguredSourceSpec>
+        get() = emptyList()
+
     /** The currently configured MediaStore query (if any) * */
     var mediaStoreQuery: MediaStore.Query
 
@@ -87,8 +93,24 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
         return changed
     }
 
-    /** Atomically consume a first-scan marker and return its source generation. */
-    fun consumePendingInitialScan(): Long? = null
+    val sourceConfigurationCheckpoint: SourceConfigurationCheckpoint?
+        get() = null
+
+    /** Mark a pending generation running without clearing its durable record. */
+    fun claimPendingConfiguration(): SourceConfigurationCheckpoint? = null
+
+    /** Resolve only a matching generation after a structured scan result. */
+    fun acknowledgeSourceConfiguration(
+        generation: Long,
+        unresolvedSourceKeys: Set<String>,
+        outcome: String,
+    ) = Unit
+
+    /** Return a matching interrupted or failed generation to retryable Pending state. */
+    fun returnSourceConfigurationToPending(generation: Long, outcome: String) = Unit
+
+    /** Retain a committed generation while recording currently unavailable configured roots. */
+    fun markSourcesUnresolved(sourceKeys: Set<String>, outcome: String) = Unit
 
     /** Resource priority used for the next immutable Musikr scan pipeline. */
     val scanPriority: ScanPriority
@@ -233,6 +255,70 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     override val sourceConfigurationGeneration: Long
         get() = sharedPreferences.getLong(KEY_SOURCE_CONFIGURATION_GENERATION, 0L)
+
+    override val configuredSourceSpecs: List<ConfiguredSourceSpec>
+        get() {
+            if (locationMode == LocationMode.MEDIA_STORE) return emptyList()
+            val fileOnly = locationMode == LocationMode.DIRECT_FS
+            val locations =
+                unlikelyToBeNull(
+                        sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
+                    )
+                    .toUnopenedLocations(fileOnly)
+            val grants = context.contentResolver.persistedUriPermissions
+            return locations.map { location ->
+                val uri = location.uri
+                val access =
+                    if (uri.scheme == "file") {
+                        val file = uri.path?.let(::File)
+                        if (file?.canRead() == true && file.isDirectory) {
+                            ConfiguredSourceSpec.AccessState.AVAILABLE
+                        } else {
+                            ConfiguredSourceSpec.AccessState.TEMPORARILY_UNAVAILABLE
+                        }
+                    } else if (grants.any { it.uri == uri && it.isReadPermission }) {
+                        ConfiguredSourceSpec.AccessState.AVAILABLE
+                    } else {
+                        ConfiguredSourceSpec.AccessState.PERMISSION_REQUIRED
+                    }
+                ConfiguredSourceSpec(
+                    normalizedUri = uri,
+                    sourceKey = SourceIdentity.forLocation(location),
+                    mode = locationMode,
+                    displayPath =
+                        uri.path?.takeIf { it.isNotBlank() } ?: location.path.components.unixString,
+                    accessState = access,
+                )
+            }
+        }
+
+    override val sourceConfigurationCheckpoint: SourceConfigurationCheckpoint?
+        get() {
+            val generation = sourceConfigurationGeneration
+            if (generation <= 0L) return null
+            val storedState =
+                SourceConfigurationCheckpoint.State.entries.firstOrNull {
+                    it.name == sharedPreferences.getString(KEY_CHECKPOINT_STATE, null)
+                }
+            val state =
+                storedState
+                    ?: if (sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) {
+                        SourceConfigurationCheckpoint.State.PENDING
+                    } else {
+                        SourceConfigurationCheckpoint.State.COMMITTED
+                    }
+            return SourceConfigurationCheckpoint(
+                generation = generation,
+                state = state,
+                unresolvedSourceKeys =
+                    sharedPreferences.getStringSet(KEY_CHECKPOINT_UNRESOLVED, emptySet()).orEmpty(),
+                lastAttemptAtMs =
+                    sharedPreferences
+                        .getLong(KEY_CHECKPOINT_LAST_ATTEMPT, Long.MIN_VALUE)
+                        .takeUnless { it == Long.MIN_VALUE },
+                lastOutcome = sharedPreferences.getString(KEY_CHECKPOINT_LAST_OUTCOME, null),
+            )
+        }
 
     override val generatedPlaylistsEnabled: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_generated_playlists), false)
@@ -382,6 +468,12 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         if (!changed) return false
 
         val nextGeneration = sourceConfigurationGeneration + 1L
+        val configuredKeys =
+            if (mode == LocationMode.MEDIA_STORE) {
+                emptySet()
+            } else {
+                safQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
+            }
         sharedPreferences.edit(commit = true) {
             putInt(getString(R.string.set_key_locations_mode), mode.intCode)
             putString(getString(R.string.set_key_music_locations), safQuery.source.stringify())
@@ -406,17 +498,87 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
             putBoolean(KEY_PENDING_INITIAL_SCAN, true)
             putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.PENDING.name)
+            putStringSet(
+                KEY_CHECKPOINT_UNRESOLVED,
+                sourceConfigurationCheckpoint
+                    ?.unresolvedSourceKeys
+                    ?.intersect(configuredKeys)
+                    .orEmpty(),
+            )
+            remove(KEY_CHECKPOINT_LAST_ATTEMPT)
+            remove(KEY_CHECKPOINT_LAST_OUTCOME)
         }
         L.i("Persisted source configuration generation $nextGeneration [mode=$mode]")
         return true
     }
 
     @Synchronized
-    override fun consumePendingInitialScan(): Long? {
-        if (!sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) return null
-        val generation = sourceConfigurationGeneration
-        sharedPreferences.edit(commit = true) { putBoolean(KEY_PENDING_INITIAL_SCAN, false) }
-        return generation
+    override fun claimPendingConfiguration(): SourceConfigurationCheckpoint? {
+        val checkpoint = sourceConfigurationCheckpoint ?: return null
+        if (
+            checkpoint.state != SourceConfigurationCheckpoint.State.PENDING &&
+                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING
+        ) {
+            return null
+        }
+        val claimed =
+            checkpoint.copy(
+                state = SourceConfigurationCheckpoint.State.RUNNING,
+                lastAttemptAtMs = System.currentTimeMillis(),
+            )
+        sharedPreferences.edit(commit = true) {
+            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
+            putString(KEY_CHECKPOINT_STATE, claimed.state.name)
+            putLong(KEY_CHECKPOINT_LAST_ATTEMPT, requireNotNull(claimed.lastAttemptAtMs))
+        }
+        return claimed
+    }
+
+    @Synchronized
+    override fun acknowledgeSourceConfiguration(
+        generation: Long,
+        unresolvedSourceKeys: Set<String>,
+        outcome: String,
+    ) {
+        if (generation != sourceConfigurationGeneration) return
+        val state =
+            if (unresolvedSourceKeys.isEmpty()) {
+                SourceConfigurationCheckpoint.State.COMMITTED
+            } else {
+                SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED
+            }
+        sharedPreferences.edit(commit = true) {
+            putBoolean(KEY_PENDING_INITIAL_SCAN, false)
+            putString(KEY_CHECKPOINT_STATE, state.name)
+            putStringSet(KEY_CHECKPOINT_UNRESOLVED, unresolvedSourceKeys)
+            putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
+        }
+    }
+
+    @Synchronized
+    override fun returnSourceConfigurationToPending(generation: Long, outcome: String) {
+        if (generation != sourceConfigurationGeneration) return
+        sharedPreferences.edit(commit = true) {
+            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
+            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.PENDING.name)
+            putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
+        }
+    }
+
+    @Synchronized
+    override fun markSourcesUnresolved(sourceKeys: Set<String>, outcome: String) {
+        if (sourceKeys.isEmpty()) return
+        val checkpoint = sourceConfigurationCheckpoint ?: return
+        sharedPreferences.edit(commit = true) {
+            putBoolean(KEY_PENDING_INITIAL_SCAN, false)
+            putString(
+                KEY_CHECKPOINT_STATE,
+                SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED.name,
+            )
+            putStringSet(KEY_CHECKPOINT_UNRESOLVED, checkpoint.unresolvedSourceKeys + sourceKeys)
+            putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
+        }
     }
 
     override fun forceLocationUpdate() {
@@ -431,6 +593,9 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
             putBoolean(KEY_PENDING_INITIAL_SCAN, true)
             putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.PENDING.name)
+            remove(KEY_CHECKPOINT_LAST_ATTEMPT)
+            remove(KEY_CHECKPOINT_LAST_OUTCOME)
         }
     }
 
@@ -541,6 +706,10 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
         const val KEY_PENDING_INITIAL_SCAN = "auxio_pending_initial_music_scan"
         const val KEY_SOURCE_CONFIGURATION_GENERATION = "auxio_source_configuration_generation"
+        const val KEY_CHECKPOINT_STATE = "auxio_source_checkpoint_state"
+        const val KEY_CHECKPOINT_UNRESOLVED = "auxio_source_checkpoint_unresolved"
+        const val KEY_CHECKPOINT_LAST_ATTEMPT = "auxio_source_checkpoint_last_attempt"
+        const val KEY_CHECKPOINT_LAST_OUTCOME = "auxio_source_checkpoint_last_outcome"
     }
 }
 

@@ -59,19 +59,20 @@ def metric_samples(metric: Any) -> list[float]:
     return []
 
 
-def metric_summary(metric: Any) -> tuple[float, float, float, float, int] | None:
+def metric_summary(metric: Any) -> tuple[float, float, float, float, float, int] | None:
     samples = metric_samples(metric)
     if samples:
         median = statistics.median(samples)
         p90 = percentile(samples, 0.90)
         p95 = percentile(samples, 0.95)
+        mad = statistics.median(abs(value - median) for value in samples)
         variance = statistics.pvariance(samples) if len(samples) > 1 else 0.0
-        return median, p90, p95, variance, len(samples)
+        return median, p90, p95, mad, variance, len(samples)
     if isinstance(metric, dict) and isinstance(metric.get("median"), (int, float)):
         median = float(metric["median"])
         maximum = float(metric.get("maximum", median))
         variance = float(metric.get("variance", metric.get("standardDeviation", 0.0)))
-        return median, maximum, maximum, variance, int(metric.get("repeatIterations", 0))
+        return median, maximum, maximum, 0.0, variance, int(metric.get("repeatIterations", 0))
     return None
 
 
@@ -99,7 +100,7 @@ def load_context(path: Path | None) -> dict[str, str]:
 
 
 def build_report(input_root: Path, context_path: Path | None) -> tuple[str, int]:
-    rows: list[tuple[str, str, float, float, float, float, int]] = []
+    rows: list[tuple[str, str, float, float, float, float, float, int]] = []
     for path in sorted(input_root.rglob("*.json")):
         try:
             document = json.loads(path.read_text(encoding="utf-8"))
@@ -125,17 +126,17 @@ def build_report(input_root: Path, context_path: Path | None) -> tuple[str, int]
         [
             "## Metrics",
             "",
-            "| Benchmark | Metric | Median | P90 | P95 | Variance | Samples |",
-            "|---|---|---:|---:|---:|---:|---:|",
+            "| Benchmark | Metric | Median | P90 | P95 | MAD | Variance | Samples |",
+            "|---|---|---:|---:|---:|---:|---:|---:|",
         ]
     )
-    for name, metric, median, p90, p95, variance, samples in rows:
+    for name, metric, median, p90, p95, mad, variance, samples in rows:
         lines.append(
             f"| {name} | {metric} | {median:.3f} | {p90:.3f} | {p95:.3f} | "
-            f"{variance:.3f} | {samples} |"
+            f"{mad:.3f} | {variance:.3f} | {samples} |"
         )
     if not rows:
-        lines.append("| _No Macrobenchmark metric JSON found_ | — | — | — | — | — | — |")
+        lines.append("| _No Macrobenchmark metric JSON found_ | — | — | — | — | — | — | — |")
     lines.extend(
         [
             "",

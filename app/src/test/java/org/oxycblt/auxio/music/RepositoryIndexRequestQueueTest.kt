@@ -29,12 +29,21 @@ class RepositoryIndexRequestQueueTest {
     fun coalescesToTheStrongestPendingRequest() {
         val queue = RepositoryIndexRequestQueue()
 
-        queue.offer(RepositoryIndexRequest(withCache = true, metadataProfile = null))
+        queue.offer(IndexRequest(IndexReason.USER_REFRESH, withCache = true))
         queue.offer(
-            RepositoryIndexRequest(withCache = true, metadataProfile = MetadataProfile.LEAN)
+            IndexRequest(
+                IndexReason.SOURCE_OBSERVER,
+                withCache = true,
+                metadataProfile = MetadataProfile.LEAN,
+            )
         )
         queue.offer(
-            RepositoryIndexRequest(withCache = false, metadataProfile = MetadataProfile.FULL)
+            IndexRequest(
+                IndexReason.USER_RETRY,
+                withCache = false,
+                metadataProfile = MetadataProfile.FULL,
+                configurationGeneration = 4L,
+            )
         )
 
         val request = requireNotNull(queue.drain())
@@ -48,9 +57,14 @@ class RepositoryIndexRequestQueueTest {
         val queue = RepositoryIndexRequestQueue()
 
         queue.offer(
-            RepositoryIndexRequest(withCache = false, metadataProfile = MetadataProfile.LEAN)
+            IndexRequest(
+                IndexReason.INITIAL_CONFIGURATION,
+                withCache = false,
+                metadataProfile = MetadataProfile.LEAN,
+                configurationGeneration = 2L,
+            )
         )
-        queue.offer(RepositoryIndexRequest(withCache = true, metadataProfile = null))
+        queue.offer(IndexRequest(IndexReason.USER_REFRESH, withCache = true))
 
         val request = requireNotNull(queue.drain())
         assertFalse(request.withCache)
@@ -62,10 +76,35 @@ class RepositoryIndexRequestQueueTest {
         val queue = RepositoryIndexRequestQueue()
 
         queue.offer(
-            RepositoryIndexRequest(withCache = true, metadataProfile = MetadataProfile.LEAN)
+            IndexRequest(
+                IndexReason.USER_REFRESH,
+                withCache = true,
+                metadataProfile = MetadataProfile.LEAN,
+            )
         )
-        queue.offer(RepositoryIndexRequest(withCache = true, metadataProfile = null))
+        queue.offer(IndexRequest(IndexReason.SOURCE_OBSERVER, withCache = true))
 
         assertEquals(MetadataProfile.LEAN, queue.drain()?.metadataProfile)
+    }
+
+    @Test
+    fun newerConfigurationSupersedesOlderPendingWork() {
+        val queue = RepositoryIndexRequestQueue()
+        queue.offer(
+            IndexRequest(
+                IndexReason.INITIAL_CONFIGURATION,
+                withCache = false,
+                configurationGeneration = 7L,
+            )
+        )
+        queue.offer(
+            IndexRequest(
+                IndexReason.INITIAL_CONFIGURATION,
+                withCache = false,
+                configurationGeneration = 8L,
+            )
+        )
+
+        assertEquals(8L, queue.drain()?.configurationGeneration)
     }
 }

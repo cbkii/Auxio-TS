@@ -5,6 +5,14 @@ Status: **Requires device validation**. Repository, JVM and managed-emulator res
 - **Evidence confidence:** Requires TS18 validation.
 - **Porting decision:** Reusable validation procedure; runtime results apply only to the recorded exact build, APK, source layout and power state.
 
+## Required exact-device context
+
+This procedure assumes the operator has read and is applying:
+
+- [`CODEX_TS18_DEVICE_CONTEXT.md`](../CODEX_TS18_DEVICE_CONTEXT.md)
+- [`TS18_INSTALLATION_CONSTRAINTS.md`](../TS18_INSTALLATION_CONSTRAINTS.md)
+- [the canonical `s9863a1h10` Android 10 device profile](../evidence/ts18-device-profile/s9863a1h10-android10-termone-2026-05-17.md)
+
 ## Exact target identity
 
 - Product/build identity: `s9863a1h10_Natv`
@@ -76,6 +84,10 @@ Do not merge samples across different boots, processes, APKs or source layouts.
 **Pass:** prior committed rows and primitive queue restore; pending generation never replaces committed data; playback controls become available independently of rich hydration.
 
 **Fail:** empty library despite committed data, queue replacement, stuck pending state, crash loop or source rescan destroys last-known-good data.
+
+Repeat once after claiming a new source configuration but before enumeration completes. The same
+generation must remain retryable after process recreation; it must not be consumed merely because a
+scan was dispatched.
 
 ### 4. Bluetooth and hardware/media-key start
 
@@ -166,6 +178,48 @@ Do not merge samples across different boots, processes, APKs or source layouts.
 **Pass:** one service/session remains, queue/current item and source status recover coherently, no implicit destructive rescan occurs, Fast Start works before enrichment.
 
 **Fail:** boot loop, duplicate service, dead controls, stale mount identity, lost queue or high background work immediately after wake.
+
+### 13. Restore-command burst
+
+**Prerequisite:** persisted queue with a playable item; process stopped.
+
+**Action:** launch through BOOT restore, then immediately send Bluetooth/media-button restore,
+Pause, Next, and one Seek before Queue Ready.
+
+**Pass:** one descriptor read/restore generation; latest play/pause and seek apply once; bounded skip
+lands on the expected item; watchdog cancellation prevents late attachment.
+
+**Fail:** repeated descriptor reads, lost command, double skip/seek, stale queue attachment, or a
+second service/session/notification.
+
+### 14. Late DirectFS mount and recovery
+
+**Prerequisite:** configured DirectFS USB source absent at process start with a prior committed
+library.
+
+**Action:** launch Auxio, mount the source after the UI/queue are ready, repeat the mounted broadcast
+burst, then use Retry source setup once. Repeat with `usbdisk0`/`usbdisk1` order reversed.
+
+**Pass:** prior library remains visible; one bounded settle/retry targets the matching source key;
+the current configuration generation commits only after enumeration; duplicate broadcasts do not
+cause a scan storm.
+
+**Fail:** authoritative empty publication, healthy sibling rescan/deletion, consumed checkpoint,
+permanent polling, or mount-name order changing source ownership.
+
+### 15. Generated playlists off and on
+
+**Prerequisite:** rich base library ready and no active source scan.
+
+**Action:** verify fresh/default Off, switch On, wait for Up to date, use Refresh, then switch Off
+while monitoring source requests.
+
+**Pass:** compiler starts only after startup-critical work; one generation job per base fingerprint;
+Refresh and toggle perform no source invalidation/index; Off removes generated rows only; user
+playlists and playback remain intact.
+
+**Fail:** generated work before Queue Ready, source scan, full base-index rebuild per toggle,
+duplicate jobs, lost user playlist, or base library loss after compiler failure.
 
 ## Timing interpretation
 
