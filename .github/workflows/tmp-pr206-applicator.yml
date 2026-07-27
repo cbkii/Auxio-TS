@@ -17,85 +17,952 @@ jobs:
           ref: fix/restore-v607-library-loading
           fetch-depth: 0
 
-      - name: Extract staged applicator
+      - name: Apply source-loading restoration
         shell: bash
         run: |
-          python3 - <<'PY'
+          set -o pipefail
+          python3 - <<'PY' 2>&1 | tee /tmp/pr206-applicator.log
           from pathlib import Path
-
-          workflow = Path('.github/workflows/tmp-restore-v607-library-loading.yml')
-          lines = workflow.read_text(encoding='utf-8').splitlines()
-          step = next(i for i, line in enumerate(lines) if 'Apply focused source-loading restoration' in line)
-          run_line = next(i for i in range(step + 1, len(lines)) if lines[i].strip() == 'run: |')
-          body = []
-          for line in lines[run_line + 1:]:
-              if line.startswith('      - name:'):
-                  break
-              body.append(line[10:] if line.startswith('          ') else line)
-          script_text = '\n'.join(body) + '\n'
-          start = script_text.index('# Fresh installs return to the last known-good SAF default.')
-          end = script_text.index('# Make source configuration one durable operation')
-          script_text = script_text[:start] + script_text[end:]
-          script_text = script_text.replace(
-              'raise SystemExit(f"{path}: expected one exact match, found {count}")',
-              'raise SystemExit(f"{path}: expected one exact match, found {count}; old={old[:240]!r}")',
-          )
-          Path('/tmp/pr206-apply.sh').write_text(script_text, encoding='utf-8')
-          PY
-
-      - name: Apply, format, and publish or preserve diagnostics
-        shell: bash
-        run: |
-          set +e
-          python3 - <<'PY'
-          from pathlib import Path
+          from textwrap import dedent
           import re
 
-          path = Path('app/src/main/java/org/oxycblt/auxio/music/locations/LocationMode.kt')
-          text = path.read_text(encoding='utf-8')
-          updated, count = re.subn(
-              r'        fun defaultForFlavor\(topwayCompat: Boolean\): LocationMode =\s*\n\s*if \(topwayCompat\) DIRECT_FS else SAF',
-              '        fun defaultForFlavor(\n            @Suppress("UNUSED_PARAMETER") topwayCompat: Boolean\n        ): LocationMode = SAF',
-              text,
-              count=1,
-          )
-          if count != 1 and '): LocationMode = SAF' not in text:
-              raise SystemExit(f'LocationMode default replacement count={count}')
-          path.write_text(updated if count else text, encoding='utf-8')
-          PY
-          bash /tmp/pr206-apply.sh > /tmp/pr206-applicator.log 2>&1
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            git reset --hard HEAD
-            cp /tmp/pr206-applicator.log .github/pr206-applicator-failure.log
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add .github/pr206-applicator-failure.log
-            git commit -m "chore: preserve PR206 applicator failure"
-            git push origin HEAD:fix/restore-v607-library-loading
-            cat /tmp/pr206-applicator.log
-            exit "$status"
-          fi
+          def load(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
 
+          def save(path: str, text: str) -> None:
+              Path(path).write_text(text, encoding="utf-8")
+
+          def sub(path: str, pattern: str, replacement: str, *, flags=re.S) -> None:
+              text = load(path)
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f"{path}: pattern did not match: {pattern[:180]!r}")
+              save(path, updated)
+
+          def insert_after(path: str, marker: str, addition: str) -> None:
+              text = load(path)
+              if marker not in text:
+                  raise SystemExit(f"{path}: marker not found: {marker[:180]!r}")
+              save(path, text.replace(marker, marker + addition, 1))
+
+          # Fresh installs return to the last known-good SAF source-selection baseline.
+          sub(
+              "app/src/main/java/org/oxycblt/auxio/music/locations/LocationMode.kt",
+              r"        fun defaultForFlavor\(topwayCompat: Boolean\): LocationMode =\s*if \(topwayCompat\) DIRECT_FS else SAF",
+              dedent('''
+                      fun defaultForFlavor(
+                          @Suppress("UNUSED_PARAMETER") topwayCompat: Boolean
+                      ): LocationMode = SAF''').lstrip("\n"),
+          )
+
+          # Durable, atomic source configuration and a separate generated-playlist preference.
+          path = "app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt"
+          insert_after(
+              path,
+              "    var mediaStoreQuery: MediaStore.Query\n",
+              dedent('''
+
+                  /** Monotonic generation for an atomically persisted source configuration. */
+                  val sourceConfigurationGeneration: Long
+                      get() = 0L
+
+                  /** Optional post-load generated playlists. Disabled by default. */
+                  val generatedPlaylistsEnabled: Boolean
+                      get() = false
+
+                  /** Persist all source fields together and queue one cache-bypassing initial scan. */
+                  fun applySourceConfiguration(
+                      mode: LocationMode,
+                      safQuery: SAF.Query,
+                      mediaStoreQuery: MediaStore.Query,
+                  ): Boolean {
+                      val changed =
+                          locationMode != mode ||
+                              this.safQuery != safQuery ||
+                              this.mediaStoreQuery != mediaStoreQuery
+                      locationMode = mode
+                      this.safQuery = safQuery
+                      this.mediaStoreQuery = mediaStoreQuery
+                      return changed
+                  }
+
+                  /** Consume a durable first-scan marker after the indexing worker is attached. */
+                  fun consumePendingInitialScan(): Boolean = false
+                  ''').rstrip("\n"),
+          )
+          insert_after(
+              path,
+              "        fun onObservingChanged() {}\n",
+              dedent('''
+
+                  /** Rebuild optional generated playlists without rescanning sources. */
+                  fun onGeneratedPlaylistsChanged() {}
+                  ''').rstrip("\n"),
+          )
+          insert_after(
+              path,
+              "    override val performanceCaptureEnabled: Boolean\n        get() = sharedPreferences.getBoolean(getString(R.string.set_key_performance_capture), false)\n",
+              dedent('''
+
+                  override val sourceConfigurationGeneration: Long
+                      get() = sharedPreferences.getLong(KEY_SOURCE_CONFIGURATION_GENERATION, 0L)
+
+                  override val generatedPlaylistsEnabled: Boolean
+                      get() =
+                          sharedPreferences.getBoolean(
+                              getString(R.string.set_key_generated_playlists),
+                              false,
+                          )
+                  ''').rstrip("\n"),
+          )
+          sub(
+              path,
+              r"    override fun forceLocationUpdate\(\) \{.*?\n    \}\n\n    override fun onSettingChanged",
+              dedent('''
+                  @Synchronized
+                  override fun applySourceConfiguration(
+                      mode: LocationMode,
+                      safQuery: SAF.Query,
+                      mediaStoreQuery: MediaStore.Query,
+                  ): Boolean {
+                      val changed =
+                          locationMode != mode ||
+                              this.safQuery != safQuery ||
+                              this.mediaStoreQuery != mediaStoreQuery
+                      if (!changed) return false
+
+                      val nextGeneration = sourceConfigurationGeneration + 1L
+                      sharedPreferences.edit(commit = true) {
+                          putInt(getString(R.string.set_key_locations_mode), mode.intCode)
+                          putString(getString(R.string.set_key_music_locations), safQuery.source.stringify())
+                          putString(
+                              getString(R.string.set_key_excluded_locations),
+                              safQuery.exclude.stringify(),
+                          )
+                          putBoolean(getString(R.string.set_key_with_hidden), safQuery.withHidden)
+                          putBoolean(
+                              getString(R.string.set_key_saf_multithread),
+                              safQuery.multithread,
+                          )
+
+                          val filterMode =
+                              when (mediaStoreQuery.mode) {
+                                  MediaStore.FilterMode.INCLUDE -> IntegerTable.FILTER_MODE_INCLUDE
+                                  MediaStore.FilterMode.EXCLUDE -> IntegerTable.FILTER_MODE_EXCLUDE
+                              }
+                          putInt(getString(R.string.set_key_filter_mode), filterMode)
+                          putString(
+                              getString(R.string.set_key_filtered_locations),
+                              mediaStoreQuery.filtered.stringify(),
+                          )
+                          putBoolean(
+                              getString(R.string.set_key_exclude_non_music),
+                              mediaStoreQuery.excludeNonMusic,
+                          )
+                          putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
+                          putBoolean(KEY_PENDING_INITIAL_SCAN, true)
+                          putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+                      }
+                      L.i("Persisted source configuration generation $nextGeneration [mode=$mode]")
+                      return true
+                  }
+
+                  @Synchronized
+                  override fun consumePendingInitialScan(): Boolean {
+                      if (!sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) return false
+                      sharedPreferences.edit(commit = true) { putBoolean(KEY_PENDING_INITIAL_SCAN, false) }
+                      return true
+                  }
+
+                  override fun forceLocationUpdate() {
+                      markInitialScanPending()
+                      listeners.forEach { it.onMusicLocationsChanged() }
+                  }
+
+                  @Synchronized
+                  private fun markInitialScanPending() {
+                      val nextGeneration = sourceConfigurationGeneration + 1L
+                      sharedPreferences.edit(commit = true) {
+                          putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
+                          putBoolean(KEY_PENDING_INITIAL_SCAN, true)
+                          putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+                      }
+                  }
+
+                  override fun onSettingChanged''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"(            getString\(R\.string\.set_key_performance_capture\) -> \{)",
+              dedent('''
+                              getString(R.string.set_key_generated_playlists) -> {
+                                  L.d("Applying generated-playlist preference without source reindex")
+                                  listener.onGeneratedPlaylistsChanged()
+                              }
+                              getString(R.string.set_key_performance_capture) -> {''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"    private companion object \{\n        const val KEY_TS18_SYSTEM_SOURCE_FILTER = \"auxio_ts18_system_source_filter\"\n    \}",
+              dedent('''
+                  private companion object {
+                      const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
+                      const val KEY_PENDING_INITIAL_SCAN = "auxio_pending_initial_music_scan"
+                      const val KEY_SOURCE_CONFIGURATION_GENERATION =
+                          "auxio_source_configuration_generation"
+                  }''').lstrip("\n"),
+          )
+
+          # DirectFS mode uses its direct candidate/manual picker, never DocumentsUI.
+          path = "app/src/main/java/org/oxycblt/auxio/music/locations/LocationsDialog.kt"
+          sub(
+              path,
+              r"    private fun onNewLocation\(launcher: ActivityResultLauncher<Uri\?>\?, disableThirdParty: Boolean\) \{.*?\n    \}\n\n    private fun showPickerUnavailableFallback",
+              dedent('''
+                  private fun onNewLocation(
+                      launcher: ActivityResultLauncher<Uri?>?,
+                      disableThirdParty: Boolean,
+                  ) {
+                      L.d("Opening music-source selector [mode=$locationMode]")
+                      if (locationMode == LocationMode.DIRECT_FS) {
+                          showCandidatePathPicker(disableThirdParty)
+                          return
+                      }
+
+                      val documentTreeLauncher =
+                          requireNotNull(launcher) { "Document tree launcher was not available" }
+                      try {
+                          documentTreeLauncher.launch(null)
+                      } catch (e: ActivityNotFoundException) {
+                          L.w(e, "SAF tree picker activity not found; showing fallback sources.")
+                          showPickerUnavailableFallback(disableThirdParty)
+                      } catch (e: SecurityException) {
+                          L.w(e, "SAF tree picker launch denied; showing fallback sources.")
+                          showPickerUnavailableFallback(disableThirdParty)
+                      } catch (e: IllegalStateException) {
+                          L.w(e, "SAF tree picker launcher unavailable; showing fallback sources.")
+                          showPickerUnavailableFallback(disableThirdParty)
+                      } catch (e: RuntimeException) {
+                          L.w(e, "SAF tree picker failed; showing fallback sources.")
+                          showPickerUnavailableFallback(disableThirdParty)
+                      }
+                  }
+
+                  private fun showPickerUnavailableFallback''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"    private fun saveChanges\(\) \{.*?\n    \}\n\n    private fun checkStoragePermission",
+              dedent('''
+                  private fun saveChanges() {
+                      val binding = requireBinding()
+                      val currentSafQuery = musicSettings.safQuery
+                      val currentMediaStoreQuery = musicSettings.mediaStoreQuery
+                      val newSafQuery =
+                          if (locationMode == LocationMode.SAF || locationMode == LocationMode.DIRECT_FS) {
+                              SAF.Query(
+                                  source = includeLocationAdapter.locations,
+                                  exclude = excludeLocationAdapter.locations,
+                                  withHidden = binding.locationsWithHiddenSwitch.isChecked,
+                                  multithread = binding.locationsMultithreadSwitch.isChecked,
+                              )
+                          } else {
+                              currentSafQuery
+                          }
+                      val newMediaStoreQuery =
+                          if (locationMode == LocationMode.MEDIA_STORE) {
+                              MediaStore.Query(
+                                  mode =
+                                      if (isIncludeMode) {
+                                          MediaStore.FilterMode.INCLUDE
+                                      } else {
+                                          MediaStore.FilterMode.EXCLUDE
+                                      },
+                                  filtered = filterLocationAdapter.locations,
+                                  excludeNonMusic = binding.locationsExcludeNonMusicSwitch.isChecked,
+                              )
+                          } else {
+                              currentMediaStoreQuery
+                          }
+
+                      val changed =
+                          musicSettings.applySourceConfiguration(
+                              mode = locationMode,
+                              safQuery = newSafQuery,
+                              mediaStoreQuery = newMediaStoreQuery,
+                          )
+                      if (!changed && permissionGrantedInSession) {
+                          L.d("Storage permission changed; queuing one source-authoritative scan")
+                          musicSettings.forceLocationUpdate()
+                      }
+                  }
+
+                  private fun checkStoragePermission''').lstrip("\n"),
+          )
+
+          # Generated playlists are a post-load projection, not part of base library construction.
+          path = "musikr/src/main/java/org/oxycblt/musikr/Library.kt"
+          insert_after(
+              path,
+              "interface MutableLibrary : Library {\n",
+              dedent('''
+                  /** Add or remove generated playlists without rescanning music sources. */
+                  fun withGeneratedPlaylists(enabled: Boolean): MutableLibrary = this
+
+                  ''').lstrip("\n"),
+          )
+
+          path = "musikr/src/main/java/org/oxycblt/musikr/model/LibraryFactory.kt"
+          sub(path, r"private class LibraryFactoryImpl : LibraryFactory", "internal class LibraryFactoryImpl : LibraryFactory", flags=0)
+          sub(
+              path,
+              r"\n        // Generated playlists are deterministic projections.*?\n        generatedDefinitions\.forEach \{ definition ->.*?\n        \}\n\n        return LibraryImpl\(",
+              "\n        return LibraryImpl(",
+          )
+          sub(path, r"    private companion object \{", "    companion object {", flags=0)
+          insert_after(
+              path,
+              "    companion object {\n",
+              dedent('''
+                      internal fun generatedPlaylists(songs: Collection<Song>): Set<PlaylistImpl> {
+                          val definitions =
+                              GeneratedPlaylistCompiler.compile(
+                                  songs.map { song ->
+                                      GeneratedPlaylistCompiler.Entry(
+                                          value = song,
+                                          stableKey = song.uid.toString(),
+                                          addedMs = song.addedMs,
+                                          year = song.album.dates?.min?.year,
+                                          albumSort = song.album.name.sortKey(),
+                                          disc = song.disc?.number ?: 0,
+                                          track = song.track ?: 0,
+                                          titleSort = song.name.sort ?: song.name.raw,
+                                      )
+                                  }
+                              )
+                          return definitions.mapTo(mutableSetOf()) { definition ->
+                              PlaylistImpl(
+                                  GeneratedPlaylistCore(
+                                      id = definition.id,
+                                      displayName = definition.name,
+                                      songs = definition.values,
+                                  )
+                              )
+                          }
+                      }
+
+                      ''').lstrip("\n"),
+          )
+
+          path = "musikr/src/main/java/org/oxycblt/musikr/model/LibraryImpl.kt"
+          insert_after(
+              path,
+              "    override fun empty() = songs.isEmpty()\n",
+              dedent('''
+
+                  override fun withGeneratedPlaylists(enabled: Boolean): MutableLibrary {
+                      val ordinary =
+                          playlists.filterNotTo(mutableSetOf()) {
+                              it.origin == Playlist.Origin.GENERATED
+                          }
+                      val projected =
+                          if (enabled) ordinary + LibraryFactoryImpl.generatedPlaylists(songs) else ordinary
+                      return if (projected == playlists) this else copy(playlists = projected)
+                  }
+                  ''').rstrip("\n"),
+          )
+
+          # Repository: first source scan bypasses incremental preflight; cancellation terminates;
+          # readable partial libraries publish; generated playlists refresh independently.
+          path = "app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt"
+          insert_after(path, "import kotlinx.coroutines.Job\n", "import kotlinx.coroutines.NonCancellable\n")
+          insert_after(path, "import org.oxycblt.musikr.Song\n", "import org.oxycblt.musikr.SourceScanFailureException\n")
+          insert_after(
+              path,
+              "    suspend fun invalidateSource(sourceKey: String? = null) = Unit\n",
+              dedent('''
+
+                  /** Rebuild only optional generated playlists from the current base library. */
+                  suspend fun refreshGeneratedPlaylists() = Unit
+                  ''').rstrip("\n"),
+          )
+          insert_after(
+              path,
+              "    @Volatile private var compatibilityHydrationJob: Job? = null\n",
+              "    @Volatile private var generatedPlaylistJob: Job? = null\n",
+          )
+          sub(
+              path,
+              r"            val prepared =\n                try \{\n                    IncrementalIndexPlanner\.prepare\((.*?)\n                    \)\n                \} catch \(e: CancellationException\) \{\n                    throw e\n                \} catch \(e: Exception\) \{(.*?)\n                \}",
+              dedent('''
+                          val prepared =
+                              if (!withCache) {
+                                  L.i("Using simple source-authoritative scan; incremental preflight bypassed")
+                                  IncrementalIndexPlanner.Prepared(
+                                      fs = rawFs,
+                                      cache = WriteOnlyMutableCache(cache),
+                                      plan = null,
+                                  )
+                              } else {
+                                  try {
+                                      IncrementalIndexPlanner.prepare(
+                                          fs = rawFs,
+                                          cache = cache,
+                                          withCache = true,
+                                          profile = resolvedProfile,
+                                          configurationRevision = sourceConfigurationRevision(),
+                                          legacyWriteOnly = ::WriteOnlyMutableCache,
+                                      )
+                                  } catch (e: CancellationException) {
+                                      withContext(NonCancellable) {
+                                          emitIndexingCompletion(
+                                              Exception("Music-source preflight cancelled", e)
+                                          )
+                                      }
+                                      throw e
+                                  } catch (e: Exception) {
+                                      musicSettings.lastScanFailed = true
+                                      emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                                      L.w(
+                                          e,
+                                          "Music-source preflight failed; preserving the last readable library",
+                                      )
+                                      emitIndexingCompletion(e)
+                                      return@traceSuspend
+                                  }
+                              }''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"            if \(plan == null && locations\.any \{ !it\.path\.volume\.isAccessible\(\) \}\) \{",
+              "            if (\n                plan == null &&\n                    musicSettings.locationMode == LocationMode.SAF &&\n                    locations.any { !it.path.volume.isAccessible() }\n            ) {",
+              flags=0,
+          )
+          sub(
+              path,
+              r"                if \(plan == null && result\.library\.songs\.isEmpty\(\)\) \{\n                    if \(locations\.any \{ !it\.path\.volume\.isAccessible\(\) \}\) \{",
+              "                if (\n                    plan == null &&\n                        musicSettings.locationMode == LocationMode.SAF &&\n                        result.library.songs.isEmpty()\n                ) {\n                    if (locations.any { !it.path.volume.isAccessible() }) {",
+              flags=0,
+          )
+          sub(
+              path,
+              r"                val publishedLibrary =\n                    if \(result\.failedSources\.isEmpty\(\)\) \{\n                        result\.library\n                    \} else \{.*?\n                    \}",
+              dedent('''
+                              val publishedLibrary =
+                                  if (result.failedSources.isEmpty() || result.library.songs.isNotEmpty()) {
+                                      if (result.failedSources.isNotEmpty()) {
+                                          L.w(
+                                              "Publishing readable partial library; source warnings: " +
+                                                  result.failedSources.keys
+                                          )
+                                      }
+                                      result.library
+                                  } else {
+                                      throw SourceScanFailureException(result.failedSources)
+                                  }''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"                emitLibrary\(publishedLibrary\)\n                result\.cleanup\(\)",
+              dedent('''
+                              emitLibrary(publishedLibrary)
+                              try {
+                                  result.cleanup()
+                              } catch (cleanupFailure: Exception) {
+                                  L.w(cleanupFailure, "Post-publication cover cleanup failed")
+                              }''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"                if \(!isEmpty\) emitStartupReadinessState\(StartupReadinessState\.FullLibraryReady\)",
+              dedent('''
+                              if (!isEmpty) {
+                                  emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                                  requestGeneratedPlaylistRefresh()
+                              }''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"            \} catch \(e: CancellationException\) \{\n                throw e\n            \} catch \(e: Exception\) \{",
+              dedent('''
+                          } catch (e: CancellationException) {
+                              withContext(NonCancellable) {
+                                  emitIndexingCompletion(
+                                      Exception("Music indexing cancelled before completion", e)
+                                  )
+                              }
+                              throw e
+                          } catch (e: Exception) {''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"    private fun startCompatibilityBackfill\(\) \{",
+              dedent('''
+                  override suspend fun refreshGeneratedPlaylists() {
+                      val current = synchronized(this) { library } ?: return
+                      val startingRevision = musicSettings.revision
+                      val startingDeviceGeneration = deviceLibraryGeneration.get()
+                      val enabled = musicSettings.generatedPlaylistsEnabled
+                      val projected =
+                          withContext(Dispatchers.Default) {
+                              current.withGeneratedPlaylists(enabled)
+                          }
+                      val stillCurrent =
+                          synchronized(this) {
+                              library === current &&
+                                  musicSettings.revision == startingRevision &&
+                                  deviceLibraryGeneration.get() == startingDeviceGeneration
+                          }
+                      if (!stillCurrent) {
+                          L.d("Skipping generated-playlist projection superseded by a newer library")
+                          return
+                      }
+                      if (projected === current) return
+                      emitLibrary(projected, device = false, user = true)
+                      L.i("Generated playlists ${if (enabled) "enabled" else "disabled"}")
+                  }
+
+                  private fun requestGeneratedPlaylistRefresh() {
+                      if (!musicSettings.generatedPlaylistsEnabled) return
+                      generatedPlaylistJob?.cancel()
+                      generatedPlaylistJob =
+                          compatibilityHydrationScope.launch {
+                              try {
+                                  refreshGeneratedPlaylists()
+                              } catch (e: CancellationException) {
+                                  throw e
+                              } catch (e: Exception) {
+                                  L.w(e, "Generated playlists failed; base library remains available")
+                              }
+                          }
+                  }
+
+                  private fun startCompatibilityBackfill() {''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"                        if \(songCount > 0\) \{\n                            emitStartupReadinessState\(StartupReadinessState\.FullLibraryReady\)\n                        \}",
+              dedent('''
+                                      if (songCount > 0) {
+                                          emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
+                                          requestGeneratedPlaylistRefresh()
+                                      }''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"    private suspend fun emitLibrary\(newLibrary: MutableLibrary\) \{",
+              dedent('''
+                  private suspend fun emitLibrary(
+                      newLibrary: MutableLibrary,
+                      device: Boolean = true,
+                      user: Boolean = true,
+                  ) {''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"withContext\(Dispatchers\.Main\) \{ dispatchLibraryChange\(device = true, user = true\) \}",
+              "withContext(Dispatchers.Main) { dispatchLibraryChange(device = device, user = user) }",
+              flags=0,
+          )
+
+          # Indexing holder consumes the durable marker and deduplicates preference callbacks.
+          path = "app/src/main/java/org/oxycblt/auxio/music/service/IndexingHolder.kt"
+          insert_after(
+              path,
+              "    private var pendingStartupOrigin: StartupScanOrigin? = null\n",
+              "    private var lastHandledSourceConfigurationGeneration = Long.MIN_VALUE\n",
+          )
+          sub(
+              path,
+              r"                        musicRepository\.startup\(this@IndexingHolder\)\n                        if \(BuildConfig\.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed\) \{\n                            requestVisibleRecoveryScan\(sourceAuthority\)\n                        \}",
+              dedent('''
+                                      musicRepository.startup(this@IndexingHolder)
+                                      val pendingInitialScan = musicSettings.consumePendingInitialScan()
+                                      if (pendingInitialScan) {
+                                          synchronized(this@IndexingHolder) {
+                                              lastHandledSourceConfigurationGeneration =
+                                                  musicSettings.sourceConfigurationGeneration
+                                          }
+                                          L.i("Consuming durable source configuration with a simple initial scan")
+                                          requestIndex(false)
+                                      } else if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
+                                          requestVisibleRecoveryScan(sourceAuthority)
+                                      }''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"(Trusted visible startup is repairing the library.*?\n            \)\n            requestIndex\()true(\))",
+              r"\1false\2",
+          )
+          sub(
+              path,
+              r"    override fun onMusicLocationsChanged\(\) \{.*?\n    \}\n\n    override fun onIndexingSettingChanged",
+              dedent('''
+                  override fun onMusicLocationsChanged() {
+                      super.onMusicLocationsChanged()
+                      val generation = musicSettings.sourceConfigurationGeneration
+                      val shouldHandle =
+                          synchronized(this) {
+                              if (generation == lastHandledSourceConfigurationGeneration) {
+                                  false
+                              } else {
+                                  lastHandledSourceConfigurationGeneration = generation
+                                  true
+                              }
+                          }
+                      if (!shouldHandle) {
+                          L.d("Ignoring duplicate source callback [generation=$generation]")
+                          return
+                      }
+                      if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
+                      val initialScan = musicSettings.consumePendingInitialScan()
+                      indexScope.launch {
+                          musicRepository.invalidateSource()
+                          musicRepository.requestIndex(withCache = !initialScan)
+                      }
+                  }
+
+                  override fun onGeneratedPlaylistsChanged() {
+                      indexScope.launch { musicRepository.refreshGeneratedPlaylists() }
+                  }
+
+                  override fun onIndexingSettingChanged''').lstrip("\n"),
+          )
+
+          # DirectFS source-local failures are isolated; one bounded root snapshot may provide names.
+          path = "musikr/src/main/java/org/oxycblt/musikr/fs/direct/DirectFS.kt"
+          insert_after(path, "import org.oxycblt.musikr.fs.RootGate\n", "import org.oxycblt.musikr.fs.RootTreeSnapshot\n")
+          sub(
+              path,
+              r"    private val rootSnapshotChecked = ConcurrentHashMap\.newKeySet<String>\(\)\n    private val rootSnapshotOnly = ConcurrentHashMap\.newKeySet<String>\(\)",
+              dedent('''
+                  private val rootSnapshotChecked = ConcurrentHashMap.newKeySet<String>()
+                  private val rootSnapshotEntries =
+                      ConcurrentHashMap<String, Map<String, List<DirectEntry>>>()''').lstrip("\n"),
+              flags=0,
+          )
+          sub(
+              path,
+              r"        if \(task\.depth > MAX_DEPTH\) \{\n            recordFailure\(.*?\n            \)\n            return\n        \}",
+              dedent('''
+                          if (task.depth > MAX_DEPTH) {
+                              val detail = "DirectFS maximum depth exceeded at ${task.directory.path}"
+                              if (task.configuredRootTask) recordFailure(task.sourceKey, detail)
+                              else Log.w(TAG, detail)
+                              return
+                          }''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"        val entries = listFilesSafe\(task\.directory\)\n        if \(entries == null\) \{.*?\n            return\n        \}",
+              dedent('''
+                          val entries = listFilesSafe(task.directory)
+                          if (entries == null) {
+                              val detail = "DirectFS directory is unavailable at ${task.directory.path}"
+                              if (task.configuredRootTask) {
+                                  recordFailure(task.sourceKey, detail)
+                              } else {
+                                  Log.w(TAG, "Skipping unreadable child directory ${task.directory.path}")
+                              }
+                              return
+                          }''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"            if \(!isWithinCanonicalRoot\(item, task\.canonicalRoot\)\) \{\n                recordFailure\(.*?\n                \)\n                continue\n            \}",
+              dedent('''
+                              if (!isWithinCanonicalRoot(item, task.canonicalRoot)) {
+                                  Log.w(TAG, "DirectFS skipped an escaped directory at ${item.path}")
+                                  continue
+                              }''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"            if \(current >= MAX_VISITED_DIRECTORIES\) \{\n                recordFailure\(.*?\n                \)\n                return EnqueueResult\.LimitExceeded\n            \}",
+              dedent('''
+                              if (current >= MAX_VISITED_DIRECTORIES) {
+                                  Log.w(TAG, "DirectFS directory limit reached at ${task.directory.path}")
+                                  return EnqueueResult.LimitExceeded
+                              }''').lstrip("\n"),
+          )
+          sub(
+              path,
+              r"    private fun listFilesSafe\(directory: JavaFile\): List<DirectEntry>\? \{.*?\n    \}\n\n    private fun configuredRootFor",
+              dedent('''
+                  private fun listFilesSafe(directory: JavaFile): List<DirectEntry>? {
+                      val local =
+                          try {
+                              directory.listFiles()
+                          } catch (e: RuntimeException) {
+                              Log.d(TAG, "Direct listing unavailable for ${directory.path}", e)
+                              null
+                          }
+                      if (local != null) {
+                          return local.map {
+                              DirectEntry(
+                                  javaFile = it,
+                                  name = it.name,
+                                  isDirectory = it.isDirectory,
+                                  isSymlink = isSymbolicLinkCompat(it),
+                                  modifiedMs = it.lastModified(),
+                                  size = it.length(),
+                              )
+                          }
+                      }
+
+                      val canonicalRoot = configuredRootFor(directory)
+                      val canonicalDirectory = canonicalFileOrNull(directory)
+                      if (canonicalRoot != null && canonicalDirectory != null && rootGate != null) {
+                          val requestedRoot = configuredRequestedRootFor(canonicalRoot)
+                          val key = canonicalRoot.absolutePath
+                          if (rootSnapshotChecked.add(key)) {
+                              rootGate.snapshotTreeSync(
+                                      requestedRoot.absolutePath,
+                                      MAX_DEPTH,
+                                      ROOT_SNAPSHOT_TIMEOUT_MS,
+                                  )
+                                  ?.let { snapshot ->
+                                      rootSnapshotEntries[key] = indexRootSnapshot(requestedRoot, snapshot)
+                                  }
+                          }
+                          rootSnapshotEntries[key]?.let { index ->
+                              val relative = relativePathWithin(canonicalDirectory, canonicalRoot)
+                              if (relative != null && index.containsKey(relative)) {
+                                  Log.d(TAG, "Using bounded root snapshot for ${directory.path}")
+                                  return index.getValue(relative)
+                              }
+                          }
+                      }
+                      Log.w(TAG, "DirectFS source is unavailable or inaccessible: ${directory.path}")
+                      return null
+                  }
+
+                  private fun indexRootSnapshot(
+                      requestedRoot: JavaFile,
+                      snapshot: RootTreeSnapshot,
+                  ): Map<String, List<DirectEntry>> {
+                      val children = linkedMapOf<String, MutableList<DirectEntry>>()
+                      children.getOrPut("") { mutableListOf() }
+                      for (entry in snapshot.entries) {
+                          val relative = normalizeSnapshotRelativePath(entry.relativePath) ?: continue
+                          val parent = relative.substringBeforeLast('/', "")
+                          val name = relative.substringAfterLast('/')
+                          children.getOrPut(parent) { mutableListOf() } +=
+                              DirectEntry(
+                                  javaFile = JavaFile(requestedRoot, relative),
+                                  name = name,
+                                  isDirectory = entry.isDirectory,
+                                  isSymlink = entry.isSymlink,
+                                  modifiedMs = entry.modifiedMs,
+                                  size = entry.size,
+                              )
+                          if (entry.isDirectory) children.getOrPut(relative) { mutableListOf() }
+                      }
+                      return children.mapValues { (_, entries) ->
+                          entries.sortedBy { it.name.lowercase(Locale.ROOT) }
+                      }
+                  }
+
+                  private fun normalizeSnapshotRelativePath(value: String): String? {
+                      val clean = value.replace('\\', '/').trim('/')
+                      if (clean.isBlank()) return null
+                      val segments = clean.split('/')
+                      if (segments.any { it.isBlank() || it == "." || it == ".." }) return null
+                      return segments.joinToString("/")
+                  }
+
+                  private fun relativePathWithin(
+                      directory: JavaFile,
+                      configuredRoot: JavaFile,
+                  ): String? {
+                      val rootPath = configuredRoot.absolutePath.trimEnd('/')
+                      val directoryPath = directory.absolutePath.trimEnd('/')
+                      return when {
+                          directoryPath == rootPath -> ""
+                          directoryPath.startsWith("$rootPath/") ->
+                              directoryPath.removePrefix("$rootPath/")
+                          else -> null
+                      }
+                  }
+
+                  private fun configuredRequestedRootFor(canonicalRoot: JavaFile): JavaFile =
+                      roots
+                          .asSequence()
+                          .mapNotNull { it.uri.path?.let(::JavaFile) }
+                          .firstOrNull { canonicalFileOrNull(it) == canonicalRoot }
+                          ?: canonicalRoot
+
+                  private fun configuredRootFor''').lstrip("\n"),
+          )
+
+          # Resources and focused tests.
+          path = "app/src/main/res/values/settings.xml"
+          insert_after(
+              path,
+              "    <string name=\"set_key_performance_capture\" translatable=\"false\">auxio_performance_capture</string>\n",
+              "    <string name=\"set_key_generated_playlists\" translatable=\"false\">auxio_generated_playlists</string>\n",
+          )
+          path = "app/src/main/res/values/strings.xml"
+          sub(
+              path,
+              r"</resources>\s*$",
+              dedent('''
+                      <string name="set_generated_playlists">Generated playlists</string>
+                      <string name="set_generated_playlists_desc">Create Recently added and decade playlists only after the main music library has loaded. Disabled by default.</string>
+                  </resources>
+                  ''').lstrip("\n"),
+          )
+          path = "app/src/main/res/xml/preferences_music.xml"
+          insert_after(
+              path,
+              "        <SwitchPreferenceCompat app:defaultValue=\"false\" app:key=\"@string/set_key_performance_capture\" app:summary=\"@string/set_performance_capture_desc\" app:title=\"@string/set_performance_capture\" />\n",
+              "        <SwitchPreferenceCompat app:defaultValue=\"false\" app:key=\"@string/set_key_generated_playlists\" app:summary=\"@string/set_generated_playlists_desc\" app:title=\"@string/set_generated_playlists\" />\n",
+          )
+
+          path = "app/src/test/java/org/oxycblt/auxio/music/locations/LocationModeDefaultTest.kt"
+          sub(
+              path,
+              r"    fun topwayFreshInstallUsesDirectFs\(\) \{\n        assertEquals\(LocationMode\.DIRECT_FS, LocationMode\.defaultForFlavor\(true\)\)\n    \}",
+              dedent('''
+                      fun topwayFreshInstallUsesSafRecoveryBaseline() {
+                          assertEquals(LocationMode.SAF, LocationMode.defaultForFlavor(true))
+                      }''').lstrip("\n"),
+              flags=0,
+          )
+
+          path = "app/src/test/java/org/oxycblt/auxio/music/MusicSettingsIndexingTriggerTest.kt"
+          insert_after(path, "        var observingChanges = 0\n", "        var generatedPlaylistChanges = 0\n")
+          insert_after(
+              path,
+              "        override fun onObservingChanged() {\n            observingChanges++\n        }\n",
+              dedent('''
+
+                      override fun onGeneratedPlaylistsChanged() {
+                          generatedPlaylistChanges++
+                      }
+                      ''').rstrip("\n"),
+          )
+          insert_after(
+              path,
+              "    @Test\n    fun `observation settings dispatch observing changes only`() {\n",
+              "",
+          )
+          marker = "    @Test\n    fun `observation settings dispatch observing changes only`() {\n"
+          text = load(path)
+          test = dedent('''
+              @Test
+              fun `generated playlists toggle does not initiate a source scan`() {
+                  dispatch(context.getString(R.string.set_key_generated_playlists))
+                  assertEquals(0, listener.indexingSettingChanges)
+                  assertEquals(0, listener.locationChanges)
+                  assertEquals(1, listener.generatedPlaylistChanges)
+              }
+
+              ''')
+          if marker not in text:
+              raise SystemExit(f"{path}: observation test marker missing")
+          save(path, text.replace(marker, test + marker, 1))
+
+          new_test = Path("app/src/test/java/org/oxycblt/auxio/music/MusicSourceConfigurationTest.kt")
+          new_test.write_text(dedent('''
+              /*
+               * Copyright (c) 2026 Auxio Project
+               * MusicSourceConfigurationTest.kt is part of Auxio.
+               *
+               * This program is free software: you can redistribute it and/or modify
+               * it under the terms of the GNU General Public License as published by
+               * the Free Software Foundation, either version 3 of the License, or
+               * (at your option) any later version.
+               */
+
+              package org.oxycblt.auxio.music
+
+              import android.content.Context
+              import android.net.Uri
+              import androidx.preference.PreferenceManager
+              import androidx.test.core.app.ApplicationProvider
+              import java.io.File
+              import org.junit.Assert.assertEquals
+              import org.junit.Assert.assertFalse
+              import org.junit.Assert.assertTrue
+              import org.junit.Before
+              import org.junit.Test
+              import org.junit.runner.RunWith
+              import org.oxycblt.auxio.music.locations.LocationMode
+              import org.oxycblt.musikr.fs.Location
+              import org.oxycblt.musikr.fs.saf.SAF
+              import org.robolectric.RobolectricTestRunner
+              import org.robolectric.annotation.Config
+
+              @RunWith(RobolectricTestRunner::class)
+              @Config(sdk = [29])
+              class MusicSourceConfigurationTest {
+                  private lateinit var context: Context
+                  private lateinit var settings: MusicSettingsImpl
+
+                  @Before
+                  fun setUp() {
+                      context = ApplicationProvider.getApplicationContext()
+                      PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit()
+                      settings = MusicSettingsImpl(context)
+                  }
+
+                  @Test
+                  fun `source configuration is durable and queues one initial scan`() {
+                      settings.lastScanFailed = true
+                      val source =
+                          requireNotNull(
+                              Location.Unopened
+                                  .from(
+                                      context,
+                                      Uri.fromFile(File("/storage/emulated/0/Music")),
+                                  )
+                                  .open(context)
+                          )
+                      val query =
+                          SAF.Query(
+                              source = listOf(source),
+                              exclude = emptyList(),
+                              withHidden = false,
+                              multithread = true,
+                          )
+                      val before = settings.sourceConfigurationGeneration
+
+                      assertTrue(
+                          settings.applySourceConfiguration(
+                              LocationMode.DIRECT_FS,
+                              query,
+                              settings.mediaStoreQuery,
+                          )
+                      )
+                      assertEquals(LocationMode.DIRECT_FS, settings.locationMode)
+                      assertEquals(1, settings.configuredSourceCount)
+                      assertEquals(before + 1L, settings.sourceConfigurationGeneration)
+                      assertFalse(settings.lastScanFailed)
+                      assertTrue(settings.consumePendingInitialScan())
+                      assertFalse(settings.consumePendingInitialScan())
+                  }
+              }
+              ''').lstrip("\n"), encoding="utf-8")
+
+          print("Applied v6.0.7 source-loading restoration and generated-playlist opt-in")
+          PY
+
+      - name: Format and publish implementation
+        shell: bash
+        run: |
           chmod +x gradlew
           ./gradlew spotlessApply --no-daemon
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            git reset --hard HEAD
-            printf '%s\n' 'spotlessApply failed after the source patch applied' > .github/pr206-applicator-failure.log
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add .github/pr206-applicator-failure.log
-            git commit -m "chore: preserve PR206 formatting failure"
-            git push origin HEAD:fix/restore-v607-library-loading
-            exit "$status"
-          fi
-
           rm -f .github/workflows/tmp-restore-v607-library-loading.yml
-          rm -f .github/pr206-applicator-trigger.txt
-          rm -f .github/pr206-applicator-trigger-2.txt
-          rm -f .github/pr206-applicator-trigger-3.txt
-          rm -f .github/pr206-applicator-trigger-4.txt
+          rm -f .github/pr206-applicator-trigger*.txt
           rm -f .github/pr206-applicator-failure.log
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -103,3 +970,19 @@ jobs:
           git diff --cached --check
           git commit -m "fix: restore reliable music source loading"
           git push origin HEAD:fix/restore-v607-library-loading
+
+      - name: Preserve applicator diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          git reset --hard HEAD
+          if [ -f /tmp/pr206-applicator.log ]; then
+            cp /tmp/pr206-applicator.log .github/pr206-applicator-failure.log
+          else
+            printf '%s\n' 'PR206 applicator failed before producing a log' > .github/pr206-applicator-failure.log
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/pr206-applicator-failure.log
+          git commit -m "chore: preserve PR206 applicator failure" || true
+          git push origin HEAD:fix/restore-v607-library-loading || true
