@@ -21,6 +21,7 @@ package org.oxycblt.auxio.music
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -39,6 +40,7 @@ class StartupOptionalWorkGateTest {
         assertFalse(waiter.isCompleted)
 
         gate.onRestoreFinished()
+        withTimeout(1_000L) { waiter.join() }
         assertTrue(waiter.isCompleted)
     }
 
@@ -52,6 +54,7 @@ class StartupOptionalWorkGateTest {
         assertFalse(waiter.isCompleted)
 
         readiness.publishCapability(StartupReadinessState.QueueReady)
+        withTimeout(1_000L) { waiter.join() }
         assertTrue(waiter.isCompleted)
     }
 }
