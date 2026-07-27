@@ -72,8 +72,16 @@ internal object IncrementalIndexPlanner {
             throw SourcePreflightException("Music-source preflight returned no configured sources")
         }
 
+        val retriedKeys =
+            observedSnapshots
+                .asSequence()
+                .filterNot { it.available }
+                .filter { targetSourceKeys == null || it.sourceKey in targetSourceKeys }
+                .mapTo(linkedSetOf()) { it.sourceKey }
         val retryableSnapshots = observedSnapshots.map { snapshot ->
-            if (snapshot.available) {
+            val targetedForRetry =
+                targetSourceKeys == null || snapshot.sourceKey in targetSourceKeys
+            if (snapshot.available || !targetedForRetry) {
                 snapshot
             } else {
                 // Availability probes are advisory. Actual enumeration remains authoritative.
@@ -87,8 +95,6 @@ internal object IncrementalIndexPlanner {
                 )
             }
         }
-        val retriedKeys =
-            observedSnapshots.filterNot { it.available }.mapTo(linkedSetOf()) { it.sourceKey }
         if (retriedKeys.isNotEmpty()) {
             L.w("Retrying sources rejected by advisory preflight: $retriedKeys")
         }
@@ -112,8 +118,7 @@ internal object IncrementalIndexPlanner {
                 completePlan.copy(
                     scanSources = selectedSources,
                     reuseSourceKeys = completePlan.reuseSourceKeys + deferredSourceKeys,
-                    unavailableSourceKeys =
-                        completePlan.unavailableSourceKeys.intersect(targetSourceKeys),
+                    unavailableSourceKeys = completePlan.unavailableSourceKeys,
                 )
             }
         return Prepared(

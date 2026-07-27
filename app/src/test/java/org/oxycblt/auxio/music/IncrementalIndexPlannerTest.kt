@@ -101,9 +101,9 @@ class IncrementalIndexPlannerTest {
                 sourceType = "DIRECT_FS",
                 rootUri = "file:///storage/usbdisk1",
                 rootPath = "/storage/usbdisk1",
-                available = true,
+                available = false,
                 fingerprint = "b",
-                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+                fingerprintStrength = SourceFingerprintStrength.ADVISORY,
             )
         val original = FakeSourceAwareFs(snapshots = listOf(sourceA, sourceB))
         val cache = FakeIncrementalCache()
@@ -120,10 +120,14 @@ class IncrementalIndexPlannerTest {
             )
 
         assertEquals(setOf(sourceA.sourceKey, sourceB.sourceKey), cache.plannedSnapshotKeys)
+        assertEquals(
+            false,
+            cache.plannedSnapshots?.single { it.sourceKey == sourceB.sourceKey }?.available,
+        )
         assertEquals(setOf(sourceA.sourceKey), original.selectedSourceKeys)
         assertEquals(setOf(sourceA.sourceKey), prepared.plan?.scanSourceKeys)
         assertEquals(setOf(sourceB.sourceKey), prepared.plan?.reuseSourceKeys)
-        assertTrue(prepared.plan?.unavailableSourceKeys.orEmpty().isEmpty())
+        assertEquals(setOf(sourceB.sourceKey), prepared.plan?.unavailableSourceKeys)
     }
 
     @Test
