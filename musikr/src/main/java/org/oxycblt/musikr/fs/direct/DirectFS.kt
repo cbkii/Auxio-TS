@@ -128,7 +128,10 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
             for (location in roots) {
                 val sourceKey = SourceIdentity.forLocation(location)
                 if (location.uri.scheme != "file") {
-                    recordFailure(sourceKey, "Unsupported DirectFS URI ${location.uri}")
+                    recordFailure(
+                        sourceKey,
+                        "TEMPORARILY_UNAVAILABLE|Unsupported DirectFS URI ${location.uri}",
+                    )
                     continue
                 }
                 val root = location.uri.path?.let(::JavaFile)
@@ -136,7 +139,10 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                 if (
                     root == null || canonicalRoot == null || !isAllowedCanonicalRoot(canonicalRoot)
                 ) {
-                    recordFailure(sourceKey, "Unsafe or missing DirectFS source ${location.uri}")
+                    recordFailure(
+                        sourceKey,
+                        "TEMPORARILY_UNAVAILABLE|Unsafe or missing DirectFS source ${location.uri}",
+                    )
                     continue
                 }
                 val task =
@@ -170,7 +176,10 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         discoveredDirectories: AtomicInteger,
     ) {
         if (task.depth > MAX_DEPTH) {
-            Log.w(TAG, "DirectFS maximum depth exceeded at ${task.directory.path}")
+            recordFailure(
+                task.sourceKey,
+                "TRUNCATED|DirectFS maximum depth exceeded at ${task.directory.path}",
+            )
             return
         }
         if (!isWithinCanonicalRoot(task.directory, task.canonicalRoot)) {
@@ -185,7 +194,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         if (entries == null) {
             val detail = "DirectFS directory is unavailable at ${task.directory.path}"
             if (task.configuredRootTask) {
-                recordFailure(task.sourceKey, detail)
+                recordFailure(task.sourceKey, "TEMPORARILY_UNAVAILABLE|$detail")
             } else {
                 Log.w(TAG, "Skipping unreadable child directory ${task.directory.path}")
             }
@@ -263,7 +272,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
             if (current >= MAX_VISITED_DIRECTORIES) {
                 recordFailure(
                     task.sourceKey,
-                    "DirectFS directory limit reached at ${task.directory.path}",
+                    "TRUNCATED|DirectFS directory limit reached at ${task.directory.path}",
                 )
                 return EnqueueResult.LimitExceeded
             }

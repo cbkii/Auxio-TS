@@ -32,6 +32,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.root.RootStateHolder
+import org.oxycblt.auxio.music.GeneratedPlaylistStatus
+import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.RootDiagnosticsHelper
@@ -50,6 +52,7 @@ import timber.log.Timber as L
 class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) {
     private val musicModel: MusicViewModel by viewModels()
     @Inject lateinit var rootStateHolder: RootStateHolder
+    @Inject lateinit var musicSettings: MusicSettings
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
         when (preference.key) {
@@ -90,6 +93,48 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                     PerfTimer.configure(newValue as? Boolean == true)
                     true
                 }
+        }
+        if (preference.key == getString(R.string.set_key_generated_playlists)) {
+            preference.onPreferenceChangeListener =
+                Preference.OnPreferenceChangeListener { _, newValue ->
+                    findPreference<Preference>(
+                            getString(R.string.set_key_refresh_generated_playlists)
+                        )
+                        ?.isEnabled = newValue as? Boolean == true
+                    true
+                }
+        }
+        if (preference.key == getString(R.string.set_key_refresh_generated_playlists)) {
+            preference.isEnabled =
+                preferenceManager.sharedPreferences?.getBoolean(
+                    getString(R.string.set_key_generated_playlists),
+                    false,
+                ) == true
+            preference.setOnPreferenceClickListener {
+                musicModel.refreshGeneratedPlaylists()
+                true
+            }
+        }
+        if (preference.key == getString(R.string.set_key_generated_playlists_status)) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                musicModel.generatedPlaylistStatus.collect { status ->
+                    preference.summary =
+                        getString(
+                            when (status) {
+                                GeneratedPlaylistStatus.OFF ->
+                                    R.string.set_generated_playlists_status_off
+                                GeneratedPlaylistStatus.WAITING_FOR_LIBRARY ->
+                                    R.string.set_generated_playlists_status_waiting
+                                GeneratedPlaylistStatus.GENERATING ->
+                                    R.string.set_generated_playlists_status_generating
+                                GeneratedPlaylistStatus.UP_TO_DATE ->
+                                    R.string.set_generated_playlists_status_up_to_date
+                                GeneratedPlaylistStatus.FAILED ->
+                                    R.string.set_generated_playlists_status_failed
+                            }
+                        )
+                }
+            }
         }
         if (preference.key == getString(R.string.set_key_export_startup_report)) {
             preference.setOnPreferenceClickListener {
@@ -175,11 +220,40 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
             )
         }
         if (preference.key == getString(R.string.set_key_ts18_source_repair_status)) {
-            RootDiagnosticsHelper.setupTs18SourceRepairStatus(
-                requireContext(),
-                preference,
-                viewLifecycleOwner.lifecycleScope,
-            )
+            updateSourceCheckpointSummary(preference)
+            viewLifecycleOwner.lifecycleScope.launch {
+                musicModel.indexingState.collect { updateSourceCheckpointSummary(preference) }
+            }
         }
+        if (preference.key == getString(R.string.set_key_retry_source_setup)) {
+            preference.setOnPreferenceClickListener {
+                musicModel.retrySourceConfiguration()
+                true
+            }
+        }
+    }
+
+    private fun updateSourceCheckpointSummary(preference: Preference) {
+        val checkpoint = musicSettings.sourceConfigurationCheckpoint
+        val none = getString(R.string.set_source_checkpoint_none)
+        val unavailable =
+            musicSettings.configuredSourceSpecs
+                .filter {
+                    it.accessState !=
+                        org.oxycblt.auxio.music.ConfiguredSourceSpec.AccessState.AVAILABLE
+                }
+                .joinToString { "${it.displayPath} (${it.accessState.name.lowercase()})" }
+                .ifBlank { none }
+        val checkpointText =
+            checkpoint?.let { "${it.state.name.lowercase()} generation ${it.generation}" } ?: none
+        preference.summary =
+            getString(
+                R.string.set_source_checkpoint_summary,
+                musicSettings.locationMode.name,
+                musicSettings.configuredSourceCount,
+                checkpointText,
+                unavailable,
+                checkpoint?.lastOutcome ?: none,
+            )
     }
 }

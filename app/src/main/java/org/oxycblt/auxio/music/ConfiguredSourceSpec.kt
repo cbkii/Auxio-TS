@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * RepositoryIndexRequestQueue.kt is part of Auxio.
+ * ConfiguredSourceSpec.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,13 +18,20 @@
 
 package org.oxycblt.auxio.music
 
-/** Coalesces requests received before the service indexing worker is attached. */
-internal class RepositoryIndexRequestQueue {
-    private var pending: IndexRequest? = null
+import android.net.Uri
+import org.oxycblt.auxio.music.locations.LocationMode
 
-    fun offer(request: IndexRequest) {
-        pending = IndexRequestPolicy.merge(pending, request)
+/** Immutable source identity parsed before attempting to open a provider or filesystem root. */
+data class ConfiguredSourceSpec(
+    val normalizedUri: Uri,
+    val sourceKey: String,
+    val mode: LocationMode,
+    val displayPath: String,
+    val accessState: AccessState,
+) {
+    enum class AccessState {
+        AVAILABLE,
+        PERMISSION_REQUIRED,
+        TEMPORARILY_UNAVAILABLE,
     }
-
-    fun drain(): IndexRequest? = pending.also { pending = null }
 }

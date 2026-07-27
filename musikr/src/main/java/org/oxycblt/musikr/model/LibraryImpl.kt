@@ -49,9 +49,12 @@ internal data class LibraryImpl(
     override fun withGeneratedPlaylists(enabled: Boolean): MutableLibrary {
         val ordinary =
             playlists.filterNotTo(mutableSetOf()) { it.origin == Playlist.Origin.GENERATED }
-        val projected =
-            if (enabled) ordinary + LibraryFactoryImpl.generatedPlaylists(songs) else ordinary
-        return if (projected == playlists) this else copy(playlists = projected)
+        val base = if (ordinary == playlists) this else copy(playlists = ordinary)
+        return if (enabled) {
+            GeneratedPlaylistLibraryView(base, LibraryFactoryImpl.generatedPlaylists(songs))
+        } else {
+            base
+        }
     }
 
     // Compat hack. See TagInterpreter for why this needs to be done

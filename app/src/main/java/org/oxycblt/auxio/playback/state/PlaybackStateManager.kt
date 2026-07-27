@@ -240,6 +240,9 @@ interface PlaybackStateManager {
     /** Notify the manager of a change in [DeferredPlayback.RestoreState] outcome. */
     fun notifyRestoreOutcome(outcome: RestoreOutcome)
 
+    /** Cancel the pending restore in the holder rather than only changing its public outcome. */
+    fun cancelDeferredRestore()
+
     /**
      * Request that the pending [DeferredPlayback] (if any) be passed to the given
      * [PlaybackStateHolder].
@@ -659,6 +662,13 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
             restoreOutcome = outcome
             listeners.forEach { it.onRestoreOutcomeChanged(outcome) }
         }
+    }
+
+    @Synchronized
+    override fun cancelDeferredRestore() {
+        pendingDeferredPlayback =
+            pendingDeferredPlayback?.takeUnless { it is DeferredPlayback.RestoreState }
+        stateHolder?.cancelDeferredRestore()
     }
 
     @Synchronized

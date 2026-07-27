@@ -768,6 +768,23 @@ Publication requested this process: %4$s</string>
     <string name="set_floating_controls_permission_desc">Open Android permission settings for floating controls</string>
     <string name="set_path_root_snapshot_only">Root can see this volume, but Auxio cannot open its media yet. Use the matching /storage path or install/repair the prepared-alias helper.</string>
     <string name="set_path_no_supported_audio">No supported audio file could be opened within the bounded source check.</string>
-    <string name="set_generated_playlists">Generated playlists</string>
+    <string name="set_generated_playlists">Create generated playlists</string>
     <string name="set_generated_playlists_desc">Create Recently added and decade playlists only after the main music library has loaded. Disabled by default.</string>
+    <string name="set_generated_playlists_category">Generated playlists</string>
+    <string name="set_refresh_generated_playlists">Refresh generated playlists</string>
+    <string name="set_refresh_generated_playlists_desc">Rebuild from the current library without rescanning music sources</string>
+    <string name="set_generated_playlists_status">Generation status</string>
+    <string name="set_generated_playlists_status_off">Off</string>
+    <string name="set_generated_playlists_status_waiting">Waiting for library</string>
+    <string name="set_generated_playlists_status_generating">Generating</string>
+    <string name="set_generated_playlists_status_up_to_date">Up to date</string>
+    <string name="set_generated_playlists_status_failed">Failed — base library unaffected</string>
+    <string name="set_retry_source_setup">Retry source setup</string>
+    <string name="set_retry_source_setup_desc">Retry the current source generation without clearing the existing library</string>
+    <string name="set_source_checkpoint_summary">Mode: %1$s
+Configured sources: %2$d
+Checkpoint: %3$s
+Unavailable or permission required: %4$s
+Last attempt: %5$s</string>
+    <string name="set_source_checkpoint_none">none</string>
 </resources>
