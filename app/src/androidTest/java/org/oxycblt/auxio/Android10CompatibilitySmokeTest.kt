@@ -28,6 +28,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
+import com.tw.music.MusicService
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -52,17 +53,22 @@ class Android10CompatibilitySmokeTest {
     }
 
     @Test
-    fun legacyStorageAndMediaComponentsArePresent() {
+    fun legacyStorageAndCanonicalTopwayMediaComponentsArePresent() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         assertTrue(
             "Android 10 DirectFS requires legacy external-storage behaviour",
             Environment.isExternalStorageLegacy(),
         )
 
-        val service =
+        val internalService =
             context.packageManager.resolveService(Intent(context, AuxioService::class.java), 0)
-        assertNotNull(service)
-        assertTrue(requireNotNull(service).serviceInfo.exported)
+        assertNotNull(internalService)
+        assertFalse(requireNotNull(internalService).serviceInfo.exported)
+
+        val canonicalService =
+            context.packageManager.resolveService(Intent(context, MusicService::class.java), 0)
+        assertNotNull(canonicalService)
+        assertTrue(requireNotNull(canonicalService).serviceInfo.exported)
     }
 
     @Test
@@ -77,7 +83,7 @@ class Android10CompatibilitySmokeTest {
             browser =
                 MediaBrowserCompat(
                     context,
-                    ComponentName(context, AuxioService::class.java),
+                    ComponentName(context, MusicService::class.java),
                     object : MediaBrowserCompat.ConnectionCallback() {
                         override fun onConnected() {
                             try {

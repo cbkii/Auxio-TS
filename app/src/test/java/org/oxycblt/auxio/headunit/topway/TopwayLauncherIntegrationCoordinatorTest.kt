@@ -176,10 +176,14 @@ class TopwayLauncherIntegrationCoordinatorTest {
     private fun coordinator(
         context: Context,
         mode: Ts18LauncherIntegrationMode,
-    ): TopwayLauncherIntegrationCoordinator =
-        TopwayLauncherIntegrationCoordinator(context, DiagnosticJournal()).apply {
-            this.mode = mode
-        }
+    ): TopwayLauncherIntegrationCoordinator {
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .edit()
+            .putString(Ts18LauncherIntegrationMode.PREF_KEY, mode.name)
+            .putBoolean(Ts18LauncherIntegrationMode.PREF_GENERIC_DEFAULT_MIGRATED, true)
+            .commit()
+        return TopwayLauncherIntegrationCoordinator(context, DiagnosticJournal())
+    }
 
     private fun snapshot(title: String) =
         HeadUnitMetadataSnapshot(

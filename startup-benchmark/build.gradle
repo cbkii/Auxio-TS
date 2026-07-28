@@ -20,10 +20,6 @@ android {
 
     flavorDimensions += "distribution"
     productFlavors {
-        standard {
-            dimension "distribution"
-            buildConfigField "String", "TARGET_PACKAGE", '"org.oxycblt.auxio"'
-        }
         topwayTwMusic {
             dimension "distribution"
             buildConfigField "String", "TARGET_PACKAGE", '"com.tw.music"'

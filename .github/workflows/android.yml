@@ -5,56 +5,91 @@ on:
   push:
     branches:
       - dev
-    paths:
-      - ".github/workflows/**"
-      - "app/**"
-      - "musikr/**"
-      - "startup-benchmark/**"
-      - "media"
-      - "media/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - ".gitmodules"
-      - "gradle/**"
-      - "gradlew"
-      - "gradlew.bat"
-      - "NOTICE"
-      - "eclipse-cdt.xml"
-      - "scripts/**"
-      - "ci/dependencies/**"
-      - ".github/dependabot.yml"
   pull_request:
     branches:
       - dev
       - "cx/**"
-    paths:
-      - ".github/workflows/**"
-      - "app/**"
-      - "musikr/**"
-      - "startup-benchmark/**"
-      - "media"
-      - "media/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - ".gitmodules"
-      - "gradle/**"
-      - "gradlew"
-      - "gradlew.bat"
-      - "NOTICE"
-      - "eclipse-cdt.xml"
-      - "scripts/**"
-      - "ci/dependencies/**"
-      - ".github/dependabot.yml"
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: CI scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      topway_build: ${{ steps.scope.outputs.topway_build }}
+      topway_twmedia: ${{ steps.scope.outputs.topway_twmedia }}
+      topway_twmusic: ${{ steps.scope.outputs.topway_twmusic }}
+      compatibility_contracts: ${{ steps.scope.outputs.compatibility_contracts }}
+      api29: ${{ steps.scope.outputs.api29 }}
+      release: ${{ steps.scope.outputs.release }}
+      full: ${{ steps.scope.outputs.full }}
+      changed_count: ${{ steps.scope.outputs.changed_count }}
+      comparison: ${{ steps.scope.outputs.comparison }}
+    steps:
+      - name: Checkout comparison head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+          submodules: false
+          persist-credentials: false
+
+      - name: Fetch comparison boundary
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          target=""
+          case "${EVENT_NAME}" in
+            pull_request) target="${PR_BASE_SHA}" ;;
+            push) target="${PUSH_BEFORE_SHA}" ;;
+          esac
+          if [[ -n "${target}" && ! "${target}" =~ ^0+$ ]] && ! git cat-file -e "${target}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "${target}" ||
+              echo "::warning::Could not fetch comparison boundary ${target}; classifier will fail open to full CI."
+          fi
+
+      - name: Classify changed files
+        id: scope
+        shell: bash
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_BEFORE_SHA: ${{ github.event.before }}
+          CI_REF_NAME: ${{ github.ref_name }}
+          CI_FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: bash ./scripts/ci-scope.sh
+
+      - name: Write scope summary
+        shell: bash
+        run: |
+          {
+            echo "## Android Build scope"
+            echo
+            echo "- Comparison: \`${{ steps.scope.outputs.comparison }}\`"
+            echo "- Changed files: \`${{ steps.scope.outputs.changed_count }}\`"
+            echo "- Build topwayTwMedia: \`${{ steps.scope.outputs.topway_twmedia }}\`"
+            echo "- Build topwayTwMusic: \`${{ steps.scope.outputs.topway_twmusic }}\`"
+            echo "- Compatibility contracts: \`${{ steps.scope.outputs.compatibility_contracts }}\`"
+            echo "- API 29: \`${{ steps.scope.outputs.api29 }}\`"
+            echo "- Full CI: \`${{ steps.scope.outputs.full }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   api29-runtime-smoke:
+    name: API 29 runtime smoke
+    needs: scope
+    if: needs.scope.outputs.api29 == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -66,7 +101,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
           persist-credentials: false
 
@@ -111,28 +146,18 @@ jobs:
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
           sdkmanager_bin="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
           avdmanager_bin="${sdk_root}/cmdline-tools/latest/bin/avdmanager"
-          if [[ ! -x "${sdkmanager_bin}" ]]; then
-            sdkmanager_bin="$(command -v sdkmanager || true)"
-          fi
-          if [[ ! -x "${avdmanager_bin}" ]]; then
-            avdmanager_bin="$(command -v avdmanager || true)"
-          fi
-          if [[ -z "${sdkmanager_bin}" || ! -x "${sdkmanager_bin}" ]]; then
-            echo "::error::sdkmanager was not found in the hosted Android SDK."
-            exit 1
-          fi
-          if [[ -z "${avdmanager_bin}" || ! -x "${avdmanager_bin}" ]]; then
-            echo "::error::avdmanager was not found in the hosted Android SDK."
-            exit 1
-          fi
+          [[ -x "${sdkmanager_bin}" ]] || sdkmanager_bin="$(command -v sdkmanager || true)"
+          [[ -x "${avdmanager_bin}" ]] || avdmanager_bin="$(command -v avdmanager || true)"
+          [[ -n "${sdkmanager_bin}" && -x "${sdkmanager_bin}" ]] || { echo "::error::sdkmanager was not found."; exit 1; }
+          [[ -n "${avdmanager_bin}" && -x "${avdmanager_bin}" ]] || { echo "::error::avdmanager was not found."; exit 1; }
 
           set +e
           yes | "${sdkmanager_bin}" --licenses >/dev/null 2>&1
-          license_status=${PIPESTATUS[1]}
+          licence_status=${PIPESTATUS[1]}
           set -e
-          if [[ "${license_status}" -ne 0 ]]; then
-            echo "::error::Android SDK license acceptance failed with status ${license_status}."
-            exit "${license_status}"
+          if [[ "${licence_status}" -ne 0 ]]; then
+            echo "::error::Android SDK licence acceptance failed with status ${licence_status}."
+            exit "${licence_status}"
           fi
           "${sdkmanager_bin}" --install \
             "platform-tools" \
@@ -141,15 +166,9 @@ jobs:
             "${SYSTEM_IMAGE}"
 
           emulator_bin="${sdk_root}/emulator/emulator"
-          if [[ ! -x "${emulator_bin}" ]]; then
-            emulator_bin="$(command -v emulator || true)"
-          fi
-          if [[ -z "${emulator_bin}" || ! -x "${emulator_bin}" ]]; then
-            echo "::error::Android emulator binary was not found after SDK installation."
-            exit 1
-          fi
+          [[ -x "${emulator_bin}" ]] || emulator_bin="$(command -v emulator || true)"
+          [[ -n "${emulator_bin}" && -x "${emulator_bin}" ]] || { echo "::error::Android emulator binary was not found."; exit 1; }
           printf '%s\n' "${sdk_root}/platform-tools" >> "${GITHUB_PATH}"
-          printf 'SDKMANAGER_BIN=%s\n' "${sdkmanager_bin}" >> "${GITHUB_ENV}"
           printf 'AVDMANAGER_BIN=%s\n' "${avdmanager_bin}" >> "${GITHUB_ENV}"
           printf 'EMULATOR_BIN=%s\n' "${emulator_bin}" >> "${GITHUB_ENV}"
 
@@ -170,18 +189,10 @@ jobs:
           avd_status="${pipeline_status[1]}"
           if [[ "${avd_status}" -ne 0 ]]; then
             echo "::error::avdmanager failed with status ${avd_status}."
-            "${AVDMANAGER_BIN}" list avd 2>&1 | tee -a "${avd_log}" || true
-            "${AVDMANAGER_BIN}" list target 2>&1 | tee -a "${avd_log}" || true
             exit "${avd_status}"
           fi
           avd_names="$("${EMULATOR_BIN}" -list-avds 2>&1 | tee -a "${avd_log}")"
-          if ! grep -Fxq "${AVD_NAME}" <<<"${avd_names}"; then
-            echo "::error::avdmanager reported success but ${AVD_NAME} is not runnable."
-            "${AVDMANAGER_BIN}" list avd 2>&1 | tee -a "${avd_log}" || true
-            find "${ANDROID_USER_HOME}" "${ANDROID_AVD_HOME}" -maxdepth 4 -print \
-              2>&1 | tee -a "${avd_log}" || true
-            exit 1
-          fi
+          grep -Fxq "${AVD_NAME}" <<<"${avd_names}" || { echo "::error::${AVD_NAME} is not runnable."; exit 1; }
 
       - name: Start emulator and wait for Android 10
         shell: bash
@@ -200,55 +211,29 @@ jobs:
             -camera-back none \
             -camera-front none \
             >>"${emulator_log}" 2>&1 &
-          emulator_pid=$!
-          printf '%s\n' "${emulator_pid}" > "${RUNNER_TEMP}/api29-emulator.pid"
+          echo "$!" > "${RUNNER_TEMP}/api29-emulator.pid"
 
-          if ! adb start-server >>"${emulator_log}" 2>&1; then
-            echo "::error::adb server failed to start."
-            tail -n 200 "${emulator_log}" || true
-            exit 1
-          fi
+          adb start-server >>"${emulator_log}" 2>&1 || { echo "::error::adb server failed to start."; exit 1; }
           device_ready=0
           for attempt in $(seq 1 120); do
-            if adb get-state 2>/dev/null | grep -Fxq device; then
-              device_ready=1
-              break
-            fi
+            if adb get-state 2>/dev/null | grep -Fxq device; then device_ready=1; break; fi
             sleep 2
           done
-          if [[ "${device_ready}" -ne 1 ]]; then
-            echo "::error::API 29 emulator did not become available to adb."
-            tail -n 200 "${emulator_log}" || true
-            exit 1
-          fi
-          printf 'adb device ready at %s\n' "$(date -u +%FT%TZ)" >> "${emulator_log}"
+          [[ "${device_ready}" -eq 1 ]] || { echo "::error::API 29 emulator did not become available to adb."; tail -n 200 "${emulator_log}" || true; exit 1; }
 
           booted=0
           for attempt in $(seq 1 180); do
-            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
-              booted=1
-              break
-            fi
+            if [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then booted=1; break; fi
             sleep 2
           done
-          if [[ "${booted}" -ne 1 ]]; then
-            echo "::error::API 29 emulator did not finish booting."
-            tail -n 200 "${emulator_log}" || true
-            exit 1
-          fi
-          printf 'Android boot completed at %s\n' "$(date -u +%FT%TZ)" >> "${emulator_log}"
+          [[ "${booted}" -eq 1 ]] || { echo "::error::API 29 emulator did not finish booting."; tail -n 200 "${emulator_log}" || true; exit 1; }
 
           adb shell input keyevent 82
           adb shell settings put global window_animation_scale 0
           adb shell settings put global transition_animation_scale 0
           adb shell settings put global animator_duration_scale 0
           sdk_value="$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')"
-          if [[ "${sdk_value}" != "${ANDROID_API}" ]]; then
-            echo "::error::Expected Android API ${ANDROID_API}, got ${sdk_value:-<empty>}."
-            tail -n 200 "${emulator_log}" || true
-            exit 1
-          fi
-          printf 'Validated Android API %s\n' "${sdk_value}" >> "${emulator_log}"
+          [[ "${sdk_value}" == "${ANDROID_API}" ]] || { echo "::error::Expected Android API ${ANDROID_API}, got ${sdk_value:-<empty>}."; exit 1; }
 
       - name: Prepare CI environment
         shell: bash
@@ -260,7 +245,7 @@ jobs:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log
         run: |
           bash ./scripts/ci-gradle.sh \
-            :app:connectedStandardDebugAndroidTest \
+            :app:connectedTopwayTwMediaDebugAndroidTest \
             :musikr:connectedDebugAndroidTest
 
       - name: Upload API 29 failure reports
@@ -290,6 +275,9 @@ jobs:
           fi
 
   build:
+    name: build
+    needs: scope
+    if: needs.scope.outputs.topway_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -297,7 +285,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
           persist-credentials: false
 
@@ -310,12 +298,8 @@ jobs:
       - name: Write local.properties for Android SDK
         shell: bash
         run: |
-          set -euo pipefail
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [[ -z "${sdk_dir}" ]]; then
-            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
-            exit 1
-          fi
+          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
       - name: Set up Gradle
@@ -326,7 +310,6 @@ jobs:
       - name: Ensure native build tools are present
         shell: bash
         run: |
-          set -euo pipefail
           if ! command -v ninja >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y ninja-build
@@ -336,26 +319,53 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Build debug APKs
+      - name: Build selected maintained debug APKs
         shell: bash
+        env:
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-debug-gradle.log
         run: |
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardDebug
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicDebug
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaDebug
+          tasks=()
+          [[ "${BUILD_TWMEDIA}" == "true" ]] && tasks+=(:app:assembleTopwayTwMediaDebug)
+          [[ "${BUILD_TWMUSIC}" == "true" ]] && tasks+=(:app:assembleTopwayTwMusicDebug)
+          ((${#tasks[@]} > 0)) || { echo "::error::Topway build selected without a maintained variant."; exit 1; }
+          printf 'Selected debug APK tasks:\n'
+          printf ' - %s\n' "${tasks[@]}"
+          bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
 
-      - name: Build release APKs
-        if: github.event_name != 'pull_request'
+      - name: Build selected maintained release APKs
+        if: github.event_name != 'pull_request' && (needs.scope.outputs.release == 'true' || needs.scope.outputs.full == 'true')
         shell: bash
+        env:
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
         run: |
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleStandardRelease
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMusicRelease
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaRelease
+          tasks=()
+          [[ "${BUILD_TWMEDIA}" == "true" ]] && tasks+=(:app:assembleTopwayTwMediaRelease)
+          [[ "${BUILD_TWMUSIC}" == "true" ]] && tasks+=(:app:assembleTopwayTwMusicRelease)
+          ((${#tasks[@]} > 0)) || { echo "::error::Release validation selected without a maintained variant."; exit 1; }
+          bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
+
+      - name: Validate selected maintained APK outputs
+        shell: bash
+        env:
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
+        run: bash ./scripts/check-built-topway-apks.sh
+
+      - name: Validate maintained variant contracts
+        shell: bash
+        run: bash ./scripts/check-ci-variant-contracts.sh
 
       - name: Validate TS18 APK reference contracts
+        if: needs.scope.outputs.compatibility_contracts == 'true' || needs.scope.outputs.full == 'true'
         shell: bash
         run: bash ./scripts/check-ts18-apk-reference-contracts.sh
 
-      - name: Validate DoFun/Topway compatibility sources
+      - name: Validate combined DoFun/Topway outputs
+        if: needs.scope.outputs.topway_twmedia == 'true' && needs.scope.outputs.topway_twmusic == 'true'
         shell: bash
         run: bash ./scripts/check-dofun-topway-compat.sh
 
@@ -368,6 +378,8 @@ jobs:
           path: |
             app/build/reports/**
             build/reports/problems/**
+            ${{ runner.temp }}/android-build-debug-gradle.log
+            ${{ runner.temp }}/android-build-release-gradle.log
           if-no-files-found: ignore
           retention-days: 7
 
@@ -378,10 +390,9 @@ jobs:
         with:
           name: auxio-ts-debug-apks
           path: |
-            app/build/outputs/apk/standard/debug/*.apk
-            app/build/outputs/apk/topwayTwMusic/debug/*.apk
             app/build/outputs/apk/topwayTwMedia/debug/*.apk
-          if-no-files-found: error
+            app/build/outputs/apk/topwayTwMusic/debug/*.apk
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Write build summary
@@ -391,12 +402,15 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           REPORTS_URL: ${{ steps.failure_reports.outputs.artifact-url }}
           DEBUG_APKS_URL: ${{ steps.debug_apks.outputs.artifact-url }}
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
         run: |
           {
             echo "## Android Build"
             echo
             echo "- Result: \`${JOB_STATUS}\`"
-            echo "- Ref: \`${GITHUB_REF_NAME}\`"
+            echo "- topwayTwMedia selected: \`${BUILD_TWMEDIA}\`"
+            echo "- topwayTwMusic selected: \`${BUILD_TWMUSIC}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             if [[ -n "${REPORTS_URL}" ]]; then
@@ -404,7 +418,5 @@ jobs:
             fi
             if [[ -n "${DEBUG_APKS_URL}" ]]; then
               echo "- Debug APKs: ${DEBUG_APKS_URL}"
-            elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-              echo "- Debug APK upload: skipped for pull requests; dispatch this workflow manually on the branch when installable debug artifacts are needed."
             fi
           } >> "${GITHUB_STEP_SUMMARY}"

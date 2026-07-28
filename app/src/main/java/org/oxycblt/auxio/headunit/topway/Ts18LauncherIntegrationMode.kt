@@ -58,8 +58,11 @@ enum class Ts18LauncherIntegrationMode {
         const val PREF_KEY = "auxio_ts18_launcher_integration_mode"
         const val PREF_GENERIC_DEFAULT_MIGRATED = "auxio_ts18_launcher_generic_default_migrated_v1"
 
-        fun default(): Ts18LauncherIntegrationMode =
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) GenericDofunMedia else AndroidMediaSessionOnly
+        /** Pure policy helper retained independently from distributable product flavours. */
+        fun defaultFor(topwayCompatFlavor: Boolean): Ts18LauncherIntegrationMode =
+            if (topwayCompatFlavor) GenericDofunMedia else AndroidMediaSessionOnly
+
+        fun default(): Ts18LauncherIntegrationMode = defaultFor(BuildConfig.TOPWAY_COMPAT_FLAVOR)
 
         fun fromPreference(value: String?): Ts18LauncherIntegrationMode =
             entries.firstOrNull { it.name == value } ?: default()
@@ -80,13 +83,7 @@ enum class Ts18LauncherIntegrationMode {
             val parsed = entries.firstOrNull { it.name == persistedValue }
             if (!topwayCompatFlavor || migrationComplete) {
                 return Ts18LauncherModeMigrationDecision(
-                    mode =
-                        parsed
-                            ?: if (topwayCompatFlavor) {
-                                GenericDofunMedia
-                            } else {
-                                AndroidMediaSessionOnly
-                            },
+                    mode = parsed ?: defaultFor(topwayCompatFlavor),
                     persistMode = null,
                     markComplete = false,
                 )

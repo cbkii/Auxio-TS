@@ -4,21 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       target_ref:
-        description: "Branch, tag, or commit SHA to render"
+        description: Branch, tag, or commit SHA to render
         required: true
         default: dev
         type: string
       variant:
-        description: "App variant"
+        description: App variant
         required: true
-        default: topway_twmusic
+        default: topway_twmedia
         type: choice
         options:
-          - topway_twmusic
           - topway_twmedia
-          - standard
+          - topway_twmusic
       roborazzi_task:
-        description: "Roborazzi operation"
+        description: Roborazzi operation
         required: true
         default: record
         type: choice
@@ -32,7 +31,7 @@ permissions:
   contents: read
 
 env:
-  GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx6g -Dorg.gradle.daemon=false -Dkotlin.incremental=false"
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx6g -Dorg.gradle.daemon=false -Dkotlin.incremental=false
 
 concurrency:
   group: ui-screenshots-${{ inputs.target_ref }}-${{ inputs.variant }}-${{ inputs.roborazzi_task }}
@@ -49,7 +48,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.target_ref }}
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
           persist-credentials: false
 
@@ -67,18 +66,13 @@ jobs:
       - name: Write local.properties
         shell: bash
         run: |
-          set -euo pipefail
           sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [[ -z "${sdk_dir}" ]]; then
-            echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."
-            exit 1
-          fi
+          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
           printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
 
       - name: Ensure native build tools are present
         shell: bash
         run: |
-          set -euo pipefail
           if ! command -v ninja >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y ninja-build
@@ -95,28 +89,18 @@ jobs:
           VARIANT: ${{ inputs.variant }}
           OPERATION: ${{ inputs.roborazzi_task }}
         run: |
-          set -euo pipefail
           case "${VARIANT}" in
-            standard) suffix="StandardDebug" ;;
-            topway_twmusic) suffix="TopwayTwMusicDebug" ;;
-            topway_twmedia) suffix="TopwayTwMediaDebug" ;;
-            *)
-              echo "::error::Unknown variant: ${VARIANT}"
-              exit 1
-              ;;
+            topway_twmusic) suffix='TopwayTwMusicDebug' ;;
+            topway_twmedia) suffix='TopwayTwMediaDebug' ;;
+            *) echo "::error::Unknown variant: ${VARIANT}"; exit 1 ;;
           esac
-
           case "${OPERATION}" in
-            record) prefix="recordRoborazzi" ;;
-            verify) prefix="verifyRoborazzi" ;;
-            compare) prefix="compareRoborazzi" ;;
-            verify_and_record) prefix="verifyAndRecordRoborazzi" ;;
-            *)
-              echo "::error::Unknown operation: ${OPERATION}"
-              exit 1
-              ;;
+            record) prefix='recordRoborazzi' ;;
+            verify) prefix='verifyRoborazzi' ;;
+            compare) prefix='compareRoborazzi' ;;
+            verify_and_record) prefix='verifyAndRecordRoborazzi' ;;
+            *) echo "::error::Unknown operation: ${OPERATION}"; exit 1 ;;
           esac
-
           echo "gradle_task=${prefix}${suffix}" >> "${GITHUB_OUTPUT}"
 
       - name: Run Roborazzi
@@ -169,10 +153,6 @@ jobs:
             echo "- Variant: \`${VARIANT}\`"
             echo "- Gradle task: \`${GRADLE_TASK}\`"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            if [[ -n "${REPORTS_URL}" ]]; then
-              echo "- Reports: ${REPORTS_URL}"
-            fi
-            if [[ -n "${SCREENSHOTS_URL}" ]]; then
-              echo "- PNG bundle: ${SCREENSHOTS_URL}"
-            fi
+            [[ -n "${REPORTS_URL}" ]] && echo "- Reports: ${REPORTS_URL}"
+            [[ -n "${SCREENSHOTS_URL}" ]] && echo "- PNG bundle: ${SCREENSHOTS_URL}"
           } >> "${GITHUB_STEP_SUMMARY}"

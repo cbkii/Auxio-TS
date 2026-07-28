@@ -48,10 +48,11 @@ require_contains docs/reference/ts18-apk/reference-contracts.json '"cn.cardoor.l
 require_contains docs/reference/ts18-apk/reference-contracts.json '"android.tw.john.TWUtil"' 'forbidden TWUtil reference'
 require_contains docs/reference/ts18-apk/reference-contracts.json '"com.tw.service.xt.aidl.ITWCommandAidl"' 'forbidden ITWCommandAidl reference'
 
-require_contains AGENTS.md 'DoFun Variety / stock twmusic compatibility authority' 'agent DoFun/twmusic authority section'
-require_contains AGENTS.md "only dedicated, clearly named Topway/DoFun compatibility variants may install as those package IDs" "agent package-identity exception"
+require_contains AGENTS.md 'DoFun, Topway and stock music authority' 'agent DoFun/twmusic authority section'
+require_contains AGENTS.md 'Do not casually change maintained package/component contracts.' 'agent package-identity guard'
 require_contains .github/copilot-instructions.md 'DoFun Variety / stock twmusic compatibility authority' 'Copilot DoFun/twmusic authority section'
-require_contains docs/README.md 'DoFun Variety / TS18 APK reference baseline' 'docs index reference section'
+require_contains docs/README.md 'Maintained package contract' 'docs index package reference section'
+require_contains docs/README.md 'TS18_APK_REFERENCE.md' 'docs index APK reference link'
 
 if (( failures > 0 )); then
   printf 'Result: FAIL (%d issue(s))\n' "$failures" >&2
