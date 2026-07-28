@@ -43,6 +43,9 @@ reset_flags() {
 }
 
 mark_full() {
+  # "Full" means every maintained Android/Topway lane. Native formatting remains
+  # changed-file driven because Eclipse CDT provisioning is an independent external
+  # P2 dependency and provides no evidence for a change set with no C/C++ files.
   full=true
   static_only=false
   static_checks=true
@@ -53,11 +56,9 @@ mark_full() {
   topway_twmedia=true
   topway_twmusic=true
   android_runtime_high_risk=true
-  native_cpp=true
   benchmark=true
   release=true
   formatting=true
-  format_cpp=true
   app_tests=true
   musikr_tests=true
   android_lint=true
@@ -111,7 +112,7 @@ classify_path() {
       ;;
     .github/workflows/*|.github/dependabot.yml|scripts/ci-scope.sh|scripts/check-*|scripts/package-*|scripts/summarize-*|scripts/*.py|scripts/*.sh)
       # Workflow/shell-only edits receive syntax and executable contract checks. A caller can
-      # request all maintained lanes with ci:full or workflow_dispatch.
+      # request all maintained Android lanes with ci:full or workflow_dispatch.
       static_checks=true
       [[ "$path" == .github/workflows/manual-release.yml || "$path" == scripts/package-* ]] && release=true
       matched=true
@@ -311,10 +312,22 @@ self_test() {
     fail 'Self-test: topwayTwMusic-specific classification is not focused.'
 
   reset_flags
+  mark_full
+  finalise_flags
+  [[ "$full" == true && "$api29" == true && "$topway_twmedia" == true && "$topway_twmusic" == true && "$format_cpp" == false ]] ||
+    fail 'Self-test: full maintained Android CI must not invent an unrelated native formatter lane.'
+
+  reset_flags
+  classify_path 'musikr/src/main/cpp/example.cpp'
+  finalise_flags
+  [[ "$native_cpp" == true && "$format_cpp" == true && "$gradle_quality" == true ]] ||
+    fail 'Self-test: a native source change must select the C/C++ formatter.'
+
+  reset_flags
   classify_path 'app/build.gradle'
   finalise_flags
-  [[ "$full" == true && "$api29" == true && "$topway_twmedia" == true && "$topway_twmusic" == true ]] ||
-    fail 'Self-test: module build configuration changes must run full maintained CI.'
+  [[ "$full" == true && "$api29" == true && "$topway_twmedia" == true && "$topway_twmusic" == true && "$format_cpp" == false ]] ||
+    fail 'Self-test: module build configuration changes must run full maintained Android CI without unrelated C/C++ provisioning.'
 
   log 'self-test PASS'
 }
@@ -334,12 +347,19 @@ force_full=${CI_FORCE_FULL:-false}
 ref_name=${CI_REF_NAME:-${GITHUB_REF_NAME:-}}
 comparison=''
 changed_files=''
+full_requested=false
 
-if [[ "$force_full" == true || "$event" == workflow_dispatch ]]; then
-  log 'Full maintained validation explicitly requested.'
+if [[ "$event" == workflow_dispatch ]]; then
+  log 'Full maintained Android validation explicitly requested by workflow dispatch.'
   mark_full
   emit_outputs 0 manual-full
   exit 0
+fi
+
+if [[ "$force_full" == true ]]; then
+  # Keep classifying the actual PR diff so a real native change still selects the C/C++ lane.
+  full_requested=true
+  log 'Full maintained Android validation requested; retaining changed-file native classification.'
 fi
 
 case "$event" in
@@ -352,7 +372,7 @@ case "$event" in
     fi
     ;;
   *)
-    warn "Unknown or missing event '$event'; running full maintained validation."
+    warn "Unknown or missing event '$event'; running full maintained Android validation."
     mark_full
     emit_outputs 0 unknown-full
     exit 0
@@ -362,7 +382,7 @@ esac
 if [[ -z "$comparison" || -z "$head_sha" ]] ||
    ! git cat-file -e "${head_sha}^{commit}" 2>/dev/null ||
    ! git diff --name-only "$comparison" >/dev/null 2>&1; then
-  warn "No trustworthy comparison range is available (${comparison:-none}); running full maintained validation."
+  warn "No trustworthy comparison range is available (${comparison:-none}); running full maintained Android validation."
   mark_full
   emit_outputs 0 comparison-unavailable
   exit 0
@@ -380,6 +400,10 @@ if (( changed_count == 0 )); then
   warn "Comparison $comparison contains no changed files; running static checks only."
 fi
 
+if [[ "$full_requested" == true ]]; then
+  mark_full
+fi
+
 # Every integration push to dev retains the API 29 Android 10 gate, even for a narrow change.
 if [[ "$event" == push && "$ref_name" == dev ]]; then
   api29=true
@@ -388,5 +412,5 @@ if [[ "$event" == push && "$ref_name" == dev ]]; then
 fi
 
 finalise_flags
-log "comparison=$comparison changed=$changed_count static_only=$static_only formatting=$formatting app_tests=$app_tests musikr_tests=$musikr_tests lint=$android_lint twmedia=$topway_twmedia twmusic=$topway_twmusic api29=$api29"
+log "comparison=$comparison changed=$changed_count full=$full native_cpp=$native_cpp static_only=$static_only formatting=$formatting format_cpp=$format_cpp app_tests=$app_tests musikr_tests=$musikr_tests lint=$android_lint twmedia=$topway_twmedia twmusic=$topway_twmusic api29=$api29"
 emit_outputs "$changed_count" "$comparison"
