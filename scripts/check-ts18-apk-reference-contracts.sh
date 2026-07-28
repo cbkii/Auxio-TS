@@ -48,8 +48,8 @@ require_contains docs/reference/ts18-apk/reference-contracts.json '"cn.cardoor.l
 require_contains docs/reference/ts18-apk/reference-contracts.json '"android.tw.john.TWUtil"' 'forbidden TWUtil reference'
 require_contains docs/reference/ts18-apk/reference-contracts.json '"com.tw.service.xt.aidl.ITWCommandAidl"' 'forbidden ITWCommandAidl reference'
 
-require_contains AGENTS.md 'DoFun Variety / stock twmusic authority' 'agent DoFun/twmusic authority section'
-require_contains AGENTS.md 'Do not change `topwayTwMedia` or `topwayTwMusic` package/component contracts casually.' 'agent package-identity guard'
+require_contains AGENTS.md 'DoFun, Topway and stock music authority' 'agent DoFun/twmusic authority section'
+require_contains AGENTS.md 'Do not casually change maintained package/component contracts.' 'agent package-identity guard'
 require_contains .github/copilot-instructions.md 'DoFun Variety / stock twmusic compatibility authority' 'Copilot DoFun/twmusic authority section'
 require_contains docs/README.md 'Maintained package contract' 'docs index package reference section'
 require_contains docs/README.md 'TS18_APK_REFERENCE.md' 'docs index APK reference link'
