@@ -84,6 +84,8 @@ require_contains "$scope_script" "classify_path 'musikr/src/main/java/example/Pa
 require_contains "$scope_script" "classify_path 'app/src/topwayCompat/java/com/tw/music/MusicService.kt'" 'scope self-test covers shared Topway changes'
 require_contains "$scope_script" "classify_path 'app/src/topwayTwMedia/res/values/strings.xml'" 'scope self-test covers primary variant resources'
 require_contains "$scope_script" "classify_path 'app/src/topwayTwMusic/res/values/strings.xml'" 'scope self-test covers exact-package resources'
+require_contains "$scope_script" 'full maintained Android CI must not invent an unrelated native formatter lane' 'full Android CI keeps native formatting changed-file driven'
+require_contains "$scope_script" "classify_path 'musikr/src/main/cpp/example.cpp'" 'scope self-test covers native formatting selection'
 
 require_contains "$gradle_wrapper" 'AUXIO_TS_CI_GRADLE_MAX_WORKERS:-1' 'automatic Gradle uses one worker by default'
 require_contains "$gradle_wrapper" 'args+=("--max-workers=${max_workers}")' 'Gradle wrapper enforces bounded worker policy'
