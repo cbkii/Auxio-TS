@@ -64,6 +64,7 @@ import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.ConfiguredSourcePolicy
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.StartupOptionalWorkGate
 import org.oxycblt.auxio.music.StartupReadinessController
 import org.oxycblt.auxio.music.StartupReadinessState
 import org.oxycblt.auxio.music.resolve
@@ -104,6 +105,7 @@ class ExoPlaybackStateHolder(
     private val imageSettings: ImageSettings,
     private val startupReadinessController: StartupReadinessController,
     private val configuredSourcePolicy: ConfiguredSourcePolicy,
+    private val optionalWorkGate: StartupOptionalWorkGate,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -114,8 +116,9 @@ class ExoPlaybackStateHolder(
     private val saveScope = CoroutineScope(Dispatchers.IO + saveJob)
     private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
     private var currentSaveJob: Job? = null
-    private var currentRestoreJob: Job? = null
-    private var restoreGeneration = 0L
+    @Volatile private var currentRestoreJob: Job? = null
+    @Volatile private var restoreGeneration = 0L
+    private val restoreIntentArbiter = RestoreIntentArbiter()
     private var openAudioEffectSession = false
     private val audioManager = context.getSystemService(AudioManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -268,7 +271,7 @@ class ExoPlaybackStateHolder(
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
         if (action is DeferredPlayback.RestoreState) {
-            Ts18FirstAudioLatency.mark("restore_request_received")
+            Ts18FirstAudioLatency.mark("restore_requested")
             startPrimitiveQueueRestore(action)
             return true
         }
@@ -373,68 +376,104 @@ class ExoPlaybackStateHolder(
     }
 
     private fun startPrimitiveQueueRestore(action: DeferredPlayback.RestoreState) {
-        playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
+        val newlyStarted = restoreIntentArbiter.begin(action)
+        if (!newlyStarted && currentRestoreJob?.isActive == true) {
+            Ts18FirstAudioLatency.mark("restore_coalesced")
+            L.d("Coalescing saved-state restore into the active restore generation")
+            return
+        }
         currentRestoreJob?.cancel()
+        optionalWorkGate.onRestoreStarted()
+        playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_PLAYER)
         val generation = ++restoreGeneration
         currentRestoreJob =
             restoreScope.launch {
                 try {
-                    Ts18FirstAudioLatency.mark("primitive_session_read_start")
+                    Ts18FirstAudioLatency.mark("queue_descriptor_read_start")
                     val descriptor = persistenceRepository.readQueueDescriptor()
-                    Ts18FirstAudioLatency.mark("primitive_session_read_end")
+                    Ts18FirstAudioLatency.mark("queue_descriptor_read_end")
                     if (descriptor == null) {
-                        startupReadinessController.publishCapability(
-                            StartupReadinessState.QueueReady
-                        )
-                        withContext(Dispatchers.Main) { startRawFallback(action, generation) }
+                        if (!publishQueueReadyIfCurrent(generation)) return@launch
+                        startRawFallback(generation)
                         return@launch
                     }
 
-                    var window = persistenceRepository.readQueueWindowAround(descriptor)
-                    var current = window?.currentItem
-                    if (current?.hasPlayableReference != true) {
-                        val snapshot = persistenceRepository.readFastResumeSnapshot()
-                        if (snapshot != null) {
-                            persistenceRepository.enrichQueueItem(
-                                descriptor,
-                                descriptor.currentLogicalPosition,
-                                snapshot,
-                            )
-                            window = persistenceRepository.readQueueWindowAround(descriptor)
-                            current = window?.currentItem
+                    var attempts = 0
+                    while (generation == restoreGeneration) {
+                        val intent = restoreIntentArbiter.snapshot()
+                        val target =
+                            (descriptor.currentLogicalPosition.toLong() + intent.skipDelta)
+                                .coerceIn(0L, (descriptor.totalCount - 1).coerceAtLeast(0).toLong())
+                                .toInt()
+                        val requested = descriptor.copy(currentLogicalPosition = target)
+                        Ts18FirstAudioLatency.mark("queue_window_read_start")
+                        var window = persistenceRepository.readQueueWindowAround(requested, target)
+                        Ts18FirstAudioLatency.mark("queue_window_read_end")
+                        var current = window?.currentItem
+                        if (current?.hasPlayableReference != true) {
+                            val snapshot = persistenceRepository.readFastResumeSnapshot()
+                            if (snapshot != null) {
+                                persistenceRepository.enrichQueueItem(requested, target, snapshot)
+                                window =
+                                    persistenceRepository.readQueueWindowAround(requested, target)
+                                current = window?.currentItem
+                            }
                         }
-                    }
-                    val playableWindow = window?.contiguousPlayableWindow()
-                    if (playableWindow == null || current?.hasPlayableReference != true) {
-                        startupReadinessController.publishCapability(
-                            StartupReadinessState.QueueReady
-                        )
-                        withContext(Dispatchers.Main) { startRawFallback(action, generation) }
-                        return@launch
-                    }
+                        val playableWindow = window?.contiguousPlayableWindow()
+                        if (playableWindow == null || current?.hasPlayableReference != true) {
+                            if (!publishQueueReadyIfCurrent(generation)) return@launch
+                            startRawFallback(generation)
+                            return@launch
+                        }
 
-                    withContext(Dispatchers.Main) {
-                        if (generation != restoreGeneration) return@withContext
-                        attachPrimitiveWindow(
-                            window = playableWindow,
-                            targetLogicalPosition = descriptor.currentLogicalPosition,
-                            positionMs = descriptor.positionMs,
-                            play = shouldPlayImmediately(action.play),
-                        )
-                        startupReadinessController.publishCapability(
-                            StartupReadinessState.QueueReady
-                        )
-                        completeRestore(generation, RestoreOutcome.RESTORED_EXISTING_SESSION)
+                        val attached =
+                            withContext(Dispatchers.Main) {
+                                if (generation != restoreGeneration) return@withContext true
+                                val latest = restoreIntentArbiter.snapshot()
+                                if (latest.version != intent.version && attempts < 3) {
+                                    return@withContext false
+                                }
+                                val latestTarget =
+                                    (descriptor.currentLogicalPosition.toLong() + latest.skipDelta)
+                                        .coerceIn(
+                                            0L,
+                                            (descriptor.totalCount - 1).coerceAtLeast(0).toLong(),
+                                        )
+                                        .toInt()
+                                if (
+                                    latestTarget != target &&
+                                        playableWindow.globalToLocal(latestTarget) == null
+                                ) {
+                                    return@withContext false
+                                }
+                                val finalIntent = restoreIntentArbiter.finish()
+                                val position =
+                                    finalIntent.seekPositionMs
+                                        ?: if (finalIntent.skipDelta != 0) 0L
+                                        else descriptor.positionMs
+                                attachPrimitiveWindow(
+                                    window = playableWindow,
+                                    targetLogicalPosition = latestTarget,
+                                    positionMs = position,
+                                    play = shouldPlayImmediately(finalIntent.play),
+                                )
+                                Ts18FirstAudioLatency.mark("primitive_window_attached")
+                                if (!publishQueueReadyIfCurrent(generation)) return@withContext true
+                                completeRestore(
+                                    generation,
+                                    RestoreOutcome.RESTORED_EXISTING_SESSION,
+                                )
+                                true
+                            }
+                        if (attached) return@launch
+                        attempts += 1
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     L.w(e, "Unable to restore primitive playback queue")
-                    startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
-                    withContext(Dispatchers.Main) {
-                        if (generation == restoreGeneration) {
-                            startRawFallback(action, generation)
-                        }
+                    if (publishQueueReadyIfCurrent(generation)) {
+                        startRawFallback(generation)
                     }
                 } finally {
                     if (generation == restoreGeneration) currentRestoreJob = null
@@ -442,10 +481,16 @@ class ExoPlaybackStateHolder(
             }
     }
 
-    private fun startRawFallback(action: DeferredPlayback.RestoreState, generation: Long) {
+    private fun publishQueueReadyIfCurrent(generation: Long): Boolean {
+        if (generation != restoreGeneration) return false
+        startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+        return true
+    }
+
+    private suspend fun startRawFallback(generation: Long) {
         if (generation != restoreGeneration) return
         playbackManager.notifyRestoreOutcome(RestoreOutcome.WAITING_FOR_LIBRARY)
-        tryStartRawFastResume(action, generation)
+        tryStartRawFastResume(generation)
     }
 
     private fun QueueWindow.contiguousPlayableWindow(): QueueWindow? {
@@ -494,6 +539,7 @@ class ExoPlaybackStateHolder(
                 RepeatMode.TRACK -> Player.REPEAT_MODE_ONE
             }
         player.seekTo(localTarget, positionMs.coerceAtLeast(0L))
+        Ts18FirstAudioLatency.mark("player_prepare")
         player.prepare()
         sessionOngoing = true
         if (play) playing(true) else player.playWhenReady = false
@@ -801,6 +847,7 @@ class ExoPlaybackStateHolder(
     private fun completeRestore(generation: Long, outcome: RestoreOutcome) {
         if (generation != restoreGeneration) return
         currentRestoreJob = null
+        optionalWorkGate.onRestoreFinished()
         playbackManager.notifyRestoreOutcome(outcome)
     }
 
@@ -818,13 +865,19 @@ class ExoPlaybackStateHolder(
         restoreGeneration += 1
         currentRestoreJob = null
         pendingLibraryRestoreAfterRawFailure = null
+        restoreIntentArbiter.cancel()
         job?.cancel()
+        optionalWorkGate.onRestoreFinished()
         if (notify && (jobActive || transientOutcome)) {
             playbackManager.notifyRestoreOutcome(RestoreOutcome.CANCELLED)
         }
     }
 
     override fun playing(playing: Boolean) {
+        if (restoreIntentArbiter.updatePlay(playing)) {
+            Ts18FirstAudioLatency.mark("restore_play_state_coalesced")
+            return
+        }
         if (playing && !requestAudioFocus()) {
             L.w("Cannot start playback: audio focus request denied")
             player.playWhenReady = false
@@ -849,6 +902,10 @@ class ExoPlaybackStateHolder(
     }
 
     override fun seekTo(positionMs: Long) {
+        if (restoreIntentArbiter.updateSeek(positionMs)) {
+            Ts18FirstAudioLatency.mark("restore_seek_coalesced")
+            return
+        }
         player.seekTo(positionMs)
         deferSave()
         // Ack handled w/ExoPlayer events
@@ -937,6 +994,10 @@ class ExoPlaybackStateHolder(
     }
 
     override fun next() {
+        if (restoreIntentArbiter.addSkip(1)) {
+            Ts18FirstAudioLatency.mark("restore_skip_coalesced")
+            return
+        }
         cancelActiveRestore("next")
         activePrimitiveWindow?.let { window ->
             val current = pendingPrimitiveTarget ?: window.descriptor.currentLogicalPosition
@@ -983,6 +1044,10 @@ class ExoPlaybackStateHolder(
     }
 
     override fun prev() {
+        if (restoreIntentArbiter.addSkip(-1)) {
+            Ts18FirstAudioLatency.mark("restore_skip_coalesced")
+            return
+        }
         cancelActiveRestore("previous")
         activePrimitiveWindow?.let { window ->
             if (playbackSettings.rewindWithPrev && player.currentPosition > 3000L) {
@@ -1301,7 +1366,7 @@ class ExoPlaybackStateHolder(
         // in an ExoPlayer callback anyway. This doesn't really cause issues anywhere.
         if (player.isPlaying && !markedFirstPlaying) {
             markedFirstPlaying = true
-            Ts18FirstAudioLatency.mark("first_playing_state")
+            Ts18FirstAudioLatency.mark("first_audio")
         }
         if (
             events.containsAny(
@@ -1413,10 +1478,10 @@ class ExoPlaybackStateHolder(
                 reconcileRawFastResume(library)
                 return
             }
-            pendingLibraryRestoreAfterRawFailure?.let { pending ->
+            pendingLibraryRestoreAfterRawFailure?.let {
                 L.d("Library obtained after raw fast-resume miss; replaying saved-state restore")
                 pendingLibraryRestoreAfterRawFailure = null
-                playbackManager.playDeferred(pending)
+                playbackManager.playDeferred(restoreIntentArbiter.snapshot().toRestoreState())
                 return
             }
             L.d("Library obtained, requesting action")
@@ -1486,65 +1551,76 @@ class ExoPlaybackStateHolder(
     }
 
     // --- PLAYBACKSETTINGS OVERRIDES ---
-    private fun tryStartRawFastResume(action: DeferredPlayback.RestoreState, generation: Long) {
-        pendingLibraryRestoreAfterRawFailure = action
-        restoreScope.launch {
-            Ts18FirstAudioLatency.mark("snapshot_read_start")
-            val snapshot = persistenceRepository.readFastResumeSnapshot()
-            Ts18FirstAudioLatency.mark("snapshot_read_end")
-            if (snapshot == null) {
-                L.d("No TS18 fast-resume snapshot available")
-                withContext(Dispatchers.Main) {
+    private suspend fun tryStartRawFastResume(generation: Long) {
+        pendingLibraryRestoreAfterRawFailure = restoreIntentArbiter.snapshot().toRestoreState()
+        Ts18FirstAudioLatency.mark("snapshot_read_start")
+        val snapshot = persistenceRepository.readFastResumeSnapshot()
+        Ts18FirstAudioLatency.mark("snapshot_read_end")
+        if (snapshot == null) {
+            L.d("No TS18 fast-resume snapshot available")
+            optionalWorkGate.onNoSavedSession()
+            withContext(Dispatchers.Main) {
+                if (generation == restoreGeneration && musicRepository.library != null) {
+                    pendingLibraryRestoreAfterRawFailure = null
+                    val finalIntent = restoreIntentArbiter.finish()
+                    if (finalIntent.fallback != null) {
+                        completeRestore(generation, RestoreOutcome.FALLBACK_QUEUE_CREATED)
+                        playbackManager.playDeferred(finalIntent.fallback)
+                    } else {
+                        completeRestore(generation, RestoreOutcome.NO_SAVED_SESSION)
+                    }
+                }
+            }
+            return
+        }
+        Ts18FirstAudioLatency.mark("raw_media_validation_start")
+        val validation = RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
+        Ts18FirstAudioLatency.mark("raw_media_validation_end")
+        withContext(Dispatchers.Main) {
+            when (validation) {
+                is RawFastResumeValidator.Result.Valid -> {
+                    if (generation != restoreGeneration) {
+                        L.d(
+                            "Skipping late TS18 raw fast-resume result; restore was already consumed"
+                        )
+                        return@withContext
+                    }
+                    pendingLibraryRestoreAfterRawFailure = null
+                    val finalIntent = restoreIntentArbiter.finish()
+                    val shouldPlay = shouldPlayImmediately(finalIntent.play)
+                    startRawFastResume(validation.item, shouldPlay)
+                    finalIntent.seekPositionMs?.let(player::seekTo)
+                    optionalWorkGate.onRestoreFinished()
+                    playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
+                }
+                is RawFastResumeValidator.Result.Invalid -> {
+                    optionalWorkGate.onNoSavedSession()
+                    L.w(
+                        "Ignoring invalid TS18 fast-resume snapshot: " +
+                            validation.reason +
+                            " " +
+                            validation.detail
+                    )
                     if (generation == restoreGeneration && musicRepository.library != null) {
                         pendingLibraryRestoreAfterRawFailure = null
-                        if (action.fallback != null) {
+                        val finalIntent = restoreIntentArbiter.finish()
+                        if (finalIntent.fallback != null) {
                             completeRestore(generation, RestoreOutcome.FALLBACK_QUEUE_CREATED)
-                            playbackManager.playDeferred(action.fallback)
+                            playbackManager.playDeferred(finalIntent.fallback)
                         } else {
                             completeRestore(generation, RestoreOutcome.NO_SAVED_SESSION)
                         }
                     }
                 }
-                return@launch
-            }
-            Ts18FirstAudioLatency.mark("raw_media_validation_start")
-            val validation =
-                RawFastResumeValidator.validate(context, snapshot, configuredSourcePolicy)
-            Ts18FirstAudioLatency.mark("raw_media_validation_end")
-            withContext(Dispatchers.Main) {
-                when (validation) {
-                    is RawFastResumeValidator.Result.Valid -> {
-                        if (pendingLibraryRestoreAfterRawFailure !== action) {
-                            L.d(
-                                "Skipping late TS18 raw fast-resume result; restore was already consumed"
-                            )
-                            return@withContext
-                        }
-                        pendingLibraryRestoreAfterRawFailure = null
-                        val shouldPlay = shouldPlayImmediately(action.play)
-                        startRawFastResume(validation.item, shouldPlay)
-                        playbackManager.notifyRestoreOutcome(RestoreOutcome.RAW_FAST_RESUME_ACTIVE)
-                    }
-                    is RawFastResumeValidator.Result.Invalid -> {
-                        L.w(
-                            "Ignoring invalid TS18 fast-resume snapshot: " +
-                                validation.reason +
-                                " " +
-                                validation.detail
-                        )
-                        if (generation == restoreGeneration && musicRepository.library != null) {
-                            pendingLibraryRestoreAfterRawFailure = null
-                            if (action.fallback != null) {
-                                completeRestore(generation, RestoreOutcome.FALLBACK_QUEUE_CREATED)
-                                playbackManager.playDeferred(action.fallback)
-                            } else {
-                                completeRestore(generation, RestoreOutcome.NO_SAVED_SESSION)
-                            }
-                        }
-                    }
-                }
             }
         }
+    }
+
+    private fun RestoreIntentArbiter.Snapshot.toRestoreState() =
+        DeferredPlayback.RestoreState(play = play, fallback = fallback)
+
+    override fun cancelDeferredRestore() {
+        cancelActiveRestore("external-cancel")
     }
 
     private fun startRawFastResume(item: RawFastResumeItem, play: Boolean) {
@@ -1556,6 +1632,7 @@ class ExoPlaybackStateHolder(
         player.setMediaItems(listOf(item.buildMediaItem()))
         player.seekTo(0, item.positionMs)
         Ts18FirstAudioLatency.mark("raw_seek")
+        Ts18FirstAudioLatency.mark("player_prepare")
         player.prepare()
         Ts18FirstAudioLatency.mark("raw_prepare")
         sessionOngoing = true
@@ -1862,6 +1939,7 @@ class ExoPlaybackStateHolder(
         private val imageSettings: ImageSettings,
         private val startupReadinessController: StartupReadinessController,
         private val configuredSourcePolicy: ConfiguredSourcePolicy,
+        private val optionalWorkGate: StartupOptionalWorkGate,
     ) {
         fun create(): ExoPlaybackStateHolder {
             // Since Auxio is a music player, only specify an audio renderer to save
@@ -1914,6 +1992,7 @@ class ExoPlaybackStateHolder(
                 imageSettings,
                 startupReadinessController,
                 configuredSourcePolicy,
+                optionalWorkGate,
             )
         }
     }

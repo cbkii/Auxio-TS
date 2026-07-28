@@ -149,6 +149,9 @@ interface PlaybackStateHolder {
      */
     fun handleDeferred(action: DeferredPlayback): Boolean
 
+    /** Cancel any in-flight saved-state restore and its underlying I/O work. */
+    fun cancelDeferredRestore()
+
     /**
      * Override the current held state with a saved state.
      *

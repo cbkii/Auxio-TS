@@ -63,6 +63,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
     private fun seedAsync(context: Context, intent: Intent) {
         val songCount = intent.getIntExtra(EXTRA_SONG_COUNT, DEFAULT_SONG_COUNT)
         val sourceMode = intent.getStringExtra(EXTRA_SOURCE_MODE) ?: SOURCE_MODE_NORMAL
+        val generatedPlaylistsEnabled = intent.getBooleanExtra(EXTRA_GENERATED_PLAYLISTS, false)
         if (songCount !in SUPPORTED_SONG_COUNTS || sourceMode !in SUPPORTED_SOURCE_MODES) {
             resultCode = Activity.RESULT_CANCELED
             resultData = "Unsupported fixture request: songs=$songCount sourceMode=$sourceMode"
@@ -72,7 +73,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         val pending = goAsync()
         thread(name = "auxio-benchmark-fixture") {
             try {
-                seed(context.applicationContext, songCount, sourceMode)
+                seed(context.applicationContext, songCount, sourceMode, generatedPlaylistsEnabled)
                 pending.resultCode = Activity.RESULT_OK
                 pending.resultData =
                     "Seeded $songCount committed rows and primitive queue ($sourceMode)"
@@ -99,7 +100,12 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         resultData = Base64.encodeToString(report.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
     }
 
-    private fun seed(context: Context, songCount: Int, sourceMode: String) {
+    private fun seed(
+        context: Context,
+        songCount: Int,
+        sourceMode: String,
+        generatedPlaylistsEnabled: Boolean,
+    ) {
         val databaseFile = context.getDatabasePath(DATABASE_NAME)
         require(databaseFile.isFile) {
             "${databaseFile.path} does not exist; launch the benchmark target once before seeding"
@@ -123,7 +129,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                 }
             }
         seedPlaybackQueue(context, songCount, playableFiles)
-        seedBenchmarkStartupPreferences(context)
+        seedBenchmarkStartupPreferences(context, generatedPlaylistsEnabled)
         context
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -202,7 +208,10 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun seedBenchmarkStartupPreferences(context: Context) {
+    private fun seedBenchmarkStartupPreferences(
+        context: Context,
+        generatedPlaylistsEnabled: Boolean,
+    ) {
         check(
             PreferenceManager.getDefaultSharedPreferences(context)
                 .edit()
@@ -223,6 +232,11 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
                     context.getString(R.string.set_key_music_locations),
                     "file:///storage/usbdisk0;file:///storage/usbdisk1",
                 )
+                .putBoolean(
+                    context.getString(R.string.set_key_generated_playlists),
+                    generatedPlaylistsEnabled,
+                )
+                .putBoolean(context.getString(R.string.set_key_autoplay_on_launch), true)
                 .commit()
         ) {
             "Unable to persist deterministic benchmark startup settings"
@@ -570,6 +584,7 @@ class BenchmarkFixtureReceiver : BroadcastReceiver() {
         const val ACTION_REPORT = "org.oxycblt.auxio.action.EXPORT_BENCHMARK_REPORT"
         const val EXTRA_SONG_COUNT = "song_count"
         const val EXTRA_SOURCE_MODE = "source_mode"
+        const val EXTRA_GENERATED_PLAYLISTS = "generated_playlists"
         const val SOURCE_MODE_NORMAL = "normal"
         const val SOURCE_MODE_USB1_ABSENT = "usb1_absent"
         const val SOURCE_MODE_PENDING = "pending_generation"

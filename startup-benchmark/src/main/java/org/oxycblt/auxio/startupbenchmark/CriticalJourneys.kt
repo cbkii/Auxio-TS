@@ -35,12 +35,15 @@ import androidx.test.uiautomator.Until
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
 
 /** Shared critical user journeys for profile generation and macrobenchmarks. */
 internal object CriticalJourneys {
     const val TRACE_QUICK_FIND_FIRST_RESULT = "auxio.quick_find_first_result"
     const val TRACE_SEARCH_RESULT_TO_FIRST_AUDIO = "auxio.search_result_to_first_audio"
     const val TRACE_SAVED_SESSION_TO_FIRST_AUDIO = "auxio.saved_session_to_first_audio"
+    const val TRACE_BOOT_RESTORE_TO_FIRST_AUDIO = "auxio.boot_restore_to_first_audio"
+    const val TRACE_RESTORE_BURST_TO_FIRST_AUDIO = "auxio.restore_burst_to_first_audio"
     const val TRACE_NEXT_COMMAND_TO_NEXT_AUDIO = "auxio.next_command_to_next_audio"
     const val TRACE_USB0_FOLDER_TO_FIRST_AUDIO = "auxio.usb0_folder_to_first_audio"
     const val TRACE_USB1_FOLDER_TO_FIRST_AUDIO = "auxio.usb1_folder_to_first_audio"
@@ -155,6 +158,92 @@ internal object CriticalJourneys {
                 )
                 waitForMediaFingerprint(controller)
             }
+        }
+    }
+
+    /**
+     * Starts the playback service exactly as BOOT_COMPLETED does, without launching the activity.
+     */
+    fun MacrobenchmarkScope.exerciseBootRestore() {
+        traceSection(TRACE_BOOT_RESTORE_TO_FIRST_AUDIO) {
+            startRestoreService(START_ID_BOOT)
+            withMediaController { controller ->
+                waitForPlaybackState(controller, PlaybackStateCompat.STATE_PLAYING)
+                waitForMediaFingerprint(controller)
+            }
+        }
+    }
+
+    /** Reproduces a BOOT/Bluetooth/media-button burst against the same saved queue. */
+    fun MacrobenchmarkScope.exerciseRestoreBurst() {
+        traceSection(TRACE_RESTORE_BURST_TO_FIRST_AUDIO) {
+            startRestoreService(START_ID_BOOT)
+            startRestoreService(START_ID_BLUETOOTH)
+            withMediaController { controller ->
+                dispatchMediaKey(
+                    controller,
+                    KeyEvent.KEYCODE_MEDIA_PLAY,
+                    "Play during restore burst",
+                    PlaybackStateCompat.STATE_PLAYING,
+                )
+                waitForMediaFingerprint(controller)
+            }
+        }
+    }
+
+    fun MacrobenchmarkScope.exercisePauseDuringRestore() {
+        startRestoreService(START_ID_BOOT)
+        withMediaController { controller ->
+            dispatchMediaKey(
+                controller,
+                KeyEvent.KEYCODE_MEDIA_PAUSE,
+                "Pause during restore",
+                PlaybackStateCompat.STATE_PAUSED,
+            )
+            Thread.sleep(SETTLE_MS)
+            check(controller.playbackState?.state == PlaybackStateCompat.STATE_PAUSED) {
+                "Restore overrode the latest Pause intent"
+            }
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseNextDuringRestore() {
+        startRestoreService(START_ID_BOOT)
+        withMediaController { controller ->
+            val first = waitForMediaFingerprint(controller)
+            dispatchMediaKey(
+                controller,
+                KeyEvent.KEYCODE_MEDIA_NEXT,
+                "Next during restore",
+                PlaybackStateCompat.STATE_PLAYING,
+            )
+            waitForMediaFingerprint(controller, excluded = first)
+        }
+    }
+
+    fun MacrobenchmarkScope.exerciseSeekDuringRestore() {
+        startRestoreService(START_ID_BOOT)
+        withMediaController { controller ->
+            dispatchMediaKey(
+                controller,
+                KeyEvent.KEYCODE_MEDIA_PAUSE,
+                "Pause before restore seek",
+                PlaybackStateCompat.STATE_PAUSED,
+            )
+            mainThreadValue { controller.transportControls.seekTo(RESTORE_SEEK_POSITION_MS) }
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(AUDIO_TIMEOUT_MS)
+            var lastPosition = Long.MIN_VALUE
+            while (System.nanoTime() < deadline) {
+                lastPosition = controller.playbackState?.position ?: Long.MIN_VALUE
+                if (abs(lastPosition - RESTORE_SEEK_POSITION_MS) <= SEEK_TOLERANCE_MS) {
+                    return@withMediaController
+                }
+                Thread.sleep(100)
+            }
+            error(
+                "Restore did not retain latest Seek intent; " +
+                    "expected=$RESTORE_SEEK_POSITION_MS last=$lastPosition"
+            )
         }
     }
 
@@ -291,6 +380,18 @@ internal object CriticalJourneys {
             runOnMainSync { controller.unregisterCallback(callback) }
         }
         device.waitForIdle()
+    }
+
+    private fun MacrobenchmarkScope.startRestoreService(startId: Int) {
+        val packageName = BuildConfig.TARGET_PACKAGE
+        val output =
+            device.executeShellCommand(
+                "am startservice -n $packageName/org.oxycblt.auxio.AuxioService " +
+                    "--ei $packageName.service.START_ID $startId"
+            )
+        check(!output.contains("Error:", ignoreCase = true)) {
+            "Unable to start playback service for restore benchmark: $output"
+        }
     }
 
     private fun MacrobenchmarkScope.scrollPageTwice() {
@@ -472,6 +573,11 @@ internal object CriticalJourneys {
 
     private fun serviceComponent() =
         ComponentName(BuildConfig.TARGET_PACKAGE, "org.oxycblt.auxio.AuxioService")
+
+    private const val START_ID_BOOT = 0xA054
+    private const val START_ID_BLUETOOTH = 0xA055
+    private const val RESTORE_SEEK_POSITION_MS = 4_000L
+    private const val SEEK_TOLERANCE_MS = 750L
 
     private data class PlaybackFingerprint(
         val mediaId: String?,

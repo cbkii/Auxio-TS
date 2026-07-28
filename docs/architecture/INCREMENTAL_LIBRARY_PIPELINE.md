@@ -38,6 +38,18 @@ Every configured MediaStore volume, SAF tree or DirectFS root has an independent
 
 **Observed:** source observers attach before rich-library hydration. Attachment does not enumerate files or construct a library; notification bursts are debounced and persist only source invalidation before scan planning.
 
+Source setup also has a configuration-level `SourceConfigurationCheckpoint`. Applying a new setup
+atomically writes `PENDING`; claiming it records `RUNNING` without clearing durability. Only a scan
+carrying the matching generation can acknowledge `COMMITTED` or `PARTIALLY_COMMITTED`. Cancellation,
+process death, permission loss, and all-source failure return the matching generation to `PENDING`;
+an older scan cannot acknowledge a newer configuration. Partial commits retain unresolved source
+keys and never cause a retry loop for healthy siblings.
+
+`ConfiguredSourceSpec` is parsed from raw persisted URIs before provider/file opening. A
+`ConfiguredSourceAwareFS` combines real snapshots with synthetic permission-required or temporarily
+unavailable snapshots. Synthetic rows are recovery metadata only: the app UID remains the sole scan
+and playback authority, and root remains candidate discovery/preparation only.
+
 MediaStore uses the platform volume-version token on Android 10. SAF uses root-document metadata. DirectFS uses a bounded root sample and periodic refresh. Direct/SAF fingerprints are advisory: they avoid needless warm work but are not treated as proof that an entire FAT/document tree cannot have changed.
 
 ## Generation protocol
@@ -74,6 +86,22 @@ Mount state, app access, committed library availability and playback viability a
 - **Reinserted unchanged:** restore access to the last committed generation without metadata extraction; advisory refresh still applies on its normal bounded interval.
 - **Reinserted changed:** extract only new or changed rows before committing the replacement generation.
 - **Two USB roots:** `/storage/usbdisk0` and `/storage/usbdisk1` have separate keys and generations; source-list ordering cannot make one invalidate the other.
+
+On Android 10, the application integration layer listens for mounted, unmounted, eject, and removed
+file-scheme media broadcasts only while DirectFS is configured. Mount bursts coalesce, use bounded
+500 ms / 1.5 s / 3 s readability attempts, invalidate only matched source keys, and submit a
+`STORAGE_MOUNTED` request after startup-critical work. Removal cancels work targeting the matched
+source, records temporary unavailability, and preserves the committed library. There is no polling.
+
+Every scan request carries a reason, cache policy, optional metadata profile, configuration
+generation, and optional source-key scope. Initial setup and user retry outrank observer/mount work;
+Full enrichment remains lowest and cannot strengthen a cache-bypassing initial request. A newer
+configuration supersedes older source work.
+
+Publication uses `SourceScanOutcome`: Success and authoritative all-source Empty acknowledge;
+Partial and Truncated preserve failed source generations/unresolved keys; Temporary Unavailable,
+Permission Required, and Cancelled preserve the current library and retryable checkpoint. DirectFS
+depth and directory-count bounds emit Truncated rather than authoritative deletion.
 
 **Requires device validation:** real mount-name swaps, FAT timestamp behaviour and ACC sleep/wake transitions on `s9863a1h10_Natv`.
 

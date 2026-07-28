@@ -18,10 +18,8 @@
 
 package org.oxycblt.auxio.music.service
 
-import org.oxycblt.musikr.library.MetadataProfile
-
-/** A pending indexing request after observer and enrichment bursts have been conflated. */
-internal data class IndexRequest(val withCache: Boolean, val metadataProfile: MetadataProfile?)
+import org.oxycblt.auxio.music.IndexRequest
+import org.oxycblt.auxio.music.IndexRequestPolicy
 
 /**
  * Collapses bursts into the single strongest pending indexing request.
@@ -33,17 +31,6 @@ internal data class IndexRequest(val withCache: Boolean, val metadataProfile: Me
  */
 internal object IndexRequestCoalescer {
     fun merge(current: IndexRequest?, incoming: IndexRequest): IndexRequest {
-        if (current == null) return incoming
-        return IndexRequest(
-            withCache = current.withCache && incoming.withCache,
-            metadataProfile =
-                when {
-                    current.metadataProfile == MetadataProfile.FULL ||
-                        incoming.metadataProfile == MetadataProfile.FULL -> MetadataProfile.FULL
-                    current.metadataProfile == MetadataProfile.LEAN ||
-                        incoming.metadataProfile == MetadataProfile.LEAN -> MetadataProfile.LEAN
-                    else -> null
-                },
-        )
+        return IndexRequestPolicy.merge(current, incoming)
     }
 }

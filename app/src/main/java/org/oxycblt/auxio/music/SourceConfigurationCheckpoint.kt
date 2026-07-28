@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * RepositoryIndexRequestQueue.kt is part of Auxio.
+ * SourceConfigurationCheckpoint.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,13 +18,17 @@
 
 package org.oxycblt.auxio.music
 
-/** Coalesces requests received before the service indexing worker is attached. */
-internal class RepositoryIndexRequestQueue {
-    private var pending: IndexRequest? = null
-
-    fun offer(request: IndexRequest) {
-        pending = IndexRequestPolicy.merge(pending, request)
+data class SourceConfigurationCheckpoint(
+    val generation: Long,
+    val state: State,
+    val unresolvedSourceKeys: Set<String> = emptySet(),
+    val lastAttemptAtMs: Long? = null,
+    val lastOutcome: String? = null,
+) {
+    enum class State {
+        PENDING,
+        RUNNING,
+        PARTIALLY_COMMITTED,
+        COMMITTED,
     }
-
-    fun drain(): IndexRequest? = pending.also { pending = null }
 }

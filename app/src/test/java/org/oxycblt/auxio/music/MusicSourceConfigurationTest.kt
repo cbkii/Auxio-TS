@@ -25,7 +25,6 @@ import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -77,7 +76,51 @@ class MusicSourceConfigurationTest {
         assertEquals(1, settings.configuredSourceCount)
         assertEquals(before + 1L, settings.sourceConfigurationGeneration)
         assertFalse(settings.lastScanFailed)
-        assertEquals(before + 1L, settings.consumePendingInitialScan())
-        assertNull(settings.consumePendingInitialScan())
+        val claimed = requireNotNull(settings.claimPendingConfiguration())
+        assertEquals(before + 1L, claimed.generation)
+        assertEquals(SourceConfigurationCheckpoint.State.RUNNING, claimed.state)
+        assertEquals(
+            SourceConfigurationCheckpoint.State.RUNNING,
+            settings.sourceConfigurationCheckpoint?.state,
+        )
+
+        settings.acknowledgeSourceConfiguration(
+            generation = claimed.generation,
+            unresolvedSourceKeys = emptySet(),
+            outcome = "Success",
+        )
+
+        assertEquals(
+            SourceConfigurationCheckpoint.State.COMMITTED,
+            settings.sourceConfigurationCheckpoint?.state,
+        )
+    }
+
+    @Test
+    fun `running checkpoint remains claimable after process recreation`() {
+        settings.forceLocationUpdate()
+        val firstClaim = requireNotNull(settings.claimPendingConfiguration())
+
+        val recreated = MusicSettingsImpl(context)
+        val reclaimed = requireNotNull(recreated.claimPendingConfiguration())
+
+        assertEquals(firstClaim.generation, reclaimed.generation)
+        assertEquals(SourceConfigurationCheckpoint.State.RUNNING, reclaimed.state)
+    }
+
+    @Test
+    fun `older scan cannot acknowledge a newer configuration`() {
+        settings.forceLocationUpdate()
+        val oldGeneration = requireNotNull(settings.claimPendingConfiguration()).generation
+        settings.forceLocationUpdate()
+        val currentGeneration = settings.sourceConfigurationGeneration
+
+        settings.acknowledgeSourceConfiguration(oldGeneration, emptySet(), "Success")
+
+        assertEquals(currentGeneration, settings.sourceConfigurationCheckpoint?.generation)
+        assertEquals(
+            SourceConfigurationCheckpoint.State.PENDING,
+            settings.sourceConfigurationCheckpoint?.state,
+        )
     }
 }
