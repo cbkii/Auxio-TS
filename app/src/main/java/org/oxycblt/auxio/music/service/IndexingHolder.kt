@@ -281,9 +281,7 @@ private constructor(
             indexScope.launch {
                 delay(STARTUP_RECOVERY_GRACE_MS)
                 val shouldRecover =
-                    synchronized(this@IndexingHolder) {
-                        attached && currentIndexJob?.isActive != true
-                    } &&
+                    synchronized(this@IndexingHolder) { attached && currentIndexJob == null } &&
                         !musicSettings.lastScanFailed &&
                         (musicRepository.library == null ||
                             musicRepository.startupLibraryStatus != StartupLibraryStatus.Usable)
@@ -352,7 +350,10 @@ private constructor(
     }
 
     private fun requestIndexLocked(request: IndexRequest) {
-        if (currentIndexJob?.isActive == true) {
+        // Keep ownership until the running coroutine reaches its finally block. Job.cancel()
+        // changes isActive immediately, but starting another job in that gap lets the old finally
+        // clobber the new job reference and pending-request state.
+        if (currentIndexJob != null) {
             coalescePendingIndex(request)
             musicRepository.setPendingIndexReplacement(true)
             val activeGeneration = activeIndexRequest?.configurationGeneration
@@ -459,7 +460,7 @@ private constructor(
         if (!progression.isPlaying) {
             synchronized(this) {
                 val pending = pendingIndexRequest
-                if (pending != null && currentIndexJob?.isActive != true) {
+                if (pending != null && currentIndexJob == null) {
                     pendingIndexRequest = null
                     startIndexLocked(pending)
                 }
