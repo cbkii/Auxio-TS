@@ -7,7 +7,7 @@
 - `topwayTwMedia` (`com.tw.media`) — primary build, JVM test, lint, API 29, benchmark, screenshot and APK release authority.
 - `topwayTwMusic` (`com.tw.music`) — exact-package compatibility build and Magisk packaging authority.
 
-`scripts/check-ci-variant-contracts.sh` fails if active build or workflow configuration restores a Standard task/input/asset.
+`scripts/check-ci-variant-contracts.sh` fails if active build or workflow configuration restores a Standard task, input or asset.
 
 ## Automatic workflow shape
 
@@ -15,22 +15,34 @@
 | --- | --- |
 | CI scope | Every PR/push/manual run; classifies changed files and fails open to full CI when uncertain |
 | Workflow/script syntax | YAML, shell/Python syntax, release and variant contracts |
-| Consolidated Gradle quality | Kotlin formatting, `topwayTwMedia` JVM tests, Musikr tests and `topwayTwMedia` lint in one setup/invocation |
-| Topway build | Both maintained debug APKs in one Gradle invocation; release APKs only on push/manual runs |
+| Consolidated Gradle quality | Only selected Kotlin/C++ formatting, app tests, Musikr tests and `topwayTwMedia` lint in one setup/invocation |
+| Topway build | Only selected maintained debug APKs, still grouped into one Gradle invocation when both are required |
 | API 29 smoke | High-risk runtime changes, all `dev` integration pushes, `ci:full`, manual full CI |
 | Head-unit safety | TS18/DoFun/Topway source and package contract guardrails |
 
-The small `Formatting`, `Unit tests` and `Android lint` gate jobs preserve existing branch-protection check names while the expensive Gradle work runs once.
+The small `Formatting`, `Unit tests` and `Android lint` gate jobs preserve existing branch-protection check names while selected expensive Gradle work runs once.
 
 ## Changed-file authority
 
-`scripts/ci-scope.sh` publishes scope flags. Workflow/build-system changes run full CI. App/service/storage/startup/manifest/database changes include API 29. Documentation-only changes remain static. An unavailable diff range runs full maintained validation rather than guessing.
+`scripts/ci-scope.sh` publishes explicit scope flags and consumes them at job/task level:
 
-Use the `ci:full` PR label for an explicit full run.
+| Change authority | Automatic evidence |
+| --- | --- |
+| Workflow, documentation or ordinary shell contracts | Static YAML/syntax/contract checks only |
+| Ordinary app Kotlin/Java | Formatting, app JVM tests, app lint and the primary `topwayTwMedia` compile |
+| Musikr implementation/tests | Musikr JVM tests plus one `topwayTwMedia` integration compile |
+| `topwayTwMedia` resources/package surface | Primary variant build and selected compatibility checks |
+| `topwayTwMusic` resources/package surface | Exact-package variant build and selected compatibility checks |
+| Shared `topwayCompat` code/manifest/resources | Both maintained APKs and compatibility contracts |
+| Database, service, provider, receiver, manifest, startup or storage authority | Primary quality/build lanes plus API 29 instrumentation |
+| Gradle/dependency authority or unknown path | Full maintained validation |
+| Push to `dev` | API 29 retained even for a narrow change |
+
+Use the `ci:full` PR label or manual dispatch to request every maintained lane. An unavailable comparison range and any unclassified path fail open to full validation rather than guessing.
 
 ## Gradle invocation policy
 
-CI uses `scripts/ci-gradle.sh` with explicit tasks. Routine examples:
+CI uses `scripts/ci-gradle.sh` with explicit tasks. Full-maintained examples:
 
 ```bash
 bash ./scripts/ci-gradle.sh --continue \
@@ -46,7 +58,9 @@ bash ./scripts/ci-gradle.sh \
 
 Avoid generic `build`, `check`, `test` and `lint` as PR proof.
 
-The wrapper defaults to no-daemon, sequential execution and build cache. Configuration cache and parallel execution remain opt-in:
+The wrapper defaults to no-daemon, build cache, sequential execution and **one Gradle worker**. The one-worker limit prevents the two large Kotlin/KSP/Hilt variant compilations from exhausting the 1 GiB Kotlin daemon when both APKs share an invocation. A caller may set `AUXIO_TS_CI_GRADLE_MAX_WORKERS` explicitly for controlled evidence gathering.
+
+Configuration cache and parallel execution remain opt-in:
 
 ```bash
 AUXIO_TS_CI_CONFIGURATION_CACHE=1 bash ./scripts/ci-gradle.sh <tasks...>
