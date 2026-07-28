@@ -579,7 +579,13 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                         IndexingTerminalOutcome.SUCCESS -> R.string.lbl_indexing
                     }
                 )
-                binding.homeIndexingSummary.setText(R.string.indexing_failed_detail)
+                binding.homeIndexingSummary.setText(
+                    if (state.outcome == IndexingTerminalOutcome.FAILED) {
+                        R.string.indexing_failed_detail
+                    } else {
+                        R.string.indexing_terminal_detail
+                    }
+                )
                 binding.homeIndexingDetail.text = state.error?.localizedMessage.orEmpty()
                 binding.homeIndexingRetry.setOnClickListener {
                     musicModel.retrySourceConfiguration()

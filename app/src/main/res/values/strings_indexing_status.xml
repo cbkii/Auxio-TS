@@ -21,6 +21,7 @@
     <string name="indexing_service_stopped">Music loading stopped when the service closed</string>
     <string name="indexing_timed_out">Music loading reached the 30-minute safety limit</string>
     <string name="indexing_failed_detail">Tap for error details, or retry the configured sources.</string>
+    <string name="indexing_terminal_detail">Review the details, or retry the configured sources.</string>
     <string name="indexing_time_seconds">%1$ds</string>
     <string name="indexing_time_minutes">%1$dm %2$ds</string>
     <string name="indexing_time_hours">%1$dh %2$dm</string>

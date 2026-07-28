@@ -204,14 +204,15 @@ object TopwaySourcePolicy {
     internal fun preferSpecificMusicRoots(
         paths: Collection<String>,
         protectedPaths: Set<String> = emptySet(),
-    ): List<String> =
-        paths.filterNot { candidate ->
+    ): List<String> {
+        val hasEmulatedDescendant = paths.any { it.startsWith("$EMULATED_ROOT/") }
+        val hasSdcardDescendant = paths.any { it.startsWith("$SDCARD_ROOT/") }
+        return paths.filterNot { candidate ->
             candidate !in protectedPaths &&
-                candidate in setOf(EMULATED_ROOT, SDCARD_ROOT) &&
-                paths.any { other ->
-                    other != candidate && other.startsWith(candidate.trimEnd('/') + "/")
-                }
+                ((candidate == EMULATED_ROOT && hasEmulatedDescendant) ||
+                    (candidate == SDCARD_ROOT && hasSdcardDescendant))
         }
+    }
 
     internal fun discoverAudioParents(
         root: File,

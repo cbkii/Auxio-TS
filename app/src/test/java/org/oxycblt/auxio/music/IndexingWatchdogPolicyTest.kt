@@ -47,6 +47,30 @@ class IndexingWatchdogPolicyTest {
     }
 
     @Test
+    fun unsetStartBaselineCannotBecomeOverdue() {
+        assertEquals(
+            IndexingWatchdogState.HEALTHY,
+            IndexingWatchdogPolicy.classify(
+                nowElapsedMs = IndexingWatchdogPolicy.MAX_SCAN_ELAPSED_MS + 10_000L,
+                startedAtElapsedMs = 0L,
+                lastProgressAtElapsedMs = IndexingWatchdogPolicy.MAX_SCAN_ELAPSED_MS + 9_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun unsetProgressBaselineCannotBecomeStalled() {
+        assertEquals(
+            IndexingWatchdogState.HEALTHY,
+            IndexingWatchdogPolicy.classify(
+                nowElapsedMs = 120_000L,
+                startedAtElapsedMs = 60_000L,
+                lastProgressAtElapsedMs = 0L,
+            ),
+        )
+    }
+
+    @Test
     fun maximumElapsedTimeTakesPrecedenceOverRecentProgress() {
         assertEquals(
             IndexingWatchdogState.OVERDUE,

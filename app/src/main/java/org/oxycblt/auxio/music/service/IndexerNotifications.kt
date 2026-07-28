@@ -110,6 +110,8 @@ internal class IndexingNotificationUpdateGate(
             is IndexingProgress.Indeterminate,
             is IndexingProgress.Stage -> {
                 lastUpdateTime = -1L
+                lastLoaded = -1
+                lastExplored = -1
                 true
             }
             is IndexingProgress.Songs -> {

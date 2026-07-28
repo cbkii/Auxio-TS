@@ -492,21 +492,29 @@ constructor(
         }
     }
 
-    @Synchronized
     override fun unregisterWorker(worker: IndexingWorker) {
-        if (indexingWorker !== worker) {
-            L.w("Given worker did not match current worker")
-            return
-        }
-        L.d("Unregistering worker $worker")
-        indexingWorker = null
-        if (currentIndexingState is IndexingState.Indexing) {
-            val outcome = preparedInterruptionOutcome ?: IndexingTerminalOutcome.SERVICE_STOPPED
-            previousCompletedState =
-                IndexingState.Completed(IndexingInterruptedException(outcome), outcome)
-            currentIndexingState = null
-            preparedInterruptionOutcome = null
-            preparedReplacementHandoff = false
+        val dispatchCompletion =
+            synchronized(this) {
+                if (indexingWorker !== worker) {
+                    L.w("Given worker did not match current worker")
+                    return
+                }
+                L.d("Unregistering worker $worker")
+                indexingWorker = null
+                if (currentIndexingState is IndexingState.Indexing) {
+                    val outcome =
+                        preparedInterruptionOutcome ?: IndexingTerminalOutcome.SERVICE_STOPPED
+                    previousCompletedState =
+                        IndexingState.Completed(IndexingInterruptedException(outcome), outcome)
+                    currentIndexingState = null
+                    preparedInterruptionOutcome = null
+                    preparedReplacementHandoff = false
+                    true
+                } else {
+                    false
+                }
+            }
+        if (dispatchCompletion) {
             dispatchIndexingState()
         }
     }

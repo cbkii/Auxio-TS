@@ -22,6 +22,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.music.IndexingState
+import org.oxycblt.musikr.IndexingPhase
 import org.oxycblt.musikr.IndexingProgress
 
 class IndexingNotificationUpdateGateTest {
@@ -50,5 +51,35 @@ class IndexingNotificationUpdateGateTest {
 
         assertTrue(gate.shouldRefresh(first, nowElapsedMs = 10_000L))
         assertTrue(gate.shouldRefresh(replacement, nowElapsedMs = 10_001L))
+    }
+
+    @Test
+    fun changedProgressIsThrottledWithinTheUpdateWindow() {
+        val gate = IndexingNotificationUpdateGate(minProgressUpdateMs = 3_000L)
+        val first =
+            IndexingState.Indexing(
+                progress = IndexingProgress.Songs(loaded = 10, explored = 20),
+                sessionId = 1L,
+            )
+        val changed = first.copy(progress = IndexingProgress.Songs(loaded = 11, explored = 21))
+
+        assertTrue(gate.shouldRefresh(first, nowElapsedMs = 10_000L))
+        assertFalse(gate.shouldRefresh(changed, nowElapsedMs = 11_000L))
+        assertTrue(gate.shouldRefresh(changed, nowElapsedMs = 13_000L))
+    }
+
+    @Test
+    fun phaseTransitionAlwaysRefreshesImmediately() {
+        val gate = IndexingNotificationUpdateGate(minProgressUpdateMs = 3_000L)
+        val songs =
+            IndexingState.Indexing(
+                progress = IndexingProgress.Songs(loaded = 10, explored = 20),
+                sessionId = 1L,
+            )
+        val finalising = songs.copy(progress = IndexingProgress.Stage(IndexingPhase.FINALISING))
+
+        assertTrue(gate.shouldRefresh(songs, nowElapsedMs = 10_000L))
+        assertTrue(gate.shouldRefresh(finalising, nowElapsedMs = 10_100L))
+        assertTrue(gate.shouldRefresh(songs, nowElapsedMs = 10_200L))
     }
 }
