@@ -23,10 +23,10 @@ on:
           - "5000"
           - "20000"
       iterations:
-        description: Measurement iterations (3-30)
+        description: Measurement iterations (15-30)
         required: true
         type: number
-        default: 7
+        default: 15
       suite:
         description: Instrumented suite
         required: true
@@ -96,8 +96,8 @@ jobs:
             500|5000|20000) ;;
             *) echo "Unsupported fixture size: ${FIXTURE_SONG_COUNT}" >&2; exit 1 ;;
           esac
-          if ((ITERATIONS < 3 || ITERATIONS > 30)); then
-            echo "Iterations must be between 3 and 30." >&2
+          if ((ITERATIONS < 15 || ITERATIONS > 30)); then
+            echo "Iterations must be between 15 and 30." >&2
             exit 1
           fi
           bash ./scripts/check-startup-performance-contracts.sh
