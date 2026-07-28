@@ -42,6 +42,9 @@ import org.oxycblt.musikr.pipeline.ExploreStep
 import org.oxycblt.musikr.pipeline.Explored
 import org.oxycblt.musikr.pipeline.ExtractStep
 import org.oxycblt.musikr.pipeline.Extracted
+import org.oxycblt.musikr.pipeline.InvalidSong
+import org.oxycblt.musikr.pipeline.NewSong
+import org.oxycblt.musikr.pipeline.NotAudio
 import org.oxycblt.musikr.pipeline.PipelinePolicy
 import org.oxycblt.musikr.pipeline.RawPlaylist
 import org.oxycblt.musikr.pipeline.RawSong
