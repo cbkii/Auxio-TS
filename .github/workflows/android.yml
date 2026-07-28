@@ -25,7 +25,11 @@ jobs:
     timeout-minutes: 10
     outputs:
       topway_build: ${{ steps.scope.outputs.topway_build }}
+      topway_twmedia: ${{ steps.scope.outputs.topway_twmedia }}
+      topway_twmusic: ${{ steps.scope.outputs.topway_twmusic }}
+      compatibility_contracts: ${{ steps.scope.outputs.compatibility_contracts }}
       api29: ${{ steps.scope.outputs.api29 }}
+      release: ${{ steps.scope.outputs.release }}
       full: ${{ steps.scope.outputs.full }}
       changed_count: ${{ steps.scope.outputs.changed_count }}
       comparison: ${{ steps.scope.outputs.comparison }}
@@ -75,7 +79,9 @@ jobs:
             echo
             echo "- Comparison: \`${{ steps.scope.outputs.comparison }}\`"
             echo "- Changed files: \`${{ steps.scope.outputs.changed_count }}\`"
-            echo "- Topway build: \`${{ steps.scope.outputs.topway_build }}\`"
+            echo "- Build topwayTwMedia: \`${{ steps.scope.outputs.topway_twmedia }}\`"
+            echo "- Build topwayTwMusic: \`${{ steps.scope.outputs.topway_twmusic }}\`"
+            echo "- Compatibility contracts: \`${{ steps.scope.outputs.compatibility_contracts }}\`"
             echo "- API 29: \`${{ steps.scope.outputs.api29 }}\`"
             echo "- Full CI: \`${{ steps.scope.outputs.full }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -313,34 +319,73 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Build maintained debug APKs
+      - name: Build selected maintained debug APKs
         shell: bash
         env:
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-debug-gradle.log
         run: |
-          bash ./scripts/ci-gradle.sh --warning-mode all \
-            :app:assembleTopwayTwMediaDebug \
-            :app:assembleTopwayTwMusicDebug
+          tasks=()
+          [[ "${BUILD_TWMEDIA}" == "true" ]] && tasks+=(:app:assembleTopwayTwMediaDebug)
+          [[ "${BUILD_TWMUSIC}" == "true" ]] && tasks+=(:app:assembleTopwayTwMusicDebug)
+          ((${#tasks[@]} > 0)) || { echo "::error::Topway build selected without a maintained variant."; exit 1; }
+          printf 'Selected debug APK tasks:\n'
+          printf ' - %s\n' "${tasks[@]}"
+          bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
 
-      - name: Build maintained release APKs
-        if: github.event_name != 'pull_request'
+      - name: Build selected maintained release APKs
+        if: github.event_name != 'pull_request' && (needs.scope.outputs.release == 'true' || needs.scope.outputs.full == 'true')
         shell: bash
         env:
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
         run: |
-          bash ./scripts/ci-gradle.sh --warning-mode all \
-            :app:assembleTopwayTwMediaRelease \
-            :app:assembleTopwayTwMusicRelease
+          tasks=()
+          [[ "${BUILD_TWMEDIA}" == "true" ]] && tasks+=(:app:assembleTopwayTwMediaRelease)
+          [[ "${BUILD_TWMUSIC}" == "true" ]] && tasks+=(:app:assembleTopwayTwMusicRelease)
+          ((${#tasks[@]} > 0)) || { echo "::error::Release validation selected without a maintained variant."; exit 1; }
+          bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
+
+      - name: Validate selected debug APK identities
+        shell: bash
+        env:
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
+        run: |
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          apkanalyzer="${sdk_root}/cmdline-tools/latest/bin/apkanalyzer"
+          [[ -x "${apkanalyzer}" ]] || apkanalyzer="$(command -v apkanalyzer || true)"
+          [[ -n "${apkanalyzer}" && -x "${apkanalyzer}" ]] || { echo "::error::apkanalyzer was not found."; exit 1; }
+
+          validate_apk() {
+            local directory=$1 expected_package=$2 label=$3
+            mapfile -t apks < <(find "${directory}" -maxdepth 1 -type f -name '*.apk' | sort)
+            ((${#apks[@]} == 1)) || { echo "::error::Expected one ${label} APK in ${directory}, found ${#apks[@]}."; return 1; }
+            local actual_package manifest
+            actual_package="$("${apkanalyzer}" manifest application-id "${apks[0]}")"
+            [[ "${actual_package}" == "${expected_package}" ]] || { echo "::error::${label} application id expected ${expected_package}, got ${actual_package}."; return 1; }
+            manifest="$("${apkanalyzer}" manifest print "${apks[0]}")"
+            grep -Fq 'android:name="com.tw.music.MusicActivity"' <<<"${manifest}" || { echo "::error::${label} lacks com.tw.music.MusicActivity."; return 1; }
+            grep -Fq 'android:targetActivity="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' <<<"${manifest}" || { echo "::error::${label} alias target mismatch."; return 1; }
+            printf 'Validated %s: %s (%s)\n' "${label}" "${apks[0]}" "${actual_package}"
+          }
+
+          [[ "${BUILD_TWMEDIA}" != "true" ]] || validate_apk app/build/outputs/apk/topwayTwMedia/debug com.tw.media.debug topwayTwMediaDebug
+          [[ "${BUILD_TWMUSIC}" != "true" ]] || validate_apk app/build/outputs/apk/topwayTwMusic/debug com.tw.music.debug topwayTwMusicDebug
 
       - name: Validate maintained variant contracts
         shell: bash
         run: bash ./scripts/check-ci-variant-contracts.sh
 
       - name: Validate TS18 APK reference contracts
+        if: needs.scope.outputs.compatibility_contracts == 'true' || needs.scope.outputs.full == 'true'
         shell: bash
         run: bash ./scripts/check-ts18-apk-reference-contracts.sh
 
-      - name: Validate DoFun/Topway compatibility sources and outputs
+      - name: Validate combined DoFun/Topway outputs
+        if: needs.scope.outputs.topway_twmedia == 'true' && needs.scope.outputs.topway_twmusic == 'true'
         shell: bash
         run: bash ./scripts/check-dofun-topway-compat.sh
 
@@ -367,7 +412,7 @@ jobs:
           path: |
             app/build/outputs/apk/topwayTwMedia/debug/*.apk
             app/build/outputs/apk/topwayTwMusic/debug/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Write build summary
@@ -377,13 +422,15 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           REPORTS_URL: ${{ steps.failure_reports.outputs.artifact-url }}
           DEBUG_APKS_URL: ${{ steps.debug_apks.outputs.artifact-url }}
+          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
+          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
         run: |
           {
             echo "## Android Build"
             echo
             echo "- Result: \`${JOB_STATUS}\`"
-            echo "- Primary automatic variant: \`topwayTwMedia\`"
-            echo "- Exact-package compatibility variant: \`topwayTwMusic\`"
+            echo "- topwayTwMedia selected: \`${BUILD_TWMEDIA}\`"
+            echo "- topwayTwMusic selected: \`${BUILD_TWMUSIC}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             if [[ -n "${REPORTS_URL}" ]]; then
