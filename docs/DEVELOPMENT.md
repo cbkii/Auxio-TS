@@ -55,7 +55,7 @@ Both variants share `app/src/topwayCompat/`, exposing `com.tw.music.MusicActivit
 | `:startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark` | Primary benchmark instrumentation |
 | `:startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark` | Exact-package benchmark instrumentation |
 
-CI-equivalent local quality:
+Full-maintained local quality:
 
 ```bash
 bash scripts/bootstrap-dependencies.sh --profile full-build
@@ -69,21 +69,23 @@ bash scripts/ci-gradle.sh \
   :app:assembleTopwayTwMusicDebug
 ```
 
+For normal changes, prefer the narrower tasks selected by `scripts/ci-scope.sh` rather than running the full set mechanically.
+
 ## CI architecture
 
-`scripts/ci-scope.sh` classifies changed files and fails open to full maintained CI when comparison evidence is unavailable. Automatic workflows start for every PR/push and condition jobs rather than skipping a whole required workflow.
+`scripts/ci-scope.sh` classifies changed files and fails open to full maintained CI when comparison evidence is unavailable or a path is unknown. Automatic workflows start for every PR/push and condition jobs/tasks rather than skipping a whole required workflow.
 
-- `Android Build`: both Topway APKs in one Gradle invocation; API 29 for high-risk changes and all `dev` pushes.
-- `Android Quality`: one consolidated Gradle setup/invocation for formatting, tests and lint; small gate jobs preserve required check names.
+- `Android Build`: builds only the relevant maintained variant; shared Topway or full changes build both APKs in one invocation. API 29 runs for high-risk changes and all `dev` pushes.
+- `Android Quality`: one consolidated Gradle setup/invocation containing only selected formatting, app tests, Musikr tests and app lint. Small gate jobs preserve required check names.
 - `Startup Release Validation`: manual exhaustive profile/release validation for only the maintained variants.
-- `Startup Benchmarks`: manual API 29 macrobenchmark or API 35 Baseline Profile generation; defaults to `topwayTwMedia`.
+- `Startup Benchmarks`: manual API 29 macrobenchmark or API 35 Baseline Profile generation; defaults to `topwayTwMedia` and requires 15–30 measured iterations.
 - `UI Screenshots`: manual Roborazzi for `topwayTwMedia` or `topwayTwMusic`; defaults to `topwayTwMedia`.
 - `Gradle Optimisation Pilot`: manual configuration-cache and parallel-execution evidence.
 - `Manual Release`: signed `com.tw.media` APK and optional `com.tw.music` Magisk module only.
 
 Build/test jobs use `fetch-depth: 1`; scope fetches only the boundary commit. Release keeps full history and tags.
 
-Configuration cache and Gradle parallelism remain opt-in through the wrapper and manual pilot until proven safe for the exact current task set.
+Automatic Gradle execution is no-daemon, sequential and limited to one worker. This prevents simultaneous Kotlin variant compilations from exhausting the Kotlin daemon. Configuration cache and Gradle parallelism remain opt-in through the wrapper and manual pilot until proven safe for the exact current task set.
 
 ## Required checks
 
