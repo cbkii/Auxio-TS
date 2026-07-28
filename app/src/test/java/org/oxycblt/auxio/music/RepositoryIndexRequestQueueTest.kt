@@ -107,4 +107,23 @@ class RepositoryIndexRequestQueueTest {
 
         assertEquals(8L, queue.drain()?.configurationGeneration)
     }
+
+    @Test
+    fun metadataEnrichmentDoesNotOwnTheCommittedSourceCheckpoint() {
+        val enrichment =
+            IndexRequest(
+                IndexReason.METADATA_ENRICHMENT,
+                withCache = true,
+                metadataProfile = MetadataProfile.FULL,
+                configurationGeneration = 9L,
+            )
+
+        assertNull(IndexRequestPolicy.checkpointGeneration(enrichment))
+        assertEquals(
+            9L,
+            IndexRequestPolicy.checkpointGeneration(
+                enrichment.copy(reason = IndexReason.INITIAL_CONFIGURATION)
+            ),
+        )
+    }
 }

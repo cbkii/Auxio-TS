@@ -667,7 +667,7 @@ constructor(
                 preparedInterruptionOutcome = outcome
                 currentIndexingState as? IndexingState.Indexing
             } ?: return
-        current.request?.configurationGeneration?.let {
+        current.request?.let(IndexRequestPolicy::checkpointGeneration)?.let {
             musicSettings.returnSourceConfigurationToPending(it, outcome.name)
         }
         L.w(
@@ -776,6 +776,7 @@ constructor(
                 "profile=${request.metadataProfile} generation=${request.configurationGeneration})"
         ) {
             yield()
+            val checkpointGeneration = IndexRequestPolicy.checkpointGeneration(request)
             if (indexingWorker !== worker) {
                 L.w("Index requested from unregistered worker; ignoring")
                 return@traceSuspend
@@ -830,7 +831,7 @@ constructor(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            request.configurationGeneration?.let {
+                            checkpointGeneration?.let {
                                 musicSettings.returnSourceConfigurationToPending(
                                     it,
                                     "TemporarilyUnavailable",
@@ -877,7 +878,7 @@ constructor(
                             )
                         )
                     }
-                    request.configurationGeneration?.let {
+                    checkpointGeneration?.let {
                         val unresolved =
                             musicSettings.sourceConfigurationCheckpoint
                                 ?.unresolvedSourceKeys
@@ -914,7 +915,7 @@ constructor(
                         locations.any { !it.path.volume.isAccessible() }
                 ) {
                     L.w("One or more legacy music sources are inaccessible. Preserving cache.")
-                    request.configurationGeneration?.let {
+                    checkpointGeneration?.let {
                         musicSettings.returnSourceConfigurationToPending(
                             it,
                             "TemporarilyUnavailable",
@@ -986,7 +987,7 @@ constructor(
                         when (sourceOutcome) {
                             is SourceScanOutcome.PermissionRequired,
                             is SourceScanOutcome.TemporarilyUnavailable -> {
-                                request.configurationGeneration?.let {
+                                checkpointGeneration?.let {
                                     musicSettings.returnSourceConfigurationToPending(
                                         it,
                                         sourceOutcome.javaClass.simpleName,
@@ -999,7 +1000,7 @@ constructor(
                             }
                             is SourceScanOutcome.Partial,
                             is SourceScanOutcome.Truncated -> {
-                                request.configurationGeneration?.let { generation ->
+                                checkpointGeneration?.let { generation ->
                                     val retained =
                                         musicSettings.sourceConfigurationCheckpoint
                                             ?.unresolvedSourceKeys
@@ -1029,7 +1030,7 @@ constructor(
                 musicSettings.libraryState =
                     if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
                 musicSettings.lastScanFailed = false
-                request.configurationGeneration?.let { generation ->
+                checkpointGeneration?.let { generation ->
                     val priorUnresolved =
                         musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
                     val retainedUnresolved = priorUnresolved - attemptedSourceKeys
@@ -1092,7 +1093,7 @@ constructor(
                 lastSourceScanOutcome = SourceScanOutcome.Cancelled
                 val terminalOutcome =
                     preparedInterruptionOutcome ?: IndexingTerminalOutcome.CANCELLED
-                request.configurationGeneration?.let {
+                checkpointGeneration?.let {
                     musicSettings.returnSourceConfigurationToPending(it, terminalOutcome.name)
                 }
                 val replacementPending =
@@ -1112,7 +1113,7 @@ constructor(
                 }
                 throw e
             } catch (e: Exception) {
-                request.configurationGeneration?.let {
+                checkpointGeneration?.let {
                     musicSettings.returnSourceConfigurationToPending(it, "Failed")
                 }
                 musicSettings.lastScanFailed = true
