@@ -2,9 +2,9 @@
 # Central Gradle entrypoint for GitHub Actions CI.
 #
 # This wrapper intentionally preserves workflow task scope. It only centralises
-# execution flags, plain console output, build-cache enablement,
-# and heartbeat progress for silent Gradle phases. Do not replace explicit
-# module/variant tasks with generic aggregate tasks here.
+# execution flags, plain console output, build-cache enablement, bounded worker
+# policy, and heartbeat progress for silent Gradle phases. Do not replace
+# explicit module/variant tasks with generic aggregate tasks here.
 
 warning_count=0
 
@@ -41,25 +41,42 @@ args=(
   --build-cache
 )
 
-# Android variant builds that involve AGP, Kotlin/KSP, Hilt and generated sources are more reliable
-# when isolated. Parallel execution remains available as an explicit opt-in for a dedicated
-# compatibility pass, but PR CI defaults to sequential execution so maintained Topway variants do
-# not race through shared generated-source/report directories.
-if [[ "${AUXIO_TS_CI_GRADLE_PARALLEL:-0}" == "1" ]]; then
-  args+=(--parallel)
-fi
-
 has_warning_mode=0
+has_max_workers=0
 for arg in "$@"; do
   case "$arg" in
     --warning-mode|--warning-mode=*)
       has_warning_mode=1
+      ;;
+    --max-workers|--max-workers=*)
+      has_max_workers=1
       ;;
   esac
 done
 
 if (( has_warning_mode == 0 )); then
   args+=(--warning-mode summary)
+fi
+
+# The maintained variants share a large app/KSP/Hilt/native dependency graph. The failed PR #207
+# build proved that allowing two worker leases can start both Kotlin variant compilations together
+# and exhaust the 1 GiB Kotlin daemon. Automatic CI therefore uses one Gradle worker by default,
+# while the dedicated parallel pilot remains the only opt-in path that deliberately lifts this
+# isolation. A workflow may override the sequential worker count explicitly for evidence gathering.
+max_workers=${AUXIO_TS_CI_GRADLE_MAX_WORKERS:-1}
+case "$max_workers" in
+  ''|*[!0-9]*) fail "AUXIO_TS_CI_GRADLE_MAX_WORKERS must be a positive integer, got '${max_workers}'." ;;
+  0) fail "AUXIO_TS_CI_GRADLE_MAX_WORKERS must be greater than zero." ;;
+esac
+
+if [[ "${AUXIO_TS_CI_GRADLE_PARALLEL:-0}" == "1" ]]; then
+  args+=(--parallel)
+  worker_policy=parallel-pilot
+elif (( has_max_workers == 0 )); then
+  args+=("--max-workers=${max_workers}")
+  worker_policy="max-workers-${max_workers}"
+else
+  worker_policy=explicit-cli
 fi
 
 # Configuration cache is intentionally opt-in. Gradle 9.x recommends it for
@@ -177,6 +194,7 @@ if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
     echo "- Result: \`${result}\` (exit \`${rc}\`)"
     echo "- Duration: \`${elapsed}s\`"
     echo "- Tasks/options: \`${task_summary% }\`"
+    echo "- Worker policy: \`${worker_policy}\`"
     echo "- Configuration cache: \`${AUXIO_TS_CI_CONFIGURATION_CACHE:-0}\`"
     echo "- Parallel execution: \`${AUXIO_TS_CI_GRADLE_PARALLEL:-0}\`"
   } >> "${GITHUB_STEP_SUMMARY}" || warn "Could not append Gradle timing to ${GITHUB_STEP_SUMMARY}."
