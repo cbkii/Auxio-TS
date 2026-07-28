@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guard the final two-variant Auxio-TS build and CI contract.
+# Guard the final two-variant Auxio-TS build and focused CI contract.
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd -P) || {
   printf '::error::Cannot resolve repository root.\n' >&2
@@ -39,6 +39,8 @@ startup_workflow=.github/workflows/startup-performance.yml
 benchmark_workflow=.github/workflows/startup-benchmarks.yml
 screenshots_workflow=.github/workflows/ui-screenshots.yml
 release_workflow=.github/workflows/manual-release.yml
+scope_script=scripts/ci-scope.sh
+gradle_wrapper=scripts/ci-gradle.sh
 mode_file=app/src/main/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationMode.kt
 mode_test=app/src/test/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationModeTest.kt
 
@@ -53,13 +55,37 @@ require_contains "$benchmark_gradle" 'topwayTwMusic {' 'topwayTwMusic benchmark 
 require_absent "$benchmark_gradle" '        standard {' 'standard benchmark flavour is retired'
 require_absent "$benchmark_gradle" '"org.oxycblt.auxio"' 'benchmark module has no retired standard target package'
 
-require_contains "$android_workflow" ':app:assembleTopwayTwMediaDebug' 'automatic build compiles primary Topway lane'
-require_contains "$android_workflow" ':app:assembleTopwayTwMusicDebug' 'automatic build compiles exact-package Topway lane'
+require_contains "$android_workflow" 'topway_twmedia: ${{ steps.scope.outputs.topway_twmedia }}' 'build workflow exports focused topwayTwMedia scope'
+require_contains "$android_workflow" 'topway_twmusic: ${{ steps.scope.outputs.topway_twmusic }}' 'build workflow exports focused topwayTwMusic scope'
+require_contains "$android_workflow" 'BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}' 'build workflow consumes topwayTwMedia scope'
+require_contains "$android_workflow" 'BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}' 'build workflow consumes topwayTwMusic scope'
+require_contains "$android_workflow" 'tasks+=(:app:assembleTopwayTwMediaDebug)' 'automatic build can compile primary Topway lane'
+require_contains "$android_workflow" 'tasks+=(:app:assembleTopwayTwMusicDebug)' 'automatic build can compile exact-package Topway lane'
 require_contains "$android_workflow" ':app:connectedTopwayTwMediaDebugAndroidTest' 'API 29 gate targets topwayTwMedia'
-require_contains "$quality_workflow" ':app:testTopwayTwMediaDebugUnitTest' 'unit-test authority targets topwayTwMedia'
-require_contains "$quality_workflow" ':app:lintTopwayTwMediaDebug' 'lint authority targets topwayTwMedia'
-require_contains "$quality_workflow" 'scripts/ci-scope.sh' 'quality workflow uses central changed-file scope'
-require_contains "$android_workflow" 'scripts/ci-scope.sh' 'build workflow uses central changed-file scope'
+require_contains "$android_workflow" 'Validate selected debug APK identities' 'selected APKs receive binary identity checks'
+require_contains "$android_workflow" 'com.tw.media.debug topwayTwMediaDebug' 'primary APK application id is checked'
+require_contains "$android_workflow" 'com.tw.music.debug topwayTwMusicDebug' 'exact-package APK application id is checked'
+
+require_contains "$quality_workflow" 'app_tests: ${{ steps.scope.outputs.app_tests }}' 'quality workflow exports focused app-test scope'
+require_contains "$quality_workflow" 'musikr_tests: ${{ steps.scope.outputs.musikr_tests }}' 'quality workflow exports focused Musikr-test scope'
+require_contains "$quality_workflow" 'android_lint: ${{ steps.scope.outputs.android_lint }}' 'quality workflow exports focused lint scope'
+require_contains "$quality_workflow" '[[ "${APP_TESTS}" == "true" ]] && tasks+=(:app:testTopwayTwMediaDebugUnitTest)' 'unit-test authority targets topwayTwMedia conditionally'
+require_contains "$quality_workflow" '[[ "${MUSIKR_TESTS}" == "true" ]] && tasks+=(:musikr:testDebugUnitTest)' 'Musikr tests are independently selectable'
+require_contains "$quality_workflow" '[[ "${ANDROID_LINT}" == "true" ]] && tasks+=(:app:lintTopwayTwMediaDebug)' 'lint authority targets topwayTwMedia conditionally'
+require_contains "$quality_workflow" 'android-quality-gradle.log' 'quality failures preserve complete Gradle output'
+
+for token in app_tests musikr_tests unit_tests android_lint compatibility_contracts topway_twmedia topway_twmusic; do
+  require_contains "$scope_script" "${token}=" "CI scope publishes ${token}"
+done
+require_contains "$scope_script" "classify_path '.github/workflows/android.yml'" 'scope self-test covers workflow-only changes'
+require_contains "$scope_script" "classify_path 'musikr/src/main/java/example/Parser.kt'" 'scope self-test covers Musikr-only changes'
+require_contains "$scope_script" "classify_path 'app/src/topwayCompat/java/com/tw/music/MusicService.kt'" 'scope self-test covers shared Topway changes'
+require_contains "$scope_script" "classify_path 'app/src/topwayTwMedia/res/values/strings.xml'" 'scope self-test covers primary variant resources'
+require_contains "$scope_script" "classify_path 'app/src/topwayTwMusic/res/values/strings.xml'" 'scope self-test covers exact-package resources'
+
+require_contains "$gradle_wrapper" 'AUXIO_TS_CI_GRADLE_MAX_WORKERS:-1' 'automatic Gradle uses one worker by default'
+require_contains "$gradle_wrapper" 'args+=("--max-workers=${max_workers}")' 'Gradle wrapper enforces bounded worker policy'
+require_contains "$gradle_wrapper" 'AUXIO_TS_CI_GRADLE_PARALLEL' 'parallel execution remains explicit pilot input'
 
 for path in \
   "$android_workflow" \
