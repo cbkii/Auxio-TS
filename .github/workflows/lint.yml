@@ -195,18 +195,44 @@ jobs:
           APP_TESTS: ${{ needs.scope.outputs.app_tests }}
           MUSIKR_TESTS: ${{ needs.scope.outputs.musikr_tests }}
           ANDROID_LINT: ${{ needs.scope.outputs.android_lint }}
-          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-quality-gradle.log
         run: |
           tasks=()
           [[ "${FORMAT_KOTLIN}" == "true" ]] && tasks+=(spotlessKotlinCheck)
           [[ "${APP_TESTS}" == "true" ]] && tasks+=(:app:testTopwayTwMediaDebugUnitTest)
           [[ "${MUSIKR_TESTS}" == "true" ]] && tasks+=(:musikr:testDebugUnitTest)
           [[ "${ANDROID_LINT}" == "true" ]] && tasks+=(:app:lintTopwayTwMediaDebug)
-          [[ "${FORMAT_CPP}" == "true" ]] && tasks+=(spotlessCppCheck)
-          ((${#tasks[@]} > 0)) || { echo "::error::Gradle quality selected without any task."; exit 1; }
-          printf 'Selected Gradle quality tasks:\n'
-          printf ' - %s\n' "${tasks[@]}"
-          bash ./scripts/ci-gradle.sh --continue "${tasks[@]}"
+
+          if ((${#tasks[@]} > 0)); then
+            printf 'Selected consolidated Gradle quality tasks:\n'
+            printf ' - %s\n' "${tasks[@]}"
+            AUXIO_TS_CI_GRADLE_LOG="${RUNNER_TEMP}/android-quality-gradle.log" \
+              bash ./scripts/ci-gradle.sh --continue "${tasks[@]}"
+          elif [[ "${FORMAT_CPP}" != "true" ]]; then
+            echo "::error::Gradle quality selected without any task."
+            exit 1
+          fi
+
+          # Eclipse CDT formatting provisions P2 repositories outside Gradle's normal dependency
+          # cache. Retry this isolated formatter once for a transient repository timeout, while
+          # preserving a deterministic formatting violation as a final failure.
+          if [[ "${FORMAT_CPP}" == "true" ]]; then
+            cpp_status=1
+            for attempt in 1 2; do
+              echo "C/C++ formatting attempt ${attempt}/2"
+              if AUXIO_TS_CI_GRADLE_LOG="${RUNNER_TEMP}/android-quality-cpp-gradle-${attempt}.log" \
+                bash ./scripts/ci-gradle.sh spotlessCppCheck; then
+                cpp_status=0
+                break
+              else
+                cpp_status=$?
+              fi
+              if ((attempt < 2)); then
+                echo "::warning::C/C++ formatter failed with status ${cpp_status}; retrying once after 15 seconds."
+                sleep 15
+              fi
+            done
+            ((cpp_status == 0)) || exit "${cpp_status}"
+          fi
 
       - name: Upload consolidated quality reports
         if: failure()
@@ -220,6 +246,7 @@ jobs:
             musikr/build/test-results/**
             build/reports/problems/**
             ${{ runner.temp }}/android-quality-gradle.log
+            ${{ runner.temp }}/android-quality-cpp-gradle-*.log
           if-no-files-found: ignore
           retention-days: 7
 

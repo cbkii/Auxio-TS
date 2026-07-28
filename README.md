@@ -72,7 +72,7 @@ bash scripts/bootstrap-dependencies.sh --profile full-build
 # Primary development APK
 bash scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
 
-# Both maintained debug APKs in one invocation
+# Full maintained compatibility evidence; both selected tasks share one invocation
 bash scripts/ci-gradle.sh \
   :app:assembleTopwayTwMediaDebug \
   :app:assembleTopwayTwMusicDebug
@@ -117,7 +117,7 @@ CI/emulator success is not proof of exact TS18 widget, USB, ACC, MCU/CAN, DSP/ra
 
 ## CI
 
-`topwayTwMedia` is the automatic unit-test, lint and API 29 authority. Both maintained APKs build together. Changed-file classification avoids unnecessary Android work, while uncertain/workflow-sensitive changes fail open to full CI. See [`docs/CI_TASK_POLICY.md`](docs/CI_TASK_POLICY.md).
+`topwayTwMedia` is the automatic unit-test, lint and API 29 authority. Changed-file classification selects only the relevant maintained variant(s); shared Topway/full changes build both in one bounded Gradle invocation. Uncertain or Gradle/dependency-sensitive changes fail open to full CI. See [`docs/CI_TASK_POLICY.md`](docs/CI_TASK_POLICY.md).
 
 ## Documentation
 

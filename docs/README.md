@@ -7,7 +7,7 @@ Auxio-TS targets TS18/Topway/DoFun Variety. Start here for current product, CI, 
 ## Current guidance
 
 - [`DEVELOPMENT.md`](DEVELOPMENT.md) — setup, maintained variants, Gradle tasks and CI architecture.
-- [`CI_TASK_POLICY.md`](CI_TASK_POLICY.md) — changed-file classification, consolidated quality/build lanes and optimisation pilot.
+- [`CI_TASK_POLICY.md`](CI_TASK_POLICY.md) — changed-file classification, focused quality/build lanes and optimisation pilot.
 - [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — signed `com.tw.media` APK and `com.tw.music` Magisk release flow.
 - [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — launcher/widget compatibility contract and private-hook boundaries.
 - [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — APK-derived DoFun and stock `twmusic` evidence.
@@ -44,8 +44,8 @@ A normal APK cannot be assumed to replace that platform/UID 1000 package. Root d
 
 ## CI entry points
 
-- `android.yml` — changed-file scope, both maintained builds and conditional API 29.
-- `lint.yml` — syntax/static checks plus one consolidated formatting/test/lint Gradle lane and stable required-check gates.
+- `android.yml` — changed-file scope, selected maintained builds and conditional API 29.
+- `lint.yml` — syntax/static checks plus one focused formatting/test/lint Gradle lane and stable required-check gates.
 - `startup-performance.yml` — manual exhaustive two-variant profile/release validation.
 - `startup-benchmarks.yml` — manual API 29 macrobenchmark or API 35 Baseline Profile generation, defaulting to `topwayTwMedia`.
 - `ui-screenshots.yml` — manual Roborazzi for the two maintained variants.

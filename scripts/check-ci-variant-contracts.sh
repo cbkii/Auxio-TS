@@ -72,6 +72,8 @@ require_contains "$quality_workflow" 'android_lint: ${{ steps.scope.outputs.andr
 require_contains "$quality_workflow" '[[ "${APP_TESTS}" == "true" ]] && tasks+=(:app:testTopwayTwMediaDebugUnitTest)' 'unit-test authority targets topwayTwMedia conditionally'
 require_contains "$quality_workflow" '[[ "${MUSIKR_TESTS}" == "true" ]] && tasks+=(:musikr:testDebugUnitTest)' 'Musikr tests are independently selectable'
 require_contains "$quality_workflow" '[[ "${ANDROID_LINT}" == "true" ]] && tasks+=(:app:lintTopwayTwMediaDebug)' 'lint authority targets topwayTwMedia conditionally'
+require_contains "$quality_workflow" 'C/C++ formatting attempt ${attempt}/2' 'C/C++ formatter retry is bounded and visible'
+require_contains "$quality_workflow" 'android-quality-cpp-gradle-*.log' 'C/C++ retry logs are preserved on failure'
 require_contains "$quality_workflow" 'android-quality-gradle.log' 'quality failures preserve complete Gradle output'
 
 for token in app_tests musikr_tests unit_tests android_lint compatibility_contracts topway_twmedia topway_twmusic; do
@@ -105,6 +107,12 @@ require_absent "$screenshots_workflow" '          - standard' 'Roborazzi workflo
 require_contains "$mode_file" 'fun defaultFor(topwayCompatFlavor: Boolean)' 'launcher default policy is testable without a flavour'
 require_contains "$mode_test" 'default policy is explicit for both compatibility states' 'pure launcher default policy covers true and false states'
 require_contains "$mode_test" 'topwayCompatFlavor = false' 'non-Topway fallback policy remains covered without a distributable flavour'
+
+if ! bash ./scripts/check-startup-performance-contracts.sh; then
+  fail 'startup/profile/PR208 integration contracts failed'
+else
+  pass 'startup/profile/PR208 integration contracts pass'
+fi
 
 if (( failures > 0 )); then
   printf 'CI variant contracts: FAIL (%d issue(s))\n' "$failures" >&2

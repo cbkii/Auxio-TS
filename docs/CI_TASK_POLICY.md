@@ -14,9 +14,10 @@
 | Lane | Triggered work |
 | --- | --- |
 | CI scope | Every PR/push/manual run; classifies changed files and fails open to full CI when uncertain |
-| Workflow/script syntax | YAML, shell/Python syntax, release and variant contracts |
-| Consolidated Gradle quality | Only selected Kotlin/C++ formatting, app tests, Musikr tests and `topwayTwMedia` lint in one setup/invocation |
-| Topway build | Only selected maintained debug APKs, still grouped into one Gradle invocation when both are required |
+| Workflow/script syntax | YAML, shell/Python syntax, release, startup and variant contracts |
+| Consolidated app quality | Selected Kotlin formatting, app tests, Musikr tests and `topwayTwMedia` lint in one setup/invocation |
+| C/C++ formatting | Selected only for native/full scope; reuses the quality setup and has one bounded retry for transient Eclipse P2 provisioning |
+| Topway build | Only selected maintained debug APKs, grouped into one Gradle invocation when both are required |
 | API 29 smoke | High-risk runtime changes, all `dev` integration pushes, `ci:full`, manual full CI |
 | Head-unit safety | TS18/DoFun/Topway source and package contract guardrails |
 
@@ -35,6 +36,7 @@ The small `Formatting`, `Unit tests` and `Android lint` gate jobs preserve exist
 | `topwayTwMusic` resources/package surface | Exact-package variant build and selected compatibility checks |
 | Shared `topwayCompat` code/manifest/resources | Both maintained APKs and compatibility contracts |
 | Database, service, provider, receiver, manifest, startup or storage authority | Primary quality/build lanes plus API 29 instrumentation |
+| Native C/C++ | Native formatter and relevant primary compile/test evidence |
 | Gradle/dependency authority or unknown path | Full maintained validation |
 | Push to `dev` | API 29 retained even for a narrow change |
 
@@ -59,6 +61,8 @@ bash ./scripts/ci-gradle.sh \
 Avoid generic `build`, `check`, `test` and `lint` as PR proof.
 
 The wrapper defaults to no-daemon, build cache, sequential execution and **one Gradle worker**. The one-worker limit prevents the two large Kotlin/KSP/Hilt variant compilations from exhausting the 1 GiB Kotlin daemon when both APKs share an invocation. A caller may set `AUXIO_TS_CI_GRADLE_MAX_WORKERS` explicitly for controlled evidence gathering.
+
+The Eclipse CDT formatter uses external P2 repositories. It runs separately only when selected, with at most two attempts and preserved attempt logs. This retry is for transient repository timeouts; a deterministic formatting violation still fails the required Formatting check.
 
 Configuration cache and parallel execution remain opt-in:
 
