@@ -11,6 +11,7 @@ fail() { printf 'startup-performance contract: %s\n' "$*" >&2; exit 1; }
 require_file() { [[ -s $1 ]] || fail "required non-empty file is missing: $1"; }
 require_contains() { grep -Fq -- "$2" "$1" || fail "$1 does not contain required contract: $2"; }
 require_absent() { grep -Fq -- "$2" "$1" && fail "$1 contains forbidden startup contract: $2" || true; }
+require_absent_regex() { grep -Eq -- "$2" "$1" && fail "$1 contains forbidden startup regex: $2" || true; }
 
 baseline_profile=app/src/main/baseline-prof.txt
 startup_profile=app/src/main/generated/baselineProfiles/startup-prof.txt
@@ -54,7 +55,7 @@ require_contains startup-benchmark/build.gradle 'id "androidx.baselineprofile"'
 require_contains startup-benchmark/build.gradle 'pixel2Api29'
 require_contains startup-benchmark/build.gradle 'pixel6Api35'
 require_contains startup-benchmark/build.gradle 'managedDevices = ["pixel6Api35"]'
-require_absent startup-benchmark/build.gradle '        standard {'
+require_absent_regex startup-benchmark/build.gradle '^[[:space:]]*standard[[:space:]]*\{'
 require_absent startup-benchmark/build.gradle 'org.oxycblt.auxio"'
 
 for task in \
@@ -127,7 +128,7 @@ require_absent "$release_workflow" 'include_standard_apk'
 require_contains "$benchmark_workflow" 'default: topwayTwMedia'
 require_contains "$benchmark_workflow" 'Measurement iterations (15-30)'
 require_contains "$benchmark_workflow" '        default: 15'
-require_absent "$benchmark_workflow" '          - standard'
+require_absent_regex "$benchmark_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$'
 
 if find .github -maxdepth 2 -type f \( -name 'pr184-*' -o -name 'pr183-*' -o -name '*hardening-error*' \) -print -quit | grep -q .; then
   fail 'temporary PR repair/finaliser artefacts remain in the source tree'

@@ -31,6 +31,17 @@ require_absent() {
   fi
 }
 
+require_absent_regex() {
+  local path=$1 pattern=$2 description=$3
+  if [[ ! -f "$path" ]]; then
+    fail "$description (missing file $path)"
+  elif grep -Eq -- "$pattern" "$path"; then
+    fail "$description (forbidden regex '$pattern' in $path)"
+  else
+    pass "$description"
+  fi
+}
+
 app_gradle=app/build.gradle
 benchmark_gradle=startup-benchmark/build.gradle
 android_workflow=.github/workflows/android.yml
@@ -41,6 +52,7 @@ screenshots_workflow=.github/workflows/ui-screenshots.yml
 release_workflow=.github/workflows/manual-release.yml
 scope_script=scripts/ci-scope.sh
 gradle_wrapper=scripts/ci-gradle.sh
+built_apk_check=scripts/check-built-topway-apks.sh
 mode_file=app/src/main/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationMode.kt
 mode_test=app/src/test/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationModeTest.kt
 
@@ -48,11 +60,11 @@ require_contains "$app_gradle" 'topwayTwMedia {' 'topwayTwMedia app flavour exis
 require_contains "$app_gradle" 'applicationId "com.tw.media"' 'topwayTwMedia keeps com.tw.media identity'
 require_contains "$app_gradle" 'topwayTwMusic {' 'topwayTwMusic app flavour exists'
 require_contains "$app_gradle" 'applicationId "com.tw.music"' 'topwayTwMusic keeps com.tw.music identity'
-require_absent "$app_gradle" '        standard {' 'standard app flavour is retired'
+require_absent_regex "$app_gradle" '^[[:space:]]*standard[[:space:]]*\{' 'standard app flavour is retired regardless of indentation'
 
 require_contains "$benchmark_gradle" 'topwayTwMedia {' 'topwayTwMedia benchmark flavour exists'
 require_contains "$benchmark_gradle" 'topwayTwMusic {' 'topwayTwMusic benchmark flavour exists'
-require_absent "$benchmark_gradle" '        standard {' 'standard benchmark flavour is retired'
+require_absent_regex "$benchmark_gradle" '^[[:space:]]*standard[[:space:]]*\{' 'standard benchmark flavour is retired regardless of indentation'
 require_absent "$benchmark_gradle" '"org.oxycblt.auxio"' 'benchmark module has no retired standard target package'
 
 require_contains "$android_workflow" 'topway_twmedia: ${{ steps.scope.outputs.topway_twmedia }}' 'build workflow exports focused topwayTwMedia scope'
@@ -62,9 +74,12 @@ require_contains "$android_workflow" 'BUILD_TWMUSIC: ${{ needs.scope.outputs.top
 require_contains "$android_workflow" 'tasks+=(:app:assembleTopwayTwMediaDebug)' 'automatic build can compile primary Topway lane'
 require_contains "$android_workflow" 'tasks+=(:app:assembleTopwayTwMusicDebug)' 'automatic build can compile exact-package Topway lane'
 require_contains "$android_workflow" ':app:connectedTopwayTwMediaDebugAndroidTest' 'API 29 gate targets topwayTwMedia'
-require_contains "$android_workflow" 'Validate selected debug APK identities' 'selected APKs receive binary identity checks'
-require_contains "$android_workflow" 'com.tw.media.debug topwayTwMediaDebug' 'primary APK application id is checked'
-require_contains "$android_workflow" 'com.tw.music.debug topwayTwMusicDebug' 'exact-package APK application id is checked'
+require_contains "$android_workflow" 'Validate selected maintained APK outputs' 'selected APKs receive binary output checks'
+require_contains "$android_workflow" 'bash ./scripts/check-built-topway-apks.sh' 'workflow delegates binary checks to repository script'
+require_absent "$android_workflow" 'apkanalyzer' 'workflow YAML does not duplicate APK parsing logic'
+require_contains "$built_apk_check" 'bash ./scripts/check-headunit-compat-safety.sh' 'binary output check reuses canonical head-unit safety guardrail'
+require_contains "$built_apk_check" 'com.tw.media.debug' 'primary APK application id is checked in repository script'
+require_contains "$built_apk_check" 'com.tw.music.debug' 'exact-package APK application id is checked in repository script'
 
 require_contains "$quality_workflow" 'app_tests: ${{ steps.scope.outputs.app_tests }}' 'quality workflow exports focused app-test scope'
 require_contains "$quality_workflow" 'musikr_tests: ${{ steps.scope.outputs.musikr_tests }}' 'quality workflow exports focused Musikr-test scope'
@@ -103,8 +118,8 @@ for path in \
   require_absent "$path" 'standard-release.apk' "$path has no retired standard release asset"
 done
 require_absent "$release_workflow" 'include_standard_apk' 'manual release has no standard selection'
-require_absent "$benchmark_workflow" '          - standard' 'startup benchmark has no standard choice'
-require_absent "$screenshots_workflow" '          - standard' 'Roborazzi workflow has no standard choice'
+require_absent_regex "$benchmark_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$' 'startup benchmark has no standard choice regardless of indentation'
+require_absent_regex "$screenshots_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$' 'Roborazzi workflow has no standard choice regardless of indentation'
 
 require_contains "$mode_file" 'fun defaultFor(topwayCompatFlavor: Boolean)' 'launcher default policy is testable without a flavour'
 require_contains "$mode_test" 'default policy is explicit for both compatibility states' 'pure launcher default policy covers true and false states'

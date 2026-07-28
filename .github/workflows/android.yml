@@ -348,32 +348,12 @@ jobs:
           ((${#tasks[@]} > 0)) || { echo "::error::Release validation selected without a maintained variant."; exit 1; }
           bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
 
-      - name: Validate selected debug APK identities
+      - name: Validate selected maintained APK outputs
         shell: bash
         env:
           BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
           BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
-        run: |
-          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          apkanalyzer="${sdk_root}/cmdline-tools/latest/bin/apkanalyzer"
-          [[ -x "${apkanalyzer}" ]] || apkanalyzer="$(command -v apkanalyzer || true)"
-          [[ -n "${apkanalyzer}" && -x "${apkanalyzer}" ]] || { echo "::error::apkanalyzer was not found."; exit 1; }
-
-          validate_apk() {
-            local directory=$1 expected_package=$2 label=$3
-            mapfile -t apks < <(find "${directory}" -maxdepth 1 -type f -name '*.apk' | sort)
-            ((${#apks[@]} == 1)) || { echo "::error::Expected one ${label} APK in ${directory}, found ${#apks[@]}."; return 1; }
-            local actual_package manifest
-            actual_package="$("${apkanalyzer}" manifest application-id "${apks[0]}")"
-            [[ "${actual_package}" == "${expected_package}" ]] || { echo "::error::${label} application id expected ${expected_package}, got ${actual_package}."; return 1; }
-            manifest="$("${apkanalyzer}" manifest print "${apks[0]}")"
-            grep -Fq 'android:name="com.tw.music.MusicActivity"' <<<"${manifest}" || { echo "::error::${label} lacks com.tw.music.MusicActivity."; return 1; }
-            grep -Fq 'android:targetActivity="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' <<<"${manifest}" || { echo "::error::${label} alias target mismatch."; return 1; }
-            printf 'Validated %s: %s (%s)\n' "${label}" "${apks[0]}" "${actual_package}"
-          }
-
-          [[ "${BUILD_TWMEDIA}" != "true" ]] || validate_apk app/build/outputs/apk/topwayTwMedia/debug com.tw.media.debug topwayTwMediaDebug
-          [[ "${BUILD_TWMUSIC}" != "true" ]] || validate_apk app/build/outputs/apk/topwayTwMusic/debug com.tw.music.debug topwayTwMusicDebug
+        run: bash ./scripts/check-built-topway-apks.sh
 
       - name: Validate maintained variant contracts
         shell: bash
