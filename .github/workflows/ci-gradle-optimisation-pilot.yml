@@ -30,7 +30,6 @@ jobs:
     timeout-minutes: 120
     env:
       AUXIO_TS_CI_CONFIGURATION_CACHE: "1"
-      AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/configuration-cache-pilot.log
 
     steps:
       - name: Checkout repository
@@ -65,6 +64,8 @@ jobs:
 
       - name: Run first configuration-cache pass
         shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/configuration-cache-pilot.log
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
@@ -76,6 +77,8 @@ jobs:
 
       - name: Run configuration-cache reuse pass
         shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/configuration-cache-pilot.log
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
@@ -105,7 +108,6 @@ jobs:
     timeout-minutes: 120
     env:
       AUXIO_TS_CI_GRADLE_PARALLEL: "1"
-      AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/parallel-pilot.log
 
     steps:
       - name: Checkout repository
@@ -140,6 +142,8 @@ jobs:
 
       - name: Run maintained task set with Gradle parallelism
         shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/parallel-pilot.log
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
