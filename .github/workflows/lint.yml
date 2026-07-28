@@ -26,7 +26,12 @@ jobs:
     outputs:
       static_checks: ${{ steps.scope.outputs.static_checks }}
       gradle_quality: ${{ steps.scope.outputs.gradle_quality }}
+      formatting: ${{ steps.scope.outputs.formatting }}
       format_cpp: ${{ steps.scope.outputs.format_cpp }}
+      app_tests: ${{ steps.scope.outputs.app_tests }}
+      musikr_tests: ${{ steps.scope.outputs.musikr_tests }}
+      unit_tests: ${{ steps.scope.outputs.unit_tests }}
+      android_lint: ${{ steps.scope.outputs.android_lint }}
       changed_count: ${{ steps.scope.outputs.changed_count }}
       comparison: ${{ steps.scope.outputs.comparison }}
     steps:
@@ -66,6 +71,21 @@ jobs:
           CI_REF_NAME: ${{ github.ref_name }}
           CI_FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
         run: bash ./scripts/ci-scope.sh
+
+      - name: Write scope summary
+        shell: bash
+        run: |
+          {
+            echo "## Android Quality scope"
+            echo
+            echo "- Comparison: \`${{ steps.scope.outputs.comparison }}\`"
+            echo "- Changed files: \`${{ steps.scope.outputs.changed_count }}\`"
+            echo "- Kotlin formatting: \`${{ steps.scope.outputs.formatting }}\`"
+            echo "- C/C++ formatting: \`${{ steps.scope.outputs.format_cpp }}\`"
+            echo "- App tests: \`${{ steps.scope.outputs.app_tests }}\`"
+            echo "- Musikr tests: \`${{ steps.scope.outputs.musikr_tests }}\`"
+            echo "- Android lint: \`${{ steps.scope.outputs.android_lint }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   workflow-syntax:
     name: Workflow/script syntax
@@ -127,7 +147,7 @@ jobs:
     needs: scope
     if: needs.scope.outputs.gradle_quality == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
@@ -167,20 +187,25 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Run formatting, unit tests and Android lint
+      - name: Run selected formatting, unit tests and Android lint
         shell: bash
         env:
+          FORMAT_KOTLIN: ${{ needs.scope.outputs.formatting }}
           FORMAT_CPP: ${{ needs.scope.outputs.format_cpp }}
+          APP_TESTS: ${{ needs.scope.outputs.app_tests }}
+          MUSIKR_TESTS: ${{ needs.scope.outputs.musikr_tests }}
+          ANDROID_LINT: ${{ needs.scope.outputs.android_lint }}
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-quality-gradle.log
         run: |
-          tasks=(
-            spotlessKotlinCheck
-            :app:testTopwayTwMediaDebugUnitTest
-            :musikr:testDebugUnitTest
-            :app:lintTopwayTwMediaDebug
-          )
-          if [[ "${FORMAT_CPP}" == "true" ]]; then
-            tasks+=(spotlessCppCheck)
-          fi
+          tasks=()
+          [[ "${FORMAT_KOTLIN}" == "true" ]] && tasks+=(spotlessKotlinCheck)
+          [[ "${APP_TESTS}" == "true" ]] && tasks+=(:app:testTopwayTwMediaDebugUnitTest)
+          [[ "${MUSIKR_TESTS}" == "true" ]] && tasks+=(:musikr:testDebugUnitTest)
+          [[ "${ANDROID_LINT}" == "true" ]] && tasks+=(:app:lintTopwayTwMediaDebug)
+          [[ "${FORMAT_CPP}" == "true" ]] && tasks+=(spotlessCppCheck)
+          ((${#tasks[@]} > 0)) || { echo "::error::Gradle quality selected without any task."; exit 1; }
+          printf 'Selected Gradle quality tasks:\n'
+          printf ' - %s\n' "${tasks[@]}"
           bash ./scripts/ci-gradle.sh --continue "${tasks[@]}"
 
       - name: Upload consolidated quality reports
@@ -194,6 +219,7 @@ jobs:
             musikr/build/reports/**
             musikr/build/test-results/**
             build/reports/problems/**
+            ${{ runner.temp }}/android-quality-gradle.log
           if-no-files-found: ignore
           retention-days: 7
 
@@ -207,10 +233,11 @@ jobs:
       - name: Preserve required formatting check
         shell: bash
         env:
-          REQUIRED: ${{ needs.scope.outputs.gradle_quality }}
+          REQUIRED_KOTLIN: ${{ needs.scope.outputs.formatting }}
+          REQUIRED_CPP: ${{ needs.scope.outputs.format_cpp }}
           RESULT: ${{ needs.gradle-quality.result }}
         run: |
-          if [[ "${REQUIRED}" != "true" ]]; then
+          if [[ "${REQUIRED_KOTLIN}" != "true" && "${REQUIRED_CPP}" != "true" ]]; then
             echo "Formatting was not required for this change set."
             exit 0
           fi
@@ -226,7 +253,7 @@ jobs:
       - name: Preserve required unit-test check
         shell: bash
         env:
-          REQUIRED: ${{ needs.scope.outputs.gradle_quality }}
+          REQUIRED: ${{ needs.scope.outputs.unit_tests }}
           RESULT: ${{ needs.gradle-quality.result }}
         run: |
           if [[ "${REQUIRED}" != "true" ]]; then
@@ -245,7 +272,7 @@ jobs:
       - name: Preserve required Android lint check
         shell: bash
         env:
-          REQUIRED: ${{ needs.scope.outputs.gradle_quality }}
+          REQUIRED: ${{ needs.scope.outputs.android_lint }}
           RESULT: ${{ needs.gradle-quality.result }}
         run: |
           if [[ "${REQUIRED}" != "true" ]]; then
