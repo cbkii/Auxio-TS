@@ -9,6 +9,10 @@
         <Preference app:key="@string/set_key_reindex" app:summary="@string/set_reindex_desc" app:title="@string/set_reindex" />
         <Preference app:key="@string/set_key_rescan" app:summary="@string/set_rescan_desc" app:title="@string/set_rescan" />
     </PreferenceCategory>
+    <PreferenceCategory app:title="@string/set_performance_library">
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_performance_capture" app:summary="@string/set_performance_capture_desc" app:title="@string/set_performance_capture" />
+        <Preference app:key="@string/set_key_export_startup_report" app:summary="@string/set_export_startup_report_desc" app:title="@string/set_export_startup_report" />
+    </PreferenceCategory>
     <PreferenceCategory app:title="@string/set_scanning">
         <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_observing" app:summary="@string/set_observing_desc" app:title="@string/set_observing" />
         <SwitchPreferenceCompat app:defaultValue="true" app:key="@string/set_key_ts18_system_source_filter" app:summary="@string/set_ts18_system_source_filter_desc" app:title="@string/set_ts18_system_source_filter" />

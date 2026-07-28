@@ -22,6 +22,7 @@ import android.content.Context
 import android.util.Log
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -125,9 +126,32 @@ interface LibraryResult {
 }
 
 sealed interface IndexingProgress {
-    data class Songs(val loaded: Int, val explored: Int) : IndexingProgress
+    val phase: IndexingPhase
+    val currentItem: String?
 
-    data object Indeterminate : IndexingProgress
+    data class Songs(
+        val loaded: Int,
+        val explored: Int,
+        val evaluated: Int = 0,
+        override val phase: IndexingPhase = IndexingPhase.DISCOVERING,
+        override val currentItem: String? = null,
+    ) : IndexingProgress
+
+    data class Stage(override val phase: IndexingPhase, override val currentItem: String? = null) :
+        IndexingProgress
+
+    data object Indeterminate : IndexingProgress {
+        override val phase = IndexingPhase.FINALISING
+        override val currentItem: String? = null
+    }
+}
+
+enum class IndexingPhase {
+    PREPARING,
+    DISCOVERING,
+    EXTRACTING,
+    EVALUATING,
+    FINALISING,
 }
 
 /** No configured source completed, reused, or retained readable rows. */
@@ -169,47 +193,110 @@ private class MusikrImpl(
         }
 
         try {
-            emitProgress(IndexingProgress.Songs(0, 0))
+            emitProgress(IndexingProgress.Stage(IndexingPhase.DISCOVERING))
             val start = System.currentTimeMillis()
             val explored = AtomicInteger(0)
             val loaded = AtomicInteger(0)
+            val evaluated = AtomicInteger(0)
+            val furthestPhase = AtomicInteger(IndexingPhase.DISCOVERING.ordinal)
+            fun currentPhase(): IndexingPhase = IndexingPhase.entries[furthestPhase.get()]
+            fun advancePhase(phase: IndexingPhase) {
+                while (true) {
+                    val current = furthestPhase.get()
+                    if (
+                        phase.ordinal <= current ||
+                            furthestPhase.compareAndSet(current, phase.ordinal)
+                    ) {
+                        return
+                    }
+                }
+            }
+            fun progress(item: String? = null) =
+                IndexingProgress.Songs(
+                    loaded = loaded.get(),
+                    explored = explored.get(),
+                    evaluated = evaluated.get(),
+                    phase = currentPhase(),
+                    currentItem = item,
+                )
             val exploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
             val exploredTask = exploreStep.explore(this, exploredChannel)
+            val lastExtractionEmitMs = AtomicLong(0L)
             val trackedExploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
             val trackedExploredTask =
                 tryAsyncWith(trackedExploredChannel, Dispatchers.Default) {
                     var lastEmitMs = 0L
                     for (item in exploredChannel) {
-                        val exploredCount = explored.incrementAndGet()
+                        explored.incrementAndGet()
                         val now = System.currentTimeMillis()
-                        if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
+                        if (
+                            currentPhase() == IndexingPhase.DISCOVERING &&
+                                now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS
+                        ) {
                             lastEmitMs = now
-                            emitProgress(IndexingProgress.Songs(loaded.get(), exploredCount))
+                            emitProgress(progress(item.displayName()))
                         }
                         trackedExploredChannel.send(item)
                     }
-                    emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
+                    if (currentPhase() == IndexingPhase.DISCOVERING) {
+                        emitProgress(progress())
+                    }
                 }
             val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
-            val extractedTask = extractStep.extract(this, trackedExploredChannel, extractedChannel)
+            val extractedTask =
+                extractStep.extract(
+                    this,
+                    trackedExploredChannel,
+                    extractedChannel,
+                    onItemStarted = { item ->
+                        advancePhase(IndexingPhase.EXTRACTING)
+                        val now = System.currentTimeMillis()
+                        val prior = lastExtractionEmitMs.get()
+                        if (
+                            now - prior >= PipelinePolicy.PROGRESS_INTERVAL_MS &&
+                                lastExtractionEmitMs.compareAndSet(prior, now)
+                        ) {
+                            emitProgress(progress(item.displayName()))
+                        }
+                    },
+                )
             val trackedExtractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
             val trackedExtractedTask =
                 tryAsyncWith(trackedExtractedChannel, Dispatchers.Default) {
                     var lastEmitMs = 0L
                     for (item in extractedChannel) {
-                        val loadedCount = loaded.incrementAndGet()
+                        loaded.incrementAndGet()
+                        advancePhase(IndexingPhase.EXTRACTING)
                         val now = System.currentTimeMillis()
-                        if (now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
+                        if (
+                            currentPhase() == IndexingPhase.EXTRACTING &&
+                                now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS
+                        ) {
                             lastEmitMs = now
-                            emitProgress(IndexingProgress.Songs(loadedCount, explored.get()))
+                            emitProgress(progress(item.displayName()))
                         }
                         trackedExtractedChannel.send(item)
                     }
-                    emitProgress(IndexingProgress.Songs(loaded.get(), explored.get()))
-                    emitProgress(IndexingProgress.Indeterminate)
+                    if (currentPhase() == IndexingPhase.EXTRACTING) {
+                        emitProgress(progress())
+                    }
                 }
-            var resultLibrary = evaluateStep.evaluate(trackedExtractedChannel)
+            var lastEvaluationEmitMs = 0L
+            var resultLibrary =
+                evaluateStep.evaluate(
+                    trackedExtractedChannel,
+                    onItemStarted = { item ->
+                        advancePhase(IndexingPhase.EVALUATING)
+                        val now = System.currentTimeMillis()
+                        if (now - lastEvaluationEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
+                            lastEvaluationEmitMs = now
+                            emitProgress(progress(item.displayName()))
+                        }
+                    },
+                    onItemCompleted = { evaluated.incrementAndGet() },
+                )
             merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
+            emitProgress(IndexingProgress.Stage(IndexingPhase.FINALISING))
 
             val commit = if (plan != null) incremental?.commitScan() else null
             if (commit != null) {
@@ -244,6 +331,22 @@ private class MusikrImpl(
             throw e
         }
     }
+
+    private fun Explored.displayName(): String? =
+        when (this) {
+            is NewSong -> file.path.resolve(context)
+            is RawSong -> file.path.resolve(context)
+            is RawPlaylist -> file.name
+            is NotAudio -> null
+        }
+
+    private fun Extracted.displayName(): String? =
+        when (this) {
+            is RawSong -> file.path.resolve(context)
+            is RawPlaylist -> file.name
+            is InvalidSong,
+            is NotAudio -> null
+        }
 
     private suspend fun abortIncremental(
         plan: org.oxycblt.musikr.cache.IncrementalScanPlan?,

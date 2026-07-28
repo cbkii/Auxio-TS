@@ -176,6 +176,10 @@ constructor(
         musicRepository.retrySourceConfiguration()
     }
 
+    fun cancelIndexing() {
+        musicRepository.cancelIndexing()
+    }
+
     /**
      * Create a new generic [Playlist].
      *

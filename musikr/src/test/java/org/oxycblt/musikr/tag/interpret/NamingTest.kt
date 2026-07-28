@@ -20,6 +20,7 @@ package org.oxycblt.musikr.tag.interpret
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 import org.oxycblt.musikr.tag.Name
 import org.oxycblt.musikr.tag.Placeholder
@@ -428,5 +429,29 @@ class NamingTest {
         val a = Name.Unknown(Placeholder.ALBUM)
         val b = Naming.intelligent().name("A", null)
         assertEquals(-1, a.compareTo(b))
+    }
+
+    @Test
+    fun intelligentNamesReuseParsedTokensForRepeatedMetadata() {
+        IntelligentTokenCache.clearForTest()
+
+        val first = Naming.intelligent().name("Repeated Album", null)
+        val second = Naming.intelligent().name("Repeated Album", null)
+
+        assertSame(first.tokens, second.tokens)
+        assertEquals(1, IntelligentTokenCache.sizeForTest())
+        IntelligentTokenCache.clearForTest()
+    }
+
+    @Test
+    fun intelligentTokenCacheIsBounded() {
+        IntelligentTokenCache.clearForTest()
+
+        repeat(IntelligentTokenCache.MAX_ENTRIES + 1) { index ->
+            IntelligentTokenCache.getOrPut("name-$index") { emptyList() }
+        }
+
+        assertEquals(IntelligentTokenCache.MAX_ENTRIES, IntelligentTokenCache.sizeForTest())
+        IntelligentTokenCache.clearForTest()
     }
 }

@@ -36,7 +36,9 @@ fun FragmentHomeListBinding.updateLibraryEmptyState(
     val cachedStartupPending =
         empty && startupState.rank < StartupReadinessState.FastBrowseReady.rank
     val indexingPending = empty && indexingState is IndexingState.Indexing
-    val showProgress = cachedStartupPending || indexingPending
+    // Indexing has one authoritative live status surface in HomeFragment. Keeping a second,
+    // anonymous spinner here made a cancelled/stalled scan look like two unrelated operations.
+    val showProgress = cachedStartupPending
     val showEmptyPanel = empty || showProgress || actionVisibleWhenNotEmpty
     val canShowSourceAction =
         !showProgress && (indexingState == null || indexingState is IndexingState.Completed)

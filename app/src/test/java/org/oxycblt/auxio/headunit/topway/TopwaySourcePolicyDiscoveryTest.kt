@@ -105,6 +105,32 @@ class TopwaySourcePolicyDiscoveryTest {
     }
 
     @Test
+    fun specificMusicFoldersSuppressUnselectedWholePrimaryStorageRoots() {
+        val candidates =
+            TopwaySourcePolicy.preferSpecificMusicRoots(
+                listOf(
+                    "/storage/emulated/0",
+                    "/storage/emulated/0/Music",
+                    "/sdcard",
+                    "/sdcard/Music",
+                )
+            )
+
+        assertEquals(listOf("/storage/emulated/0/Music", "/sdcard/Music"), candidates)
+    }
+
+    @Test
+    fun explicitlySavedWholeStorageRootIsPreserved() {
+        val candidates =
+            TopwaySourcePolicy.preferSpecificMusicRoots(
+                listOf("/storage/emulated/0", "/storage/emulated/0/Music"),
+                protectedPaths = setOf("/storage/emulated/0"),
+            )
+
+        assertEquals(listOf("/storage/emulated/0", "/storage/emulated/0/Music"), candidates)
+    }
+
+    @Test
     fun configuredOnlyModeExcludesUnconfiguredMediaInjectedAndFallbackRoots() {
         val candidates =
             TopwaySourcePolicy.discoverMusicSourceCandidates(

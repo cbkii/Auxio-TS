@@ -40,6 +40,8 @@ STOP if the build, board, panel, launcher package, test asset/commit, package-si
 Capture:
 
 - exported Auxio startup report;
+- screenshots of Auxio's live source-loading card at start, meaningful phase changes and any
+  stalled/overdue state;
 - boot ID and process ID;
 - APK hash, application ID, commit and variant;
 - source/mount state before and after;
@@ -50,6 +52,28 @@ Capture:
 - observed warnings, cancellation or recovery state.
 
 Do not merge samples across different boots, processes, APKs or source layouts.
+
+## Source-loading evidence
+
+Debug builds preserve the real Timber payload. Keep `MusicRepositoryImpl`, `IndexingHolder`,
+`Musikr`, `DirectFS`, `EvaluateStep`, `TagLibJNI` and `AuxioPerf` log lines rather than relying on
+the notification alone.
+
+During an active scan, verify that the in-app card and logs agree on:
+
+- source mode and configured display path;
+- configuration generation and request reason;
+- phase (`PREPARING`, `DISCOVERING`, `EXTRACTING`, `EVALUATING` or `FINALISING`);
+- explored, loaded and evaluated counts;
+- current file/path, elapsed time and last-progress age;
+- whether a replacement generation is pending;
+- terminal outcome after success, failure, user cancellation, service destruction or the
+  30-minute safety limit.
+
+The foreground indexer notification must remain present for the whole active generation, including
+a cancellation-to-replacement handoff. A one-minute no-progress warning is diagnostic; it does not
+discard committed data. The 30-minute safety limit must stop the in-flight generation, preserve the
+last committed library and leave that generation retryable.
 
 ## Scenario matrix
 
