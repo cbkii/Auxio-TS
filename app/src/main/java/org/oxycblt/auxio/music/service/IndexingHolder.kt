@@ -97,6 +97,7 @@ private constructor(
     private var currentIndexJob: Job? = null
     private var activeIndexRequest: IndexRequest? = null
     private var pendingIndexRequest: IndexRequest? = null
+    private var directReplacementHandoff = false
     private var startupJob: Job? = null
     private var startupRecoveryJob: Job? = null
     private var watchdogJob: Job? = null
@@ -156,6 +157,7 @@ private constructor(
         unregisterRemovableStorageReceiver()
         observationRequestJob?.cancel()
         observationRequestJob = null
+        directReplacementHandoff = false
         if (currentIndexJob?.isActive == true) {
             musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.SERVICE_STOPPED)
             currentIndexJob?.cancel()
@@ -360,10 +362,20 @@ private constructor(
                     incomingGeneration != null &&
                     incomingGeneration > activeGeneration
             if (newerGeneration || request.reason == IndexReason.USER_RETRY) {
+                val pending = checkNotNull(pendingIndexRequest)
+                directReplacementHandoff =
+                    !IndexReplacementHandoffPolicy.mustWaitForIdle(
+                        request = pending,
+                        playbackActive = playbackActiveSnapshot(),
+                        observationMode = musicSettings.observationMode,
+                    )
+                if (directReplacementHandoff) {
+                    musicRepository.prepareIndexingReplacementHandoff()
+                }
                 L.i(
                     "Replacement request supersedes active indexing " +
                         "[reason=${request.reason} active=$activeGeneration " +
-                        "incoming=$incomingGeneration]"
+                        "incoming=$incomingGeneration direct=$directReplacementHandoff]"
                 )
                 currentIndexJob?.cancel()
             }
@@ -372,9 +384,11 @@ private constructor(
         }
         val playbackActive = playbackActiveSnapshot()
         val mustWaitForIdle =
-            playbackActive &&
-                (request.metadataProfile == MetadataProfile.FULL ||
-                    musicSettings.observationMode == ObservationMode.WHEN_IDLE)
+            IndexReplacementHandoffPolicy.mustWaitForIdle(
+                request,
+                playbackActive,
+                musicSettings.observationMode,
+            )
         if (mustWaitForIdle) {
             coalescePendingIndex(request)
             L.i("Deferred indexing/enrichment until playback is idle [request=$request]")
@@ -401,16 +415,25 @@ private constructor(
                     synchronized(this@IndexingHolder) {
                         currentIndexJob = null
                         activeIndexRequest = null
+                        val directHandoff = directReplacementHandoff
+                        directReplacementHandoff = false
                         val pending = pendingIndexRequest
                         if (pending != null) {
                             val playbackActive = playbackActiveSnapshot()
                             val mustWaitForIdle =
-                                playbackActive &&
-                                    (pending.metadataProfile == MetadataProfile.FULL ||
-                                        musicSettings.observationMode == ObservationMode.WHEN_IDLE)
-                            if (!mustWaitForIdle) {
+                                IndexReplacementHandoffPolicy.mustWaitForIdle(
+                                    pending,
+                                    playbackActive,
+                                    musicSettings.observationMode,
+                                )
+                            if (directHandoff || !mustWaitForIdle) {
                                 pendingIndexRequest = null
                                 startIndexLocked(pending)
+                            } else {
+                                L.i(
+                                    "Replacement remains deferred until playback is idle " +
+                                        "[request=$pending]"
+                                )
                             }
                         } else {
                             musicRepository.setPendingIndexReplacement(false)
@@ -423,6 +446,7 @@ private constructor(
     @Synchronized
     override fun cancelIndexing() {
         pendingIndexRequest = null
+        directReplacementHandoff = false
         musicRepository.setPendingIndexReplacement(false)
         if (currentIndexJob?.isActive == true) {
             L.i("Cancelling active indexing job at user request")
@@ -475,6 +499,7 @@ private constructor(
                     if (watchdogState == IndexingWatchdogState.OVERDUE) {
                         synchronized(this@IndexingHolder) {
                             pendingIndexRequest = null
+                            directReplacementHandoff = false
                             musicRepository.setPendingIndexReplacement(false)
                             musicRepository.prepareIndexingInterruption(
                                 IndexingTerminalOutcome.TIMED_OUT
@@ -564,7 +589,9 @@ private constructor(
     private fun cancelCurrentIndex() {
         currentIndexJob?.let {
             if (it.isActive) {
+                directReplacementHandoff = false
                 L.i("Cancelling active indexing job due to source change")
+                musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
                 it.cancel()
             }
         }
@@ -577,7 +604,9 @@ private constructor(
             currentIndexJob?.isActive == true &&
                 (activeSources == null || activeSources.any { it in sourceKeys })
         ) {
+            directReplacementHandoff = false
             L.i("Cancelling indexing work targeting removed sources $sourceKeys")
+            musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
             currentIndexJob?.cancel()
         }
         pendingIndexRequest =
@@ -786,4 +815,16 @@ private constructor(
         internal const val STARTUP_RECOVERY_GRACE_MS = 3_000L
         internal const val WATCHDOG_POLL_MS = 5_000L
     }
+}
+
+/** Decides whether optional replacement work must wait so cancellation cannot fake a handoff. */
+internal object IndexReplacementHandoffPolicy {
+    fun mustWaitForIdle(
+        request: IndexRequest,
+        playbackActive: Boolean,
+        observationMode: ObservationMode,
+    ): Boolean =
+        playbackActive &&
+            (request.metadataProfile == MetadataProfile.FULL ||
+                observationMode == ObservationMode.WHEN_IDLE)
 }

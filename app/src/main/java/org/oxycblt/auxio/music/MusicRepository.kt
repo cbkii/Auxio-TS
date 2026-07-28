@@ -238,6 +238,9 @@ interface MusicRepository {
     /** Publish whether a newer request is waiting behind the active source generation. */
     fun setPendingIndexReplacement(pending: Boolean) = Unit
 
+    /** Mark a cancellation as an atomic handoff to a replacement that will start immediately. */
+    fun prepareIndexingReplacementHandoff() = Unit
+
     /** Update the elapsed/no-progress watchdog state without restarting the pipeline. */
     fun updateIndexingWatchdog(state: IndexingWatchdogState) = Unit
 
@@ -402,6 +405,7 @@ constructor(
     @Volatile private var previousCompletedState: IndexingState.Completed? = null
     @Volatile private var currentIndexingState: IndexingState? = null
     @Volatile private var preparedInterruptionOutcome: IndexingTerminalOutcome? = null
+    @Volatile private var preparedReplacementHandoff = false
     @Volatile private var lastProgressLogAtElapsedMs = 0L
     @Volatile private var lastLoggedProgressPhase: IndexingPhase? = null
     @Volatile
@@ -501,6 +505,8 @@ constructor(
             previousCompletedState =
                 IndexingState.Completed(IndexingInterruptedException(outcome), outcome)
             currentIndexingState = null
+            preparedInterruptionOutcome = null
+            preparedReplacementHandoff = false
             dispatchIndexingState()
         }
     }
@@ -645,6 +651,14 @@ constructor(
         if (changed) dispatchIndexingState()
     }
 
+    override fun prepareIndexingReplacementHandoff() {
+        synchronized(this) {
+            if (currentIndexingState !is IndexingState.Indexing) return
+            preparedReplacementHandoff = true
+        }
+        L.i("Prepared direct indexing-generation handoff")
+    }
+
     override fun updateIndexingWatchdog(state: IndexingWatchdogState) {
         val current =
             synchronized(this) {
@@ -665,6 +679,7 @@ constructor(
         val current =
             synchronized(this) {
                 preparedInterruptionOutcome = outcome
+                preparedReplacementHandoff = false
                 currentIndexingState as? IndexingState.Indexing
             } ?: return
         current.request?.let(IndexRequestPolicy::checkpointGeneration)?.let {
@@ -1096,12 +1111,11 @@ constructor(
                 checkpointGeneration?.let {
                     musicSettings.returnSourceConfigurationToPending(it, terminalOutcome.name)
                 }
-                val replacementPending =
+                val directReplacementHandoff =
                     synchronized(this) {
-                        (currentIndexingState as? IndexingState.Indexing)?.pendingReplacement ==
-                            true
+                        preparedReplacementHandoff.also { preparedReplacementHandoff = false }
                     }
-                if (replacementPending) {
+                if (directReplacementHandoff) {
                     L.i("Cancelled source generation handed directly to pending replacement")
                 } else {
                     withContext(NonCancellable) {
@@ -1440,6 +1454,7 @@ constructor(
                 .toList()
         synchronized(this) {
             preparedInterruptionOutcome = null
+            preparedReplacementHandoff = false
             currentIndexingState =
                 IndexingState.Indexing(
                     progress = IndexingProgress.Stage(IndexingPhase.PREPARING),
@@ -1527,10 +1542,20 @@ constructor(
             if (error == null) IndexingTerminalOutcome.SUCCESS else IndexingTerminalOutcome.FAILED,
     ) {
         yield()
-        synchronized(this) {
-            previousCompletedState = IndexingState.Completed(error, outcome)
-            currentIndexingState = null
-            preparedInterruptionOutcome = null
+        val completed =
+            synchronized(this) {
+                if (currentIndexingState !is IndexingState.Indexing) {
+                    return@synchronized false
+                }
+                previousCompletedState = IndexingState.Completed(error, outcome)
+                currentIndexingState = null
+                preparedInterruptionOutcome = null
+                preparedReplacementHandoff = false
+                true
+            }
+        if (!completed) {
+            L.d("Ignoring duplicate indexing completion [outcome=$outcome]")
+            return
         }
         L.i("Dispatching indexing completion [outcome=$outcome error=$error]")
         dispatchIndexingState()
