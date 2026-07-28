@@ -103,11 +103,12 @@ require_absent "$music_repository" 'persist.tw.storage.switch'
 require_contains "$music_settings" 'PerfTimer.configure(performanceCaptureEnabled)'
 require_contains "$deferred_startup_test" 'cached-library-hydration-deferred'
 require_contains "$capture_restore_test" 'settings construction restores persisted performance capture preference'
-require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences(context)'
+require_contains "$fixture_receiver" 'seedBenchmarkStartupPreferences(context, generatedPlaylistsEnabled)'
 require_contains "$fixture_receiver" 'FIXTURE_LIBRARY_REVISION'
 require_contains "$fixture_receiver" 'LibraryState.USABLE.name'
 require_contains "$fixture_receiver" 'IntegerTable.LOCATION_MODE_DIRECT_FS'
 require_contains "$fixture_receiver" 'file:///storage/usbdisk0;file:///storage/usbdisk1'
+require_contains "$fixture_receiver" 'EXTRA_GENERATED_PLAYLISTS'
 
 for workflow in "$android_workflow" "$quality_workflow"; do
   require_contains "$workflow" '      - "cx/**"'
@@ -124,6 +125,8 @@ require_contains "$release_workflow" '.sha256'
 require_contains "$release_workflow" '.metadata.txt'
 require_absent "$release_workflow" 'include_standard_apk'
 require_contains "$benchmark_workflow" 'default: topwayTwMedia'
+require_contains "$benchmark_workflow" 'Measurement iterations (15-30)'
+require_contains "$benchmark_workflow" '        default: 15'
 require_absent "$benchmark_workflow" '          - standard'
 
 if find .github -maxdepth 2 -type f \( -name 'pr184-*' -o -name 'pr183-*' -o -name '*hardening-error*' \) -print -quit | grep -q .; then
@@ -133,6 +136,9 @@ fi
 for journey in \
   coldStartupWithoutProfiles coldStartupWithBaselineProfile warmStartupWithBaselineProfile \
   hotStartupWithBaselineProfile savedSessionColdStartupWithBaselineProfile \
+  attachThenBootRestoreCold attachThenRestoreBurstCold pauseDuringRestore nextDuringRestore \
+  seekDuringRestore generatedPlaylistsDoNotBlockFiveThousandSongResume \
+  generatedPlaylistsDoNotBlockTwentyThousandSongResume \
   primitiveQueueControlsJourney findAndPlayJourney usbFolderPlaybackJourney \
   secondUsbFolderPlaybackJourney pagedLibraryJourney earlyMediaBrowserJourney \
   coldStartupWithUnavailableSecondUsb coldStartupWithInterruptedPendingGeneration \
@@ -140,9 +146,12 @@ for journey in \
   require_contains "$macrobenchmark" "$journey"
 done
 for token in \
-  exerciseSavedSessionResume exerciseEarlyMediaBrowser 'exerciseUsbFolder(sourceIndex: Int = 0)' \
-  waitForAudioPlayback 'Required UI object not found' TRACE_NEXT_COMMAND_TO_NEXT_AUDIO \
-  TRACE_MEDIA_BROWSER_FIRST_PAGE 'Next after Quick Find' 'first Album track'; do
+  exerciseSavedSessionResume exerciseBootRestore exerciseRestoreBurst exercisePauseDuringRestore \
+  exerciseNextDuringRestore exerciseSeekDuringRestore exerciseEarlyMediaBrowser \
+  'exerciseUsbFolder(sourceIndex: Int = 0)' waitForAudioPlayback 'Required UI object not found' \
+  TRACE_NEXT_COMMAND_TO_NEXT_AUDIO TRACE_MEDIA_BROWSER_FIRST_PAGE \
+  TRACE_BOOT_RESTORE_TO_FIRST_AUDIO TRACE_RESTORE_BURST_TO_FIRST_AUDIO \
+  'Next after Quick Find' 'first Album track'; do
   require_contains "$journeys" "$token"
 done
 require_absent "$journeys" 'clickIfPresent'
