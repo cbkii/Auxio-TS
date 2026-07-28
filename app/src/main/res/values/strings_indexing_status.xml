@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="indexing_phase_preparing">Preparing sources</string>
-    <string name="indexing_phase_discovering">Finding music files</string>
-    <string name="indexing_phase_extracting">Reading music metadata</string>
-    <string name="indexing_phase_evaluating">Building the music library</string>
-    <string name="indexing_phase_finalising">Saving the music library</string>
-    <string name="indexing_summary_counts">%1$d found • %2$d loaded • %3$d evaluated</string>
-    <string name="indexing_summary_stage">Waiting for the first progress update</string>
-    <string name="indexing_detail_context">%1$s • generation %2$s • %3$s</string>
-    <string name="indexing_detail_timing">%1$s elapsed • last progress %2$s ago</string>
-    <string name="indexing_source_unknown">Source not resolved yet</string>
-    <string name="indexing_generation_unknown">not assigned</string>
-    <string name="indexing_mode_saf">Folder access</string>
-    <string name="indexing_mode_media_store">Android media library</string>
-    <string name="indexing_mode_direct_fs">Direct filesystem</string>
-    <string name="indexing_replacement_pending">A newer source selection is waiting</string>
-    <string name="indexing_stalled">No progress for over one minute</string>
-    <string name="indexing_overdue">This scan is taking unusually long</string>
-    <string name="indexing_cancelled">Music loading was cancelled</string>
-    <string name="indexing_service_stopped">Music loading stopped when the service closed</string>
-    <string name="indexing_timed_out">Music loading reached the 30-minute safety limit</string>
-    <string name="indexing_failed_detail">Tap for error details, or retry the configured sources.</string>
-    <string name="indexing_terminal_detail">Review the details, or retry the configured sources.</string>
-    <string name="indexing_time_seconds">%1$ds</string>
-    <string name="indexing_time_minutes">%1$dm %2$ds</string>
-    <string name="indexing_time_hours">%1$dh %2$dm</string>
+    <string name="indexing_phase_preparing" translatable="false">Preparing sources</string>
+    <string name="indexing_phase_discovering" translatable="false">Finding music files</string>
+    <string name="indexing_phase_extracting" translatable="false">Reading music metadata</string>
+    <string name="indexing_phase_evaluating" translatable="false">Building the music library</string>
+    <string name="indexing_phase_finalising" translatable="false">Saving the music library</string>
+    <string name="indexing_summary_counts" translatable="false">%1$d found • %2$d loaded • %3$d evaluated</string>
+    <string name="indexing_summary_stage" translatable="false">Waiting for the first progress update</string>
+    <string name="indexing_detail_context" translatable="false">%1$s • generation %2$s • %3$s</string>
+    <string name="indexing_detail_timing" translatable="false">%1$s elapsed • last progress %2$s ago</string>
+    <string name="indexing_source_unknown" translatable="false">Source not resolved yet</string>
+    <string name="indexing_generation_unknown" translatable="false">not assigned</string>
+    <string name="indexing_mode_saf" translatable="false">Folder access</string>
+    <string name="indexing_mode_media_store" translatable="false">Android media library</string>
+    <string name="indexing_mode_direct_fs" translatable="false">Direct filesystem</string>
+    <string name="indexing_replacement_pending" translatable="false">A newer source selection is waiting</string>
+    <string name="indexing_stalled" translatable="false">No progress for over one minute</string>
+    <string name="indexing_overdue" translatable="false">This scan is taking unusually long</string>
+    <string name="indexing_cancelled" translatable="false">Music loading was cancelled</string>
+    <string name="indexing_service_stopped" translatable="false">Music loading stopped when the service closed</string>
+    <string name="indexing_timed_out" translatable="false">Music loading reached the 30-minute safety limit</string>
+    <string name="indexing_failed_detail" translatable="false">Tap for error details, or retry the configured sources.</string>
+    <string name="indexing_terminal_detail" translatable="false">Review the details, or retry the configured sources.</string>
+    <string name="indexing_time_seconds" translatable="false">%1$ds</string>
+    <string name="indexing_time_minutes" translatable="false">%1$dm %2$ds</string>
+    <string name="indexing_time_hours" translatable="false">%1$dh %2$dm</string>
 </resources>
