@@ -23,6 +23,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.PowerManager
+import android.os.SystemClock
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +37,9 @@ import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.music.IndexReason
 import org.oxycblt.auxio.music.IndexRequest
 import org.oxycblt.auxio.music.IndexingState
+import org.oxycblt.auxio.music.IndexingTerminalOutcome
+import org.oxycblt.auxio.music.IndexingWatchdogPolicy
+import org.oxycblt.auxio.music.IndexingWatchdogState
 import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
@@ -93,8 +97,11 @@ private constructor(
     private var currentIndexJob: Job? = null
     private var activeIndexRequest: IndexRequest? = null
     private var pendingIndexRequest: IndexRequest? = null
+    private var directReplacementHandoff = false
     private var startupJob: Job? = null
     private var startupRecoveryJob: Job? = null
+    private var watchdogJob: Job? = null
+    private var sourceConfigurationJob: Job? = null
     private var attached = false
     private var activeStartupOrigin: StartupScanOrigin? = null
     private var pendingStartupOrigin: StartupScanOrigin? = null
@@ -142,11 +149,19 @@ private constructor(
         startupJob = null
         startupRecoveryJob?.cancel()
         startupRecoveryJob = null
+        watchdogJob?.cancel()
+        watchdogJob = null
+        sourceConfigurationJob?.cancel()
+        sourceConfigurationJob = null
         stopTracking()
         unregisterRemovableStorageReceiver()
         observationRequestJob?.cancel()
         observationRequestJob = null
-        currentIndexJob?.cancel()
+        directReplacementHandoff = false
+        if (currentIndexJob?.isActive == true) {
+            musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.SERVICE_STOPPED)
+            currentIndexJob?.cancel()
+        }
         currentIndexJob = null
         pendingIndexRequest = null
         indexJob.cancel()
@@ -266,9 +281,7 @@ private constructor(
             indexScope.launch {
                 delay(STARTUP_RECOVERY_GRACE_MS)
                 val shouldRecover =
-                    synchronized(this@IndexingHolder) {
-                        attached && currentIndexJob?.isActive != true
-                    } &&
+                    synchronized(this@IndexingHolder) { attached && currentIndexJob == null } &&
                         !musicSettings.lastScanFailed &&
                         (musicRepository.library == null ||
                             musicRepository.startupLibraryStatus != StartupLibraryStatus.Usable)
@@ -294,10 +307,10 @@ private constructor(
             // we can go foreground later.
             // 2. If a non-foreground service is killed, the app will probably still be alive,
             // and thus the music library will not be updated at all.
-            val changed = indexingNotification.updateIndexingState(state.progress)
-            if (changed) {
-                post(indexingNotification)
-            }
+            indexingNotification.updateIndexingState(state)
+            // Re-entering startForeground is intentional and idempotent. Foreground ownership
+            // must never depend on whether the newly built progress text was deduplicated.
+            post(indexingNotification)
         } else if (musicSettings.shouldBeObserving) {
             // Not observing and done loading, exit foreground.
             L.d("Exiting foreground")
@@ -337,29 +350,46 @@ private constructor(
     }
 
     private fun requestIndexLocked(request: IndexRequest) {
-        if (currentIndexJob?.isActive == true) {
+        // Keep ownership until the running coroutine reaches its finally block. Job.cancel()
+        // changes isActive immediately, but starting another job in that gap lets the old finally
+        // clobber the new job reference and pending-request state.
+        if (currentIndexJob != null) {
+            coalescePendingIndex(request)
+            musicRepository.setPendingIndexReplacement(true)
             val activeGeneration = activeIndexRequest?.configurationGeneration
             val incomingGeneration = request.configurationGeneration
-            if (
+            val newerGeneration =
                 activeGeneration != null &&
                     incomingGeneration != null &&
                     incomingGeneration > activeGeneration
-            ) {
+            if (newerGeneration || request.reason == IndexReason.USER_RETRY) {
+                val pending = checkNotNull(pendingIndexRequest)
+                directReplacementHandoff =
+                    !IndexReplacementHandoffPolicy.mustWaitForIdle(
+                        request = pending,
+                        playbackActive = playbackActiveSnapshot(),
+                        observationMode = musicSettings.observationMode,
+                    )
+                if (directReplacementHandoff) {
+                    musicRepository.prepareIndexingReplacementHandoff()
+                }
                 L.i(
-                    "New source generation supersedes active indexing " +
-                        "[active=$activeGeneration incoming=$incomingGeneration]"
+                    "Replacement request supersedes active indexing " +
+                        "[reason=${request.reason} active=$activeGeneration " +
+                        "incoming=$incomingGeneration direct=$directReplacementHandoff]"
                 )
                 currentIndexJob?.cancel()
             }
-            coalescePendingIndex(request)
             L.i("Coalesced indexing request while scan is running [request=$request]")
             return
         }
         val playbackActive = playbackActiveSnapshot()
         val mustWaitForIdle =
-            playbackActive &&
-                (request.metadataProfile == MetadataProfile.FULL ||
-                    musicSettings.observationMode == ObservationMode.WHEN_IDLE)
+            IndexReplacementHandoffPolicy.mustWaitForIdle(
+                request,
+                playbackActive,
+                musicSettings.observationMode,
+            )
         if (mustWaitForIdle) {
             coalescePendingIndex(request)
             L.i("Deferred indexing/enrichment until playback is idle [request=$request]")
@@ -376,6 +406,7 @@ private constructor(
     @Synchronized
     private fun startIndexLocked(request: IndexRequest) {
         L.i("Starting new indexing job [request=$request]")
+        musicRepository.setPendingIndexReplacement(false)
         activeIndexRequest = request
         currentIndexJob =
             indexScope.launch {
@@ -385,28 +416,51 @@ private constructor(
                     synchronized(this@IndexingHolder) {
                         currentIndexJob = null
                         activeIndexRequest = null
+                        val directHandoff = directReplacementHandoff
+                        directReplacementHandoff = false
                         val pending = pendingIndexRequest
                         if (pending != null) {
                             val playbackActive = playbackActiveSnapshot()
                             val mustWaitForIdle =
-                                playbackActive &&
-                                    (pending.metadataProfile == MetadataProfile.FULL ||
-                                        musicSettings.observationMode == ObservationMode.WHEN_IDLE)
-                            if (!mustWaitForIdle) {
+                                IndexReplacementHandoffPolicy.mustWaitForIdle(
+                                    pending,
+                                    playbackActive,
+                                    musicSettings.observationMode,
+                                )
+                            if (directHandoff || !mustWaitForIdle) {
                                 pendingIndexRequest = null
                                 startIndexLocked(pending)
+                            } else {
+                                L.i(
+                                    "Replacement remains deferred until playback is idle " +
+                                        "[request=$pending]"
+                                )
                             }
+                        } else {
+                            musicRepository.setPendingIndexReplacement(false)
                         }
                     }
                 }
             }
     }
 
+    @Synchronized
+    override fun cancelIndexing() {
+        pendingIndexRequest = null
+        directReplacementHandoff = false
+        musicRepository.setPendingIndexReplacement(false)
+        if (currentIndexJob?.isActive == true) {
+            L.i("Cancelling active indexing job at user request")
+            musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
+            currentIndexJob?.cancel()
+        }
+    }
+
     override fun onProgressionChanged(progression: org.oxycblt.auxio.playback.state.Progression) {
         if (!progression.isPlaying) {
             synchronized(this) {
                 val pending = pendingIndexRequest
-                if (pending != null && currentIndexJob?.isActive != true) {
+                if (pending != null && currentIndexJob == null) {
                     pendingIndexRequest = null
                     startIndexLocked(pending)
                 }
@@ -419,9 +473,44 @@ private constructor(
         val state = musicRepository.indexingState
         if (state is IndexingState.Indexing) {
             wakeLock.acquireSafe()
+            ensureWatchdog()
         } else {
             wakeLock.releaseSafe()
+            watchdogJob?.cancel()
+            watchdogJob = null
         }
+    }
+
+    private fun ensureWatchdog() {
+        if (watchdogJob?.isActive == true) return
+        watchdogJob =
+            indexScope.launch {
+                while (true) {
+                    delay(WATCHDOG_POLL_MS)
+                    val state =
+                        musicRepository.indexingState as? IndexingState.Indexing ?: return@launch
+                    wakeLock.acquireSafe()
+                    val watchdogState =
+                        IndexingWatchdogPolicy.classify(
+                            nowElapsedMs = SystemClock.elapsedRealtime(),
+                            startedAtElapsedMs = state.startedAtElapsedMs,
+                            lastProgressAtElapsedMs = state.lastProgressAtElapsedMs,
+                        )
+                    musicRepository.updateIndexingWatchdog(watchdogState)
+                    if (watchdogState == IndexingWatchdogState.OVERDUE) {
+                        synchronized(this@IndexingHolder) {
+                            pendingIndexRequest = null
+                            directReplacementHandoff = false
+                            musicRepository.setPendingIndexReplacement(false)
+                            musicRepository.prepareIndexingInterruption(
+                                IndexingTerminalOutcome.TIMED_OUT
+                            )
+                            currentIndexJob?.cancel()
+                        }
+                        return@launch
+                    }
+                }
+            }
     }
 
     override fun onMusicChanges(changes: MusicRepository.Changes) {
@@ -501,7 +590,9 @@ private constructor(
     private fun cancelCurrentIndex() {
         currentIndexJob?.let {
             if (it.isActive) {
+                directReplacementHandoff = false
                 L.i("Cancelling active indexing job due to source change")
+                musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
                 it.cancel()
             }
         }
@@ -514,7 +605,9 @@ private constructor(
             currentIndexJob?.isActive == true &&
                 (activeSources == null || activeSources.any { it in sourceKeys })
         ) {
+            directReplacementHandoff = false
             L.i("Cancelling indexing work targeting removed sources $sourceKeys")
+            musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
             currentIndexJob?.cancel()
         }
         pendingIndexRequest =
@@ -627,44 +720,50 @@ private constructor(
 
     override fun onMusicLocationsChanged() {
         super.onMusicLocationsChanged()
-        val (checkpoint, shouldHandle) =
-            synchronized(this) {
-                val pending = musicSettings.claimPendingConfiguration()
-                val currentGeneration =
-                    pending?.generation ?: musicSettings.sourceConfigurationGeneration
-                if (currentGeneration == lastHandledSourceConfigurationGeneration) {
-                    pending to false
-                } else {
-                    lastHandledSourceConfigurationGeneration = currentGeneration
-                    pending to true
-                }
-            }
-        if (!shouldHandle) {
-            L.d(
-                "Ignoring duplicate source callback " +
-                    "[generation=${musicSettings.sourceConfigurationGeneration}]"
-            )
-            return
-        }
         if (musicSettings.shouldBeObserving) startTracking() else stopTracking()
         updateRemovableStorageReceiver()
-        indexScope.launch {
-            musicRepository.invalidateSource()
-            musicRepository.requestIndex(
-                IndexRequest(
-                    reason =
-                        if (checkpoint != null) {
-                            IndexReason.INITIAL_CONFIGURATION
+        sourceConfigurationJob?.cancel()
+        sourceConfigurationJob =
+            indexScope.launch {
+                delay(SOURCE_CONFIGURATION_DEBOUNCE_MS)
+                val (checkpoint, shouldHandle) =
+                    synchronized(this@IndexingHolder) {
+                        val pending = musicSettings.claimPendingConfiguration()
+                        val currentGeneration =
+                            pending?.generation ?: musicSettings.sourceConfigurationGeneration
+                        if (currentGeneration == lastHandledSourceConfigurationGeneration) {
+                            pending to false
                         } else {
-                            IndexReason.USER_REFRESH
-                        },
-                    withCache = checkpoint == null,
-                    configurationGeneration = checkpoint?.generation,
-                    sourceKeys =
-                        musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey },
+                            lastHandledSourceConfigurationGeneration = currentGeneration
+                            pending to true
+                        }
+                    }
+                if (!shouldHandle) {
+                    L.d(
+                        "Ignoring duplicate source callback " +
+                            "[generation=${musicSettings.sourceConfigurationGeneration}]"
+                    )
+                    return@launch
+                }
+                musicRepository.invalidateSource()
+                musicRepository.requestIndex(
+                    IndexRequest(
+                        reason =
+                            if (checkpoint != null) {
+                                IndexReason.INITIAL_CONFIGURATION
+                            } else {
+                                IndexReason.USER_REFRESH
+                            },
+                        withCache = checkpoint == null,
+                        configurationGeneration = checkpoint?.generation,
+                        sourceKeys =
+                            musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) {
+                                it.sourceKey
+                            },
+                    )
                 )
-            )
-        }
+                sourceConfigurationJob = null
+            }
     }
 
     override fun onGeneratedPlaylistsChanged() {
@@ -713,6 +812,20 @@ private constructor(
     companion object {
         const val WAKELOCK_TIMEOUT_MS = 60 * 1000L
         internal const val OBSERVATION_DEBOUNCE_MS = 750L
+        internal const val SOURCE_CONFIGURATION_DEBOUNCE_MS = 600L
         internal const val STARTUP_RECOVERY_GRACE_MS = 3_000L
+        internal const val WATCHDOG_POLL_MS = 5_000L
     }
+}
+
+/** Decides whether optional replacement work must wait so cancellation cannot fake a handoff. */
+internal object IndexReplacementHandoffPolicy {
+    fun mustWaitForIdle(
+        request: IndexRequest,
+        playbackActive: Boolean,
+        observationMode: ObservationMode,
+    ): Boolean =
+        playbackActive &&
+            (request.metadataProfile == MetadataProfile.FULL ||
+                observationMode == ObservationMode.WHEN_IDLE)
 }

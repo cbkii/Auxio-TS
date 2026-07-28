@@ -40,6 +40,16 @@ data class IndexRequest(
 
 /** Shared request semantics used on both sides of the repository/service attachment boundary. */
 internal object IndexRequestPolicy {
+    /**
+     * Metadata enrichment reuses the generation that already committed the lean library, but it
+     * does not own that source-configuration checkpoint. An interrupted optional enrichment must
+     * therefore never regress a committed source generation back to pending.
+     */
+    fun checkpointGeneration(request: IndexRequest): Long? =
+        request.configurationGeneration.takeUnless {
+            request.reason == IndexReason.METADATA_ENRICHMENT
+        }
+
     fun merge(current: IndexRequest?, incoming: IndexRequest): IndexRequest {
         if (current == null) return incoming
         val currentGeneration = current.configurationGeneration

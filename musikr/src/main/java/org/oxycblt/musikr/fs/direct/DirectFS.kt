@@ -105,6 +105,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         val queue = LinkedBlockingQueue<DirectoryTask>(MAX_PENDING_DIRECTORIES)
         val pending = AtomicInteger(0)
         val discoveredDirectories = AtomicInteger(0)
+        val discoveredFiles = AtomicInteger(0)
         val seeding = AtomicBoolean(true)
         val workers =
             List(DIRECTORY_WORKER_COUNT) {
@@ -116,7 +117,14 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                             continue
                         }
                         try {
-                            processDirectory(task, files, queue, pending, discoveredDirectories)
+                            processDirectory(
+                                task,
+                                files,
+                                queue,
+                                pending,
+                                discoveredDirectories,
+                                discoveredFiles,
+                            )
                         } finally {
                             pending.decrementAndGet()
                         }
@@ -158,7 +166,14 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                 when (enqueueDirectory(queue, pending, discoveredDirectories, task)) {
                     EnqueueResult.Enqueued -> Unit
                     EnqueueResult.ProcessInline ->
-                        processDirectory(task, files, queue, pending, discoveredDirectories)
+                        processDirectory(
+                            task,
+                            files,
+                            queue,
+                            pending,
+                            discoveredDirectories,
+                            discoveredFiles,
+                        )
                     EnqueueResult.LimitExceeded -> Unit
                 }
             }
@@ -174,7 +189,15 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         queue: LinkedBlockingQueue<DirectoryTask>,
         pending: AtomicInteger,
         discoveredDirectories: AtomicInteger,
+        discoveredFiles: AtomicInteger,
     ) {
+        if (discoveredFiles.get() >= MAX_VISITED_FILES) {
+            recordFailure(
+                task.sourceKey,
+                "TRUNCATED|DirectFS file limit reached at ${task.directory.path}",
+            )
+            return
+        }
         if (task.depth > MAX_DEPTH) {
             recordFailure(
                 task.sourceKey,
@@ -206,6 +229,13 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         try {
             for (entry in entries) {
                 if (entry.isSymlink || entry.isDirectory) continue
+                if (discoveredFiles.incrementAndGet() > MAX_VISITED_FILES) {
+                    recordFailure(
+                        task.sourceKey,
+                        "TRUNCATED|DirectFS file limit reached at ${task.directory.path}",
+                    )
+                    break
+                }
                 val item = entry.javaFile
                 val file =
                     File(
@@ -237,6 +267,10 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
 
         for (entry in entries) {
             if (entry.isSymlink || !entry.isDirectory) continue
+            if (!shouldDescendIntoDirectory(entry.name)) {
+                Log.d(TAG, "DirectFS skipped noisy directory ${entry.javaFile.path}")
+                continue
+            }
             val item = entry.javaFile
             if (!isWithinCanonicalRoot(item, task.canonicalRoot)) {
                 Log.w(TAG, "DirectFS skipped an escaped directory at ${item.path}")
@@ -255,7 +289,14 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
             when (enqueueDirectory(queue, pending, discoveredDirectories, childTask)) {
                 EnqueueResult.Enqueued -> Unit
                 EnqueueResult.ProcessInline ->
-                    processDirectory(childTask, files, queue, pending, discoveredDirectories)
+                    processDirectory(
+                        childTask,
+                        files,
+                        queue,
+                        pending,
+                        discoveredDirectories,
+                        discoveredFiles,
+                    )
                 EnqueueResult.LimitExceeded -> Unit
             }
         }
@@ -390,7 +431,19 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         internal const val DIRECTORY_WORKER_COUNT = 3
         internal const val MAX_PENDING_DIRECTORIES = 512
         internal const val MAX_VISITED_DIRECTORIES = 100_000
+        internal const val MAX_VISITED_FILES = 50_000
         private const val QUEUE_POLL_INTERVAL_MS = 100L
+        private val skippedDirectoryNames =
+            setOf(
+                "android",
+                "download",
+                "dcim",
+                "pictures",
+                "movies",
+                ".zjinnova",
+                ".tcfg",
+                ".dfmusiclog",
+            )
 
         private val protectedRoots =
             listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
@@ -405,6 +458,13 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
 
         fun isAllowedRoot(file: JavaFile): Boolean =
             canonicalFileOrNull(file)?.let(::isAllowedCanonicalRoot) == true
+
+        internal fun shouldDescendIntoDirectory(name: String): Boolean =
+            name.isNotBlank() &&
+                name != "." &&
+                name != ".." &&
+                !name.startsWith('.') &&
+                name.lowercase(Locale.ROOT) !in skippedDirectoryNames
 
         internal fun isWithinCanonicalRoot(candidate: JavaFile, canonicalRoot: JavaFile): Boolean {
             var cursor = canonicalFileOrNull(candidate) ?: return false

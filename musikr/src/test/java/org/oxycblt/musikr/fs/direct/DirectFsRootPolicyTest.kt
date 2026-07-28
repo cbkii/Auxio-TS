@@ -24,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isAllowedRoot
 import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isExpectedRestrictedSharedStorageChild
+import org.oxycblt.musikr.fs.direct.DirectFS.Companion.shouldDescendIntoDirectory
 
 class DirectFsRootPolicyTest {
     @Test
@@ -68,5 +69,20 @@ class DirectFsRootPolicyTest {
                 File("/storage/emulated/0/Android/data"),
             )
         )
+    }
+
+    @Test
+    fun traversalBudgetsRemainBoundedForAccidentalWholeVolumeSelections() {
+        assertTrue(DirectFS.MAX_VISITED_FILES in 1_000..100_000)
+        assertTrue(DirectFS.MAX_VISITED_DIRECTORIES in 1_000..100_000)
+    }
+
+    @Test
+    fun wholeVolumeTraversalSkipsKnownNonMusicAndHiddenTrees() {
+        listOf("Android", "Download", "DCIM", "Pictures", "Movies", ".cache").forEach {
+            assertFalse(it, shouldDescendIntoDirectory(it))
+        }
+        assertTrue(shouldDescendIntoDirectory("Music"))
+        assertTrue(shouldDescendIntoDirectory("My Audio"))
     }
 }

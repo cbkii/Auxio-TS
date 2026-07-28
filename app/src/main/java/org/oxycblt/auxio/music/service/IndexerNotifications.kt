@@ -25,6 +25,7 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.util.newMainPendingIntent
 import org.oxycblt.musikr.IndexingProgress
 import timber.log.Timber as L
@@ -37,9 +38,7 @@ import timber.log.Timber as L
  */
 class IndexingNotification(private val context: Context) :
     ForegroundServiceNotification(context, indexerChannel) {
-    private var lastUpdateTime = -1L
-    private var lastLoaded = -1
-    private var lastExplored = -1
+    private val updateGate = IndexingNotificationUpdateGate()
 
     init {
         setSmallIcon(R.drawable.ic_indexer_24)
@@ -59,17 +58,20 @@ class IndexingNotification(private val context: Context) :
     /**
      * Update this notification with the new music loading state.
      *
-     * @param progress The new music loading state to display in the notification.
+     * @param state The new music loading state to display in the notification.
      * @return true if the notification updated, false otherwise
      */
-    fun updateIndexingState(progress: IndexingProgress): Boolean {
+    fun updateIndexingState(state: IndexingState.Indexing): Boolean {
+        val shouldRefresh = updateGate.shouldRefresh(state, SystemClock.elapsedRealtime())
+        val progress = state.progress
         when (progress) {
-            is IndexingProgress.Indeterminate -> {
+            is IndexingProgress.Indeterminate,
+            is IndexingProgress.Stage -> {
                 // Indeterminate state, use a vaguer description and in-determinate progress.
                 // These events are not very frequent, and thus we don't need to safeguard
                 // against rate limiting.
+                if (!shouldRefresh) return false
                 L.d("Updating state to $progress")
-                lastUpdateTime = -1
                 setContentText(context.getString(R.string.lng_indexing))
                 setProgress(0, 0, true)
                 return true
@@ -77,28 +79,60 @@ class IndexingNotification(private val context: Context) :
             is IndexingProgress.Songs -> {
                 // Determinate state, show an active progress meter. Since these updates arrive
                 // highly rapidly, coalesce updates to reduce notification churn on TS18 SystemUI.
-                val now = SystemClock.elapsedRealtime()
-                if (progress.loaded == lastLoaded && progress.explored == lastExplored) {
-                    return false
-                }
-                if (lastUpdateTime > -1 && (now - lastUpdateTime) < MIN_PROGRESS_UPDATE_MS) {
-                    return false
-                }
-                lastUpdateTime = now
-                lastLoaded = progress.loaded
-                lastExplored = progress.explored
+                if (!shouldRefresh) return false
                 L.d("Updating state to $progress")
                 setContentText(
                     context.getString(R.string.fmt_indexing, progress.loaded, progress.explored)
                 )
-                setProgress(progress.loaded, progress.explored, false)
+                setProgress(progress.explored.coerceAtLeast(1), progress.loaded, false)
                 return true
+            }
+        }
+    }
+}
+
+internal class IndexingNotificationUpdateGate(
+    private val minProgressUpdateMs: Long = MIN_PROGRESS_UPDATE_MS
+) {
+    private var lastUpdateTime = -1L
+    private var lastLoaded = -1
+    private var lastExplored = -1
+    private var lastSessionId = -1L
+
+    fun shouldRefresh(state: IndexingState.Indexing, nowElapsedMs: Long): Boolean {
+        if (lastSessionId != state.sessionId) {
+            lastSessionId = state.sessionId
+            lastUpdateTime = -1L
+            lastLoaded = -1
+            lastExplored = -1
+        }
+        return when (val progress = state.progress) {
+            is IndexingProgress.Indeterminate,
+            is IndexingProgress.Stage -> {
+                lastUpdateTime = -1L
+                lastLoaded = -1
+                lastExplored = -1
+                true
+            }
+            is IndexingProgress.Songs -> {
+                if (progress.loaded == lastLoaded && progress.explored == lastExplored) {
+                    false
+                } else if (
+                    lastUpdateTime > -1L && nowElapsedMs - lastUpdateTime < minProgressUpdateMs
+                ) {
+                    false
+                } else {
+                    lastUpdateTime = nowElapsedMs
+                    lastLoaded = progress.loaded
+                    lastExplored = progress.explored
+                    true
+                }
             }
         }
     }
 
     private companion object {
-        const val MIN_PROGRESS_UPDATE_MS = 3000L
+        const val MIN_PROGRESS_UPDATE_MS = 3_000L
     }
 }
 

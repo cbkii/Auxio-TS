@@ -71,29 +71,100 @@
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/home_indexing_container"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top|start"
+            android:layout_margin="@dimen/spacing_medium"
             android:transitionGroup="true"
-            android:visibility="invisible"
-            android:layout_margin="@dimen/spacing_medium">
+            android:visibility="invisible">
 
-            <com.google.android.material.progressindicator.CircularProgressIndicator
-                android:id="@+id/home_indexing_progress"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_margin="@dimen/spacing_tiny" />
+                android:orientation="vertical"
+                android:padding="@dimen/spacing_medium">
 
-            <ImageView
-                android:id="@+id/home_indexing_error"
-                android:layout_width="@dimen/size_touchable_small"
-                android:layout_height="@dimen/size_touchable_small"
-                android:layout_gravity="center"
-                android:contentDescription="@string/err_index_failed"
-                android:scaleType="centerInside"
-                android:src="@drawable/ic_feature_request_24"
-                app:tint="?attr/colorError"
-                tools:visibility="invisible" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/home_indexing_progress"
+                        android:layout_width="@dimen/size_touchable_small"
+                        android:layout_height="@dimen/size_touchable_small"
+                        android:layout_marginEnd="@dimen/spacing_small" />
+
+                    <ImageView
+                        android:id="@+id/home_indexing_error"
+                        android:layout_width="@dimen/size_touchable_small"
+                        android:layout_height="@dimen/size_touchable_small"
+                        android:layout_marginEnd="@dimen/spacing_small"
+                        android:contentDescription="@string/err_index_failed"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/ic_feature_request_24"
+                        app:tint="?attr/colorError"
+                        tools:visibility="invisible" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/home_indexing_title"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/lbl_indexing"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                        <TextView
+                            android:id="@+id/home_indexing_summary"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_tiny"
+                            android:text="@string/lng_loading_music_library"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/home_indexing_detail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:maxLines="5"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    tools:text="Direct filesystem • generation 4 • /storage/emulated/0/Music&#10;1,090 found • 824 loaded • 801 evaluated • 2m 16s elapsed" />
+
+                <LinearLayout
+                    android:id="@+id/home_indexing_actions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/home_indexing_retry"
+                        style="@style/Widget.Auxio.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/lbl_retry" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/home_indexing_cancel"
+                        style="@style/Widget.Auxio.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/lbl_cancel" />
+
+                </LinearLayout>
+
+            </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
 

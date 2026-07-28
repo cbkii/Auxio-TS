@@ -19,6 +19,8 @@
 package org.oxycblt.musikr.pipeline
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +48,7 @@ internal interface ExtractStep {
         scope: CoroutineScope,
         explored: Channel<Explored>,
         extracted: Channel<Extracted>,
+        onItemStarted: suspend (Explored) -> Unit = {},
     ): Deferred<Result<Unit>>
 
     companion object {
@@ -76,37 +79,49 @@ private class ExtractStepImpl(
         scope: CoroutineScope,
         explored: Channel<Explored>,
         extracted: Channel<Extracted>,
+        onItemStarted: suspend (Explored) -> Unit,
     ): Deferred<Result<Unit>> {
         val addingMs = System.currentTimeMillis()
         val extract = Channel<ParsedExtractItem>(parallelism)
         val extractTask =
             scope.mapParallel(parallelism, explored, extract, Dispatchers.IO) { item ->
-                when (item) {
-                    is RawSong -> Finalized(item)
-                    is RawPlaylist -> Finalized(item)
-                    is NewSong -> {
-                        when (val result = metadataExtractor.extract(item.file)) {
-                            is MetadataResult.Success ->
-                                result.metadata?.let { metadata -> NeedsParsing(item, metadata) }
-                                    ?: Finalized(InvalidSong)
-                            MetadataResult.NoMetadata -> Finalized(InvalidSong)
-                            MetadataResult.NotAudio -> Finalized(NotAudio)
-                            MetadataResult.ProviderFailed -> {
-                                // A transient provider/open failure is not evidence that a
-                                // previously
-                                // committed song was deleted. Fail only this source generation so
-                                // its
-                                // last-known-good rows remain visible after the provider recovers.
-                                (cache as? IncrementalCache)?.markSourceFailed(
-                                    SourceIdentity.forFile(item.file),
-                                    "Metadata provider failed for ${item.file.uri}",
-                                )
-                                Finalized(InvalidSong)
+                onItemStarted(item)
+                val startedAtElapsedMs = SystemClock.elapsedRealtime()
+                val result =
+                    when (item) {
+                        is RawSong -> Finalized(item)
+                        is RawPlaylist -> Finalized(item)
+                        is NewSong -> {
+                            when (val metadataResult = metadataExtractor.extract(item.file)) {
+                                is MetadataResult.Success ->
+                                    metadataResult.metadata?.let { metadata ->
+                                        NeedsParsing(item, metadata)
+                                    } ?: Finalized(InvalidSong)
+                                MetadataResult.NoMetadata -> Finalized(InvalidSong)
+                                MetadataResult.NotAudio -> Finalized(NotAudio)
+                                MetadataResult.ProviderFailed -> {
+                                    // A transient provider/open failure is not evidence that a
+                                    // previously committed song was deleted. Fail only this source
+                                    // generation so its last-known-good rows remain visible after
+                                    // the provider recovers.
+                                    (cache as? IncrementalCache)?.markSourceFailed(
+                                        SourceIdentity.forFile(item.file),
+                                        "Metadata provider failed for ${item.file.uri}",
+                                    )
+                                    Finalized(InvalidSong)
+                                }
                             }
                         }
+                        is NotAudio -> Finalized(NotAudio)
                     }
-                    is NotAudio -> Finalized(NotAudio)
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAtElapsedMs
+                if (elapsedMs >= SLOW_ITEM_WARNING_MS) {
+                    Log.w(
+                        TAG,
+                        "Slow metadata extraction [elapsedMs=$elapsedMs item=${item.label()}]",
+                    )
                 }
+                result
             }
         val parsed = Channel<ParsedCachingItem>(PipelinePolicy.BUFFER_CAPACITY)
         val parsedTask =
@@ -114,6 +129,8 @@ private class ExtractStepImpl(
                 when (item) {
                     is Finalized -> item
                     is NeedsParsing -> {
+                        onItemStarted(item.newSong)
+                        val startedAtElapsedMs = SystemClock.elapsedRealtime()
                         val tags = tagParser.parse(item.metadata)
                         val cover =
                             if (extractArtwork) {
@@ -126,7 +143,7 @@ private class ExtractStepImpl(
                             } else {
                                 null
                             }
-                        NeedsCaching(
+                        val rawSong =
                             RawSong(
                                 item.newSong.file,
                                 item.metadata.properties,
@@ -134,7 +151,15 @@ private class ExtractStepImpl(
                                 cover,
                                 item.newSong.file.addedMs.resolve() ?: addingMs,
                             )
-                        )
+                        val elapsedMs = SystemClock.elapsedRealtime() - startedAtElapsedMs
+                        if (elapsedMs >= SLOW_ITEM_WARNING_MS) {
+                            Log.w(
+                                TAG,
+                                "Slow tag parsing/artwork extraction " +
+                                    "[elapsedMs=$elapsedMs item=${item.newSong.label()}]",
+                            )
+                        }
+                        NeedsCaching(rawSong)
                     }
                 }
             }
@@ -182,4 +207,17 @@ private class ExtractStepImpl(
 
     private fun RawSong.toCachedFile() =
         CachedFile(file, audio = Audio(properties, tags, cover?.id), addedMs)
+
+    private fun Explored.label(): String =
+        when (this) {
+            is NewSong -> file.uri.toString()
+            is RawSong -> file.uri.toString()
+            is RawPlaylist -> file.name
+            is NotAudio -> "non-audio file"
+        }
+
+    private companion object {
+        const val TAG = "ExtractStep"
+        const val SLOW_ITEM_WARNING_MS = 5_000L
+    }
 }

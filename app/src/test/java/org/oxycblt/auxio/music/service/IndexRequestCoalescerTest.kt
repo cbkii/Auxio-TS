@@ -24,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.music.IndexReason
 import org.oxycblt.auxio.music.IndexRequest
+import org.oxycblt.auxio.music.ObservationMode
 import org.oxycblt.musikr.library.MetadataProfile
 
 class IndexRequestCoalescerTest {
@@ -156,5 +157,50 @@ class IndexRequestCoalescerTest {
 
         assertEquals(newer, merged)
         assertTrue("old" !in requireNotNull(merged.sourceKeys))
+    }
+
+    @Test
+    fun `replacement handoff is immediate while playback is idle`() {
+        assertFalse(
+            IndexReplacementHandoffPolicy.mustWaitForIdle(
+                IndexRequest(
+                    IndexReason.METADATA_ENRICHMENT,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.FULL,
+                ),
+                playbackActive = false,
+                observationMode = ObservationMode.WHEN_IDLE,
+            )
+        )
+    }
+
+    @Test
+    fun `full replacement waits while playback is active`() {
+        assertTrue(
+            IndexReplacementHandoffPolicy.mustWaitForIdle(
+                IndexRequest(
+                    IndexReason.METADATA_ENRICHMENT,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.FULL,
+                ),
+                playbackActive = true,
+                observationMode = ObservationMode.CONTINUOUS,
+            )
+        )
+    }
+
+    @Test
+    fun `when-idle observation defers even lean replacement work`() {
+        assertTrue(
+            IndexReplacementHandoffPolicy.mustWaitForIdle(
+                IndexRequest(
+                    IndexReason.SOURCE_OBSERVER,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.LEAN,
+                ),
+                playbackActive = true,
+                observationMode = ObservationMode.WHEN_IDLE,
+            )
+        )
     }
 }

@@ -19,6 +19,7 @@
 package org.oxycblt.musikr.pipeline
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.channels.Channel
 import org.oxycblt.musikr.BuildConfig
@@ -32,7 +33,11 @@ import org.oxycblt.musikr.playlist.interpret.PlaylistInterpreter
 import org.oxycblt.musikr.tag.interpret.TagInterpreter
 
 internal interface EvaluateStep {
-    suspend fun evaluate(extractedMusic: Channel<Extracted>): MutableLibrary
+    suspend fun evaluate(
+        extractedMusic: Channel<Extracted>,
+        onItemStarted: suspend (Extracted) -> Unit = {},
+        onItemCompleted: suspend (Extracted) -> Unit = {},
+    ): MutableLibrary
 
     companion object {
         fun new(context: Context, config: Config, interpretation: Interpretation): EvaluateStep =
@@ -53,14 +58,28 @@ private class EvaluateStepImpl(
     private val storedPlaylists: StoredPlaylists,
     private val libraryFactory: LibraryFactory,
 ) : EvaluateStep {
-    override suspend fun evaluate(extractedMusic: Channel<Extracted>): MutableLibrary {
+    override suspend fun evaluate(
+        extractedMusic: Channel<Extracted>,
+        onItemStarted: suspend (Extracted) -> Unit,
+        onItemCompleted: suspend (Extracted) -> Unit,
+    ): MutableLibrary {
         val builder = MusicGraph.builder()
         for (extracted in extractedMusic) {
+            onItemStarted(extracted)
+            val startedAtElapsedMs = SystemClock.elapsedRealtime()
             when (extracted) {
                 is RawSong -> builder.add(tagInterpreter.interpret(extracted))
                 is RawPlaylist -> builder.add(playlistInterpreter.interpret(extracted.file))
                 is NotAudio -> {}
                 is InvalidSong -> {}
+            }
+            onItemCompleted(extracted)
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAtElapsedMs
+            if (elapsedMs >= SLOW_ITEM_WARNING_MS) {
+                Log.w(
+                    "EvaluateStep",
+                    "Slow library item evaluation [elapsedMs=$elapsedMs item=${extracted.label()}]",
+                )
             }
         }
         val graph = builder.build()
@@ -89,5 +108,17 @@ private class EvaluateStepImpl(
         }
 
         return libraryFactory.create(graph, storedPlaylists, playlistInterpreter)
+    }
+
+    private fun Extracted.label(): String =
+        when (this) {
+            is RawSong -> file.path.resolve(context)
+            is RawPlaylist -> file.name
+            is InvalidSong -> "invalid song"
+            is NotAudio -> "non-audio file"
+        }
+
+    private companion object {
+        const val SLOW_ITEM_WARNING_MS = 5_000L
     }
 }

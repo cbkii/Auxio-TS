@@ -32,7 +32,9 @@ object TopwaySourcePolicy {
     const val SDCARD_ROOT = "/sdcard"
     const val SDCARD_MUSIC = "$SDCARD_ROOT/Music"
 
-    val SAFE_GENERIC_FALLBACKS = listOf(EMULATED_ROOT, EMULATED_MUSIC, SDCARD_ROOT, SDCARD_MUSIC)
+    // Specific conventional music folders must rank ahead of whole-volume roots. A whole primary
+    // storage scan can traverse tens of thousands of unrelated files on TS18 hardware.
+    val SAFE_GENERIC_FALLBACKS = listOf(EMULATED_MUSIC, SDCARD_MUSIC, EMULATED_ROOT, SDCARD_ROOT)
     val TS18_USB_EXAMPLE_CANDIDATES = listOf(USB_DISK_0)
 
     @Deprecated("Use dynamic discoverCandidateRoots(); this is an observed example seed only")
@@ -189,13 +191,27 @@ object TopwaySourcePolicy {
         val usb = roots.filter(::isUsbCandidate)
         val generic = roots.filterNot(::isUsbCandidate)
         val ordered = linkedSetOf<String>()
-        listOf(saved, displayOptionalRoots, audioParents.toList(), musicFolders, usb, generic)
+        listOf(saved, audioParents.toList(), musicFolders, usb, displayOptionalRoots, generic)
             .forEach { group -> group.filterTo(ordered, ::isAllowedSourceCandidate) }
+        val preferred = preferSpecificMusicRoots(ordered, saved.toSet())
         L.i(
-            "Discovered ${ordered.size} TS18 music source candidates " +
+            "Discovered ${preferred.size} TS18 music source candidates " +
                 "(explicitUsb=$allowUnconfiguredUsb, configured=${saved.size}, injected=${injectedRoots.size})"
         )
-        return ordered.take(MAX_CANDIDATES)
+        return preferred.take(MAX_CANDIDATES)
+    }
+
+    internal fun preferSpecificMusicRoots(
+        paths: Collection<String>,
+        protectedPaths: Set<String> = emptySet(),
+    ): List<String> {
+        val hasEmulatedDescendant = paths.any { it.startsWith("$EMULATED_ROOT/") }
+        val hasSdcardDescendant = paths.any { it.startsWith("$SDCARD_ROOT/") }
+        return paths.filterNot { candidate ->
+            candidate !in protectedPaths &&
+                ((candidate == EMULATED_ROOT && hasEmulatedDescendant) ||
+                    (candidate == SDCARD_ROOT && hasSdcardDescendant))
+        }
     }
 
     internal fun discoverAudioParents(

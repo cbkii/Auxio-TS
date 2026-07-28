@@ -22,6 +22,7 @@ import android.icu.text.Transliterator
 import android.os.Build
 import java.text.CollationKey
 import java.text.Collator
+import java.util.LinkedHashMap
 import org.oxycblt.musikr.tag.Name
 import org.oxycblt.musikr.tag.Placeholder
 import org.oxycblt.musikr.tag.Token
@@ -51,8 +52,22 @@ data object SimpleNaming : Naming() {
     override fun name(raw: String, sort: String?): Name.Known = SimpleKnownName(raw, sort)
 }
 
-private val collator: Collator = Collator.getInstance().apply { strength = Collator.PRIMARY }
 private val punctRegex by lazy { Regex("[\\p{Punct}+]") }
+private val threadCollator =
+    object : ThreadLocal<Collator>() {
+        override fun initialValue(): Collator =
+            Collator.getInstance().apply { strength = Collator.PRIMARY }
+    }
+private val anyLatinAvailable by
+    lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            Transliterator.getAvailableIDs().asSequence().any { it == "Any-Latin" }
+    }
+private val threadTransliterator =
+    object : ThreadLocal<Transliterator?>() {
+        override fun initialValue(): Transliterator? =
+            if (anyLatinAvailable) Transliterator.getInstance("Any-Latin") else null
+    }
 
 // TODO: Consider how you want to handle whitespace and "gaps" in names.
 
@@ -68,7 +83,7 @@ private data class SimpleKnownName(override val raw: String, override val sort: 
     private fun parseToken(name: String): Token {
         // Remove excess punctuation from the string, as those usually aren't considered in sorting.
         val stripped = name.replace(punctRegex, "").trim().ifEmpty { name }
-        val collationKey = collator.getCollationKey(stripped)
+        val collationKey = requireNotNull(threadCollator.get()).getCollationKey(stripped)
         // Always use lexicographic mode since we aren't parsing any numeric components
         return Token(collationKey, Token.Type.LEXICOGRAPHIC)
     }
@@ -81,7 +96,7 @@ private data class SimpleKnownName(override val raw: String, override val sort: 
  */
 private data class IntelligentKnownName(override val raw: String, override val sort: String?) :
     Name.Known() {
-    override val tokens = parseTokens(sort ?: raw)
+    override val tokens = IntelligentTokenCache.getOrPut(sort ?: raw, ::parseTokens)
 
     private fun parseTokens(name: String): List<Token> {
         // TODO: This routine is consuming much of the song building runtime, find a way to
@@ -103,13 +118,9 @@ private data class IntelligentKnownName(override val raw: String, override val s
                     }
                 }
 
-        // Transliterate to latin if available
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                Transliterator.getAvailableIDs().toList().contains("Any-Latin")
-        ) {
-            stripped = Transliterator.getInstance("Any-Latin;").transliterate(stripped)
-        }
+        // ICU discovery and construction are expensive on Android 10 head units. They are
+        // resolved once per process/thread instead of once per song/album/artist name.
+        stripped = threadTransliterator.get()?.transliterate(stripped) ?: stripped
 
         // To properly compare numeric components in names, we have to split them up into
         // individual lexicographic and numeric tokens and then individually compare them
@@ -125,10 +136,10 @@ private data class IntelligentKnownName(override val raw: String, override val s
                 val digits =
                     token.trimStart { Character.getNumericValue(it) == 0 }.ifEmpty { token }
                 // Other languages have other types of digit strings, still use collation keys
-                collationKey = collator.getCollationKey(digits)
+                collationKey = requireNotNull(threadCollator.get()).getCollationKey(digits)
                 type = Token.Type.NUMERIC
             } else {
-                collationKey = collator.getCollationKey(token)
+                collationKey = requireNotNull(threadCollator.get()).getCollationKey(token)
                 type = Token.Type.LEXICOGRAPHIC
             }
             Token(collationKey, type)
@@ -138,4 +149,27 @@ private data class IntelligentKnownName(override val raw: String, override val s
     companion object {
         private val TOKEN_REGEX by lazy { Regex("(\\d+)|(\\D+)") }
     }
+}
+
+/**
+ * Repeated album/artist names dominate real libraries. Keep a bounded process-local token cache so
+ * identical sort values do not repeat ICU transliteration, tokenisation and collation work.
+ */
+internal object IntelligentTokenCache {
+    internal const val MAX_ENTRIES = 4096
+
+    private val entries =
+        object : LinkedHashMap<String, List<Token>>(MAX_ENTRIES, 0.75f, true) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<String, List<Token>>?
+            ): Boolean = size > MAX_ENTRIES
+        }
+
+    @Synchronized
+    fun getOrPut(key: String, create: (String) -> List<Token>): List<Token> =
+        entries[key] ?: create(key).also { entries[key] = it }
+
+    @Synchronized internal fun clearForTest() = entries.clear()
+
+    @Synchronized internal fun sizeForTest(): Int = entries.size
 }

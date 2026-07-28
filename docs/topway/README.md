@@ -24,3 +24,31 @@ For the current DoFun Variety launcher/theme target and the stock `twmusic` repl
 - [`../reference/ts18-apk/`](../reference/ts18-apk/)
 
 The DoFun APK fixes music entries to `com.tw.music/com.tw.music.MusicActivity` and `com.tw.media/com.tw.music.MusicActivity`; these are the package/component compatibility requirements for the dedicated Topway/DoFun release variants.
+
+## TS18 music-source selection evidence
+
+The source ordering in `TopwaySourcePolicy` is based on a classified evidence set rather than on
+mount-name guesses:
+
+| Evidence | Classification | Source-selection consequence |
+|---|---|---|
+| Exact-device root, mount and SAF captures (`TS18-root-diagnostics`, `TS18-SAF-Diagnostics`) | Exact-device observed | USB is dynamic and appears at app-facing `/storage/usbdiskN` paths as well as privileged `/mnt/media_rw/usbdiskN`; normal app scans use the app-facing path and never depend on the raw privileged path. |
+| Exact-device Auxio validation captures from the post-PR #208 campaign | Exact-device observed | The selected internal fixture was `/storage/emulated/0/Music`; an unbounded primary-storage scan remained active for more than 18 minutes without publishing a library. Specific configured music folders must therefore suppress an unselected whole-primary-storage fallback. |
+| `TS18_comprehensive_architecture_report` storage analysis | Exact-device synthesis | SAF/DocumentsUI is optional on this build; DirectFS must support `/storage/usbdiskN` and `/storage/emulated/0`, removable absence, multiple volumes and mount-order changes. |
+| Supplied stock `com.tw.music`, `com.tw.music_ac` and DoFun APK analysis | Vendor artefact, source-led | Establishes the Topway package/component ecosystem, but does not establish a safe universal filesystem-root priority. It is not used to infer privileged access or a fixed `usbdiskN` identity. |
+| Android 10 storage and app-UID behaviour | Platform baseline | Candidate readability is checked as the application UID; root-assisted inspection does not make `/mnt/media_rw` an ordinary application source. |
+
+For this exact TS18 family, candidate priority is:
+
+1. Explicitly saved/configured sources. A deliberately saved whole-volume root is preserved.
+2. Bounded audio-parent discoveries beneath authorised roots.
+3. Readable `Music` children and conventional `/storage/emulated/0/Music` or `/sdcard/Music`.
+4. Authorised app-facing removable roots such as `/storage/usbdiskN`.
+5. Other authorised optional and generic roots.
+6. Whole `/storage/emulated/0` or `/sdcard` only as a last fallback, and only when a more specific
+   descendant is not selected.
+
+Discovery remains bounded by depth, file count, candidate count and elapsed time. DirectFS traversal
+also excludes known non-music/high-churn subtrees unless the user explicitly selects that subtree as
+the source itself. These decisions are TS18 porting evidence, not a universal rule for other Topway
+builds; a different board/build requires fresh mount and app-UID readability evidence.

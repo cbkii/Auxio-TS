@@ -21,6 +21,7 @@ package org.oxycblt.auxio.home
 import android.annotation.SuppressLint
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.MenuItem
 import androidx.activity.result.ActivityResultLauncher
@@ -42,6 +43,7 @@ import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
@@ -64,12 +66,15 @@ import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.list.SelectionFragment
 import org.oxycblt.auxio.list.menu.Menu
 import org.oxycblt.auxio.music.IndexingState
+import org.oxycblt.auxio.music.IndexingTerminalOutcome
+import org.oxycblt.auxio.music.IndexingWatchdogState
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupReadinessState
+import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.state.DeferredPlayback
@@ -81,6 +86,7 @@ import org.oxycblt.auxio.util.dampen
 import org.oxycblt.auxio.util.navigateSafe
 import org.oxycblt.auxio.util.showToast
 import org.oxycblt.musikr.Genre
+import org.oxycblt.musikr.IndexingPhase
 import org.oxycblt.musikr.IndexingProgress
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Playlist
@@ -106,6 +112,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private var storagePermissionLauncher: ActivityResultLauncher<String>? = null
     private var getContentLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
+    private var indexingTickerJob: Job? = null
     /** The current Favourites playlist (a playlist named [FAVOURITES_PLAYLIST_NAME]), or null. */
     private var favouritesPlaylist: Playlist? = null
     private var lastDashboardState: HeadUnitDashboardState? = null
@@ -537,12 +544,52 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     }
 
     private fun updateIndexerState(state: IndexingState?) {
+        indexingTickerJob?.cancel()
+        indexingTickerJob = null
+        renderIndexerState(state, SystemClock.elapsedRealtime())
+        if (state is IndexingState.Indexing) {
+            indexingTickerJob =
+                viewLifecycleOwner.lifecycleScope.launch {
+                    while (true) {
+                        delay(INDEXING_STATUS_TICK_MS)
+                        val current = musicModel.indexingState.value
+                        if (current !is IndexingState.Indexing) return@launch
+                        renderIndexerState(current, SystemClock.elapsedRealtime())
+                    }
+                }
+        }
+    }
+
+    private fun renderIndexerState(state: IndexingState?, nowElapsedMs: Long) {
         val binding = requireBinding()
         when (state) {
             is IndexingState.Completed -> {
                 binding.homeIndexingContainer.isInvisible = state.error == null
                 binding.homeIndexingProgress.isInvisible = state.error != null
                 binding.homeIndexingError.isInvisible = state.error == null
+                binding.homeIndexingActions.isVisible = state.error != null
+                binding.homeIndexingRetry.isVisible = state.error != null
+                binding.homeIndexingCancel.isVisible = false
+                binding.homeIndexingTitle.setText(
+                    when (state.outcome) {
+                        IndexingTerminalOutcome.CANCELLED -> R.string.indexing_cancelled
+                        IndexingTerminalOutcome.SERVICE_STOPPED -> R.string.indexing_service_stopped
+                        IndexingTerminalOutcome.TIMED_OUT -> R.string.indexing_timed_out
+                        IndexingTerminalOutcome.FAILED -> R.string.err_index_failed
+                        IndexingTerminalOutcome.SUCCESS -> R.string.lbl_indexing
+                    }
+                )
+                binding.homeIndexingSummary.setText(
+                    if (state.outcome == IndexingTerminalOutcome.FAILED) {
+                        R.string.indexing_failed_detail
+                    } else {
+                        R.string.indexing_terminal_detail
+                    }
+                )
+                binding.homeIndexingDetail.text = state.error?.localizedMessage.orEmpty()
+                binding.homeIndexingRetry.setOnClickListener {
+                    musicModel.retrySourceConfiguration()
+                }
                 if (state.error != null) {
                     binding.homeIndexingContainer.setOnClickListener {
                         findNavController()
@@ -554,24 +601,104 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             }
             is IndexingState.Indexing -> {
                 binding.homeIndexingContainer.isInvisible = false
+                binding.homeIndexingTitle.setText(phaseLabel(state.progress.phase))
                 binding.homeIndexingProgress.apply {
                     isInvisible = false
                     when (state.progress) {
                         is IndexingProgress.Songs -> {
                             isIndeterminate = false
-                            progress = state.progress.loaded
-                            max = state.progress.explored
+                            progress = state.progress.loaded.coerceAtLeast(0)
+                            max = state.progress.explored.coerceAtLeast(1)
                         }
-                        is IndexingProgress.Indeterminate -> {
+                        is IndexingProgress.Indeterminate,
+                        is IndexingProgress.Stage -> {
                             isIndeterminate = true
                         }
                     }
                 }
                 binding.homeIndexingError.isInvisible = true
+                binding.homeIndexingActions.isVisible = true
+                binding.homeIndexingRetry.isVisible = true
+                binding.homeIndexingCancel.isVisible = true
+                binding.homeIndexingSummary.text =
+                    when (val progress = state.progress) {
+                        is IndexingProgress.Songs ->
+                            getString(
+                                R.string.indexing_summary_counts,
+                                progress.explored,
+                                progress.loaded,
+                                progress.evaluated,
+                            )
+                        is IndexingProgress.Indeterminate,
+                        is IndexingProgress.Stage -> getString(R.string.indexing_summary_stage)
+                    }
+                val mode =
+                    getString(
+                        when (state.locationMode) {
+                            LocationMode.SAF -> R.string.indexing_mode_saf
+                            LocationMode.MEDIA_STORE -> R.string.indexing_mode_media_store
+                            LocationMode.DIRECT_FS -> R.string.indexing_mode_direct_fs
+                            null -> R.string.indexing_source_unknown
+                        }
+                    )
+                val generation =
+                    state.request?.configurationGeneration?.toString()
+                        ?: getString(R.string.indexing_generation_unknown)
+                val sources =
+                    state.sourceLabels.joinToString().ifBlank {
+                        getString(R.string.indexing_source_unknown)
+                    }
+                val details =
+                    mutableListOf(
+                        getString(R.string.indexing_detail_context, mode, generation, sources),
+                        getString(
+                            R.string.indexing_detail_timing,
+                            formatIndexingDuration(nowElapsedMs - state.startedAtElapsedMs),
+                            formatIndexingDuration(nowElapsedMs - state.lastProgressAtElapsedMs),
+                        ),
+                    )
+                state.progress.currentItem?.takeIf { it.isNotBlank() }?.let(details::add)
+                if (state.pendingReplacement) {
+                    details.add(getString(R.string.indexing_replacement_pending))
+                }
+                when (state.watchdogState) {
+                    IndexingWatchdogState.STALLED ->
+                        details.add(getString(R.string.indexing_stalled))
+                    IndexingWatchdogState.OVERDUE ->
+                        details.add(getString(R.string.indexing_overdue))
+                    IndexingWatchdogState.HEALTHY -> Unit
+                }
+                binding.homeIndexingDetail.text = details.joinToString("\n")
+                binding.homeIndexingRetry.setOnClickListener {
+                    musicModel.retrySourceConfiguration()
+                }
+                binding.homeIndexingCancel.setOnClickListener { musicModel.cancelIndexing() }
+                binding.homeIndexingContainer.setOnClickListener(null)
             }
             null -> {
                 binding.homeIndexingContainer.isInvisible = true
             }
+        }
+    }
+
+    private fun phaseLabel(phase: IndexingPhase): Int =
+        when (phase) {
+            IndexingPhase.PREPARING -> R.string.indexing_phase_preparing
+            IndexingPhase.DISCOVERING -> R.string.indexing_phase_discovering
+            IndexingPhase.EXTRACTING -> R.string.indexing_phase_extracting
+            IndexingPhase.EVALUATING -> R.string.indexing_phase_evaluating
+            IndexingPhase.FINALISING -> R.string.indexing_phase_finalising
+        }
+
+    private fun formatIndexingDuration(durationMs: Long): String {
+        val totalSeconds = durationMs.coerceAtLeast(0L) / 1000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        val hours = minutes / 60L
+        return when {
+            hours > 0L -> getString(R.string.indexing_time_hours, hours, minutes % 60L)
+            minutes > 0L -> getString(R.string.indexing_time_minutes, minutes, seconds)
+            else -> getString(R.string.indexing_time_seconds, seconds)
         }
     }
 
@@ -715,6 +842,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     }
 
     private companion object {
+        const val INDEXING_STATUS_TICK_MS = 1_000L
         const val PENDING_ENTRY_SETTLE_DELAY_MS = 300L
     }
 
