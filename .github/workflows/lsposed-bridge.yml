@@ -1,0 +1,98 @@
+name: LSPosed Bridge
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - "cx/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    # GitHub Actions has no regex trigger for PR titles. contains() comparisons are
+    # case-insensitive, so these terms implement the requested title gate without
+    # starting a runner for unrelated PRs.
+    if: >-
+      contains(github.event.pull_request.title, 'xposed') ||
+      contains(github.event.pull_request.title, 'lsposed') ||
+      contains(github.event.pull_request.title, 'hook') ||
+      contains(github.event.pull_request.title, 'bridge') ||
+      contains(github.event.pull_request.title, 'platform sign')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Test and build bridge integration
+        shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/lsposed-bridge-gradle.log
+        run: |
+          bash ./scripts/ci-gradle.sh \
+            :lsposed-bridge:testDebugUnitTest \
+            :lsposed-bridge:lintDebug \
+            :lsposed-bridge:assembleDebug \
+            :app:testTopwayTwMediaDebugUnitTest \
+            :app:assembleTopwayTwMediaDebug
+
+      - name: Validate packaged API 100 contracts
+        shell: bash
+        run: bash ./scripts/check-lsposed-bridge-contracts.sh
+
+      - name: Upload bridge APK and reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lsposed-api100-bridge-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            lsposed-bridge/build/outputs/apk/debug/*.apk
+            lsposed-bridge/build/reports/**
+            lsposed-bridge/build/test-results/**
+            app/build/outputs/apk/topwayTwMedia/debug/*.apk
+            app/build/reports/tests/testTopwayTwMediaDebugUnitTest/**
+            app/build/test-results/testTopwayTwMediaDebugUnitTest/**
+            ${{ runner.temp }}/lsposed-bridge-gradle.log
+
+      - name: Write download summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## LSPosed API 100 bridge'
+            echo
+            echo "- PR title gate matched: \`${{ github.event.pull_request.title }}\`"
+            echo "- Bridge APK: \`lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk\`"
+            echo "- Auxio target APK: \`app/build/outputs/apk/topwayTwMedia/debug/\`"
+            echo "- [Download generated artefacts](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}#artifacts)"
+          } >> "${GITHUB_STEP_SUMMARY}"

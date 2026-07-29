@@ -1,0 +1,55 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "org.oxycblt.auxio.ts18bridge"
+    compileSdk target_sdk
+
+    defaultConfig {
+        applicationId "org.oxycblt.auxio.ts18bridge"
+        minSdk 29
+        targetSdk 29
+        versionCode 1
+        versionName "1.0.0"
+
+        buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media"'
+        buildConfigField "String", "TARGET_ACTIVITY", '"com.tw.music.MusicActivity"'
+        buildConfigField "String", "TARGET_MEDIA_BUTTON_RECEIVER", '"org.oxycblt.auxio.playback.service.MediaButtonReceiver"'
+        buildConfigField "String", "TARGET_TOPWAY_RECEIVER", '"org.oxycblt.auxio.headunit.topway.TopwayMusicBridgeReceiver"'
+        buildConfigField "String", "TARGET_MEDIA_BROWSER_SERVICE", '"org.oxycblt.auxio.AuxioService"'
+        buildConfigField "String", "STOCK_CERT_SHA256", '"AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3"'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-DEBUG"
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    lint {
+        abortOnError true
+        checkDependencies false
+    }
+}
+
+dependencies {
+    // API 100 is provided by LSPosed at runtime and must not be packaged in the module APK.
+    compileOnly project(":libxposed-api100-stubs")
+
+    testImplementation "junit:junit:4.13.2"
+}
