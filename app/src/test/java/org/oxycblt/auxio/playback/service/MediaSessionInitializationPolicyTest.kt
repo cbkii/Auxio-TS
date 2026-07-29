@@ -25,8 +25,11 @@ import androidx.car.app.mediaextensions.MetadataExtras
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.oxycblt.auxio.BuildConfig
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class MediaSessionInitializationPolicyTest {
     @Test
     fun `initial flags expose media buttons transports and queue commands`() {
