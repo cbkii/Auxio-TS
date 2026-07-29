@@ -28,7 +28,7 @@ Start with these values. Change one setting at a time after the library loads co
 | --- | --- | --- |
 | Music source | **Direct** | Uses known app-readable storage paths. |
 | Root storage fast path | **On**, on a rooted TS18 **[beta]** | Requests bounded Magisk access for storage discovery and prepared aliases. |
-| Automatic reloading | **Off** or **Manual** | Avoids repeated scanning while first setup is being tested. |
+| Automatic reloading | **Off** | Avoids repeated scanning while first setup is being tested. |
 | Startup scanning | **Manual/cache-first** | Keeps startup responsive and uses the existing cache where possible. |
 | Generated playlists | **Off** **[beta]** | Keeps optional post-load work separate from the first library load. |
 | TS18 launcher integration | **Generic DoFun media** **[beta]** | Uses Android media behaviour first and keeps legacy fallbacks explicit. |
@@ -107,9 +107,8 @@ If the status is **Denied**, open Magisk and allow Auxio-TS, then retry. If it i
 | --- | --- | --- |
 | Refresh music | Use first | The source changed or new files were added. Cached tags may be reused. |
 | Full rescan | Use only when needed | A normal refresh leaves missing or incorrect metadata. It is slower. |
-| Automatic reloading | Off or Manual | Enable only after source access is reliable. |
+| Automatic reloading | Off | Enable only after source access is reliable. |
 | Startup scanning | Manual/cache-first | Use the cache at startup and refresh after changing USB contents. |
-| Scan priority | Playback first | Faster access to restored playback on a head unit. |
 | Use file-system cache | Leave at the current default | It can improve load time but may delay detection of new music. |
 | Detailed performance capture | Off | Turn on only for a bounded diagnostic capture. |
 
@@ -135,8 +134,9 @@ Leave this off during first setup. Enable it after normal songs, albums and arti
 
 | Setting | Recommended starting value | What it changes |
 | --- | --- | --- |
-| Autostart | Off until setup is stable | Opens Auxio-TS when the device boots. |
-| Launch Floating Controls only | Off **[beta]** | Restores floating controls without opening the main app. Requires Autostart, floating controls and display-over-other-apps permission. |
+| When the head unit starts | Do nothing | Choose **Open Auxio-TS** or **Restore floating controls only** **[beta]** after normal startup is stable. |
+| Display over other apps permission | Allow only for floating controls **[beta]** | Opens Android's permission screen for the floating overlay. |
+| Car Floating Controls | Off initially **[beta]** | Enables the movable playback overlay. |
 | Launch to Now Playing | Optional | Opens the playback screen without starting audio. |
 | Autoplay when Auxio-TS launches | Off initially | Starts playback when Auxio-TS opens. |
 | Always play immediately | Off initially | Starts audio even when the previous session was paused. |
@@ -154,9 +154,9 @@ Topway and DoFun integration is **[beta]** because launcher behaviour varies by 
 
 | Setting | Recommended value | Notes |
 | --- | --- | --- |
-| Head unit landscape mode | On | Prefers the wide head-unit layout. |
-| Large touch controls | On | Makes controls easier to tap while parked. |
 | Left-hand drive layout | Off in right-hand-drive vehicles | Turn on only for a left-hand-drive layout. |
+| Show album art in head-unit playback view | On | Keeps artwork visible in the driving playback view. |
+| Show dashboard quick access | On | Shows large dashboard links for playback, queue, browse and settings. |
 | TS18 launcher integration | Generic DoFun media | Uses Android MediaSession and safe generic behaviour first. |
 | Topway widget seek unit | Auto | Change only when physical validation proves the launcher sends another unit. |
 | Compatibility status | Read-only check | Shows the current compatibility surfaces. |
@@ -173,10 +173,12 @@ Do not disable, delete or replace stock `com.tw.music` as part of normal setup. 
 | Setting | Suggested start | Notes |
 | --- | --- | --- |
 | Theme | Automatic | Uses the app's normal light or dark choice. |
+| Color scheme | Default | Changes the app accent colours. |
 | Black theme | Optional | Uses a pure black dark background. |
-| Rounded interface | Optional | Adds rounded UI elements. |
+| Rounded interface | On | Adds rounded UI elements. |
 | Library tabs | Keep defaults first | Reorder or hide tabs after learning the layout. |
-| Show album art in head-unit playback view | On | Keeps artwork visible behind playback controls. |
+| Force square album covers | Off | Crops artwork to a square when enabled. |
+| Grid columns | Keep defaults first | Change only when the library layout is too dense or too sparse. |
 | Now Playing Visualizer | Off **[beta]** | Android may label its permission as audio recording. Auxio-TS uses the playback audio session and does not record microphone audio. |
 
 Visualizer modes are **Off**, **Fallback (when no artwork)** and **Always**. Test the fallback mode before using **Always** on TS18.
@@ -192,7 +194,7 @@ Use diagnostics only for a specific problem and stop when the capture is complet
 | TS18 USB source status | Checks configured source state and unavailable paths. |
 | Root file access status | Checks bounded root-storage availability. |
 | Compatibility status | Summarises media, launcher and fallback readiness. |
-| Detailed performance capture | Records a bounded local timing trace **[beta]**. |
+| Detailed performance capture, when shown | Records a bounded local timing trace **[beta]**. |
 | Export startup report | Shares a text report created by the app. |
 | Run head-unit diagnostics | Checks package, root, source, overlay and launcher state. |
 
