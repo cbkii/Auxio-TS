@@ -1,67 +1,50 @@
-# Auxio-TS documentation index
+# 🧭 Auxio-TS documentation index
 
-Auxio-TS targets TS18/Topway/DoFun Variety. Start here for current product, CI, release and exact-device guidance.
+Auxio-TS targets TS18, Topway and DoFun Variety head units. Choose the section that matches your task.
 
-[Evidence confidence: Requires TS18 validation] [Porting decision: Requires TS18 runtime validation]
+> [!NOTE]
+> Exact TS18 widget, USB, ACC, MCU, CAN, DSP, radio and launcher behaviour requires physical device validation.
 
-## Current guidance
+## 🙋 User guides
 
-- [`DEVELOPMENT.md`](DEVELOPMENT.md) — setup, maintained variants, Gradle tasks and CI architecture.
-- [`CI_TASK_POLICY.md`](CI_TASK_POLICY.md) — changed-file classification, focused quality/build lanes and optimisation pilot.
-- [`RELEASE_WORKFLOW.md`](RELEASE_WORKFLOW.md) — signed `com.tw.media` APK and `com.tw.music` Magisk release flow.
-- [`DOFUN_VARIETY_COMPATIBILITY.md`](DOFUN_VARIETY_COMPATIBILITY.md) — launcher/widget compatibility contract and private-hook boundaries.
-- [`TS18_APK_REFERENCE.md`](TS18_APK_REFERENCE.md) — APK-derived DoFun and stock `twmusic` evidence.
-- [`TS18_INSTALLATION_CONSTRAINTS.md`](TS18_INSTALLATION_CONSTRAINTS.md) — package/signing/root/install constraints.
-- [`TS18_RUNTIME_VALIDATION.md`](TS18_RUNTIME_VALIDATION.md) — physical TS18 validation checklist.
-- [`CODEX_TS18_DEVICE_CONTEXT.md`](CODEX_TS18_DEVICE_CONTEXT.md) — exact `s9863a1h10` Android 10 device context.
-- [`architecture/FAST_INTERACTION_STARTUP.md`](architecture/FAST_INTERACTION_STARTUP.md) — staged readiness and fast resume.
-- [`architecture/INCREMENTAL_LIBRARY_PIPELINE.md`](architecture/INCREMENTAL_LIBRARY_PIPELINE.md) — source generations, scanning and enrichment.
-- [`architecture/STARTUP_PROFILES_BENCHMARKS.md`](architecture/STARTUP_PROFILES_BENCHMARKS.md) — profile/benchmark evidence model.
-- [`validation/EXACT_TS18_STARTUP_VALIDATION.md`](validation/EXACT_TS18_STARTUP_VALIDATION.md) — exact-device startup test procedure.
-- [`ts18/ROOT_STORAGE_FASTPATH.md`](ts18/ROOT_STORAGE_FASTPATH.md) — bounded root storage path and rollback.
-- [`topway/README.md`](topway/README.md) — local Topway decompile/source-led notes.
+- [Main README and quick start](../README.md)
+- [Settings guide](SETTINGS_GUIDE.md)
+- [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md)
+- [DoFun Variety compatibility](DOFUN_VARIETY_COMPATIBILITY.md)
+- [Physical TS18 validation](TS18_RUNTIME_VALIDATION.md)
 
-## Maintained package contract
+## 🧰 Advanced users
 
-The old `standard` distributable is retired.
+- [Advanced use and contributing](ADVANCED_AND_CONTRIBUTING.md)
+- [Root storage fast path](ts18/ROOT_STORAGE_FASTPATH.md)
+- [Exact-device context](CODEX_TS18_DEVICE_CONTEXT.md)
+- [Topway research index](topway/README.md)
 
-| Variant | Package | Role |
-| --- | --- | --- |
-| `topwayTwMedia` | `com.tw.media` | Primary automatic CI and APK release; exposes `com.tw.music.MusicActivity` |
-| `topwayTwMusic` | `com.tw.music` | Exact stock-package compatibility; published only as a Magisk module |
+## 🧑‍💻 Contributors
 
-DoFun Variety (`com.dofun.variety`) recognises both package/component combinations. This matching evidence does not prove fixed-widget control on every firmware. Private Cardoor/vendor services remain evidence only unless promoted through the formal gap-and-promotion process.
+- [Repository instructions](../AGENTS.md)
+- [Development setup and maintained variants](DEVELOPMENT.md)
+- [CI task policy](CI_TASK_POLICY.md)
+- [Release workflow](RELEASE_WORKFLOW.md)
+- [Fast interaction startup](architecture/FAST_INTERACTION_STARTUP.md)
+- [Incremental library pipeline](architecture/INCREMENTAL_LIBRARY_PIPELINE.md)
+- [Startup profiles and benchmarks](architecture/STARTUP_PROFILES_BENCHMARKS.md)
+- [Exact TS18 startup validation](validation/EXACT_TS18_STARTUP_VALIDATION.md)
 
-## Exact-device installation warning
+## 🔬 Evidence and reference
 
-The target unit contains stock `com.tw.music` at:
+- [TS18 APK reference](TS18_APK_REFERENCE.md)
+- [Exact TS18 device context](CODEX_TS18_DEVICE_CONTEXT.md)
+- [Topway source-led notes](topway/README.md)
 
-```text
-/system/priv-app/com.tw.music_a41e/com.tw.music_a41e.apk
-```
+Use the repository evidence labels consistently: **Observed**, **Inferred**, **Hypothesis**, **Requires TS18 validation** and **Unsupported**.
 
-A normal APK cannot be assumed to replace that platform/UID 1000 package. Root does not provide platform signing. Read `TS18_INSTALLATION_CONSTRAINTS.md` before any installation claim or stock-package mutation.
+## 🛡️ Safety boundary
 
-## CI entry points
+The normal release is the signed `com.tw.media` APK. The exact-package `com.tw.music` build is published only as a Magisk module **[beta]**.
 
-- `android.yml` — changed-file scope, selected maintained builds and conditional API 29.
-- `lint.yml` — syntax/static checks plus one focused formatting/test/lint Gradle lane and stable required-check gates.
-- `startup-performance.yml` — manual exhaustive two-variant profile/release validation.
-- `startup-benchmarks.yml` — manual API 29 macrobenchmark or API 35 Baseline Profile generation, defaulting to `topwayTwMedia`.
-- `ui-screenshots.yml` — manual Roborazzi for the two maintained variants.
-- `ci-gradle-optimisation-pilot.yml` — manual configuration-cache and parallelism evidence.
-- `manual-release.yml` — selected maintained release assets and evidence sidecars.
+Root does not provide platform signing, shared UID 1000, MCU, CAN, DSP, radio or protected-package authority. Read [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md) before any exact-package or stock-app change.
 
-Local preflight:
+---
 
-```bash
-bash scripts/bootstrap-dependencies.sh --profile full-build
-bash scripts/ci-scope.sh --self-test
-bash scripts/check-ci-variant-contracts.sh
-bash scripts/check-startup-performance-contracts.sh
-bash scripts/check-ts18-apk-reference-contracts.sh
-bash scripts/check-dofun-topway-compat.sh
-bash scripts/check-headunit-compat-safety.sh
-```
-
-CI/emulator results remain repository evidence, not proof of exact TS18 widget, USB/ACC, MCU/CAN, DSP/radio or physical performance.
+[← Main README](../README.md) · [Settings guide](SETTINGS_GUIDE.md) · [Advanced and contributing](ADVANCED_AND_CONTRIBUTING.md)
