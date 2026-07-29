@@ -6,6 +6,8 @@ APK_PATH=${1:-lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk}
 EXPECTED_ENTRY='org.oxycblt.auxio.ts18bridge.Ts18LsposedBridgeModule'
 EXPECTED_SCOPE='com.tw.music'
 EXPECTED_APP_ID='org.oxycblt.auxio.ts18bridge.debug'
+EXPECTED_MIN_SDK='29'
+EXPECTED_TARGET_SDK='36'
 ERRORS=0
 
 log() { printf '[INFO] %s\n' "$*" >&2; }
@@ -68,11 +70,19 @@ if ((ERRORS == 0)); then
     [[ $app_id == "$EXPECTED_APP_ID" ]] ||
       error "Unexpected debug application ID: ${app_id:-<empty>}"
 
+    min_sdk=$($apkanalyzer_bin manifest min-sdk "$APK_PATH" 2>/dev/null) || {
+      error 'Unable to read minimum SDK'
+      min_sdk=''
+    }
+    [[ $min_sdk == "$EXPECTED_MIN_SDK" ]] ||
+      error "Expected minimum SDK $EXPECTED_MIN_SDK, got ${min_sdk:-<empty>}"
+
     target_sdk=$($apkanalyzer_bin manifest target-sdk "$APK_PATH" 2>/dev/null) || {
       error 'Unable to read target SDK'
       target_sdk=''
     }
-    [[ $target_sdk == '29' ]] || error "Expected target SDK 29, got ${target_sdk:-<empty>}"
+    [[ $target_sdk == "$EXPECTED_TARGET_SDK" ]] ||
+      error "Expected target SDK $EXPECTED_TARGET_SDK, got ${target_sdk:-<empty>}"
 
     manifest=$($apkanalyzer_bin manifest print "$APK_PATH" 2>/dev/null) || {
       error 'Unable to decode AndroidManifest.xml'
