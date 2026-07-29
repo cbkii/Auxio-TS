@@ -1,132 +1,161 @@
-<p align="center"><img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" width="150"></p>
-<h1 align="center"><b>Auxio-TS</b></h1>
-<h4 align="center">Auxio adapted for TS18 / Topway / DoFun Variety head units</h4>
-
 <p align="center">
-  <a href="https://www.gnu.org/licenses/gpl-3.0"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-2B6DBE.svg?style=flat"></a>
-  <img alt="Minimum SDK Version" src="https://img.shields.io/badge/API-24%2B-1450A8?style=flat">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" width="150" alt="Auxio-TS app icon">
 </p>
 
-## About
+<h1 align="center">🎵 Auxio-TS</h1>
 
-Auxio-TS is a specialised downstream of [OxygenCobalt/Auxio](https://github.com/OxygenCobalt/Auxio) for TS18/Topway Android head units and DoFun Variety Theme (`com.dofun.variety`). It adds package/component aliases, MediaSession/MediaBrowser integration, Topway-compatible broadcasts and widget-control surfaces needed by this vehicle platform.
+<p align="center"><strong>A local music player adapted for TS18, Topway and DoFun Variety Android head units.</strong></p>
 
-The music player, design, playback architecture and library model originate from upstream Auxio. General issues that also affect upstream Auxio belong upstream; TS18, DoFun, `com.tw.media`, `com.tw.music` and Topway bridge issues belong here.
+<p align="center">
+  <a href="https://github.com/cbkii/Auxio-TS/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/cbkii/Auxio-TS?include_prereleases&sort=semver"></a>
+  <a href="https://github.com/cbkii/Auxio-TS/releases"><img alt="Total downloads" src="https://img.shields.io/github/downloads/cbkii/Auxio-TS/total"></a>
+  <a href="https://github.com/cbkii/Auxio-TS/actions/workflows/android.yml"><img alt="Android Build" src="https://github.com/cbkii/Auxio-TS/actions/workflows/android.yml/badge.svg?branch=dev"></a>
+  <a href="https://github.com/cbkii/Auxio-TS/actions/workflows/lint.yml"><img alt="Android Quality" src="https://github.com/cbkii/Auxio-TS/actions/workflows/lint.yml/badge.svg?branch=dev"></a>
+  <a href="LICENSE"><img alt="GPL-3.0-or-later licence" src="https://img.shields.io/github/license/cbkii/Auxio-TS"></a>
+</p>
 
-[Support upstream Auxio through GitHub Sponsors](https://github.com/sponsors/OxygenCobalt).
+<p align="center">
+  <img alt="TS18 and Topway" src="https://img.shields.io/badge/TS18-Topway-1450A8">
+  <img alt="Target device Android 10" src="https://img.shields.io/badge/target%20device-Android%2010-3DDC84">
+  <img alt="Minimum Android API 24" src="https://img.shields.io/badge/minimum-API%2024%2B-3DDC84">
+  <img alt="Primary package com.tw.media" src="https://img.shields.io/badge/package-com.tw.media-6f42c1">
+  <img alt="DoFun Variety compatibility" src="https://img.shields.io/badge/launcher-DoFun%20Variety-f66a0a">
+  <img alt="Optional Magisk package" src="https://img.shields.io/badge/Magisk-optional-00AF9C">
+</p>
 
-## Maintained variants
+<p align="center">
+  <a href="#-what-is-auxio-ts">About</a> ·
+  <a href="#-main-features">Features</a> ·
+  <a href="#-quick-start">Quick start</a> ·
+  <a href="#-settings-guide">Settings</a> ·
+  <a href="#-downloads">Downloads</a> ·
+  <a href="#-help-and-guides">Help</a>
+</p>
 
-Auxio-TS now maintains two product identities:
+## 🚗 What is Auxio-TS?
 
-| Variant | Package | Role |
+Auxio-TS is a local music player for TS18 and related Topway Android head units. It is based on [Auxio](https://github.com/OxygenCobalt/Auxio) and adds a head-unit layout, TS18 storage options and safe Topway or DoFun compatibility paths.
+
+It is designed for Android 10 TS18 systems. It is not a general replacement for every Android music player or every Topway firmware.
+
+> [!NOTE]
+> Exact behaviour can vary between firmware builds. Android media controls may work even when a fixed DoFun music widget does not.
+
+## ✨ Main features
+
+- 🎵 Browse and play local music by song, album, artist, genre, folder, search and playlist.
+- 🚘 Use a landscape interface, large touch controls and a head-unit dashboard.
+- 💾 Choose Direct file access, USB auto-detection, Android's file picker or the Android system library. Root-assisted storage access is available **[beta]**.
+- ⚡ Restore a cached library, previous queue and playback state after relaunch or restart **[beta]**.
+- 🔊 Use Android MediaSession, MediaBrowser, audio focus and media buttons, with safe Topway and DoFun compatibility paths **[beta]**.
+- 🪟 Use floating playback controls and optional startup actions **[beta]**.
+- 🎨 Change themes, layout, album artwork and the Now Playing visualiser **[beta]**.
+- 📋 Create, import and export playlists. Optional generated playlists are available **[beta]**.
+
+## 📦 Downloads
+
+| Use | Choose |
+| --- | --- |
+| Most TS18 users | The signed `topwayTwMedia` APK. It installs as `com.tw.media`. |
+| Advanced rooted users who need the exact stock package name | The published `topwayTwMusic` Magisk module **[beta]**. Read the installation constraints first. |
+| Raw `topwayTwMusic` APK | Do not install or distribute it. It is only an internal Magisk packaging input. |
+
+Download published files from the [Releases page](https://github.com/cbkii/Auxio-TS/releases).
+
+> [!WARNING]
+> Stock `com.tw.music` is normally a protected, platform-signed system app. Root does not copy its platform signature or UID 1000 identity. Do not replace it with a normal APK.
+
+Read [TS18 installation constraints](docs/TS18_INSTALLATION_CONSTRAINTS.md) before using the exact-package Magisk module.
+
+## 🚀 Quick start
+
+1. Download the signed `topwayTwMedia` APK from the [Releases page](https://github.com/cbkii/Auxio-TS/releases).
+2. Install and open Auxio-TS.
+3. Grant the Android storage or notification permissions requested by the app.
+4. On a rooted TS18, open **Settings → Library & sources → Advanced source access**.
+5. Turn on **Root storage fast path**. Click **Root file access status** and confirm that it reports **Available**. This is the consent action that triggers the Magisk superuser request. Approve the request.
+7. Open **Music sources**, choose **Direct**, then use **Auto-detect USB** or enter a path such as `/storage/usbdisk0/Music`.
+8. Wait for the first library load. Confirm that your songs appear before changing optional settings.
+
+> [!IMPORTANT]
+> On a rooted TS18, grant superuser access before selecting a Direct source. This avoids starting the first Direct scan before root-assisted storage access is ready.
+
+> [!TIP]
+> Ordinary readable `/storage/...` paths are tried without root where possible. Root-assisted access is bounded and intended for storage discovery or prepared aliases. It does not authorise system writes, protected-package changes or platform privileges.
+
+## 🖼️ Quick-start screenshots
+
+| 1. Enable root access | 2. Select a Direct source | 3. Confirm the library |
 | --- | --- | --- |
-| `topwayTwMedia` | `com.tw.media` | Primary automatic CI and normal APK release; exposes `com.tw.music.MusicActivity` for DoFun matching |
-| `topwayTwMusic` | `com.tw.music` | Exact stock-package compatibility build, published only inside a Magisk systemless overlay |
+| ![Placeholder for the root access settings screenshot](docs/images/coming-soon-1.svg) | ![Placeholder for the Direct source selection screenshot](docs/images/coming-soon-2.svg) | ![Placeholder for the loaded library screenshot](docs/images/coming-soon-3.svg) |
 
-The former `org.oxycblt.auxio` standard distributable is retired. Generic Android fallback policy remains tested as pure logic without another package/flavour.
+## 📁 Choosing a music source
 
-## Compatibility model
+| Source | Best use | Notes |
+| --- | --- | --- |
+| **Direct** | TS18 USB drives and known folders | Recommended for paths such as `/storage/usbdisk0/Music`. Root-assisted discovery is **[beta]**. |
+| **File picker** | Devices with a working Android DocumentsUI | Some TS18 firmware does not include a complete system file picker. |
+| **System** | Music already indexed by Android | Faster to configure, but may miss files or include unwanted system audio. |
 
-Auxio-TS targets:
-
-- DoFun recognition of `com.tw.media/com.tw.music.MusicActivity` and `com.tw.music/com.tw.music.MusicActivity`;
-- Android MediaSession, MediaBrowserService, audio focus and media buttons;
-- Topway-style metadata, progress and widget-control broadcasts;
-- stock-compatible activity, service and widget wrapper names in isolated compatibility source sets.
-
-Private/system/vendor hooks from stock APKs are evidence only unless a protocol is proven, reviewed, isolated and supplied with safe fallback and rollback. A normal rooted APK does not become platform-signed or UID 1000.
-
-## TS18 constraints
-
-Stock firmware normally contains protected `com.tw.music`. The exact-package variant therefore cannot be treated as a normal universally installable APK. It is packaged as a Magisk module and requires a verified stock path, rollback media and boot-loop recovery.
-
-`com.tw.media` is the primary, less invasive lane, but it can still conflict where that package already exists and does not guarantee DoFun fixed-widget control on every firmware.
-
-See:
-
-- [`docs/TS18_INSTALLATION_CONSTRAINTS.md`](docs/TS18_INSTALLATION_CONSTRAINTS.md)
-- [`docs/DOFUN_VARIETY_COMPATIBILITY.md`](docs/DOFUN_VARIETY_COMPATIBILITY.md)
-- [`docs/TS18_RUNTIME_VALIDATION.md`](docs/TS18_RUNTIME_VALIDATION.md)
-
-## Music sources
-
-DirectFS is the primary source-selection path on fresh Topway-compatible installs. SAF and MediaStore remain explicit alternatives. Typical readable paths are:
+Common app-readable paths include:
 
 ```text
-/storage/usbdisk0/*
-/storage/emulated/0/*
+/storage/usbdisk0/
+/storage/usbdisk1/
+/storage/emulated/0/
 ```
 
-Root-backed discovery is bounded and read-only. Internal `/mnt/media_rw/usbdiskN` paths are not persisted for playback; Auxio-TS uses app-readable `/storage/...` paths or validated aliases.
+Do not save `/mnt/media_rw/usbdiskN` as a normal playback path. It is an internal backing path.
 
-Generated playlists are optional post-load work and do not control the initial source-selection or base-library loading path.
+## ⚙️ Settings guide
 
-## Build
+Open the part of the [settings guide](docs/SETTINGS_GUIDE.md) that matches what you need:
 
-Requirements include JDK 21, Android SDK/NDK, CMake, Ninja and access to pinned submodules.
+- 🚀 [Recommended first-use setup](docs/SETTINGS_GUIDE.md#recommended-first-use)
+- 📁 [Library and music sources](docs/SETTINGS_GUIDE.md#library-and-music-sources)
+- 🔐 [Root-assisted access](docs/SETTINGS_GUIDE.md#root-assisted-access)
+- ⚡ [Scanning and performance](docs/SETTINGS_GUIDE.md#scanning-and-performance)
+- 📋 [Generated playlists](docs/SETTINGS_GUIDE.md#generated-playlists)
+- ▶️ [Playback and startup](docs/SETTINGS_GUIDE.md#playback-and-startup)
+- 🚘 [Head-unit and DoFun integration](docs/SETTINGS_GUIDE.md#head-unit-and-dofun-integration)
+- 🎨 [Appearance and visualiser](docs/SETTINGS_GUIDE.md#appearance-and-visualiser)
+- 🧰 [Diagnostics](docs/SETTINGS_GUIDE.md#diagnostics)
+- ♻️ [Reset and recovery](docs/SETTINGS_GUIDE.md#reset-and-recovery)
 
-```bash
-bash scripts/bootstrap-dependencies.sh --profile full-build
+## 🧰 Common problems
 
-# Primary development APK
-bash scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
+### 🚫 Magisk did not ask for superuser access
 
-# Full maintained compatibility evidence; both selected tasks share one invocation
-bash scripts/ci-gradle.sh \
-  :app:assembleTopwayTwMediaDebug \
-  :app:assembleTopwayTwMusicDebug
-```
+Turn **Root storage fast path** off and on again. Click **Root file access status** and **'Grant'** the Magisk prompt, then click **Root file access status** again to refresh status. Do not continue with a root-dependent Direct path unless the status is **Available**.
 
-Release builds:
+### 🎵 No songs appear
 
-```bash
-bash scripts/bootstrap-dependencies.sh --profile release
-bash scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
-bash scripts/ci-gradle.sh :app:assembleTopwayTwMusicRelease
-```
+Check the selected path, then use **Refresh music**. Use **Full rescan** only when a normal refresh does not repair the library.
 
-The raw `topwayTwMusicRelease` APK is an internal packaging input. Use `scripts/package-topway-twmusic-magisk-module.sh`; do not publish it directly.
+### 💾 A USB source is unavailable
 
-## Validation
+Keep the cached library, reconnect the same USB drive and check **TS18 USB source status**. Avoid deleting and recreating the source unless the stored path is wrong.
 
-```bash
-bash scripts/check-ci-variant-contracts.sh
-bash scripts/check-ts18-apk-reference-contracts.sh
-bash scripts/check-dofun-topway-compat.sh
-bash scripts/check-headunit-compat-safety.sh
-bash scripts/check-startup-performance-contracts.sh
-```
+### 🧩 The DoFun widget does not control Auxio-TS
 
-Before installation, inspect existing package state:
+Android media buttons and metadata can work without fixed-widget control. Keep **Generic DoFun media** as the recommended integration mode. See the [DoFun compatibility guide](docs/DOFUN_VARIETY_COMPATIBILITY.md) for known limits.
 
-```bash
-adb shell 'cmd package list packages | grep -E "com\.tw\.music|com\.tw\.media|com\.dofun\.variety"'
-```
+## 📚 Help and guides
 
-After installing a compatible build:
+- 🙋 [Settings guide](docs/SETTINGS_GUIDE.md)
+- 🧑‍💻 [Advanced use and contributing](docs/ADVANCED_AND_CONTRIBUTING.md)
+- 🧭 [Documentation index](docs/README.md)
+- 🛡️ [TS18 installation constraints](docs/TS18_INSTALLATION_CONSTRAINTS.md)
+- 🧩 [DoFun Variety compatibility](docs/DOFUN_VARIETY_COMPATIBILITY.md)
+- 🧪 [Physical TS18 validation](docs/TS18_RUNTIME_VALIDATION.md)
+- 🐞 [Report a problem](https://github.com/cbkii/Auxio-TS/issues)
 
-```bash
-adb shell cmd package resolve-activity --brief -n com.tw.media/com.tw.music.MusicActivity
-adb shell cmd package resolve-activity --brief -n com.tw.music/com.tw.music.MusicActivity
-adb shell cmd package query-intent-services -a android.media.browse.MediaBrowserService
-adb shell dumpsys media_session | grep -i -A60 'com.tw.music\|com.tw.media\|auxio'
-```
+When reporting a problem, include the Auxio-TS version, package name, TS18 build, selected source mode and the exact path used. Do not upload private files, credentials or personal data.
 
-CI/emulator success is not proof of exact TS18 widget, USB, ACC, MCU/CAN, DSP/radio or launcher behaviour.
+## 💛 Acknowledgements, licence and donations
 
-## CI
+Auxio-TS is based on [Auxio](https://github.com/OxygenCobalt/Auxio), created by Alexander Capehart (OxygenCobalt). The original music player, design and playback architecture remain the foundation of this project.
 
-`topwayTwMedia` is the automatic unit-test, lint and API 29 authority. Changed-file classification selects only the relevant maintained variant(s); shared Topway/full changes build both in one bounded Gradle invocation. Uncertain or Gradle/dependency-sensitive changes fail open to full CI. See [`docs/CI_TASK_POLICY.md`](docs/CI_TASK_POLICY.md).
+Support the original author through [GitHub Sponsors](https://github.com/sponsors/OxygenCobalt) 💸
 
-## Documentation
-
-- [`docs/README.md`](docs/README.md) — documentation index
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — setup, tasks and CI
-- [`docs/RELEASE_WORKFLOW.md`](docs/RELEASE_WORKFLOW.md) — signed release flow
-- [`docs/TS18_APK_REFERENCE.md`](docs/TS18_APK_REFERENCE.md) — APK-derived evidence
-- [`docs/CODEX_TS18_DEVICE_CONTEXT.md`](docs/CODEX_TS18_DEVICE_CONTEXT.md) — exact-device context
-
-## Licence
-
-Auxio-TS remains GPL-3.0-or-later and preserves upstream attribution. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Auxio-TS is licensed under GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
