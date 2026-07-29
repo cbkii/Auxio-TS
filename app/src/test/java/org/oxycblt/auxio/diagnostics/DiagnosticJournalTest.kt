@@ -129,7 +129,8 @@ class DiagnosticJournalTest {
 
     @Test
     fun `strict JSON encoding preserves arbitrary control characters`() {
-        val original = "nul=\u0000 backspace=\b formfeed=\u000C tab=\t quote=\" slash=\\"
+        val controls = buildString { (0x00..0x1F).forEach { append(it.toChar()) } }
+        val original = "$controls quote=\" slash=\\"
         val encoded = DiagnosticJson.string(original)
 
         assertEquals(original, JSONObject("""{"value":$encoded}""").getString("value"))
