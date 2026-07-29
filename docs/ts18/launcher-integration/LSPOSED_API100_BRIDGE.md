@@ -95,7 +95,7 @@ The bridge workflow remains **pull-request only**. Its build job runs when any o
 - the PR has the exact label `ci:lsposed-bridge` or `lsposed-bridge`; or
 - the head branch starts with `feat/lsposed-` / `fix/lsposed-`, or contains `platform-bridge`.
 
-The workflow listens for `labeled` and `unlabeled` events, so applying the CI label reliably starts or removes the opt-in without rewriting the title. Title matching remains the normal automatic gate, while the branch gate prevents accidental CI loss if a dedicated bridge PR title is later simplified. Unrelated PRs still skip the bridge job and do not start its Gradle runner.
+The workflow listens for `labeled` and `unlabeled` events, so applying the CI label reliably starts the opt-in without rewriting the title. Title edits are recognised, but body-only edits are ignored so automated PR-summary updates cannot cancel and restart the expensive bridge build. Title matching remains the normal automatic gate, while the branch gate prevents accidental CI loss if a dedicated bridge PR title is later simplified. Unrelated PRs still skip the bridge job and do not start its Gradle runner.
 
 ## Installation
 

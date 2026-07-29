@@ -27,18 +27,22 @@ jobs:
     # PR-only gate. A matching title remains the automatic default, while exact labels
     # provide a reliable opt-in after creation and dedicated branch names protect bridge
     # work if a title is later simplified. GitHub expression string comparisons are
-    # case-insensitive.
+    # case-insensitive. PR body-only edits are ignored so bot summary updates cannot
+    # cancel a useful build.
     if: >-
-      contains(github.event.pull_request.title, 'xposed') ||
-      contains(github.event.pull_request.title, 'lsposed') ||
-      contains(github.event.pull_request.title, 'hook') ||
-      contains(github.event.pull_request.title, 'bridge') ||
-      contains(github.event.pull_request.title, 'platform sign') ||
-      contains(github.event.pull_request.labels.*.name, 'ci:lsposed-bridge') ||
-      contains(github.event.pull_request.labels.*.name, 'lsposed-bridge') ||
-      startsWith(github.head_ref, 'feat/lsposed-') ||
-      startsWith(github.head_ref, 'fix/lsposed-') ||
-      contains(github.head_ref, 'platform-bridge')
+      (github.event.action != 'edited' || github.event.changes.title != null) &&
+      (
+        contains(github.event.pull_request.title, 'xposed') ||
+        contains(github.event.pull_request.title, 'lsposed') ||
+        contains(github.event.pull_request.title, 'hook') ||
+        contains(github.event.pull_request.title, 'bridge') ||
+        contains(github.event.pull_request.title, 'platform sign') ||
+        contains(github.event.pull_request.labels.*.name, 'ci:lsposed-bridge') ||
+        contains(github.event.pull_request.labels.*.name, 'lsposed-bridge') ||
+        startsWith(github.head_ref, 'feat/lsposed-') ||
+        startsWith(github.head_ref, 'fix/lsposed-') ||
+        contains(github.head_ref, 'platform-bridge')
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
