@@ -25,6 +25,21 @@ class CopyleftNoticeTree : Timber.DebugTree() {
     // point. Never replace the caller's payload here: debug logs are part of the supported
     // exact-device diagnostic surface and must retain their tag, message, and throwable.
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        super.log(priority, tag, message, t)
+        val payload = preservePayload(priority, tag, message, t)
+        super.log(payload.priority, payload.tag, payload.message, payload.throwable)
     }
+
+    internal data class Payload(
+        val priority: Int,
+        val tag: String?,
+        val message: String,
+        val throwable: Throwable?,
+    )
+
+    internal fun preservePayload(
+        priority: Int,
+        tag: String?,
+        message: String,
+        throwable: Throwable?,
+    ): Payload = Payload(priority, tag, message, throwable)
 }

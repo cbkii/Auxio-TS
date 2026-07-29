@@ -44,11 +44,11 @@ object HeadUnitMetadataPolicy {
         artworkUri: String?,
         hasArtwork: Boolean,
     ): HeadUnitMetadataSnapshot? {
-        val safeTitle = title?.toString()?.trim().orEmpty()
+        val safeTitle = sanitizeText(title)
         if (safeTitle.isBlank()) return null
-        val safeArtist = artist?.toString()?.trim().orEmpty()
-        val safeAlbumArtist = albumArtist?.toString()?.trim().orEmpty()
-        val safeAlbum = albumTitle?.toString()?.trim().orEmpty()
+        val safeArtist = sanitizeText(artist)
+        val safeAlbumArtist = sanitizeText(albumArtist)
+        val safeAlbum = sanitizeText(albumTitle)
         val subtitle =
             if (safeArtist.isNotBlank()) {
                 if (safeAlbumArtist.isNotBlank() && safeArtist != safeAlbumArtist) {
@@ -69,11 +69,20 @@ object HeadUnitMetadataPolicy {
             albumArtist = safeAlbumArtist,
             albumTitle = safeAlbum,
             displayDescription = description,
-            durationMs = durationMs ?: 0L,
-            mediaId = mediaId.orEmpty(),
-            mediaUri = mediaUri.orEmpty(),
+            durationMs = (durationMs ?: 0L).coerceAtLeast(0L),
+            mediaId = sanitizeIdentifier(mediaId),
+            mediaUri = sanitizeIdentifier(mediaUri),
             hasArtwork = hasArtwork || !artworkUri.isNullOrBlank(),
-            artworkUri = artworkUri?.takeIf { it.isNotBlank() },
+            artworkUri = artworkUri?.trim()?.take(MAX_IDENTIFIER_LENGTH)?.takeIf { it.isNotBlank() },
         )
     }
+
+    private fun sanitizeText(value: CharSequence?): String =
+        value?.toString()?.trim()?.take(MAX_TEXT_LENGTH).orEmpty()
+
+    private fun sanitizeIdentifier(value: String?): String =
+        value?.trim()?.take(MAX_IDENTIFIER_LENGTH).orEmpty()
+
+    private const val MAX_TEXT_LENGTH = 512
+    private const val MAX_IDENTIFIER_LENGTH = 4096
 }

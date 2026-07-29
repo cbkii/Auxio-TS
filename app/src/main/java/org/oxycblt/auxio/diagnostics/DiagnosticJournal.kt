@@ -18,7 +18,12 @@
 
 package org.oxycblt.auxio.diagnostics
 
+import androidx.annotation.VisibleForTesting
+import java.io.File
 import java.util.Collections
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,12 +45,47 @@ class DiagnosticJournal @Inject constructor() {
     private val eventList = Collections.synchronizedList(mutableListOf<DiagnosticEvent>())
 
     @Volatile private var currentSessionId: String? = null
+    @Volatile private var persistenceDirectory: File? = null
+    private val persistenceExecutor: ExecutorService =
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "AuxioDiagnosticJournal").apply { isDaemon = true }
+        }
 
     val activeSessionId: String?
         get() = currentSessionId
 
     val hasActiveSession: Boolean
         get() = currentSessionId != null
+
+    /**
+     * Enables bounded process-death-safe storage. Recovery and pruning run on the journal worker so
+     * application startup never blocks on diagnostic I/O.
+     */
+    fun configurePersistence(directory: File) {
+        persistenceDirectory = directory
+        persistenceExecutor.execute {
+            if (!directory.exists() && !directory.mkdirs()) return@execute
+            recoverInterruptedSessions(directory)
+            prune(directory)
+        }
+    }
+
+    /** A stable memory snapshot for deterministic exports. */
+    fun snapshot(): List<DiagnosticEvent> = synchronized(eventList) { eventList.toList() }
+
+    /** Existing bounded session files, newest first. */
+    fun persistedFiles(): List<File> =
+        persistenceDirectory
+            ?.listFiles { file ->
+                file.isFile && (file.name.endsWith(".jsonl") || file.name.endsWith(".summary.json"))
+            }
+            ?.sortedByDescending { it.lastModified() }
+            .orEmpty()
+
+    @VisibleForTesting
+    internal fun awaitPendingWrites(timeoutMs: Long = 5_000L) {
+        persistenceExecutor.submit {}.get(timeoutMs, TimeUnit.MILLISECONDS)
+    }
 
     /** Records a new diagnostic event for the active session, no-oping while inactive. */
     fun log(
@@ -68,6 +108,7 @@ class DiagnosticJournal @Inject constructor() {
             if (currentSessionId != null) return@synchronized false
             currentSessionId = id
             appendLocked(id, CAT_SESSION, "Started", "Session ID: $id")
+            persistSessionMarker(id, active = true)
             true
         }
 
@@ -78,6 +119,8 @@ class DiagnosticJournal @Inject constructor() {
             if (id != null && id != sessionId) return@synchronized false
             appendLocked(sessionId, CAT_SESSION, "Ended", "Session ID: $sessionId")
             currentSessionId = null
+            persistSessionMarker(sessionId, active = false)
+            persistSummary(sessionId, "ENDED")
             true
         }
 
@@ -89,7 +132,7 @@ class DiagnosticJournal @Inject constructor() {
         result: String? = null,
         evidence: EvidenceClassification = EvidenceClassification.OBSERVED_BY_AUXIO,
     ) {
-        eventList.add(
+        val diagnosticEvent =
             DiagnosticEvent(
                 sessionId = sessionId,
                 category = category,
@@ -98,11 +141,12 @@ class DiagnosticJournal @Inject constructor() {
                 result = result,
                 evidence = evidence,
             )
-        )
+        eventList.add(diagnosticEvent)
         while (eventList.size > MAX_EVENT_COUNT) eventList.removeAt(0)
         // Always update the Flow so that new subscribers (like the UI) receive the latest
         // event history.
         _events.value = eventList.toList()
+        persist(diagnosticEvent)
     }
 
     /** Clears all recorded events. */
@@ -113,8 +157,129 @@ class DiagnosticJournal @Inject constructor() {
         }
     }
 
+    private fun persist(event: DiagnosticEvent) {
+        val directory = persistenceDirectory ?: return
+        val sessionId = event.sessionId ?: return
+        persistenceExecutor.execute {
+            if (!directory.exists() && !directory.mkdirs()) return@execute
+            val file = File(directory, "session-${safeName(sessionId)}.jsonl")
+            if (file.length() >= MAX_SESSION_BYTES) return@execute
+            runCatching { file.appendText(event.toJsonLine() + "\n", Charsets.UTF_8) }
+            prune(directory)
+        }
+    }
+
+    private fun persistSessionMarker(sessionId: String, active: Boolean) {
+        val directory = persistenceDirectory ?: return
+        persistenceExecutor.execute {
+            if (!directory.exists() && !directory.mkdirs()) return@execute
+            val marker = File(directory, ".active-${safeName(sessionId)}")
+            if (active) {
+                runCatching { marker.writeText(sessionId, Charsets.UTF_8) }
+            } else {
+                marker.delete()
+            }
+        }
+    }
+
+    private fun persistSummary(sessionId: String, outcome: String) {
+        val directory = persistenceDirectory ?: return
+        persistenceExecutor.execute {
+            if (!directory.exists() && !directory.mkdirs()) return@execute
+            val target = File(directory, "session-${safeName(sessionId)}.summary.json")
+            val partial = File(directory, "${target.name}.partial")
+            val body =
+                """{"schema":1,"sessionId":"${jsonEscape(sessionId)}","outcome":"$outcome","wallTime":${System.currentTimeMillis()}}"""
+            runCatching {
+                partial.writeText(body + "\n", Charsets.UTF_8)
+                if (!partial.renameTo(target)) {
+                    target.writeText(body + "\n", Charsets.UTF_8)
+                    partial.delete()
+                }
+            }
+            prune(directory)
+        }
+    }
+
+    private fun recoverInterruptedSessions(directory: File) {
+        directory
+            .listFiles { file -> file.isFile && file.name.startsWith(".active-") }
+            .orEmpty()
+            .forEach { marker ->
+                val sessionId =
+                    runCatching { marker.readText(Charsets.UTF_8).trim() }
+                        .getOrNull()
+                        .orEmpty()
+                        .ifBlank { marker.name.removePrefix(".active-") }
+                val recovery =
+                    DiagnosticEvent(
+                        sessionId = sessionId,
+                        category = CAT_SESSION,
+                        event = "Interrupted",
+                        detail = "Recovered an unfinished diagnostic session after process restart",
+                        result = "INTERRUPTED",
+                    )
+                val eventFile = File(directory, "session-${safeName(sessionId)}.jsonl")
+                if (eventFile.length() < MAX_SESSION_BYTES) {
+                    runCatching {
+                        eventFile.appendText(recovery.toJsonLine() + "\n", Charsets.UTF_8)
+                    }
+                }
+                val target = File(directory, "session-${safeName(sessionId)}.summary.json")
+                runCatching {
+                    target.writeText(
+                        """{"schema":1,"sessionId":"${jsonEscape(sessionId)}","outcome":"INTERRUPTED","wallTime":${System.currentTimeMillis()}}""" +
+                            "\n",
+                        Charsets.UTF_8,
+                    )
+                }
+                marker.delete()
+            }
+    }
+
+    private fun prune(directory: File) {
+        val files =
+            directory
+                .listFiles { file ->
+                    file.isFile &&
+                        (file.name.endsWith(".jsonl") || file.name.endsWith(".summary.json"))
+                }
+                ?.sortedByDescending { it.lastModified() }
+                .orEmpty()
+        var retainedBytes = 0L
+        files.forEachIndexed { index, file ->
+            retainedBytes += file.length()
+            if (index >= MAX_PERSISTED_FILES || retainedBytes > MAX_TOTAL_BYTES) file.delete()
+        }
+    }
+
+    private fun DiagnosticEvent.toJsonLine(): String = buildString {
+        append("""{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime""")
+        append(""","sessionId":${jsonString(sessionId)}""")
+        append(""","category":${jsonString(category)},"event":${jsonString(event)}""")
+        append(""","detail":${jsonString(detail)},"result":${jsonString(result)}""")
+        append(""","evidence":${jsonString(evidence.name)}}""")
+    }
+
     companion object {
         private const val MAX_EVENT_COUNT = 1000
+        private const val MAX_SESSION_BYTES = 1_048_576L
+        private const val MAX_TOTAL_BYTES = 5_242_880L
+        private const val MAX_PERSISTED_FILES = 10
+
+        private fun safeName(value: String): String =
+            value.replace(Regex("[^A-Za-z0-9._-]"), "_").take(120).ifBlank { "unknown" }
+
+        private fun jsonString(value: String?): String =
+            value?.let { "\"${jsonEscape(it)}\"" } ?: "null"
+
+        private fun jsonEscape(value: String): String =
+            value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
 
         // Categories
         const val CAT_SESSION = "SESSION"
@@ -127,6 +292,7 @@ class DiagnosticJournal @Inject constructor() {
         const val CAT_WIDGET = "Widget"
         const val CAT_OVERLAY = "Overlay"
         const val CAT_STORAGE = "Storage"
+        const val CAT_INDEXING = "Indexing"
         const val CAT_SYSTEM = "System"
         const val CAT_BOOT = "Boot"
     }

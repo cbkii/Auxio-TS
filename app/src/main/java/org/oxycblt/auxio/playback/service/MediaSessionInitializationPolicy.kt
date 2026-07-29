@@ -33,4 +33,11 @@ object MediaSessionInitializationPolicy {
             .setActions(MediaSessionInterface.ACTIONS)
             .setState(PlaybackStateCompat.STATE_NONE, 0L, 0f, 0L)
             .build()
+
+    /** Empty libraries remain explicitly stopped and, at the holder boundary, inactive. */
+    fun emptyPlaybackState(): PlaybackStateCompat =
+        PlaybackStateCompat.Builder()
+            .setActions(MediaSessionInterface.ACTIONS)
+            .setState(PlaybackStateCompat.STATE_STOPPED, 0L, 0f, 0L)
+            .build()
 }

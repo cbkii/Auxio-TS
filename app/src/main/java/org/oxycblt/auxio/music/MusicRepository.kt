@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.topway.TopwaySourcePolicy
 import org.oxycblt.auxio.image.covers.SettingCovers
@@ -382,6 +383,7 @@ constructor(
     private val startupReadinessController: StartupReadinessController,
     private val optionalWorkGate: StartupOptionalWorkGate,
     private val generatedPlaylistCoordinator: GeneratedPlaylistCoordinator,
+    private val diagnosticJournal: DiagnosticJournal,
 ) : MusicRepository {
     private val updateListeners = CopyOnWriteArrayList<MusicRepository.UpdateListener>()
     private val indexingListeners = CopyOnWriteArrayList<MusicRepository.IndexingListener>()
@@ -1478,6 +1480,13 @@ constructor(
             "Indexing session started [reason=${request.reason} mode=${musicSettings.locationMode} " +
                 "generation=${request.configurationGeneration} sources=$labels]"
         )
+        diagnosticJournal.log(
+            DiagnosticJournal.CAT_INDEXING,
+            "Started",
+            "session=${indexingStateSessionId()} reason=${request.reason} " +
+                "mode=${musicSettings.locationMode} generation=${request.configurationGeneration} " +
+                "sources=$labels",
+        )
         dispatchIndexingState()
     }
 
@@ -1513,6 +1522,12 @@ constructor(
                     " explored=${it.explored} loaded=${it.loaded} evaluated=${it.evaluated}"
                 } ?: ""
             L.i("Indexing progress [phase=${progress.phase}$counts item=${progress.currentItem}]")
+            diagnosticJournal.log(
+                DiagnosticJournal.CAT_INDEXING,
+                "Progress",
+                "session=${indexingStateSessionId()} phase=${progress.phase}$counts " +
+                    "item=${progress.currentItem}",
+            )
         }
         dispatchIndexingState()
     }
@@ -1566,8 +1581,18 @@ constructor(
             return
         }
         L.i("Dispatching indexing completion [outcome=$outcome error=$error]")
+        diagnosticJournal.log(
+            DiagnosticJournal.CAT_INDEXING,
+            "Completed",
+            "outcome=$outcome error=${error?.javaClass?.name.orEmpty()} " +
+                "message=${error?.message.orEmpty()} sourceOutcome=$lastSourceScanOutcome",
+            result = outcome.name,
+        )
         dispatchIndexingState()
     }
+
+    private fun indexingStateSessionId(): Long =
+        (currentIndexingState as? IndexingState.Indexing)?.sessionId ?: 0L
 
     private fun dispatchIndexingState() {
         for (listener in indexingListeners) {

@@ -37,4 +37,9 @@ class CarOverlayActivity : Activity() {
         }
         finish()
     }
+
+    companion object {
+        const val ACTION_LAUNCH_FLOATING_CONTROLS =
+            "org.oxycblt.auxio.action.LAUNCH_FLOATING_CONTROLS"
+    }
 }

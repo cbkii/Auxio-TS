@@ -186,7 +186,10 @@ private constructor(
         prefs.registerOnSharedPreferenceChangeListener(modePreferenceListener)
         playbackManager.addListener(this)
         imageSettings.registerListener(this)
-        mediaSession.isActive = true
+        // addListener() synchronously publishes the current queue/progression. The state
+        // invalidation path activates the session only when there is something usable to expose.
+        // An empty library therefore never appears externally as active + STATE_NONE.
+        synchronizeSessionActivation()
     }
 
     fun tryMediaButtonIntent(intent: Intent): Boolean =
@@ -573,6 +576,13 @@ private constructor(
     private fun invalidateSessionState() {
         L.d("Updating media session playback state")
 
+        if (!hasPlayableSessionState()) {
+            mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState())
+            mediaSession.isActive = false
+            return
+        }
+        mediaSession.isActive = true
+
         val state =
             // InternalPlayer.State handles position/state information.
             playbackManager.progression
@@ -609,6 +619,21 @@ private constructor(
 
         mediaSession.setPlaybackState(state.build())
     }
+
+    private fun synchronizeSessionActivation() {
+        if (hasPlayableSessionState()) {
+            invalidateSessionState()
+        } else {
+            mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState())
+            mediaSession.isActive = false
+        }
+    }
+
+    private fun hasPlayableSessionState(): Boolean =
+        playbackManager.currentSong != null ||
+            playbackManager.rawPlaybackMetadata != null ||
+            playbackManager.queue.isNotEmpty() ||
+            playbackManager.queueWindow != null
 
     /** Invalidate both repeat and shuffle notification actions. */
     private fun broadcastLegacyMetadataChanged(
@@ -666,7 +691,21 @@ private constructor(
     companion object {
         private const val ACTION_LEGACY_META_CHANGED = "com.android.music.metachanged"
         private const val ACTION_LEGACY_PLAYSTATE_CHANGED = "com.android.music.playstatechanged"
-        private val emptyMetadata = MediaMetadataCompat.Builder().build()
+        // Some vendor consumers dereference cleared fields without null checks. Publish a
+        // canonical non-null empty snapshot at every clearing boundary.
+        private val emptyMetadata =
+            MediaMetadataCompat.Builder()
+                .putText(MediaMetadataCompat.METADATA_KEY_TITLE, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, "")
+                .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, "")
+                .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, "")
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, 0L)
+                .build()
     }
 }
 

@@ -42,4 +42,13 @@ class MediaSessionInitializationPolicyTest {
         assertEquals(0L, state.position)
         assertEquals(MediaSessionInterface.ACTIONS, state.actions)
     }
+
+    @Test
+    fun `empty ready state is explicitly stopped`() {
+        val state = MediaSessionInitializationPolicy.emptyPlaybackState()
+
+        assertEquals(PlaybackStateCompat.STATE_STOPPED, state.state)
+        assertEquals(0L, state.position)
+        assertEquals(MediaSessionInterface.ACTIONS, state.actions)
+    }
 }

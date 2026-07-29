@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.diagnostics
 
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -100,5 +101,28 @@ class DiagnosticJournalTest {
         assertFalse(journal.startSession("second"))
         journal.endSession()
         assertTrue(journal.startSession("third"))
+    }
+
+    @Test
+    fun `active session is persisted with terminal summary`() {
+        val directory = Files.createTempDirectory("auxio-journal-test").toFile()
+        try {
+            journal.configurePersistence(directory)
+            assertTrue(journal.startSession("physical campaign"))
+            journal.log("Indexing", "Progress", "phase=EXTRACTING explored=42")
+            assertTrue(journal.endSession("physical campaign"))
+            journal.awaitPendingWrites()
+
+            val files = journal.persistedFiles()
+            assertTrue(files.any { it.name.endsWith(".jsonl") })
+            assertTrue(files.any { it.name.endsWith(".summary.json") })
+            val events = files.first { it.name.endsWith(".jsonl") }.readText()
+            assertTrue(events.contains("\"event\":\"Progress\""))
+            assertTrue(events.contains("\"sessionId\":\"physical campaign\""))
+            val summary = files.first { it.name.endsWith(".summary.json") }.readText()
+            assertTrue(summary.contains("\"outcome\":\"ENDED\""))
+        } finally {
+            directory.deleteRecursively()
+        }
     }
 }

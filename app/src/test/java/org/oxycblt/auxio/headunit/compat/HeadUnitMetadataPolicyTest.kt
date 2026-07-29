@@ -87,4 +87,28 @@ class HeadUnitMetadataPolicyTest {
         assertEquals("Artist", s.displaySubtitle)
         assertEquals("Album", s.displayDescription)
     }
+
+    @Test
+    fun fromRaw_clamps_negative_duration_and_bounds_vendor_fields() {
+        val oversized = "x".repeat(5000)
+        val s =
+            HeadUnitMetadataPolicy.fromRaw(
+                oversized,
+                oversized,
+                null,
+                null,
+                -123L,
+                oversized,
+                oversized,
+                oversized,
+                false,
+            )!!
+
+        assertEquals(512, s.displayTitle.length)
+        assertEquals(512, s.artist.length)
+        assertEquals(4096, s.mediaId.length)
+        assertEquals(4096, s.mediaUri.length)
+        assertEquals(4096, s.artworkUri!!.length)
+        assertEquals(0L, s.durationMs)
+    }
 }
