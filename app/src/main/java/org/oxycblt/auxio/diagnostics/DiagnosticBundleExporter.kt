@@ -219,13 +219,15 @@ object DiagnosticBundleExporter {
     }
 
     private fun DiagnosticEvent.toJson(pathPrivacyFilter: PathPrivacyFilter?): String =
-        """{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime,"sessionId":${json(pathPrivacyFilter?.filter(sessionId) ?: sessionId)},"category":${json(pathPrivacyFilter?.filter(category) ?: category)},"event":${json(pathPrivacyFilter?.filter(event) ?: event)},"detail":${json(pathPrivacyFilter?.filter(detail) ?: detail)},"result":${json(pathPrivacyFilter?.filter(result) ?: result)},"evidence":${json(evidence.name)}}"""
+        """{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime,"sessionId":${json(pathPrivacyFilter?.filterNullable(sessionId) ?: sessionId)},"category":${json(pathPrivacyFilter?.filter(category) ?: category)},"event":${json(pathPrivacyFilter?.filter(event) ?: event)},"detail":${json(pathPrivacyFilter?.filterNullable(detail) ?: detail)},"result":${json(pathPrivacyFilter?.filterNullable(result) ?: result)},"evidence":${json(evidence.name)}}"""
 
     private class PathPrivacyFilter(knownValues: Collection<String>) {
         private val knownValues =
             knownValues.filter(String::isNotBlank).distinct().sortedByDescending(String::length)
 
-        fun filter(value: String?): String? = value?.let { filterPathBearingText(it, knownValues) }
+        fun filter(value: String): String = filterPathBearingText(value, knownValues)
+
+        fun filterNullable(value: String?): String? = value?.let(::filter)
     }
 
     @VisibleForTesting
