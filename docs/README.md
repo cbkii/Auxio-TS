@@ -39,6 +39,15 @@ Auxio-TS targets TS18, Topway and DoFun Variety head units. Choose the section t
 
 Use the repository evidence labels consistently: **Observed**, **Inferred**, **Hypothesis**, **Requires TS18 validation** and **Unsupported**.
 
+## 📦 Maintained package contract
+
+| Variant | Package | Role |
+| --- | --- | --- |
+| `topwayTwMedia` | `com.tw.media` | Primary signed APK and normal installation lane. |
+| `topwayTwMusic` | `com.tw.music` | Exact-package compatibility, published only as a Magisk module **[beta]**. |
+
+The old `standard` distributable is retired. See [Advanced use and contributing](ADVANCED_AND_CONTRIBUTING.md#installation-and-package-identity) for the package and release boundaries.
+
 ## 🛡️ Safety boundary
 
 The normal release is the signed `com.tw.media` APK. The exact-package `com.tw.music` build is published only as a Magisk module **[beta]**.
