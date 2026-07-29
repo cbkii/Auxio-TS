@@ -21,11 +21,14 @@ import android.os.Looper;
 import android.os.SystemClock;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Mirrors Auxio's public Android MediaSession through the genuine stock process identity. */
+/** Mirrors and controls Auxio's public Android MediaSession through the genuine stock process. */
 final class MediaMirror {
     interface LogSink {
         void log(String message, Throwable error);
     }
+
+    static final long NO_TRANSPORT_ACTION = 0L;
+    static final long UNSUPPORTED_TRANSPORT_ACTION = -1L;
 
     private static final String ACTION_MUSIC_INFO = "com.tw.music.info";
     private static final String ACTION_PROGRESS = "com.tw.launcher.music_progress_duration";
@@ -43,7 +46,7 @@ final class MediaMirror {
     private final AtomicBoolean stopped = new AtomicBoolean();
 
     private MediaBrowser browser;
-    private MediaController controller;
+    private volatile MediaController controller;
     private boolean connectionPending;
     private int reconnectAttempts;
 
@@ -53,7 +56,8 @@ final class MediaMirror {
                 public void run() {
                     if (stopped.get()) return;
                     publishProgress();
-                    PlaybackState state = controller != null ? controller.getPlaybackState() : null;
+                    MediaController current = controller;
+                    PlaybackState state = current != null ? current.getPlaybackState() : null;
                     if (isPlaying(state)) handler.postDelayed(this, TICK_MS);
                 }
             };
@@ -92,7 +96,9 @@ final class MediaMirror {
                         controller = new MediaController(context, browser.getSessionToken());
                         controller.registerCallback(controllerCallback, handler);
                         reconnectAttempts = 0;
-                        log.log("MediaBrowser connected; stock-identity mirror active", null);
+                        log.log(
+                                "MediaBrowser connected; bidirectional stock-identity bridge active",
+                                null);
                         publishNow();
                     } catch (RuntimeException error) {
                         log.log("MediaController creation failed", error);
@@ -157,11 +163,92 @@ final class MediaMirror {
     void publishNow() {
         handler.post(
                 () -> {
-                    if (controller == null || stopped.get()) return;
-                    publishMetadata(controller.getMetadata());
-                    publishPlayState(controller.getPlaybackState());
+                    MediaController current = controller;
+                    if (current == null || stopped.get()) return;
+                    publishMetadata(current.getMetadata());
+                    publishPlayState(current.getPlaybackState());
                     publishProgress();
                 });
+    }
+
+    /**
+     * Sends a launcher/stock command directly to Auxio's connected MediaSession.
+     *
+     * <p>Returns {@code true} only after the target controller exists, advertises the required
+     * transport action and accepts the transport call without throwing. Callers may suppress the
+     * corresponding stock path only for this result.
+     */
+    boolean dispatchCommand(BridgeCommand command, Integer seekPosition) {
+        if (command == BridgeCommand.UNKNOWN || stopped.get()) return false;
+        if (!environment.canPublish(context)) return false;
+
+        MediaController current = controller;
+        if (current == null) {
+            startOrRetry();
+            return false;
+        }
+
+        try {
+            if (command == BridgeCommand.UPDATE) {
+                publishNow();
+                return true;
+            }
+
+            PlaybackState state = current.getPlaybackState();
+            boolean playing = isPlaying(state);
+            long requiredAction = requiredActionFor(command, playing);
+            if (requiredAction == UNSUPPORTED_TRANSPORT_ACTION) return false;
+            if (state == null || (state.getActions() & requiredAction) == 0L) {
+                log.log(
+                        "Auxio session does not currently advertise "
+                                + command
+                                + "; stock path retained",
+                        null);
+                return false;
+            }
+
+            MediaController.TransportControls controls = current.getTransportControls();
+            switch (command) {
+                case PREVIOUS -> controls.skipToPrevious();
+                case NEXT -> controls.skipToNext();
+                case PLAY_PAUSE -> {
+                    if (playing) controls.pause();
+                    else controls.play();
+                }
+                case PLAY -> controls.play();
+                case PAUSE -> controls.pause();
+                case SEEK -> {
+                    if (seekPosition == null) return false;
+                    controls.seekTo(Math.max(0L, seekPosition.longValue()));
+                }
+                case UPDATE, UNKNOWN -> {
+                    return false;
+                }
+            }
+            return true;
+        } catch (RuntimeException error) {
+            log.log("MediaController command dispatch failed; stock path retained", error);
+            handler.post(
+                    () -> {
+                        clearController();
+                        scheduleReconnect();
+                    });
+            return false;
+        }
+    }
+
+    static long requiredActionFor(BridgeCommand command, boolean currentlyPlaying) {
+        return switch (command) {
+            case PREVIOUS -> PlaybackState.ACTION_SKIP_TO_PREVIOUS;
+            case NEXT -> PlaybackState.ACTION_SKIP_TO_NEXT;
+            case PLAY_PAUSE ->
+                    currentlyPlaying ? PlaybackState.ACTION_PAUSE : PlaybackState.ACTION_PLAY;
+            case PLAY -> PlaybackState.ACTION_PLAY;
+            case PAUSE -> PlaybackState.ACTION_PAUSE;
+            case SEEK -> PlaybackState.ACTION_SEEK_TO;
+            case UPDATE -> NO_TRANSPORT_ACTION;
+            case UNKNOWN -> UNSUPPORTED_TRANSPORT_ACTION;
+        };
     }
 
     private void connect() {
@@ -249,7 +336,8 @@ final class MediaMirror {
             mediaUri = boundedText(metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI));
             duration = Math.max(0L, metadata.getLong(MediaMetadata.METADATA_KEY_DURATION));
         }
-        boolean playing = isPlaying(controller != null ? controller.getPlaybackState() : null);
+        MediaController current = controller;
+        boolean playing = isPlaying(current != null ? current.getPlaybackState() : null);
         try {
             context.sendBroadcast(
                     new Intent(ACTION_MUSIC_INFO)
@@ -284,8 +372,9 @@ final class MediaMirror {
 
     private void publishProgress() {
         if (!canPublish()) return;
-        MediaMetadata metadata = controller != null ? controller.getMetadata() : null;
-        PlaybackState state = controller != null ? controller.getPlaybackState() : null;
+        MediaController current = controller;
+        MediaMetadata metadata = current != null ? current.getMetadata() : null;
+        PlaybackState state = current != null ? current.getPlaybackState() : null;
         long duration =
                 metadata != null
                         ? Math.max(0L, metadata.getLong(MediaMetadata.METADATA_KEY_DURATION))

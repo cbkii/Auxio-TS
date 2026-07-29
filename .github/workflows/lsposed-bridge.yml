@@ -5,6 +5,14 @@ on:
     branches:
       - dev
       - "cx/**"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+      - labeled
+      - unlabeled
 
 permissions:
   contents: read
@@ -16,15 +24,21 @@ concurrency:
 
 jobs:
   bridge:
-    # GitHub Actions has no regex trigger for PR titles. contains() comparisons are
-    # case-insensitive, so these terms implement the requested title gate without
-    # starting a runner for unrelated PRs.
+    # PR-only gate. A matching title remains the automatic default, while exact labels
+    # provide a reliable opt-in after creation and dedicated branch names protect bridge
+    # work if a title is later simplified. GitHub expression string comparisons are
+    # case-insensitive.
     if: >-
       contains(github.event.pull_request.title, 'xposed') ||
       contains(github.event.pull_request.title, 'lsposed') ||
       contains(github.event.pull_request.title, 'hook') ||
       contains(github.event.pull_request.title, 'bridge') ||
-      contains(github.event.pull_request.title, 'platform sign')
+      contains(github.event.pull_request.title, 'platform sign') ||
+      contains(github.event.pull_request.labels.*.name, 'ci:lsposed-bridge') ||
+      contains(github.event.pull_request.labels.*.name, 'lsposed-bridge') ||
+      startsWith(github.head_ref, 'feat/lsposed-') ||
+      startsWith(github.head_ref, 'fix/lsposed-') ||
+      contains(github.head_ref, 'platform-bridge')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -91,8 +105,11 @@ jobs:
           {
             echo '## LSPosed API 100 bridge'
             echo
-            echo "- PR title gate matched: \`${{ github.event.pull_request.title }}\`"
-            echo "- Bridge APK: \`lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk\`"
-            echo "- Auxio target APK: \`app/build/outputs/apk/topwayTwMedia/debug/\`"
+            echo "- PR title: \`${{ github.event.pull_request.title }}\`"
+            echo "- PR labels: \`${{ join(github.event.pull_request.labels.*.name, ', ') }}\`"
+            echo "- Head branch: \`${{ github.head_ref }}\`"
+            echo '- Gate: matching title, exact `ci:lsposed-bridge` / `lsposed-bridge` label, or dedicated LSPosed bridge branch'
+            echo '- Bridge APK: `lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk`'
+            echo '- Auxio target APK: `app/build/outputs/apk/topwayTwMedia/debug/`'
             echo "- [Download generated artefacts](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}#artifacts)"
           } >> "${GITHUB_STEP_SUMMARY}"

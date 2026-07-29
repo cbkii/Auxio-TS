@@ -91,16 +91,8 @@ final class BridgeEnvironment {
                 log.log("STOP: stock com.tw.music is not UID 1000", null);
                 return false;
             }
-            if (info.getLongVersionCode() != BuildConfig.STOCK_VERSION_CODE) {
-                identityRejected.set(true);
-                log.log(
-                        "STOP: unsupported stock com.tw.music version code "
-                                + info.getLongVersionCode()
-                                + "; expected "
-                                + BuildConfig.STOCK_VERSION_CODE,
-                        null);
-                return false;
-            }
+
+            long versionCode = info.getLongVersionCode();
             SigningInfo signingInfo = info.signingInfo;
             Signature[] signatures =
                     signingInfo == null
@@ -111,9 +103,16 @@ final class BridgeEnvironment {
             for (Signature signature : signatures) {
                 if (BuildConfig.STOCK_CERT_SHA256.equals(sha256(signature.toByteArray()))) {
                     identityVerified.set(true);
+                    String versionStatus =
+                            versionCode == BuildConfig.KNOWN_TESTED_STOCK_VERSION_CODE
+                                    ? "captured/tested version"
+                                    : "version not yet device-tested";
                     log.log(
-                            "verified exact Topway signer, UID 1000 and stock version code "
-                                    + BuildConfig.STOCK_VERSION_CODE,
+                            "verified exact Topway signer and UID 1000; stock version code "
+                                    + versionCode
+                                    + " ("
+                                    + versionStatus
+                                    + "). Exact hook surfaces are capability-probed at runtime",
                             null);
                     return true;
                 }
@@ -148,17 +147,10 @@ final class BridgeEnvironment {
             if (!target.enabled || target.uid == Process.SYSTEM_UID) return false;
 
             ActivityInfo activity = manager.getActivityInfo(component(BuildConfig.TARGET_ACTIVITY), 0);
-            ActivityInfo mediaButton =
-                    manager.getReceiverInfo(component(BuildConfig.TARGET_MEDIA_BUTTON_RECEIVER), 0);
-            ActivityInfo topwayReceiver =
-                    manager.getReceiverInfo(component(BuildConfig.TARGET_TOPWAY_RECEIVER), 0);
             ServiceInfo mediaBrowser =
                     manager.getServiceInfo(component(BuildConfig.TARGET_MEDIA_BROWSER_SERVICE), 0);
 
-            return isCrossPackageCallable(activity)
-                    && isCrossPackageCallable(mediaButton)
-                    && isCrossPackageCallable(topwayReceiver)
-                    && isCrossPackageCallable(mediaBrowser);
+            return isCrossPackageCallable(activity) && isCrossPackageCallable(mediaBrowser);
         } catch (PackageManager.NameNotFoundException | RuntimeException error) {
             return false;
         }

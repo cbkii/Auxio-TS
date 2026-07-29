@@ -11,7 +11,6 @@ package org.oxycblt.auxio.ts18bridge;
 
 import static org.junit.Assert.assertEquals;
 
-import android.view.KeyEvent;
 import org.junit.Test;
 
 public class BridgeCommandTest {
@@ -58,21 +57,5 @@ public class BridgeCommandTest {
         assertEquals(BridgeCommand.PLAY, BridgeCommand.fromPresenterMethod("fa"));
         assertEquals(BridgeCommand.SEEK, BridgeCommand.fromPresenterMethod("seekTo"));
         assertEquals(BridgeCommand.UNKNOWN, BridgeCommand.fromPresenterMethod("unknown"));
-    }
-
-    @Test
-    public void exposesExactMediaKeysForNonSeekCommands() {
-        assertEquals(
-                Integer.valueOf(KeyEvent.KEYCODE_MEDIA_PREVIOUS),
-                BridgeCommand.PREVIOUS.mediaKeyCode());
-        assertEquals(
-                Integer.valueOf(KeyEvent.KEYCODE_MEDIA_NEXT), BridgeCommand.NEXT.mediaKeyCode());
-        assertEquals(
-                Integer.valueOf(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
-                BridgeCommand.PLAY_PAUSE.mediaKeyCode());
-        assertEquals(
-                Integer.valueOf(KeyEvent.KEYCODE_MEDIA_PLAY), BridgeCommand.PLAY.mediaKeyCode());
-        assertEquals(
-                Integer.valueOf(KeyEvent.KEYCODE_MEDIA_PAUSE), BridgeCommand.PAUSE.mediaKeyCode());
     }
 }

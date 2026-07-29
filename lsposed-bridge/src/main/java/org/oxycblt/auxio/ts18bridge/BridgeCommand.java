@@ -9,29 +9,18 @@
  */
 package org.oxycblt.auxio.ts18bridge;
 
-import android.view.KeyEvent;
 import java.util.Locale;
 
 /** Pure mapping for the observed stock Topway service, receiver and presenter control surface. */
 enum BridgeCommand {
-    PREVIOUS(KeyEvent.KEYCODE_MEDIA_PREVIOUS),
-    NEXT(KeyEvent.KEYCODE_MEDIA_NEXT),
-    PLAY_PAUSE(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
-    PLAY(KeyEvent.KEYCODE_MEDIA_PLAY),
-    PAUSE(KeyEvent.KEYCODE_MEDIA_PAUSE),
-    UPDATE(null),
-    SEEK(null),
-    UNKNOWN(null);
-
-    private final Integer mediaKeyCode;
-
-    BridgeCommand(Integer mediaKeyCode) {
-        this.mediaKeyCode = mediaKeyCode;
-    }
-
-    Integer mediaKeyCode() {
-        return mediaKeyCode;
-    }
+    PREVIOUS,
+    NEXT,
+    PLAY_PAUSE,
+    PLAY,
+    PAUSE,
+    UPDATE,
+    SEEK,
+    UNKNOWN;
 
     static BridgeCommand fromIntent(String action, String cmd) {
         if (BridgeContract.ACTION_PREVIOUS.equals(action)) return PREVIOUS;

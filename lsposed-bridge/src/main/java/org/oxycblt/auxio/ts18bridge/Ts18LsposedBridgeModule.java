@@ -19,7 +19,6 @@ import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.os.Process;
 import android.os.SystemClock;
-import android.view.KeyEvent;
 import io.github.libxposed.XposedContext;
 import io.github.libxposed.XposedInterface;
 import io.github.libxposed.XposedModule;
@@ -92,7 +91,8 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
             installSafely("service", () -> installServiceHooks(loader));
             installSafely("receivers", () -> installReceiverHooks(loader));
             installSafely("presenter", () -> installPresenterHooks(loader));
-            safeLog("hook installation pass complete; unavailable hooks remain stock-controlled");
+            safeLog(
+                    "hook capability-probe pass complete; unmatched stock-version surfaces remain stock-controlled");
         } catch (Throwable error) {
             safeLog("hook installation failed closed", error);
         }
@@ -308,66 +308,31 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
             if (mirror != null) mirror.pauseUntilRetried();
             return false;
         }
+
         ensureMediaMirror(context);
+        MediaMirror mirror = mediaMirror.get();
+        if (mirror == null) return false;
+
         try {
-            boolean sent =
-                    switch (command) {
-                        case PREVIOUS, NEXT, PLAY_PAUSE, PLAY, PAUSE ->
-                                sendMediaButton(context, command.mediaKeyCode());
-                        case UPDATE -> {
-                            MediaMirror mirror = mediaMirror.get();
-                            if (mirror != null) mirror.publishNow();
-                            yield sendTopwayUpdate(context);
-                        }
-                        case SEEK -> seekPosition != null && sendSeek(context, seekPosition);
-                        case UNKNOWN -> false;
-                    };
-            if (sent) rateLimitedLog("command-" + command, "forwarded " + command + " from " + source);
-            return sent;
+            boolean dispatched = mirror.dispatchCommand(command, seekPosition);
+            if (dispatched) {
+                rateLimitedLog(
+                        "command-" + command,
+                        "dispatched " + command + " to Auxio MediaSession from " + source);
+            } else {
+                rateLimitedLog(
+                        "command-not-ready-" + command,
+                        "Auxio MediaSession not ready for "
+                                + command
+                                + " from "
+                                + source
+                                + "; stock path retained");
+            }
+            return dispatched;
         } catch (RuntimeException error) {
             safeLog("command forwarding failed open for " + command, error);
             return false;
         }
-    }
-
-    private boolean sendMediaButton(Context context, Integer keyCode) {
-        if (keyCode == null) return false;
-        long now = SystemClock.uptimeMillis();
-        KeyEvent event = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0);
-        Intent intent =
-                new Intent(Intent.ACTION_MEDIA_BUTTON)
-                        .setComponent(
-                                new ComponentName(
-                                        BuildConfig.TARGET_PACKAGE,
-                                        BuildConfig.TARGET_MEDIA_BUTTON_RECEIVER))
-                        .putExtra(Intent.EXTRA_KEY_EVENT, event)
-                        .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
-        context.sendBroadcast(intent);
-        return true;
-    }
-
-    private boolean sendTopwayUpdate(Context context) {
-        context.sendBroadcast(
-                new Intent(BridgeContract.ACTION_COMMAND)
-                        .setComponent(
-                                new ComponentName(
-                                        BuildConfig.TARGET_PACKAGE,
-                                        BuildConfig.TARGET_TOPWAY_RECEIVER))
-                        .putExtra(EXTRA_COMMAND, "update")
-                        .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES));
-        return true;
-    }
-
-    private boolean sendSeek(Context context, int position) {
-        context.sendBroadcast(
-                new Intent(BridgeContract.ACTION_WIDGET_SEEK)
-                        .setComponent(
-                                new ComponentName(
-                                        BuildConfig.TARGET_PACKAGE,
-                                        BuildConfig.TARGET_TOPWAY_RECEIVER))
-                        .putExtra(EXTRA_WIDGET_PROGRESS, Math.max(0, position))
-                        .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES));
-        return true;
     }
 
     private void ensureMediaMirror(Context context) {
