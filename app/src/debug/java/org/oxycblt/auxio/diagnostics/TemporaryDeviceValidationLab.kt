@@ -39,8 +39,8 @@ import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber
 
 /**
- * Debug-only TS18 evidence controls. Remove individual controls once their physical acceptance
- * gate is closed; this entire class is intentionally absent from release variants.
+ * Debug-only TS18 evidence controls. Remove individual controls once their physical acceptance gate
+ * is closed; this entire class is intentionally absent from release variants.
  */
 object TemporaryDeviceValidationLab {
     @JvmStatic
