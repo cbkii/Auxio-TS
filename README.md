@@ -73,8 +73,7 @@ Read [TS18 installation constraints](docs/TS18_INSTALLATION_CONSTRAINTS.md) befo
 2. Install and open Auxio-TS.
 3. Grant the Android storage or notification permissions requested by the app.
 4. On a rooted TS18, open **Settings → Library & sources → Advanced source access**.
-5. Turn on **Root storage fast path**. This is the consent action that triggers the Magisk superuser request. Approve the request.
-6. Open **Root file access status** and confirm that it reports **Available**.
+5. Turn on **Root storage fast path**. Click **Root file access status** and confirm that it reports **Available**. This is the consent action that triggers the Magisk superuser request. Approve the request.
 7. Open **Music sources**, choose **Direct**, then use **Auto-detect USB** or enter a path such as `/storage/usbdisk0/Music`.
 8. Wait for the first library load. Confirm that your songs appear before changing optional settings.
 
@@ -127,7 +126,7 @@ Open the part of the [settings guide](docs/SETTINGS_GUIDE.md) that matches what 
 
 ### 🚫 Magisk did not ask for superuser access
 
-Turn **Root storage fast path** off and on again. Approve the prompt, then open **Root file access status**. Do not continue with a root-dependent Direct path unless the status is **Available**.
+Turn **Root storage fast path** off and on again. Click **Root file access status** and **'Grant'** the Magisk prompt, then click **Root file access status** again to refresh status. Do not continue with a root-dependent Direct path unless the status is **Available**.
 
 ### 🎵 No songs appear
 
@@ -157,6 +156,6 @@ When reporting a problem, include the Auxio-TS version, package name, TS18 build
 
 Auxio-TS is based on [Auxio](https://github.com/OxygenCobalt/Auxio), created by Alexander Capehart (OxygenCobalt). The original music player, design and playback architecture remain the foundation of this project.
 
-Support the original author through [GitHub Sponsors](https://github.com/sponsors/OxygenCobalt).
+Support the original author through [GitHub Sponsors](https://github.com/sponsors/OxygenCobalt) 💸
 
 Auxio-TS is licensed under GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
