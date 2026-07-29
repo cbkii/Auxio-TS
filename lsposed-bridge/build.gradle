@@ -17,7 +17,8 @@ android {
         buildConfigField "String", "TARGET_ACTIVITY", '"com.tw.music.MusicActivity"'
         buildConfigField "String", "TARGET_MEDIA_BUTTON_RECEIVER", '"org.oxycblt.auxio.playback.service.MediaButtonReceiver"'
         buildConfigField "String", "TARGET_TOPWAY_RECEIVER", '"org.oxycblt.auxio.headunit.topway.TopwayMusicBridgeReceiver"'
-        buildConfigField "String", "TARGET_MEDIA_BROWSER_SERVICE", '"org.oxycblt.auxio.AuxioService"'
+        buildConfigField "String", "TARGET_MEDIA_BROWSER_SERVICE", '"com.tw.music.MusicService"'
+        buildConfigField "long", "STOCK_VERSION_CODE", "118L"
         buildConfigField "String", "STOCK_CERT_SHA256", '"AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3"'
     }
 

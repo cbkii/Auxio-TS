@@ -11,9 +11,11 @@ package org.oxycblt.auxio.ts18bridge;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
 import android.content.pm.SigningInfo;
 import android.os.Environment;
@@ -89,6 +91,16 @@ final class BridgeEnvironment {
                 log.log("STOP: stock com.tw.music is not UID 1000", null);
                 return false;
             }
+            if (info.getLongVersionCode() != BuildConfig.STOCK_VERSION_CODE) {
+                identityRejected.set(true);
+                log.log(
+                        "STOP: unsupported stock com.tw.music version code "
+                                + info.getLongVersionCode()
+                                + "; expected "
+                                + BuildConfig.STOCK_VERSION_CODE,
+                        null);
+                return false;
+            }
             SigningInfo signingInfo = info.signingInfo;
             Signature[] signatures =
                     signingInfo == null
@@ -99,7 +111,10 @@ final class BridgeEnvironment {
             for (Signature signature : signatures) {
                 if (BuildConfig.STOCK_CERT_SHA256.equals(sha256(signature.toByteArray()))) {
                     identityVerified.set(true);
-                    log.log("verified exact Topway platform signer and UID 1000", null);
+                    log.log(
+                            "verified exact Topway signer, UID 1000 and stock version code "
+                                    + BuildConfig.STOCK_VERSION_CODE,
+                            null);
                     return true;
                 }
             }
@@ -131,14 +146,26 @@ final class BridgeEnvironment {
         try {
             ApplicationInfo target = manager.getApplicationInfo(BuildConfig.TARGET_PACKAGE, 0);
             if (!target.enabled || target.uid == Process.SYSTEM_UID) return false;
-            manager.getActivityInfo(component(BuildConfig.TARGET_ACTIVITY), 0);
-            manager.getReceiverInfo(component(BuildConfig.TARGET_MEDIA_BUTTON_RECEIVER), 0);
-            manager.getReceiverInfo(component(BuildConfig.TARGET_TOPWAY_RECEIVER), 0);
-            manager.getServiceInfo(component(BuildConfig.TARGET_MEDIA_BROWSER_SERVICE), 0);
-            return true;
+
+            ActivityInfo activity = manager.getActivityInfo(component(BuildConfig.TARGET_ACTIVITY), 0);
+            ActivityInfo mediaButton =
+                    manager.getReceiverInfo(component(BuildConfig.TARGET_MEDIA_BUTTON_RECEIVER), 0);
+            ActivityInfo topwayReceiver =
+                    manager.getReceiverInfo(component(BuildConfig.TARGET_TOPWAY_RECEIVER), 0);
+            ServiceInfo mediaBrowser =
+                    manager.getServiceInfo(component(BuildConfig.TARGET_MEDIA_BROWSER_SERVICE), 0);
+
+            return isCrossPackageCallable(activity)
+                    && isCrossPackageCallable(mediaButton)
+                    && isCrossPackageCallable(topwayReceiver)
+                    && isCrossPackageCallable(mediaBrowser);
         } catch (PackageManager.NameNotFoundException | RuntimeException error) {
             return false;
         }
+    }
+
+    private static boolean isCrossPackageCallable(android.content.pm.ComponentInfo info) {
+        return info.enabled && info.exported;
     }
 
     private static ComponentName component(String className) {

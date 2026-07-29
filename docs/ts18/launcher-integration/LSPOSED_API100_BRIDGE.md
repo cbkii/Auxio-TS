@@ -10,7 +10,7 @@ It does **not** copy or spoof the Topway platform key. It does **not** change Pa
 
 - **Observed:** the captured stock package is `com.tw.music`, UID 1000, version code 118 and signed by SHA-256 `AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3`.
 - **Observed:** stock `MusicActivity`, `MusicService`, command receiver `com.tw.music.k`, seek receiver `com.tw.music.j` and presenter `com.eckom.xtlibrary.b.f.e.a` implement the current control path.
-- **Observed:** Auxio-TS `com.tw.media` exports `com.tw.music.MusicActivity`, its Android MediaBrowser service, the narrow Topway command receiver and the media-button receiver.
+- **Observed:** Auxio-TS `com.tw.media` exports `com.tw.music.MusicActivity`, the stock-compatible `com.tw.music.MusicService` MediaBrowser wrapper, the narrow Topway command receiver and the media-button receiver.
 - **Inferred:** code running inside the genuine stock process can preserve the sender process identity expected by Topway/DoFun while using normal explicit Android IPC to control Auxio-TS.
 - **Requires device validation:** fixed DoFun widget launch, control, metadata, progress, ACC sleep/wake, cold boot and launcher restart behaviour on the exact TS18 build.
 
@@ -22,7 +22,7 @@ The module is static-scoped only to:
 com.tw.music
 ```
 
-It additionally refuses to hook unless the loaded process is the main `com.tw.music` process and its runtime UID is exactly 1000. Before forwarding anything, it verifies the captured Topway platform certificate fingerprint.
+It additionally refuses to bridge unless the loaded process is the main `com.tw.music` process and the installed stock package has all three captured identity properties: UID 1000, version code 118 and the exact Topway platform certificate fingerprint. Before forwarding, it also verifies that every required cross-package Auxio activity, receiver and MediaBrowser service is enabled and exported.
 
 If Auxio-TS or any required exported component is unavailable, the hook **fails open**: it does not suppress the stock call. Every hook callback catches failures so a bridge error does not intentionally crash the stock process.
 
@@ -47,7 +47,7 @@ Remove the marker to enable the bridge again. Restart `com.tw.music` or reboot i
 | Dynamic command receiver `com.tw.music.k` | Forwards the observed command actions and skips the stock receiver only after success. |
 | Seek receiver `com.tw.music.j` | Forwards `music_progress` to Auxio-TS and skips the stock seek only after success. |
 | Presenter `rb`, `pb`, `ba`, `fa`, `seekTo(int)` | Forwards previous, next, pause, play and seek calls that bypass public broadcasts. |
-| Auxio Android MediaBrowser/MediaSession | Mirrors title, artist, album, media URI, playback state and one-second progress broadcasts from the genuine stock process. |
+| Auxio Android MediaBrowser/MediaSession | Connects through `com.tw.media/com.tw.music.MusicService` and mirrors title, artist, album, media URI, playback state and one-second progress broadcasts from the genuine stock process. |
 
 The bridge uses Android public IPC between packages. It does not import or copy Topway implementation classes.
 
@@ -59,21 +59,22 @@ The module targets modern LSPosed/libxposed **API 100**. Compile-only stubs are 
 45f3e9722a3d4a3e6dae6cc1b51d6583767ec940
 ```
 
-The API classes are not packaged into the bridge APK. LSPosed provides them at runtime. CI verifies that the APK contains the API-100 metadata and defines no `io.github.libxposed` classes.
+The API classes are not packaged into the bridge APK. LSPosed provides them at runtime. The bridge has minimum SDK 29 for the Android 10 TS18 runtime and uses the repository's current target SDK for installation compatibility. CI verifies the API-100 metadata, SDK values and that the APK defines no `io.github.libxposed` classes.
 
 ## Installation
 
 1. Keep the genuine stock `com.tw.music` enabled and unchanged.
-2. Install the normal Auxio-TS `topwayTwMedia` release so the package is exactly `com.tw.media`.
-3. In Auxio-TS, select a music source and verify normal playback first.
-4. Create the kill-switch marker shown above.
-5. Install the bridge APK.
-6. Enable it in LSPosed. Its static scope must show only `com.tw.music`; do not add `system_server`, DoFun, Auxio or other Topway packages.
-7. Reboot the head unit.
-8. Confirm the stock music app still opens and controls normally while the marker exists.
-9. Remove the marker, force-stop/reopen `com.tw.music` or reboot, then run the validation below.
+2. Confirm it is version code 118, UID 1000 and signed by the captured Topway certificate.
+3. Install the normal Auxio-TS `topwayTwMedia` release so the package is exactly `com.tw.media`.
+4. In Auxio-TS, select a music source and verify normal playback first.
+5. Create the kill-switch marker shown above.
+6. Install the bridge APK.
+7. Enable it in LSPosed. Its static scope must show only `com.tw.music`; do not add `system_server`, DoFun, Auxio or other Topway packages.
+8. Reboot the head unit.
+9. Confirm the stock music app still opens and controls normally while the marker exists.
+10. Remove the marker, force-stop/reopen `com.tw.music` or reboot, then run the validation below.
 
-**STOP:** do not proceed if the installed stock package is not UID 1000, the signer fingerprint differs, `com.tw.media` is not installed, LSPosed cannot restrict scope, or boot-loop recovery is not available.
+**STOP:** do not proceed if the installed stock package is not version code 118 and UID 1000, the signer fingerprint differs, `com.tw.media` is not installed, LSPosed cannot restrict scope, or boot-loop recovery is not available.
 
 ## Device validation
 
