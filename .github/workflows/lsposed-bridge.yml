@@ -10,7 +10,6 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-      - edited
       - labeled
       - unlabeled
 
@@ -27,10 +26,9 @@ jobs:
     # PR-only gate. A matching title remains the automatic default, while exact labels
     # provide a reliable opt-in after creation and dedicated branch names protect bridge
     # work if a title is later simplified. GitHub expression string comparisons are
-    # case-insensitive. PR body-only edits are ignored so bot summary updates cannot
-    # cancel a useful build.
+    # case-insensitive. The workflow deliberately does not subscribe to PR edit events,
+    # so body/title automation cannot cancel an in-progress bridge build.
     if: >-
-      (github.event.action != 'edited' || github.event.changes.title != null) &&
       (
         contains(github.event.pull_request.title, 'xposed') ||
         contains(github.event.pull_request.title, 'lsposed') ||
