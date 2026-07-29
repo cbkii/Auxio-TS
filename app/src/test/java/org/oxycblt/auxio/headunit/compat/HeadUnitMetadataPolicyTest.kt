@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.headunit.compat
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,7 +67,7 @@ class HeadUnitMetadataPolicyTest {
             )!!
         assertEquals("Artist", s.displaySubtitle)
         assertEquals("Artist", s.displayDescription)
-        assertTrue(!s.hasArtwork)
+        assertFalse(s.hasArtwork)
     }
 
     @Test
@@ -89,7 +90,7 @@ class HeadUnitMetadataPolicyTest {
     }
 
     @Test
-    fun fromRaw_clamps_negative_duration_and_bounds_vendor_fields() {
+    fun fromRaw_clamps_duration_hashes_oversized_ids_and_rejects_oversized_uris() {
         val oversized = "x".repeat(5000)
         val s =
             HeadUnitMetadataPolicy.fromRaw(
@@ -106,9 +107,34 @@ class HeadUnitMetadataPolicyTest {
 
         assertEquals(512, s.displayTitle.length)
         assertEquals(512, s.artist.length)
-        assertEquals(4096, s.mediaId.length)
-        assertEquals(4096, s.mediaUri.length)
-        assertEquals(4096, s.artworkUri!!.length)
+        assertTrue(s.mediaId.startsWith("sha256:"))
+        assertEquals(71, s.mediaId.length)
+        assertEquals("", s.mediaUri)
+        assertNull(s.artworkUri)
+        assertTrue(!s.hasArtwork)
         assertEquals(0L, s.durationMs)
+    }
+
+    @Test
+    fun fromRaw_preserves_valid_uris_without_truncation() {
+        val mediaUri = "content://media/external/audio/media/42"
+        val artworkUri = "content://org.oxycblt.auxio.covers/42"
+        val s =
+            HeadUnitMetadataPolicy.fromRaw(
+                "Track",
+                "Artist",
+                null,
+                null,
+                1L,
+                "stable-id",
+                mediaUri,
+                artworkUri,
+                false,
+            )!!
+
+        assertEquals("stable-id", s.mediaId)
+        assertEquals(mediaUri, s.mediaUri)
+        assertEquals(artworkUri, s.artworkUri)
+        assertTrue(s.hasArtwork)
     }
 }

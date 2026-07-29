@@ -189,7 +189,7 @@ class DiagnosticJournal @Inject constructor() {
             val target = File(directory, "session-${safeName(sessionId)}.summary.json")
             val partial = File(directory, "${target.name}.partial")
             val body =
-                """{"schema":1,"sessionId":"${jsonEscape(sessionId)}","outcome":"$outcome","wallTime":${System.currentTimeMillis()}}"""
+                """{"schema":1,"sessionId":${DiagnosticJson.string(sessionId)},"outcome":${DiagnosticJson.string(outcome)},"wallTime":${System.currentTimeMillis()}}"""
             runCatching {
                 partial.writeText(body + "\n", Charsets.UTF_8)
                 if (!partial.renameTo(target)) {
@@ -228,7 +228,7 @@ class DiagnosticJournal @Inject constructor() {
                 val target = File(directory, "session-${safeName(sessionId)}.summary.json")
                 runCatching {
                     target.writeText(
-                        """{"schema":1,"sessionId":"${jsonEscape(sessionId)}","outcome":"INTERRUPTED","wallTime":${System.currentTimeMillis()}}""" +
+                        """{"schema":1,"sessionId":${DiagnosticJson.string(sessionId)},"outcome":"INTERRUPTED","wallTime":${System.currentTimeMillis()}}""" +
                             "\n",
                         Charsets.UTF_8,
                     )
@@ -270,16 +270,7 @@ class DiagnosticJournal @Inject constructor() {
         private fun safeName(value: String): String =
             value.replace(Regex("[^A-Za-z0-9._-]"), "_").take(120).ifBlank { "unknown" }
 
-        private fun jsonString(value: String?): String =
-            value?.let { "\"${jsonEscape(it)}\"" } ?: "null"
-
-        private fun jsonEscape(value: String): String =
-            value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t")
+        private fun jsonString(value: String?): String = DiagnosticJson.string(value)
 
         // Categories
         const val CAT_SESSION = "SESSION"

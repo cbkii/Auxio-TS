@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.headunit.compat
 
+import java.security.MessageDigest
+
 data class HeadUnitMetadataSnapshot(
     val displayTitle: String,
     val displaySubtitle: String,
@@ -49,6 +51,7 @@ object HeadUnitMetadataPolicy {
         val safeArtist = sanitizeText(artist)
         val safeAlbumArtist = sanitizeText(albumArtist)
         val safeAlbum = sanitizeText(albumTitle)
+        val safeArtworkUri = sanitizeUri(artworkUri).takeIf(String::isNotBlank)
         val subtitle =
             if (safeArtist.isNotBlank()) {
                 if (safeAlbumArtist.isNotBlank() && safeArtist != safeAlbumArtist) {
@@ -71,9 +74,9 @@ object HeadUnitMetadataPolicy {
             displayDescription = description,
             durationMs = (durationMs ?: 0L).coerceAtLeast(0L),
             mediaId = sanitizeIdentifier(mediaId),
-            mediaUri = sanitizeIdentifier(mediaUri),
-            hasArtwork = hasArtwork || !artworkUri.isNullOrBlank(),
-            artworkUri = artworkUri?.trim()?.take(MAX_IDENTIFIER_LENGTH)?.takeIf { it.isNotBlank() },
+            mediaUri = sanitizeUri(mediaUri),
+            hasArtwork = hasArtwork || safeArtworkUri != null,
+            artworkUri = safeArtworkUri,
         )
     }
 
@@ -81,7 +84,20 @@ object HeadUnitMetadataPolicy {
         value?.toString()?.trim()?.take(MAX_TEXT_LENGTH).orEmpty()
 
     private fun sanitizeIdentifier(value: String?): String =
-        value?.trim()?.take(MAX_IDENTIFIER_LENGTH).orEmpty()
+        value
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?.let { if (it.length <= MAX_IDENTIFIER_LENGTH) it else stableIdentifier(it) }
+            .orEmpty()
+
+    private fun sanitizeUri(value: String?): String =
+        value?.trim()?.takeIf { it.isNotBlank() && it.length <= MAX_IDENTIFIER_LENGTH }.orEmpty()
+
+    private fun stableIdentifier(value: String): String =
+        "sha256:" +
+            MessageDigest.getInstance("SHA-256")
+                .digest(value.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
 
     private const val MAX_TEXT_LENGTH = 512
     private const val MAX_IDENTIFIER_LENGTH = 4096

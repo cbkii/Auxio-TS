@@ -278,6 +278,7 @@ class DiagnosticsRecoveryPreferenceFragment :
                         )
                     }
                 }
+            result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
             if (!isAdded) return@launch
             result.fold(
                 onSuccess = { file ->

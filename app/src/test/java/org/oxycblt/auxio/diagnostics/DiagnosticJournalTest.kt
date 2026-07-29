@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.diagnostics
 
 import java.nio.file.Files
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -124,5 +125,37 @@ class DiagnosticJournalTest {
         } finally {
             directory.deleteRecursively()
         }
+    }
+
+    @Test
+    fun `strict JSON encoding preserves arbitrary control characters`() {
+        val original = "nul=\u0000 backspace=\b formfeed=\u000C tab=\t quote=\" slash=\\"
+        val encoded = DiagnosticJson.string(original)
+
+        assertEquals(original, JSONObject("""{"value":$encoded}""").getString("value"))
+        assertTrue(encoded.contains("\\u0000"))
+        assertFalse(encoded.any { it.code < 0x20 })
+    }
+
+    @Test
+    fun `path privacy filter removes configured and discovered path values`() {
+        val source = "/storage/emulated/0/Music"
+        val item = "$source/Artist Name/Track Name.mp3"
+        val uri = "content://media/external/audio/media/42"
+        val input =
+            """
+            {"detail":"phase=EXTRACTING item=$item","result":null}
+            Detected Path: $source
+            uri=$uri
+            """
+                .trimIndent()
+
+        val filtered = DiagnosticBundleExporter.filterPathBearingText(input, listOf(source))
+
+        assertFalse(filtered.contains(source))
+        assertFalse(filtered.contains("Artist Name"))
+        assertFalse(filtered.contains("Track Name.mp3"))
+        assertFalse(filtered.contains(uri))
+        assertTrue(filtered.contains("sha256:"))
     }
 }

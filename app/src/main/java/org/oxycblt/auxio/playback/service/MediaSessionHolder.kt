@@ -693,18 +693,32 @@ private constructor(
         private const val ACTION_LEGACY_PLAYSTATE_CHANGED = "com.android.music.playstatechanged"
         // Some vendor consumers dereference cleared fields without null checks. Publish a
         // canonical non-null empty snapshot at every clearing boundary.
-        private val emptyMetadata =
+        internal val emptyMetadata =
             MediaMetadataCompat.Builder()
                 .putText(MediaMetadataCompat.METADATA_KEY_TITLE, "")
                 .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, "")
                 .putText(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, "")
                 .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_AUTHOR, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_COMPOSER, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_WRITER, "")
+                .putText(MediaMetadataCompat.METADATA_KEY_GENRE, "")
                 .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, "")
                 .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, "")
                 .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, "")
                 .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, "")
                 .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_URI, "")
+                .putString(MediaMetadataCompat.METADATA_KEY_DATE, "")
+                .putString(MediaMetadataCompat.METADATA_KEY_ART_URI, "")
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, "")
+                .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, "")
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, 0L)
+                .putLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER, 0L)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DISC_NUMBER, 0L)
+                .putLong(MediaMetadataCompat.METADATA_KEY_YEAR, 0L)
+                .putText(PlaybackNotification.KEY_PARENT, "")
+                .putText(MetadataExtras.KEY_SUBTITLE_LINK_MEDIA_ID, "")
+                .putText(MetadataExtras.KEY_DESCRIPTION_LINK_MEDIA_ID, "")
                 .build()
     }
 }

@@ -24,6 +24,7 @@ import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,6 +52,7 @@ object TemporaryDeviceValidationLab {
         rootStateHolder: RootStateHolder,
     ) {
         val context = fragment.requireContext()
+        val applicationContext = context.applicationContext
         val screen = fragment.preferenceScreen ?: return
         val category =
             PreferenceCategory(context).apply {
@@ -169,31 +171,33 @@ object TemporaryDeviceValidationLab {
             "Runs the existing bounded allowlisted integration checks and records their output.",
         ) {
             fragment.lifecycleScope.launch {
-                val resolver = Ts18DofunIntegrationResolver(context, rootStateHolder)
-                val result =
-                    withContext(Dispatchers.IO) { runCatching { resolver.runIntegrationCheck() } }
-                result.fold(
-                    onSuccess = { report ->
-                        journal.log(
-                            DiagnosticJournal.CAT_SYSTEM,
-                            "Root SAF DoFun health probe",
-                            "root=${report.rootState} packages=${report.installedPackages} " +
-                                "path=${report.detectedPath} recommendation=${report.recommendedStep} " +
-                                "probes=${report.probeResults}",
-                            result = "COMPLETED",
-                        )
-                        toast(context, "Health probes completed")
-                    },
-                    onFailure = { error ->
-                        journal.log(
-                            DiagnosticJournal.CAT_SYSTEM,
-                            "Root SAF DoFun health probe",
-                            error.toString(),
-                            result = "FAILED",
-                        )
-                        toast(context, "Health probes failed: ${error.message}")
-                    },
-                )
+                val resolver = Ts18DofunIntegrationResolver(applicationContext, rootStateHolder)
+                try {
+                    val report = withContext(Dispatchers.IO) { resolver.runIntegrationCheck() }
+                    journal.log(
+                        DiagnosticJournal.CAT_SYSTEM,
+                        "Root SAF DoFun health probe",
+                        "root=${report.rootState} packages=${report.installedPackages} " +
+                            "path=${report.detectedPath} recommendation=${report.recommendedStep} " +
+                            "probes=${report.probeResults}",
+                        result = "COMPLETED",
+                    )
+                    if (!fragment.isAdded) return@launch
+                    val currentContext = fragment.context ?: return@launch
+                    toast(currentContext, "Health probes completed")
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    journal.log(
+                        DiagnosticJournal.CAT_SYSTEM,
+                        "Root SAF DoFun health probe",
+                        error.toString(),
+                        result = "FAILED",
+                    )
+                    if (!fragment.isAdded) return@launch
+                    val currentContext = fragment.context ?: return@launch
+                    toast(currentContext, "Health probes failed: ${error.message}")
+                }
             }
         }
         category.add(
@@ -202,19 +206,25 @@ object TemporaryDeviceValidationLab {
             "Includes identity, sources, persisted journal, timings, stacks, and checksums.",
         ) {
             fragment.lifecycleScope.launch {
-                val result =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            DiagnosticBundleExporter.create(context, journal, musicSettings)
-                        }
+                val message =
+                    try {
+                        val file =
+                            withContext(Dispatchers.IO) {
+                                DiagnosticBundleExporter.create(
+                                    applicationContext,
+                                    journal,
+                                    musicSettings,
+                                )
+                            }
+                        "Saved: ${file.absolutePath}"
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        "Save failed: ${error.message}"
                     }
-                toast(
-                    context,
-                    result.fold(
-                        onSuccess = { "Saved: ${it.absolutePath}" },
-                        onFailure = { "Save failed: ${it.message}" },
-                    ),
-                )
+                if (!fragment.isAdded) return@launch
+                val currentContext = fragment.context ?: return@launch
+                toast(currentContext, message)
             }
         }
         category.add(

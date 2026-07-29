@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Process
+import androidx.annotation.VisibleForTesting
 import java.io.File
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -62,6 +63,17 @@ object DiagnosticBundleExporter {
         val entries = linkedMapOf<String, ByteArray>()
         val apk = File(context.applicationInfo.sourceDir)
         val apkSha256 = apk.takeIf(File::isFile)?.let(::sha256)
+        val pathPrivacyFilter =
+            if (options.hashPaths) {
+                PathPrivacyFilter(
+                    musicSettings.configuredSourceSpecs.flatMap {
+                        listOf(it.displayPath, it.normalizedUri.toString(), it.sourceKey)
+                    }
+                )
+            } else {
+                null
+            }
+        fun privacyFiltered(value: String): String = pathPrivacyFilter?.filter(value) ?: value
         entries["manifest.json"] =
             manifest(context, journal, options, apkSha256).toByteArray(Charsets.UTF_8)
         entries["source-state.txt"] =
@@ -69,23 +81,33 @@ object DiagnosticBundleExporter {
         entries["journal-current.jsonl"] =
             journal
                 .snapshot()
-                .joinToString(separator = "\n", postfix = "\n") { it.toJson() }
+                .joinToString(separator = "\n", postfix = "\n") { it.toJson(pathPrivacyFilter) }
                 .toByteArray(Charsets.UTF_8)
         entries["performance.txt"] =
-            StartupPerformanceReport.render(
-                    StartupPerformanceReport.CaptureContext(
-                        authority = "deterministic-diagnostic-bundle",
-                        sourceState = musicSettings.sourceConfigurationCheckpoint.toString(),
-                        commit = BuildConfig.BUILD_COMMIT,
+            privacyFiltered(
+                    StartupPerformanceReport.render(
+                        StartupPerformanceReport.CaptureContext(
+                            authority = "deterministic-diagnostic-bundle",
+                            sourceState = musicSettings.sourceConfigurationCheckpoint.toString(),
+                            commit = BuildConfig.BUILD_COMMIT,
+                        )
                     )
                 )
                 .toByteArray(Charsets.UTF_8)
-        entries["threads.txt"] = threadDump().toByteArray(Charsets.UTF_8)
+        entries["threads.txt"] = privacyFiltered(threadDump()).toByteArray(Charsets.UTF_8)
         options.integrationReport?.let {
-            entries["integration-check.txt"] = it.toByteArray(Charsets.UTF_8)
+            entries["integration-check.txt"] = privacyFiltered(it).toByteArray(Charsets.UTF_8)
         }
         journal.persistedFiles().take(MAX_PERSISTED_FILES).forEachIndexed { index, file ->
-            entries["sessions/${index.toString().padStart(2, '0')}-${file.name}"] = file.readBytes()
+            val bytes =
+                if (pathPrivacyFilter == null) {
+                    file.readBytes()
+                } else {
+                    pathPrivacyFilter
+                        .filter(file.readText(Charsets.UTF_8))
+                        .toByteArray(Charsets.UTF_8)
+                }
+            entries["sessions/${index.toString().padStart(2, '0')}-${file.name}"] = bytes
         }
 
         val checksumLines =
@@ -172,9 +194,12 @@ object DiagnosticBundleExporter {
             val uri =
                 if (hashPaths) "sha256:${sha256(source.normalizedUri.toString().toByteArray())}"
                 else source.normalizedUri.toString()
+            val key =
+                if (hashPaths) "sha256:${sha256(source.sourceKey.toByteArray())}"
+                else source.sourceKey
             appendLine(
                 "source[$index]=mode:${source.mode} access:${source.accessState} " +
-                    "key:${source.sourceKey} path:$path uri:$uri"
+                    "key:$key path:$path uri:$uri"
             )
         }
     }
@@ -193,8 +218,40 @@ object DiagnosticBundleExporter {
             }
     }
 
-    private fun DiagnosticEvent.toJson(): String =
-        """{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime,"sessionId":${json(sessionId)},"category":${json(category)},"event":${json(event)},"detail":${json(detail)},"result":${json(result)},"evidence":${json(evidence.name)}}"""
+    private fun DiagnosticEvent.toJson(pathPrivacyFilter: PathPrivacyFilter?): String =
+        """{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime,"sessionId":${json(pathPrivacyFilter?.filter(sessionId) ?: sessionId)},"category":${json(pathPrivacyFilter?.filter(category) ?: category)},"event":${json(pathPrivacyFilter?.filter(event) ?: event)},"detail":${json(pathPrivacyFilter?.filter(detail) ?: detail)},"result":${json(pathPrivacyFilter?.filter(result) ?: result)},"evidence":${json(evidence.name)}}"""
+
+    private class PathPrivacyFilter(knownValues: Collection<String>) {
+        private val knownValues =
+            knownValues.filter(String::isNotBlank).distinct().sortedByDescending(String::length)
+
+        fun filter(value: String?): String? = value?.let { filterPathBearingText(it, knownValues) }
+    }
+
+    @VisibleForTesting
+    internal fun filterPathBearingText(value: String, knownValues: Collection<String>): String {
+        var filtered = value
+        knownValues
+            .filter(String::isNotBlank)
+            .distinct()
+            .sortedByDescending(String::length)
+            .forEach { known -> filtered = filtered.replace(known, hashPathValue(known)) }
+        filtered =
+            SENSITIVE_PATH_FIELD.replace(filtered) { match ->
+                val prefix = match.groupValues[1]
+                val raw = match.groupValues[2].trim()
+                if (raw.isBlank()) prefix else prefix + hashPathValue(raw)
+            }
+        filtered = URI_LIKE.replace(filtered) { hashPathValue(it.value) }
+        return ABSOLUTE_PATH.replace(filtered) { hashPathValue(it.value) }
+    }
+
+    private fun hashPathValue(value: String): String =
+        if (value.startsWith("sha256:") && value.length == SHA256_LABEL_LENGTH) {
+            value
+        } else {
+            "sha256:${sha256(value.toByteArray(Charsets.UTF_8))}"
+        }
 
     private fun validate(file: File, expectedEntries: Set<String>) {
         ZipFile(file).use { zip ->
@@ -238,15 +295,14 @@ object DiagnosticBundleExporter {
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
-    private fun json(value: String?): String =
-        value
-            ?.replace("\\", "\\\\")
-            ?.replace("\"", "\\\"")
-            ?.replace("\n", "\\n")
-            ?.replace("\r", "\\r")
-            ?.let { "\"$it\"" } ?: "null"
+    private fun json(value: String?): String = DiagnosticJson.string(value)
 
     private const val MAX_PERSISTED_FILES = 10
     private const val MAX_THREADS = 200
     private const val MAX_FRAMES_PER_THREAD = 100
+    private const val SHA256_LABEL_LENGTH = 71
+    private val SENSITIVE_PATH_FIELD =
+        Regex("""(?i)(\b(?:item|path|uri|sources?|detected\s+path)\s*[:=]\s*)([^\r\n"}]*)""")
+    private val URI_LIKE = Regex("""(?i)\b(?:content|file|document|https?|ftp)://[^\s"\\},]+""")
+    private val ABSOLUTE_PATH = Regex("""(?<![A-Za-z0-9:])/(?:[^\s"\\},]+)""")
 }
