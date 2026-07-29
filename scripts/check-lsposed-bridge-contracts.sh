@@ -43,8 +43,127 @@ check_exact_entry() {
   fi
 }
 
+check_defined_dex_classes() {
+  python3 - "$APK_PATH" "$EXPECTED_ENTRY" <<'PY'
+import re
+import struct
+import sys
+import zipfile
+from pathlib import Path
+
+apk_path = Path(sys.argv[1])
+expected_descriptor = "L" + sys.argv[2].replace(".", "/") + ";"
+forbidden_prefix = "Lio/github/libxposed/"
+
+
+def u32(data: bytes, offset: int) -> int:
+    if offset < 0 or offset + 4 > len(data):
+        raise ValueError(f"u32 offset outside DEX: {offset}")
+    return struct.unpack_from("<I", data, offset)[0]
+
+
+def read_uleb128(data: bytes, offset: int) -> tuple[int, int]:
+    value = 0
+    shift = 0
+    for _ in range(5):
+        if offset >= len(data):
+            raise ValueError("truncated ULEB128")
+        byte = data[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if byte & 0x80 == 0:
+            return value, offset
+        shift += 7
+    raise ValueError("invalid ULEB128")
+
+
+def read_string(data: bytes, string_ids_off: int, index: int) -> str:
+    string_data_off = u32(data, string_ids_off + index * 4)
+    _, cursor = read_uleb128(data, string_data_off)
+    end = data.find(b"\x00", cursor)
+    if end < 0:
+        raise ValueError("unterminated DEX string")
+    return data[cursor:end].decode("utf-8", errors="strict")
+
+
+def defined_descriptors(data: bytes, dex_name: str) -> set[str]:
+    if len(data) < 112 or data[:4] != b"dex\n":
+        raise ValueError(f"{dex_name}: invalid DEX header")
+
+    string_ids_size = u32(data, 56)
+    string_ids_off = u32(data, 60)
+    type_ids_size = u32(data, 64)
+    type_ids_off = u32(data, 68)
+    class_defs_size = u32(data, 96)
+    class_defs_off = u32(data, 100)
+
+    if string_ids_off + string_ids_size * 4 > len(data):
+        raise ValueError(f"{dex_name}: string_ids outside DEX")
+    if type_ids_off + type_ids_size * 4 > len(data):
+        raise ValueError(f"{dex_name}: type_ids outside DEX")
+    if class_defs_off + class_defs_size * 32 > len(data):
+        raise ValueError(f"{dex_name}: class_defs outside DEX")
+
+    descriptors: set[str] = set()
+    for class_number in range(class_defs_size):
+        class_idx = u32(data, class_defs_off + class_number * 32)
+        if class_idx >= type_ids_size:
+            raise ValueError(f"{dex_name}: class_idx outside type_ids")
+        descriptor_idx = u32(data, type_ids_off + class_idx * 4)
+        if descriptor_idx >= string_ids_size:
+            raise ValueError(f"{dex_name}: descriptor_idx outside string_ids")
+        descriptors.add(read_string(data, string_ids_off, descriptor_idx))
+    return descriptors
+
+
+try:
+    with zipfile.ZipFile(apk_path) as apk:
+        dex_names = sorted(
+            (name for name in apk.namelist() if re.fullmatch(r"classes(?:\d+)?\.dex", name)),
+            key=lambda name: (len(name), name),
+        )
+        if not dex_names:
+            raise ValueError("APK contains no classes*.dex files")
+
+        all_defined: set[str] = set()
+        for dex_name in dex_names:
+            descriptors = defined_descriptors(apk.read(dex_name), dex_name)
+            all_defined.update(descriptors)
+            print(f"[INFO] {dex_name}: {len(descriptors)} defined classes", file=sys.stderr)
+
+    if expected_descriptor not in all_defined:
+        print(
+            f"[ERROR] bridge entry class is not defined: {expected_descriptor}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    forbidden = sorted(item for item in all_defined if item.startswith(forbidden_prefix))
+    if forbidden:
+        print(
+            "[ERROR] compile-only libxposed API classes were packaged into the bridge APK:",
+            file=sys.stderr,
+        )
+        for descriptor in forbidden[:20]:
+            print(f"  {descriptor}", file=sys.stderr)
+        if len(forbidden) > 20:
+            print(f"  ... and {len(forbidden) - 20} more", file=sys.stderr)
+        raise SystemExit(1)
+
+    print(
+        f"[INFO] DEX contract passed: {len(all_defined)} total defined classes; "
+        "0 libxposed API definitions",
+        file=sys.stderr,
+    )
+except (OSError, ValueError, zipfile.BadZipFile, UnicodeDecodeError) as error:
+    print(f"[ERROR] DEX class-definition inspection failed: {error}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+}
+
 log "Validating LSPosed bridge APK: $APK_PATH"
 require_command unzip
+require_command python3
 [[ -f $APK_PATH ]] || error "APK does not exist: $APK_PATH"
 
 if ((ERRORS == 0)); then
@@ -61,7 +180,7 @@ if ((ERRORS == 0)); then
 
   apkanalyzer_bin=$(find_apkanalyzer || true)
   if [[ -z $apkanalyzer_bin || ! -x $apkanalyzer_bin ]]; then
-    error 'apkanalyzer is required to prove manifest and defined-class contracts'
+    error 'apkanalyzer is required to prove manifest contracts'
   else
     app_id=$($apkanalyzer_bin manifest application-id "$APK_PATH" 2>/dev/null) || {
       error 'Unable to read APK application ID'
@@ -91,15 +210,10 @@ if ((ERRORS == 0)); then
     if grep -q '<uses-permission' <<<"$manifest"; then
       error 'Bridge APK must not request Android permissions'
     fi
+  fi
 
-    defined=$($apkanalyzer_bin dex packages --defined-only "$APK_PATH" 2>/dev/null) || {
-      error 'Unable to inspect defined DEX classes'
-      defined=''
-    }
-    grep -Fq "$EXPECTED_ENTRY" <<<"$defined" || error 'Bridge entry class is not defined in DEX'
-    if grep -Fq 'io.github.libxposed' <<<"$defined"; then
-      error 'compile-only libxposed API classes were packaged into the bridge APK'
-    fi
+  if ! check_defined_dex_classes; then
+    error 'DEX defined-class contract failed'
   fi
 fi
 
