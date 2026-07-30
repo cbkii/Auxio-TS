@@ -43,6 +43,10 @@ if extract_apksigner_certificate_sha256 'Signer #1 certificate SHA-256 digest: n
   >/dev/null 2>&1; then
   fail 'Malformed signer output must fail closed.'
 fi
+if extract_apksigner_certificate_sha256 "${legacy_report}"$'\n''Signer #2 certificate SHA-256 digest: not-a-digest' \
+  >/dev/null 2>&1; then
+  fail 'A malformed signer record must fail even when another signer digest is valid.'
+fi
 log 'apksigner output parser self-tests passed'
 
 python3 - <<'PY'
