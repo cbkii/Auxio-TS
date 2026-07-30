@@ -18,16 +18,20 @@ The workflow fails closed when signing material is missing. Checkout credentials
 | Topway `twmedia` APK | `Auxio-TS-vX.Y.Z-topway-twmedia-release.apk` | `com.tw.media` | Primary DoFun alternate-entry lane; package state/signing and TS18 runtime still require validation |
 | LSPosed API 100 bridge addon | `Auxio-TS-vX.Y.Z-lsposed-api100-bridge.apk` | `org.oxycblt.auxio.ts18bridge` | Keep genuine stock `com.tw.music`; enable only its static/recommended `com.tw.music` scope |
 
-When `include_debug_apks` is enabled, the workflow also publishes
+When `include_debug_apks` is enabled, the workflow also uploads the following short-lived,
+14-day workflow artifacts:
 `Auxio-TS-vX.Y.Z-topway-twmedia-debug.apk` and
 `Auxio-TS-vX.Y.Z-lsposed-api100-bridge-debug.apk`. These are separately labelled diagnostic builds
-signed with the Android debug key. They are for validation only and do not replace the signed
-release pair.
+signed with the Android debug key. They are never GitHub Release assets, are for validation only,
+and do not replace the signed release pair.
 
 The former `org.oxycblt.auxio` standard APK and exact-package Auxio Magisk overlay are retired. A
 raw `com.tw.music` Auxio APK is deliberately never published.
 
-Each install asset includes `.sha256` and `.metadata.txt` sidecars recording source commit, tag, package/version/SDK/ABI and `apksigner` certificate evidence.
+Each install asset includes `.sha256` and `.metadata.txt` sidecars recording source commit, tag,
+package/version/SDK/ABI and `apksigner` certificate evidence. Before publication, the primary APK
+is checked for the exact `com.tw.media` identity, release version, SDK 24/36 contract, packaged ABI
+set, configured release signer and verifying SHA-256 sidecar.
 The release APK additionally passes a DEX-string boundary check proving that the diagnostic
 journal, bundle exporter, canary and temporary validation lab are absent.
 
@@ -38,6 +42,13 @@ bash ./scripts/bootstrap-dependencies.sh --profile release
 bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
 bash ./scripts/check-startup-performance-contracts.sh path/to/release.apk
 bash ./scripts/check-release-diagnostics-boundary.sh path/to/release.apk
+bash ./scripts/check-app-release-contracts.sh \
+  --apk path/to/release.apk \
+  --version-name X.Y.Z \
+  --version-code N \
+  --expected-signer SHA256 \
+  --sha256-file path/to/release.apk.sha256 \
+  --metadata-file path/to/release.apk.metadata.txt
 bash ./scripts/check-ci-variant-contracts.sh
 bash ./scripts/check-ts18-apk-reference-contracts.sh
 bash ./scripts/check-dofun-topway-compat.sh

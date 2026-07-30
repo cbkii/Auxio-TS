@@ -28,7 +28,7 @@ on:
         default: true
         type: boolean
       include_debug_apks:
-        description: Publish separately labelled debug companions for selected maintained assets
+        description: Build separately labelled debug companions as short-lived workflow artifacts
         required: true
         default: true
         type: boolean
@@ -195,17 +195,19 @@ jobs:
             release_code="$((current_code + 1))"
           fi
 
-          asset_names=()
+          release_asset_names=()
           while IFS= read -r variant; do
             case "${variant}" in
               topway_twmedia) base_name="Auxio-TS-${release_tag}-topway-twmedia-release.apk" ;;
-              topway_twmedia_debug) base_name="Auxio-TS-${release_tag}-topway-twmedia-debug.apk" ;;
               lsposed_bridge) base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge.apk" ;;
-              lsposed_bridge_debug) base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge-debug.apk" ;;
-              '') continue ;;
+              topway_twmedia_debug|lsposed_bridge_debug|'') continue ;;
               *) echo "::error::Unknown selected variant: ${variant}"; exit 1 ;;
             esac
-            asset_names+=("${base_name}" "${base_name}.sha256" "${base_name}.metadata.txt")
+            release_asset_names+=(
+              "${base_name}"
+              "${base_name}.sha256"
+              "${base_name}.metadata.txt"
+            )
           done <<< "${SELECTED_VARIANTS}"
           {
             echo "release_tag=${release_tag}"
@@ -214,7 +216,8 @@ jobs:
             echo "previous_tag=${previous_tag}"
             echo "existing_release=${release_exists}"
             echo "tag_commit_sha=${tag_sha}"
-            printf 'asset_names<<EOF\n%s\nEOF\n' "$(printf '%s\n' "${asset_names[@]}")"
+            printf 'release_asset_names<<EOF\n%s\nEOF\n' \
+              "$(printf '%s\n' "${release_asset_names[@]}")"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Check selected asset collisions
@@ -222,7 +225,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          ASSET_NAMES: ${{ steps.version.outputs.asset_names }}
+          ASSET_NAMES: ${{ steps.version.outputs.release_asset_names }}
           REPLACE: ${{ inputs.replace_existing_assets }}
         run: |
           set -euo pipefail
@@ -315,12 +318,25 @@ jobs:
           tools="$(find "${sdk_root}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
           apksigner="${tools}/apksigner"
           aapt="${tools}/aapt"
-          [[ -x "${apksigner}" && -x "${aapt}" ]] || {
+          keytool="${JAVA_HOME}/bin/keytool"
+          [[ -x "${apksigner}" && -x "${aapt}" && -x "${keytool}" ]] || {
             echo "::error::Required Android build tools are unavailable under ${tools}."
             exit 1
           }
-          artifact_dir="${RUNNER_TEMP}/selected-release-assets"
-          mkdir -p "${artifact_dir}"
+          expected_release_signer="$(
+            "${keytool}" -exportcert \
+              -keystore "${ORG_GRADLE_PROJECT_releaseStoreFile}" \
+              -storepass "${ORG_GRADLE_PROJECT_releaseStorePassword}" \
+              -alias "${ORG_GRADLE_PROJECT_releaseKeyAlias}" |
+              sha256sum | awk '{print toupper($1)}'
+          )"
+          [[ -n "${expected_release_signer}" ]] || {
+            echo '::error::Unable to derive the configured release signer fingerprint.'
+            exit 1
+          }
+          release_artifact_dir="${RUNNER_TEMP}/selected-release-assets"
+          debug_artifact_dir="${RUNNER_TEMP}/selected-debug-artifacts"
+          mkdir -p "${release_artifact_dir}" "${debug_artifact_dir}"
 
           find_apk() {
             local dir=$1
@@ -335,10 +351,11 @@ jobs:
 
           write_sidecars() {
             local asset=$1 name=$2 apk=$3 kind=$4
-            local digest metadata badging
+            local directory digest metadata badging
+            directory="$(dirname -- "${asset}")"
             digest="$(sha256sum "${asset}" | awk '{print $1}')"
-            printf '%s  %s\n' "${digest}" "${name}" > "${artifact_dir}/${name}.sha256"
-            metadata="${artifact_dir}/${name}.metadata.txt"
+            printf '%s  %s\n' "${digest}" "${name}" > "${directory}/${name}.sha256"
+            metadata="${directory}/${name}.metadata.txt"
             badging="$("${aapt}" dump badging "${apk}")"
             {
               echo "asset=${name}"
@@ -347,6 +364,8 @@ jobs:
               echo "source_commit=$(git rev-parse HEAD)"
               echo "release_tag=${RELEASE_TAG}"
               sed -n -E "s/^package: name='([^']+)'.*versionCode='([^']+)'.*versionName='([^']+)'.*/application_id=\1\nversion_code=\2\nversion_name=\3/p" <<< "${badging}"
+              sed -n -E "s/^sdkVersion:'([^']+)'.*/min_sdk=\1/p" <<< "${badging}"
+              sed -n -E "s/^targetSdkVersion:'([^']+)'.*/target_sdk=\1/p" <<< "${badging}"
               echo "abis=$(unzip -Z1 "${apk}" | sed -n -E 's#^lib/([^/]+)/.*#\1#p' | sort -u | paste -sd, -)"
               echo
               echo '[apksigner certificates]'
@@ -354,8 +373,10 @@ jobs:
             } > "${metadata}"
           }
 
-          asset_paths=()
-          asset_names=()
+          release_asset_paths=()
+          release_asset_names=()
+          debug_asset_paths=()
+          debug_asset_names=()
           while IFS= read -r variant; do
             [[ -n "${variant}" ]] || continue
             case "${variant}" in
@@ -363,7 +384,7 @@ jobs:
                 bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
                 apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/release)"
                 asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-release.apk"
-                asset_path="${artifact_dir}/${asset_name}"
+                asset_path="${release_artifact_dir}/${asset_name}"
                 cp "${apk_path}" "${asset_path}"
                 bash ./scripts/check-release-diagnostics-boundary.sh "${asset_path}"
                 asset_kind=signed-apk
@@ -372,7 +393,7 @@ jobs:
                 bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
                 apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/debug)"
                 asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-debug.apk"
-                asset_path="${artifact_dir}/${asset_name}"
+                asset_path="${debug_artifact_dir}/${asset_name}"
                 cp "${apk_path}" "${asset_path}"
                 asset_kind=debug-diagnostics-apk
                 ;;
@@ -380,18 +401,19 @@ jobs:
                 bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease
                 apk_path="$(find_apk lsposed-bridge/build/outputs/apk/release)"
                 asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk"
-                asset_path="${artifact_dir}/${asset_name}"
+                asset_path="${release_artifact_dir}/${asset_name}"
                 cp "${apk_path}" "${asset_path}"
-                bash ./scripts/check-lsposed-bridge-contracts.sh \
-                  --variant release \
-                  --apk "${asset_path}"
+                EXPECTED_SIGNER_SHA256="${expected_release_signer}" \
+                  bash ./scripts/check-lsposed-bridge-contracts.sh \
+                    --variant release \
+                    --apk "${asset_path}"
                 asset_kind=signed-lsposed-api100-addon
                 ;;
               lsposed_bridge_debug)
                 bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleDebug
                 apk_path="$(find_apk lsposed-bridge/build/outputs/apk/debug)"
                 asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk"
-                asset_path="${artifact_dir}/${asset_name}"
+                asset_path="${debug_artifact_dir}/${asset_name}"
                 cp "${apk_path}" "${asset_path}"
                 bash ./scripts/check-lsposed-bridge-contracts.sh \
                   --variant debug \
@@ -411,17 +433,50 @@ jobs:
               echo "::warning::Historical tag lacks startup profile contract script; package/profile metadata remains recorded in sidecars."
             fi
             write_sidecars "${asset_path}" "${asset_name}" "${apk_path}" "${asset_kind}"
-            asset_paths+=(
-              "${asset_path}"
-              "${artifact_dir}/${asset_name}.sha256"
-              "${artifact_dir}/${asset_name}.metadata.txt"
-            )
-            asset_names+=("${asset_name}" "${asset_name}.sha256" "${asset_name}.metadata.txt")
+            if [[ "${variant}" == topway_twmedia ]]; then
+              bash ./scripts/check-app-release-contracts.sh \
+                --apk "${asset_path}" \
+                --version-name "${VERSION_NAME}" \
+                --version-code "${VERSION_CODE}" \
+                --expected-signer "${expected_release_signer}" \
+                --sha256-file "${release_artifact_dir}/${asset_name}.sha256" \
+                --metadata-file "${release_artifact_dir}/${asset_name}.metadata.txt"
+            fi
+            if [[ "${variant}" == *_debug ]]; then
+              debug_asset_paths+=(
+                "${asset_path}"
+                "${debug_artifact_dir}/${asset_name}.sha256"
+                "${debug_artifact_dir}/${asset_name}.metadata.txt"
+              )
+              debug_asset_names+=(
+                "${asset_name}"
+                "${asset_name}.sha256"
+                "${asset_name}.metadata.txt"
+              )
+            else
+              release_asset_paths+=(
+                "${asset_path}"
+                "${release_artifact_dir}/${asset_name}.sha256"
+                "${release_artifact_dir}/${asset_name}.metadata.txt"
+              )
+              release_asset_names+=(
+                "${asset_name}"
+                "${asset_name}.sha256"
+                "${asset_name}.metadata.txt"
+              )
+            fi
           done <<< "${SELECTED_VARIANTS}"
           {
-            printf 'asset_paths<<EOF\n%s\nEOF\n' "$(printf '%s\n' "${asset_paths[@]}")"
-            printf 'asset_names<<EOF\n%s\nEOF\n' "$(printf '%s\n' "${asset_names[@]}")"
-            echo "artifact_dir=${artifact_dir}"
+            printf 'release_asset_paths<<EOF\n%s\nEOF\n' \
+              "$(printf '%s\n' "${release_asset_paths[@]}")"
+            printf 'release_asset_names<<EOF\n%s\nEOF\n' \
+              "$(printf '%s\n' "${release_asset_names[@]}")"
+            printf 'debug_asset_paths<<EOF\n%s\nEOF\n' \
+              "$(printf '%s\n' "${debug_asset_paths[@]}")"
+            printf 'debug_asset_names<<EOF\n%s\nEOF\n' \
+              "$(printf '%s\n' "${debug_asset_names[@]}")"
+            echo "release_artifact_dir=${release_artifact_dir}"
+            echo "debug_artifact_dir=${debug_artifact_dir}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Validate new-release source contracts
@@ -439,7 +494,17 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: Auxio-TS-${{ steps.version.outputs.release_tag }}-selected-release-assets
-          path: ${{ steps.assets.outputs.artifact_dir }}/*
+          path: ${{ steps.assets.outputs.release_artifact_dir }}/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload selected debug workflow artifacts
+        id: debug_artifact
+        if: inputs.include_debug_apks
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: Auxio-TS-${{ steps.version.outputs.release_tag }}-debug-companions
+          path: ${{ steps.assets.outputs.debug_artifact_dir }}/*
           if-no-files-found: error
           retention-days: 14
 
@@ -475,8 +540,8 @@ jobs:
           REPLACE: ${{ inputs.replace_existing_assets }}
           DRAFT: ${{ inputs.draft }}
           PRERELEASE: ${{ inputs.prerelease }}
-          ASSET_PATHS: ${{ steps.assets.outputs.asset_paths }}
-          ASSET_NAMES: ${{ steps.assets.outputs.asset_names }}
+          ASSET_PATHS: ${{ steps.assets.outputs.release_asset_paths }}
+          ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
         run: |
           set -euo pipefail
           mapfile -t paths <<< "${ASSET_PATHS}"
@@ -510,7 +575,7 @@ jobs:
               echo '## Assets'
               echo '- topwayTwMedia is the primary signed APK.'
               echo '- The LSPosed API 100 bridge is the signed TS18 addon for the genuine stock `com.tw.music` process.'
-              echo '- Separately labelled debug APKs include diagnostic tooling and are not substitutes for the signed release pair.'
+              echo '- Separately labelled debug APKs are available only as short-lived workflow artifacts; they are not GitHub Release assets.'
               echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
               echo '- Exact TS18 runtime behaviour requires device validation.'
             } > "${notes}"
@@ -555,7 +620,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          ASSET_NAMES: ${{ steps.assets.outputs.asset_names }}
+          ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
           EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
         run: |
           set -euo pipefail
@@ -578,6 +643,11 @@ jobs:
             echo "::error::Retired topwayTwMusic Magisk asset is forbidden on new releases: ${retired}"
             exit 1
           fi
+          if [[ "${EXISTING_RELEASE}" != true ]] &&
+            grep -Eq -- '-debug\.apk($|\.)' <<< "${actual}"; then
+            echo "::error::Debug APKs and sidecars are forbidden on new GitHub Releases."
+            exit 1
+          fi
 
       - name: Write release summary
         if: always()
@@ -588,8 +658,10 @@ jobs:
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SELECTED: ${{ steps.selection.outputs.selected_summary }}
           EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
-          ASSET_NAMES: ${{ steps.assets.outputs.asset_names }}
+          ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
+          DEBUG_ASSET_NAMES: ${{ steps.assets.outputs.debug_asset_names }}
           RELEASE_ARTIFACT_URL: ${{ steps.release_artifact.outputs.artifact-url }}
+          DEBUG_ARTIFACT_URL: ${{ steps.debug_artifact.outputs.artifact-url }}
         run: |
           {
             echo '# Manual release summary'
@@ -600,6 +672,7 @@ jobs:
             echo "- Maintained assets: ${SELECTED:-not selected}"
             [[ -n "${RELEASE_URL:-}" ]] && echo "- Release: ${RELEASE_URL}"
             [[ -n "${RELEASE_ARTIFACT_URL:-}" ]] && echo "- Workflow artifact: ${RELEASE_ARTIFACT_URL}"
+            [[ -n "${DEBUG_ARTIFACT_URL:-}" ]] && echo "- Debug workflow artifact: ${DEBUG_ARTIFACT_URL}"
             echo
             echo '## Selected assets'
             if [[ -n "${ASSET_NAMES:-}" ]]; then
@@ -609,10 +682,17 @@ jobs:
             else
               echo '- No assets reached staging.'
             fi
+            if [[ -n "${DEBUG_ASSET_NAMES:-}" ]]; then
+              echo
+              echo '## Debug workflow artifacts'
+              while IFS= read -r asset; do
+                [[ -n "${asset}" ]] && echo "- ${asset}"
+              done <<< "${DEBUG_ASSET_NAMES}"
+            fi
             echo
             echo '- Each selected variant is built in an independent sequential Gradle invocation.'
             echo '- topwayTwMedia remains the primary APK.'
             echo '- The API 100 LSPosed bridge is the recommended TS18 addon and is static-scoped only to com.tw.music.'
-            echo '- Assets ending in -debug.apk are separate diagnostic builds and are not recommended release installs.'
+            echo '- Debug APKs are short-lived workflow artifacts and never GitHub Release assets.'
             echo '- The exact-package topwayTwMusic Magisk release lane is retired.'
           } >> "${GITHUB_STEP_SUMMARY}"

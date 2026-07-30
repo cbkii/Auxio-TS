@@ -152,6 +152,7 @@ classify_path() {
     app/src/debug/*)
       mark_app_primary
       android_lint=true
+      release=true
       matched=true
       ;;
     app/src/release/*)
@@ -295,8 +296,8 @@ self_test() {
   reset_flags
   classify_path 'app/src/debug/java/example/DebugProbe.kt'
   finalise_flags
-  [[ "$app_tests" == true && "$android_lint" == true && "$topway_twmedia" == true && "$release" == false ]] ||
-    fail 'Self-test: debug-only source did not select focused debug validation.'
+  [[ "$app_tests" == true && "$android_lint" == true && "$topway_twmedia" == true && "$release" == true ]] ||
+    fail 'Self-test: debug-only source did not select optimized release-boundary validation.'
 
   reset_flags
   classify_path 'app/src/release/java/example/ReleaseNoOp.kt'

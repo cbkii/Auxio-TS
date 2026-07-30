@@ -65,7 +65,7 @@ class DiagnosticJournal @Inject constructor() {
     fun configurePersistence(directory: File) {
         persistenceDirectory = directory
         persistenceExecutor.execute {
-            if (!directory.exists() && !directory.mkdirs()) return@execute
+            if (!ensureDirectory(directory)) return@execute
             recoverInterruptedSessions(directory)
             prune(directory)
             writesSinceLastPrune = 0
@@ -163,7 +163,7 @@ class DiagnosticJournal @Inject constructor() {
         val directory = persistenceDirectory ?: return
         val sessionId = event.sessionId ?: return
         persistenceExecutor.execute {
-            if (!directory.exists() && !directory.mkdirs()) return@execute
+            if (!ensureDirectory(directory)) return@execute
             val file = File(directory, "session-${safeName(sessionId)}.jsonl")
             if (file.length() >= MAX_SESSION_BYTES) return@execute
             val persisted =
@@ -178,7 +178,7 @@ class DiagnosticJournal @Inject constructor() {
     private fun persistSessionMarker(sessionId: String, active: Boolean) {
         val directory = persistenceDirectory ?: return
         persistenceExecutor.execute {
-            if (!directory.exists() && !directory.mkdirs()) return@execute
+            if (!ensureDirectory(directory)) return@execute
             val marker = File(directory, ".active-${safeName(sessionId)}")
             if (active) {
                 runCatching { marker.writeText(sessionId, Charsets.UTF_8) }
@@ -191,7 +191,7 @@ class DiagnosticJournal @Inject constructor() {
     private fun persistSummary(sessionId: String, outcome: String) {
         val directory = persistenceDirectory ?: return
         persistenceExecutor.execute {
-            if (!directory.exists() && !directory.mkdirs()) return@execute
+            if (!ensureDirectory(directory)) return@execute
             val target = File(directory, "session-${safeName(sessionId)}.summary.json")
             val partial = File(directory, "${target.name}.partial")
             val body =
@@ -243,6 +243,9 @@ class DiagnosticJournal @Inject constructor() {
                 marker.delete()
             }
     }
+
+    private fun ensureDirectory(directory: File): Boolean =
+        directory.isDirectory || (!directory.exists() && directory.mkdirs())
 
     private fun prune(directory: File) {
         val files =

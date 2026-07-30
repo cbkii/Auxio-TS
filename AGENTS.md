@@ -128,6 +128,11 @@ Observed reusable requirements:
 
 Observed private Cardoor services, `android.uid.system`, shared UID, `TWUtil` and `com.tw.service.xt` AIDL are evidence only. Do not fake services, copy smali, require platform signing or claim a normal rooted APK has UID 1000 authority.
 
+The optional LSPosed addon is the narrow exception for execution context, not an identity
+exception for Auxio: it may run inside the already-installed, signer-verified stock
+`com.tw.music` UID-1000 process. It must never assign, spoof or grant that identity to Auxio,
+replace the stock APK, or broaden its static scope.
+
 ## TS18 evidence and architecture
 
 For TS18 work:
@@ -161,7 +166,9 @@ Separate Android framework authority, Topway/TW service authority, DoFun launche
 
 - Do not restore `standard` or add another distributable flavour.
 - Do not casually change maintained package/component contracts.
-- Do not require privileged/system UID, platform signing or shared UID.
+- Do not require privileged/system UID, platform signing or shared UID for an Auxio APK or
+  replacement package. The optional LSPosed addon may validate and execute inside the existing
+  genuine stock process only under the narrow rule above.
 - Do not copy vendor smali or private implementations.
 - Do not spread TS18 conditionals through core playback/library code.
 - Do not add in-app probe frameworks, hidden diagnostics, package scanners or vendor-service binders.

@@ -22,6 +22,7 @@ import android.os.Environment;
 import android.os.Process;
 import android.os.SystemClock;
 import java.io.File;
+import java.io.FileInputStream;
 import java.lang.ref.WeakReference;
 import java.security.MessageDigest;
 import java.util.Locale;
@@ -52,6 +53,10 @@ final class BridgeEnvironment {
             new AtomicReference<>(RuntimeState.unknown());
     private final AtomicReference<WeakReference<Context>> context =
             new AtomicReference<>(new WeakReference<>(null));
+    // Accessed only by the single probe executor. The loaded stock APK cannot change in-place
+    // without a process restart, but file metadata is retained in the key as a fail-safe.
+    private String cachedApkDigestKey = "";
+    private String cachedApkDigest = "";
 
     BridgeEnvironment(LogSink log) {
         this.log = log;
@@ -80,6 +85,11 @@ final class BridgeEnvironment {
         return current.canBridge();
     }
 
+    boolean canUseObservedPrivateHooks() {
+        RuntimeState current = state.get();
+        return current.known && current.identityTrusted && current.privateSurfaceTrusted;
+    }
+
     /**
      * Probes the kill switch, stock identity and Auxio target away from host callbacks.
      *
@@ -96,20 +106,33 @@ final class BridgeEnvironment {
         }
         if (!refreshPending.compareAndSet(false, true)) {
             RuntimeState current = state.get();
-            if (completion != null && current.known) {
-                completion.accept(current.identityTrusted);
-            }
+            complete(completion, current.known && current.identityTrusted);
             return;
         }
-        probeExecutor.execute(
-                () -> {
-                    RuntimeState previous = state.get();
-                    RuntimeState updated = probe(app);
-                    state.set(updated);
-                    refreshPending.set(false);
-                    logTransition(previous, updated);
-                    if (completion != null) completion.accept(updated.identityTrusted);
-                });
+        try {
+            probeExecutor.execute(
+                    () -> {
+                        boolean trusted = false;
+                        try {
+                            RuntimeState previous = state.get();
+                            RuntimeState updated = probe(app);
+                            state.set(updated);
+                            trusted = updated.identityTrusted;
+                            logTransition(previous, updated);
+                        } catch (Throwable error) {
+                            state.set(RuntimeState.unknown());
+                            log.log("bridge readiness probe failed; stock path retained", error);
+                        } finally {
+                            refreshPending.set(false);
+                            complete(completion, trusted);
+                        }
+                    });
+        } catch (RuntimeException error) {
+            state.set(RuntimeState.unknown());
+            refreshPending.set(false);
+            log.log("bridge readiness probe could not be scheduled; stock path retained", error);
+            complete(completion, false);
+        }
     }
 
     private void refreshIfNeeded(Context value, RuntimeState current) {
@@ -125,7 +148,13 @@ final class BridgeEnvironment {
         IdentityResult identity = queryStockIdentity(value);
         boolean targetReady = identity.trusted && queryTargetReady(value.getPackageManager());
         return new RuntimeState(
-                true, disabled, identity.trusted, targetReady, identity.versionCode, checkedAtMs);
+                true,
+                disabled,
+                identity.trusted,
+                identity.privateSurfaceTrusted,
+                targetReady,
+                identity.versionCode,
+                checkedAtMs);
     }
 
     private IdentityResult queryStockIdentity(Context value) {
@@ -136,7 +165,7 @@ final class BridgeEnvironment {
                                     BridgeContract.STOCK_PACKAGE,
                                     PackageManager.GET_SIGNING_CERTIFICATES);
             if (info.applicationInfo == null || info.applicationInfo.uid != Process.SYSTEM_UID) {
-                return new IdentityResult(false, info.getLongVersionCode());
+                return new IdentityResult(false, false, info.getLongVersionCode());
             }
 
             long versionCode = info.getLongVersionCode();
@@ -147,15 +176,44 @@ final class BridgeEnvironment {
                             : (signingInfo.hasMultipleSigners()
                                     ? signingInfo.getApkContentsSigners()
                                     : signingInfo.getSigningCertificateHistory());
+            String expectedCertificate = normalisedDigest(BuildConfig.STOCK_CERT_SHA256);
+            if (expectedCertificate.isEmpty()) {
+                return new IdentityResult(false, false, versionCode);
+            }
             for (Signature signature : signatures) {
-                if (BuildConfig.STOCK_CERT_SHA256.equals(sha256(signature.toByteArray()))) {
-                    return new IdentityResult(true, versionCode);
+                String actualCertificate = sha256(signature.toByteArray());
+                if (!actualCertificate.isEmpty()
+                        && expectedCertificate.equals(actualCertificate)) {
+                    String expectedApk =
+                            normalisedDigest(BuildConfig.KNOWN_TESTED_STOCK_APK_SHA256);
+                    String actualApk = cachedApkDigest(info.applicationInfo.sourceDir);
+                    boolean privateSurfaceTrusted =
+                            !expectedApk.isEmpty() && expectedApk.equals(actualApk);
+                    return new IdentityResult(true, privateSurfaceTrusted, versionCode);
                 }
             }
         } catch (PackageManager.NameNotFoundException | RuntimeException error) {
             log.log("stock identity query unavailable; bridge remains inactive", error);
         }
-        return new IdentityResult(false, 0L);
+        return new IdentityResult(false, false, 0L);
+    }
+
+    private String cachedApkDigest(String sourceDir) {
+        if (sourceDir == null || sourceDir.isEmpty()) return "";
+        File apk = new File(sourceDir);
+        String key =
+                sourceDir
+                        + '\u0000'
+                        + apk.length()
+                        + '\u0000'
+                        + apk.lastModified();
+        if (key.equals(cachedApkDigestKey)) return cachedApkDigest;
+        String digest = sha256(apk);
+        if (!digest.isEmpty()) {
+            cachedApkDigest = digest;
+            cachedApkDigestKey = key;
+        }
+        return digest;
     }
 
     private boolean queryTargetReady(PackageManager manager) {
@@ -183,6 +241,8 @@ final class BridgeEnvironment {
 
     private static boolean isDisabled() {
         try {
+            // Intentional on API 29: the UID-1000 host must read the documented shared-storage
+            // kill switch without depending on app-scoped storage owned by either APK.
             File shared = Environment.getExternalStorageDirectory();
             return new File(shared, "Auxio-TS/disable-lsposed-bridge").isFile();
         } catch (RuntimeException error) {
@@ -209,7 +269,15 @@ final class BridgeEnvironment {
                             + updated.versionCode
                             + " ("
                             + versionStatus
-                            + "). Exact hook surfaces are capability-probed at runtime",
+                            + "). Public hook surfaces are capability-probed at runtime",
+                    null);
+        }
+        if (!previous.known
+                || previous.privateSurfaceTrusted != updated.privateSurfaceTrusted) {
+            log.log(
+                    updated.privateSurfaceTrusted
+                            ? "captured stock APK fingerprint verified; private presenter hooks eligible"
+                            : "stock APK fingerprint is not the captured build; private presenter hooks disabled",
                     null);
         }
         if (!previous.known || previous.disabled != updated.disabled) {
@@ -231,22 +299,56 @@ final class BridgeEnvironment {
     private static String sha256(byte[] value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(value);
-            StringBuilder builder = new StringBuilder(digest.length * 2);
-            for (byte item : digest) {
-                builder.append(String.format(Locale.ROOT, "%02X", item & 0xff));
-            }
-            return builder.toString();
+            return hex(digest);
         } catch (Exception error) {
             return "";
         }
     }
 
+    private static String sha256(File value) {
+        try (FileInputStream input = new FileInputStream(value)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+            return hex(digest.digest());
+        } catch (Exception error) {
+            return "";
+        }
+    }
+
+    private static String hex(byte[] value) {
+        StringBuilder builder = new StringBuilder(value.length * 2);
+        for (byte item : value) {
+            builder.append(String.format(Locale.ROOT, "%02X", item & 0xff));
+        }
+        return builder.toString();
+    }
+
+    private static String normalisedDigest(String value) {
+        if (value == null) return "";
+        return value.replace(":", "").trim().toUpperCase(Locale.ROOT);
+    }
+
+    private void complete(Consumer<Boolean> completion, boolean trusted) {
+        if (completion == null) return;
+        try {
+            completion.accept(trusted);
+        } catch (RuntimeException error) {
+            log.log("bridge readiness completion failed safely", error);
+        }
+    }
+
     private static final class IdentityResult {
         final boolean trusted;
+        final boolean privateSurfaceTrusted;
         final long versionCode;
 
-        IdentityResult(boolean trusted, long versionCode) {
+        IdentityResult(boolean trusted, boolean privateSurfaceTrusted, long versionCode) {
             this.trusted = trusted;
+            this.privateSurfaceTrusted = privateSurfaceTrusted;
             this.versionCode = versionCode;
         }
     }
@@ -255,6 +357,7 @@ final class BridgeEnvironment {
         final boolean known;
         final boolean disabled;
         final boolean identityTrusted;
+        final boolean privateSurfaceTrusted;
         final boolean targetReady;
         final long versionCode;
         final long checkedAtMs;
@@ -263,19 +366,21 @@ final class BridgeEnvironment {
                 boolean known,
                 boolean disabled,
                 boolean identityTrusted,
+                boolean privateSurfaceTrusted,
                 boolean targetReady,
                 long versionCode,
                 long checkedAtMs) {
             this.known = known;
             this.disabled = disabled;
             this.identityTrusted = identityTrusted;
+            this.privateSurfaceTrusted = privateSurfaceTrusted;
             this.targetReady = targetReady;
             this.versionCode = versionCode;
             this.checkedAtMs = checkedAtMs;
         }
 
         static RuntimeState unknown() {
-            return new RuntimeState(false, false, false, false, 0L, 0L);
+            return new RuntimeState(false, false, false, false, false, 0L, 0L);
         }
 
         boolean canBridge() {

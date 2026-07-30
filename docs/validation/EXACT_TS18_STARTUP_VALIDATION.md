@@ -24,9 +24,11 @@ This procedure assumes the operator has read and is applying:
 - App-facing removable storage: `/storage/usbdisk0` and `/storage/usbdisk1`
 
 STOP if the build, board, panel, launcher package, test asset/commit, package-signing lane, playback
-authority, storage identities or rollback path cannot be confirmed. The supported integration is
-the signed `com.tw.media` APK plus the separately signed, single-scope LSPosed addon. The retired
-`com.tw.music` Magisk overlay must not be present.
+authority, storage identities or rollback path cannot be confirmed. **Observed — Directly reusable
+requirement:** the signed `com.tw.media` APK is the baseline installation. **Requires TS18
+validation — Requires TS18 runtime validation:** add the separately signed, single-scope LSPosed
+addon only when the in-app path is insufficient. The retired `com.tw.music` Magisk overlay must not
+be present.
 
 ## Common prerequisites
 

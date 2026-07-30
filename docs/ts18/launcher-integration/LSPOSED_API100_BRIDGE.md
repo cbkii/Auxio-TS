@@ -6,6 +6,11 @@ The bridge keeps the genuine Topway `com.tw.music` package installed, platform-s
 
 It does **not** copy or spoof the Topway platform key. It does **not** change Package Manager signatures, shared UID records, `packages.xml`, `system_server`, MCU/CAN state, firmware or protected package files.
 
+This is an explicit narrow execution-context exception to the normal prohibition on privileged-UID
+strategies. The exception permits the optional addon to execute only inside the already-installed,
+signer-verified stock process; it does not grant Auxio UID 1000, create another UID-1000 package or
+weaken the stock identity checks.
+
 This signed addon replaces the retired Auxio-TS exact-package Magisk overlay release lane. The
 normal player remains `com.tw.media`; the genuine platform-signed stock `com.tw.music` remains
 installed and owns its existing UID 1000 authority.
@@ -17,6 +22,7 @@ installed and owns its existing UID 1000 authority.
 - **Observed:** Auxio-TS `com.tw.media` exports `com.tw.music.MusicActivity` and the stock-compatible `com.tw.music.MusicService` MediaBrowser wrapper.
 - **Inferred:** code running inside the genuine stock process can preserve the sender process identity expected by Topway/DoFun while controlling Auxio through its public Android MediaSession.
 - **Requires device validation:** fixed DoFun widget launch, control, metadata, progress, ACC sleep/wake, cold boot and launcher restart behaviour on the exact TS18 build and on each previously unseen stock APK version.
+- **Porting decision — Requires TS18 runtime validation:** keep the addon optional and use it only after the in-app path is insufficient on the exact device.
 
 ## Safety and compatibility model
 
@@ -32,7 +38,7 @@ Package Manager or `com.tw.service*`.
 
 It refuses to bridge unless the loaded process is the main `com.tw.music` process, the installed package is UID 1000 and its signer matches the captured Topway platform certificate. These are the identity authorities.
 
-Stock version code 118 remains recorded as the **known device-tested reference**, but version code is no longer a hard enablement gate. Topway may publish another legitimate build under the same platform identity. For every loaded build, the module capability-probes the exact observed classes and method signatures independently. A missing or changed surface is not guessed and is not hooked; that path remains stock-controlled.
+Stock version code 118 remains recorded as the **known device-tested reference**, but version code is no longer a hard enablement gate. Topway may publish another legitimate build under the same platform identity. For every loaded build, the module capability-probes the public activity, service and receiver surfaces independently. Private obfuscated presenter hooks are additionally pinned to captured stock APK SHA-256 `4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518`; an unseen APK retains the public paths but keeps those suppression hooks disabled. A missing or changed surface is not guessed and remains stock-controlled.
 
 Before forwarding, the bridge verifies that the exact Auxio activity and MediaBrowser service are enabled, exported and belong to the normal non-system `com.tw.media` package.
 
