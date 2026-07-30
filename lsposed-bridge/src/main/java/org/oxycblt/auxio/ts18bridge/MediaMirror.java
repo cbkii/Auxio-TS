@@ -150,7 +150,8 @@ final class MediaMirror {
     void pauseUntilRetried() {
         handler.post(
                 () -> {
-                    handler.removeCallbacksAndMessages(null);
+                    handler.removeCallbacks(reconnect);
+                    handler.removeCallbacks(progressTick);
                     disconnectBrowser();
                     clearController();
                     started.set(false);

@@ -53,6 +53,10 @@ final class BridgeEnvironment {
             new AtomicReference<>(RuntimeState.unknown());
     private final AtomicReference<WeakReference<Context>> context =
             new AtomicReference<>(new WeakReference<>(null));
+    // Accessed only by the single probe executor. The loaded stock APK cannot change in-place
+    // without a process restart, but file metadata is retained in the key as a fail-safe.
+    private String cachedApkDigestKey = "";
+    private String cachedApkDigest = "";
 
     BridgeEnvironment(LogSink log) {
         this.log = log;
@@ -182,10 +186,7 @@ final class BridgeEnvironment {
                         && expectedCertificate.equals(actualCertificate)) {
                     String expectedApk =
                             normalisedDigest(BuildConfig.KNOWN_TESTED_STOCK_APK_SHA256);
-                    String actualApk =
-                            info.applicationInfo.sourceDir == null
-                                    ? ""
-                                    : sha256(new File(info.applicationInfo.sourceDir));
+                    String actualApk = cachedApkDigest(info.applicationInfo.sourceDir);
                     boolean privateSurfaceTrusted =
                             !expectedApk.isEmpty() && expectedApk.equals(actualApk);
                     return new IdentityResult(true, privateSurfaceTrusted, versionCode);
@@ -195,6 +196,24 @@ final class BridgeEnvironment {
             log.log("stock identity query unavailable; bridge remains inactive", error);
         }
         return new IdentityResult(false, false, 0L);
+    }
+
+    private String cachedApkDigest(String sourceDir) {
+        if (sourceDir == null || sourceDir.isEmpty()) return "";
+        File apk = new File(sourceDir);
+        String key =
+                sourceDir
+                        + '\u0000'
+                        + apk.length()
+                        + '\u0000'
+                        + apk.lastModified();
+        if (key.equals(cachedApkDigestKey)) return cachedApkDigest;
+        String digest = sha256(apk);
+        if (!digest.isEmpty()) {
+            cachedApkDigest = digest;
+            cachedApkDigestKey = key;
+        }
+        return digest;
     }
 
     private boolean queryTargetReady(PackageManager manager) {

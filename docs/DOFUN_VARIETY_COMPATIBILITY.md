@@ -215,7 +215,8 @@ CI should protect:
 
 - the retired standard variant remains non-distributable;
 - the internal Topway exact fixture still compiles and satisfies the historical contract;
-- the Topway alternate release variant is installed with the exact package ID `com.tw.media`;
+- the published `topwayTwMedia` release variant is installed with the exact package ID
+  `com.tw.media`, distinct from the internal `topwayTwMusic` fixture;
 - the LSPosed addon declares API 100, `staticScope=true`, and only `com.tw.music`;
 - `com.tw.music.MusicActivity` alias exists in Topway-compatible variants;
 - `MediaBrowserService` remains declared/exported as intended;

@@ -238,6 +238,9 @@ if ((ERRORS == 0)); then
     'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/BridgeEnvironment.java' \
     'Executors.newSingleThreadExecutor'
   require_source_contains \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/BridgeEnvironment.java' \
+    'cachedApkDigestKey'
+  require_source_contains \
     'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
     'environment.refreshAsync('
   require_source_contains \
@@ -255,6 +258,11 @@ if ((ERRORS == 0)); then
   require_source_contains \
     'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/MediaMirror.java' \
     'handler.post(this::startOrRetryOnHandler)'
+  require_source_contains \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/MediaMirror.java' \
+    'handler.removeCallbacks(progressTick)'
+  require_source_contains 'lsposed-bridge/build.gradle' \
+    'releasePackagingTasks'
   require_source_contains 'lsposed-bridge/build.gradle' \
     'LSPosed release tasks require all releaseStoreFile/releaseStorePassword/'
 

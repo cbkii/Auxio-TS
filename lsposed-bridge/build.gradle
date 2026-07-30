@@ -92,8 +92,15 @@ dependencies {
 }
 
 gradle.taskGraph.whenReady { graph ->
+    def releasePackagingTasks = [
+        "assemblerelease",
+        "bundlerelease",
+        "packagerelease",
+        "signreleasebundle",
+    ] as Set
     def releaseTasks = graph.allTasks.findAll { task ->
-        task.project == project && task.name.toLowerCase(Locale.ROOT).contains("release")
+        task.project == project &&
+                releasePackagingTasks.contains(task.name.toLowerCase(Locale.ROOT))
     }
     if (!releaseTasks.isEmpty() && !hasReleaseSigning) {
         throw new GradleException(
