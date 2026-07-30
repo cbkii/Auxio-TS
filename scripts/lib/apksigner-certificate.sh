@@ -5,7 +5,7 @@
 extract_apksigner_certificate_sha256() {
   local report=${1-}
   local line digest existing seen
-  local pattern='^[[:space:]]*Signer[[:space:]]+(#[0-9]+|\([^)]*\))[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*([0-9A-Fa-f:]+)[[:space:]]*$'
+  local pattern='^[[:space:]]*Signer[[:space:]]+(#[0-9]+|\([^)]*\))[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*([[:graph:]]*)[[:space:]]*$'
   local unique_digests=()
 
   while IFS= read -r line; do
