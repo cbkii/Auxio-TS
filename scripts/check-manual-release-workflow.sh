@@ -9,20 +9,45 @@ log() { printf '[INFO] %s\n' "$*" >&2; }
 workflow='.github/workflows/manual-release.yml'
 bridge_checker='scripts/check-lsposed-bridge-contracts.sh'
 app_checker='scripts/check-app-release-contracts.sh'
+signer_parser='scripts/lib/apksigner-certificate.sh'
 
 [[ -f "${workflow}" ]] || fail "Missing ${workflow}"
 [[ -f "${bridge_checker}" ]] || fail "Missing ${bridge_checker}"
 [[ -f "${app_checker}" ]] || fail "Missing ${app_checker}"
+[[ -f "${signer_parser}" ]] || fail "Missing ${signer_parser}"
 
 ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
-bash -n "${bridge_checker}" "${app_checker}"
+bash -n "${bridge_checker}" "${app_checker}" "${signer_parser}"
 
 if command -v actionlint >/dev/null 2>&1; then actionlint "${workflow}"; else log 'actionlint unavailable; skipped'; fi
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck "${bridge_checker}" "${app_checker}"
+    shellcheck "${bridge_checker}" "${app_checker}" "${signer_parser}"
 else
     log 'shellcheck unavailable; skipped'
 fi
+
+# shellcheck source=scripts/lib/apksigner-certificate.sh
+source "${signer_parser}"
+expected='0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
+legacy_report="Signer #1 certificate SHA-256 digest: ${expected}"
+range_report='Signer (minSdkVersion=24, maxSdkVersion=32) certificate SHA-256 digest: 01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef'
+[[ "$(extract_apksigner_certificate_sha256 "${legacy_report}")" == "${expected}" ]] ||
+  fail 'Legacy apksigner signer output is not parsed correctly.'
+[[ "$(extract_apksigner_certificate_sha256 "${range_report}")" == "${expected}" ]] ||
+  fail 'SDK-range apksigner signer output is not parsed correctly.'
+if extract_apksigner_certificate_sha256 "${legacy_report}"$'\n''Signer #2 certificate SHA-256 digest: F123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDE0' \
+  >/dev/null 2>&1; then
+  fail 'Multiple distinct signer digests must fail closed.'
+fi
+if extract_apksigner_certificate_sha256 'Signer #1 certificate SHA-256 digest: not-a-digest' \
+  >/dev/null 2>&1; then
+  fail 'Malformed signer output must fail closed.'
+fi
+if extract_apksigner_certificate_sha256 "${legacy_report}"$'\n''Signer #2 certificate SHA-256 digest: not-a-digest' \
+  >/dev/null 2>&1; then
+  fail 'A malformed signer record must fail even when another signer digest is valid.'
+fi
+log 'apksigner output parser self-tests passed'
 
 python3 - <<'PY'
 from pathlib import Path
@@ -126,5 +151,12 @@ if 'EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}' not in text
     raise SystemExit('Existing-release state is not routed through the shell environment')
 print('OK manual-release maintained asset invariants')
 PY
+
+for checker in "${app_checker}" "${bridge_checker}"; do
+  grep -Fq 'extract_apksigner_certificate_sha256' "${checker}" ||
+    fail "${checker} does not use the shared signer parser."
+  grep -Fq 'verify --verbose --print-certs' "${checker}" ||
+    fail "${checker} does not request apksigner certificate output."
+done
 
 log 'manual release workflow and LSPosed addon checks passed'

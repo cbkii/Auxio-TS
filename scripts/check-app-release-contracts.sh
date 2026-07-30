@@ -13,6 +13,11 @@ fail() {
   exit 1
 }
 
+signer_parser="${repo_root}/scripts/lib/apksigner-certificate.sh"
+[[ -f "$signer_parser" ]] || fail "Missing apksigner certificate parser: $signer_parser"
+# shellcheck source=scripts/lib/apksigner-certificate.sh
+source "$signer_parser"
+
 apk=''
 version_name=''
 version_code=''
@@ -67,13 +72,19 @@ expected_signer=$(tr -d '[:space:]:' <<<"$expected_signer" | tr '[:lower:]' '[:u
 [[ -f "$metadata_file" ]] || fail "Metadata sidecar not found: ${metadata_file:-<unset>}"
 
 sdk_root=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
-apkanalyzer=${sdk_root:+${sdk_root}/cmdline-tools/latest/bin/apkanalyzer}
+apkanalyzer=${APKANALYZER_BIN:-}
+if [[ -z "$apkanalyzer" || ! -x "$apkanalyzer" ]]; then
+  apkanalyzer=${sdk_root:+${sdk_root}/cmdline-tools/latest/bin/apkanalyzer}
+fi
 if [[ -z "$apkanalyzer" || ! -x "$apkanalyzer" ]]; then
   apkanalyzer=$(command -v apkanalyzer || true)
 fi
-apksigner=${sdk_root:+$(find "$sdk_root/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)}
+apksigner=${APKSIGNER_BIN:-}
 if [[ -z "$apksigner" || ! -x "$apksigner" ]]; then
   apksigner=$(command -v apksigner || true)
+fi
+if [[ -z "$apksigner" || ! -x "$apksigner" ]]; then
+  apksigner=${sdk_root:+$(find "$sdk_root/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n1)}
 fi
 [[ -n "$apkanalyzer" && -x "$apkanalyzer" ]] || fail 'apkanalyzer was not found.'
 [[ -n "$apksigner" && -x "$apksigner" ]] || fail 'apksigner was not found.'
@@ -109,14 +120,11 @@ if grep -Eq 'android:debuggable=(true|"true")' <<<"$manifest"; then
   fail 'Primary release APK must not be debuggable.'
 fi
 
-signing_report=$("$apksigner" verify --verbose --print-certs "$apk") ||
+signing_report=$("$apksigner" verify --verbose --print-certs "$apk" 2>&1) ||
   fail 'Primary release APK is not validly signed.'
-actual_signer=$(
-  sed -n -E 's/^Signer #1 certificate SHA-256 digest: (.*)$/\1/p' <<<"$signing_report" |
-    head -n1 |
-    tr -d '[:space:]:' |
-    tr '[:lower:]' '[:upper:]'
-)
+if ! actual_signer=$(extract_apksigner_certificate_sha256 "$signing_report"); then
+  fail 'Unable to derive exactly one signer certificate SHA-256 digest from apksigner output.'
+fi
 [[ "$actual_signer" == "$expected_signer" ]] ||
   fail "Release signer mismatch: expected $expected_signer, got ${actual_signer:-<empty>}."
 
@@ -130,8 +138,12 @@ for expected_metadata in \
   grep -Fxq -- "$expected_metadata" "$metadata_file" ||
     fail "Release metadata sidecar is missing: $expected_metadata"
 done
-grep -Fqi -- "$actual_signer" "$metadata_file" ||
-  fail 'Release metadata sidecar does not contain the verified signer fingerprint.'
+metadata_report=$(cat -- "$metadata_file")
+if ! metadata_signer=$(extract_apksigner_certificate_sha256 "$metadata_report"); then
+  fail 'Release metadata sidecar does not contain exactly one valid signer fingerprint.'
+fi
+[[ "$metadata_signer" == "$actual_signer" ]] ||
+  fail 'Release metadata sidecar signer does not match the verified APK signer.'
 
 checksum_dir=$(cd -- "$(dirname -- "$sha256_file")" && pwd -P)
 checksum_name=$(basename -- "$sha256_file")

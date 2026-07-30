@@ -5,6 +5,13 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+SIGNER_PARSER="${REPO_ROOT}/scripts/lib/apksigner-certificate.sh"
+[[ -f $SIGNER_PARSER ]] || {
+  printf '[ERROR] Missing apksigner certificate parser: %s\n' "$SIGNER_PARSER" >&2
+  exit 1
+}
+# shellcheck source=scripts/lib/apksigner-certificate.sh
+source "$SIGNER_PARSER"
 
 VARIANT=debug
 APK_PATH=''
@@ -77,6 +84,10 @@ require_source_absent() {
 }
 
 find_apkanalyzer() {
+  if [[ -n ${APKANALYZER_BIN:-} && -x ${APKANALYZER_BIN} ]]; then
+    printf '%s\n' "$APKANALYZER_BIN"
+    return 0
+  fi
   if command -v apkanalyzer >/dev/null 2>&1; then
     command -v apkanalyzer
     return 0
@@ -88,6 +99,10 @@ find_apkanalyzer() {
 }
 
 find_apksigner() {
+  if [[ -n ${APKSIGNER_BIN:-} && -x ${APKSIGNER_BIN} ]]; then
+    printf '%s\n' "$APKSIGNER_BIN"
+    return 0
+  fi
   if command -v apksigner >/dev/null 2>&1; then
     command -v apksigner
     return 0
@@ -328,19 +343,13 @@ if ((ERRORS == 0)); then
       fi
       expected_signer=${EXPECTED_SIGNER_SHA256:-}
       expected_signer=${expected_signer//:/}
-      expected_signer=${expected_signer^^}
-      if [[ -z $expected_signer ]]; then
-        error 'EXPECTED_SIGNER_SHA256 is required for release bridge validation'
-      else
-        actual_signer=$(
-          sed -n -E 's/^Signer #[0-9]+ certificate SHA-256 digest: (.*)$/\1/p' \
-            <<<"$signing_report" | head -n 1
-        )
-        actual_signer=${actual_signer//:/}
-        actual_signer=${actual_signer^^}
-        if [[ -z $actual_signer || $actual_signer != "$expected_signer" ]]; then
-          error 'Release bridge signer does not match the configured release key'
-        fi
+      expected_signer=$(printf '%s' "$expected_signer" | tr '[:lower:]' '[:upper:]')
+      if [[ ! $expected_signer =~ ^[0-9A-F]{64}$ ]]; then
+        error 'EXPECTED_SIGNER_SHA256 must be a 64-character SHA-256 fingerprint'
+      elif ! actual_signer=$(extract_apksigner_certificate_sha256 "$signing_report"); then
+        error 'Unable to derive exactly one release bridge signer certificate SHA-256 digest'
+      elif [[ $actual_signer != "$expected_signer" ]]; then
+        error 'Release bridge signer does not match the configured release key'
       fi
     fi
   fi
