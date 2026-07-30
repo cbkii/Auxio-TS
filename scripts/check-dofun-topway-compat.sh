@@ -417,8 +417,8 @@ if ! bash ./scripts/check-topway-manifest-components.sh; then
 fi
 
 printf '\nChecking built APK presence when present...\n'
-mode=full
-req_topway_music_release=1
+mode=supported-release
+req_topway_music_release=0
 req_topway_media_release=1
 if [[ -n ${SELECTED_VARIANTS:-} ]]; then
   mode=selective

@@ -54,6 +54,7 @@ scope_script=scripts/ci-scope.sh
 gradle_wrapper=scripts/ci-gradle.sh
 built_apk_check=scripts/check-built-topway-apks.sh
 release_diagnostics_check=scripts/check-release-diagnostics-boundary.sh
+compatibility_check=scripts/check-dofun-topway-compat.sh
 mode_file=app/src/main/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationMode.kt
 mode_test=app/src/test/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationModeTest.kt
 
@@ -91,6 +92,8 @@ require_absent "$android_workflow" 'apkanalyzer' 'workflow YAML does not duplica
 require_contains "$built_apk_check" 'bash ./scripts/check-headunit-compat-safety.sh' 'binary output check reuses canonical head-unit safety guardrail'
 require_contains "$built_apk_check" 'com.tw.media.debug' 'primary APK application id is checked in repository script'
 require_contains "$built_apk_check" 'com.tw.music.debug' 'exact-package APK application id is checked in repository script'
+require_contains "$compatibility_check" 'req_topway_music_release=0' 'compatibility checks do not require the retired exact-package release'
+require_contains "$compatibility_check" 'topway_twmusic_magisk) req_topway_music_release=1' 'explicit internal exact-package release validation remains available'
 
 require_contains "$quality_workflow" 'app_tests: ${{ steps.scope.outputs.app_tests }}' 'quality workflow exports focused app-test scope'
 require_contains "$quality_workflow" 'musikr_tests: ${{ steps.scope.outputs.musikr_tests }}' 'quality workflow exports focused Musikr-test scope'
