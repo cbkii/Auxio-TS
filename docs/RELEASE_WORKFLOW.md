@@ -18,12 +18,22 @@ The workflow fails closed when signing material is missing. Checkout credentials
 | Topway `twmedia` APK | `Auxio-TS-vX.Y.Z-topway-twmedia-release.apk` | `com.tw.media` | Primary DoFun alternate-entry lane; package state/signing and TS18 runtime still require validation |
 | LSPosed API 100 bridge addon | `Auxio-TS-vX.Y.Z-lsposed-api100-bridge.apk` | `org.oxycblt.auxio.ts18bridge` | Keep genuine stock `com.tw.music`; enable only its static/recommended `com.tw.music` scope |
 
-When `include_debug_apks` is enabled, the workflow also uploads the following short-lived,
-14-day workflow artifacts:
-`Auxio-TS-vX.Y.Z-topway-twmedia-debug.apk` and
-`Auxio-TS-vX.Y.Z-lsposed-api100-bridge-debug.apk`. These are separately labelled diagnostic builds
-signed with the Android debug key. They are never GitHub Release assets, are for validation only,
-and do not replace the signed release pair.
+Each selected maintained lane also builds its separately labelled debug companion:
+
+- `Auxio-TS-vX.Y.Z-topway-twmedia-debug.apk`
+- `Auxio-TS-vX.Y.Z-lsposed-api100-bridge-debug.apk`
+
+The required `debug_variant_destination` choice controls where these debug APKs and their `.sha256`
+and `.metadata.txt` sidecars are placed:
+
+| Value | Result |
+| --- | --- |
+| `workflow_artifacts` | Default. Upload debug companions only as short-lived, 14-day GitHub Actions artifacts. They are not added to the GitHub Release. |
+| `release_assets` | Publish the debug companions and sidecars as explicitly selected GitHub Release assets. They are not also uploaded as a separate debug workflow artifact. |
+
+Debug companions are signed with the Android debug key, use separate debug application IDs, and are
+for diagnostics and validation only. Publishing them does not make them the recommended install,
+replace the signed release pair, or prove release-runtime behaviour on the TS18.
 
 The former `org.oxycblt.auxio` standard APK and exact-package Auxio Magisk overlay are retired. A
 raw `com.tw.music` Auxio APK is deliberately never published.
@@ -69,4 +79,8 @@ internal contract build only; do not publish its APK or package it as a Magisk o
 
 ## Invocation
 
-Run **Manual Release** from `dev`. Normally create a draft first. Leave `version_tag` blank to auto-increment patch, or provide `vMAJOR.MINOR.PATCH`. Existing releases can append or explicitly replace selected rebuilt assets. Replacement occurs only after new assets are staged and validated.
+Run **Manual Release** from `dev`. Normally create a draft first. Leave `version_tag` blank to
+auto-increment patch, or provide `vMAJOR.MINOR.PATCH`. Select `workflow_artifacts` to keep debug
+companions in the workflow only, or explicitly select `release_assets` to add them to the GitHub
+Release. Existing releases can append or explicitly replace selected rebuilt assets. Replacement
+occurs only after new assets are staged and validated.

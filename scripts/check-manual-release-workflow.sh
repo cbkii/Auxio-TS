@@ -51,25 +51,51 @@ log 'apksigner output parser self-tests passed'
 
 python3 - <<'PY'
 from pathlib import Path
+import re
+
 text = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
-required = {
-    'include_topway_twmedia_apk': 'default: true',
-    'include_lsposed_bridge_apk': 'default: true',
-    'include_debug_apks': 'default: true',
-}
-for key, default in required.items():
+
+
+def input_block(key: str) -> str:
     marker = f'      {key}:\n'
     pos = text.find(marker)
     if pos < 0:
         raise SystemExit(f'Missing workflow_dispatch input: {key}')
-    next_candidates = [
-        text.find('\n      include_', pos + len(marker)),
-        text.find('\n      replace_existing_assets:', pos + len(marker)),
-        text.find('\n\npermissions:', pos + len(marker)),
-    ]
-    next_pos = min([candidate for candidate in next_candidates if candidate != -1] or [len(text)])
-    if default not in text[pos:next_pos]:
-        raise SystemExit(f'{key} does not contain expected {default}')
+    content_start = pos + len(marker)
+    next_match = re.search(
+        r'^      [A-Za-z0-9_]+:\n',
+        text[content_start:],
+        flags=re.MULTILINE,
+    )
+    next_input = content_start + next_match.start() if next_match else -1
+    permissions = text.find('\n\npermissions:', content_start)
+    candidates = [value for value in (next_input, permissions) if value >= 0]
+    end = min(candidates) if candidates else len(text)
+    return text[pos:end]
+
+
+required_inputs = {
+    'include_topway_twmedia_apk': ('required: true', 'default: true', 'type: boolean'),
+    'include_lsposed_bridge_apk': ('required: true', 'default: true', 'type: boolean'),
+    'debug_variant_destination': (
+        'required: true',
+        'default: workflow_artifacts',
+        'type: choice',
+    ),
+}
+for key, required_tokens in required_inputs.items():
+    block = input_block(key)
+    for token in required_tokens:
+        if token not in block:
+            raise SystemExit(f'{key} does not contain expected {token}')
+
+debug_block = input_block('debug_variant_destination')
+debug_options = re.findall(r'^          - ([a-z_]+)$', debug_block, flags=re.MULTILINE)
+if debug_options != ['workflow_artifacts', 'release_assets']:
+    raise SystemExit(
+        'debug_variant_destination must expose exactly workflow_artifacts and release_assets'
+    )
+
 for forbidden in (
     'include_standard_apk',
     'assembleStandardRelease',
@@ -77,11 +103,14 @@ for forbidden in (
     'include_topway_twmusic_magisk',
     'topway_twmusic_magisk)',
     'package-topway-twmusic-magisk-module.sh',
+    'include_debug_apks',
 ):
     if forbidden in text:
         raise SystemExit(f'Retired release token remains: {forbidden}')
 if 'At least one maintained release asset must be selected' not in text:
     raise SystemExit('Missing empty-selection guard')
+if 'Unsupported debug variant destination' not in text:
+    raise SystemExit('Missing fail-closed debug destination validation')
 if 'topway-twmusic-release.apk' not in text or 'Raw topwayTwMusic APK asset is forbidden' not in text:
     raise SystemExit('Missing forbidden raw topwayTwMusic APK guard')
 for required_bridge in (
@@ -108,7 +137,9 @@ for artifact_contract in (
     'path: ${{ steps.assets.outputs.debug_artifact_dir }}/*',
     'ASSET_PATHS: ${{ steps.assets.outputs.release_asset_paths }}',
     'ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}',
-    'Debug APKs and sidecars are forbidden on new GitHub Releases.',
+    'DEBUG_DESTINATION: ${{ inputs.debug_variant_destination }}',
+    "if: inputs.debug_variant_destination == 'workflow_artifacts'",
+    'Debug APKs and sidecars are forbidden unless debug_variant_destination=release_assets.',
 ):
     if artifact_contract not in text:
         raise SystemExit(f'Missing release/debug publication boundary: {artifact_contract}')
@@ -128,10 +159,12 @@ for debug_contract in (
     'debug-diagnostics-apk',
     'check-release-diagnostics-boundary.sh "${asset_path}"',
     'Auxio-TS-${{ steps.version.outputs.release_tag }}-debug-companions',
-    'Debug APKs are short-lived workflow artifacts and never GitHub Release assets.',
+    '[[ "${DEBUG_DESTINATION}" == release_assets ]]',
+    'Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.',
+    'Debug APKs were published as explicitly selected GitHub Release assets.',
 ):
     if debug_contract not in text:
-        raise SystemExit(f'Missing separated debug/release contract: {debug_contract}')
+        raise SystemExit(f'Missing selectable debug publication contract: {debug_contract}')
 for suffix in ('.sha256', '.metadata.txt'):
     if suffix not in text:
         raise SystemExit(f'Missing release evidence sidecar: {suffix}')
