@@ -83,7 +83,7 @@ For normal changes, prefer the narrower tasks selected by `scripts/ci-scope.sh` 
 - `Startup Benchmarks`: manual API 29 macrobenchmark or API 35 Baseline Profile generation; defaults to `topwayTwMedia` and requires 15–30 measured iterations.
 - `UI Screenshots`: manual Roborazzi for `topwayTwMedia` or `topwayTwMusic`; defaults to `topwayTwMedia`.
 - `Gradle Optimisation Pilot`: manual configuration-cache and parallel-execution evidence.
-- `Manual Release`: signed `com.tw.media` APK and signed LSPosed API 100 bridge addon.
+- `Manual Release`: signed `com.tw.media` APK and signed LSPosed API 100 bridge addon for the supported installation.
 
 Build/test jobs use `fetch-depth: 1`; scope fetches only the boundary commit. Release keeps full history and tags.
 

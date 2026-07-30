@@ -40,6 +40,26 @@ require_file_not_contains() {
   fi
 }
 
+require_exact_scope() {
+  local file=$1
+  local expected=$2
+  local desc=$3
+  if [[ ! -f "$file" ]]; then
+    fail "missing ${desc}: ${file}"
+    return
+  fi
+  local actual
+  actual="$(
+    sed -e 's/\r$//' -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "$file" |
+      sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  )"
+  if [[ "$actual" == "$expected" ]]; then
+    pass "${desc} is exactly ${expected}"
+  else
+    fail "${desc} must contain only ${expected}: ${file}"
+  fi
+}
+
 find_merged_manifest() {
   local variant=$1
   find app/build/intermediates/merged_manifest app/build/intermediates/merged_manifests \
@@ -258,7 +278,7 @@ require_file_contains .github/workflows/manual-release.yml 'topway-twmusic-relea
 require_file_contains .github/workflows/manual-release.yml 'topway-twmedia-release.apk' 'manual release names Topway media APK'
 require_file_contains .github/workflows/manual-release.yml ':lsposed-bridge:assembleRelease' 'manual release builds LSPosed addon'
 require_file_contains .github/workflows/manual-release.yml 'lsposed-api100-bridge.apk' 'manual release names LSPosed addon'
-require_file_contains lsposed-bridge/src/main/resources/META-INF/xposed/scope.list 'com.tw.music' 'LSPosed addon scopes only stock music'
+require_exact_scope lsposed-bridge/src/main/resources/META-INF/xposed/scope.list 'com.tw.music' 'LSPosed addon scope'
 
 printf '\nChecking generated merged manifests when present...\n'
 manifest_specs=(

@@ -38,6 +38,7 @@ android {
         buildConfigField "String", "TARGET_MEDIA_BROWSER_SERVICE", '"com.tw.music.MusicService"'
         buildConfigField "long", "KNOWN_TESTED_STOCK_VERSION_CODE", "118L"
         buildConfigField "String", "STOCK_CERT_SHA256", '"AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3"'
+        buildConfigField "String", "KNOWN_TESTED_STOCK_APK_SHA256", '"4F5495E270A7C86BAB232E2B7EE2ECD2D71F3450F6F20ED5F36FEAA4229C1518"'
     }
 
     if (hasReleaseSigning) {

@@ -59,6 +59,8 @@ for required_bridge in (
     'signed-lsposed-api100-addon',
     'ORG_GRADLE_PROJECT_bridgeVersionName',
     'ORG_GRADLE_PROJECT_bridgeVersionCode',
+    'EXPECTED_SIGNER_SHA256="${expected_release_signer}"',
+    'keytool}" -exportcert',
 ):
     if required_bridge not in text:
         raise SystemExit(f'Missing LSPosed release contract: {required_bridge}')

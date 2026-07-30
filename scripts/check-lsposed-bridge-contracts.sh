@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
 # Failure policy is explicit. This script validates a completed APK and never modifies the device.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 VARIANT=debug
 APK_PATH=''
@@ -32,11 +36,11 @@ done
 case "$VARIANT" in
   debug)
     EXPECTED_APP_ID='org.oxycblt.auxio.ts18bridge.debug'
-    : "${APK_PATH:=lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk}"
+    : "${APK_PATH:=${REPO_ROOT}/lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk}"
     ;;
   release)
     EXPECTED_APP_ID='org.oxycblt.auxio.ts18bridge'
-    : "${APK_PATH:=lsposed-bridge/build/outputs/apk/release/lsposed-bridge-release.apk}"
+    : "${APK_PATH:=${REPO_ROOT}/lsposed-bridge/build/outputs/apk/release/lsposed-bridge-release.apk}"
     ;;
   *)
     printf '[ERROR] Unsupported variant: %s\n' "$VARIANT" >&2
@@ -61,12 +65,12 @@ require_command() {
 }
 
 require_source_contains() {
-  local path=$1 pattern=$2
+  local path="${REPO_ROOT}/$1" pattern=$2
   grep -Fq -- "$pattern" "$path" || error "Source contract missing '$pattern' in $path"
 }
 
 require_source_absent() {
-  local path=$1 pattern=$2
+  local path="${REPO_ROOT}/$1" pattern=$2
   if grep -Fq -- "$pattern" "$path"; then
     error "Forbidden source contract '$pattern' remains in $path"
   fi
@@ -239,6 +243,12 @@ if ((ERRORS == 0)); then
   require_source_contains \
     'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
     '.getMainExecutor()'
+  require_source_contains \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
+    'environment.canUseObservedPrivateHooks()'
+  require_source_contains \
+    'lsposed-bridge/build.gradle' \
+    'KNOWN_TESTED_STOCK_APK_SHA256'
   require_source_absent \
     'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
     'callback.returnAndSkip(Service.START_NOT_STICKY)'
@@ -307,6 +317,22 @@ if ((ERRORS == 0)); then
       }
       if grep -Fq 'CN=Android Debug' <<<"$signing_report"; then
         error 'Release bridge APK must not use the Android debug certificate'
+      fi
+      expected_signer=${EXPECTED_SIGNER_SHA256:-}
+      expected_signer=${expected_signer//:/}
+      expected_signer=${expected_signer^^}
+      if [[ -z $expected_signer ]]; then
+        error 'EXPECTED_SIGNER_SHA256 is required for release bridge validation'
+      else
+        actual_signer=$(
+          sed -n -E 's/^Signer #[0-9]+ certificate SHA-256 digest: (.*)$/\1/p' \
+            <<<"$signing_report" | head -n 1
+        )
+        actual_signer=${actual_signer//:/}
+        actual_signer=${actual_signer^^}
+        if [[ -z $actual_signer || $actual_signer != "$expected_signer" ]]; then
+          error 'Release bridge signer does not match the configured release key'
+        fi
       fi
     fi
   fi

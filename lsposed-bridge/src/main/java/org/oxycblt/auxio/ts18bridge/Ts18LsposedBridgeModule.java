@@ -96,10 +96,32 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
     private void activateVerifiedHooks(Application application, ClassLoader loader) {
         if (!hooksInstalled.compareAndSet(false, true)) return;
         try {
-            installSafely("activity", () -> installActivityHooks(loader));
-            installSafely("service", () -> installServiceHooks(loader));
-            installSafely("receivers", () -> installReceiverHooks(loader));
-            installSafely("presenter", () -> installPresenterHooks(loader));
+            installSafely("activity onCreate", () -> installActivityOnCreateHook(loader));
+            installSafely("activity onNewIntent", () -> installActivityOnNewIntentHook(loader));
+            installSafely("service onCreate", () -> installServiceOnCreateHook(loader));
+            installSafely("service onStartCommand", () -> installServiceOnStartCommandHook(loader));
+            installSafely(
+                    "command receiver",
+                    () ->
+                            hookReceiver(
+                                    loader,
+                                    STOCK_COMMAND_RECEIVER,
+                                    "stock-command-receiver"));
+            installSafely(
+                    "seek receiver",
+                    () -> hookReceiver(loader, STOCK_SEEK_RECEIVER, "stock-seek-receiver"));
+            if (environment.canUseObservedPrivateHooks()) {
+                installSafely("presenter previous", () -> installPresenterMethod(loader, "rb"));
+                installSafely("presenter next", () -> installPresenterMethod(loader, "pb"));
+                installSafely("presenter pause", () -> installPresenterMethod(loader, "ba"));
+                installSafely("presenter play", () -> installPresenterMethod(loader, "fa"));
+                installSafely(
+                        "presenter seek",
+                        () -> installPresenterMethod(loader, "seekTo", int.class));
+            } else {
+                safeLog(
+                        "private presenter hooks skipped because the stock APK fingerprint is not the captured build");
+            }
             captureAndStart(application);
             safeLog(
                     "hook capability-probe pass complete; unmatched stock-version surfaces remain stock-controlled");
@@ -111,9 +133,9 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
     private void installSafely(String group, ThrowingInstall install) {
         try {
             install.run();
-            safeLog("installed " + group + " hook group");
+            safeLog("installed " + group + " hook");
         } catch (Throwable error) {
-            safeLog(group + " hook group unavailable; preserving stock behaviour", error);
+            safeLog(group + " hook unavailable; preserving stock behaviour", error);
         }
     }
 
@@ -144,7 +166,8 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                 });
     }
 
-    private void installActivityHooks(ClassLoader loader) throws ReflectiveOperationException {
+    private void installActivityOnCreateHook(ClassLoader loader)
+            throws ReflectiveOperationException {
         Method onCreate = requiredMethod(loader, STOCK_ACTIVITY, "onCreate", Bundle.class);
         hookAfter(
                 onCreate,
@@ -156,28 +179,28 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                         safeLog("activity onCreate redirect failed open", error);
                     }
                 });
-
-        try {
-            Method onNewIntent = inheritedMethod(loader, STOCK_ACTIVITY, "onNewIntent", Intent.class);
-            hookAfter(
-                    onNewIntent,
-                    callback -> {
-                        try {
-                            Object target = callback.getThis();
-                            if (target instanceof Activity activity
-                                    && STOCK_ACTIVITY.equals(activity.getClass().getName())) {
-                                redirectActivity(activity, "onNewIntent");
-                            }
-                        } catch (Throwable error) {
-                            safeLog("activity onNewIntent redirect failed open", error);
-                        }
-                    });
-        } catch (ReflectiveOperationException error) {
-            safeLog("optional onNewIntent hook unavailable", error);
-        }
     }
 
-    private void installServiceHooks(ClassLoader loader) throws ReflectiveOperationException {
+    private void installActivityOnNewIntentHook(ClassLoader loader)
+            throws ReflectiveOperationException {
+        Method onNewIntent = inheritedMethod(loader, STOCK_ACTIVITY, "onNewIntent", Intent.class);
+        hookAfter(
+                onNewIntent,
+                callback -> {
+                    try {
+                        Object target = callback.getThis();
+                        if (target instanceof Activity activity
+                                && STOCK_ACTIVITY.equals(activity.getClass().getName())) {
+                            redirectActivity(activity, "onNewIntent");
+                        }
+                    } catch (Throwable error) {
+                        safeLog("activity onNewIntent redirect failed open", error);
+                    }
+                });
+    }
+
+    private void installServiceOnCreateHook(ClassLoader loader)
+            throws ReflectiveOperationException {
         Method onCreate = requiredMethod(loader, STOCK_SERVICE, "onCreate");
         hookAfter(
                 onCreate,
@@ -189,7 +212,10 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                         safeLog("service context capture failed open", error);
                     }
                 });
+    }
 
+    private void installServiceOnStartCommandHook(ClassLoader loader)
+            throws ReflectiveOperationException {
         Method onStartCommand =
                 requiredMethod(
                         loader,
@@ -205,18 +231,17 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                         Object target = callback.getThis();
                         Intent intent = argument(callback, 0, Intent.class);
                         if (target instanceof Service service && intent != null) {
-                            // Preserve the stock lifecycle and any startForeground requirement.
-                            forwardObservedIntent(service, intent, "service-onStartCommand");
+                            // Keep service lifecycle observation separate from transport interception.
+                            // The stock implementation must run (including startForeground), and the
+                            // fingerprint-gated presenter hook suppresses its transport call only
+                            // after Auxio acknowledges it. Receiver-origin commands are intercepted
+                            // independently before their stock delegate runs.
+                            captureAndStart(service);
                         }
                     } catch (Throwable error) {
                         safeLog("service command hook failed open", error);
                     }
                 });
-    }
-
-    private void installReceiverHooks(ClassLoader loader) throws ReflectiveOperationException {
-        hookReceiver(loader, STOCK_COMMAND_RECEIVER, "stock-command-receiver");
-        hookReceiver(loader, STOCK_SEEK_RECEIVER, "stock-seek-receiver");
     }
 
     private void hookReceiver(ClassLoader loader, String className, String source)
@@ -240,49 +265,34 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                 });
     }
 
-    private void installPresenterHooks(ClassLoader loader) {
-        installPresenterMethod(loader, "rb");
-        installPresenterMethod(loader, "pb");
-        installPresenterMethod(loader, "ba");
-        installPresenterMethod(loader, "fa");
-        installPresenterMethod(loader, "seekTo", int.class);
-    }
-
     private void installPresenterMethod(
-            ClassLoader loader, String methodName, Class<?>... parameterTypes) {
+            ClassLoader loader, String methodName, Class<?>... parameterTypes)
+            throws ReflectiveOperationException {
+        Method method = requiredMethod(loader, STOCK_PRESENTER, methodName, parameterTypes);
         try {
-            Method method = requiredMethod(loader, STOCK_PRESENTER, methodName, parameterTypes);
-            try {
-                deoptimize(method);
-            } catch (RuntimeException error) {
-                safeLog("presenter deoptimisation unavailable for " + methodName, error);
-            }
-            hookBefore(
-                    method,
-                    callback -> {
-                        try {
-                            Context context = environment.currentContext();
-                            if (context == null) return;
-                            BridgeCommand command = BridgeCommand.fromPresenterMethod(methodName);
-                            Integer seek =
-                                    command == BridgeCommand.SEEK
-                                            ? safeIntArgument(callback, 0)
-                                            : null;
-                            if (forwardCommand(
-                                    context, command, seek, "presenter-" + methodName)) {
-                                callback.returnAndSkip(null);
-                            }
-                        } catch (Throwable error) {
-                            safeLog("presenter hook " + methodName + " failed open", error);
-                        }
-                    });
-        } catch (Throwable error) {
-            safeLog(
-                    "presenter method "
-                            + methodName
-                            + " unavailable; stock fallback retained",
-                    error);
+            deoptimize(method);
+        } catch (RuntimeException error) {
+            safeLog("presenter deoptimisation unavailable for " + methodName, error);
         }
+        hookBefore(
+                method,
+                callback -> {
+                    try {
+                        Context context = environment.currentContext();
+                        if (context == null) return;
+                        BridgeCommand command = BridgeCommand.fromPresenterMethod(methodName);
+                        Integer seek =
+                                command == BridgeCommand.SEEK
+                                        ? safeIntArgument(callback, 0)
+                                        : null;
+                        if (forwardCommand(
+                                context, command, seek, "presenter-" + methodName)) {
+                            callback.returnAndSkip(null);
+                        }
+                    } catch (Throwable error) {
+                        safeLog("presenter hook " + methodName + " failed open", error);
+                    }
+                });
     }
 
     private void captureAndStart(Context context) {
@@ -318,7 +328,7 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
         if (command == BridgeCommand.UNKNOWN) return false;
         Integer seek =
                 command == BridgeCommand.SEEK
-                        ? Math.max(0, safeIntExtra(intent, EXTRA_WIDGET_PROGRESS, 0))
+                        ? safeOptionalIntExtra(intent, EXTRA_WIDGET_PROGRESS)
                         : null;
         return forwardCommand(context, command, seek, source);
     }
@@ -427,11 +437,12 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
         }
     }
 
-    private static int safeIntExtra(Intent intent, String key, int fallback) {
+    private static Integer safeOptionalIntExtra(Intent intent, String key) {
         try {
-            return intent.getIntExtra(key, fallback);
+            if (!intent.hasExtra(key)) return null;
+            return Math.max(0, intent.getIntExtra(key, 0));
         } catch (RuntimeException error) {
-            return fallback;
+            return null;
         }
     }
 

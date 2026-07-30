@@ -50,6 +50,7 @@ final class MediaMirror {
     private boolean connectionPending;
     private int reconnectAttempts;
 
+    private final Runnable reconnect = this::connect;
     private final Runnable progressTick =
             new Runnable() {
                 @Override
@@ -141,7 +142,7 @@ final class MediaMirror {
                 && controller == null
                 && (browser == null || !browser.isConnected())) {
             reconnectAttempts = 0;
-            handler.removeCallbacksAndMessages(null);
+            handler.removeCallbacks(reconnect);
             connect();
         }
     }
@@ -287,8 +288,8 @@ final class MediaMirror {
         }
         reconnectAttempts += 1;
         long delayMs = Math.min(30_000L, 2_000L * reconnectAttempts);
-        handler.removeCallbacksAndMessages(null);
-        handler.postDelayed(this::connect, delayMs);
+        handler.removeCallbacks(reconnect);
+        handler.postDelayed(reconnect, delayMs);
     }
 
     private void disconnectBrowser() {

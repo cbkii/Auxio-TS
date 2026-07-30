@@ -21,7 +21,7 @@ public class XposedContextWrapper extends ContextWrapper implements XposedInterf
     }
 
     public XposedContextWrapper(XposedContextWrapper base) {
-        super(base);
+        super(base.getBaseContext());
     }
 
     final public int getAPIVersion() {

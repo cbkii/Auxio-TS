@@ -47,6 +47,20 @@ public class BridgeCommandTest {
         assertEquals(
                 BridgeCommand.UNKNOWN,
                 BridgeCommand.fromIntent(BridgeContract.ACTION_COMMAND, "delete"));
+        assertEquals(
+                BridgeCommand.UNKNOWN,
+                BridgeCommand.fromIntent(BridgeContract.ACTION_COMMAND, null));
+        assertEquals(
+                BridgeCommand.PREVIOUS,
+                BridgeCommand.fromIntent(BridgeContract.ACTION_COMMAND, "PREV"));
+    }
+
+    @Test
+    public void unknownOrMissingActionsFailOpen() {
+        assertEquals(BridgeCommand.UNKNOWN, BridgeCommand.fromIntent(null, null));
+        assertEquals(
+                BridgeCommand.UNKNOWN,
+                BridgeCommand.fromIntent("com.example.unrelated", null));
     }
 
     @Test

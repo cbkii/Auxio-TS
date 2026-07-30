@@ -20,13 +20,13 @@ This page is the entry point for advanced Auxio-TS work. It links to the documen
 
 ## 🛡️ Installation and package identity
 
-Auxio-TS maintains two product identities:
+Auxio-TS maintains two APK variants plus one optional LSPosed bridge addon:
 
 | Variant | Package | Purpose |
 | --- | --- | --- |
-| `topwayTwMedia` | `com.tw.media` | Primary APK release and normal installation lane. It exposes `com.tw.music.MusicActivity` for DoFun matching. |
-| LSPosed bridge | `org.oxycblt.auxio.ts18bridge` | Optional API 100 addon **[beta]** scoped only to genuine stock `com.tw.music`. |
-| `topwayTwMusic` | `com.tw.music` | Internal exact-package compatibility/test build only; never publish or install. |
+| `topwayTwMedia` | `com.tw.media` | **Observed — Directly reusable requirement:** primary APK release and normal installation lane. It exposes `com.tw.music.MusicActivity` for DoFun matching. |
+| LSPosed bridge | `org.oxycblt.auxio.ts18bridge` | **Requires TS18 validation — Requires TS18 runtime validation:** optional API 100 addon **[beta]** scoped only to genuine stock `com.tw.music`. |
+| `topwayTwMusic` | `com.tw.music` | **Observed — Useful as evidence only:** internal exact-package compatibility/test build; never publish or install. |
 
 The old `org.oxycblt.auxio` standard distributable is retired.
 

@@ -301,8 +301,20 @@ jobs:
           tools="$(find "${sdk_root}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
           apksigner="${tools}/apksigner"
           aapt="${tools}/aapt"
-          [[ -x "${apksigner}" && -x "${aapt}" ]] || {
+          keytool="${JAVA_HOME}/bin/keytool"
+          [[ -x "${apksigner}" && -x "${aapt}" && -x "${keytool}" ]] || {
             echo "::error::Required Android build tools are unavailable under ${tools}."
+            exit 1
+          }
+          expected_release_signer="$(
+            "${keytool}" -exportcert \
+              -keystore "${ORG_GRADLE_PROJECT_releaseStoreFile}" \
+              -storepass "${ORG_GRADLE_PROJECT_releaseStorePassword}" \
+              -alias "${ORG_GRADLE_PROJECT_releaseKeyAlias}" |
+              sha256sum | awk '{print toupper($1)}'
+          )"
+          [[ -n "${expected_release_signer}" ]] || {
+            echo '::error::Unable to derive the configured release signer fingerprint.'
             exit 1
           }
           artifact_dir="${RUNNER_TEMP}/selected-release-assets"
@@ -359,7 +371,8 @@ jobs:
                 asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk"
                 asset_path="${artifact_dir}/${asset_name}"
                 cp "${apk_path}" "${asset_path}"
-                bash ./scripts/check-lsposed-bridge-contracts.sh \
+                EXPECTED_SIGNER_SHA256="${expected_release_signer}" \
+                  bash ./scripts/check-lsposed-bridge-contracts.sh \
                   --variant release \
                   --apk "${asset_path}"
                 asset_kind=signed-lsposed-api100-addon

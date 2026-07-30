@@ -2,8 +2,8 @@
 
 This folder separates two compatibility paths:
 
-1. **In-app Android/Topway compatibility** in the normal Auxio-TS `com.tw.media` app.
-2. **Optional LSPosed stock-identity bridge** for exact TS18 firmware where the fixed DoFun widget requires calls or broadcasts to originate from the genuine platform-signed `com.tw.music` process.
+1. **Observed — Directly reusable requirement:** in-app Android/Topway compatibility in the normal Auxio-TS `com.tw.media` app.
+2. **Requires TS18 validation — Requires TS18 runtime validation:** optional LSPosed stock-identity bridge for exact TS18 firmware where the fixed DoFun widget requires calls or broadcasts to originate from the genuine platform-signed `com.tw.music` process.
 
 The LSPosed bridge is not a platform-signature clone and does not replace the stock APK. Start with the in-app path and add the bridge only when exact-device evidence proves that Android MediaSession and safe Topway broadcasts are insufficient.
 
