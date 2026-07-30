@@ -350,19 +350,22 @@ jobs:
           ((${#tasks[@]} > 0)) || { echo "::error::Release validation selected without a maintained variant."; exit 1; }
           bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
 
-      - name: Compile selected release source sets for pull requests
+      - name: Build and inspect primary release diagnostics boundary
         if: github.event_name == 'pull_request' && needs.scope.outputs.release == 'true'
         shell: bash
         env:
-          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
-          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
-          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-compile-gradle.log
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
         run: |
-          tasks=()
-          [[ "${BUILD_TWMEDIA}" == "true" ]] && tasks+=(:app:compileTopwayTwMediaReleaseKotlin)
-          [[ "${BUILD_TWMUSIC}" == "true" ]] && tasks+=(:app:compileTopwayTwMusicReleaseKotlin)
-          ((${#tasks[@]} > 0)) || { echo "::error::Release source validation selected without a maintained variant."; exit 1; }
-          bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
+          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaRelease
+          release_apk="$(
+            find app/build/outputs/apk/topwayTwMedia/release \
+              -maxdepth 1 -type f -name '*.apk' -print -quit
+          )"
+          [[ -n "${release_apk}" ]] || {
+            echo "::error::Primary release APK was not produced."
+            exit 1
+          }
+          bash ./scripts/check-release-diagnostics-boundary.sh "${release_apk}"
 
       - name: Validate selected maintained APK outputs
         shell: bash
@@ -396,7 +399,6 @@ jobs:
             build/reports/problems/**
             ${{ runner.temp }}/android-build-debug-gradle.log
             ${{ runner.temp }}/android-build-release-gradle.log
-            ${{ runner.temp }}/android-build-release-compile-gradle.log
           if-no-files-found: ignore
           retention-days: 7
 
