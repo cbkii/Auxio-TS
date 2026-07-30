@@ -3,17 +3,25 @@ name: Manual Release
 on:
   workflow_dispatch:
     inputs:
+      release_mode:
+        description: Create a new release or repair assets for an existing immutable tag
+        required: true
+        default: create_new_release
+        type: choice
+        options:
+          - create_new_release
+          - repair_existing_release
       version_tag:
-        description: Release tag, e.g. v1.2.3. Leave blank to auto-increment. Existing tags append selected assets.
+        description: Release tag, e.g. v6.4.8. Required for repair; blank new releases resolve safely.
         required: false
         type: string
       draft:
-        description: Create release as draft
+        description: Leave a newly created release as draft after asset verification
         required: true
         default: true
         type: boolean
       prerelease:
-        description: Mark release as prerelease
+        description: Mark a newly created published release as prerelease
         required: true
         default: false
         type: boolean
@@ -36,7 +44,7 @@ on:
           - workflow_artifacts
           - release_assets
       replace_existing_assets:
-        description: Replace selected assets if they already exist on an existing release
+        description: Replace complete selected asset triplets during repair mode
         required: true
         default: false
         type: boolean
@@ -45,10 +53,9 @@ permissions:
   actions: read
   checks: read
   contents: write
-  pull-requests: read
 
 concurrency:
-  group: manual-release-${{ github.ref_name }}
+  group: manual-release
   cancel-in-progress: false
 
 jobs:
@@ -66,6 +73,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify branch release context
+        id: source
         shell: bash
         run: |
           set -euo pipefail
@@ -74,10 +82,21 @@ jobs:
             exit 1
           fi
           git fetch --tags origin dev
-          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/dev)" ]] || {
+          source_sha="$(git rev-parse HEAD)"
+          remote_sha="$(git rev-parse origin/dev)"
+          [[ "${source_sha}" == "${remote_sha}" ]] || {
             echo "::error::Release checkout is stale. Re-run from the latest dev."
             exit 1
           }
+          echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate current release workflow contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/check-manual-release-workflow.sh
+          bash ./scripts/check-ci-variant-contracts.sh
+          bash ./scripts/check-ts18-apk-reference-contracts.sh
 
       - name: Select maintained release assets
         id: selection
@@ -107,34 +126,223 @@ jobs:
             echo "::error::At least one maintained release asset must be selected."
             exit 1
           fi
+
+          selected_file="${RUNNER_TEMP}/selected-variants.txt"
+          printf '%s\n' "${selected[@]}" > "${selected_file}"
           {
-            printf 'selected_variants<<EOF\n%s\nEOF\n' "$(printf '%s\n' "${selected[@]}")"
+            echo "selected_file=${selected_file}"
+            printf 'selected_variants<<EOF\n%s\nEOF\n' "$(cat "${selected_file}")"
             printf 'selected_summary=%s\n' "$(IFS=', '; echo "${selected[*]}")"
             echo "debug_destination=${DEBUG_DESTINATION}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Validate current release workflow contracts
+      - name: Preserve release orchestration tools
+        id: tooling
         shell: bash
         run: |
-          bash ./scripts/check-manual-release-workflow.sh
-          bash ./scripts/check-ci-variant-contracts.sh
-          bash ./scripts/check-ts18-apk-reference-contracts.sh
+          set -euo pipefail
+          tools_dir="${RUNNER_TEMP}/release-tools"
+          mkdir -p "${tools_dir}/lib"
+          cp scripts/release-orchestrator.py "${tools_dir}/release-orchestrator.py"
+          cp scripts/lib/apksigner-certificate.sh "${tools_dir}/lib/apksigner-certificate.sh"
+          chmod +x "${tools_dir}/release-orchestrator.py"
+          python3 "${tools_dir}/release-orchestrator.py" self-test
+          echo "tools_dir=${tools_dir}" >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve version and repository release state
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          INPUT_TAG: ${{ inputs.version_tag }}
+          TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
+        run: |
+          set -euo pipefail
+          case "${RELEASE_MODE}" in
+            create_new_release|repair_existing_release) ;;
+            *)
+              echo "::error::Unsupported release mode: ${RELEASE_MODE}"
+              exit 1
+              ;;
+          esac
+
+          git_tags="${RUNNER_TEMP}/git-tags.txt"
+          release_tags="${RUNNER_TEMP}/github-release-tags.txt"
+          target_release="${RUNNER_TEMP}/target-release.json"
+          preliminary="${RUNNER_TEMP}/release-plan-preliminary.json"
+          final_plan="${RUNNER_TEMP}/release-plan.json"
+
+          git tag --list > "${git_tags}"
+          # The Releases API returns draft, prerelease and final releases. Pagination is mandatory.
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[].tag_name' > "${release_tags}"
+          printf '{}\n' > "${target_release}"
+
+          python3 "${TOOL}" resolve \
+            --mode "${RELEASE_MODE}" \
+            --input-tag "${INPUT_TAG}" \
+            --source-gradle app/build.gradle \
+            --git-tags-file "${git_tags}" \
+            --release-tags-file "${release_tags}" \
+            --target-release-json "${target_release}" \
+            --output "${preliminary}"
+
+          release_tag="$(jq -r .release_tag "${preliminary}")"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" > "${target_release}" 2>/dev/null; then
+            echo "Found existing GitHub Release ${release_tag}."
+          else
+            printf '{}\n' > "${target_release}"
+          fi
+
+          python3 "${TOOL}" resolve \
+            --mode "${RELEASE_MODE}" \
+            --input-tag "${INPUT_TAG}" \
+            --source-gradle app/build.gradle \
+            --git-tags-file "${git_tags}" \
+            --release-tags-file "${release_tags}" \
+            --target-release-json "${target_release}" \
+            --output "${final_plan}"
+
+          existing_assets="${RUNNER_TEMP}/existing-release-assets.txt"
+          jq -r '.assets[]?.name' "${target_release}" > "${existing_assets}"
+          {
+            echo "plan_file=${final_plan}"
+            echo "target_release_file=${target_release}"
+            echo "existing_assets_file=${existing_assets}"
+            echo "release_tag=$(jq -r .release_tag "${final_plan}")"
+            echo "release_version_name=$(jq -r .release_version_name "${final_plan}")"
+            echo "release_version_code=$(jq -r .release_version_code "${final_plan}")"
+            echo "previous_tag=$(jq -r .previous_tag "${final_plan}")"
+            echo "tag_exists=$(jq -r .tag_exists "${final_plan}")"
+            echo "release_exists=$(jq -r .release_exists "${final_plan}")"
+            echo "metadata_change_required=$(jq -r .metadata_change_required "${final_plan}")"
+            echo "existing_release_url=$(jq -r .target_release_url "${final_plan}")"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Plan efficient asset work
+        id: asset_plan
+        shell: bash
+        env:
+          TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          SELECTED_FILE: ${{ steps.selection.outputs.selected_file }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
+          EXISTING_ASSETS_FILE: ${{ steps.plan.outputs.existing_assets_file }}
+          REPLACE: ${{ inputs.replace_existing_assets }}
+        run: |
+          set -euo pipefail
+          plan_file="${RUNNER_TEMP}/asset-plan.json"
+          python3 "${TOOL}" plan-assets \
+            --mode "${RELEASE_MODE}" \
+            --release-tag "${RELEASE_TAG}" \
+            --selected-variants-file "${SELECTED_FILE}" \
+            --debug-destination "${DEBUG_DESTINATION}" \
+            --existing-assets-file "${EXISTING_ASSETS_FILE}" \
+            --replace "${REPLACE}" \
+            --output "${plan_file}"
+
+          build_variants="${RUNNER_TEMP}/build-variants.txt"
+          build_apk_names="${RUNNER_TEMP}/build-apk-names.txt"
+          upload_names="${RUNNER_TEMP}/upload-asset-names.txt"
+          verify_names="${RUNNER_TEMP}/verify-asset-names.txt"
+          debug_workflow_names="${RUNNER_TEMP}/debug-workflow-asset-names.txt"
+          jq -r '.build_variants[]' "${plan_file}" > "${build_variants}"
+          jq -r '.build_apk_names[]' "${plan_file}" > "${build_apk_names}"
+          jq -r '.upload_names[]' "${plan_file}" > "${upload_names}"
+          jq -r '.verify_names[]' "${plan_file}" > "${verify_names}"
+          jq -r '.debug_workflow_names[]' "${plan_file}" > "${debug_workflow_names}"
+          {
+            echo "plan_file=${plan_file}"
+            echo "build_variants_file=${build_variants}"
+            echo "build_apk_names_file=${build_apk_names}"
+            echo "upload_names_file=${upload_names}"
+            echo "verify_names_file=${verify_names}"
+            echo "debug_workflow_names_file=${debug_workflow_names}"
+            echo "build_count=$(wc -l < "${build_variants}" | tr -d ' ')"
+            echo "needs_signing=$(jq -r .needs_signing "${plan_file}")"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Checkout immutable repair tag
+        if: inputs.release_mode == 'repair_existing_release'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          tag_sha="$(git rev-list -n1 "${RELEASE_TAG}")"
+          [[ -n "${tag_sha}" ]] || {
+            echo "::error::Repair tag ${RELEASE_TAG} cannot be resolved."
+            exit 1
+          }
+          git checkout --detach "${tag_sha}"
+          [[ "$(git rev-parse HEAD)" == "${tag_sha}" ]] || {
+            echo "::error::Repair checkout does not match immutable tag ${RELEASE_TAG}."
+            exit 1
+          }
+
+      - name: Prepare release source metadata
+        id: metadata
+        shell: bash
+        env:
+          TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          VERSION_NAME: ${{ steps.plan.outputs.release_version_name }}
+          VERSION_CODE: ${{ steps.plan.outputs.release_version_code }}
+          METADATA_CHANGE_REQUIRED: ${{ steps.plan.outputs.metadata_change_required }}
+        run: |
+          set -euo pipefail
+          if [[ "${RELEASE_MODE}" == create_new_release ]]; then
+            if [[ "${METADATA_CHANGE_REQUIRED}" == true ]]; then
+              python3 "${TOOL}" update-gradle \
+                --gradle app/build.gradle \
+                --version-name "${VERSION_NAME}" \
+                --version-code "${VERSION_CODE}"
+              git config user.name 'github-actions[bot]'
+              git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+              git add app/build.gradle
+              git commit -m "chore(release): prepare ${RELEASE_TAG}"
+            fi
+            release_sha="$(git rev-parse HEAD)"
+            resolved_name="${VERSION_NAME}"
+            resolved_code="${VERSION_CODE}"
+          else
+            tagged_metadata="${RUNNER_TEMP}/tagged-gradle-metadata.json"
+            python3 "${TOOL}" inspect-gradle \
+              --gradle app/build.gradle \
+              --expected-version "${VERSION_NAME}" \
+              --output "${tagged_metadata}"
+            release_sha="$(git rev-parse HEAD)"
+            resolved_name="$(jq -r .version_name "${tagged_metadata}")"
+            resolved_code="$(jq -r .version_code "${tagged_metadata}")"
+          fi
+          {
+            echo "release_sha=${release_sha}"
+            echo "version_name=${resolved_name}"
+            echo "version_code=${resolved_code}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Set up JDK 21
+        if: steps.asset_plan.outputs.build_count != '0'
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle
+        if: steps.asset_plan.outputs.build_count != '0'
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
         with:
           cache-cleanup: always
 
       - name: Set up Android SDK
+        if: steps.asset_plan.outputs.build_count != '0'
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
 
       - name: Install Android and native build tools
+        if: steps.asset_plan.outputs.build_count != '0'
         shell: bash
         run: |
           set -euo pipefail
@@ -144,148 +352,20 @@ jobs:
             sudo apt-get install -y ninja-build
           fi
 
-      - name: Compute version and expected assets
-        id: version
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          INPUT_TAG: ${{ inputs.version_tag }}
-          SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
-          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
-        run: |
-          set -euo pipefail
-          input_tag="$(printf '%s' "${INPUT_TAG}" | xargs)"
-          current_name="$(sed -n -E 's/^[[:space:]]*versionName "([^"]+)".*/\1/p' app/build.gradle | head -n1)"
-          current_code="$(sed -n -E 's/^[[:space:]]*versionCode ([0-9]+).*/\1/p' app/build.gradle | head -n1)"
-          [[ -n "${current_name}" && -n "${current_code}" ]] || {
-            echo "::error::Cannot read current app version metadata."
-            exit 1
-          }
-          previous_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
-          if [[ -n "${input_tag}" ]]; then
-            [[ "${input_tag}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-              echo "::error::Invalid version tag: ${input_tag}"
-              exit 1
-            }
-            [[ "${input_tag}" == v* ]] && release_tag="${input_tag}" || release_tag="v${input_tag}"
-          else
-            base="${previous_tag#v}"
-            [[ -n "${base}" ]] || base="${current_name}"
-            IFS=. read -r major minor patch <<< "${base}"
-            release_tag="v${major}.${minor}.$((patch + 1))"
-          fi
-
-          tag_exists=false
-          release_exists=false
-          git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null && tag_exists=true
-          gh release view "${release_tag}" >/dev/null 2>&1 && release_exists=true
-          if [[ -z "${input_tag}" && ( "${tag_exists}" == true || "${release_exists}" == true ) ]]; then
-            echo "::error::Auto-computed tag ${release_tag} already exists."
-            exit 1
-          fi
-          [[ "${tag_exists}" == "${release_exists}" ]] || {
-            echo "::error::Release/tag state is inconsistent for ${release_tag}."
-            exit 1
-          }
-
-          if [[ "${release_exists}" == true ]]; then
-            tag_sha="$(git rev-list -n1 "${release_tag}")"
-            release_name="$(git show "${release_tag}:app/build.gradle" | sed -n -E 's/^[[:space:]]*versionName "([^"]+)".*/\1/p' | head -n1)"
-            release_code="$(git show "${release_tag}:app/build.gradle" | sed -n -E 's/^[[:space:]]*versionCode ([0-9]+).*/\1/p' | head -n1)"
-            [[ -n "${tag_sha}" && -n "${release_name}" && -n "${release_code}" ]] || {
-              echo "::error::Cannot read immutable version metadata from existing tag ${release_tag}."
-              exit 1
-            }
-            [[ "v${release_name}" == "${release_tag}" ]] || {
-              echo "::error::Existing tag ${release_tag} does not match its app versionName ${release_name}."
-              exit 1
-            }
-          else
-            tag_sha=''
-            release_name="${release_tag#v}"
-            release_code="$((current_code + 1))"
-          fi
-
-          release_asset_names=()
-          while IFS= read -r variant; do
-            case "${variant}" in
-              topway_twmedia)
-                base_name="Auxio-TS-${release_tag}-topway-twmedia-release.apk"
-                ;;
-              lsposed_bridge)
-                base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge.apk"
-                ;;
-              topway_twmedia_debug)
-                [[ "${DEBUG_DESTINATION}" == release_assets ]] || continue
-                base_name="Auxio-TS-${release_tag}-topway-twmedia-debug.apk"
-                ;;
-              lsposed_bridge_debug)
-                [[ "${DEBUG_DESTINATION}" == release_assets ]] || continue
-                base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge-debug.apk"
-                ;;
-              '')
-                continue
-                ;;
-              *)
-                echo "::error::Unknown selected variant: ${variant}"
-                exit 1
-                ;;
-            esac
-            release_asset_names+=(
-              "${base_name}"
-              "${base_name}.sha256"
-              "${base_name}.metadata.txt"
-            )
-          done <<< "${SELECTED_VARIANTS}"
-          {
-            echo "release_tag=${release_tag}"
-            echo "release_version_name=${release_name}"
-            echo "release_version_code=${release_code}"
-            echo "previous_tag=${previous_tag}"
-            echo "existing_release=${release_exists}"
-            echo "tag_commit_sha=${tag_sha}"
-            printf 'release_asset_names<<EOF\n%s\nEOF\n' \
-              "$(printf '%s\n' "${release_asset_names[@]}")"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Check selected asset collisions
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          ASSET_NAMES: ${{ steps.version.outputs.release_asset_names }}
-          REPLACE: ${{ inputs.replace_existing_assets }}
-        run: |
-          set -euo pipefail
-          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || exit 0
-          existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
-          while IFS= read -r asset; do
-            [[ -n "${asset}" ]] || continue
-            if grep -Fxq -- "${asset}" <<< "${existing}" && [[ "${REPLACE}" != true ]]; then
-              echo "::error::Selected asset already exists: ${asset}. Enable replacement to rebuild it."
-              exit 1
-            fi
-          done <<< "${ASSET_NAMES}"
-
-      - name: Checkout existing release tag
-        if: steps.version.outputs.existing_release == 'true'
-        shell: bash
-        env:
-          TAG_SHA: ${{ steps.version.outputs.tag_commit_sha }}
-        run: |
-          set -euo pipefail
-          git checkout --detach "${TAG_SHA}"
-          [[ "$(git rev-parse HEAD)" == "${TAG_SHA}" ]] || {
-            echo "::error::Existing release checkout does not match the resolved tag commit."
-            exit 1
-          }
-
       - name: Prepare CI environment
+        if: steps.asset_plan.outputs.build_count != '0'
         shell: bash
-        run: bash ./scripts/bootstrap-dependencies.sh --profile release
+        run: |
+          set -euo pipefail
+          [[ -x scripts/bootstrap-dependencies.sh ]] || {
+            echo "::error::Selected immutable source lacks scripts/bootstrap-dependencies.sh; safe rebuild is unsupported."
+            exit 1
+          }
+          bash ./scripts/bootstrap-dependencies.sh --profile release
 
       - name: Decode release keystore
         id: signing
+        if: steps.asset_plan.outputs.needs_signing == 'true'
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -308,25 +388,7 @@ jobs:
           chmod 600 "${path}"
           echo "path=${path}" >> "${GITHUB_OUTPUT}"
 
-      - name: Update and commit Android version metadata
-        id: version_commit
-        if: steps.version.outputs.existing_release != 'true'
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          VERSION_NAME: ${{ steps.version.outputs.release_version_name }}
-          VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
-        run: |
-          set -euo pipefail
-          sed -i -E "0,/^([[:space:]]*)versionName \".*\"/s//\1versionName \"${VERSION_NAME}\"/" app/build.gradle
-          sed -i -E "0,/^([[:space:]]*)versionCode [0-9]+/s//\1versionCode ${VERSION_CODE}/" app/build.gradle
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app/build.gradle
-          git commit -m "chore(release): prepare ${RELEASE_TAG}"
-          echo "release_commit_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
-
-      - name: Build, verify and stage selected release assets
+      - name: Build once, inspect once and stage selected assets
         id: assets
         shell: bash
         env:
@@ -334,207 +396,276 @@ jobs:
           ORG_GRADLE_PROJECT_releaseStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_releaseKeyAlias: ${{ secrets.KEY_ALIAS }}
           ORG_GRADLE_PROJECT_releaseKeyPassword: ${{ secrets.KEY_PASSWORD }}
-          ORG_GRADLE_PROJECT_bridgeVersionName: ${{ steps.version.outputs.release_version_name }}
-          ORG_GRADLE_PROJECT_bridgeVersionCode: ${{ steps.version.outputs.release_version_code }}
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          VERSION_NAME: ${{ steps.version.outputs.release_version_name }}
-          VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
-          SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
+          ORG_GRADLE_PROJECT_bridgeVersionName: ${{ steps.metadata.outputs.version_name }}
+          ORG_GRADLE_PROJECT_bridgeVersionCode: ${{ steps.metadata.outputs.version_code }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          VERSION_NAME: ${{ steps.metadata.outputs.version_name }}
+          VERSION_CODE: ${{ steps.metadata.outputs.version_code }}
+          RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
+          BUILD_VARIANTS_FILE: ${{ steps.asset_plan.outputs.build_variants_file }}
+          BUILD_APK_NAMES_FILE: ${{ steps.asset_plan.outputs.build_apk_names_file }}
+          UPLOAD_NAMES_FILE: ${{ steps.asset_plan.outputs.upload_names_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
+          TOOLS_DIR: ${{ steps.tooling.outputs.tools_dir }}
+          ASSET_PLAN_FILE: ${{ steps.asset_plan.outputs.plan_file }}
+          RELEASE_PLAN_FILE: ${{ steps.plan.outputs.plan_file }}
+          NEEDS_SIGNING: ${{ steps.asset_plan.outputs.needs_signing }}
         run: |
           set -euo pipefail
-          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          tools="$(find "${sdk_root}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
-          apksigner="${tools}/apksigner"
-          aapt="${tools}/aapt"
-          keytool="${JAVA_HOME}/bin/keytool"
-          [[ -x "${apksigner}" && -x "${aapt}" && -x "${keytool}" ]] || {
-            echo "::error::Required Android build tools are unavailable under ${tools}."
-            exit 1
-          }
-          expected_release_signer="$(
-            "${keytool}" -exportcert \
-              -keystore "${ORG_GRADLE_PROJECT_releaseStoreFile}" \
-              -storepass "${ORG_GRADLE_PROJECT_releaseStorePassword}" \
-              -alias "${ORG_GRADLE_PROJECT_releaseKeyAlias}" |
-              sha256sum | awk '{print toupper($1)}'
-          )"
-          [[ -n "${expected_release_signer}" ]] || {
-            echo '::error::Unable to derive the configured release signer fingerprint.'
-            exit 1
-          }
-          release_artifact_dir="${RUNNER_TEMP}/selected-release-assets"
-          debug_artifact_dir="${RUNNER_TEMP}/selected-debug-artifacts"
-          mkdir -p "${release_artifact_dir}" "${debug_artifact_dir}"
+          release_dir="${RUNNER_TEMP}/selected-release-assets"
+          debug_dir="${RUNNER_TEMP}/selected-debug-artifacts"
+          mkdir -p "${release_dir}" "${debug_dir}"
+          manifest_ndjson="${RUNNER_TEMP}/release-manifest.ndjson"
+          manifest_json="${release_dir}/release-manifest.json"
+          staged_tsv="${RUNNER_TEMP}/staged-assets.tsv"
+          upload_tsv="${RUNNER_TEMP}/release-upload.tsv"
+          : > "${manifest_ndjson}"
+          : > "${staged_tsv}"
 
-          find_apk() {
-            local dir=$1
-            local found=()
-            mapfile -t found < <(find "${dir}" -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' | sort)
-            ((${#found[@]} == 1)) || {
-              echo "::error::Expected one signed APK in ${dir}, found ${#found[@]}."
+          if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
+            sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+            tools="$(find "${sdk_root}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
+            apksigner="${tools}/apksigner"
+            aapt="${tools}/aapt"
+            keytool="${JAVA_HOME}/bin/keytool"
+            [[ -x "${apksigner}" && -x "${aapt}" ]] || {
+              echo "::error::Required Android build tools are unavailable under ${tools}."
               exit 1
             }
-            printf '%s\n' "${found[0]}"
-          }
+            # shellcheck source=/dev/null
+            source "${TOOLS_DIR}/lib/apksigner-certificate.sh"
 
-          write_sidecars() {
-            local asset=$1 name=$2 apk=$3 kind=$4
-            local directory digest metadata badging
-            directory="$(dirname -- "${asset}")"
-            digest="$(sha256sum "${asset}" | awk '{print $1}')"
-            printf '%s  %s\n' "${digest}" "${name}" > "${directory}/${name}.sha256"
-            metadata="${directory}/${name}.metadata.txt"
-            badging="$("${aapt}" dump badging "${apk}")"
-            {
-              echo "asset=${name}"
-              echo "asset_kind=${kind}"
-              echo "asset_sha256=${digest}"
-              echo "source_commit=$(git rev-parse HEAD)"
-              echo "release_tag=${RELEASE_TAG}"
-              sed -n -E "s/^package: name='([^']+)'.*versionCode='([^']+)'.*versionName='([^']+)'.*/application_id=\1\nversion_code=\2\nversion_name=\3/p" <<< "${badging}"
-              sed -n -E "s/^sdkVersion:'([^']+)'.*/min_sdk=\1/p" <<< "${badging}"
-              sed -n -E "s/^targetSdkVersion:'([^']+)'.*/target_sdk=\1/p" <<< "${badging}"
-              echo "abis=$(unzip -Z1 "${apk}" | sed -n -E 's#^lib/([^/]+)/.*#\1#p' | sort -u | paste -sd, -)"
-              echo
-              echo '[apksigner certificates]'
-              "${apksigner}" verify --verbose --print-certs "${apk}"
-            } > "${metadata}"
-          }
-
-          release_asset_paths=()
-          release_asset_names=()
-          debug_asset_paths=()
-          debug_asset_names=()
-          while IFS= read -r variant; do
-            [[ -n "${variant}" ]] || continue
-            case "${variant}" in
-              topway_twmedia)
-                bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
-                apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/release)"
-                asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-release.apk"
-                asset_path="${release_artifact_dir}/${asset_name}"
-                cp "${apk_path}" "${asset_path}"
-                bash ./scripts/check-release-diagnostics-boundary.sh "${asset_path}"
-                asset_kind=signed-apk
-                ;;
-              topway_twmedia_debug)
-                bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
-                apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/debug)"
-                asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-debug.apk"
-                asset_path="${debug_artifact_dir}/${asset_name}"
-                cp "${apk_path}" "${asset_path}"
-                asset_kind=debug-diagnostics-apk
-                ;;
-              lsposed_bridge)
-                bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease
-                apk_path="$(find_apk lsposed-bridge/build/outputs/apk/release)"
-                asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk"
-                asset_path="${release_artifact_dir}/${asset_name}"
-                cp "${apk_path}" "${asset_path}"
-                EXPECTED_SIGNER_SHA256="${expected_release_signer}" \
-                  bash ./scripts/check-lsposed-bridge-contracts.sh \
-                    --variant release \
-                    --apk "${asset_path}"
-                asset_kind=signed-lsposed-api100-addon
-                ;;
-              lsposed_bridge_debug)
-                bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleDebug
-                apk_path="$(find_apk lsposed-bridge/build/outputs/apk/debug)"
-                asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk"
-                asset_path="${debug_artifact_dir}/${asset_name}"
-                cp "${apk_path}" "${asset_path}"
-                bash ./scripts/check-lsposed-bridge-contracts.sh \
-                  --variant debug \
-                  --apk "${asset_path}"
-                asset_kind=debug-lsposed-api100-addon
-                ;;
-              *)
-                echo "::error::Unknown selected variant during build: ${variant}"
+            expected_release_signer=''
+            if [[ "${NEEDS_SIGNING}" == true ]]; then
+              [[ -x "${keytool}" ]] || {
+                echo "::error::keytool is unavailable."
                 exit 1
-                ;;
-            esac
+              }
+              expected_release_signer="$(
+                "${keytool}" -exportcert \
+                  -keystore "${ORG_GRADLE_PROJECT_releaseStoreFile}" \
+                  -storepass "${ORG_GRADLE_PROJECT_releaseStorePassword}" \
+                  -alias "${ORG_GRADLE_PROJECT_releaseKeyAlias}" |
+                  sha256sum | awk '{print toupper($1)}'
+              )"
+              [[ "${expected_release_signer}" =~ ^[0-9A-F]{64}$ ]] || {
+                echo "::error::Unable to derive the configured release signer fingerprint."
+                exit 1
+              }
+            fi
 
-            "${apksigner}" verify --verbose "${apk_path}"
-            if [[ "${variant}" == topway_twmedia && -f scripts/check-startup-performance-contracts.sh ]]; then
-              bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"
-            elif [[ "${variant}" == topway_twmedia ]]; then
-              echo "::warning::Historical tag lacks startup profile contract script; package/profile metadata remains recorded in sidecars."
-            fi
-            write_sidecars "${asset_path}" "${asset_name}" "${apk_path}" "${asset_kind}"
-            if [[ "${variant}" == topway_twmedia ]]; then
-              bash ./scripts/check-app-release-contracts.sh \
-                --apk "${asset_path}" \
-                --version-name "${VERSION_NAME}" \
-                --version-code "${VERSION_CODE}" \
-                --expected-signer "${expected_release_signer}" \
-                --sha256-file "${release_artifact_dir}/${asset_name}.sha256" \
-                --metadata-file "${release_artifact_dir}/${asset_name}.metadata.txt"
-            fi
-            if [[ "${variant}" == *_debug ]]; then
-              debug_asset_paths+=(
-                "${asset_path}"
-                "${debug_artifact_dir}/${asset_name}.sha256"
-                "${debug_artifact_dir}/${asset_name}.metadata.txt"
-              )
-              debug_asset_names+=(
-                "${asset_name}"
-                "${asset_name}.sha256"
-                "${asset_name}.metadata.txt"
-              )
-              if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
-                release_asset_paths+=(
-                  "${asset_path}"
-                  "${debug_artifact_dir}/${asset_name}.sha256"
-                  "${debug_artifact_dir}/${asset_name}.metadata.txt"
-                )
-                release_asset_names+=(
-                  "${asset_name}"
-                  "${asset_name}.sha256"
-                  "${asset_name}.metadata.txt"
-                )
+            find_apk() {
+              local dir=$1
+              local found=()
+              mapfile -t found < <(find "${dir}" -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' | sort)
+              ((${#found[@]} == 1)) || {
+                echo "::error::Expected one signed APK in ${dir}, found ${#found[@]}."
+                exit 1
+              }
+              printf '%s\n' "${found[0]}"
+            }
+
+            while IFS= read -r variant; do
+              [[ -n "${variant}" ]] || continue
+              case "${variant}" in
+                topway_twmedia)
+                  bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
+                  apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/release)"
+                  asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-release.apk"
+                  asset_kind='signed-apk'
+                  destination='release'
+                  ;;
+                topway_twmedia_debug)
+                  bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
+                  apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/debug)"
+                  asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-debug.apk"
+                  asset_kind='debug-diagnostics-apk'
+                  destination="${DEBUG_DESTINATION}"
+                  ;;
+                lsposed_bridge)
+                  bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease
+                  apk_path="$(find_apk lsposed-bridge/build/outputs/apk/release)"
+                  asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk"
+                  asset_kind='signed-lsposed-api100-addon'
+                  destination='release'
+                  ;;
+                lsposed_bridge_debug)
+                  bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleDebug
+                  apk_path="$(find_apk lsposed-bridge/build/outputs/apk/debug)"
+                  asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk"
+                  asset_kind='debug-lsposed-api100-addon'
+                  destination="${DEBUG_DESTINATION}"
+                  ;;
+                *)
+                  echo "::error::Unknown selected variant during build: ${variant}"
+                  exit 1
+                  ;;
+              esac
+
+              if [[ "${destination}" == workflow_artifacts ]]; then
+                asset_dir="${debug_dir}"
+              else
+                asset_dir="${release_dir}"
               fi
-            else
-              release_asset_paths+=(
-                "${asset_path}"
-                "${release_artifact_dir}/${asset_name}.sha256"
-                "${release_artifact_dir}/${asset_name}.metadata.txt"
-              )
-              release_asset_names+=(
-                "${asset_name}"
-                "${asset_name}.sha256"
-                "${asset_name}.metadata.txt"
-              )
-            fi
-          done <<< "${SELECTED_VARIANTS}"
+              asset_path="${asset_dir}/${asset_name}"
+              cp "${apk_path}" "${asset_path}"
+
+              digest="$(sha256sum "${asset_path}" | awk '{print $1}')"
+              badging="$("${aapt}" dump badging "${apk_path}")"
+              signing_report="$("${apksigner}" verify --verbose --print-certs "${apk_path}" 2>&1)" || {
+                echo "::error::APK signature verification failed for ${asset_name}."
+                exit 1
+              }
+              signer="$(extract_apksigner_certificate_sha256 "${signing_report}")" || {
+                echo "::error::Unable to resolve exactly one signer for ${asset_name}."
+                exit 1
+              }
+              application_id="$(sed -n -E "s/^package: name='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+              actual_code="$(sed -n -E "s/^package: .*versionCode='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+              actual_name="$(sed -n -E "s/^package: .*versionName='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+              min_sdk="$(sed -n -E "s/^sdkVersion:'([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+              target_sdk="$(sed -n -E "s/^targetSdkVersion:'([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+              abis="$(unzip -Z1 "${apk_path}" | sed -n -E 's#^lib/([^/]+)/.*#\1#p' | sort -u | paste -sd, -)"
+
+              printf '%s  %s\n' "${digest}" "${asset_name}" > "${asset_dir}/${asset_name}.sha256"
+              {
+                echo "asset=${asset_name}"
+                echo "asset_kind=${asset_kind}"
+                echo "asset_sha256=${digest}"
+                echo "source_commit=${RELEASE_SHA}"
+                echo "release_tag=${RELEASE_TAG}"
+                echo "application_id=${application_id}"
+                echo "version_code=${actual_code}"
+                echo "version_name=${actual_name}"
+                echo "min_sdk=${min_sdk}"
+                echo "target_sdk=${target_sdk}"
+                echo "abis=${abis}"
+                echo
+                echo '[apksigner certificates]'
+                printf '%s\n' "${signing_report}"
+              } > "${asset_dir}/${asset_name}.metadata.txt"
+
+              case "${variant}" in
+                topway_twmedia)
+                  for checker in \
+                    scripts/check-release-diagnostics-boundary.sh \
+                    scripts/check-startup-performance-contracts.sh \
+                    scripts/check-app-release-contracts.sh; do
+                    [[ -x "${checker}" ]] || {
+                      echo "::error::Immutable source lacks required release checker ${checker}; safe rebuild is unsupported."
+                      exit 1
+                    }
+                  done
+                  bash ./scripts/check-release-diagnostics-boundary.sh "${asset_path}"
+                  bash ./scripts/check-startup-performance-contracts.sh "${asset_path}"
+                  APKSIGNER_BIN="${apksigner}" \
+                    bash ./scripts/check-app-release-contracts.sh \
+                      --apk "${asset_path}" \
+                      --version-name "${VERSION_NAME}" \
+                      --version-code "${VERSION_CODE}" \
+                      --expected-signer "${expected_release_signer}" \
+                      --sha256-file "${asset_dir}/${asset_name}.sha256" \
+                      --metadata-file "${asset_dir}/${asset_name}.metadata.txt"
+                  ;;
+                lsposed_bridge)
+                  [[ -x scripts/check-lsposed-bridge-contracts.sh ]] || {
+                    echo "::error::Immutable source lacks the LSPosed release checker; safe rebuild is unsupported."
+                    exit 1
+                  }
+                  EXPECTED_SIGNER_SHA256="${expected_release_signer}" APKSIGNER_BIN="${apksigner}" \
+                    bash ./scripts/check-lsposed-bridge-contracts.sh --variant release --apk "${asset_path}"
+                  ;;
+                lsposed_bridge_debug)
+                  [[ -x scripts/check-lsposed-bridge-contracts.sh ]] || {
+                    echo "::error::Immutable source lacks the LSPosed debug checker; safe rebuild is unsupported."
+                    exit 1
+                  }
+                  APKSIGNER_BIN="${apksigner}" \
+                    bash ./scripts/check-lsposed-bridge-contracts.sh --variant debug --apk "${asset_path}"
+                  ;;
+              esac
+
+              jq -nc \
+                --arg filename "${asset_name}" \
+                --arg variant "${variant}" \
+                --arg asset_kind "${asset_kind}" \
+                --arg sha256 "${digest}" \
+                --arg application_id "${application_id}" \
+                --arg version_name "${actual_name}" \
+                --argjson version_code "${actual_code}" \
+                --arg signer_sha256 "${signer}" \
+                --arg source_commit "${RELEASE_SHA}" \
+                --arg release_tag "${RELEASE_TAG}" \
+                --arg destination "${destination}" \
+                '{filename:$filename,variant:$variant,asset_kind:$asset_kind,sha256:$sha256,application_id:$application_id,version_name:$version_name,version_code:$version_code,signer_sha256:$signer_sha256,source_commit:$source_commit,release_tag:$release_tag,destination:$destination}' \
+                >> "${manifest_ndjson}"
+
+              printf '%s\t%s\n' "${asset_name}" "${asset_path}" >> "${staged_tsv}"
+              printf '%s\t%s\n' "${asset_name}.sha256" "${asset_dir}/${asset_name}.sha256" >> "${staged_tsv}"
+              printf '%s\t%s\n' "${asset_name}.metadata.txt" "${asset_dir}/${asset_name}.metadata.txt" >> "${staged_tsv}"
+            done < "${BUILD_VARIANTS_FILE}"
+          fi
+
+          if [[ -s "${manifest_ndjson}" ]]; then
+            jq -s '.' "${manifest_ndjson}" > "${manifest_json}"
+          else
+            printf '[]\n' > "${manifest_json}"
+          fi
+          cp "${ASSET_PLAN_FILE}" "${release_dir}/asset-plan.json"
+          cp "${RELEASE_PLAN_FILE}" "${release_dir}/release-plan.json"
+
+          python3 "${TOOLS_DIR}/release-orchestrator.py" validate-manifest \
+            --manifest "${manifest_json}" \
+            --expected-built-names-file "${BUILD_APK_NAMES_FILE}" \
+            --version-name "${VERSION_NAME}" \
+            --version-code "${VERSION_CODE}" \
+            --release-tag "${RELEASE_TAG}" \
+            --source-commit "${RELEASE_SHA}" \
+            --debug-destination "${DEBUG_DESTINATION}"
+
+          python3 - "${staged_tsv}" "${UPLOAD_NAMES_FILE}" "${upload_tsv}" <<'PY'
+          import sys
+          from pathlib import Path
+
+          staged_path, names_path, output_path = map(Path, sys.argv[1:])
+          staged = {}
+          for line in staged_path.read_text(encoding='utf-8').splitlines():
+              if not line:
+                  continue
+              name, path = line.split('\t', 1)
+              staged[name] = path
+          requested = [line for line in names_path.read_text(encoding='utf-8').splitlines() if line]
+          missing = [name for name in requested if name not in staged]
+          if missing:
+              raise SystemExit(f"Planned upload assets were not staged: {missing}")
+          output_path.write_text(
+              ''.join(f"{name}\t{staged[name]}\n" for name in requested),
+              encoding='utf-8',
+          )
+          PY
+
           {
-            printf 'release_asset_paths<<EOF\n%s\nEOF\n' \
-              "$(printf '%s\n' "${release_asset_paths[@]}")"
-            printf 'release_asset_names<<EOF\n%s\nEOF\n' \
-              "$(printf '%s\n' "${release_asset_names[@]}")"
-            printf 'debug_asset_paths<<EOF\n%s\nEOF\n' \
-              "$(printf '%s\n' "${debug_asset_paths[@]}")"
-            printf 'debug_asset_names<<EOF\n%s\nEOF\n' \
-              "$(printf '%s\n' "${debug_asset_names[@]}")"
-            echo "release_artifact_dir=${release_artifact_dir}"
-            echo "debug_artifact_dir=${debug_artifact_dir}"
+            echo "release_artifact_dir=${release_dir}"
+            echo "debug_artifact_dir=${debug_dir}"
+            echo "manifest_file=${manifest_json}"
+            echo "upload_tsv=${upload_tsv}"
+            echo "staged_tsv=${staged_tsv}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Validate new-release source contracts
-        if: steps.version.outputs.existing_release != 'true'
+        if: inputs.release_mode == 'create_new_release'
         shell: bash
-        env:
-          SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
         run: |
+          set -euo pipefail
           bash ./scripts/check-ci-variant-contracts.sh
           bash ./scripts/check-ts18-apk-reference-contracts.sh
           bash ./scripts/check-dofun-topway-compat.sh
 
-      - name: Upload selected release workflow artifacts
+      - name: Upload release recovery workflow artifact
         id: release_artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: Auxio-TS-${{ steps.version.outputs.release_tag }}-selected-release-assets
+          name: Auxio-TS-${{ steps.plan.outputs.release_tag }}-release-recovery
           path: ${{ steps.assets.outputs.release_artifact_dir }}/*
           if-no-files-found: error
           retention-days: 14
@@ -544,66 +675,44 @@ jobs:
         if: inputs.debug_variant_destination == 'workflow_artifacts'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: Auxio-TS-${{ steps.version.outputs.release_tag }}-debug-companions
+          name: Auxio-TS-${{ steps.plan.outputs.release_tag }}-debug-companions
           path: ${{ steps.assets.outputs.debug_artifact_dir }}/*
           if-no-files-found: error
           retention-days: 14
 
-      - name: Push version commit and tag
-        id: publish_ref
-        if: steps.version.outputs.existing_release != 'true'
+      - name: Push immutable release tag
+        id: publish_tag
+        if: inputs.release_mode == 'create_new_release'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          RELEASE_SHA: ${{ steps.version_commit.outputs.release_commit_sha }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: |
           set -euo pipefail
           gh auth setup-git
-          git fetch origin dev
-          [[ "$(git rev-parse "${RELEASE_SHA}^")" == "$(git rev-parse origin/dev)" ]] || {
-            echo "::error::Remote dev moved while building. Re-run from the latest dev."
-            exit 1
-          }
-          git push origin "${RELEASE_SHA}:refs/heads/dev"
           git tag "${RELEASE_TAG}" "${RELEASE_SHA}"
           git push origin "refs/tags/${RELEASE_TAG}"
-          echo 'tag_pushed=true' >> "${GITHUB_OUTPUT}"
+          remote_sha="$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}')"
+          [[ "${remote_sha}" == "${RELEASE_SHA}" ]] || {
+            echo "::error::Remote tag ${RELEASE_TAG} does not match the validated release commit."
+            exit 1
+          }
+          echo "tag_pushed=true" >> "${GITHUB_OUTPUT}"
 
-      - name: Create or update release
+      - name: Ensure draft release transaction exists
         id: release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          PREVIOUS_TAG: ${{ steps.version.outputs.previous_tag }}
-          EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
-          REPLACE: ${{ inputs.replace_existing_assets }}
-          DRAFT: ${{ inputs.draft }}
-          PRERELEASE: ${{ inputs.prerelease }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          PREVIOUS_TAG: ${{ steps.plan.outputs.previous_tag }}
+          RELEASE_EXISTS: ${{ steps.plan.outputs.release_exists }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
-          ASSET_PATHS: ${{ steps.assets.outputs.release_asset_paths }}
-          ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
         run: |
           set -euo pipefail
-          mapfile -t paths <<< "${ASSET_PATHS}"
-          mapfile -t names <<< "${ASSET_NAMES}"
-          upload=()
-          for i in "${!paths[@]}"; do
-            upload+=("${paths[$i]}#${names[$i]}")
-          done
-
-          if [[ "${EXISTING_RELEASE}" == true ]]; then
-            if [[ "${REPLACE}" == true ]]; then
-              existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
-              for name in "${names[@]}"; do
-                if grep -Fxq -- "${name}" <<< "${existing}"; then
-                  gh release delete-asset "${RELEASE_TAG}" "${name}" --yes
-                fi
-              done
-            fi
-            gh release upload "${RELEASE_TAG}" "${upload[@]}"
-          else
+          created=false
+          if [[ "${RELEASE_EXISTS}" != true ]]; then
             notes="${RUNNER_TEMP}/release-notes.md"
             {
               echo "## What's changed"
@@ -618,135 +727,215 @@ jobs:
               echo '- topwayTwMedia is the primary signed APK.'
               echo '- The LSPosed API 100 bridge is the signed TS18 addon for the genuine stock `com.tw.music` process.'
               if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
-                echo '- Debug APKs were published as explicitly selected GitHub Release assets.'
-                echo '- Debug APKs are diagnostic companions with separate application IDs; they are not release-runtime proof or recommended normal installs.'
+                echo '- Debug APKs were explicitly selected as GitHub Release assets.'
+                echo '- Debug APKs are diagnostic companions with separate application IDs; they are not recommended normal installs.'
               else
                 echo '- Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.'
               fi
               echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
               echo '- Exact TS18 runtime behaviour requires device validation.'
             } > "${notes}"
-            args=()
-            [[ "${DRAFT}" == true ]] && args+=(--draft)
-            [[ "${PRERELEASE}" == true ]] && args+=(--prerelease)
-            gh release create "${RELEASE_TAG}" "${upload[@]}" \
+            gh release create "${RELEASE_TAG}" \
               --title "${RELEASE_TAG}" \
               --notes-file "${notes}" \
-              --verify-tag \
-              "${args[@]}"
+              --draft \
+              --verify-tag
+            created=true
           fi
-          echo "release_url=$(gh release view "${RELEASE_TAG}" --json url --jq .url)" >> "${GITHUB_OUTPUT}"
+          release_json="${RUNNER_TEMP}/active-release.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > "${release_json}"
+          {
+            echo "created=${created}"
+            echo "release_id=$(jq -r .id "${release_json}")"
+            echo "release_url=$(jq -r .html_url "${release_json}")"
+            echo "initial_draft=$(jq -r .draft "${release_json}")"
+            echo "initial_prerelease=$(jq -r .prerelease "${release_json}")"
+          } >> "${GITHUB_OUTPUT}"
 
-      - name: Cleanup release tag after failed release creation
-        if: ${{ failure() && steps.publish_ref.outputs.tag_pushed == 'true' && steps.release.outcome != 'success' }}
+      - name: Upload or replace planned release assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          RELEASE_COMMIT_SHA: ${{ steps.version_commit.outputs.release_commit_sha }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          UPLOAD_TSV: ${{ steps.assets.outputs.upload_tsv }}
+          REPLACE: ${{ inputs.replace_existing_assets }}
         run: |
           set -euo pipefail
-          gh auth setup-git
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Release ${RELEASE_TAG} exists; keeping remote tag."
-            exit 0
-          fi
-          remote_tag_sha="$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}' || true)"
-          if [[ -z "${remote_tag_sha}" ]]; then
-            echo "Remote tag ${RELEASE_TAG} is already absent."
-            exit 0
-          fi
-          if [[ "${remote_tag_sha}" != "${RELEASE_COMMIT_SHA}" ]]; then
-            echo "::warning::Remote tag ${RELEASE_TAG} does not point at this workflow's release commit; refusing cleanup."
-            exit 0
-          fi
-          git push origin ":refs/tags/${RELEASE_TAG}" || true
+          upload=()
+          while IFS=$'\t' read -r name path; do
+            [[ -n "${name}" ]] || continue
+            [[ -f "${path}" ]] || {
+              echo "::error::Staged upload path is missing for ${name}: ${path}"
+              exit 1
+            }
+            upload+=("${path}#${name}")
+          done < "${UPLOAD_TSV}"
 
-      - name: Verify selected release assets
+          if ((${#upload[@]} == 0)); then
+            echo 'No remote asset upload is required; selected triplets are already complete.'
+          elif [[ "${REPLACE}" == true ]]; then
+            gh release upload "${RELEASE_TAG}" "${upload[@]}" --clobber
+          else
+            gh release upload "${RELEASE_TAG}" "${upload[@]}"
+          fi
+
+      - name: Verify remote release asset manifest
+        id: verify
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
-          ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
-          EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
         run: |
           set -euo pipefail
-          actual="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
+          remote_json="${RUNNER_TEMP}/verified-release.json"
+          actual_names="${RUNNER_TEMP}/actual-release-assets.txt"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > "${remote_json}"
+          jq -r '.assets[].name' "${remote_json}" | sort -u > "${actual_names}"
+
           while IFS= read -r name; do
             [[ -n "${name}" ]] || continue
-            grep -Fxq -- "${name}" <<< "${actual}" || {
-              echo "::error::Release is missing ${name}."
+            grep -Fxq -- "${name}" "${actual_names}" || {
+              echo "::error::Release is missing selected asset ${name}."
               exit 1
             }
-          done <<< "${ASSET_NAMES}"
-          forbidden="Auxio-TS-${RELEASE_TAG}-topway-twmusic-release.apk"
-          if grep -Fxq -- "${forbidden}" <<< "${actual}"; then
-            echo "::error::Raw topwayTwMusic APK asset is forbidden: ${forbidden}"
-            exit 1
+          done < "${VERIFY_NAMES_FILE}"
+
+          if [[ "${RELEASE_MODE}" == create_new_release ]]; then
+            expected_sorted="${RUNNER_TEMP}/expected-release-assets.txt"
+            sort -u "${VERIFY_NAMES_FILE}" > "${expected_sorted}"
+            if ! diff -u "${expected_sorted}" "${actual_names}"; then
+              echo "::error::New release contains an unexpected or missing asset."
+              exit 1
+            fi
+            forbidden="Auxio-TS-${RELEASE_TAG}-topway-twmusic-release.apk"
+            retired="Auxio-TS-${RELEASE_TAG}-topway-twmusic-magisk.zip"
+            grep -Fxq -- "${forbidden}" "${actual_names}" && {
+              echo "::error::Raw topwayTwMusic APK asset is forbidden: ${forbidden}"
+              exit 1
+            }
+            grep -Fxq -- "${retired}" "${actual_names}" && {
+              echo "::error::Retired topwayTwMusic Magisk asset is forbidden: ${retired}"
+              exit 1
+            }
+            if [[ "${DEBUG_DESTINATION}" != release_assets ]] && grep -Eq -- '-debug\.apk($|\.)' "${actual_names}"; then
+              echo "::error::Debug APKs are forbidden unless debug_variant_destination=release_assets."
+              exit 1
+            fi
           fi
-          retired="Auxio-TS-${RELEASE_TAG}-topway-twmusic-magisk.zip"
-          if [[ "${EXISTING_RELEASE}" != true ]] &&
-            grep -Fxq -- "${retired}" <<< "${actual}"; then
-            echo "::error::Retired topwayTwMusic Magisk asset is forbidden on new releases: ${retired}"
-            exit 1
+          echo "verified=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Apply requested status to newly created release
+        id: finalise
+        if: steps.release.outputs.created == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft="${DRAFT}" \
+            -F prerelease="${PRERELEASE}" > "${RUNNER_TEMP}/final-release.json"
+          echo "draft=$(jq -r .draft "${RUNNER_TEMP}/final-release.json")" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=$(jq -r .prerelease "${RUNNER_TEMP}/final-release.json")" >> "${GITHUB_OUTPUT}"
+
+      - name: Synchronise released source metadata to dev
+        id: sync
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin dev
+          remote_dev="$(git rev-parse origin/dev)"
+          status='blocked'
+          if [[ "${remote_dev}" == "${RELEASE_SHA}" ]] || git merge-base --is-ancestor "${RELEASE_SHA}" "${remote_dev}"; then
+            status='already_synced'
+          elif [[ "$(git rev-parse "${RELEASE_SHA}^")" == "${remote_dev}" ]]; then
+            gh auth setup-git
+            if git push origin "${RELEASE_SHA}:refs/heads/dev"; then
+              status='fast_forwarded'
+            else
+              echo "::warning::Release assets are verified, but the protected dev metadata fast-forward was rejected."
+              status='push_rejected'
+            fi
+          else
+            echo "::warning::Release assets are verified, but dev moved and cannot be fast-forwarded to the release metadata commit."
+            status='dev_moved'
           fi
-          if [[ "${EXISTING_RELEASE}" != true && "${DEBUG_DESTINATION}" != release_assets ]] &&
-            grep -Eq -- '-debug\.apk($|\.)' <<< "${actual}"; then
-            echo "::error::Debug APKs and sidecars are forbidden unless debug_variant_destination=release_assets."
-            exit 1
-          fi
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
 
       - name: Write release summary
         if: always()
         shell: bash
         env:
           RESULT: ${{ job.status }}
-          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
           SELECTED: ${{ steps.selection.outputs.selected_summary }}
-          EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
-          ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
-          DEBUG_ASSET_NAMES: ${{ steps.assets.outputs.debug_asset_names }}
+          VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
           RELEASE_ARTIFACT_URL: ${{ steps.release_artifact.outputs.artifact-url }}
           DEBUG_ARTIFACT_URL: ${{ steps.debug_artifact.outputs.artifact-url }}
+          RELEASE_CREATED: ${{ steps.release.outputs.created }}
+          INITIAL_DRAFT: ${{ steps.release.outputs.initial_draft }}
+          INITIAL_PRERELEASE: ${{ steps.release.outputs.initial_prerelease }}
+          FINAL_DRAFT: ${{ steps.finalise.outputs.draft }}
+          FINAL_PRERELEASE: ${{ steps.finalise.outputs.prerelease }}
+          ASSETS_VERIFIED: ${{ steps.verify.outputs.verified }}
+          SYNC_STATUS: ${{ steps.sync.outputs.status }}
         run: |
           {
             echo '# Manual release summary'
             echo
             echo "- Result: \`${RESULT}\`"
+            echo "- Mode: \`${RELEASE_MODE}\`"
             echo "- Tag: ${RELEASE_TAG:-not computed}"
-            echo "- Existing-release append mode: ${EXISTING_RELEASE:-false}"
+            echo "- Starting dev SHA: ${SOURCE_SHA:-not resolved}"
+            echo "- Release/tag SHA: ${RELEASE_SHA:-not resolved}"
             echo "- Maintained assets: ${SELECTED:-not selected}"
-            echo "- Debug variant destination: ${DEBUG_DESTINATION:-not selected}"
+            echo "- Debug destination: ${DEBUG_DESTINATION:-not selected}"
+            echo "- Release created in this run: ${RELEASE_CREATED:-false}"
+            echo "- Assets verified remotely: ${ASSETS_VERIFIED:-false}"
+            echo "- Source metadata synchronisation: ${SYNC_STATUS:-not attempted}"
             [[ -n "${RELEASE_URL:-}" ]] && echo "- Release: ${RELEASE_URL}"
-            [[ -n "${RELEASE_ARTIFACT_URL:-}" ]] && echo "- Workflow artifact: ${RELEASE_ARTIFACT_URL}"
+            [[ -n "${RELEASE_ARTIFACT_URL:-}" ]] && echo "- Recovery workflow artifact: ${RELEASE_ARTIFACT_URL}"
             [[ -n "${DEBUG_ARTIFACT_URL:-}" ]] && echo "- Debug workflow artifact: ${DEBUG_ARTIFACT_URL}"
             echo
-            echo '## Selected GitHub Release assets'
-            if [[ -n "${ASSET_NAMES:-}" ]]; then
-              while IFS= read -r asset; do
-                [[ -n "${asset}" ]] && echo "- ${asset}"
-              done <<< "${ASSET_NAMES}"
+            echo '## Release status'
+            if [[ "${RELEASE_CREATED}" == true ]]; then
+              echo "- Initial transaction state: draft=${INITIAL_DRAFT}, prerelease=${INITIAL_PRERELEASE}"
+              echo "- Requested final state: draft=${FINAL_DRAFT:-unknown}, prerelease=${FINAL_PRERELEASE:-unknown}"
             else
-              echo '- No assets reached staging.'
-            fi
-            if [[ -n "${DEBUG_ASSET_NAMES:-}" && "${DEBUG_DESTINATION}" != release_assets ]]; then
-              echo
-              echo '## Debug workflow artifacts'
-              while IFS= read -r asset; do
-                [[ -n "${asset}" ]] && echo "- ${asset}"
-              done <<< "${DEBUG_ASSET_NAMES}"
+              echo "- Existing release status was preserved: draft=${INITIAL_DRAFT:-unknown}, prerelease=${INITIAL_PRERELEASE:-unknown}"
             fi
             echo
-            echo '- Each selected variant is built in an independent sequential Gradle invocation.'
-            echo '- topwayTwMedia remains the primary APK.'
-            echo '- The API 100 LSPosed bridge is the recommended TS18 addon and is static-scoped only to com.tw.music.'
-            if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
-              echo '- Debug APKs were published as explicitly selected GitHub Release assets.'
+            echo '## Selected GitHub Release assets'
+            if [[ -f "${VERIFY_NAMES_FILE:-}" && -s "${VERIFY_NAMES_FILE}" ]]; then
+              while IFS= read -r asset; do
+                [[ -n "${asset}" ]] && echo "- ${asset}"
+              done < "${VERIFY_NAMES_FILE}"
             else
-              echo '- Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.'
+              echo '- No release asset list reached planning.'
             fi
-            echo '- The exact-package topwayTwMusic Magisk release lane is retired.'
+            echo
+            echo '- Each required variant was built at most once.'
+            echo '- Existing complete triplets were reused in repair mode; partial triplets require explicit replacement.'
+            echo '- topwayTwMedia remains the primary APK.'
+            echo '- The API 100 LSPosed bridge remains static-scoped only to genuine stock com.tw.music.'
+            echo '- The exact-package topwayTwMusic Magisk release lane remains retired.'
+            if [[ "${SYNC_STATUS}" == push_rejected || "${SYNC_STATUS}" == dev_moved ]]; then
+              echo
+              echo '## Follow-up required'
+              echo '- The GitHub Release succeeded, but source metadata did not reach dev. Reconcile dev with the immutable release commit before the next release.'
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
