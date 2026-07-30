@@ -138,8 +138,12 @@ for expected_metadata in \
   grep -Fxq -- "$expected_metadata" "$metadata_file" ||
     fail "Release metadata sidecar is missing: $expected_metadata"
 done
-grep -Fqi -- "$actual_signer" "$metadata_file" ||
-  fail 'Release metadata sidecar does not contain the verified signer fingerprint.'
+metadata_report=$(cat -- "$metadata_file")
+if ! metadata_signer=$(extract_apksigner_certificate_sha256 "$metadata_report"); then
+  fail 'Release metadata sidecar does not contain exactly one valid signer fingerprint.'
+fi
+[[ "$metadata_signer" == "$actual_signer" ]] ||
+  fail 'Release metadata sidecar signer does not match the verified APK signer.'
 
 checksum_dir=$(cd -- "$(dirname -- "$sha256_file")" && pwd -P)
 checksum_name=$(basename -- "$sha256_file")
