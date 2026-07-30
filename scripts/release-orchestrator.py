@@ -13,7 +13,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, NoReturn, Sequence
 
 SEMVER_RE = re.compile(r"^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 VERSION_NAME_RE = re.compile(r'^(?P<indent>\s*)versionName\s+"(?P<value>[^"]+)"\s*$', re.MULTILINE)
@@ -31,7 +31,7 @@ class SemVer:
     patch: int
 
     @classmethod
-    def parse(cls, value: str) -> "SemVer | None":
+    def parse(cls, value: str) -> SemVer | None:
         match = SEMVER_RE.fullmatch(value.strip())
         if not match:
             return None
@@ -50,18 +50,22 @@ class SemVer:
         # Repository authority: major * 1,000,000 + minor * 10,000 + patch * 100.
         return self.major * 1_000_000 + self.minor * 10_000 + self.patch * 100
 
-    def next_patch(self) -> "SemVer":
+    def next_patch(self) -> SemVer:
         return SemVer(self.major, self.minor, self.patch + 1)
 
 
-def fail(message: str) -> "NoReturn":  # type: ignore[name-defined]
+def fail(message: str) -> NoReturn:
     raise ReleasePlanError(message)
 
 
 def read_lines(path: Path) -> list[str]:
     if not path.exists():
         return []
-    return [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 def parse_versions(values: Iterable[str]) -> set[SemVer]:
@@ -84,11 +88,14 @@ def read_gradle_metadata(path: Path) -> tuple[SemVer, int]:
         )
     version = SemVer.parse(name_matches[0].group("value"))
     if version is None:
-        fail(f"Source versionName is not strict major.minor.patch: {name_matches[0].group('value')}")
+        fail(
+            "Source versionName is not strict major.minor.patch: "
+            f"{name_matches[0].group('value')}"
+        )
     return version, int(code_matches[0].group("value"))
 
 
-def load_target_release(path: Path) -> dict:
+def load_target_release(path: Path) -> dict[str, object]:
     if not path.exists() or not path.read_text(encoding="utf-8").strip():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -102,6 +109,37 @@ def highest_below(versions: Iterable[SemVer], target: SemVer) -> SemVer | None:
     return max(eligible) if eligible else None
 
 
+def validate_version_authority(
+    git_versions: set[SemVer],
+    release_versions: set[SemVer],
+    mode: str,
+) -> None:
+    """Reject release/tag states that would make a new version skip repairable state."""
+
+    release_without_tag = release_versions - git_versions
+    if release_without_tag:
+        orphan = max(release_without_tag)
+        fail(
+            f"GitHub Release {orphan.tag} exists without a resolvable Git tag. "
+            "STOP for human repair."
+        )
+
+    if mode != "create_new_release":
+        return
+
+    tag_without_release = git_versions - release_versions
+    if not tag_without_release:
+        return
+    newest_tag_only = max(tag_without_release)
+    newest_release = max(release_versions) if release_versions else None
+    if newest_release is None or newest_tag_only > newest_release:
+        fail(
+            f"Latest version authority {newest_tag_only.tag} is an immutable tag without "
+            "a GitHub Release. Use repair_existing_release with that explicit tag instead "
+            "of skipping to a new version."
+        )
+
+
 def command_resolve(args: argparse.Namespace) -> None:
     source_version, source_code = read_gradle_metadata(Path(args.source_gradle))
     git_tag_values = read_lines(Path(args.git_tags_file))
@@ -111,17 +149,25 @@ def command_resolve(args: argparse.Namespace) -> None:
     external_versions = git_versions | release_versions
     target_release = load_target_release(Path(args.target_release_json))
 
+    validate_version_authority(git_versions, release_versions, args.mode)
+
     requested = args.input_tag.strip()
     requested_version = SemVer.parse(requested) if requested else None
     if requested and requested_version is None:
-        fail(f"Invalid version tag {requested!r}; expected vMAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH.")
+        fail(
+            f"Invalid version tag {requested!r}; expected "
+            "vMAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH."
+        )
 
     if args.mode == "repair_existing_release":
         if requested_version is None:
             fail("repair_existing_release requires an explicit version_tag.")
         target = requested_version
         if target not in git_versions:
-            fail(f"Repair requires existing immutable tag {target.tag}; no matching Git tag was found.")
+            fail(
+                f"Repair requires existing immutable tag {target.tag}; "
+                "no matching Git tag was found."
+            )
     else:
         if requested_version is not None:
             target = requested_version
@@ -141,25 +187,34 @@ def command_resolve(args: argparse.Namespace) -> None:
         highest_external = max(external_versions) if external_versions else None
         if highest_external is not None and target <= highest_external:
             fail(
-                f"New release {target.tag} must be newer than existing release/tag authority "
-                f"{highest_external.tag}."
+                f"New release {target.tag} must be newer than existing release/tag "
+                f"authority {highest_external.tag}."
             )
 
     tag_exists = target in git_versions
     release_exists = target in release_versions or bool(target_release.get("id"))
     if release_exists and not tag_exists:
-        fail(f"GitHub Release {target.tag} exists without a resolvable Git tag. STOP for human repair.")
+        fail(
+            f"GitHub Release {target.tag} exists without a resolvable Git tag. "
+            "STOP for human repair."
+        )
 
     previous = highest_below(git_versions, target)
     target_code = target.version_code
     metadata_change_required = source_version != target or source_code != target_code
     if args.mode == "create_new_release" and target_code < source_code:
         fail(
-            f"Calculated versionCode {target_code} would regress below source versionCode {source_code}."
+            f"Calculated versionCode {target_code} would regress below source "
+            f"versionCode {source_code}."
         )
-    if args.mode == "create_new_release" and target_code == source_code and source_version != target:
+    if (
+        args.mode == "create_new_release"
+        and target_code == source_code
+        and source_version != target
+    ):
         fail(
-            f"Calculated versionCode {target_code} collides with source version {source_version.name}."
+            f"Calculated versionCode {target_code} collides with source version "
+            f"{source_version.name}."
         )
 
     result = {
@@ -179,17 +234,29 @@ def command_resolve(args: argparse.Namespace) -> None:
         "target_release_prerelease": bool(target_release.get("prerelease", False)),
         "target_release_url": str(target_release.get("html_url", "")),
     }
-    Path(args.output).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    Path(args.output).write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def command_inspect_gradle(args: argparse.Namespace) -> None:
     version, code = read_gradle_metadata(Path(args.gradle))
     if args.expected_version and version.name != args.expected_version:
         fail(
-            f"Tagged source versionName {version.name} does not match requested {args.expected_version}."
+            f"Tagged source versionName {version.name} does not match requested "
+            f"{args.expected_version}."
+        )
+    if code != version.version_code:
+        fail(
+            f"Tagged source versionCode {code} does not match repository formula "
+            f"{version.version_code} for {version.name}."
         )
     result = {"version_name": version.name, "version_code": code}
-    Path(args.output).write_text(json.dumps(result, sort_keys=True) + "\n", encoding="utf-8")
+    Path(args.output).write_text(
+        json.dumps(result, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def command_update_gradle(args: argparse.Namespace) -> None:
@@ -199,16 +266,24 @@ def command_update_gradle(args: argparse.Namespace) -> None:
         fail("--version-name must be strict MAJOR.MINOR.PATCH without a v prefix.")
     if args.version_code != version.version_code:
         fail(
-            f"Version code {args.version_code} does not match repository formula {version.version_code}."
+            f"Version code {args.version_code} does not match repository formula "
+            f"{version.version_code}."
         )
     text = path.read_text(encoding="utf-8")
-    if len(list(VERSION_NAME_RE.finditer(text))) != 1 or len(list(VERSION_CODE_RE.finditer(text))) != 1:
+    if (
+        len(list(VERSION_NAME_RE.finditer(text))) != 1
+        or len(list(VERSION_CODE_RE.finditer(text))) != 1
+    ):
         fail("Refusing metadata update because version literals are not unique.")
     text = VERSION_NAME_RE.sub(
-        lambda match: f'{match.group("indent")}versionName "{version.name}"', text, count=1
+        lambda match: f'{match.group("indent")}versionName "{version.name}"',
+        text,
+        count=1,
     )
     text = VERSION_CODE_RE.sub(
-        lambda match: f'{match.group("indent")}versionCode {args.version_code}', text, count=1
+        lambda match: f'{match.group("indent")}versionCode {args.version_code}',
+        text,
+        count=1,
     )
     path.write_text(text, encoding="utf-8")
     updated_version, updated_code = read_gradle_metadata(path)
@@ -265,22 +340,31 @@ def command_plan_assets(args: argparse.Namespace) -> None:
             continue
         elif any(present):
             fail(
-                f"Partial existing asset triplet for {base}. Enable replacement to rebuild it safely."
+                f"Partial existing asset triplet for {base}. "
+                "Enable replacement to rebuild it safely."
             )
         else:
             build_variants.append(variant)
             upload_names.extend(names)
 
-    build_apk_names = [VARIANT_NAMES[variant].format(tag=args.release_tag) for variant in build_variants]
+    build_apk_names = [
+        VARIANT_NAMES[variant].format(tag=args.release_tag)
+        for variant in build_variants
+    ]
     result = {
         "build_variants": build_variants,
         "build_apk_names": build_apk_names,
-        "needs_signing": any(not variant.endswith("_debug") for variant in build_variants),
+        "needs_signing": any(
+            not variant.endswith("_debug") for variant in build_variants
+        ),
         "upload_names": upload_names,
         "verify_names": verify_names,
         "debug_workflow_names": debug_workflow_names,
     }
-    Path(args.output).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    Path(args.output).write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def command_validate_manifest(args: argparse.Namespace) -> None:
@@ -305,8 +389,16 @@ def command_validate_manifest(args: argparse.Namespace) -> None:
     }
     expected_identity = {
         "topway_twmedia": ("com.tw.media", args.version_name, "release"),
-        "topway_twmedia_debug": ("com.tw.media.debug", f"{args.version_name}-DEBUG", args.debug_destination),
-        "lsposed_bridge": ("org.oxycblt.auxio.ts18bridge", args.version_name, "release"),
+        "topway_twmedia_debug": (
+            "com.tw.media.debug",
+            f"{args.version_name}-DEBUG",
+            args.debug_destination,
+        ),
+        "lsposed_bridge": (
+            "org.oxycblt.auxio.ts18bridge",
+            args.version_name,
+            "release",
+        ),
         "lsposed_bridge_debug": (
             "org.oxycblt.auxio.ts18bridge.debug",
             f"{args.version_name}-DEBUG",
@@ -330,7 +422,10 @@ def command_validate_manifest(args: argparse.Namespace) -> None:
             fail(f"{variant} versionName mismatch: {entry['version_name']}")
         if int(entry["version_code"]) != expected_version_code:
             fail(f"{variant} versionCode mismatch: {entry['version_code']}")
-        if entry["source_commit"] != args.source_commit or entry["release_tag"] != args.release_tag:
+        if (
+            entry["source_commit"] != args.source_commit
+            or entry["release_tag"] != args.release_tag
+        ):
             fail(f"{variant} source/tag provenance mismatch.")
         if entry["destination"] != expected_destination:
             fail(f"{variant} destination mismatch: {entry['destination']}")
@@ -355,6 +450,23 @@ def command_self_test(_: argparse.Namespace) -> None:
     assert SemVer.parse("v6.4") is None
     versions = parse_versions(["v6.4.7", "6.4.8", "bad", "v6.5.0"])
     assert max(versions).tag == "v6.5.0"
+
+    v647 = SemVer(6, 4, 7)
+    v648 = SemVer(6, 4, 8)
+    validate_version_authority({v647, v648}, {v647}, "repair_existing_release")
+    try:
+        validate_version_authority({v647, v648}, {v647}, "create_new_release")
+    except ReleasePlanError:
+        pass
+    else:
+        raise AssertionError("create mode accepted the newest tag-only release state")
+    try:
+        validate_version_authority({v647}, {v647, v648}, "create_new_release")
+    except ReleasePlanError:
+        pass
+    else:
+        raise AssertionError("release-without-tag authority was accepted")
+
     print("release-orchestrator self-tests: PASS")
 
 
@@ -363,7 +475,11 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     resolve = subparsers.add_parser("resolve")
-    resolve.add_argument("--mode", choices=["create_new_release", "repair_existing_release"], required=True)
+    resolve.add_argument(
+        "--mode",
+        choices=["create_new_release", "repair_existing_release"],
+        required=True,
+    )
     resolve.add_argument("--input-tag", default="")
     resolve.add_argument("--source-gradle", required=True)
     resolve.add_argument("--git-tags-file", required=True)
@@ -385,10 +501,18 @@ def build_parser() -> argparse.ArgumentParser:
     update_gradle.set_defaults(func=command_update_gradle)
 
     plan_assets = subparsers.add_parser("plan-assets")
-    plan_assets.add_argument("--mode", choices=["create_new_release", "repair_existing_release"], required=True)
+    plan_assets.add_argument(
+        "--mode",
+        choices=["create_new_release", "repair_existing_release"],
+        required=True,
+    )
     plan_assets.add_argument("--release-tag", required=True)
     plan_assets.add_argument("--selected-variants-file", required=True)
-    plan_assets.add_argument("--debug-destination", choices=["workflow_artifacts", "release_assets"], required=True)
+    plan_assets.add_argument(
+        "--debug-destination",
+        choices=["workflow_artifacts", "release_assets"],
+        required=True,
+    )
     plan_assets.add_argument("--existing-assets-file", required=True)
     plan_assets.add_argument("--replace", choices=["true", "false"], required=True)
     plan_assets.add_argument("--output", required=True)
@@ -401,7 +525,11 @@ def build_parser() -> argparse.ArgumentParser:
     validate_manifest.add_argument("--version-code", required=True)
     validate_manifest.add_argument("--release-tag", required=True)
     validate_manifest.add_argument("--source-commit", required=True)
-    validate_manifest.add_argument("--debug-destination", choices=["workflow_artifacts", "release_assets"], required=True)
+    validate_manifest.add_argument(
+        "--debug-destination",
+        choices=["workflow_artifacts", "release_assets"],
+        required=True,
+    )
     validate_manifest.set_defaults(func=command_validate_manifest)
 
     self_test = subparsers.add_parser("self-test")
