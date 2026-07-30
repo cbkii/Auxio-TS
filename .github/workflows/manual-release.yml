@@ -732,13 +732,9 @@ jobs:
             else
               echo '- No assets reached staging.'
             fi
-            if [[ -n "${DEBUG_ASSET_NAMES:-}" ]]; then
+            if [[ -n "${DEBUG_ASSET_NAMES:-}" && "${DEBUG_DESTINATION}" != release_assets ]]; then
               echo
-              if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
-                echo '## Debug assets included in GitHub Release'
-              else
-                echo '## Debug workflow artifacts'
-              fi
+              echo '## Debug workflow artifacts'
               while IFS= read -r asset; do
                 [[ -n "${asset}" ]] && echo "- ${asset}"
               done <<< "${DEBUG_ASSET_NAMES}"
