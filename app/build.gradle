@@ -140,6 +140,11 @@ android {
     }
 
     sourceSets {
+        // Benchmark is release-like and deliberately reuses release no-op diagnostic APIs.
+        benchmark {
+            java.srcDirs += ["src/release/java"]
+            kotlin.srcDirs += ["src/release/java"]
+        }
         // Reuse the same thin Topway/DoFun wrapper source set for both fixed DoFun entries.
         // The active applicationId supplies either com.tw.music or com.tw.media while the
         // exported component remains com.tw.music.MusicActivity. Keep both Java and Kotlin

@@ -6,8 +6,5 @@
     <PreferenceCategory app:title="@string/set_category_diagnostics">
         <Preference app:key="@string/set_key_diagnostics_run_check" app:summary="@string/set_run_dofun_check_desc" app:title="@string/set_run_dofun_check" />
         <Preference android:enabled="false" app:key="@string/set_key_diagnostics_export_report" app:summary="@string/set_export_dofun_report_desc" app:title="@string/set_export_dofun_report" />
-        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_diagnostics_hash_paths" app:summary="@string/set_diagnostics_hash_paths_desc" app:title="@string/set_diagnostics_hash_paths" />
-        <SwitchPreferenceCompat app:defaultValue="false" app:key="@string/set_key_diagnostics_redact_device" app:summary="@string/set_diagnostics_redact_device_desc" app:title="@string/set_diagnostics_redact_device" />
-        <Preference app:key="@string/set_key_diagnostics_save_bundle" app:summary="@string/set_diagnostics_save_bundle_desc" app:title="@string/set_diagnostics_save_bundle" />
     </PreferenceCategory>
 </PreferenceScreen>

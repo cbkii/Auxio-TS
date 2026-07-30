@@ -1592,7 +1592,9 @@ constructor(
     }
 
     private fun indexingStateSessionId(): Long =
-        (currentIndexingState as? IndexingState.Indexing)?.sessionId ?: 0L
+        synchronized(this) {
+            (currentIndexingState as? IndexingState.Indexing)?.sessionId ?: 0L
+        }
 
     private fun dispatchIndexingState() {
         for (listener in indexingListeners) {

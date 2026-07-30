@@ -97,7 +97,7 @@ object HeadUnitMetadataPolicy {
         "sha256:" +
             MessageDigest.getInstance("SHA-256")
                 .digest(value.toByteArray(Charsets.UTF_8))
-                .joinToString("") { "%02x".format(it) }
+                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private const val MAX_TEXT_LENGTH = 512
     private const val MAX_IDENTIFIER_LENGTH = 4096

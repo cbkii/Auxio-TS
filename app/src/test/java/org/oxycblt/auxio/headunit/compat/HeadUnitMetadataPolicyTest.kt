@@ -109,6 +109,7 @@ class HeadUnitMetadataPolicyTest {
         assertEquals(512, s.artist.length)
         assertTrue(s.mediaId.startsWith("sha256:"))
         assertEquals(71, s.mediaId.length)
+        assertTrue(s.mediaId.removePrefix("sha256:").matches(Regex("[0-9a-f]{64}")))
         assertEquals("", s.mediaUri)
         assertNull(s.artworkUri)
         assertTrue(!s.hasArtwork)

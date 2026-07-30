@@ -149,6 +149,17 @@ classify_path() {
       mark_app_primary
       matched=true
       ;;
+    app/src/debug/*)
+      mark_app_primary
+      android_lint=true
+      matched=true
+      ;;
+    app/src/release/*)
+      mark_app_primary
+      android_lint=true
+      release=true
+      matched=true
+      ;;
     app/src/main/*)
       mark_app_primary
       android_lint=true
@@ -280,6 +291,18 @@ self_test() {
   finalise_flags
   [[ "$app_tests" == true && "$android_lint" == true && "$topway_twmedia" == true && "$topway_twmusic" == false && "$api29" == false ]] ||
     fail 'Self-test: ordinary app code did not select focused primary validation.'
+
+  reset_flags
+  classify_path 'app/src/debug/java/example/DebugProbe.kt'
+  finalise_flags
+  [[ "$app_tests" == true && "$android_lint" == true && "$topway_twmedia" == true && "$release" == false ]] ||
+    fail 'Self-test: debug-only source did not select focused debug validation.'
+
+  reset_flags
+  classify_path 'app/src/release/java/example/ReleaseNoOp.kt'
+  finalise_flags
+  [[ "$release" == true && "$android_lint" == true && "$topway_twmedia" == true ]] ||
+    fail 'Self-test: release-only source did not select release compilation.'
 
   reset_flags
   classify_path 'app/src/main/java/example/MusicRepository.kt'

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="module_name">Auxio-TS Stock Music Bridge</string>
+    <string name="module_description">Routes the genuine TS18 com.tw.music activity and controls to Auxio-TS without spoofing platform signing or UID 1000.</string>
+</resources>

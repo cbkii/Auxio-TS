@@ -114,26 +114,28 @@ class Auxio : Application() {
         } else if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
-        journal.configurePersistence(File(filesDir, "diagnostics/sessions"))
-        val processSessionId =
-            "process-${System.currentTimeMillis()}-${Process.myPid()}-${BuildConfig.APPLICATION_ID}"
-        journal.startSession(processSessionId)
-        journal.log(
-            DiagnosticJournal.CAT_LIFECYCLE,
-            "Application process started",
-            "variant=${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE} commit=${BuildConfig.BUILD_COMMIT}",
-        )
-        Timber.tag(DIAGNOSTIC_CANARY_TAG)
-            .i(
-                "AUXIO_TS_CAPTURE_CANARY session=%s applicationId=%s version=%s(%d) variant=%s%s commit=%s",
-                processSessionId,
-                BuildConfig.APPLICATION_ID,
-                BuildConfig.VERSION_NAME,
-                BuildConfig.VERSION_CODE,
-                BuildConfig.FLAVOR,
-                BuildConfig.BUILD_TYPE,
-                BuildConfig.BUILD_COMMIT,
+        if (BuildConfig.DEBUG) {
+            journal.configurePersistence(File(filesDir, "diagnostics/sessions"))
+            val processSessionId =
+                "process-${System.currentTimeMillis()}-${Process.myPid()}-${BuildConfig.APPLICATION_ID}"
+            journal.startSession(processSessionId)
+            journal.log(
+                DiagnosticJournal.CAT_LIFECYCLE,
+                "Application process started",
+                "variant=${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE} commit=${BuildConfig.BUILD_COMMIT}",
             )
+            Timber.tag(DIAGNOSTIC_CANARY_TAG)
+                .i(
+                    "AUXIO_TS_CAPTURE_CANARY session=%s applicationId=%s version=%s(%d) variant=%s%s commit=%s",
+                    processSessionId,
+                    BuildConfig.APPLICATION_ID,
+                    BuildConfig.VERSION_NAME,
+                    BuildConfig.VERSION_CODE,
+                    BuildConfig.FLAVOR,
+                    BuildConfig.BUILD_TYPE,
+                    BuildConfig.BUILD_COMMIT,
+                )
+        }
 
         // Migrate any settings that may have changed in an app update.
         // Isolate each migration so a single failure doesn't block the rest.

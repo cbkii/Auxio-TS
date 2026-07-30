@@ -1,6 +1,8 @@
 # DoFun Variety / Topway music compatibility
 
-Auxio-TS targets TS18/Topway head units using DoFun Variety Theme (`com.dofun.variety`). The practical goal is for Auxio-TS to replace or satisfy the stock `twmusic` / `com.tw.music` app contract so the DoFun launcher/theme music widget can recognise the app, open it, display playback state, and route controls.
+Auxio-TS targets TS18/Topway head units using DoFun Variety Theme (`com.dofun.variety`). The
+supported integration keeps genuine stock `com.tw.music` in place and uses a statically scoped
+LSPosed addon to connect its public integration surface to Auxio-TS running as `com.tw.media`.
 
 This document is the concise compatibility guide. Raw APK reference snippets live in `docs/reference/ts18-apk/`. The exact-device runtime profile lives in `docs/evidence/ts18-device-profile/`.
 
@@ -13,7 +15,7 @@ com.tw.media / com.tw.music.MusicActivity
 com.tw.music / com.tw.music.MusicActivity
 ```
 
-The clean exact replacement target is therefore a dedicated Topway/DoFun variant that exposes:
+The fixed identity that DoFun addresses is:
 
 ```text
 application/package ID: com.tw.music
@@ -21,17 +23,17 @@ launcher/activity component: com.tw.music.MusicActivity
 label: Music
 ```
 
-A normal Auxio package identity such as `org.oxycblt.auxio` may be a valid Android media app, but it is unlikely to satisfy the fixed DoFun music hotseat contract.
+Auxio cannot safely acquire this platform-signed UID-1000 identity. The API-100 bridge runs only
+inside the genuine stock process and connects it to the normal Android media surfaces exported by
+the separately installed Auxio app.
 
 ## Variant expectations
 
-| Build                                   | Package/application ID                                | Launcher component                                                     | Purpose                                                                 |
-| --------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Standard Auxio-TS                       | `org.oxycblt.auxio`                                   | `org.oxycblt.auxio.MainActivity`                                       | Development/upstream baseline                                           |
-| Standard debug                          | `org.oxycblt.auxio.debug`                             | `org.oxycblt.auxio.MainActivity`                                       | Development/debug                                                       |
-| Topway/DoFun exact release              | `com.tw.music`                                        | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | Exact DoFun fixed-identity compatibility APK                            |
-| Topway/DoFun exact debug                | normally `com.tw.music.debug` if debug suffix is kept | same alias                                                             | Development only; not a final DoFun identity proof                      |
-| Proposed Topway/DoFun alternate release | `com.tw.media`                                        | `com.tw.music.MusicActivity` alias to `org.oxycblt.auxio.MainActivity` | DoFun alternate fixed-entry candidate for stock-conflict-aware installs |
+| Build/component | Package/application ID | Scope/component | Purpose |
+| --- | --- | --- | --- |
+| Auxio-TS primary release | `com.tw.media` | `com.tw.media/com.tw.music.MusicActivity` | Supported independently signed player |
+| LSPosed API-100 addon | `org.oxycblt.auxio.ts18bridge` | static scope: `com.tw.music` only | Stock-identity bridge into Auxio |
+| Topway exact fixture | `com.tw.music` | internal build/test only | Verifies historical package/component contracts; not published |
 
 Use a real Android product flavour/source set. Do not mutate package names only in CI.
 
@@ -47,10 +49,11 @@ The real target TS18 diagnostics show stock `com.tw.music` installed as a system
 
 Implications:
 
-- `topwayTwMusicRelease` remains the correct exact DoFun replacement identity.
-- It is not guaranteed installable through the normal package installer on stock firmware where `com.tw.music` already exists.
-- Installation may require ADB shell, Shizuku, root, firmware control, package disable/uninstall-for-user, or compatible signing.
-- Do not claim universal no-root install compatibility for `topwayTwMusicRelease`.
+- keep genuine stock `com.tw.music` installed and enabled;
+- do not publish or install Auxio as an exact-package replacement;
+- use the signed bridge with its single static/recommended `com.tw.music` scope;
+- retire the former exact-package Magisk overlay instead of running both mechanisms;
+- retain real-device validation because static identity evidence cannot prove DoFun panel parity.
 
 ## `com.tw.media` alternate-entry posture
 
@@ -62,13 +65,13 @@ com.tw.media/com.tw.music.MusicActivity
 
 [Evidence confidence: Observed APK/reference evidence] [Porting decision: Directly reusable alternate-entry requirement]
 
-However, `com.tw.media` must be documented honestly:
+The supported `com.tw.media` application must still be documented honestly:
 
 - It does not remove or neutralise stock `com.tw.music`.
 - It may conflict if firmware already provides stock `com.tw.media`.
 - It may not be selected if DoFun prioritises `com.tw.music`.
-- It is primarily useful for users who can manage stock package state through ADB shell, Shizuku, root, or firmware control.
-- It is not a universal no-root bypass.
+- Without the LSPosed addon, it may not be selected if DoFun prioritises `com.tw.music`.
+- The full bridge path requires root/LSPosed even though the Auxio APK itself is normally signed.
 
 ## Required Android media surfaces
 
@@ -161,15 +164,13 @@ The exact TS18 diagnostic profile indicates the stock music app is part of a bro
 
 ## Runtime fallback posture
 
-Auxio-TS implements or should implement the highest-confidence DoFun/Topway fallbacks without copying private vendor APIs:
+Auxio-TS implements the highest-confidence DoFun/Topway path without copying private vendor APIs:
 
-- the exact release APK installs as `com.tw.music`;
-- the alternate APK installs as `com.tw.media`;
-- both Topway-compatible variants should expose `com.tw.music.MusicActivity` for DoFun matching;
-- `com.tw.music.MusicService` may be provided in the Topway flavour as a stock-name wrapper over Auxio's real media/browser/playback service;
-- `com.tw.music.view.MusicWidgetProvider` may be provided in the Topway flavour as a stock-name wrapper that forwards safe observed Topway widget/control broadcasts into Auxio's bridge;
-- Topway metadata/progress broadcasts should be enabled in real Topway-compatible variants, regardless of head-unit UI layout preference;
-- cold-start Topway play/pause commands should restore saved playback state instead of being dropped when no current song is yet loaded in memory.
+- the published player installs as `com.tw.media`;
+- the bridge loads only in genuine `com.tw.music`, verifies its UID/certificate, and fails open;
+- the bridge connects to Auxio through Android `MediaBrowser`/`MediaController`;
+- the genuine stock process remains the sender/receiver for observed Topway broadcasts;
+- cold-start commands connect to Auxio instead of relying on a replaced stock package.
 
 Auxio-TS still deliberately avoids fake `cn.cardoor.libs.media.RemoteMediaService`, `android.tw.john.TWUtil`, and `com.tw.service.xt.aidl.*` implementations unless a later human-approved design PR proves a safe protocol.
 
@@ -213,8 +214,9 @@ adb shell am broadcast -a com.tw.launcher.music_progress_duration   --el msg_mus
 CI should protect:
 
 - standard variant identity remains intact;
-- Topway stock release variant installs as exact `com.tw.music`;
+- the internal Topway exact fixture still compiles and satisfies the historical contract;
 - Topway alternate release variant installs as exact `com.tw.media`;
+- the LSPosed addon declares API 100, `staticScope=true`, and only `com.tw.music`;
 - `com.tw.music.MusicActivity` alias exists in Topway-compatible variants;
 - `MediaBrowserService` remains declared/exported as intended;
 - provider authorities follow the variant application ID;
@@ -231,17 +233,23 @@ bash scripts/check-ts18-apk-reference-contracts.sh
 
 Add or keep a more specific DoFun/Topway manifest/APK check when the flavour is implemented.
 
-## Post-PR#53 exact-device hardening notes
+## Exact-device hardening notes
 
 **Evidence confidence:** Observed. **Porting decision:** Directly reusable requirement. The redacted `s9863a1h10` Android 10 profile confirms DoFun fixed entries for both `com.tw.music/com.tw.music.MusicActivity` and `com.tw.media/com.tw.music.MusicActivity`.
 
-Auxio-TS now provides two Topway-compatible release identities:
+Auxio-TS keeps two Topway-compatible build identities but publishes only the non-conflicting player
+plus the bridge:
 
-| Variant                | Package        | DoFun component                           | Install constraint                                                                                    |
-| ---------------------- | -------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `topwayTwMusicRelease` | `com.tw.music` | `com.tw.music/com.tw.music.MusicActivity` | Exact stock replacement; conflicts with stock system priv-app unless package state/signing is managed |
-| `topwayTwMediaRelease` | `com.tw.media` | `com.tw.media/com.tw.music.MusicActivity` | Alternate DoFun fixed entry; not a universal no-root bypass and may conflict on some firmware         |
+| Component | Package | DoFun/runtime role | Release posture |
+| --- | --- | --- | --- |
+| `topwayTwMusicRelease` | `com.tw.music` | Internal exact-identity contract fixture | Build/test only; never install or publish |
+| `topwayTwMediaRelease` | `com.tw.media` | Independently signed Auxio player | Primary published APK |
+| LSPosed API-100 bridge | `org.oxycblt.auxio.ts18bridge` | Runs only in genuine stock `com.tw.music` | Separately signed addon |
 
-Both variants reuse the same thin wrapper source set (`com.tw.music.MusicActivity`, `com.tw.music.MusicService`, and `com.tw.music.view.MusicWidgetProvider`) and delegate into Auxio-owned code. The wrapper exposes stock-compatible package/class/component names only; it does not add private Cardoor services, TWUtil reflection, vendor binders, system UID, `sharedUserId`, copied smali, or platform-signature requirements.
+Both app variants reuse the same thin wrapper source set (`com.tw.music.MusicActivity`,
+`com.tw.music.MusicService`, and `com.tw.music.view.MusicWidgetProvider`) and delegate into
+Auxio-owned code. The published `com.tw.media` APK exposes stock-compatible class names without
+claiming the stock package, system UID, platform signature, private Cardoor services, TWUtil,
+vendor binders, or copied smali.
 
 Topway-compatible variants use `com.tw.music.MusicService` as the canonical exported external MediaBrowserService. The base Auxio `org.oxycblt.auxio.AuxioService` remains available for explicit in-app starts, but its inherited browse/search intent filters are removed in the Topway wrapper manifest so external TS18/DoFun clients do not split across two service component names. **Evidence confidence:** Inferred from manifest design. **Porting decision:** Requires TS18 runtime validation. Runtime validation must still check for duplicate active sessions, duplicate foreground services, and duplicate lifecycle starts before claiming final TS18 parity.

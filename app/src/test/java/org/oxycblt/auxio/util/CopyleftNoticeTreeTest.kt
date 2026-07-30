@@ -19,27 +19,43 @@
 package org.oxycblt.auxio.util
 
 import android.util.Log
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertSame
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.shadows.ShadowLog
+import timber.log.Timber
 
+@RunWith(RobolectricTestRunner::class)
 class CopyleftNoticeTreeTest {
+    private lateinit var tree: CopyleftNoticeTree
+
+    @Before
+    fun setup() {
+        ShadowLog.clear()
+        tree = CopyleftNoticeTree()
+        Timber.plant(tree)
+    }
+
+    @After
+    fun tearDown() {
+        Timber.uproot(tree)
+    }
+
     @Test
     fun `fork logger preserves diagnostic tag message and throwable`() {
-        val tree = CopyleftNoticeTree()
         val throwable = IllegalStateException("source failure")
 
-        val payload =
-            tree.preservePayload(
-                Log.ERROR,
-                "AuxioCapture",
-                "AUXIO_TS_CAPTURE_CANARY generation=42",
-                throwable,
-            )
+        Timber.tag("AuxioCapture")
+            .e(throwable, "AUXIO_TS_CAPTURE_CANARY generation=%d", 42)
 
-        assertEquals(Log.ERROR, payload.priority)
-        assertEquals("AuxioCapture", payload.tag)
-        assertEquals("AUXIO_TS_CAPTURE_CANARY generation=42", payload.message)
-        assertSame(throwable, payload.throwable)
+        val logged = ShadowLog.getLogs().last()
+        assertEquals(Log.ERROR, logged.type)
+        assertEquals("AuxioCapture", logged.tag)
+        assertEquals("AUXIO_TS_CAPTURE_CANARY generation=42", logged.msg)
+        assertSame(throwable, logged.throwable)
     }
 }

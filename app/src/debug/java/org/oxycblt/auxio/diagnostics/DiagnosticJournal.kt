@@ -46,6 +46,7 @@ class DiagnosticJournal @Inject constructor() {
 
     @Volatile private var currentSessionId: String? = null
     @Volatile private var persistenceDirectory: File? = null
+    private var writesSinceLastPrune = 0
     private val persistenceExecutor: ExecutorService =
         Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "AuxioDiagnosticJournal").apply { isDaemon = true }
@@ -67,6 +68,7 @@ class DiagnosticJournal @Inject constructor() {
             if (!directory.exists() && !directory.mkdirs()) return@execute
             recoverInterruptedSessions(directory)
             prune(directory)
+            writesSinceLastPrune = 0
         }
     }
 
@@ -164,8 +166,12 @@ class DiagnosticJournal @Inject constructor() {
             if (!directory.exists() && !directory.mkdirs()) return@execute
             val file = File(directory, "session-${safeName(sessionId)}.jsonl")
             if (file.length() >= MAX_SESSION_BYTES) return@execute
-            runCatching { file.appendText(event.toJsonLine() + "\n", Charsets.UTF_8) }
-            prune(directory)
+            val persisted =
+                runCatching { file.appendText(toJsonLine(event) + "\n", Charsets.UTF_8) }.isSuccess
+            if (persisted && ++writesSinceLastPrune >= PRUNE_WRITE_INTERVAL) {
+                prune(directory)
+                writesSinceLastPrune = 0
+            }
         }
     }
 
@@ -198,6 +204,7 @@ class DiagnosticJournal @Inject constructor() {
                 }
             }
             prune(directory)
+            writesSinceLastPrune = 0
         }
     }
 
@@ -222,7 +229,7 @@ class DiagnosticJournal @Inject constructor() {
                 val eventFile = File(directory, "session-${safeName(sessionId)}.jsonl")
                 if (eventFile.length() < MAX_SESSION_BYTES) {
                     runCatching {
-                        eventFile.appendText(recovery.toJsonLine() + "\n", Charsets.UTF_8)
+                        eventFile.appendText(toJsonLine(recovery) + "\n", Charsets.UTF_8)
                     }
                 }
                 val target = File(directory, "session-${safeName(sessionId)}.summary.json")
@@ -248,17 +255,15 @@ class DiagnosticJournal @Inject constructor() {
                 .orEmpty()
         var retainedBytes = 0L
         files.forEachIndexed { index, file ->
-            retainedBytes += file.length()
-            if (index >= MAX_PERSISTED_FILES || retainedBytes > MAX_TOTAL_BYTES) file.delete()
+            val length = file.length()
+            val keep =
+                index < MAX_PERSISTED_FILES && length <= MAX_TOTAL_BYTES - retainedBytes
+            if (keep) {
+                retainedBytes += length
+            } else {
+                file.delete()
+            }
         }
-    }
-
-    private fun DiagnosticEvent.toJsonLine(): String = buildString {
-        append("""{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime""")
-        append(""","sessionId":${jsonString(sessionId)}""")
-        append(""","category":${jsonString(category)},"event":${jsonString(event)}""")
-        append(""","detail":${jsonString(detail)},"result":${jsonString(result)}""")
-        append(""","evidence":${jsonString(evidence.name)}}""")
     }
 
     companion object {
@@ -266,11 +271,29 @@ class DiagnosticJournal @Inject constructor() {
         private const val MAX_SESSION_BYTES = 1_048_576L
         private const val MAX_TOTAL_BYTES = 5_242_880L
         private const val MAX_PERSISTED_FILES = 10
+        private const val PRUNE_WRITE_INTERVAL = 64
 
         private fun safeName(value: String): String =
             value.replace(Regex("[^A-Za-z0-9._-]"), "_").take(120).ifBlank { "unknown" }
 
-        private fun jsonString(value: String?): String = DiagnosticJson.string(value)
+        /** Canonical serializer shared by persisted sessions and bundle exports. */
+        @VisibleForTesting
+        internal fun toJsonLine(event: DiagnosticEvent): String =
+            with(event) {
+                buildString {
+                    append(
+                        """{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime"""
+                    )
+                    append(""","sessionId":${DiagnosticJson.string(sessionId)}""")
+                    append(
+                        ""","category":${DiagnosticJson.string(category)},"event":${DiagnosticJson.string(event)}"""
+                    )
+                    append(
+                        ""","detail":${DiagnosticJson.string(detail)},"result":${DiagnosticJson.string(result)}"""
+                    )
+                    append(""","evidence":${DiagnosticJson.string(evidence.name)}}""")
+                }
+            }
 
         // Categories
         const val CAT_SESSION = "SESSION"

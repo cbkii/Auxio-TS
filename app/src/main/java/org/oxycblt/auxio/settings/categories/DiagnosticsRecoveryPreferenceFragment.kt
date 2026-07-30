@@ -32,8 +32,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
-import org.oxycblt.auxio.diagnostics.DiagnosticBundleExporter
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.diagnostics.TemporaryDeviceValidationLab
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.root.RootStateHolder
@@ -42,7 +42,6 @@ import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.RootDiagnosticsHelper
 import org.oxycblt.auxio.ui.UISettings
-import timber.log.Timber as L
 
 @AndroidEntryPoint
 class DiagnosticsRecoveryPreferenceFragment :
@@ -62,26 +61,10 @@ class DiagnosticsRecoveryPreferenceFragment :
         installTemporaryDebugLab()
     }
 
-    /**
-     * The implementation exists only in the debug source set. Reflection keeps every class, action,
-     * and control out of release APKs while still providing an obvious device-side UX in maintained
-     * debug variants.
-     */
+    /** Installs debug-only controls through a source-set-specific, compile-time-checked API. */
     private fun installTemporaryDebugLab() {
         if (!BuildConfig.DEBUG || !BuildConfig.TOPWAY_COMPAT_FLAVOR) return
-        try {
-            Class.forName("org.oxycblt.auxio.diagnostics.TemporaryDeviceValidationLab")
-                .getMethod(
-                    "install",
-                    DiagnosticsRecoveryPreferenceFragment::class.java,
-                    DiagnosticJournal::class.java,
-                    MusicSettings::class.java,
-                    RootStateHolder::class.java,
-                )
-                .invoke(null, this, journal, musicSettings, rootStateHolder)
-        } catch (e: ReflectiveOperationException) {
-            L.w(e, "Temporary debug validation lab is unavailable")
-        }
+        TemporaryDeviceValidationLab.install(this, journal, musicSettings, rootStateHolder)
     }
 
     override fun onSetupPreference(preference: Preference) {
@@ -115,13 +98,6 @@ class DiagnosticsRecoveryPreferenceFragment :
         if (preference.key == getString(R.string.set_key_diagnostics_export_report)) {
             preference.setOnPreferenceClickListener {
                 exportReport()
-                true
-            }
-        }
-
-        if (preference.key == getString(R.string.set_key_diagnostics_save_bundle)) {
-            preference.setOnPreferenceClickListener {
-                saveDiagnosticBundle(preference)
                 true
             }
         }
@@ -245,62 +221,6 @@ class DiagnosticsRecoveryPreferenceFragment :
                 Toast.LENGTH_SHORT,
             )
             .show()
-    }
-
-    private fun saveDiagnosticBundle(preference: Preference) {
-        val context = context ?: return
-        val sharedPreferences = preferenceManager.sharedPreferences
-        val hashPaths =
-            sharedPreferences?.getBoolean(
-                getString(R.string.set_key_diagnostics_hash_paths),
-                false,
-            ) == true
-        val redactDevice =
-            sharedPreferences?.getBoolean(
-                getString(R.string.set_key_diagnostics_redact_device),
-                false,
-            ) == true
-        preference.isEnabled = false
-        preference.summary = getString(R.string.set_diagnostics_bundle_saving)
-        viewLifecycleOwner.lifecycleScope.launch {
-            val result =
-                withContext(Dispatchers.IO) {
-                    runCatching {
-                        DiagnosticBundleExporter.create(
-                            context,
-                            journal,
-                            musicSettings,
-                            DiagnosticBundleExporter.Options(
-                                hashPaths = hashPaths,
-                                redactDeviceIdentifiers = redactDevice,
-                                integrationReport = lastReportStr,
-                            ),
-                        )
-                    }
-                }
-            result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
-            if (!isAdded) return@launch
-            result.fold(
-                onSuccess = { file ->
-                    preference.summary =
-                        getString(R.string.set_diagnostics_bundle_saved, file.absolutePath)
-                    Toast.makeText(
-                            requireContext(),
-                            getString(R.string.set_diagnostics_bundle_saved, file.absolutePath),
-                            Toast.LENGTH_LONG,
-                        )
-                        .show()
-                },
-                onFailure = { error ->
-                    preference.summary =
-                        getString(
-                            R.string.set_diagnostics_bundle_failed,
-                            error.message ?: error.javaClass.simpleName,
-                        )
-                },
-            )
-            preference.isEnabled = true
-        }
     }
 
     private fun updateUiState() {

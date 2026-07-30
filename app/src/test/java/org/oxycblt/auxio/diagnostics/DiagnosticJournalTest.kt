@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.diagnostics
 
+import java.io.File
 import java.nio.file.Files
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -108,7 +109,28 @@ class DiagnosticJournalTest {
     fun `active session is persisted with terminal summary`() {
         val directory = Files.createTempDirectory("auxio-journal-test").toFile()
         try {
+            val now = System.currentTimeMillis()
+            repeat(12) { index ->
+                File(directory, "session-seed-$index.jsonl").apply {
+                    writeText("""{"seed":$index}""")
+                    setLastModified(now - 10_000L - index)
+                }
+            }
+            val interruptedMarker =
+                File(directory, ".active-interrupted_campaign").apply {
+                    writeText("interrupted campaign")
+                }
+
             journal.configurePersistence(directory)
+            journal.awaitPendingWrites()
+
+            assertFalse(interruptedMarker.exists())
+            val interruptedSummary =
+                File(directory, "session-interrupted_campaign.summary.json")
+            assertTrue(interruptedSummary.exists())
+            assertTrue(interruptedSummary.readText().contains("\"outcome\":\"INTERRUPTED\""))
+            assertTrue(journal.persistedFiles().size <= 10)
+
             assertTrue(journal.startSession("physical campaign"))
             journal.log("Indexing", "Progress", "phase=EXTRACTING explored=42")
             assertTrue(journal.endSession("physical campaign"))
@@ -131,9 +153,19 @@ class DiagnosticJournalTest {
     fun `strict JSON encoding preserves arbitrary control characters`() {
         val controls = buildString { (0x00..0x1F).forEach { append(it.toChar()) } }
         val original = "$controls quote=\" slash=\\"
-        val encoded = DiagnosticJson.string(original)
+        val encoded =
+            DiagnosticJournal.toJsonLine(
+                DiagnosticEvent(
+                    category = original,
+                    event = original,
+                    detail = original,
+                )
+            )
 
-        assertEquals(original, JSONObject("""{"value":$encoded}""").getString("value"))
+        val decoded = JSONObject(encoded)
+        assertEquals(original, decoded.getString("category"))
+        assertEquals(original, decoded.getString("event"))
+        assertEquals(original, decoded.getString("detail"))
         assertTrue(encoded.contains("\\u0000"))
         assertFalse(encoded.any { it.code < 0x20 })
     }

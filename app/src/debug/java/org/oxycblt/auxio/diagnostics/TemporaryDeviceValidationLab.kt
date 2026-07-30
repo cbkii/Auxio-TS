@@ -41,7 +41,7 @@ import timber.log.Timber
 
 /**
  * Debug-only TS18 evidence controls. Remove individual controls once their physical acceptance gate
- * is closed; this entire class is intentionally absent from release variants.
+ * is closed; release variants provide only a no-op installation API.
  */
 object TemporaryDeviceValidationLab {
     @JvmStatic
@@ -129,11 +129,12 @@ object TemporaryDeviceValidationLab {
             "Capture own JVM thread snapshot",
             "Records thread counts immediately; the next saved bundle contains bounded stacks.",
         ) {
-            val states = Thread.getAllStackTraces().keys.groupingBy { it.state }.eachCount()
+            val currentThread = Thread.currentThread()
             journal.log(
                 DiagnosticJournal.CAT_SYSTEM,
                 "JVM thread snapshot requested",
-                "threadCount=${states.values.sum()} states=$states",
+                "activeThreadCountApprox=${Thread.activeCount()} " +
+                    "requestThread=${currentThread.name} state=${currentThread.state}",
             )
             toast(context, "Thread marker recorded; save a bundle now")
         }

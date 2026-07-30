@@ -53,6 +53,7 @@ release_workflow=.github/workflows/manual-release.yml
 scope_script=scripts/ci-scope.sh
 gradle_wrapper=scripts/ci-gradle.sh
 built_apk_check=scripts/check-built-topway-apks.sh
+release_diagnostics_check=scripts/check-release-diagnostics-boundary.sh
 mode_file=app/src/main/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationMode.kt
 mode_test=app/src/test/java/org/oxycblt/auxio/headunit/topway/Ts18LauncherIntegrationModeTest.kt
 
@@ -80,6 +81,9 @@ require_contains "$android_workflow" 'bash ./scripts/check-built-topway-apks.sh'
 require_contains "$android_workflow" 'auxio-ts-topwayTwMedia-debug' 'workflow exposes the primary debug APK as an individual artifact'
 require_contains "$android_workflow" 'auxio-ts-topwayTwMusic-debug' 'workflow exposes the exact-package debug APK as an individual artifact'
 require_contains "$android_workflow" 'artifact-url' 'workflow publishes direct artifact URLs in its summary'
+require_contains "$android_workflow" "contains(github.event.pull_request.labels.*.name, 'ci:debug-artifacts')" 'PR debug downloads require explicit opt-in'
+require_contains "$android_workflow" 'github.event.pull_request.head.repo.full_name == github.repository' 'fork PRs cannot publish downloadable debug APKs'
+require_contains "$android_workflow" ':app:compileTopwayTwMediaReleaseKotlin' 'release-only source changes compile on pull requests'
 require_absent "$android_workflow" 'apkanalyzer' 'workflow YAML does not duplicate APK parsing logic'
 require_contains "$built_apk_check" 'bash ./scripts/check-headunit-compat-safety.sh' 'binary output check reuses canonical head-unit safety guardrail'
 require_contains "$built_apk_check" 'com.tw.media.debug' 'primary APK application id is checked in repository script'
@@ -103,6 +107,13 @@ require_contains "$scope_script" "classify_path 'musikr/src/main/java/example/Pa
 require_contains "$scope_script" "classify_path 'app/src/topwayCompat/java/com/tw/music/MusicService.kt'" 'scope self-test covers shared Topway changes'
 require_contains "$scope_script" "classify_path 'app/src/topwayTwMedia/res/values/strings.xml'" 'scope self-test covers primary variant resources'
 require_contains "$scope_script" "classify_path 'app/src/topwayTwMusic/res/values/strings.xml'" 'scope self-test covers exact-package resources'
+require_contains "$scope_script" "classify_path 'app/src/debug/java/example/DebugProbe.kt'" 'scope self-test covers debug-only sources'
+require_contains "$scope_script" "classify_path 'app/src/release/java/example/ReleaseNoOp.kt'" 'scope self-test covers release-only sources'
+if ! bash "$release_diagnostics_check"; then
+  fail 'release diagnostics source-set boundary failed'
+else
+  pass 'release diagnostics source-set boundary passes'
+fi
 require_contains "$scope_script" 'full maintained Android CI must not invent an unrelated native formatter lane' 'full Android CI keeps native formatting changed-file driven'
 require_contains "$scope_script" "classify_path 'musikr/src/main/cpp/example.cpp'" 'scope self-test covers native formatting selection'
 
@@ -122,6 +133,10 @@ for path in \
   require_absent "$path" 'standard-release.apk' "$path has no retired standard release asset"
 done
 require_absent "$release_workflow" 'include_standard_apk' 'manual release has no standard selection'
+require_contains "$release_workflow" 'include_debug_apks:' 'manual release exposes separate debug companions'
+require_contains "$release_workflow" 'topway-twmedia-debug.apk' 'manual release labels the debug app separately'
+require_contains "$release_workflow" 'lsposed-api100-bridge-debug.apk' 'manual release labels the debug addon separately'
+require_contains "$release_workflow" 'check-release-diagnostics-boundary.sh "${asset_path}"' 'manual release verifies diagnostics are absent from the release APK'
 require_absent_regex "$benchmark_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$' 'startup benchmark has no standard choice regardless of indentation'
 require_absent_regex "$screenshots_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$' 'Roborazzi workflow has no standard choice regardless of indentation'
 

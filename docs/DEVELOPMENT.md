@@ -34,7 +34,7 @@ Dependency policy lives under `ci/dependencies/`; shared read-only parsing and p
 | Variant | Package | Purpose |
 | --- | --- | --- |
 | `topwayTwMedia` | `com.tw.media` | Primary automatic CI, normal APK release and alternate DoFun fixed entry |
-| `topwayTwMusic` | `com.tw.music` | Exact stock-package compatibility and Magisk packaging |
+| `topwayTwMusic` | `com.tw.music` | Internal exact-package compatibility/test build only |
 
 The old `standard` flavour is retired. Generic/non-Topway policy behaviour remains covered through pure inputs/tests rather than another distributable package.
 
@@ -47,7 +47,7 @@ Both variants share `app/src/topwayCompat/`, exposing `com.tw.music.MusicActivit
 | `:app:assembleTopwayTwMediaDebug` | Primary debug APK |
 | `:app:assembleTopwayTwMusicDebug` | Exact-package compatibility debug APK |
 | `:app:assembleTopwayTwMediaRelease` | Primary signed release APK |
-| `:app:assembleTopwayTwMusicRelease` | Internal APK used for Magisk packaging |
+| `:app:assembleTopwayTwMusicRelease` | Internal package/component contract build; never publish or install |
 | `:app:testTopwayTwMediaDebugUnitTest` | App JVM test authority |
 | `:app:lintTopwayTwMediaDebug` | App Android lint authority |
 | `:musikr:testDebugUnitTest` | Musikr JVM tests |
@@ -83,7 +83,7 @@ For normal changes, prefer the narrower tasks selected by `scripts/ci-scope.sh` 
 - `Startup Benchmarks`: manual API 29 macrobenchmark or API 35 Baseline Profile generation; defaults to `topwayTwMedia` and requires 15–30 measured iterations.
 - `UI Screenshots`: manual Roborazzi for `topwayTwMedia` or `topwayTwMusic`; defaults to `topwayTwMedia`.
 - `Gradle Optimisation Pilot`: manual configuration-cache and parallel-execution evidence.
-- `Manual Release`: signed `com.tw.media` APK and optional `com.tw.music` Magisk module only.
+- `Manual Release`: signed `com.tw.media` APK and signed LSPosed API 100 bridge addon.
 
 Build/test jobs use `fetch-depth: 1`; scope fetches only the boundary commit. Release keeps full history and tags.
 
@@ -131,4 +131,9 @@ Roborazzi runs through Robolectric at 1280×720. Regular unit-test tasks exclude
 
 ## Release safety
 
-The primary published APK is `com.tw.media`. `topwayTwMusic` is packaged as a Magisk systemless overlay and is never published as a raw APK. Package identity, signing certificate, privileged placement, launcher recognition and root are separate authorities. Read `docs/TS18_INSTALLATION_CONSTRAINTS.md` before installing.
+The primary published APK is `com.tw.media`. The optional published addon is the LSPosed API 100
+bridge, static-scoped only to the genuine stock `com.tw.music` process. The former exact-package
+Auxio Magisk overlay is retired; `topwayTwMusic` remains only as an internal package/component
+contract build and must not be published or installed. Package identity, signing certificate,
+launcher recognition, LSPosed scope and root are separate authorities. Read
+`docs/TS18_INSTALLATION_CONSTRAINTS.md` before installing.

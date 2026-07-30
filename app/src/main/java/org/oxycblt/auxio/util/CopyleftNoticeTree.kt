@@ -21,25 +21,9 @@ package org.oxycblt.auxio.util
 import timber.log.Timber
 
 class CopyleftNoticeTree : Timber.DebugTree() {
-    // Fork builds still use a distinct tree so downstream packaging can identify the policy
-    // point. Never replace the caller's payload here: debug logs are part of the supported
-    // exact-device diagnostic surface and must retain their tag, message, and throwable.
+    // Fork debug builds keep a distinct tree so downstream packaging can identify the policy
+    // point while preserving Timber's real payload and routing behavior.
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        val payload = preservePayload(priority, tag, message, t)
-        super.log(payload.priority, payload.tag, payload.message, payload.throwable)
+        super.log(priority, tag, message, t)
     }
-
-    internal data class Payload(
-        val priority: Int,
-        val tag: String?,
-        val message: String,
-        val throwable: Throwable?,
-    )
-
-    internal fun preservePayload(
-        priority: Int,
-        tag: String?,
-        message: String,
-        throwable: Throwable?,
-    ): Payload = Payload(priority, tag, message, throwable)
 }

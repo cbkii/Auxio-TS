@@ -24,6 +24,8 @@ import android.os.Build
 import android.os.Process
 import androidx.annotation.VisibleForTesting
 import java.io.File
+import java.io.OutputStream
+import java.security.DigestOutputStream
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -35,7 +37,7 @@ import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.util.StartupPerformanceReport
 
-/** Creates a deterministic, integrity-checked, local diagnostic bundle. No upload is performed. */
+/** Debug-only deterministic, integrity-checked local bundle exporter. No upload is performed. */
 object DiagnosticBundleExporter {
     data class Options(
         val hashPaths: Boolean = false,
@@ -60,7 +62,6 @@ object DiagnosticBundleExporter {
         val partial = File(output.parentFile, "${output.name}.partial")
         partial.delete()
 
-        val entries = linkedMapOf<String, ByteArray>()
         val apk = File(context.applicationInfo.sourceDir)
         val apkSha256 = apk.takeIf(File::isFile)?.let(::sha256)
         val pathPrivacyFilter =
@@ -74,56 +75,60 @@ object DiagnosticBundleExporter {
                 null
             }
         fun privacyFiltered(value: String): String = pathPrivacyFilter?.filter(value) ?: value
-        entries["manifest.json"] =
-            manifest(context, journal, options, apkSha256).toByteArray(Charsets.UTF_8)
-        entries["source-state.txt"] =
-            sourceState(musicSettings, options.hashPaths).toByteArray(Charsets.UTF_8)
-        entries["journal-current.jsonl"] =
-            journal
-                .snapshot()
-                .joinToString(separator = "\n", postfix = "\n") { it.toJson(pathPrivacyFilter) }
-                .toByteArray(Charsets.UTF_8)
-        entries["performance.txt"] =
-            privacyFiltered(
-                    StartupPerformanceReport.render(
-                        StartupPerformanceReport.CaptureContext(
-                            authority = "deterministic-diagnostic-bundle",
-                            sourceState = musicSettings.sourceConfigurationCheckpoint.toString(),
-                            commit = BuildConfig.BUILD_COMMIT,
+        val expectedEntries = linkedSetOf<String>()
+        val checksumLines = mutableListOf<String>()
+        ZipOutputStream(partial.outputStream().buffered()).use { zip ->
+            fun payload(name: String, write: (OutputStream) -> Unit) {
+                expectedEntries += name
+                checksumLines += "${zip.writeEntry(name, write)}  $name"
+            }
+
+            payload("manifest.json") { it.writeUtf8(manifest(context, journal, options, apkSha256)) }
+            payload("source-state.txt") {
+                it.writeUtf8(sourceState(musicSettings, options.hashPaths))
+            }
+            payload("journal-current.jsonl") { outputStream ->
+                journal.snapshot().forEach { event ->
+                    outputStream.writeUtf8(
+                        DiagnosticJournal.toJsonLine(event.filtered(pathPrivacyFilter)) + "\n"
+                    )
+                }
+            }
+            payload("performance.txt") {
+                it.writeUtf8(
+                    privacyFiltered(
+                        StartupPerformanceReport.render(
+                            StartupPerformanceReport.CaptureContext(
+                                authority = "deterministic-diagnostic-bundle",
+                                sourceState =
+                                    musicSettings.sourceConfigurationCheckpoint.toString(),
+                                commit = BuildConfig.BUILD_COMMIT,
+                            )
                         )
                     )
                 )
-                .toByteArray(Charsets.UTF_8)
-        entries["threads.txt"] = privacyFiltered(threadDump()).toByteArray(Charsets.UTF_8)
-        options.integrationReport?.let {
-            entries["integration-check.txt"] = privacyFiltered(it).toByteArray(Charsets.UTF_8)
-        }
-        journal.persistedFiles().take(MAX_PERSISTED_FILES).forEachIndexed { index, file ->
-            val bytes =
-                if (pathPrivacyFilter == null) {
-                    file.readBytes()
-                } else {
-                    pathPrivacyFilter
-                        .filter(file.readText(Charsets.UTF_8))
-                        .toByteArray(Charsets.UTF_8)
+            }
+            payload("threads.txt") { it.writeUtf8(privacyFiltered(threadDump())) }
+            options.integrationReport?.let { report ->
+                payload("integration-check.txt") { it.writeUtf8(privacyFiltered(report)) }
+            }
+            journal.persistedFiles().take(MAX_PERSISTED_FILES).forEachIndexed { index, file ->
+                payload("sessions/${index.toString().padStart(2, '0')}-${file.name}") { output ->
+                    if (pathPrivacyFilter == null) {
+                        file.inputStream().buffered().use { input -> input.copyTo(output) }
+                    } else {
+                        output.writeUtf8(
+                            pathPrivacyFilter.filter(file.readText(Charsets.UTF_8))
+                        )
+                    }
                 }
-            entries["sessions/${index.toString().padStart(2, '0')}-${file.name}"] = bytes
-        }
-
-        val checksumLines =
-            entries.entries.joinToString(separator = "\n", postfix = "\n") { (name, bytes) ->
-                "${sha256(bytes)}  $name"
             }
-        entries["checksums.sha256"] = checksumLines.toByteArray(Charsets.UTF_8)
-
-        ZipOutputStream(partial.outputStream().buffered()).use { zip ->
-            entries.forEach { (name, bytes) ->
-                zip.putNextEntry(ZipEntry(name).apply { time = 0L })
-                zip.write(bytes)
-                zip.closeEntry()
+            expectedEntries += CHECKSUM_ENTRY
+            zip.writeEntry(CHECKSUM_ENTRY) {
+                it.writeUtf8(checksumLines.joinToString(separator = "\n", postfix = "\n"))
             }
         }
-        validate(partial, entries.keys)
+        validate(partial, expectedEntries)
         check(partial.renameTo(output)) { "Unable to finalise ${output.absolutePath}" }
         return output
     }
@@ -157,25 +162,31 @@ object DiagnosticBundleExporter {
             append("{\n")
             append("  \"schema\": 1,\n")
             append("  \"createdWallTime\": ${System.currentTimeMillis()},\n")
-            append("  \"applicationId\": ${json(BuildConfig.APPLICATION_ID)},\n")
-            append("  \"versionName\": ${json(BuildConfig.VERSION_NAME)},\n")
+            append("  \"applicationId\": ${DiagnosticJson.string(BuildConfig.APPLICATION_ID)},\n")
+            append("  \"versionName\": ${DiagnosticJson.string(BuildConfig.VERSION_NAME)},\n")
             append("  \"versionCode\": ${BuildConfig.VERSION_CODE},\n")
-            append("  \"flavor\": ${json(BuildConfig.FLAVOR)},\n")
-            append("  \"buildType\": ${json(BuildConfig.BUILD_TYPE)},\n")
-            append("  \"commit\": ${json(BuildConfig.BUILD_COMMIT)},\n")
-            append("  \"apkSha256\": ${json(apkSha256)},\n")
-            append("  \"signingCertificateSha256\": ${json(signingDigests.joinToString())},\n")
+            append("  \"flavor\": ${DiagnosticJson.string(BuildConfig.FLAVOR)},\n")
+            append("  \"buildType\": ${DiagnosticJson.string(BuildConfig.BUILD_TYPE)},\n")
+            append("  \"commit\": ${DiagnosticJson.string(BuildConfig.BUILD_COMMIT)},\n")
+            append("  \"apkSha256\": ${DiagnosticJson.string(apkSha256)},\n")
+            append(
+                "  \"signingCertificateSha256\": ${DiagnosticJson.string(signingDigests.joinToString())},\n"
+            )
             append("  \"uid\": ${Process.myUid()},\n")
             append("  \"pid\": ${Process.myPid()},\n")
-            append("  \"activeSessionId\": ${json(journal.activeSessionId)},\n")
+            append("  \"activeSessionId\": ${DiagnosticJson.string(journal.activeSessionId)},\n")
             append("  \"hashPaths\": ${options.hashPaths},\n")
             append("  \"redactDeviceIdentifiers\": ${options.redactDeviceIdentifiers},\n")
             append("  \"sdkInt\": ${Build.VERSION.SDK_INT},\n")
             append(
-                "  \"manufacturer\": ${json(if (redact) "<redacted>" else Build.MANUFACTURER)},\n"
+                "  \"manufacturer\": ${DiagnosticJson.string(if (redact) "<redacted>" else Build.MANUFACTURER)},\n"
             )
-            append("  \"model\": ${json(if (redact) "<redacted>" else Build.MODEL)},\n")
-            append("  \"fingerprint\": ${json(if (redact) "<redacted>" else Build.FINGERPRINT)}\n")
+            append(
+                "  \"model\": ${DiagnosticJson.string(if (redact) "<redacted>" else Build.MODEL)},\n"
+            )
+            append(
+                "  \"fingerprint\": ${DiagnosticJson.string(if (redact) "<redacted>" else Build.FINGERPRINT)}\n"
+            )
             append("}\n")
         }
     }
@@ -218,8 +229,18 @@ object DiagnosticBundleExporter {
             }
     }
 
-    private fun DiagnosticEvent.toJson(pathPrivacyFilter: PathPrivacyFilter?): String =
-        """{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime,"sessionId":${json(pathPrivacyFilter?.filterNullable(sessionId) ?: sessionId)},"category":${json(pathPrivacyFilter?.filter(category) ?: category)},"event":${json(pathPrivacyFilter?.filter(event) ?: event)},"detail":${json(pathPrivacyFilter?.filterNullable(detail) ?: detail)},"result":${json(pathPrivacyFilter?.filterNullable(result) ?: result)},"evidence":${json(evidence.name)}}"""
+    private fun DiagnosticEvent.filtered(pathPrivacyFilter: PathPrivacyFilter?): DiagnosticEvent =
+        if (pathPrivacyFilter == null) {
+            this
+        } else {
+            copy(
+                sessionId = pathPrivacyFilter.filterNullable(sessionId),
+                category = pathPrivacyFilter.filter(category),
+                event = pathPrivacyFilter.filter(event),
+                detail = pathPrivacyFilter.filterNullable(detail),
+                result = pathPrivacyFilter.filterNullable(result),
+            )
+        }
 
     private class PathPrivacyFilter(knownValues: Collection<String>) {
         private val knownValues =
@@ -295,14 +316,32 @@ object DiagnosticBundleExporter {
     private fun sha256(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
 
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+    private fun ByteArray.toHex(): String =
+        joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
-    private fun json(value: String?): String = DiagnosticJson.string(value)
+    private fun ZipOutputStream.writeEntry(
+        name: String,
+        write: (OutputStream) -> Unit,
+    ): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        putNextEntry(ZipEntry(name).apply { time = 0L })
+        try {
+            DigestOutputStream(this, digest).also(write).flush()
+        } finally {
+            closeEntry()
+        }
+        return digest.digest().toHex()
+    }
+
+    private fun OutputStream.writeUtf8(value: String) {
+        write(value.toByteArray(Charsets.UTF_8))
+    }
 
     private const val MAX_PERSISTED_FILES = 10
     private const val MAX_THREADS = 200
     private const val MAX_FRAMES_PER_THREAD = 100
     private const val SHA256_LABEL_LENGTH = 71
+    private const val CHECKSUM_ENTRY = "checksums.sha256"
     private val SENSITIVE_PATH_FIELD =
         Regex("""(?i)(\b(?:item|path|uri|sources?|detected\s+path)\s*[:=]\s*)([^\r\n"}]*)""")
     private val URI_LIKE = Regex("""(?i)\b(?:content|file|document|https?|ftp)://[^\s"\\},]+""")
