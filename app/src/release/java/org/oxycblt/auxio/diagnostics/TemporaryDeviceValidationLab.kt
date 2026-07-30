@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2024 Auxio Project
- * CopyleftNoticeTree.kt is part of Auxio.
+ * Copyright (c) 2026 Auxio Project
+ * TemporaryDeviceValidationLab.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,14 +16,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package org.oxycblt.auxio.util
+package org.oxycblt.auxio.diagnostics
 
-import timber.log.Timber
+import org.oxycblt.auxio.headunit.root.RootStateHolder
+import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.settings.categories.DiagnosticsRecoveryPreferenceFragment
 
-class CopyleftNoticeTree : Timber.DebugTree() {
-    // Fork debug builds keep a distinct tree so downstream packaging can identify the policy
-    // point while preserving Timber's real payload and routing behavior.
-    override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        super.log(priority, tag, message, t)
-    }
+/** Release no-op for the debug lab's compile-time-checked installation API. */
+@Suppress("UNUSED_PARAMETER")
+object TemporaryDeviceValidationLab {
+    fun install(
+        fragment: DiagnosticsRecoveryPreferenceFragment,
+        journal: DiagnosticJournal,
+        musicSettings: MusicSettings,
+        rootStateHolder: RootStateHolder,
+    ) = Unit
 }

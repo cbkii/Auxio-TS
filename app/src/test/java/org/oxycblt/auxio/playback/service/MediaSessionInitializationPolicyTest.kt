@@ -18,12 +18,18 @@
 
 package org.oxycblt.auxio.playback.service
 
+import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import androidx.car.app.mediaextensions.MetadataExtras
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.oxycblt.auxio.BuildConfig
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class MediaSessionInitializationPolicyTest {
     @Test
     fun `initial flags expose media buttons transports and queue commands`() {
@@ -41,5 +47,50 @@ class MediaSessionInitializationPolicyTest {
         assertEquals(PlaybackStateCompat.STATE_NONE, state.state)
         assertEquals(0L, state.position)
         assertEquals(MediaSessionInterface.ACTIONS, state.actions)
+    }
+
+    @Test
+    fun `empty ready state is explicitly stopped`() {
+        val state = MediaSessionInitializationPolicy.emptyPlaybackState()
+
+        assertEquals(PlaybackStateCompat.STATE_STOPPED, state.state)
+        assertEquals(0L, state.position)
+        assertEquals(MediaSessionInterface.ACTIONS, state.actions)
+    }
+
+    @Test
+    fun `empty metadata publishes non-null values for every cleared vendor field`() {
+        val metadata = MediaSessionHolder.emptyMetadata
+        val stringKeys =
+            listOf(
+                MediaMetadataCompat.METADATA_KEY_TITLE,
+                MediaMetadataCompat.METADATA_KEY_ARTIST,
+                MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST,
+                MediaMetadataCompat.METADATA_KEY_ALBUM,
+                MediaMetadataCompat.METADATA_KEY_AUTHOR,
+                MediaMetadataCompat.METADATA_KEY_COMPOSER,
+                MediaMetadataCompat.METADATA_KEY_WRITER,
+                MediaMetadataCompat.METADATA_KEY_GENRE,
+                MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE,
+                MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE,
+                MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION,
+                MediaMetadataCompat.METADATA_KEY_MEDIA_ID,
+                MediaMetadataCompat.METADATA_KEY_MEDIA_URI,
+                MediaMetadataCompat.METADATA_KEY_DATE,
+                MediaMetadataCompat.METADATA_KEY_ART_URI,
+                MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI,
+                MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI,
+                BuildConfig.APPLICATION_ID + ".metadata.PARENT",
+                MetadataExtras.KEY_SUBTITLE_LINK_MEDIA_ID,
+                MetadataExtras.KEY_DESCRIPTION_LINK_MEDIA_ID,
+            )
+
+        stringKeys.forEach {
+            assertEquals("Expected non-null empty value for $it", "", metadata.getString(it))
+        }
+        assertEquals(0L, metadata.getLong(MediaMetadataCompat.METADATA_KEY_DURATION))
+        assertEquals(0L, metadata.getLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER))
+        assertEquals(0L, metadata.getLong(MediaMetadataCompat.METADATA_KEY_DISC_NUMBER))
+        assertEquals(0L, metadata.getLong(MediaMetadataCompat.METADATA_KEY_YEAR))
     }
 }

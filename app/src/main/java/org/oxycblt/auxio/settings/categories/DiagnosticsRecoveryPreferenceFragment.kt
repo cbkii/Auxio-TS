@@ -32,10 +32,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.diagnostics.TemporaryDeviceValidationLab
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.root.dofun.Ts18DofunIntegrationResolver
+import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.RootDiagnosticsHelper
 import org.oxycblt.auxio.ui.UISettings
@@ -46,6 +49,8 @@ class DiagnosticsRecoveryPreferenceFragment :
 
     @javax.inject.Inject lateinit var rootStateHolder: RootStateHolder
     @javax.inject.Inject lateinit var uiSettings: UISettings
+    @javax.inject.Inject lateinit var journal: DiagnosticJournal
+    @javax.inject.Inject lateinit var musicSettings: MusicSettings
 
     private lateinit var resolver: Ts18DofunIntegrationResolver
     private var lastReportStr: String? = null
@@ -53,6 +58,13 @@ class DiagnosticsRecoveryPreferenceFragment :
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         resolver = Ts18DofunIntegrationResolver(requireContext(), rootStateHolder)
+        installTemporaryDebugLab()
+    }
+
+    /** Installs debug-only controls through a source-set-specific, compile-time-checked API. */
+    private fun installTemporaryDebugLab() {
+        if (!BuildConfig.DEBUG || !BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        TemporaryDeviceValidationLab.install(this, journal, musicSettings, rootStateHolder)
     }
 
     override fun onSetupPreference(preference: Preference) {

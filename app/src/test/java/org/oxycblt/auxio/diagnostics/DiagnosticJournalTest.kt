@@ -18,6 +18,9 @@
 
 package org.oxycblt.auxio.diagnostics
 
+import java.io.File
+import java.nio.file.Files
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -100,5 +103,87 @@ class DiagnosticJournalTest {
         assertFalse(journal.startSession("second"))
         journal.endSession()
         assertTrue(journal.startSession("third"))
+    }
+
+    @Test
+    fun `active session is persisted with terminal summary`() {
+        val directory = Files.createTempDirectory("auxio-journal-test").toFile()
+        try {
+            val now = System.currentTimeMillis()
+            repeat(12) { index ->
+                File(directory, "session-seed-$index.jsonl").apply {
+                    writeText("""{"seed":$index}""")
+                    setLastModified(now - 10_000L - index)
+                }
+            }
+            val interruptedMarker =
+                File(directory, ".active-interrupted_campaign").apply {
+                    writeText("interrupted campaign")
+                }
+
+            journal.configurePersistence(directory)
+            journal.awaitPendingWrites()
+
+            assertFalse(interruptedMarker.exists())
+            val interruptedSummary = File(directory, "session-interrupted_campaign.summary.json")
+            assertTrue(interruptedSummary.exists())
+            assertTrue(interruptedSummary.readText().contains("\"outcome\":\"INTERRUPTED\""))
+            assertTrue(journal.persistedFiles().size <= 10)
+
+            assertTrue(journal.startSession("physical campaign"))
+            journal.log("Indexing", "Progress", "phase=EXTRACTING explored=42")
+            assertTrue(journal.endSession("physical campaign"))
+            journal.awaitPendingWrites()
+
+            val files = journal.persistedFiles()
+            assertTrue(files.any { it.name.endsWith(".jsonl") })
+            assertTrue(files.any { it.name.endsWith(".summary.json") })
+            val events = files.first { it.name.endsWith(".jsonl") }.readText()
+            assertTrue(events.contains("\"event\":\"Progress\""))
+            assertTrue(events.contains("\"sessionId\":\"physical campaign\""))
+            val summary = files.first { it.name.endsWith(".summary.json") }.readText()
+            assertTrue(summary.contains("\"outcome\":\"ENDED\""))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `strict JSON encoding preserves arbitrary control characters`() {
+        val controls = buildString { (0x00..0x1F).forEach { append(it.toChar()) } }
+        val original = "$controls quote=\" slash=\\"
+        val encoded =
+            DiagnosticJournal.toJsonLine(
+                DiagnosticEvent(category = original, event = original, detail = original)
+            )
+
+        val decoded = JSONObject(encoded)
+        assertEquals(original, decoded.getString("category"))
+        assertEquals(original, decoded.getString("event"))
+        assertEquals(original, decoded.getString("detail"))
+        assertTrue(encoded.contains("\\u0000"))
+        assertFalse(encoded.any { it.code < 0x20 })
+    }
+
+    @Test
+    fun `path privacy filter removes configured and discovered path values`() {
+        val source = "/storage/emulated/0/Music"
+        val item = "$source/Artist Name/Track Name.mp3"
+        val uri = "content://media/external/audio/media/42"
+        val input =
+            """
+            {"detail":"phase=EXTRACTING item=$item","result":null}
+            Detected Path: $source
+            uri=$uri
+            """
+                .trimIndent()
+
+        val filtered = DiagnosticBundleExporter.filterPathBearingText(input, listOf(source))
+
+        assertFalse(filtered.contains(source))
+        assertFalse(filtered.contains("Artist Name"))
+        assertFalse(filtered.contains("Track Name.mp3"))
+        assertFalse(filtered.contains(uri))
+        assertTrue(filtered.contains("sha256:"))
     }
 }

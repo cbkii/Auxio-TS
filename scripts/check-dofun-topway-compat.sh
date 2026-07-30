@@ -377,10 +377,10 @@ def require_launcher_entries(application, label):
     entries = components_with_filter(application, "activity", "android.intent.action.MAIN", "android.intent.category.LAUNCHER")
     entries += components_with_filter(application, "activity-alias", "android.intent.action.MAIN", "android.intent.category.LAUNCHER")
     names = [attr(item, "name") for item in entries]
-    expected = {"com.tw.music.MusicActivity", "org.oxycblt.auxio.car.overlay.CarOverlayActivity"}
+    expected = {"com.tw.music.MusicActivity"}
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates: fail(f"{label} duplicate MAIN/LAUNCHER entries: {duplicates}")
-    elif set(names) == expected and len(names) == len(expected): ok(f"{label} MAIN/LAUNCHER entries are correct")
+    elif set(names) == expected and len(names) == len(expected): ok(f"{label} has one canonical MAIN/LAUNCHER entry")
     else: fail(f"{label} MAIN/LAUNCHER entries expected {sorted(expected)}, got {names}")
 
 def require_topway_alias(application, label):
@@ -437,8 +437,8 @@ if ! bash ./scripts/check-topway-manifest-components.sh; then
 fi
 
 printf '\nChecking built APK presence when present...\n'
-mode=full
-req_topway_music_release=1
+mode=supported-release
+req_topway_music_release=0
 req_topway_media_release=1
 if [[ -n ${SELECTED_VARIANTS:-} ]]; then
   mode=selective

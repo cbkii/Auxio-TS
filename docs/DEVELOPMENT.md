@@ -78,6 +78,13 @@ For normal changes, prefer the narrower tasks selected by `scripts/ci-scope.sh` 
 `scripts/ci-scope.sh` classifies changed files and fails open to full maintained Android CI when comparison evidence is unavailable or a path is unknown. Automatic workflows start for every PR/push and condition jobs/tasks rather than skipping a whole required workflow.
 
 - `Android Build`: builds only the relevant maintained variant; shared Topway or full changes build both APKs in one invocation. API 29 runs for high-risk changes and all `dev` pushes.
+- Debug APK downloads are produced only by manual dispatch or an explicitly labelled
+  same-repository PR (`ci:debug-artifacts`). Ordinary pushes and fork PRs validate without creating
+  downloadable APK artifact bloat. The exact-package `topwayTwMusic` output is an internal contract
+  fixture and is never a supported install.
+- Changes to release-only sources assemble the optimized primary release APK in PR CI and inspect
+  its DEX strings for diagnostic exporter/lab/canary leakage. That validation APK is not uploaded;
+  publishable release assets are rebuilt with the configured release key by Manual Release.
 - `Android Quality`: one setup/bootstrap. Selected Kotlin formatting, app tests, Musikr tests and app lint share one Gradle invocation. C/C++ formatting runs only for a native changed file, separately with one bounded retry because Eclipse CDT provisioning depends on external P2 repositories. Small gate jobs preserve required check names.
 - `Startup Release Validation`: manual exhaustive profile/release validation for only the maintained variants.
 - `Startup Benchmarks`: manual API 29 macrobenchmark or API 35 Baseline Profile generation; defaults to `topwayTwMedia` and requires 15–30 measured iterations.

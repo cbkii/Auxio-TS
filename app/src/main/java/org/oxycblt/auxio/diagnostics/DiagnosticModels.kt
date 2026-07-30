@@ -89,3 +89,30 @@ enum class DiagnosticStatus {
     UNKNOWN,
     NOT_APPLICABLE,
 }
+
+/** Shared strict JSON-string encoding for journal persistence and deterministic exports. */
+internal object DiagnosticJson {
+    fun string(value: String?): String = value?.let { "\"${escape(it)}\"" } ?: "null"
+
+    fun escape(value: String): String =
+        buildString(value.length) {
+            value.forEach { char ->
+                when (char) {
+                    '\\' -> append("\\\\")
+                    '"' -> append("\\\"")
+                    '\b' -> append("\\b")
+                    '\u000C' -> append("\\f")
+                    '\n' -> append("\\n")
+                    '\r' -> append("\\r")
+                    '\t' -> append("\\t")
+                    else ->
+                        if (char.code < 0x20) {
+                            append("\\u")
+                            append(char.code.toString(16).padStart(4, '0'))
+                        } else {
+                            append(char)
+                        }
+                }
+            }
+        }
+}

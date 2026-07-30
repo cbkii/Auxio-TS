@@ -154,9 +154,8 @@
             android:label="@string/car_overlay_setting_title"
             android:icon="@mipmap/ic_launcher">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
+                <action android:name="org.oxycblt.auxio.action.LAUNCH_FLOATING_CONTROLS" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 

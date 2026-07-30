@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.settings.categories
 
+import android.content.Intent
 import androidx.navigation.fragment.findNavController
 import androidx.preference.ListPreference
 import androidx.preference.Preference
@@ -26,6 +27,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.car.overlay.CarOverlayActivity
 import org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity
 import org.oxycblt.auxio.car.overlay.CarOverlaySettings
 import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
@@ -76,6 +78,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
                     ) + "\n" + uiSettings.headUnitCompatStatusSummary
             }
             KEY_CAR_OVERLAY_ENABLED -> setupCarOverlayEnabled(preference)
+            KEY_CAR_OVERLAY_LAUNCH_NOW -> setupCarOverlayLaunchNow(preference)
             KEY_CAR_OVERLAY_RESET_POSITION -> setupCarOverlayReset(preference)
             getString(R.string.set_key_ts18_fast_resume_status) ->
                 setupTs18FastResumeStatus(preference)
@@ -226,11 +229,22 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         }
     }
 
+    private fun setupCarOverlayLaunchNow(preference: Preference) {
+        preference.setOnPreferenceClickListener {
+            startActivity(
+                Intent(requireContext(), CarOverlayActivity::class.java)
+                    .setAction(CarOverlayActivity.ACTION_LAUNCH_FLOATING_CONTROLS)
+            )
+            true
+        }
+    }
+
     private fun statusSummary(status: Boolean): String =
         if (status) getString(R.string.lbl_enabled) else getString(R.string.lbl_disabled)
 
     private companion object {
         const val KEY_CAR_OVERLAY_ENABLED = CarOverlayContract.KEY_ENABLED
+        const val KEY_CAR_OVERLAY_LAUNCH_NOW = "car_overlay_launch_now"
         const val KEY_CAR_OVERLAY_RESET_POSITION = "car_overlay_reset_position"
         const val STARTUP_NONE = "none"
         const val STARTUP_OPEN_AUXIO = "open_auxio"

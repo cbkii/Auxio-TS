@@ -21,6 +21,7 @@ package org.oxycblt.auxio
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.Process
 import android.os.StrictMode
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.preference.PreferenceManager
@@ -112,6 +113,28 @@ class Auxio : Application() {
             Timber.plant(CopyleftNoticeTree())
         } else if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
+        }
+        if (BuildConfig.DEBUG) {
+            journal.configurePersistence(File(filesDir, "diagnostics/sessions"))
+            val processSessionId =
+                "process-${System.currentTimeMillis()}-${Process.myPid()}-${BuildConfig.APPLICATION_ID}"
+            journal.startSession(processSessionId)
+            journal.log(
+                DiagnosticJournal.CAT_LIFECYCLE,
+                "Application process started",
+                "variant=${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE} commit=${BuildConfig.BUILD_COMMIT}",
+            )
+            Timber.tag(DIAGNOSTIC_CANARY_TAG)
+                .i(
+                    "AUXIO_TS_CAPTURE_CANARY session=%s applicationId=%s version=%s(%d) variant=%s%s commit=%s",
+                    processSessionId,
+                    BuildConfig.APPLICATION_ID,
+                    BuildConfig.VERSION_NAME,
+                    BuildConfig.VERSION_CODE,
+                    BuildConfig.FLAVOR,
+                    BuildConfig.BUILD_TYPE,
+                    BuildConfig.BUILD_COMMIT,
+                )
         }
 
         // Migrate any settings that may have changed in an app update.
@@ -316,5 +339,9 @@ class Auxio : Application() {
             fun displayTimestamp(date: Date): String =
                 SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS Z", Locale.US).format(date)
         }
+    }
+
+    private companion object {
+        const val DIAGNOSTIC_CANARY_TAG = "AuxioCapture"
     }
 }

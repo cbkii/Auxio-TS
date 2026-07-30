@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.headunit.compat
 
+import java.security.MessageDigest
+
 data class HeadUnitMetadataSnapshot(
     val displayTitle: String,
     val displaySubtitle: String,
@@ -44,11 +46,12 @@ object HeadUnitMetadataPolicy {
         artworkUri: String?,
         hasArtwork: Boolean,
     ): HeadUnitMetadataSnapshot? {
-        val safeTitle = title?.toString()?.trim().orEmpty()
+        val safeTitle = sanitizeText(title)
         if (safeTitle.isBlank()) return null
-        val safeArtist = artist?.toString()?.trim().orEmpty()
-        val safeAlbumArtist = albumArtist?.toString()?.trim().orEmpty()
-        val safeAlbum = albumTitle?.toString()?.trim().orEmpty()
+        val safeArtist = sanitizeText(artist)
+        val safeAlbumArtist = sanitizeText(albumArtist)
+        val safeAlbum = sanitizeText(albumTitle)
+        val safeArtworkUri = sanitizeUri(artworkUri).takeIf(String::isNotBlank)
         val subtitle =
             if (safeArtist.isNotBlank()) {
                 if (safeAlbumArtist.isNotBlank() && safeArtist != safeAlbumArtist) {
@@ -69,11 +72,33 @@ object HeadUnitMetadataPolicy {
             albumArtist = safeAlbumArtist,
             albumTitle = safeAlbum,
             displayDescription = description,
-            durationMs = durationMs ?: 0L,
-            mediaId = mediaId.orEmpty(),
-            mediaUri = mediaUri.orEmpty(),
-            hasArtwork = hasArtwork || !artworkUri.isNullOrBlank(),
-            artworkUri = artworkUri?.takeIf { it.isNotBlank() },
+            durationMs = (durationMs ?: 0L).coerceAtLeast(0L),
+            mediaId = sanitizeIdentifier(mediaId),
+            mediaUri = sanitizeUri(mediaUri),
+            hasArtwork = hasArtwork || safeArtworkUri != null,
+            artworkUri = safeArtworkUri,
         )
     }
+
+    private fun sanitizeText(value: CharSequence?): String =
+        value?.toString()?.trim()?.take(MAX_TEXT_LENGTH).orEmpty()
+
+    private fun sanitizeIdentifier(value: String?): String =
+        value
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?.let { if (it.length <= MAX_IDENTIFIER_LENGTH) it else stableIdentifier(it) }
+            .orEmpty()
+
+    private fun sanitizeUri(value: String?): String =
+        value?.trim()?.takeIf { it.isNotBlank() && it.length <= MAX_IDENTIFIER_LENGTH }.orEmpty()
+
+    private fun stableIdentifier(value: String): String =
+        "sha256:" +
+            MessageDigest.getInstance("SHA-256")
+                .digest(value.toByteArray(Charsets.UTF_8))
+                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+    private const val MAX_TEXT_LENGTH = 512
+    private const val MAX_IDENTIFIER_LENGTH = 4096
 }

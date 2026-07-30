@@ -31,6 +31,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.music.GeneratedPlaylistStatus
@@ -142,7 +143,13 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                 val report =
                     StartupPerformanceReport.render(
                         StartupPerformanceReport.CaptureContext(
-                            authority = "user-started-settings-export"
+                            authority = "user-started-settings-export",
+                            sourceState =
+                                "mode=${musicSettings.locationMode};" +
+                                    "generation=${musicSettings.sourceConfigurationGeneration};" +
+                                    "checkpoint=${musicSettings.sourceConfigurationCheckpoint};" +
+                                    "sources=${musicSettings.configuredSourceSpecs}",
+                            commit = BuildConfig.BUILD_COMMIT,
                         )
                     )
                 val shareIntent =
