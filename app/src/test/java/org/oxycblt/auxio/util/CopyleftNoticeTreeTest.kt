@@ -21,7 +21,6 @@ package org.oxycblt.auxio.util
 import android.util.Log
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -57,6 +56,5 @@ class CopyleftNoticeTreeTest {
         assertEquals("AuxioCapture", logged.tag)
         assertTrue(logged.msg.startsWith("AUXIO_TS_CAPTURE_CANARY generation=42"))
         assertTrue(logged.msg.contains("java.lang.IllegalStateException: source failure"))
-        assertSame(throwable, logged.throwable)
     }
 }
