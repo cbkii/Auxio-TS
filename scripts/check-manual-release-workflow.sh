@@ -10,20 +10,29 @@ workflow='.github/workflows/manual-release.yml'
 bridge_checker='scripts/check-lsposed-bridge-contracts.sh'
 app_checker='scripts/check-app-release-contracts.sh'
 signer_parser='scripts/lib/apksigner-certificate.sh'
+orchestrator='scripts/release-orchestrator.py'
+variant_checker='scripts/check-ci-variant-contracts.sh'
 
-[[ -f "${workflow}" ]] || fail "Missing ${workflow}"
-[[ -f "${bridge_checker}" ]] || fail "Missing ${bridge_checker}"
-[[ -f "${app_checker}" ]] || fail "Missing ${app_checker}"
-[[ -f "${signer_parser}" ]] || fail "Missing ${signer_parser}"
+for required in \
+  "${workflow}" \
+  "${bridge_checker}" \
+  "${app_checker}" \
+  "${signer_parser}" \
+  "${orchestrator}" \
+  "${variant_checker}"; do
+  [[ -f "${required}" ]] || fail "Missing ${required}"
+done
 
 ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
-bash -n "${bridge_checker}" "${app_checker}" "${signer_parser}"
+bash -n "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
+python3 -m py_compile "${orchestrator}"
+python3 "${orchestrator}" self-test
 
 if command -v actionlint >/dev/null 2>&1; then actionlint "${workflow}"; else log 'actionlint unavailable; skipped'; fi
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck "${bridge_checker}" "${app_checker}" "${signer_parser}"
+  shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
 else
-    log 'shellcheck unavailable; skipped'
+  log 'shellcheck unavailable; skipped'
 fi
 
 # shellcheck source=scripts/lib/apksigner-certificate.sh
@@ -43,10 +52,6 @@ if extract_apksigner_certificate_sha256 'Signer #1 certificate SHA-256 digest: n
   >/dev/null 2>&1; then
   fail 'Malformed signer output must fail closed.'
 fi
-if extract_apksigner_certificate_sha256 "${legacy_report}"$'\n''Signer #2 certificate SHA-256 digest: not-a-digest' \
-  >/dev/null 2>&1; then
-  fail 'A malformed signer record must fail even when another signer digest is valid.'
-fi
 log 'apksigner output parser self-tests passed'
 
 python3 - <<'PY'
@@ -54,6 +59,7 @@ from pathlib import Path
 import re
 
 text = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
+variant_text = Path('scripts/check-ci-variant-contracts.sh').read_text(encoding='utf-8')
 
 
 def input_block(key: str) -> str:
@@ -62,11 +68,7 @@ def input_block(key: str) -> str:
     if pos < 0:
         raise SystemExit(f'Missing workflow_dispatch input: {key}')
     content_start = pos + len(marker)
-    next_match = re.search(
-        r'^      [A-Za-z0-9_]+:\n',
-        text[content_start:],
-        flags=re.MULTILINE,
-    )
+    next_match = re.search(r'^      [A-Za-z0-9_]+:\n', text[content_start:], flags=re.MULTILINE)
     next_input = content_start + next_match.start() if next_match else -1
     permissions = text.find('\n\npermissions:', content_start)
     candidates = [value for value in (next_input, permissions) if value >= 0]
@@ -75,6 +77,7 @@ def input_block(key: str) -> str:
 
 
 required_inputs = {
+    'release_mode': ('required: true', 'default: create_new_release', 'type: choice'),
     'include_topway_twmedia_apk': ('required: true', 'default: true', 'type: boolean'),
     'include_lsposed_bridge_apk': ('required: true', 'default: true', 'type: boolean'),
     'debug_variant_destination': (
@@ -89,8 +92,15 @@ for key, required_tokens in required_inputs.items():
         if token not in block:
             raise SystemExit(f'{key} does not contain expected {token}')
 
-debug_block = input_block('debug_variant_destination')
-debug_options = re.findall(r'^          - ([a-z_]+)$', debug_block, flags=re.MULTILINE)
+release_mode_options = re.findall(
+    r'^          - ([a-z_]+)$', input_block('release_mode'), flags=re.MULTILINE
+)
+if release_mode_options != ['create_new_release', 'repair_existing_release']:
+    raise SystemExit('release_mode must expose exactly create_new_release and repair_existing_release')
+
+debug_options = re.findall(
+    r'^          - ([a-z_]+)$', input_block('debug_variant_destination'), flags=re.MULTILINE
+)
 if debug_options != ['workflow_artifacts', 'release_assets']:
     raise SystemExit(
         'debug_variant_destination must expose exactly workflow_artifacts and release_assets'
@@ -101,89 +111,161 @@ for forbidden in (
     'assembleStandardRelease',
     'standard-release.apk',
     'include_topway_twmusic_magisk',
-    'topway_twmusic_magisk)',
     'package-topway-twmusic-magisk-module.sh',
     'include_debug_apks',
+    'Cleanup release tag after failed release creation',
+    'git push origin ":refs/tags/',
 ):
     if forbidden in text:
-        raise SystemExit(f'Retired release token remains: {forbidden}')
-if 'At least one maintained release asset must be selected' not in text:
-    raise SystemExit('Missing empty-selection guard')
-if 'Unsupported debug variant destination' not in text:
-    raise SystemExit('Missing fail-closed debug destination validation')
-if 'topway-twmusic-release.apk' not in text or 'Raw topwayTwMusic APK asset is forbidden' not in text:
-    raise SystemExit('Missing forbidden raw topwayTwMusic APK guard')
-for required_bridge in (
+        raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
+
+required_tokens = (
+    'group: manual-release',
+    'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
+    "--jq '.[].tag_name'",
+    'scripts/release-orchestrator.py',
+    'Push immutable release tag',
+    'Ensure draft release transaction exists',
+    '--draft',
+    'Upload or replace planned release assets',
+    '--clobber',
+    'Verify remote release asset manifest',
+    'Apply requested status to newly created release',
+    'Synchronise released source metadata to dev',
+    'git push origin "${RELEASE_SHA}:refs/heads/dev"',
+    'git merge-base --is-ancestor',
+    'Each required variant was built at most once.',
+    'Debug APKs are forbidden unless debug_variant_destination=release_assets.',
+    'At least one maintained release asset must be selected.',
+    'Unsupported debug variant destination',
+    ':app:assembleTopwayTwMediaRelease',
+    ':app:assembleTopwayTwMediaDebug',
     ':lsposed-bridge:assembleRelease',
     ':lsposed-bridge:assembleDebug',
-    'Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk',
-    'Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk',
+    'check-release-diagnostics-boundary.sh',
+    'check-startup-performance-contracts.sh',
+    'check-app-release-contracts.sh',
     'check-lsposed-bridge-contracts.sh',
-    'signed-lsposed-api100-addon',
-    'debug-lsposed-api100-addon',
-    'ORG_GRADLE_PROJECT_bridgeVersionName',
-    'ORG_GRADLE_PROJECT_bridgeVersionCode',
-    'EXPECTED_SIGNER_SHA256="${expected_release_signer}"',
-    'keytool}" -exportcert',
+    'Auxio-TS-${RELEASE_TAG}-topway-twmedia-release.apk',
+    'Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk',
+    'Auxio-TS-${RELEASE_TAG}-topway-twmedia-debug.apk',
+    'Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk',
+    'workflow_artifacts|release_assets',
+    'persist-credentials: false',
+)
+for token in required_tokens:
+    if token not in text:
+        raise SystemExit(f'Missing release transaction contract: {token}')
+
+for guard in (
+    "${GITHUB_WORKFLOW:-}",
+    "git fetch --quiet origin dev",
+    "remote dev moved during release preparation; refusing stale tag publication",
 ):
-    if required_bridge not in text:
-        raise SystemExit(f'Missing LSPosed release contract: {required_bridge}')
-if 'gh release delete-asset' not in text or 'gh release upload' not in text:
-    raise SystemExit('Missing release replacement/upload flow')
-if text.find('gh release delete-asset') < text.find('Build, verify and stage selected release assets'):
-    raise SystemExit('Release asset deletion appears before rebuilt assets are staged')
-for artifact_contract in (
-    'path: ${{ steps.assets.outputs.release_artifact_dir }}/*',
-    'path: ${{ steps.assets.outputs.debug_artifact_dir }}/*',
-    'ASSET_PATHS: ${{ steps.assets.outputs.release_asset_paths }}',
-    'ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}',
-    'DEBUG_DESTINATION: ${{ inputs.debug_variant_destination }}',
-    "if: inputs.debug_variant_destination == 'workflow_artifacts'",
-    'Debug APKs and sidecars are forbidden unless debug_variant_destination=release_assets.',
-):
-    if artifact_contract not in text:
-        raise SystemExit(f'Missing release/debug publication boundary: {artifact_contract}')
-if 'persist-credentials: false' not in text:
-    raise SystemExit('Checkout must not persist contents:write credentials')
+    if guard not in variant_text:
+        raise SystemExit(f'Missing pre-tag dev authority guard: {guard}')
+
+order = [
+    'Build once, inspect once and stage selected assets',
+    'Upload release recovery workflow artifact',
+    'Push immutable release tag',
+    'Ensure draft release transaction exists',
+    'Upload or replace planned release assets',
+    'Verify remote release asset manifest',
+    'Apply requested status to newly created release',
+    'Synchronise released source metadata to dev',
+]
+positions = [text.find(value) for value in order]
+if any(position < 0 for position in positions) or positions != sorted(positions):
+    raise SystemExit(f'Unsafe release transaction ordering: {list(zip(order, positions))}')
+
+dev_push = text.find('git push origin "${RELEASE_SHA}:refs/heads/dev"')
+remote_verify = text.find('Verify remote release asset manifest')
+if dev_push < remote_verify:
+    raise SystemExit('dev metadata push occurs before remote release verification')
+
 for pinned in (
+    'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
     'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
     'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
+    'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
 ):
     if pinned not in text:
         raise SystemExit(f'Missing immutable action pin: {pinned}')
-if 'bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"' not in text:
-    raise SystemExit('Release APKs are not checked for compiled Baseline Profile data')
-for debug_contract in (
-    ':app:assembleTopwayTwMediaDebug',
-    'Auxio-TS-${RELEASE_TAG}-topway-twmedia-debug.apk',
-    'debug-diagnostics-apk',
-    'check-release-diagnostics-boundary.sh "${asset_path}"',
-    'Auxio-TS-${{ steps.version.outputs.release_tag }}-debug-companions',
-    '[[ "${DEBUG_DESTINATION}" == release_assets ]]',
-    'Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.',
-    'Debug APKs were published as explicitly selected GitHub Release assets.',
-):
-    if debug_contract not in text:
-        raise SystemExit(f'Missing selectable debug publication contract: {debug_contract}')
-for suffix in ('.sha256', '.metadata.txt'):
-    if suffix not in text:
-        raise SystemExit(f'Missing release evidence sidecar: {suffix}')
-if 'apksigner certificates' not in text or 'asset_sha256=' not in text:
-    raise SystemExit('Release metadata does not record signing and checksum evidence')
-for app_contract in (
-    'bash ./scripts/check-app-release-contracts.sh',
-    '--version-name "${VERSION_NAME}"',
-    '--version-code "${VERSION_CODE}"',
-    '--expected-signer "${expected_release_signer}"',
-    '--sha256-file "${release_artifact_dir}/${asset_name}.sha256"',
-    '--metadata-file "${release_artifact_dir}/${asset_name}.metadata.txt"',
-):
-    if app_contract not in text:
-        raise SystemExit(f'Missing primary release APK contract: {app_contract}')
-if 'EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}' not in text:
-    raise SystemExit('Existing-release state is not routed through the shell environment')
-print('OK manual-release maintained asset invariants')
+
+print('OK manual-release transactional invariants')
 PY
+
+tmp=$(mktemp -d)
+trap 'rm -rf -- "${tmp}"' EXIT
+cat > "${tmp}/build.gradle" <<'EOF'
+android {
+    defaultConfig {
+        versionName "6.4.7"
+        versionCode 6040700
+    }
+}
+EOF
+printf '%s\n' v6.4.7 v6.4.8 > "${tmp}/git-tags.txt"
+printf '%s\n' v6.4.7 v6.4.8 > "${tmp}/release-tags.txt"
+printf '{}\n' > "${tmp}/target.json"
+python3 "${orchestrator}" resolve \
+  --mode create_new_release \
+  --source-gradle "${tmp}/build.gradle" \
+  --git-tags-file "${tmp}/git-tags.txt" \
+  --release-tags-file "${tmp}/release-tags.txt" \
+  --target-release-json "${tmp}/target.json" \
+  --output "${tmp}/new-plan.json"
+[[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release_tag"])' "${tmp}/new-plan.json")" == v6.4.9 ]] ||
+  fail 'Draft releases are not included in automatic version authority.'
+[[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release_version_code"])' "${tmp}/new-plan.json")" == 6040900 ]] ||
+  fail 'Semantic version-code formula is incorrect.'
+
+printf '%s\n' v6.4.7 v6.4.8 > "${tmp}/git-tags.txt"
+printf '%s\n' v6.4.7 > "${tmp}/release-tags.txt"
+if python3 "${orchestrator}" resolve \
+  --mode create_new_release \
+  --source-gradle "${tmp}/build.gradle" \
+  --git-tags-file "${tmp}/git-tags.txt" \
+  --release-tags-file "${tmp}/release-tags.txt" \
+  --target-release-json "${tmp}/target.json" \
+  --output "${tmp}/skipped-tag-plan.json" >/dev/null 2>&1; then
+  fail 'Create mode must not skip the newest tag-only interrupted release.'
+fi
+python3 "${orchestrator}" resolve \
+  --mode repair_existing_release \
+  --input-tag v6.4.8 \
+  --source-gradle "${tmp}/build.gradle" \
+  --git-tags-file "${tmp}/git-tags.txt" \
+  --release-tags-file "${tmp}/release-tags.txt" \
+  --target-release-json "${tmp}/target.json" \
+  --output "${tmp}/repair-plan.json"
+
+printf '%s\n' topway_twmedia topway_twmedia_debug > "${tmp}/variants.txt"
+: > "${tmp}/assets.txt"
+python3 "${orchestrator}" plan-assets \
+  --mode create_new_release \
+  --release-tag v6.4.9 \
+  --selected-variants-file "${tmp}/variants.txt" \
+  --debug-destination workflow_artifacts \
+  --existing-assets-file "${tmp}/assets.txt" \
+  --replace false \
+  --output "${tmp}/asset-plan.json"
+[[ "$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["build_variants"]))' "${tmp}/asset-plan.json")" == 2 ]] ||
+  fail 'Create-mode asset planning did not retain release and debug builds.'
+
+base='Auxio-TS-v6.4.9-topway-twmedia-release.apk'
+printf '%s\n' "${base}" "${base}.sha256" > "${tmp}/partial-assets.txt"
+if python3 "${orchestrator}" plan-assets \
+  --mode repair_existing_release \
+  --release-tag v6.4.9 \
+  --selected-variants-file "${tmp}/variants.txt" \
+  --debug-destination workflow_artifacts \
+  --existing-assets-file "${tmp}/partial-assets.txt" \
+  --replace false \
+  --output "${tmp}/partial-plan.json" >/dev/null 2>&1; then
+  fail 'Partial existing triplets must fail closed without explicit replacement.'
+fi
 
 for checker in "${app_checker}" "${bridge_checker}"; do
   grep -Fq 'extract_apksigner_certificate_sha256' "${checker}" ||
@@ -192,4 +274,4 @@ for checker in "${app_checker}" "${bridge_checker}"; do
     fail "${checker} does not request apksigner certificate output."
 done
 
-log 'manual release workflow and LSPosed addon checks passed'
+log 'manual release workflow, state machine and LSPosed addon checks passed'

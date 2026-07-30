@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Guard the final two-variant Auxio-TS build and focused CI contract.
+# shellcheck disable=SC2016 # Contract probes intentionally match literal ${...} and ${{...}} text.
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd -P) || {
   printf '::error::Cannot resolve repository root.\n' >&2
@@ -62,7 +63,19 @@ require_contains "$app_gradle" 'topwayTwMedia {' 'topwayTwMedia app flavour exis
 require_contains "$app_gradle" 'applicationId "com.tw.media"' 'topwayTwMedia keeps com.tw.media identity'
 require_contains "$app_gradle" 'topwayTwMusic {' 'topwayTwMusic app flavour exists'
 require_contains "$app_gradle" 'applicationId "com.tw.music"' 'topwayTwMusic keeps com.tw.music identity'
-require_contains "$app_gradle" 'versionCode 6040700' 'version code uses the monotonic TS18 scheme above recorded stock builds'
+version_name=$(sed -n -E 's/^[[:space:]]*versionName "([0-9]+)\.([0-9]+)\.([0-9]+)"[[:space:]]*$/\1 \2 \3/p' "$app_gradle" | head -n1)
+version_code=$(sed -n -E 's/^[[:space:]]*versionCode ([0-9]+)[[:space:]]*$/\1/p' "$app_gradle" | head -n1)
+if [[ -n "$version_name" && "$version_code" =~ ^[0-9]+$ ]]; then
+  read -r version_major version_minor version_patch <<< "$version_name"
+  expected_version_code=$((version_major * 1000000 + version_minor * 10000 + version_patch * 100))
+  if [[ "$version_code" == "$expected_version_code" && "$version_code" -gt 118 ]]; then
+    pass 'version code follows the monotonic semantic TS18 scheme above recorded stock builds'
+  else
+    fail "version code $version_code does not match semantic formula $expected_version_code or stock floor"
+  fi
+else
+  fail 'app version metadata is not a single strict semantic versionName and numeric versionCode'
+fi
 require_absent_regex "$app_gradle" '^[[:space:]]*standard[[:space:]]*\{' 'standard app flavour is retired regardless of indentation'
 
 require_contains "$benchmark_gradle" 'topwayTwMedia {' 'topwayTwMedia benchmark flavour exists'
@@ -146,10 +159,10 @@ require_contains "$release_workflow" '- release_assets' 'manual release exposes 
 require_contains "$release_workflow" 'topway-twmedia-debug.apk' 'manual release labels the debug app separately'
 require_contains "$release_workflow" 'lsposed-api100-bridge-debug.apk' 'manual release labels the debug addon separately'
 require_contains "$release_workflow" 'debug_artifact_dir' 'manual release isolates built debug companions'
-require_contains "$release_workflow" 'release_asset_paths' 'manual release isolates selected GitHub Release assets'
+require_contains "$release_workflow" 'upload_tsv' 'manual release isolates and maps selected GitHub Release assets'
 require_contains "$release_workflow" "if: inputs.debug_variant_destination == 'workflow_artifacts'" 'workflow-only mode uploads short-lived debug artifacts'
 require_contains "$release_workflow" '[[ "${DEBUG_DESTINATION}" == release_assets ]]' 'release-assets mode adds debug companions to the published asset set'
-require_contains "$release_workflow" 'Debug APKs and sidecars are forbidden unless debug_variant_destination=release_assets.' 'manual release rejects accidental debug publication'
+require_contains "$release_workflow" 'Debug APKs are forbidden unless debug_variant_destination=release_assets.' 'manual release rejects accidental debug publication'
 require_contains "$release_workflow" 'check-app-release-contracts.sh' 'manual release validates the staged primary APK identity'
 require_contains "$release_workflow" 'check-release-diagnostics-boundary.sh "${asset_path}"' 'manual release verifies diagnostics are absent from the release APK'
 require_absent_regex "$benchmark_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$' 'startup benchmark has no standard choice regardless of indentation'
@@ -158,6 +171,22 @@ require_absent_regex "$screenshots_workflow" '^[[:space:]]*-[[:space:]]*standard
 require_contains "$mode_file" 'fun defaultFor(topwayCompatFlavor: Boolean)' 'launcher default policy is testable without a flavour'
 require_contains "$mode_test" 'default policy is explicit for both compatibility states' 'pure launcher default policy covers true and false states'
 require_contains "$mode_test" 'topwayCompatFlavor = false' 'non-Topway fallback policy remains covered without a distributable flavour'
+
+# Manual Release calls this contract both before planning and again after building the local release
+# commit. The second call is the last read-only branch-authority guard before a tag is pushed.
+if [[ "${GITHUB_WORKFLOW:-}" == 'Manual Release' ]]; then
+  if git fetch --quiet origin dev && remote_dev=$(git rev-parse origin/dev 2>/dev/null); then
+    current_head=$(git rev-parse HEAD)
+    current_parent=$(git rev-parse HEAD^ 2>/dev/null || true)
+    if [[ "$current_head" == "$remote_dev" || "$current_parent" == "$remote_dev" ]]; then
+      pass 'manual release source remains anchored to current remote dev'
+    else
+      fail 'remote dev moved during release preparation; refusing stale tag publication'
+    fi
+  else
+    fail 'cannot refresh remote dev before release publication'
+  fi
+fi
 
 if ! bash ./scripts/check-startup-performance-contracts.sh; then
   fail 'startup/profile/PR208 integration contracts failed'
