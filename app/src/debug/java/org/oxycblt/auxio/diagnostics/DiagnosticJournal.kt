@@ -256,8 +256,7 @@ class DiagnosticJournal @Inject constructor() {
         var retainedBytes = 0L
         files.forEachIndexed { index, file ->
             val length = file.length()
-            val keep =
-                index < MAX_PERSISTED_FILES && length <= MAX_TOTAL_BYTES - retainedBytes
+            val keep = index < MAX_PERSISTED_FILES && length <= MAX_TOTAL_BYTES - retainedBytes
             if (keep) {
                 retainedBytes += length
             } else {
@@ -281,9 +280,7 @@ class DiagnosticJournal @Inject constructor() {
         internal fun toJsonLine(event: DiagnosticEvent): String =
             with(event) {
                 buildString {
-                    append(
-                        """{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime"""
-                    )
+                    append("""{"schema":1,"wallTime":$wallTime,"monotonicTime":$monotonicTime""")
                     append(""","sessionId":${DiagnosticJson.string(sessionId)}""")
                     append(
                         ""","category":${DiagnosticJson.string(category)},"event":${DiagnosticJson.string(event.event)}"""

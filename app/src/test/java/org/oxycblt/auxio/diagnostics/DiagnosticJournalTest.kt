@@ -125,8 +125,7 @@ class DiagnosticJournalTest {
             journal.awaitPendingWrites()
 
             assertFalse(interruptedMarker.exists())
-            val interruptedSummary =
-                File(directory, "session-interrupted_campaign.summary.json")
+            val interruptedSummary = File(directory, "session-interrupted_campaign.summary.json")
             assertTrue(interruptedSummary.exists())
             assertTrue(interruptedSummary.readText().contains("\"outcome\":\"INTERRUPTED\""))
             assertTrue(journal.persistedFiles().size <= 10)
@@ -155,11 +154,7 @@ class DiagnosticJournalTest {
         val original = "$controls quote=\" slash=\\"
         val encoded =
             DiagnosticJournal.toJsonLine(
-                DiagnosticEvent(
-                    category = original,
-                    event = original,
-                    detail = original,
-                )
+                DiagnosticEvent(category = original, event = original, detail = original)
             )
 
         val decoded = JSONObject(encoded)

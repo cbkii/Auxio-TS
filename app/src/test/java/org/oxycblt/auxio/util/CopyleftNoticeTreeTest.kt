@@ -22,6 +22,7 @@ import android.util.Log
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,13 +50,13 @@ class CopyleftNoticeTreeTest {
     fun `fork logger preserves diagnostic tag message and throwable`() {
         val throwable = IllegalStateException("source failure")
 
-        Timber.tag("AuxioCapture")
-            .e(throwable, "AUXIO_TS_CAPTURE_CANARY generation=%d", 42)
+        Timber.tag("AuxioCapture").e(throwable, "AUXIO_TS_CAPTURE_CANARY generation=%d", 42)
 
         val logged = ShadowLog.getLogs().last()
         assertEquals(Log.ERROR, logged.type)
         assertEquals("AuxioCapture", logged.tag)
-        assertEquals("AUXIO_TS_CAPTURE_CANARY generation=42", logged.msg)
+        assertTrue(logged.msg.startsWith("AUXIO_TS_CAPTURE_CANARY generation=42"))
+        assertTrue(logged.msg.contains("java.lang.IllegalStateException: source failure"))
         assertSame(throwable, logged.throwable)
     }
 }

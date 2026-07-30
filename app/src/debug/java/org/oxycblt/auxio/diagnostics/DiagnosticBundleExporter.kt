@@ -83,7 +83,9 @@ object DiagnosticBundleExporter {
                 checksumLines += "${zip.writeEntry(name, write)}  $name"
             }
 
-            payload("manifest.json") { it.writeUtf8(manifest(context, journal, options, apkSha256)) }
+            payload("manifest.json") {
+                it.writeUtf8(manifest(context, journal, options, apkSha256))
+            }
             payload("source-state.txt") {
                 it.writeUtf8(sourceState(musicSettings, options.hashPaths))
             }
@@ -117,9 +119,7 @@ object DiagnosticBundleExporter {
                     if (pathPrivacyFilter == null) {
                         file.inputStream().buffered().use { input -> input.copyTo(output) }
                     } else {
-                        output.writeUtf8(
-                            pathPrivacyFilter.filter(file.readText(Charsets.UTF_8))
-                        )
+                        output.writeUtf8(pathPrivacyFilter.filter(file.readText(Charsets.UTF_8)))
                     }
                 }
             }
@@ -319,10 +319,7 @@ object DiagnosticBundleExporter {
     private fun ByteArray.toHex(): String =
         joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
-    private fun ZipOutputStream.writeEntry(
-        name: String,
-        write: (OutputStream) -> Unit,
-    ): String {
+    private fun ZipOutputStream.writeEntry(name: String, write: (OutputStream) -> Unit): String {
         val digest = MessageDigest.getInstance("SHA-256")
         putNextEntry(ZipEntry(name).apply { time = 0L })
         try {
