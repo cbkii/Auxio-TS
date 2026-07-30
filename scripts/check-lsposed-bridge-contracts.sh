@@ -343,7 +343,7 @@ if ((ERRORS == 0)); then
       fi
       expected_signer=${EXPECTED_SIGNER_SHA256:-}
       expected_signer=${expected_signer//:/}
-      expected_signer=${expected_signer^^}
+      expected_signer=$(printf '%s' "$expected_signer" | tr '[:lower:]' '[:upper:]')
       if [[ ! $expected_signer =~ ^[0-9A-F]{64}$ ]]; then
         error 'EXPECTED_SIGNER_SHA256 must be a 64-character SHA-256 fingerprint'
       elif ! actual_signer=$(extract_apksigner_certificate_sha256 "$signing_report"); then
