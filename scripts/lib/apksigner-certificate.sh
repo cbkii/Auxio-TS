@@ -4,21 +4,29 @@
 
 extract_apksigner_certificate_sha256() {
   local report=${1-}
-  local line digest
+  local line digest existing seen
   local pattern='^[[:space:]]*Signer[[:space:]]+(#[0-9]+|\([^)]*\))[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*([0-9A-Fa-f:]+)[[:space:]]*$'
-  local -A unique_digests=()
+  local unique_digests=()
 
   while IFS= read -r line; do
     line=${line%$'\r'}
     [[ $line =~ $pattern ]] || continue
 
     digest=${BASH_REMATCH[2]//:/}
-    digest=${digest^^}
+    digest=$(printf '%s' "$digest" | tr '[:lower:]' '[:upper:]')
     if [[ ! $digest =~ ^[0-9A-F]{64}$ ]]; then
       printf '::error::apksigner returned a malformed certificate SHA-256 digest.\n' >&2
       return 2
     fi
-    unique_digests["$digest"]=1
+
+    seen=false
+    for existing in "${unique_digests[@]}"; do
+      if [[ $existing == "$digest" ]]; then
+        seen=true
+        break
+      fi
+    done
+    [[ $seen == true ]] || unique_digests+=("$digest")
   done <<< "$report"
 
   case ${#unique_digests[@]} in
@@ -27,9 +35,7 @@ extract_apksigner_certificate_sha256() {
       return 1
       ;;
     1)
-      for digest in "${!unique_digests[@]}"; do
-        printf '%s\n' "$digest"
-      done
+      printf '%s\n' "${unique_digests[0]}"
       ;;
     *)
       printf '::error::apksigner output contained %d distinct signer certificate SHA-256 digests.\n' \
