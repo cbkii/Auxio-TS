@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Guard the final two-variant Auxio-TS build and focused CI contract.
+# shellcheck disable=SC2016 # Contract probes intentionally match literal ${...} and ${{...}} text.
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd -P) || {
   printf '::error::Cannot resolve repository root.\n' >&2
