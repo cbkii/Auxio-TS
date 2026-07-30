@@ -60,6 +60,18 @@ require_command() {
   }
 }
 
+require_source_contains() {
+  local path=$1 pattern=$2
+  grep -Fq -- "$pattern" "$path" || error "Source contract missing '$pattern' in $path"
+}
+
+require_source_absent() {
+  local path=$1 pattern=$2
+  if grep -Fq -- "$pattern" "$path"; then
+    error "Forbidden source contract '$pattern' remains in $path"
+  fi
+}
+
 find_apkanalyzer() {
   if command -v apkanalyzer >/dev/null 2>&1; then
     command -v apkanalyzer
@@ -69,6 +81,17 @@ find_apkanalyzer() {
   [[ -n $sdk_root ]] || return 1
   find "$sdk_root/cmdline-tools" -type f -name apkanalyzer -perm -u+x 2>/dev/null |
     sort | tail -n 1
+}
+
+find_apksigner() {
+  if command -v apksigner >/dev/null 2>&1; then
+    command -v apksigner
+    return 0
+  fi
+  local sdk_root=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}
+  [[ -n $sdk_root ]] || return 1
+  find "$sdk_root/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null |
+    sort -V | tail -n 1
 }
 
 check_exact_entry() {
@@ -207,6 +230,24 @@ require_command python3
 [[ -f $APK_PATH ]] || error "APK does not exist: $APK_PATH"
 
 if ((ERRORS == 0)); then
+  require_source_contains \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/BridgeEnvironment.java' \
+    'Executors.newSingleThreadExecutor'
+  require_source_contains \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
+    'environment.refreshAsync('
+  require_source_contains \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
+    '.getMainExecutor()'
+  require_source_absent \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
+    'callback.returnAndSkip(Service.START_NOT_STICKY)'
+  require_source_contains \
+    'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/MediaMirror.java' \
+    'handler.post(this::startOrRetryOnHandler)'
+  require_source_contains 'lsposed-bridge/build.gradle' \
+    'LSPosed release tasks require all releaseStoreFile/releaseStorePassword/'
+
   check_exact_entry 'META-INF/xposed/java_init.list' "$EXPECTED_ENTRY"
   check_exact_entry 'META-INF/xposed/scope.list' "$EXPECTED_SCOPE"
 
@@ -252,6 +293,21 @@ if ((ERRORS == 0)); then
     fi
     if [[ $VARIANT == release ]] && grep -Eq 'android:debuggable=(true|"true")' <<<"$manifest"; then
       error 'Release bridge APK must not be debuggable'
+    fi
+  fi
+
+  if [[ $VARIANT == release ]]; then
+    apksigner_bin=$(find_apksigner || true)
+    if [[ -z $apksigner_bin || ! -x $apksigner_bin ]]; then
+      error 'apksigner is required to prove the release signing contract'
+    else
+      signing_report=$("$apksigner_bin" verify --verbose --print-certs "$APK_PATH" 2>&1) || {
+        error 'Release bridge APK is not validly signed'
+        signing_report=''
+      }
+      if grep -Fq 'CN=Android Debug' <<<"$signing_report"; then
+        error 'Release bridge APK must not use the Android debug certificate'
+      fi
     fi
   fi
 

@@ -57,6 +57,10 @@ Before enabling the bridge, prove that `com.tw.music` is the genuine system pack
 adb shell pm path com.tw.music
 adb shell dumpsys package com.tw.music |
   grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|flags|privateFlags|enabled'
+stock_apk="$(adb shell pm path com.tw.music | tr -d '\r' | sed -n 's/^package://p' | head -n1)"
+adb pull "${stock_apk}" /tmp/ts18-stock-com.tw.music.apk
+apksigner verify --verbose --print-certs /tmp/ts18-stock-com.tw.music.apk |
+  grep 'Signer #1 certificate SHA-256 digest'
 ```
 
 Expected on the captured target:
@@ -64,7 +68,8 @@ Expected on the captured target:
 - the code path is under `/system/priv-app/`;
 - the app UID/shared UID is the platform/system identity;
 - the package is enabled for user 0;
-- the certificate matches the verified stock identity documented by the bridge.
+- the certificate SHA-256 is
+  `AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3`.
 
 If an old Auxio exact-package overlay/module is present, disable or uninstall that Magisk module,
 reboot, and repeat the identity gate before installing the bridge. Do not clear stock app state

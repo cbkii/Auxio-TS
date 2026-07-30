@@ -25,8 +25,11 @@ import java.io.File;
 import java.lang.ref.WeakReference;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /** Runtime identity, target-readiness and kill-switch authority for the bridge. */
 final class BridgeEnvironment {
@@ -37,13 +40,18 @@ final class BridgeEnvironment {
     private static final long READINESS_CACHE_MS = 3_000L;
 
     private final LogSink log;
-    private final AtomicBoolean identityVerified = new AtomicBoolean();
-    private final AtomicBoolean identityRejected = new AtomicBoolean();
+    private final ExecutorService probeExecutor =
+            Executors.newSingleThreadExecutor(
+                    task -> {
+                        Thread thread = new Thread(task, "AuxioTsBridgeProbe");
+                        thread.setDaemon(true);
+                        return thread;
+                    });
+    private final AtomicBoolean refreshPending = new AtomicBoolean();
+    private final AtomicReference<RuntimeState> state =
+            new AtomicReference<>(RuntimeState.unknown());
     private final AtomicReference<WeakReference<Context>> context =
             new AtomicReference<>(new WeakReference<>(null));
-
-    private volatile long readinessCheckedAtMs;
-    private volatile boolean cachedTargetReady;
 
     BridgeEnvironment(LogSink log) {
         this.log = log;
@@ -60,26 +68,67 @@ final class BridgeEnvironment {
 
     boolean canBridge(Context value, String reason) {
         remember(value);
-        if (isDisabled()) {
-            log.log("bridge disabled by kill switch during " + reason + "; stock path retained", null);
-            return false;
-        }
-        if (!verifyStockIdentity(value)) return false;
-        if (!isTargetReady(value)) {
-            log.log("Auxio target unavailable during " + reason + "; stock path retained", null);
-            return false;
-        }
-        return true;
+        RuntimeState current = state.get();
+        refreshIfNeeded(value, current);
+        return current.canBridge();
     }
 
     boolean canPublish(Context value) {
-        if (isDisabled()) return false;
-        return verifyStockIdentity(value) && isTargetReady(value);
+        remember(value);
+        RuntimeState current = state.get();
+        refreshIfNeeded(value, current);
+        return current.canBridge();
     }
 
-    boolean verifyStockIdentity(Context value) {
-        if (identityVerified.get()) return true;
-        if (identityRejected.get()) return false;
+    /**
+     * Probes the kill switch, stock identity and Auxio target away from host callbacks.
+     *
+     * <p>The initial unknown state always preserves the stock path. The completion callback reports
+     * only the signer/UID decision so callers can install functional hooks even when Auxio is not
+     * installed yet.
+     */
+    void refreshAsync(Context value, Consumer<Boolean> completion) {
+        remember(value);
+        Context app = currentContext();
+        if (app == null) {
+            if (completion != null) completion.accept(false);
+            return;
+        }
+        if (!refreshPending.compareAndSet(false, true)) {
+            RuntimeState current = state.get();
+            if (completion != null && current.known) {
+                completion.accept(current.identityTrusted);
+            }
+            return;
+        }
+        probeExecutor.execute(
+                () -> {
+                    RuntimeState previous = state.get();
+                    RuntimeState updated = probe(app);
+                    state.set(updated);
+                    refreshPending.set(false);
+                    logTransition(previous, updated);
+                    if (completion != null) completion.accept(updated.identityTrusted);
+                });
+    }
+
+    private void refreshIfNeeded(Context value, RuntimeState current) {
+        long now = SystemClock.elapsedRealtime();
+        if (!current.known || now - current.checkedAtMs >= READINESS_CACHE_MS) {
+            refreshAsync(value, null);
+        }
+    }
+
+    private RuntimeState probe(Context value) {
+        long checkedAtMs = SystemClock.elapsedRealtime();
+        boolean disabled = isDisabled();
+        IdentityResult identity = queryStockIdentity(value);
+        boolean targetReady = identity.trusted && queryTargetReady(value.getPackageManager());
+        return new RuntimeState(
+                true, disabled, identity.trusted, targetReady, identity.versionCode, checkedAtMs);
+    }
+
+    private IdentityResult queryStockIdentity(Context value) {
         try {
             PackageInfo info =
                     value.getPackageManager()
@@ -87,9 +136,7 @@ final class BridgeEnvironment {
                                     BridgeContract.STOCK_PACKAGE,
                                     PackageManager.GET_SIGNING_CERTIFICATES);
             if (info.applicationInfo == null || info.applicationInfo.uid != Process.SYSTEM_UID) {
-                identityRejected.set(true);
-                log.log("STOP: stock com.tw.music is not UID 1000", null);
-                return false;
+                return new IdentityResult(false, info.getLongVersionCode());
             }
 
             long versionCode = info.getLongVersionCode();
@@ -102,43 +149,13 @@ final class BridgeEnvironment {
                                     : signingInfo.getSigningCertificateHistory());
             for (Signature signature : signatures) {
                 if (BuildConfig.STOCK_CERT_SHA256.equals(sha256(signature.toByteArray()))) {
-                    identityVerified.set(true);
-                    String versionStatus =
-                            versionCode == BuildConfig.KNOWN_TESTED_STOCK_VERSION_CODE
-                                    ? "captured/tested version"
-                                    : "version not yet device-tested";
-                    log.log(
-                            "verified exact Topway signer and UID 1000; stock version code "
-                                    + versionCode
-                                    + " ("
-                                    + versionStatus
-                                    + "). Exact hook surfaces are capability-probed at runtime",
-                            null);
-                    return true;
+                    return new IdentityResult(true, versionCode);
                 }
             }
-            identityRejected.set(true);
-            log.log("STOP: stock signer differs from the captured Topway platform certificate", null);
         } catch (PackageManager.NameNotFoundException | RuntimeException error) {
             log.log("stock identity query unavailable; bridge remains inactive", error);
         }
-        return false;
-    }
-
-    boolean isTargetReady(Context value) {
-        long now = SystemClock.elapsedRealtime();
-        if (readinessCheckedAtMs != 0L && now - readinessCheckedAtMs < READINESS_CACHE_MS) {
-            return cachedTargetReady;
-        }
-        synchronized (this) {
-            now = SystemClock.elapsedRealtime();
-            if (readinessCheckedAtMs != 0L && now - readinessCheckedAtMs < READINESS_CACHE_MS) {
-                return cachedTargetReady;
-            }
-            cachedTargetReady = queryTargetReady(value.getPackageManager());
-            readinessCheckedAtMs = now;
-            return cachedTargetReady;
-        }
+        return new IdentityResult(false, 0L);
     }
 
     private boolean queryTargetReady(PackageManager manager) {
@@ -173,6 +190,44 @@ final class BridgeEnvironment {
         }
     }
 
+    private void logTransition(RuntimeState previous, RuntimeState updated) {
+        if (!updated.identityTrusted) {
+            if (!previous.known || previous.identityTrusted) {
+                log.log(
+                        "STOP: com.tw.music UID or signer differs from the captured stock identity",
+                        null);
+            }
+            return;
+        }
+        if (!previous.known || !previous.identityTrusted) {
+            String versionStatus =
+                    updated.versionCode == BuildConfig.KNOWN_TESTED_STOCK_VERSION_CODE
+                            ? "captured/tested version"
+                            : "version not yet device-tested";
+            log.log(
+                    "verified exact Topway signer and UID 1000; stock version code "
+                            + updated.versionCode
+                            + " ("
+                            + versionStatus
+                            + "). Exact hook surfaces are capability-probed at runtime",
+                    null);
+        }
+        if (!previous.known || previous.disabled != updated.disabled) {
+            log.log(
+                    updated.disabled
+                            ? "bridge disabled by kill switch; stock path retained"
+                            : "bridge kill switch is clear",
+                    null);
+        }
+        if (!previous.known || previous.targetReady != updated.targetReady) {
+            log.log(
+                    updated.targetReady
+                            ? "Auxio target components are ready"
+                            : "Auxio target unavailable; stock path retained",
+                    null);
+        }
+    }
+
     private static String sha256(byte[] value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(value);
@@ -183,6 +238,48 @@ final class BridgeEnvironment {
             return builder.toString();
         } catch (Exception error) {
             return "";
+        }
+    }
+
+    private static final class IdentityResult {
+        final boolean trusted;
+        final long versionCode;
+
+        IdentityResult(boolean trusted, long versionCode) {
+            this.trusted = trusted;
+            this.versionCode = versionCode;
+        }
+    }
+
+    private static final class RuntimeState {
+        final boolean known;
+        final boolean disabled;
+        final boolean identityTrusted;
+        final boolean targetReady;
+        final long versionCode;
+        final long checkedAtMs;
+
+        RuntimeState(
+                boolean known,
+                boolean disabled,
+                boolean identityTrusted,
+                boolean targetReady,
+                long versionCode,
+                long checkedAtMs) {
+            this.known = known;
+            this.disabled = disabled;
+            this.identityTrusted = identityTrusted;
+            this.targetReady = targetReady;
+            this.versionCode = versionCode;
+            this.checkedAtMs = checkedAtMs;
+        }
+
+        static RuntimeState unknown() {
+            return new RuntimeState(false, false, false, false, 0L, 0L);
+        }
+
+        boolean canBridge() {
+            return known && identityTrusted && !disabled && targetReady;
         }
     }
 }

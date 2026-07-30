@@ -254,7 +254,7 @@ require_file_contains app/src/test/java/org/oxycblt/auxio/car/overlay/CarOverlay
 
 require_file_not_contains .github/workflows/manual-release.yml 'assembleTopwayTwMusicRelease' 'manual release retires exact-package Topway music'
 require_file_contains .github/workflows/manual-release.yml 'assembleTopwayTwMediaRelease' 'manual release builds Topway media'
-require_file_contains .github/workflows/manual-release.yml 'topway-twmusic-release.apk' 'manual release forbids raw Topway music APK name'
+require_file_contains .github/workflows/manual-release.yml 'topway-twmusic-release.apk' 'manual release checks the forbidden raw Topway music APK name'
 require_file_contains .github/workflows/manual-release.yml 'topway-twmedia-release.apk' 'manual release names Topway media APK'
 require_file_contains .github/workflows/manual-release.yml ':lsposed-bridge:assembleRelease' 'manual release builds LSPosed addon'
 require_file_contains .github/workflows/manual-release.yml 'lsposed-api100-bridge.apk' 'manual release names LSPosed addon'

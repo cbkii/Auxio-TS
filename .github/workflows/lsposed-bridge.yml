@@ -86,6 +86,7 @@ jobs:
 
       - name: Prepare bridge download
         id: prepare
+        if: github.event.pull_request.head.repo.full_name == github.repository
         shell: bash
         run: |
           set -euo pipefail
@@ -104,6 +105,7 @@ jobs:
 
       - name: Upload bridge debug APK
         id: bridge_artifact
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: lsposed-api100-bridge-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
@@ -133,13 +135,16 @@ jobs:
         env:
           ARTIFACT_URL: ${{ steps.bridge_artifact.outputs.artifact-url }}
           BRIDGE_SHA256: ${{ steps.prepare.outputs.sha256 }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ', ') }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           {
             echo '## LSPosed API 100 bridge'
             echo
-            echo "- PR title: \`${{ github.event.pull_request.title }}\`"
-            echo "- PR labels: \`${{ join(github.event.pull_request.labels.*.name, ', ') }}\`"
-            echo "- Head branch: \`${{ github.head_ref }}\`"
+            echo "- PR title: \`${PR_TITLE}\`"
+            echo "- PR labels: \`${PR_LABELS}\`"
+            echo "- Head branch: \`${HEAD_REF}\`"
             echo '- Gate: matching title, exact `ci:lsposed-bridge` / `lsposed-bridge` label, or dedicated LSPosed bridge branch'
             echo '- Static/recommended LSPosed scope: `com.tw.music` only'
             echo
@@ -148,6 +153,6 @@ jobs:
               echo "|---|---|---|"
               echo "| Bridge debug APK | [Download](${ARTIFACT_URL}) | \`${BRIDGE_SHA256}\` |"
             else
-              echo 'Bridge APK unavailable — build, validation or upload did not complete.'
+              echo 'Bridge APK unavailable — fork PRs do not publish binaries, or build/validation/upload did not complete.'
             fi
           } >> "${GITHUB_STEP_SUMMARY}"

@@ -131,22 +131,29 @@ final class MediaMirror {
 
     void startOrRetry() {
         stopped.set(false);
+        handler.post(this::startOrRetryOnHandler);
+    }
+
+    private void startOrRetryOnHandler() {
         if (started.compareAndSet(false, true)) {
-            handler.post(this::connect);
+            connect();
         } else if (!connectionPending
                 && controller == null
                 && (browser == null || !browser.isConnected())) {
             reconnectAttempts = 0;
             handler.removeCallbacksAndMessages(null);
-            handler.post(this::connect);
+            connect();
         }
     }
 
     void pauseUntilRetried() {
-        handler.removeCallbacksAndMessages(null);
-        disconnectBrowser();
-        clearController();
-        started.set(false);
+        handler.post(
+                () -> {
+                    handler.removeCallbacksAndMessages(null);
+                    disconnectBrowser();
+                    clearController();
+                    started.set(false);
+                });
     }
 
     void stop() {
@@ -199,11 +206,6 @@ final class MediaMirror {
             long requiredAction = requiredActionFor(command, playing);
             if (requiredAction == UNSUPPORTED_TRANSPORT_ACTION) return false;
             if (state == null || (state.getActions() & requiredAction) == 0L) {
-                log.log(
-                        "Auxio session does not currently advertise "
-                                + command
-                                + "; stock path retained",
-                        null);
                 return false;
             }
 
@@ -339,6 +341,9 @@ final class MediaMirror {
         MediaController current = controller;
         boolean playing = isPlaying(current != null ? current.getPlaybackState() : null);
         try {
+            // These implicit actions and the musicPath extra reproduce the captured stock TW Music
+            // contract consumed by fixed launcher/panel receivers. They intentionally expose the
+            // same bounded metadata to broadcast receivers as stock; do not add unrelated fields.
             context.sendBroadcast(
                     new Intent(ACTION_MUSIC_INFO)
                             .putExtra("musicTitle", title)

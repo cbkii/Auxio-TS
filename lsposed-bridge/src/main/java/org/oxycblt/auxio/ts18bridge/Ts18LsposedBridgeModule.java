@@ -47,6 +47,7 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
     private static final long LOG_WINDOW_MS = 10_000L;
     private static final int MAX_LOGS_PER_WINDOW = 4;
 
+    private final AtomicBoolean bootstrapInstalled = new AtomicBoolean();
     private final AtomicBoolean hooksInstalled = new AtomicBoolean();
     private final AtomicReference<MediaMirror> mediaMirror = new AtomicReference<>();
     private final Map<String, LogWindow> logWindows = new ConcurrentHashMap<>();
@@ -83,14 +84,23 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                 safeLog("STOP: com.tw.music is not UID 1000; no hooks installed");
                 return;
             }
-            if (!hooksInstalled.compareAndSet(false, true)) return;
-
             ClassLoader loader = param.getClassLoader();
-            installSafely("application", () -> installApplicationHook(loader));
+            if (!bootstrapInstalled.compareAndSet(false, true)) return;
+            installBootstrapHook(loader);
+            safeLog("installed stock-identity bootstrap hook; functional hooks remain inactive");
+        } catch (Throwable error) {
+            safeLog("identity bootstrap hook failed closed", error);
+        }
+    }
+
+    private void activateVerifiedHooks(Application application, ClassLoader loader) {
+        if (!hooksInstalled.compareAndSet(false, true)) return;
+        try {
             installSafely("activity", () -> installActivityHooks(loader));
             installSafely("service", () -> installServiceHooks(loader));
             installSafely("receivers", () -> installReceiverHooks(loader));
             installSafely("presenter", () -> installPresenterHooks(loader));
+            captureAndStart(application);
             safeLog(
                     "hook capability-probe pass complete; unmatched stock-version surfaces remain stock-controlled");
         } catch (Throwable error) {
@@ -107,16 +117,29 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
         }
     }
 
-    private void installApplicationHook(ClassLoader loader) throws ReflectiveOperationException {
+    private void installBootstrapHook(ClassLoader loader) throws ReflectiveOperationException {
         Method onCreate = requiredMethod(loader, STOCK_APPLICATION, "onCreate");
         hookAfter(
                 onCreate,
                 callback -> {
                     try {
                         Object target = callback.getThis();
-                        if (target instanceof Application application) captureAndStart(application);
+                        if (target instanceof Application application) {
+                            environment.refreshAsync(
+                                    application,
+                                    trusted ->
+                                            application
+                                                    .getMainExecutor()
+                                                    .execute(
+                                                            () -> {
+                                                                if (trusted) {
+                                                                    activateVerifiedHooks(
+                                                                            application, loader);
+                                                                }
+                                                            }));
+                        }
                     } catch (Throwable error) {
-                        safeLog("application hook failed open", error);
+                        safeLog("identity bootstrap hook failed open", error);
                     }
                 });
     }
@@ -181,10 +204,9 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                     try {
                         Object target = callback.getThis();
                         Intent intent = argument(callback, 0, Intent.class);
-                        if (target instanceof Service service
-                                && intent != null
-                                && forwardObservedIntent(service, intent, "service-onStartCommand")) {
-                            callback.returnAndSkip(Service.START_NOT_STICKY);
+                        if (target instanceof Service service && intent != null) {
+                            // Preserve the stock lifecycle and any startForeground requirement.
+                            forwardObservedIntent(service, intent, "service-onStartCommand");
                         }
                     } catch (Throwable error) {
                         safeLog("service command hook failed open", error);

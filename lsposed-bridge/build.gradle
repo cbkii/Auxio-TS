@@ -1,3 +1,5 @@
+import java.util.Locale
+
 plugins {
     id "com.android.application"
 }
@@ -86,4 +88,15 @@ dependencies {
     compileOnly project(":libxposed-api100-stubs")
 
     testImplementation "junit:junit:4.13.2"
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def releaseTasks = graph.allTasks.findAll { task ->
+        task.project == project && task.name.toLowerCase(Locale.ROOT).contains("release")
+    }
+    if (!releaseTasks.isEmpty() && !hasReleaseSigning) {
+        throw new GradleException(
+                "LSPosed release tasks require all releaseStoreFile/releaseStorePassword/" +
+                        "releaseKeyAlias/releaseKeyPassword properties.")
+    }
 }

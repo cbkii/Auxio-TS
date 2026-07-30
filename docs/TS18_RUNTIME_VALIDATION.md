@@ -38,10 +38,16 @@ adb shell dumpsys package com.tw.music |
   grep -iE 'codePath|versionCode|versionName|userId|sharedUserId|flags|privateFlags|enabled|User 0'
 adb shell dumpsys package com.tw.media |
   grep -iE 'codePath|versionCode|versionName|userId|enabled|User 0' || true
+stock_apk="$(adb shell pm path com.tw.music | tr -d '\r' | sed -n 's/^package://p' | head -n1)"
+adb pull "${stock_apk}" /tmp/ts18-stock-com.tw.music.apk
+apksigner verify --verbose --print-certs /tmp/ts18-stock-com.tw.music.apk |
+  grep 'Signer #1 certificate SHA-256 digest'
 ```
 
 Stop if `com.tw.music` is not the verified system priv-app or an Auxio Magisk overlay is still
-active. Do not disable, uninstall-for-user, replace, clear, or re-sign stock `com.tw.music`.
+active. Its certificate SHA-256 must be
+`AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3`. Do not
+disable, uninstall-for-user, replace, clear, or re-sign stock `com.tw.music`.
 
 ## Install and LSPosed configuration
 

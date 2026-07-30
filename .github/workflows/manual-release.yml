@@ -521,6 +521,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
           ASSET_NAMES: ${{ steps.assets.outputs.asset_names }}
+          EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
         run: |
           set -euo pipefail
           actual="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
@@ -537,7 +538,7 @@ jobs:
             exit 1
           fi
           retired="Auxio-TS-${RELEASE_TAG}-topway-twmusic-magisk.zip"
-          if [[ "${{ steps.version.outputs.existing_release }}" != true ]] &&
+          if [[ "${EXISTING_RELEASE}" != true ]] &&
             grep -Fxq -- "${retired}" <<< "${actual}"; then
             echo "::error::Retired topwayTwMusic Magisk asset is forbidden on new releases: ${retired}"
             exit 1

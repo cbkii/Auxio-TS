@@ -54,7 +54,10 @@ Create this empty file to disable all redirection and forwarding without uninsta
 /storage/emulated/0/Auxio-TS/disable-lsposed-bridge
 ```
 
-The marker is checked on every launch/control operation and while publishing mirrored state. When present, the genuine stock path remains active.
+The marker, signer and target readiness are refreshed on a dedicated worker and published as one
+atomic snapshot. Host callbacks only read that snapshot; an unknown initial state preserves the
+stock path. Refreshes are bounded to a three-second cache window, so marker activation may take up
+to three seconds to become effective without blocking the stock process.
 
 Remove the marker to enable the bridge again. Restart `com.tw.music` or reboot if a stale activity remains visible.
 
@@ -65,7 +68,7 @@ Remove the marker to enable the bridge again. Restart `com.tw.music` or reboot i
 | Stock surface | Bridge action |
 | --- | --- |
 | `com.tw.music.MusicActivity` | Opens `com.tw.media/com.tw.music.MusicActivity`, then finishes the stock activity only after the target launch succeeds. |
-| `MusicService.onStartCommand()` | Maps observed `prev`, `next`, `pp` and `update` commands to the connected Auxio MediaSession. The stock handler is skipped only after acknowledged dispatch. |
+| `MusicService.onStartCommand()` | Maps observed `prev`, `next`, `pp` and `update` commands to the connected Auxio MediaSession. The stock handler always continues so its lifecycle and any foreground-service obligation remain intact. |
 | Dynamic command receiver `com.tw.music.k` | Maps the captured command actions to Auxio transport controls and skips the stock receiver only after acknowledged dispatch. |
 | Seek receiver `com.tw.music.j` | Sends `music_progress` through `MediaController.TransportControls.seekTo()` only when Auxio advertises seek support. |
 | Presenter `rb`, `pb`, `ba`, `fa`, `seekTo(int)` | Maps previous, next, pause, play and seek calls that bypass the public broadcasts. Each exact method is hooked only when present. |
@@ -82,6 +85,13 @@ The same MediaController observes Auxio metadata and PlaybackState changes. The 
 - `com.tw.launcher.music_progress_duration`.
 
 This is the return path from Auxio to the DoFun/Topway panel. It mirrors title, artist, album, media URI, playing state, duration and current position. Android/CI validation proves the implemented route; whether the exact fixed DoFun panel consumes every field remains **Requires device validation**.
+
+The four actions remain implicit, and `com.tw.music.info` retains the bounded `musicPath` extra,
+because those are captured parts of the stock player contract used by fixed launcher/panel
+receivers. Package-targeting the broadcasts or dropping the path would no longer reproduce stock
+behaviour. This intentionally has the same privacy boundary as stock: other installed broadcast
+receivers can observe the mirrored media metadata. No fields outside the captured contract are
+added, and physical validation must confirm whether a future version can narrow the path field.
 
 The bridge uses Android public IPC between packages. It does not import or copy Topway implementation classes.
 
@@ -114,6 +124,9 @@ The bridge workflow remains **pull-request only**. Its build job runs when any o
 - the head branch starts with `feat/lsposed-` / `fix/lsposed-`, or contains `platform-bridge`.
 
 The workflow listens for `labeled` and `unlabeled` events, so applying the CI label reliably starts the opt-in without rewriting the title. It deliberately does not subscribe to generic PR `edited` events, because title/body automation can otherwise cancel and restart an expensive in-progress build through workflow concurrency. Title matching remains the normal gate when a PR opens or receives a new commit; the label is the reliable trigger when a later title change should enable CI. The branch gate prevents accidental CI loss if a dedicated bridge PR title is simplified. Unrelated PRs still skip the bridge job and do not start its Gradle runner.
+
+Same-repository bridge PRs publish the debug addon and checksum as a short-lived workflow artifact.
+Fork PRs run the gate but do not publish downloadable APK binaries.
 
 ## Installation
 

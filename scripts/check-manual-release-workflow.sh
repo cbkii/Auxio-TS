@@ -83,6 +83,8 @@ for suffix in ('.sha256', '.metadata.txt'):
         raise SystemExit(f'Missing release evidence sidecar: {suffix}')
 if 'apksigner certificates' not in text or 'asset_sha256=' not in text:
     raise SystemExit('Release metadata does not record signing and checksum evidence')
+if 'EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}' not in text:
+    raise SystemExit('Existing-release state is not routed through the shell environment')
 print('OK manual-release maintained asset invariants')
 PY
 
