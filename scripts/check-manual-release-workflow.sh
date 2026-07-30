@@ -11,19 +11,26 @@ bridge_checker='scripts/check-lsposed-bridge-contracts.sh'
 app_checker='scripts/check-app-release-contracts.sh'
 signer_parser='scripts/lib/apksigner-certificate.sh'
 orchestrator='scripts/release-orchestrator.py'
+variant_checker='scripts/check-ci-variant-contracts.sh'
 
-for required in "${workflow}" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${orchestrator}"; do
+for required in \
+  "${workflow}" \
+  "${bridge_checker}" \
+  "${app_checker}" \
+  "${signer_parser}" \
+  "${orchestrator}" \
+  "${variant_checker}"; do
   [[ -f "${required}" ]] || fail "Missing ${required}"
 done
 
 ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
-bash -n "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}"
+bash -n "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
 python3 -m py_compile "${orchestrator}"
 python3 "${orchestrator}" self-test
 
 if command -v actionlint >/dev/null 2>&1; then actionlint "${workflow}"; else log 'actionlint unavailable; skipped'; fi
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}"
+  shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
 else
   log 'shellcheck unavailable; skipped'
 fi
@@ -52,6 +59,7 @@ from pathlib import Path
 import re
 
 text = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
+variant_text = Path('scripts/check-ci-variant-contracts.sh').read_text(encoding='utf-8')
 
 
 def input_block(key: str) -> str:
@@ -149,6 +157,14 @@ for token in required_tokens:
     if token not in text:
         raise SystemExit(f'Missing release transaction contract: {token}')
 
+for guard in (
+    "${GITHUB_WORKFLOW:-}",
+    "git fetch --quiet origin dev",
+    "remote dev moved during release preparation; refusing stale tag publication",
+):
+    if guard not in variant_text:
+        raise SystemExit(f'Missing pre-tag dev authority guard: {guard}')
+
 order = [
     'Build once, inspect once and stage selected assets',
     'Upload release recovery workflow artifact',
@@ -190,7 +206,7 @@ android {
     }
 }
 EOF
-printf '%s\n' v6.4.7 > "${tmp}/git-tags.txt"
+printf '%s\n' v6.4.7 v6.4.8 > "${tmp}/git-tags.txt"
 printf '%s\n' v6.4.7 v6.4.8 > "${tmp}/release-tags.txt"
 printf '{}\n' > "${tmp}/target.json"
 python3 "${orchestrator}" resolve \
@@ -204,6 +220,26 @@ python3 "${orchestrator}" resolve \
   fail 'Draft releases are not included in automatic version authority.'
 [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release_version_code"])' "${tmp}/new-plan.json")" == 6040900 ]] ||
   fail 'Semantic version-code formula is incorrect.'
+
+printf '%s\n' v6.4.7 v6.4.8 > "${tmp}/git-tags.txt"
+printf '%s\n' v6.4.7 > "${tmp}/release-tags.txt"
+if python3 "${orchestrator}" resolve \
+  --mode create_new_release \
+  --source-gradle "${tmp}/build.gradle" \
+  --git-tags-file "${tmp}/git-tags.txt" \
+  --release-tags-file "${tmp}/release-tags.txt" \
+  --target-release-json "${tmp}/target.json" \
+  --output "${tmp}/skipped-tag-plan.json" >/dev/null 2>&1; then
+  fail 'Create mode must not skip the newest tag-only interrupted release.'
+fi
+python3 "${orchestrator}" resolve \
+  --mode repair_existing_release \
+  --input-tag v6.4.8 \
+  --source-gradle "${tmp}/build.gradle" \
+  --git-tags-file "${tmp}/git-tags.txt" \
+  --release-tags-file "${tmp}/release-tags.txt" \
+  --target-release-json "${tmp}/target.json" \
+  --output "${tmp}/repair-plan.json"
 
 printf '%s\n' topway_twmedia topway_twmedia_debug > "${tmp}/variants.txt"
 : > "${tmp}/assets.txt"
