@@ -286,7 +286,7 @@ class DiagnosticJournal @Inject constructor() {
                     )
                     append(""","sessionId":${DiagnosticJson.string(sessionId)}""")
                     append(
-                        ""","category":${DiagnosticJson.string(category)},"event":${DiagnosticJson.string(event)}"""
+                        ""","category":${DiagnosticJson.string(category)},"event":${DiagnosticJson.string(this.event)}"""
                     )
                     append(
                         ""","detail":${DiagnosticJson.string(detail)},"result":${DiagnosticJson.string(result)}"""
