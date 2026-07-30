@@ -27,11 +27,14 @@ on:
         required: true
         default: true
         type: boolean
-      include_debug_apks:
-        description: Build separately labelled debug companions as short-lived workflow artifacts
+      debug_variant_destination:
+        description: Keep debug companions as workflow artifacts or publish them as GitHub Release assets
         required: true
-        default: true
-        type: boolean
+        default: workflow_artifacts
+        type: choice
+        options:
+          - workflow_artifacts
+          - release_assets
       replace_existing_assets:
         description: Replace selected assets if they already exist on an existing release
         required: true
@@ -82,17 +85,23 @@ jobs:
         env:
           INCLUDE_TWMEDIA: ${{ inputs.include_topway_twmedia_apk }}
           INCLUDE_LSPOSED_BRIDGE: ${{ inputs.include_lsposed_bridge_apk }}
-          INCLUDE_DEBUG_APKS: ${{ inputs.include_debug_apks }}
+          DEBUG_DESTINATION: ${{ inputs.debug_variant_destination }}
         run: |
           set -euo pipefail
+          case "${DEBUG_DESTINATION}" in
+            workflow_artifacts|release_assets) ;;
+            *)
+              echo "::error::Unsupported debug variant destination: ${DEBUG_DESTINATION}"
+              exit 1
+              ;;
+          esac
+
           selected=()
           if [[ "${INCLUDE_TWMEDIA}" == true ]]; then
-            selected+=(topway_twmedia)
-            [[ "${INCLUDE_DEBUG_APKS}" == true ]] && selected+=(topway_twmedia_debug)
+            selected+=(topway_twmedia topway_twmedia_debug)
           fi
           if [[ "${INCLUDE_LSPOSED_BRIDGE}" == true ]]; then
-            selected+=(lsposed_bridge)
-            [[ "${INCLUDE_DEBUG_APKS}" == true ]] && selected+=(lsposed_bridge_debug)
+            selected+=(lsposed_bridge lsposed_bridge_debug)
           fi
           if ((${#selected[@]} == 0)); then
             echo "::error::At least one maintained release asset must be selected."
@@ -101,6 +110,7 @@ jobs:
           {
             printf 'selected_variants<<EOF\n%s\nEOF\n' "$(printf '%s\n' "${selected[@]}")"
             printf 'selected_summary=%s\n' "$(IFS=', '; echo "${selected[*]}")"
+            echo "debug_destination=${DEBUG_DESTINATION}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: Validate current release workflow contracts
@@ -141,6 +151,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_TAG: ${{ inputs.version_tag }}
           SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
         run: |
           set -euo pipefail
           input_tag="$(printf '%s' "${INPUT_TAG}" | xargs)"
@@ -198,10 +209,27 @@ jobs:
           release_asset_names=()
           while IFS= read -r variant; do
             case "${variant}" in
-              topway_twmedia) base_name="Auxio-TS-${release_tag}-topway-twmedia-release.apk" ;;
-              lsposed_bridge) base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge.apk" ;;
-              topway_twmedia_debug|lsposed_bridge_debug|'') continue ;;
-              *) echo "::error::Unknown selected variant: ${variant}"; exit 1 ;;
+              topway_twmedia)
+                base_name="Auxio-TS-${release_tag}-topway-twmedia-release.apk"
+                ;;
+              lsposed_bridge)
+                base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge.apk"
+                ;;
+              topway_twmedia_debug)
+                [[ "${DEBUG_DESTINATION}" == release_assets ]] || continue
+                base_name="Auxio-TS-${release_tag}-topway-twmedia-debug.apk"
+                ;;
+              lsposed_bridge_debug)
+                [[ "${DEBUG_DESTINATION}" == release_assets ]] || continue
+                base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge-debug.apk"
+                ;;
+              '')
+                continue
+                ;;
+              *)
+                echo "::error::Unknown selected variant: ${variant}"
+                exit 1
+                ;;
             esac
             release_asset_names+=(
               "${base_name}"
@@ -312,6 +340,7 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.release_version_name }}
           VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
           SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
         run: |
           set -euo pipefail
           sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
@@ -453,6 +482,18 @@ jobs:
                 "${asset_name}.sha256"
                 "${asset_name}.metadata.txt"
               )
+              if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
+                release_asset_paths+=(
+                  "${asset_path}"
+                  "${debug_artifact_dir}/${asset_name}.sha256"
+                  "${debug_artifact_dir}/${asset_name}.metadata.txt"
+                )
+                release_asset_names+=(
+                  "${asset_name}"
+                  "${asset_name}.sha256"
+                  "${asset_name}.metadata.txt"
+                )
+              fi
             else
               release_asset_paths+=(
                 "${asset_path}"
@@ -500,7 +541,7 @@ jobs:
 
       - name: Upload selected debug workflow artifacts
         id: debug_artifact
-        if: inputs.include_debug_apks
+        if: inputs.debug_variant_destination == 'workflow_artifacts'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: Auxio-TS-${{ steps.version.outputs.release_tag }}-debug-companions
@@ -540,6 +581,7 @@ jobs:
           REPLACE: ${{ inputs.replace_existing_assets }}
           DRAFT: ${{ inputs.draft }}
           PRERELEASE: ${{ inputs.prerelease }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           ASSET_PATHS: ${{ steps.assets.outputs.release_asset_paths }}
           ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
         run: |
@@ -575,7 +617,12 @@ jobs:
               echo '## Assets'
               echo '- topwayTwMedia is the primary signed APK.'
               echo '- The LSPosed API 100 bridge is the signed TS18 addon for the genuine stock `com.tw.music` process.'
-              echo '- Separately labelled debug APKs are available only as short-lived workflow artifacts; they are not GitHub Release assets.'
+              if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
+                echo '- Debug APKs were published as explicitly selected GitHub Release assets.'
+                echo '- Debug APKs are diagnostic companions with separate application IDs; they are not release-runtime proof or recommended normal installs.'
+              else
+                echo '- Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.'
+              fi
               echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
               echo '- Exact TS18 runtime behaviour requires device validation.'
             } > "${notes}"
@@ -622,6 +669,7 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
           ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
           EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
         run: |
           set -euo pipefail
           actual="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
@@ -643,9 +691,9 @@ jobs:
             echo "::error::Retired topwayTwMusic Magisk asset is forbidden on new releases: ${retired}"
             exit 1
           fi
-          if [[ "${EXISTING_RELEASE}" != true ]] &&
+          if [[ "${EXISTING_RELEASE}" != true && "${DEBUG_DESTINATION}" != release_assets ]] &&
             grep -Eq -- '-debug\.apk($|\.)' <<< "${actual}"; then
-            echo "::error::Debug APKs and sidecars are forbidden on new GitHub Releases."
+            echo "::error::Debug APKs and sidecars are forbidden unless debug_variant_destination=release_assets."
             exit 1
           fi
 
@@ -658,6 +706,7 @@ jobs:
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SELECTED: ${{ steps.selection.outputs.selected_summary }}
           EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           ASSET_NAMES: ${{ steps.assets.outputs.release_asset_names }}
           DEBUG_ASSET_NAMES: ${{ steps.assets.outputs.debug_asset_names }}
           RELEASE_ARTIFACT_URL: ${{ steps.release_artifact.outputs.artifact-url }}
@@ -670,11 +719,12 @@ jobs:
             echo "- Tag: ${RELEASE_TAG:-not computed}"
             echo "- Existing-release append mode: ${EXISTING_RELEASE:-false}"
             echo "- Maintained assets: ${SELECTED:-not selected}"
+            echo "- Debug variant destination: ${DEBUG_DESTINATION:-not selected}"
             [[ -n "${RELEASE_URL:-}" ]] && echo "- Release: ${RELEASE_URL}"
             [[ -n "${RELEASE_ARTIFACT_URL:-}" ]] && echo "- Workflow artifact: ${RELEASE_ARTIFACT_URL}"
             [[ -n "${DEBUG_ARTIFACT_URL:-}" ]] && echo "- Debug workflow artifact: ${DEBUG_ARTIFACT_URL}"
             echo
-            echo '## Selected assets'
+            echo '## Selected GitHub Release assets'
             if [[ -n "${ASSET_NAMES:-}" ]]; then
               while IFS= read -r asset; do
                 [[ -n "${asset}" ]] && echo "- ${asset}"
@@ -684,7 +734,11 @@ jobs:
             fi
             if [[ -n "${DEBUG_ASSET_NAMES:-}" ]]; then
               echo
-              echo '## Debug workflow artifacts'
+              if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
+                echo '## Debug assets included in GitHub Release'
+              else
+                echo '## Debug workflow artifacts'
+              fi
               while IFS= read -r asset; do
                 [[ -n "${asset}" ]] && echo "- ${asset}"
               done <<< "${DEBUG_ASSET_NAMES}"
@@ -693,6 +747,10 @@ jobs:
             echo '- Each selected variant is built in an independent sequential Gradle invocation.'
             echo '- topwayTwMedia remains the primary APK.'
             echo '- The API 100 LSPosed bridge is the recommended TS18 addon and is static-scoped only to com.tw.music.'
-            echo '- Debug APKs are short-lived workflow artifacts and never GitHub Release assets.'
+            if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
+              echo '- Debug APKs were published as explicitly selected GitHub Release assets.'
+            else
+              echo '- Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.'
+            fi
             echo '- The exact-package topwayTwMusic Magisk release lane is retired.'
           } >> "${GITHUB_STEP_SUMMARY}"
