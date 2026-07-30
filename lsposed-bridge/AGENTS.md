@@ -10,4 +10,7 @@ These instructions apply to `lsposed-bridge/`.
 - Use the connected Auxio MediaBrowser/MediaSession as the acknowledged control path. Suppress a stock callback only when the target session exists, advertises the required transport action and accepts the transport call without throwing.
 - Every callback must fail open to stock behaviour when identity, target readiness, method match or forwarding cannot be proven. Catch host-process failures and keep logs rate-limited.
 - Preserve the shared-storage kill switch and documented rollback. No bridge change is runtime-proven until physically validated on the exact TS18 build across launch, controls, metadata, progress, restart, cold boot and ACC sleep/wake.
+- The bridge APK is the supported replacement for the retired Auxio exact-package Magisk overlay.
+  Release builds must be signed, versioned with the paired Auxio release, packaged as a separate
+  APK asset, and pass the release-variant bridge contract check.
 - Dedicated bridge CI remains PR-only. It may run from a matching bridge/Xposed/platform-signing title, an exact bridge CI label, or an explicitly named LSPosed bridge branch; unrelated PRs must not start the bridge build job.

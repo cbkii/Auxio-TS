@@ -2,10 +2,50 @@
 
 # Failure policy is explicit. This script validates a completed APK and never modifies the device.
 
-APK_PATH=${1:-lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk}
+VARIANT=debug
+APK_PATH=''
+while (($#)); do
+  case "$1" in
+    --variant)
+      (($# >= 2)) || {
+        printf '[ERROR] --variant requires debug or release.\n' >&2
+        exit 2
+      }
+      VARIANT=$2
+      shift 2
+      ;;
+    --apk)
+      (($# >= 2)) || {
+        printf '[ERROR] --apk requires a path.\n' >&2
+        exit 2
+      }
+      APK_PATH=$2
+      shift 2
+      ;;
+    *)
+      printf '[ERROR] Unknown argument: %s\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+case "$VARIANT" in
+  debug)
+    EXPECTED_APP_ID='org.oxycblt.auxio.ts18bridge.debug'
+    : "${APK_PATH:=lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk}"
+    ;;
+  release)
+    EXPECTED_APP_ID='org.oxycblt.auxio.ts18bridge'
+    : "${APK_PATH:=lsposed-bridge/build/outputs/apk/release/lsposed-bridge-release.apk}"
+    ;;
+  *)
+    printf '[ERROR] Unsupported variant: %s\n' "$VARIANT" >&2
+    exit 2
+    ;;
+esac
+
 EXPECTED_ENTRY='org.oxycblt.auxio.ts18bridge.Ts18LsposedBridgeModule'
 EXPECTED_SCOPE='com.tw.music'
-EXPECTED_APP_ID='org.oxycblt.auxio.ts18bridge.debug'
 EXPECTED_MIN_SDK='29'
 EXPECTED_TARGET_SDK='36'
 ERRORS=0
@@ -187,7 +227,7 @@ if ((ERRORS == 0)); then
       app_id=''
     }
     [[ $app_id == "$EXPECTED_APP_ID" ]] ||
-      error "Unexpected debug application ID: ${app_id:-<empty>}"
+      error "Unexpected ${VARIANT} application ID: ${app_id:-<empty>}"
 
     min_sdk=$($apkanalyzer_bin manifest min-sdk "$APK_PATH" 2>/dev/null) || {
       error 'Unable to read minimum SDK'
@@ -209,6 +249,9 @@ if ((ERRORS == 0)); then
     }
     if grep -q '<uses-permission' <<<"$manifest"; then
       error 'Bridge APK must not request Android permissions'
+    fi
+    if [[ $VARIANT == release ]] && grep -Eq 'android:debuggable=(true|"true")' <<<"$manifest"; then
+      error 'Release bridge APK must not be debuggable'
     fi
   fi
 

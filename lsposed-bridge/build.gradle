@@ -2,6 +2,24 @@ plugins {
     id "com.android.application"
 }
 
+def bridgeVersionName =
+        providers.gradleProperty("bridgeVersionName").orElse("1.1.0-dev").get()
+def bridgeVersionCode =
+        providers.gradleProperty("bridgeVersionCode").orElse("2").get().toInteger()
+def releaseStoreFile = providers.gradleProperty("releaseStoreFile").orNull
+def releaseStorePassword = providers.gradleProperty("releaseStorePassword").orNull
+def releaseKeyAlias = providers.gradleProperty("releaseKeyAlias").orNull
+def releaseKeyPassword = providers.gradleProperty("releaseKeyPassword").orNull
+def hasReleaseSigning = [
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+].every {
+    def value = it?.toString()
+    value != null && !value.isBlank()
+}
+
 android {
     namespace "org.oxycblt.auxio.ts18bridge"
     compileSdk target_sdk
@@ -10,14 +28,25 @@ android {
         applicationId "org.oxycblt.auxio.ts18bridge"
         minSdk 29
         targetSdk target_sdk
-        versionCode 2
-        versionName "1.1.0"
+        versionCode bridgeVersionCode
+        versionName bridgeVersionName
 
         buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media"'
         buildConfigField "String", "TARGET_ACTIVITY", '"com.tw.music.MusicActivity"'
         buildConfigField "String", "TARGET_MEDIA_BROWSER_SERVICE", '"com.tw.music.MusicService"'
         buildConfigField "long", "KNOWN_TESTED_STOCK_VERSION_CODE", "118L"
         buildConfigField "String", "STOCK_CERT_SHA256", '"AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3"'
+    }
+
+    if (hasReleaseSigning) {
+        signingConfigs {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -27,6 +56,13 @@ android {
         }
         release {
             minifyEnabled false
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+            dependenciesInfo {
+                includeInApk = false
+                includeInBundle = false
+            }
         }
     }
 

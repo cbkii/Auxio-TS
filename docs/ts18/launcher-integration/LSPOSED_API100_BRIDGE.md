@@ -6,6 +6,10 @@ The bridge keeps the genuine Topway `com.tw.music` package installed, platform-s
 
 It does **not** copy or spoof the Topway platform key. It does **not** change Package Manager signatures, shared UID records, `packages.xml`, `system_server`, MCU/CAN state, firmware or protected package files.
 
+This signed addon replaces the retired Auxio-TS exact-package Magisk overlay release lane. The
+normal player remains `com.tw.media`; the genuine platform-signed stock `com.tw.music` remains
+installed and owns its existing UID 1000 authority.
+
 ## Evidence status
 
 - **Observed:** the captured stock package is `com.tw.music`, UID 1000, version code 118 and signed by SHA-256 `AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3`.
@@ -21,6 +25,10 @@ The module is static-scoped only to:
 ```text
 com.tw.music
 ```
+
+This scope is packaged as both the default and enforced recommendation (`staticScope=true`). Do
+not broaden it in LSPosed. In particular, do not select DoFun, Auxio-TS, Android/System Framework,
+Package Manager or `com.tw.service*`.
 
 It refuses to bridge unless the loaded process is the main `com.tw.music` process, the installed package is UID 1000 and its signer matches the captured Topway platform certificate. These are the identity authorities.
 
@@ -87,6 +95,16 @@ The module targets modern LSPosed/libxposed **API 100**. Compile-only stubs are 
 
 The API classes are not packaged into the bridge APK. LSPosed provides them at runtime. The bridge has minimum SDK 29 for the Android 10 TS18 runtime and uses the repository's current target SDK for installation compatibility. CI verifies the API-100 metadata, SDK values and that the APK defines no `io.github.libxposed` classes.
 
+The Manual Release workflow signs the bridge with the repository release key, assigns the paired
+Auxio release version and publishes:
+
+```text
+Auxio-TS-vX.Y.Z-lsposed-api100-bridge.apk
+```
+
+The release asset has its own checksum and package/signing metadata sidecars. The workflow does not
+publish the former `topwayTwMusic` Magisk ZIP or a raw exact-package Auxio APK.
+
 ## Dedicated CI gate
 
 The bridge workflow remains **pull-request only**. Its build job runs when any one of these explicit gates matches:
@@ -104,8 +122,9 @@ The workflow listens for `labeled` and `unlabeled` events, so applying the CI la
 3. Install the normal Auxio-TS `topwayTwMedia` release so the package is exactly `com.tw.media`.
 4. In Auxio-TS, select a music source and verify normal playback first.
 5. Create the kill-switch marker shown above.
-6. Install the bridge APK.
-7. Enable it in LSPosed. Its static scope must show only `com.tw.music`; do not add `system_server`, DoFun, Auxio or other Topway packages.
+6. Install the signed bridge APK from the same Auxio-TS release.
+7. Enable it in LSPosed. Its static/recommended scope must show only `com.tw.music`; do not add
+   System Framework, DoFun, Auxio or other Topway packages.
 8. Reboot the head unit.
 9. Confirm the stock music app still opens and controls normally while the marker exists.
 10. Remove the marker, force-stop/reopen `com.tw.music` or reboot, then run the validation below.

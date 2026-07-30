@@ -25,7 +25,8 @@ Auxio-TS maintains two product identities:
 | Variant | Package | Purpose |
 | --- | --- | --- |
 | `topwayTwMedia` | `com.tw.media` | Primary APK release and normal installation lane. It exposes `com.tw.music.MusicActivity` for DoFun matching. |
-| `topwayTwMusic` | `com.tw.music` | Exact-package compatibility build. It is published only inside the Magisk systemless module **[beta]**. |
+| LSPosed bridge | `org.oxycblt.auxio.ts18bridge` | Optional API 100 addon **[beta]** scoped only to genuine stock `com.tw.music`. |
+| `topwayTwMusic` | `com.tw.music` | Internal exact-package compatibility/test build only; never publish or install. |
 
 The old `org.oxycblt.auxio` standard distributable is retired.
 
@@ -36,7 +37,9 @@ Read:
 - [Root storage fast path](ts18/ROOT_STORAGE_FASTPATH.md)
 
 > [!WARNING]
-> Root does not provide the stock platform certificate, shared UID 1000 or signature permissions. Never publish or install the raw `topwayTwMusic` APK as a normal app.
+> Root does not provide the stock platform certificate, shared UID 1000 or signature permissions.
+> Keep genuine stock `com.tw.music` installed. Never publish or install the raw `topwayTwMusic`
+> APK, and do not recreate the retired Magisk overlay.
 
 <a name="dofun-and-topway-integration"></a>
 
@@ -109,9 +112,10 @@ Use [RELEASE_WORKFLOW.md](RELEASE_WORKFLOW.md) as the release authority.
 Published install assets are:
 
 - the signed `com.tw.media` APK;
-- the optional `com.tw.music` Magisk module **[beta]**.
+- the optional signed LSPosed API 100 bridge addon **[beta]**.
 
-Do not publish the raw exact-package APK. Preserve package, version, SDK, ABI, signing certificate and checksum evidence for release assets.
+Do not publish the raw exact-package APK or a replacement Magisk overlay. Preserve package,
+version, SDK, ABI, signing certificate and checksum evidence for release assets.
 
 <a name="evidence-and-reverse-engineering"></a>
 

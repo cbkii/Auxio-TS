@@ -5,7 +5,8 @@
 `standard` is retired. Automatic CI and releases support:
 
 - `topwayTwMedia` (`com.tw.media`) — primary build, JVM test, lint, API 29, benchmark, screenshot and APK release authority.
-- `topwayTwMusic` (`com.tw.music`) — exact-package compatibility build and Magisk packaging authority.
+- `topwayTwMusic` (`com.tw.music`) — internal exact-package compatibility/build authority only; it
+  is not a published or recommended install asset.
 
 `scripts/check-ci-variant-contracts.sh` fails if active build or workflow configuration restores a Standard task, input or asset.
 

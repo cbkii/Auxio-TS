@@ -20,7 +20,7 @@
   <img alt="Minimum Android API 24" src="https://img.shields.io/badge/minimum-API%2024%2B-3DDC84">
   <img alt="Primary package com.tw.media" src="https://img.shields.io/badge/package-com.tw.media-6f42c1">
   <img alt="DoFun Variety compatibility" src="https://img.shields.io/badge/launcher-DoFun%20Variety-f66a0a">
-  <img alt="Optional Magisk package" src="https://img.shields.io/badge/Magisk-optional-00AF9C">
+  <img alt="Optional LSPosed bridge" src="https://img.shields.io/badge/LSPosed-addon-00AF9C">
 </p>
 
 <p align="center">
@@ -57,15 +57,17 @@ It is designed for Android 10 TS18 systems. It is not a general replacement for 
 | Use | Choose |
 | --- | --- |
 | Most TS18 users | The signed `topwayTwMedia` APK. It installs as `com.tw.media`. |
-| Advanced rooted users who need the exact stock package name | The published `topwayTwMusic` Magisk module **[beta]**. Read the installation constraints first. |
-| Raw `topwayTwMusic` APK | Do not install or distribute it. It is only an internal Magisk packaging input. |
+| Fixed DoFun stock-music panel support **[beta]** | Install the signed LSPosed API 100 bridge addon after Auxio-TS. Keep stock `com.tw.music`; enable only the recommended `com.tw.music` scope. |
+| `topwayTwMusic` build | Internal compatibility testing only. Do not install or distribute its APK. The former Magisk overlay is retired. |
 
 Download published files from the [Releases page](https://github.com/cbkii/Auxio-TS/releases).
 
 > [!WARNING]
 > Stock `com.tw.music` is normally a protected, platform-signed system app. Root does not copy its platform signature or UID 1000 identity. Do not replace it with a normal APK.
 
-Read [TS18 installation constraints](docs/TS18_INSTALLATION_CONSTRAINTS.md) before using the exact-package Magisk module.
+Read [TS18 installation constraints](docs/TS18_INSTALLATION_CONSTRAINTS.md) and the
+[LSPosed bridge guide](docs/ts18/launcher-integration/LSPOSED_API100_BRIDGE.md) before enabling the
+addon.
 
 ## 🚀 Quick start
 
@@ -74,8 +76,10 @@ Read [TS18 installation constraints](docs/TS18_INSTALLATION_CONSTRAINTS.md) befo
 3. Grant the Android storage or notification permissions requested by the app.
 4. On a rooted TS18, open **Settings → Library & sources → Advanced source access**.
 5. Turn on **Root storage fast path**. Click **Root file access status** and confirm that it reports **Available**. This is the consent action that triggers the Magisk superuser request. Approve the request.
-7. Open **Music sources**, choose **Direct**, then use **Auto-detect USB** or enter a path such as `/storage/usbdisk0/Music`.
-8. Wait for the first library load. Confirm that your songs appear before changing optional settings.
+6. Open **Music sources**, choose **Direct**, then use **Auto-detect USB** or enter a path such as `/storage/usbdisk0/Music`.
+7. Wait for the first library load. Confirm that your songs appear before changing optional settings.
+8. For fixed DoFun panel support **[beta]**, install the matching LSPosed bridge release asset,
+   enable only its preselected `com.tw.music` scope, and reboot.
 
 > [!IMPORTANT]
 > On a rooted TS18, grant superuser access before selecting a Direct source. This avoids starting the first Direct scan before root-assisted storage access is ready.
