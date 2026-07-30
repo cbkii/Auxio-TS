@@ -61,8 +61,14 @@ def input_block(key: str) -> str:
     pos = text.find(marker)
     if pos < 0:
         raise SystemExit(f'Missing workflow_dispatch input: {key}')
-    next_input = text.find('\n      ', pos + len(marker))
-    permissions = text.find('\n\npermissions:', pos + len(marker))
+    content_start = pos + len(marker)
+    next_match = re.search(
+        r'^      [A-Za-z0-9_]+:\n',
+        text[content_start:],
+        flags=re.MULTILINE,
+    )
+    next_input = content_start + next_match.start() if next_match else -1
+    permissions = text.find('\n\npermissions:', content_start)
     candidates = [value for value in (next_input, permissions) if value >= 0]
     end = min(candidates) if candidates else len(text)
     return text[pos:end]
