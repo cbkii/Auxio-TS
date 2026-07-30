@@ -44,13 +44,15 @@ Use the repository evidence labels consistently: **Observed**, **Inferred**, **H
 | Variant | Package | Role |
 | --- | --- | --- |
 | `topwayTwMedia` | `com.tw.media` | Primary signed APK and normal installation lane. |
-| `topwayTwMusic` | `com.tw.music` | Exact-package compatibility, published only as a Magisk module **[beta]**. |
+| LSPosed bridge addon | `org.oxycblt.auxio.ts18bridge` | Optional signed addon **[beta]**, static-scoped only to genuine stock `com.tw.music`. |
+| `topwayTwMusic` | `com.tw.music` | Internal exact-package compatibility/test build; never publish or install. |
 
 The old `standard` distributable is retired. See [Advanced use and contributing](ADVANCED_AND_CONTRIBUTING.md#installation-and-package-identity) for the package and release boundaries.
 
 ## 🛡️ Safety boundary
 
-The normal release is the signed `com.tw.media` APK. The exact-package `com.tw.music` build is published only as a Magisk module **[beta]**.
+The normal release is the signed `com.tw.media` APK. The optional TS18 addon is the signed LSPosed
+API 100 bridge **[beta]**. The former exact-package Auxio Magisk overlay is retired.
 
 Root does not provide platform signing, shared UID 1000, MCU, CAN, DSP, radio or protected-package authority. Read [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md) before any exact-package or stock-app change.
 

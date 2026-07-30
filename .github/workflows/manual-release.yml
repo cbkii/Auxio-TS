@@ -22,10 +22,10 @@ on:
         required: true
         default: true
         type: boolean
-      include_topway_twmusic_magisk:
-        description: Build topwayTwMusic and upload only its Magisk module ZIP
+      include_lsposed_bridge_apk:
+        description: Build/upload the signed API 100 LSPosed stock-music bridge addon
         required: true
-        default: false
+        default: true
         type: boolean
       replace_existing_assets:
         description: Replace selected assets if they already exist on an existing release
@@ -76,12 +76,12 @@ jobs:
         shell: bash
         env:
           INCLUDE_TWMEDIA: ${{ inputs.include_topway_twmedia_apk }}
-          INCLUDE_TWMUSIC: ${{ inputs.include_topway_twmusic_magisk }}
+          INCLUDE_LSPOSED_BRIDGE: ${{ inputs.include_lsposed_bridge_apk }}
         run: |
           set -euo pipefail
           selected=()
           [[ "${INCLUDE_TWMEDIA}" == true ]] && selected+=(topway_twmedia)
-          [[ "${INCLUDE_TWMUSIC}" == true ]] && selected+=(topway_twmusic_magisk)
+          [[ "${INCLUDE_LSPOSED_BRIDGE}" == true ]] && selected+=(lsposed_bridge)
           if ((${#selected[@]} == 0)); then
             echo "::error::At least one maintained release asset must be selected."
             exit 1
@@ -187,7 +187,7 @@ jobs:
           while IFS= read -r variant; do
             case "${variant}" in
               topway_twmedia) base_name="Auxio-TS-${release_tag}-topway-twmedia-release.apk" ;;
-              topway_twmusic_magisk) base_name="Auxio-TS-${release_tag}-topway-twmusic-magisk.zip" ;;
+              lsposed_bridge) base_name="Auxio-TS-${release_tag}-lsposed-api100-bridge.apk" ;;
               '') continue ;;
               *) echo "::error::Unknown selected variant: ${variant}"; exit 1 ;;
             esac
@@ -221,15 +221,6 @@ jobs:
               exit 1
             fi
           done <<< "${ASSET_NAMES}"
-
-      - name: Preserve current Magisk packager
-        id: tooling
-        shell: bash
-        run: |
-          packager="${RUNNER_TEMP}/package-topway-twmusic-magisk-module.sh"
-          cp scripts/package-topway-twmusic-magisk-module.sh "${packager}"
-          chmod +x "${packager}"
-          echo "packager=${packager}" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout existing release tag
         if: steps.version.outputs.existing_release == 'true'
@@ -298,19 +289,32 @@ jobs:
           ORG_GRADLE_PROJECT_releaseStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_releaseKeyAlias: ${{ secrets.KEY_ALIAS }}
           ORG_GRADLE_PROJECT_releaseKeyPassword: ${{ secrets.KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_bridgeVersionName: ${{ steps.version.outputs.release_version_name }}
+          ORG_GRADLE_PROJECT_bridgeVersionCode: ${{ steps.version.outputs.release_version_code }}
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
           VERSION_NAME: ${{ steps.version.outputs.release_version_name }}
           VERSION_CODE: ${{ steps.version.outputs.release_version_code }}
           SELECTED_VARIANTS: ${{ steps.selection.outputs.selected_variants }}
-          PACKAGER: ${{ steps.tooling.outputs.packager }}
         run: |
           set -euo pipefail
           sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           tools="$(find "${sdk_root}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n1)"
           apksigner="${tools}/apksigner"
           aapt="${tools}/aapt"
-          [[ -x "${apksigner}" && -x "${aapt}" ]] || {
+          keytool="${JAVA_HOME}/bin/keytool"
+          [[ -x "${apksigner}" && -x "${aapt}" && -x "${keytool}" ]] || {
             echo "::error::Required Android build tools are unavailable under ${tools}."
+            exit 1
+          }
+          expected_release_signer="$(
+            "${keytool}" -exportcert \
+              -keystore "${ORG_GRADLE_PROJECT_releaseStoreFile}" \
+              -storepass "${ORG_GRADLE_PROJECT_releaseStorePassword}" \
+              -alias "${ORG_GRADLE_PROJECT_releaseKeyAlias}" |
+              sha256sum | awk '{print toupper($1)}'
+          )"
+          [[ -n "${expected_release_signer}" ]] || {
+            echo '::error::Unable to derive the configured release signer fingerprint.'
             exit 1
           }
           artifact_dir="${RUNNER_TEMP}/selected-release-assets"
@@ -361,18 +365,17 @@ jobs:
                 cp "${apk_path}" "${asset_path}"
                 asset_kind=signed-apk
                 ;;
-              topway_twmusic_magisk)
-                bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMusicRelease
-                apk_path="$(find_apk app/build/outputs/apk/topwayTwMusic/release)"
-                asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmusic-magisk.zip"
+              lsposed_bridge)
+                bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease
+                apk_path="$(find_apk lsposed-bridge/build/outputs/apk/release)"
+                asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk"
                 asset_path="${artifact_dir}/${asset_name}"
-                bash "${PACKAGER}" \
-                  --apk "${apk_path}" \
-                  --output "${asset_path}" \
-                  --version "${VERSION_NAME}" \
-                  --version-code "${VERSION_CODE}"
-                unzip -t "${asset_path}"
-                asset_kind=magisk-systemless-overlay
+                cp "${apk_path}" "${asset_path}"
+                EXPECTED_SIGNER_SHA256="${expected_release_signer}" \
+                  bash ./scripts/check-lsposed-bridge-contracts.sh \
+                  --variant release \
+                  --apk "${asset_path}"
+                asset_kind=signed-lsposed-api100-addon
                 ;;
               *)
                 echo "::error::Unknown selected variant during build: ${variant}"
@@ -381,9 +384,9 @@ jobs:
             esac
 
             "${apksigner}" verify --verbose "${apk_path}"
-            if [[ -f scripts/check-startup-performance-contracts.sh ]]; then
+            if [[ "${variant}" == topway_twmedia && -f scripts/check-startup-performance-contracts.sh ]]; then
               bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"
-            else
+            elif [[ "${variant}" == topway_twmedia ]]; then
               echo "::warning::Historical tag lacks startup profile contract script; package/profile metadata remains recorded in sidecars."
             fi
             write_sidecars "${asset_path}" "${asset_name}" "${apk_path}" "${asset_kind}"
@@ -485,7 +488,8 @@ jobs:
               echo
               echo '## Assets'
               echo '- topwayTwMedia is the primary signed APK.'
-              echo '- topwayTwMusic is published only as a systemless Magisk module.'
+              echo '- The LSPosed API 100 bridge is the signed TS18 addon for the genuine stock `com.tw.music` process.'
+              echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
               echo '- Exact TS18 runtime behaviour requires device validation.'
             } > "${notes}"
             args=()
@@ -530,6 +534,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
           ASSET_NAMES: ${{ steps.assets.outputs.asset_names }}
+          EXISTING_RELEASE: ${{ steps.version.outputs.existing_release }}
         run: |
           set -euo pipefail
           actual="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
@@ -543,6 +548,12 @@ jobs:
           forbidden="Auxio-TS-${RELEASE_TAG}-topway-twmusic-release.apk"
           if grep -Fxq -- "${forbidden}" <<< "${actual}"; then
             echo "::error::Raw topwayTwMusic APK asset is forbidden: ${forbidden}"
+            exit 1
+          fi
+          retired="Auxio-TS-${RELEASE_TAG}-topway-twmusic-magisk.zip"
+          if [[ "${EXISTING_RELEASE}" != true ]] &&
+            grep -Fxq -- "${retired}" <<< "${actual}"; then
+            echo "::error::Retired topwayTwMusic Magisk asset is forbidden on new releases: ${retired}"
             exit 1
           fi
 
@@ -579,5 +590,6 @@ jobs:
             echo
             echo '- Each selected variant is built in an independent sequential Gradle invocation.'
             echo '- topwayTwMedia remains the primary APK.'
-            echo '- topwayTwMusic remains a Magisk-only exact-package lane.'
+            echo '- The API 100 LSPosed bridge is the recommended TS18 addon and is static-scoped only to com.tw.music.'
+            echo '- The exact-package topwayTwMusic Magisk release lane is retired.'
           } >> "${GITHUB_STEP_SUMMARY}"

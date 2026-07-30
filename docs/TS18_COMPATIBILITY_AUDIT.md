@@ -6,9 +6,10 @@ This audit records the repo-wide TS18/Topway/DoFun compatibility scan performed 
 
 | Surface                                             | Classification                                 | Result                                                                                                                                                                                                                   |
 | --------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `standard` package identity                         | Correct product code                           | Remains `org.oxycblt.auxio`; no stock-package identity is used by the standard flavor.                                                                                                                                   |
-| `topwayTwMusicRelease` package identity             | Correct wrapper/bridge code                    | Dedicated exact replacement identity: `com.tw.music`. Requires package-state/signing management on stock firmware.                                                                                                       |
-| `topwayTwMediaRelease` package identity             | Correct wrapper/bridge code                    | Dedicated DoFun alternate fixed-entry identity: `com.tw.media`; not a no-root bypass.                                                                                                                                    |
+| `standard` package identity                         | Retired; non-distributable                     | Historical `org.oxycblt.auxio` identity is not an active product, CI or release lane.                                                                                                                                   |
+| `topwayTwMusicRelease` package identity             | Correct internal contract fixture              | Exact `com.tw.music` identity remains build/test-only and is not published or installed.                                                                                                                                 |
+| `topwayTwMediaRelease` package identity             | Correct product code                           | Published Auxio player identity `com.tw.media`; paired with the separately signed LSPosed bridge while genuine stock `com.tw.music` remains installed.                                                                     |
+| LSPosed API-100 bridge                              | Correct addon boundary                         | Static scope is exactly `com.tw.music`; verifies the genuine stock identity and forwards to Auxio through Android media APIs.                                                                                              |
 | `com.tw.music.MusicActivity` alias                  | Correct wrapper/bridge code                    | Shared wrapper manifest exposes the stock-compatible activity alias for both Topway-compatible packages.                                                                                                                 |
 | CoverProvider authorities                           | Correct product code                           | Manifest uses `${applicationId}.image.CoverProvider`; variant resources cover release/debug authorities.                                                                                                                 |
 | `com.tw.music.MusicService`                         | Correct wrapper/bridge code                    | Canonical exported Topway-compatible MediaBrowserService wrapper; delegates to Auxio-owned `AuxioService`.                                                                                                               |
@@ -38,7 +39,10 @@ These are safe, layered fallbacks: the primary path is unchanged when the native
 
 ## Remaining hardware-only checks
 
-Run the commands in `docs/TS18_RUNTIME_VALIDATION.md` on the actual head unit to validate install conflicts, DoFun launch/widget behavior, duplicate sessions/services/notifications, `/storage/usbdisk0` indexing, overlay permission revocation, boot, and ACC wake.
+Run the commands in `docs/TS18_RUNTIME_VALIDATION.md` on the actual head unit to validate the stock
+identity, single bridge scope, DoFun launch/widget behavior, duplicate
+sessions/services/notifications, `/storage/usbdiskN` indexing, overlay permission revocation,
+kill-switch rollback, boot, and ACC wake.
 
 ## TS18 dedicated-app optimisation pass — 2026-06-11
 

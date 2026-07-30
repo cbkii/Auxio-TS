@@ -1,15 +1,19 @@
-# TS18 Launcher Media Integration Support Pack
+# TS18 launcher media integration
 
-This support pack is intended to be extracted into the root of `cbkii/Auxio-TS` on the `dev` branch before asking Codex to implement the comprehensive in-app TS18 launcher integration path.
+This folder separates two compatibility paths:
 
-It does not modify app code. It adds implementation requirements, contracts, validation expectations, and a ready-to-use Codex prompt.
+1. **Observed — Directly reusable requirement:** in-app Android/Topway compatibility in the normal Auxio-TS `com.tw.media` app.
+2. **Requires TS18 validation — Requires TS18 runtime validation:** optional LSPosed stock-identity bridge for exact TS18 firmware where the fixed DoFun widget requires calls or broadcasts to originate from the genuine platform-signed `com.tw.music` process.
+
+The LSPosed bridge is not a platform-signature clone and does not replace the stock APK. Start with the in-app path and add the bridge only when exact-device evidence proves that Android MediaSession and safe Topway broadcasts are insufficient.
 
 Files:
 
+- `docs/ts18/launcher-integration/LSPOSED_API100_BRIDGE.md`
 - `docs/prompts/codex_ts18_launcher_comprehensive_in_app_integration.md`
 - `docs/ts18/launcher-integration/TS18_LAUNCHER_COMPREHENSIVE_IN_APP_PLAN.md`
 - `docs/ts18/launcher-integration/TOPWAY_MUSIC_WIDGET_CONTRACT.md`
 - `docs/ts18/launcher-integration/VALIDATION_MATRIX.md`
 - `scripts/evidence/collect-ts18-launcher-media-integration.sh`
 
-Run the script on the TS18 after Codex implements the app changes and after installing the resulting APK.
+Run the evidence script on the physical TS18 only for a defined test window, export the result, then stop additional logging.

@@ -15,7 +15,7 @@ The distributable `standard` flavour is retired. Do not recreate it as a generic
 | Variant | Package | Authority |
 | --- | --- | --- |
 | `topwayTwMedia` | `com.tw.media` | Primary JVM-test, lint, API 29, benchmark, screenshot and normal APK-release lane |
-| `topwayTwMusic` | `com.tw.music` | Exact-package compatibility build and Magisk packaging lane |
+| `topwayTwMusic` | `com.tw.music` | Internal exact-package compatibility/test build; never a release/install asset |
 
 Both variants reuse `app/src/topwayCompat/` and expose `com.tw.music.MusicActivity`. Keep their package/component contracts distinct. Test generic/non-Topway fallback policy through pure inputs, not a third distributable package.
 
@@ -128,6 +128,11 @@ Observed reusable requirements:
 
 Observed private Cardoor services, `android.uid.system`, shared UID, `TWUtil` and `com.tw.service.xt` AIDL are evidence only. Do not fake services, copy smali, require platform signing or claim a normal rooted APK has UID 1000 authority.
 
+The optional LSPosed addon is the narrow exception for execution context, not an identity
+exception for Auxio: it may run inside the already-installed, signer-verified stock
+`com.tw.music` UID-1000 process. It must never assign, spoof or grant that identity to Auxio,
+replace the stock APK, or broaden its static scope.
+
 ## TS18 evidence and architecture
 
 For TS18 work:
@@ -161,7 +166,9 @@ Separate Android framework authority, Topway/TW service authority, DoFun launche
 
 - Do not restore `standard` or add another distributable flavour.
 - Do not casually change maintained package/component contracts.
-- Do not require privileged/system UID, platform signing or shared UID.
+- Do not require privileged/system UID, platform signing or shared UID for an Auxio APK or
+  replacement package. The optional LSPosed addon may validate and execute inside the existing
+  genuine stock process only under the narrow rule above.
 - Do not copy vendor smali or private implementations.
 - Do not spread TS18 conditionals through core playback/library code.
 - Do not add in-app probe frameworks, hidden diagnostics, package scanners or vendor-service binders.
@@ -178,8 +185,11 @@ Startup benchmark/profile work supports only maintained variants. API 29 macrobe
 ## Release and signing safety
 
 - Manual releases run only from current `dev` with full history/tags.
-- Published install assets are the signed `com.tw.media` APK and optional `com.tw.music` Magisk module.
-- Never publish a raw `topwayTwMusic` APK.
+- Published install assets are the signed `com.tw.media` APK and the separately signed, optional
+  LSPosed API 100 bridge addon.
+- The former exact-package `topwayTwMusic` Magisk overlay is retired. Never publish its raw APK or
+  reconstruct the overlay release lane.
+- Keep the LSPosed bridge static-scoped exactly to the genuine stock `com.tw.music` process.
 - Never print secrets or commit keystores; use runner temporary storage.
 - Stage and validate rebuilt assets before replacing existing release assets.
 - Preserve package, version, SDK, ABI, signing-certificate and SHA-256 sidecars.

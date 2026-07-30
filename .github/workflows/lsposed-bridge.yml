@@ -1,0 +1,158 @@
+name: LSPosed Bridge
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - "cx/**"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    # PR-only gate. A matching title remains the automatic default, while exact labels
+    # provide a reliable opt-in after creation and dedicated branch names protect bridge
+    # work if a title is later simplified. GitHub expression string comparisons are
+    # case-insensitive. The workflow deliberately does not subscribe to PR edit events,
+    # so body/title automation cannot cancel an in-progress bridge build.
+    if: >-
+      (
+        contains(github.event.pull_request.title, 'xposed') ||
+        contains(github.event.pull_request.title, 'lsposed') ||
+        contains(github.event.pull_request.title, 'hook') ||
+        contains(github.event.pull_request.title, 'bridge') ||
+        contains(github.event.pull_request.title, 'platform sign') ||
+        contains(github.event.pull_request.labels.*.name, 'ci:lsposed-bridge') ||
+        contains(github.event.pull_request.labels.*.name, 'lsposed-bridge') ||
+        startsWith(github.head_ref, 'feat/lsposed-') ||
+        startsWith(github.head_ref, 'fix/lsposed-') ||
+        contains(github.head_ref, 'platform-bridge')
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+        with:
+          cache-read-only: true
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Test and build bridge integration
+        shell: bash
+        env:
+          AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/lsposed-bridge-gradle.log
+        run: |
+          bash ./scripts/ci-gradle.sh \
+            :lsposed-bridge:testDebugUnitTest \
+            :lsposed-bridge:lintDebug \
+            :lsposed-bridge:assembleDebug \
+            :app:testTopwayTwMediaDebugUnitTest \
+            :app:assembleTopwayTwMediaDebug
+
+      - name: Validate packaged API 100 contracts
+        shell: bash
+        run: bash ./scripts/check-lsposed-bridge-contracts.sh --variant debug
+
+      - name: Prepare bridge download
+        id: prepare
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="${RUNNER_TEMP}/lsposed-bridge-download"
+          mkdir -p "${artifact_dir}"
+          apk='lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk'
+          name='Auxio-TS-lsposed-api100-bridge-debug.apk'
+          cp "${apk}" "${artifact_dir}/${name}"
+          (
+            cd "${artifact_dir}"
+            sha256sum "${name}" >"${name}.sha256"
+            sha256sum -c "${name}.sha256"
+          )
+          echo "artifact_dir=${artifact_dir}" >>"${GITHUB_OUTPUT}"
+          echo "sha256=$(sha256sum "${artifact_dir}/${name}" | awk '{print $1}')" >>"${GITHUB_OUTPUT}"
+
+      - name: Upload bridge debug APK
+        id: bridge_artifact
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lsposed-api100-bridge-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ steps.prepare.outputs.artifact_dir }}/Auxio-TS-lsposed-api100-bridge-debug.apk
+            ${{ steps.prepare.outputs.artifact_dir }}/Auxio-TS-lsposed-api100-bridge-debug.apk.sha256
+
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: lsposed-api100-bridge-failure-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            lsposed-bridge/build/reports/**
+            lsposed-bridge/build/test-results/**
+            app/build/reports/tests/testTopwayTwMediaDebugUnitTest/**
+            app/build/test-results/testTopwayTwMediaDebugUnitTest/**
+            ${{ runner.temp }}/lsposed-bridge-gradle.log
+
+      - name: Write download summary
+        if: always()
+        shell: bash
+        env:
+          ARTIFACT_URL: ${{ steps.bridge_artifact.outputs.artifact-url }}
+          BRIDGE_SHA256: ${{ steps.prepare.outputs.sha256 }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ', ') }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          {
+            echo '## LSPosed API 100 bridge'
+            echo
+            echo "- PR title: \`${PR_TITLE}\`"
+            echo "- PR labels: \`${PR_LABELS}\`"
+            echo "- Head branch: \`${HEAD_REF}\`"
+            echo '- Gate: matching title, exact `ci:lsposed-bridge` / `lsposed-bridge` label, or dedicated LSPosed bridge branch'
+            echo '- Static/recommended LSPosed scope: `com.tw.music` only'
+            echo
+            if [[ -n "${ARTIFACT_URL}" && -n "${BRIDGE_SHA256}" ]]; then
+              echo "| Artifact | Download | SHA-256 |"
+              echo "|---|---|---|"
+              echo "| Bridge debug APK | [Download](${ARTIFACT_URL}) | \`${BRIDGE_SHA256}\` |"
+            else
+              echo 'Bridge APK unavailable — fork PRs do not publish binaries, or build/validation/upload did not complete.'
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

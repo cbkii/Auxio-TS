@@ -23,7 +23,12 @@ This procedure assumes the operator has read and is applying:
 - Display: physical 1280×720; stable app content approximately 1225×665
 - App-facing removable storage: `/storage/usbdisk0` and `/storage/usbdisk1`
 
-STOP if the build, board, panel, launcher package, test asset/commit, package-signing lane, playback authority, storage identities or rollback path cannot be confirmed. A standalone APK, `com.tw.media` APK and `com.tw.music` Magisk overlay are separate installation authorities and must not be substituted for one another.
+STOP if the build, board, panel, launcher package, test asset/commit, package-signing lane, playback
+authority, storage identities or rollback path cannot be confirmed. **Observed — Directly reusable
+requirement:** the signed `com.tw.media` APK is the baseline installation. **Requires TS18
+validation — Requires TS18 runtime validation:** add the separately signed, single-scope LSPosed
+addon only when the in-app path is insufficient. The retired `com.tw.music` Magisk overlay must not
+be present.
 
 ## Common prerequisites
 

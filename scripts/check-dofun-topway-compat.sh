@@ -40,6 +40,26 @@ require_file_not_contains() {
   fi
 }
 
+require_exact_scope() {
+  local file=$1
+  local expected=$2
+  local desc=$3
+  if [[ ! -f "$file" ]]; then
+    fail "missing ${desc}: ${file}"
+    return
+  fi
+  local actual
+  actual="$(
+    sed -e 's/\r$//' -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "$file" |
+      sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  )"
+  if [[ "$actual" == "$expected" ]]; then
+    pass "${desc} is exactly ${expected}"
+  else
+    fail "${desc} must contain only ${expected}: ${file}"
+  fi
+}
+
 find_merged_manifest() {
   local variant=$1
   find app/build/intermediates/merged_manifest app/build/intermediates/merged_manifests \
@@ -252,10 +272,13 @@ require_file_contains app/src/test/java/org/oxycblt/auxio/car/overlay/CarOverlay
 require_file_contains app/src/test/java/org/oxycblt/auxio/car/overlay/CarOverlayBoundsClampingTest.kt 'defaultTopCenterPosition' 'overlay dynamic bounds test'
 require_file_contains app/src/test/java/org/oxycblt/auxio/car/overlay/CarOverlayBoundsClampingTest.kt 'assertEquals(0, y)' 'overlay y=0 test'
 
-require_file_contains .github/workflows/manual-release.yml 'assembleTopwayTwMusicRelease' 'manual release builds Topway music'
+require_file_not_contains .github/workflows/manual-release.yml 'assembleTopwayTwMusicRelease' 'manual release retires exact-package Topway music'
 require_file_contains .github/workflows/manual-release.yml 'assembleTopwayTwMediaRelease' 'manual release builds Topway media'
-require_file_contains .github/workflows/manual-release.yml 'topway-twmusic-release.apk' 'manual release forbids raw Topway music APK name'
+require_file_contains .github/workflows/manual-release.yml 'topway-twmusic-release.apk' 'manual release checks the forbidden raw Topway music APK name'
 require_file_contains .github/workflows/manual-release.yml 'topway-twmedia-release.apk' 'manual release names Topway media APK'
+require_file_contains .github/workflows/manual-release.yml ':lsposed-bridge:assembleRelease' 'manual release builds LSPosed addon'
+require_file_contains .github/workflows/manual-release.yml 'lsposed-api100-bridge.apk' 'manual release names LSPosed addon'
+require_exact_scope lsposed-bridge/src/main/resources/META-INF/xposed/scope.list 'com.tw.music' 'LSPosed addon scope'
 
 printf '\nChecking generated merged manifests when present...\n'
 manifest_specs=(
