@@ -171,6 +171,22 @@ require_contains "$mode_file" 'fun defaultFor(topwayCompatFlavor: Boolean)' 'lau
 require_contains "$mode_test" 'default policy is explicit for both compatibility states' 'pure launcher default policy covers true and false states'
 require_contains "$mode_test" 'topwayCompatFlavor = false' 'non-Topway fallback policy remains covered without a distributable flavour'
 
+# Manual Release calls this contract both before planning and again after building the local release
+# commit. The second call is the last read-only branch-authority guard before a tag is pushed.
+if [[ "${GITHUB_WORKFLOW:-}" == 'Manual Release' ]]; then
+  if git fetch --quiet origin dev && remote_dev=$(git rev-parse origin/dev 2>/dev/null); then
+    current_head=$(git rev-parse HEAD)
+    current_parent=$(git rev-parse HEAD^ 2>/dev/null || true)
+    if [[ "$current_head" == "$remote_dev" || "$current_parent" == "$remote_dev" ]]; then
+      pass 'manual release source remains anchored to current remote dev'
+    else
+      fail 'remote dev moved during release preparation; refusing stale tag publication'
+    fi
+  else
+    fail 'cannot refresh remote dev before release publication'
+  fi
+fi
+
 if ! bash ./scripts/check-startup-performance-contracts.sh; then
   fail 'startup/profile/PR208 integration contracts failed'
 else
