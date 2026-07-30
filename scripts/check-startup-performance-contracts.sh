@@ -121,7 +121,7 @@ require_contains "$android_workflow" ':app:connectedTopwayTwMediaDebugAndroidTes
 require_contains "$quality_workflow" ':app:testTopwayTwMediaDebugUnitTest'
 require_contains "$quality_workflow" ':app:lintTopwayTwMediaDebug'
 require_contains "$release_workflow" 'persist-credentials: false'
-require_contains "$release_workflow" 'bash ./scripts/check-startup-performance-contracts.sh "${apk_path}"'
+require_contains "$release_workflow" 'bash ./scripts/check-startup-performance-contracts.sh "${asset_path}"'
 require_contains "$release_workflow" '.sha256'
 require_contains "$release_workflow" '.metadata.txt'
 require_absent "$release_workflow" 'include_standard_apk'
