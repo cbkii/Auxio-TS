@@ -281,7 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
-      PUBLISH_DEBUG_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'ci:debug-artifacts')) }}
+      PUBLISH_DEBUG_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 'ci:debug-artifacts')) }}
 
     steps:
       - name: Checkout repository
@@ -506,7 +506,7 @@ jobs:
               echo "| topwayTwMedia debug APK | [Download](${TWMEDIA_URL}) | \`${TWMEDIA_SHA256}\` |"
             fi
             if [[ -n "${TWMUSIC_URL}" ]]; then
-              echo "| topwayTwMusic debug APK | [Download](${TWMUSIC_URL}) | \`${TWMUSIC_SHA256}\` |"
+              echo "| topwayTwMusic internal contract APK — do not install | [Download](${TWMUSIC_URL}) | \`${TWMUSIC_SHA256}\` |"
             fi
             if [[ -n "${INVENTORY_URL}" ]]; then
               echo "| Checksums and build metadata | [Download](${INVENTORY_URL}) | — |"

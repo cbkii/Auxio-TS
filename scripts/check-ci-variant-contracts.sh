@@ -83,6 +83,8 @@ require_contains "$android_workflow" 'auxio-ts-topwayTwMusic-debug' 'workflow ex
 require_contains "$android_workflow" 'artifact-url' 'workflow publishes direct artifact URLs in its summary'
 require_contains "$android_workflow" "contains(github.event.pull_request.labels.*.name, 'ci:debug-artifacts')" 'PR debug downloads require explicit opt-in'
 require_contains "$android_workflow" 'github.event.pull_request.head.repo.full_name == github.repository' 'fork PRs cannot publish downloadable debug APKs'
+require_absent "$android_workflow" "github.event_name == 'push' ||" 'ordinary pushes do not create debug APK artifact bloat'
+require_contains "$android_workflow" 'topwayTwMusic internal contract APK — do not install' 'exact-package debug artifact is visibly non-installable'
 require_contains "$android_workflow" ':app:compileTopwayTwMediaReleaseKotlin' 'release-only source changes compile on pull requests'
 require_absent "$android_workflow" 'apkanalyzer' 'workflow YAML does not duplicate APK parsing logic'
 require_contains "$built_apk_check" 'bash ./scripts/check-headunit-compat-safety.sh' 'binary output check reuses canonical head-unit safety guardrail'
