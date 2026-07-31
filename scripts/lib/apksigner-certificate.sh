@@ -2,20 +2,59 @@
 # Shared parser for apksigner verify --print-certs output.
 # Callers must capture stdout and stderr from apksigner before invoking this function.
 
+summarise_apksigner_certificate_records() {
+  local report=${1-}
+  local line prefix
+  local count=0
+
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    case $line in
+      *"certificate SHA-256 digest:"*)
+        prefix=${line%%certificate SHA-256 digest:*}
+        printf '[INFO] apksigner certificate record: %scertificate SHA-256 digest: <redacted>\n' \
+          "$prefix" >&2
+        count=$((count + 1))
+        ((count >= 20)) && break
+        ;;
+    esac
+  done <<< "$report"
+
+  if ((count == 0)); then
+    printf '[INFO] apksigner report contained no SHA-256 certificate record lines.\n' >&2
+  fi
+}
+
 extract_apksigner_certificate_sha256() {
   local report=${1-}
-  local line digest existing seen
-  local pattern='^[[:space:]]*Signer[[:space:]]+(#[0-9]+|\([^)]*\))[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*([[:graph:]]*)[[:space:]]*$'
+  local line label digest existing seen
+  # AOSP may emit either "Signer #N" or an SDK-range label. The SDK-range label
+  # can itself contain nested parentheses, for example "(dev release=true)".
+  local record_pattern='^[[:space:]]*Signer[[:space:]]+(.+)[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*(.*)[[:space:]]*$'
+  local label_pattern='^(#[0-9]+|\(.*\))$'
   local unique_digests=()
 
   while IFS= read -r line; do
     line=${line%$'\r'}
-    [[ $line =~ $pattern ]] || continue
+    [[ $line =~ $record_pattern ]] || continue
 
-    digest=${BASH_REMATCH[2]//:/}
-    digest=$(printf '%s' "$digest" | tr '[:lower:]' '[:upper:]')
+    label=${BASH_REMATCH[1]}
+    digest=${BASH_REMATCH[2]}
+    if [[ ! $label =~ $label_pattern ]]; then
+      printf '::error::apksigner returned an unsupported signer certificate label.\n' >&2
+      summarise_apksigner_certificate_records "$report"
+      return 2
+    fi
+
+    digest=$(
+      printf '%s' "$digest" |
+        tr -d '[:space:]:' |
+        tr -d '-' |
+        tr '[:lower:]' '[:upper:]'
+    )
     if [[ ! $digest =~ ^[0-9A-F]{64}$ ]]; then
       printf '::error::apksigner returned a malformed certificate SHA-256 digest.\n' >&2
+      summarise_apksigner_certificate_records "$report"
       return 2
     fi
 
@@ -32,6 +71,7 @@ extract_apksigner_certificate_sha256() {
   case ${#unique_digests[@]} in
     0)
       printf '::error::apksigner output did not contain a signer certificate SHA-256 digest.\n' >&2
+      summarise_apksigner_certificate_records "$report"
       return 1
       ;;
     1)
@@ -40,6 +80,7 @@ extract_apksigner_certificate_sha256() {
     *)
       printf '::error::apksigner output contained %d distinct signer certificate SHA-256 digests.\n' \
         "${#unique_digests[@]}" >&2
+      summarise_apksigner_certificate_records "$report"
       return 1
       ;;
   esac
