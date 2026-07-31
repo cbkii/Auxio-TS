@@ -28,11 +28,14 @@ summarise_apksigner_certificate_records() {
 extract_apksigner_certificate_sha256() {
   local report=${1-}
   local line label digest existing seen
-  # AOSP emits either "Signer #N" or one of two SDK-range forms. The v3.1 form
-  # can contain the nested literal "(dev release=true)" marker.
-  local record_pattern='^[[:space:]]*Signer[[:space:]]+(.+)[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*(.*)[[:space:]]*$'
-  local numbered_label_pattern='^#[1-9][0-9]*$'
-  local sdk_range_label_pattern='^\(minSdkVersion=[0-9]+([[:space:]]+\(dev[[:space:]]+release=true\))?,[[:space:]]+maxSdkVersion=[0-9]+\)$'
+  # apksigner output varies by Build Tools release. Accept the historical
+  # aggregate labels and the scheme-qualified labels emitted by newer tools,
+  # while rejecting source stamps and every other certificate record.
+  local record_pattern='^[[:space:]]*(.+)[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*(.*)[[:space:]]*$'
+  local numbered_label_pattern='^Signer[[:space:]]+#[1-9][0-9]*$'
+  local sdk_range_label_pattern='^Signer[[:space:]]+\(minSdkVersion=[0-9]+([[:space:]]+\(dev[[:space:]]+release=true\))?,[[:space:]]+maxSdkVersion=[0-9]+\)$'
+  local scheme_label_pattern='^V[1-9][0-9]*(\.[0-9]+)?[[:space:]]+Signer:$'
+  local source_stamp_label='Source Stamp Signer'
   local unique_digests=()
 
   while IFS= read -r line; do
@@ -41,7 +44,13 @@ extract_apksigner_certificate_sha256() {
 
     label=${BASH_REMATCH[1]}
     digest=${BASH_REMATCH[2]}
-    if [[ ! $label =~ $numbered_label_pattern && ! $label =~ $sdk_range_label_pattern ]]; then
+
+    # A source stamp identifies the distributor, not the APK signing identity.
+    [[ $label == "$source_stamp_label" ]] && continue
+
+    if [[ ! $label =~ $numbered_label_pattern &&
+          ! $label =~ $sdk_range_label_pattern &&
+          ! $label =~ $scheme_label_pattern ]]; then
       printf '::error::apksigner returned an unsupported signer certificate label.\n' >&2
       summarise_apksigner_certificate_records "$report"
       return 2
