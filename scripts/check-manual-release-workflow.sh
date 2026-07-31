@@ -40,10 +40,15 @@ source "${signer_parser}"
 expected='0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF'
 legacy_report="Signer #1 certificate SHA-256 digest: ${expected}"
 range_report='Signer (minSdkVersion=24, maxSdkVersion=32) certificate SHA-256 digest: 01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef'
+nested_range_report='Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647) certificate SHA-256 digest: 01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef'
 [[ "$(extract_apksigner_certificate_sha256 "${legacy_report}")" == "${expected}" ]] ||
   fail 'Legacy apksigner signer output is not parsed correctly.'
 [[ "$(extract_apksigner_certificate_sha256 "${range_report}")" == "${expected}" ]] ||
   fail 'SDK-range apksigner signer output is not parsed correctly.'
+[[ "$(extract_apksigner_certificate_sha256 "${nested_range_report}")" == "${expected}" ]] ||
+  fail 'Nested SDK-range apksigner signer output is not parsed correctly.'
+[[ "$(extract_apksigner_certificate_sha256 "${legacy_report}"$'\n'"${nested_range_report}")" == "${expected}" ]] ||
+  fail 'Duplicate signer records for the same certificate must resolve to one fingerprint.'
 if extract_apksigner_certificate_sha256 "${legacy_report}"$'\n''Signer #2 certificate SHA-256 digest: F123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDE0' \
   >/dev/null 2>&1; then
   fail 'Multiple distinct signer digests must fail closed.'
@@ -52,6 +57,20 @@ if extract_apksigner_certificate_sha256 'Signer #1 certificate SHA-256 digest: n
   >/dev/null 2>&1; then
   fail 'Malformed signer output must fail closed.'
 fi
+if extract_apksigner_certificate_sha256 'Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647) certificate SHA-256 digest: not-a-digest' \
+  >/dev/null 2>&1; then
+  fail 'Malformed nested SDK-range signer output must fail closed.'
+fi
+if extract_apksigner_certificate_sha256 "Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647)) certificate SHA-256 digest: ${expected}" \
+  >/dev/null 2>&1; then
+  fail 'Malformed SDK-range signer labels must fail closed.'
+fi
+if extract_apksigner_certificate_sha256 "Source Stamp Signer certificate SHA-256 digest: ${expected}" \
+  >/dev/null 2>&1; then
+  fail 'A source-stamp certificate must not be accepted as the APK signer.'
+fi
+grep -Fq 'summarise_apksigner_certificate_records' "${signer_parser}" ||
+  fail 'Signer parser failure diagnostics are missing.'
 log 'apksigner output parser self-tests passed'
 
 python3 - <<'PY'
