@@ -28,10 +28,11 @@ summarise_apksigner_certificate_records() {
 extract_apksigner_certificate_sha256() {
   local report=${1-}
   local line label digest existing seen
-  # AOSP may emit either "Signer #N" or an SDK-range label. The SDK-range label
-  # can itself contain nested parentheses, for example "(dev release=true)".
+  # AOSP emits either "Signer #N" or one of two SDK-range forms. The v3.1 form
+  # can contain the nested literal "(dev release=true)" marker.
   local record_pattern='^[[:space:]]*Signer[[:space:]]+(.+)[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*(.*)[[:space:]]*$'
-  local label_pattern='^(#[0-9]+|\(.*\))$'
+  local numbered_label_pattern='^#[1-9][0-9]*$'
+  local sdk_range_label_pattern='^\(minSdkVersion=[0-9]+([[:space:]]+\(dev[[:space:]]+release=true\))?,[[:space:]]+maxSdkVersion=[0-9]+\)$'
   local unique_digests=()
 
   while IFS= read -r line; do
@@ -40,7 +41,7 @@ extract_apksigner_certificate_sha256() {
 
     label=${BASH_REMATCH[1]}
     digest=${BASH_REMATCH[2]}
-    if [[ ! $label =~ $label_pattern ]]; then
+    if [[ ! $label =~ $numbered_label_pattern && ! $label =~ $sdk_range_label_pattern ]]; then
       printf '::error::apksigner returned an unsupported signer certificate label.\n' >&2
       summarise_apksigner_certificate_records "$report"
       return 2
