@@ -61,6 +61,10 @@ if extract_apksigner_certificate_sha256 'Signer (minSdkVersion=35 (dev release=t
   >/dev/null 2>&1; then
   fail 'Malformed nested SDK-range signer output must fail closed.'
 fi
+if extract_apksigner_certificate_sha256 "Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647)) certificate SHA-256 digest: ${expected}" \
+  >/dev/null 2>&1; then
+  fail 'Malformed SDK-range signer labels must fail closed.'
+fi
 if extract_apksigner_certificate_sha256 "Source Stamp Signer certificate SHA-256 digest: ${expected}" \
   >/dev/null 2>&1; then
   fail 'A source-stamp certificate must not be accepted as the APK signer.'
