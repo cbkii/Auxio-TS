@@ -28,15 +28,13 @@ summarise_apksigner_certificate_records() {
 extract_apksigner_certificate_sha256() {
   local report=${1-}
   local line label digest existing seen
-  # apksigner output varies by Build Tools release. Accept the historical
-  # aggregate labels and the scheme-qualified labels emitted by newer tools,
-  # while rejecting source stamps and every other certificate record.
+  # apksigner output varies by Build Tools release. Accept historical aggregate
+  # labels plus only the documented Android APK signing-scheme labels. Unknown
+  # scheme versions remain fail-closed rather than becoming trusted identities.
   local record_pattern='^[[:space:]]*(.+)[[:space:]]+certificate[[:space:]]+SHA-256[[:space:]]+digest:[[:space:]]*(.*)[[:space:]]*$'
   local numbered_label_pattern='^Signer[[:space:]]+#[1-9][0-9]*$'
   local sdk_range_label_pattern='^Signer[[:space:]]+\(minSdkVersion=[0-9]+([[:space:]]+\(dev[[:space:]]+release=true\))?,[[:space:]]+maxSdkVersion=[0-9]+\)$'
-  # Android APK signing schemes start at v1; there is no v0 scheme. Keep the
-  # positive integer open-ended so future scheme numbers retain this grammar.
-  local scheme_label_pattern='^V[1-9][0-9]*(\.[0-9]+)?[[:space:]]+Signer:$'
+  local scheme_label_pattern='^V(1|2|3|3\.1|4)[[:space:]]+Signer:$'
   local source_stamp_label='Source Stamp Signer'
   local unique_digests=()
 
