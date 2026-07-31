@@ -105,8 +105,10 @@ require_absent "$android_workflow" 'apkanalyzer' 'workflow YAML does not duplica
 require_contains "$built_apk_check" 'bash ./scripts/check-headunit-compat-safety.sh' 'binary output check reuses canonical head-unit safety guardrail'
 require_contains "$built_apk_check" 'com.tw.media.debug' 'primary APK application id is checked in repository script'
 require_contains "$built_apk_check" 'com.tw.music.debug' 'exact-package APK application id is checked in repository script'
-require_contains "$compatibility_check" 'req_topway_music_release=0' 'compatibility checks do not require the retired exact-package release'
-require_contains "$compatibility_check" 'topway_twmusic_magisk) req_topway_music_release=1' 'explicit internal exact-package release validation remains available'
+require_contains "$compatibility_check" 'The workflow that selects/builds variants owns output-completeness checks.' 'compatibility checker delegates selected-output completeness to the owning workflow'
+require_contains "$compatibility_check" 'one built flavour must never imply that an unselected sibling was required.' 'compatibility checker does not require unselected sibling outputs'
+require_absent "$compatibility_check" 'topway_twmusic_magisk' 'compatibility checker has no retired exact-package Magisk selection token'
+require_contains "$compatibility_check" 'check_apk_manifest "$topway_release_apk" com.tw.music topwayTwMusicRelease' 'internal exact-package release APK remains validated when present'
 
 require_contains "$quality_workflow" 'app_tests: ${{ steps.scope.outputs.app_tests }}' 'quality workflow exports focused app-test scope'
 require_contains "$quality_workflow" 'musikr_tests: ${{ steps.scope.outputs.musikr_tests }}' 'quality workflow exports focused Musikr-test scope'
