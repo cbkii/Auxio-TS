@@ -46,6 +46,12 @@ extract_apksigner_certificate_sha256() {
 
     label=${BASH_REMATCH[1]}
     digest=${BASH_REMATCH[2]}
+    # The record separator is intentionally flexible. Remove only its captured
+    # leading/trailing whitespace; keep internal label spacing for exact checks.
+    label=$(
+      printf '%s' "$label" |
+        sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+    )
 
     # A source stamp identifies the distributor, not the APK signing identity.
     [[ $label == "$source_stamp_label" ]] && continue
