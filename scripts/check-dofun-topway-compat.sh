@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Source, merged-manifest and APK checks for the two maintained DoFun/Topway variants.
+# Source, merged-manifest and APK checks for the maintained DoFun/Topway app variants.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -436,52 +436,35 @@ if ! bash ./scripts/check-topway-manifest-components.sh; then
   failures=$((failures + 1))
 fi
 
-printf '\nChecking built APK presence when present...\n'
-mode=supported-release
-req_topway_music_release=0
-req_topway_media_release=1
-if [[ -n ${SELECTED_VARIANTS:-} ]]; then
-  mode=selective
-  req_topway_music_release=0
-  req_topway_media_release=0
-  while IFS= read -r variant; do
-    case "$variant" in
-      topway_twmedia) req_topway_media_release=1 ;;
-      topway_twmusic_magisk) req_topway_music_release=1 ;;
-    esac
-  done <<< "$SELECTED_VARIANTS"
-fi
+printf '\nChecking built APK outputs when present...\n'
 
 topway_debug_apk="$(find_apk topwayTwMusic debug || true)"
 topway_release_apk="$(find_apk topwayTwMusic release || true)"
 topway_media_debug_apk="$(find_apk topwayTwMedia debug || true)"
 topway_media_release_apk="$(find_apk topwayTwMedia release || true)"
 
-debug_outputs_present=0
-release_outputs_present=0
-[[ -n "$topway_debug_apk" || -n "$topway_media_debug_apk" ]] && debug_outputs_present=1
-[[ -n "$topway_release_apk" || -n "$topway_media_release_apk" ]] && release_outputs_present=1
-
-if (( debug_outputs_present )); then
-  [[ -n "$topway_debug_apk" ]] && pass "found Topway music debug APK: ${topway_debug_apk}" || fail 'Topway music debug APK missing while debug outputs are present'
-  [[ -n "$topway_media_debug_apk" ]] && pass "found Topway media debug APK: ${topway_media_debug_apk}" || fail 'Topway media debug APK missing while debug outputs are present'
-elif (( ! release_outputs_present )); then
-  warn 'debug APKs not found; run both maintained debug assemble tasks'
+# The workflow that selects/builds variants owns output-completeness checks.
+# This shared compatibility checker validates every app APK that actually exists;
+# one built flavour must never imply that an unselected sibling was required.
+app_outputs_present=0
+if [[ -n "$topway_debug_apk" ]]; then
+  app_outputs_present=1
+  pass "found Topway music debug APK: ${topway_debug_apk}"
 fi
-
-if (( release_outputs_present )); then
-  if [[ -n "$topway_release_apk" ]]; then
-    pass "found internal Topway music release APK: ${topway_release_apk}"
-  elif (( req_topway_music_release )); then
-    fail "internal Topway music release APK missing in ${mode} mode"
-  fi
-  if [[ -n "$topway_media_release_apk" ]]; then
-    pass "found Topway media release APK: ${topway_media_release_apk}"
-  elif (( req_topway_media_release )); then
-    fail "Topway media release APK missing in ${mode} mode"
-  fi
-elif (( ! debug_outputs_present )); then
-  warn 'release APKs not found; run both maintained release assemble tasks'
+if [[ -n "$topway_release_apk" ]]; then
+  app_outputs_present=1
+  pass "found internal Topway music release APK: ${topway_release_apk}"
+fi
+if [[ -n "$topway_media_debug_apk" ]]; then
+  app_outputs_present=1
+  pass "found Topway media debug APK: ${topway_media_debug_apk}"
+fi
+if [[ -n "$topway_media_release_apk" ]]; then
+  app_outputs_present=1
+  pass "found Topway media release APK: ${topway_media_release_apk}"
+fi
+if (( ! app_outputs_present )); then
+  warn 'no app APK outputs found; source-only compatibility checks completed'
 fi
 
 [[ -n "$topway_debug_apk" ]] && check_apk_manifest "$topway_debug_apk" com.tw.music.debug topwayTwMusicDebug
