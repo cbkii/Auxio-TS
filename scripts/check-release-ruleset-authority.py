@@ -2,10 +2,11 @@
 """Fail-closed validation for Manual Release protected-ref authority.
 
 The workflow fetches complete active repository ruleset JSON with the owner PAT,
-then this script verifies that every active ruleset applying to the protected
-`dev` branch (and, for new releases, the exact release tag) grants the token
-owner a User/always bypass. It also rejects blocking classic branch protection
-that is explicitly enforced for administrators.
+then this script verifies that every active branch or tag ruleset applying to the
+protected `dev` branch (and, for new releases, the exact release tag) grants the
+token owner a User/always bypass. Every active push ruleset is also checked,
+because push rulesets apply repository-wide without branch targeting. Blocking
+classic branch protection enforced for administrators is rejected as well.
 """
 
 from __future__ import annotations
@@ -185,6 +186,36 @@ def _verify_ref(
     return applicable
 
 
+def _verify_push_rulesets(
+    rulesets: Iterable[dict[str, Any]], *, actor_id: int
+) -> list[dict[str, Any]]:
+    """Verify every active repository-wide push ruleset.
+
+    GitHub push rulesets do not target branches or tags. They apply to every push
+    to the targeted repository/fork network, so there is no ref-name condition to
+    evaluate here. Requiring the same User/always bypass is conservative and
+    prevents a file/path/size push rule from becoming a late release blocker.
+    """
+
+    applicable = [
+        ruleset
+        for ruleset in rulesets
+        if str(ruleset.get("target", "")).lower() == "push" and _is_active(ruleset)
+    ]
+    missing = [
+        ruleset
+        for ruleset in applicable
+        if not _has_owner_always_bypass(ruleset, actor_id)
+    ]
+    if missing:
+        names = ", ".join(_describe(ruleset) for ruleset in missing)
+        raise AuthorityError(
+            f"owner user id {actor_id} lacks User/always bypass on active "
+            f"repository-wide push rulesets: {names}"
+        )
+    return applicable
+
+
 def _verify_classic_protection(
     protection: dict[str, Any], *, actor_login: str
 ) -> None:
@@ -248,6 +279,7 @@ def verify(args: argparse.Namespace) -> None:
         default_branch=args.default_branch,
         actor_id=args.actor_id,
     )
+    push_rulesets = _verify_push_rulesets(rulesets, actor_id=args.actor_id)
 
     tag_rulesets: list[dict[str, Any]] = []
     if args.mode == "create_new_release":
@@ -281,6 +313,7 @@ def verify(args: argparse.Namespace) -> None:
         "OK protected-ref authority: "
         f"branch_rulesets={len(branch_rulesets)} "
         f"tag_rulesets={len(tag_rulesets)} "
+        f"push_rulesets={len(push_rulesets)} "
         f"actor={args.actor_login}({args.actor_id})"
     )
 
@@ -309,6 +342,17 @@ def self_test() -> None:
         "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
         "rules": [{"type": "creation"}, {"type": "deletion"}],
     }
+    push = {
+        "id": 3,
+        "name": "repository push protections",
+        "target": "push",
+        "enforcement": "active",
+        "bypass_actors": [
+            {"actor_id": actor_id, "actor_type": "User", "bypass_mode": "always"}
+        ],
+        "conditions": {},
+        "rules": [{"type": "file_path_restriction", "parameters": {"restricted_file_paths": ["secrets/**"]}}],
+    }
 
     assert _ruleset_applies(
         branch,
@@ -323,19 +367,20 @@ def self_test() -> None:
         default_branch="dev",
     )
     _verify_ref(
-        [branch, tag],
+        [branch, tag, push],
         target="branch",
         full_ref="refs/heads/dev",
         default_branch="dev",
         actor_id=actor_id,
     )
     _verify_ref(
-        [branch, tag],
+        [branch, tag, push],
         target="tag",
         full_ref="refs/tags/v6.4.9",
         default_branch="dev",
         actor_id=actor_id,
     )
+    assert len(_verify_push_rulesets([branch, tag, push], actor_id=actor_id)) == 1
 
     missing = dict(branch)
     missing["bypass_actors"] = []
@@ -350,7 +395,16 @@ def self_test() -> None:
     except AuthorityError:
         pass
     else:
-        raise AssertionError("missing bypass was accepted")
+        raise AssertionError("missing branch bypass was accepted")
+
+    missing_push = dict(push)
+    missing_push["bypass_actors"] = []
+    try:
+        _verify_push_rulesets([missing_push], actor_id=actor_id)
+    except AuthorityError:
+        pass
+    else:
+        raise AssertionError("missing push-ruleset bypass was accepted")
 
     try:
         _verify_classic_protection(
@@ -369,6 +423,7 @@ def self_test() -> None:
         root = Path(directory)
         (root / "1.json").write_text(json.dumps(branch), encoding="utf-8")
         (root / "2.json").write_text(json.dumps(tag), encoding="utf-8")
+        (root / "3.json").write_text(json.dumps(push), encoding="utf-8")
         classic = root / "classic.json"
         classic.write_text("{}\n", encoding="utf-8")
         args = argparse.Namespace(
