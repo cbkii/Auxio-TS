@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 """Fail-closed validation for Manual Release protected-ref authority.
 
-The workflow fetches complete active repository branch/tag ruleset JSON with the
-owner PAT, then this script verifies that every active ruleset applying to the
-protected `dev` branch (and, for new releases, the exact release tag) grants the
-token owner a User/always bypass. The script independently fetches every active
-push-target ruleset because push rulesets apply repository-wide without branch
-targeting. Blocking classic branch protection enforced for administrators is
-rejected as well.
+The workflow downloads complete branch/tag ruleset details with the owner PAT
+and passes them to this checker. The checker independently lists and downloads
+push-target rulesets because those rules are repository-wide and have no branch
+or tag ref-name targeting.
+
+A release is authorised only when:
+
+* every active branch ruleset applying to ``dev`` grants the owner user an
+  ``always`` bypass;
+* for a new release, every active tag ruleset applying to the exact release tag
+  grants the same bypass and at least one applicable tag ruleset restricts
+  creation;
+* every active push-target ruleset grants the same bypass; and
+* classic branch protection enforced for administrators cannot reject the
+  release metadata fast-forward.
 """
 
 from __future__ import annotations
@@ -19,6 +27,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -39,16 +48,44 @@ def _read_json(path: Path) -> Any:
 
 
 def _is_active(ruleset: dict[str, Any]) -> bool:
-    # GitHub's current value is `active`; tolerate the historical response label
-    # `enabled` so an API spelling change cannot silently skip protection.
+    # GitHub currently returns `active`. Retaining `enabled` keeps old exported
+    # fixtures readable without silently accepting any other unknown state.
     return str(ruleset.get("enforcement", "")).lower() in {"active", "enabled"}
 
 
-def _candidate_patterns(pattern: str, target: str) -> tuple[str, ...]:
-    if pattern.startswith("refs/"):
-        return (pattern,)
-    prefix = "refs/heads/" if target == "branch" else "refs/tags/"
-    return (pattern, f"{prefix}{pattern}")
+def _github_pathname_match(value: str, pattern: str) -> bool:
+    """Match GitHub ref patterns using pathname-aware wildcard semantics.
+
+    GitHub rulesets use ``File::FNM_PATHNAME`` semantics: ``*``, ``?`` and a
+    character class do not cross ``/``. A complete ``**`` path segment may
+    consume zero or more slash-delimited components. Matching segment-by-
+    segment gives the required behaviour while still using Python's mature
+    wildcard handling inside each component.
+    """
+
+    value_parts = tuple(value.split("/"))
+    pattern_parts = tuple(pattern.split("/"))
+
+    @lru_cache(maxsize=None)
+    def match(value_index: int, pattern_index: int) -> bool:
+        if pattern_index == len(pattern_parts):
+            return value_index == len(value_parts)
+
+        current_pattern = pattern_parts[pattern_index]
+        if current_pattern == "**":
+            # Zero components, or consume one component and remain on **.
+            return match(value_index, pattern_index + 1) or (
+                value_index < len(value_parts)
+                and match(value_index + 1, pattern_index)
+            )
+
+        if value_index == len(value_parts):
+            return False
+        if not fnmatch.fnmatchcase(value_parts[value_index], current_pattern):
+            return False
+        return match(value_index + 1, pattern_index + 1)
+
+    return match(0, 0)
 
 
 def _pattern_matches(
@@ -63,13 +100,16 @@ def _pattern_matches(
     if pattern == "~DEFAULT_BRANCH":
         return target == "branch" and full_ref == f"refs/heads/{default_branch}"
 
-    short_ref = full_ref.removeprefix("refs/heads/").removeprefix("refs/tags/")
-    for candidate_pattern in _candidate_patterns(pattern, target):
-        if fnmatch.fnmatchcase(full_ref, candidate_pattern):
-            return True
-        if fnmatch.fnmatchcase(short_ref, candidate_pattern):
-            return True
-    return False
+    prefix = "refs/heads/" if target == "branch" else "refs/tags/"
+    short_ref = full_ref.removeprefix(prefix)
+
+    if pattern.startswith("refs/"):
+        return _github_pathname_match(full_ref, pattern)
+
+    # Support both API-form full refs and UI/export forms that omit the prefix.
+    return _github_pathname_match(short_ref, pattern) or _github_pathname_match(
+        full_ref, f"{prefix}{pattern}"
+    )
 
 
 def _ruleset_applies(
@@ -79,9 +119,7 @@ def _ruleset_applies(
     full_ref: str,
     default_branch: str,
 ) -> bool:
-    if str(ruleset.get("target", "")).lower() != target:
-        return False
-    if not _is_active(ruleset):
+    if str(ruleset.get("target", "")).lower() != target or not _is_active(ruleset):
         return False
 
     conditions = ruleset.get("conditions")
@@ -106,34 +144,24 @@ def _ruleset_applies(
             f"ruleset {ruleset.get('id', '?')} has a malformed ref exclude list"
         )
 
-    if any(
-        isinstance(pattern, str)
-        and _pattern_matches(
+    def matches(pattern: object) -> bool:
+        return isinstance(pattern, str) and _pattern_matches(
             pattern,
             full_ref=full_ref,
             target=target,
             default_branch=default_branch,
         )
-        for pattern in exclude
-    ):
-        return False
 
-    return any(
-        isinstance(pattern, str)
-        and _pattern_matches(
-            pattern,
-            full_ref=full_ref,
-            target=target,
-            default_branch=default_branch,
-        )
-        for pattern in include
-    )
+    if any(matches(pattern) for pattern in exclude):
+        return False
+    return any(matches(pattern) for pattern in include)
 
 
 def _has_owner_always_bypass(ruleset: dict[str, Any], actor_id: int) -> bool:
     actors = ruleset.get("bypass_actors")
     if not isinstance(actors, list):
         return False
+
     for actor in actors:
         if not isinstance(actor, dict):
             continue
@@ -192,14 +220,8 @@ def _verify_ref(
 def _verify_push_rulesets(
     rulesets: Iterable[dict[str, Any]], *, actor_id: int
 ) -> list[dict[str, Any]]:
-    """Verify every active repository-wide push ruleset.
-
-    GitHub push rulesets do not target branches or tags. They apply to every push
-    to the targeted repository/fork network, so there is no ref-name condition to
-    evaluate here. Requiring the same User/always bypass prevents a file/path/size
-    push rule from becoming a late release blocker.
-    """
-
+    # Push rulesets have repository/fork-network scope rather than a ref-name
+    # condition, so every active one can govern both protected ref mutations.
     applicable = [
         ruleset
         for ruleset in rulesets
@@ -262,6 +284,7 @@ def _fetch_live_push_rulesets() -> list[dict[str, Any]]:
         token=token,
         description="listing active push-target rulesets",
     )
+
     ids: list[int] = []
     for line in ids_output.splitlines():
         value = line.strip()
@@ -339,53 +362,52 @@ def verify(args: argparse.Namespace) -> None:
     if not ruleset_paths:
         raise AuthorityError(f"no ruleset detail files found in {args.ruleset_dir}")
 
-    rulesets: list[dict[str, Any]] = []
+    downloaded: list[dict[str, Any]] = []
     for path in ruleset_paths:
         value = _read_json(path)
         if not isinstance(value, dict):
             raise AuthorityError(f"ruleset detail is not a JSON object: {path}")
-        rulesets.append(value)
+        downloaded.append(value)
 
-    live_push_rulesets = (
-        [] if args.skip_live_push_rulesets else _fetch_live_push_rulesets()
-    )
-    all_rulesets_by_id: dict[str, dict[str, Any]] = {}
-    for ruleset in [*rulesets, *live_push_rulesets]:
-        key = str(ruleset.get("id", f"anonymous-{len(all_rulesets_by_id)}"))
-        all_rulesets_by_id[key] = ruleset
-    all_rulesets = list(all_rulesets_by_id.values())
+    push_rulesets = [] if args.skip_live_push_rulesets else _fetch_live_push_rulesets()
+    by_id: dict[str, dict[str, Any]] = {}
+    for ruleset in [*downloaded, *push_rulesets]:
+        key = str(ruleset.get("id", f"anonymous-{len(by_id)}"))
+        by_id[key] = ruleset
+    rulesets = list(by_id.values())
 
-    branch_ref = f"refs/heads/{args.default_branch}"
     branch_rulesets = _verify_ref(
-        all_rulesets,
+        rulesets,
         target="branch",
-        full_ref=branch_ref,
+        full_ref=f"refs/heads/{args.default_branch}",
         default_branch=args.default_branch,
         actor_id=args.actor_id,
     )
-    push_rulesets = _verify_push_rulesets(all_rulesets, actor_id=args.actor_id)
+    active_push_rulesets = _verify_push_rulesets(rulesets, actor_id=args.actor_id)
 
     tag_rulesets: list[dict[str, Any]] = []
     if args.mode == "create_new_release":
         if not args.release_tag:
             raise AuthorityError("create_new_release requires --release-tag")
+        tag_ref = f"refs/tags/{args.release_tag}"
         tag_rulesets = _verify_ref(
-            all_rulesets,
+            rulesets,
             target="tag",
-            full_ref=f"refs/tags/{args.release_tag}",
+            full_ref=tag_ref,
             default_branch=args.default_branch,
             actor_id=args.actor_id,
         )
-        if not any(
+        has_creation_rule = any(
             any(
                 isinstance(rule, dict) and rule.get("type") == "creation"
                 for rule in ruleset.get("rules", [])
             )
             for ruleset in tag_rulesets
-        ):
+        )
+        if not has_creation_rule:
             raise AuthorityError(
-                f"no active ruleset applying to refs/tags/{args.release_tag} "
-                "contains the required creation restriction"
+                f"no active ruleset applying to {tag_ref} contains the required "
+                "creation restriction"
             )
 
     classic = _read_json(args.classic_protection_json)
@@ -397,51 +419,68 @@ def verify(args: argparse.Namespace) -> None:
         "OK protected-ref authority: "
         f"branch_rulesets={len(branch_rulesets)} "
         f"tag_rulesets={len(tag_rulesets)} "
-        f"push_rulesets={len(push_rulesets)} "
+        f"push_rulesets={len(active_push_rulesets)} "
         f"actor={args.actor_login}({args.actor_id})"
+    )
+
+
+def _fixture_rulesets(actor_id: int) -> tuple[dict[str, Any], ...]:
+    bypass = [
+        {"actor_id": actor_id, "actor_type": "User", "bypass_mode": "always"}
+    ]
+    return (
+        {
+            "id": 1,
+            "name": "dev protection",
+            "target": "branch",
+            "enforcement": "active",
+            "bypass_actors": bypass,
+            "conditions": {
+                "ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}
+            },
+            "rules": [{"type": "pull_request"}],
+        },
+        {
+            "id": 2,
+            "name": "release tags",
+            "target": "tag",
+            "enforcement": "active",
+            "bypass_actors": bypass,
+            "conditions": {
+                "ref_name": {"include": ["refs/tags/v*"], "exclude": []}
+            },
+            "rules": [{"type": "creation"}, {"type": "deletion"}],
+        },
+        {
+            "id": 3,
+            "name": "repository push protections",
+            "target": "push",
+            "enforcement": "active",
+            "bypass_actors": bypass,
+            "conditions": {},
+            "rules": [
+                {
+                    "type": "file_path_restriction",
+                    "parameters": {"restricted_file_paths": ["secrets/**"]},
+                }
+            ],
+        },
     )
 
 
 def self_test() -> None:
     actor_id = 150587541
-    branch = {
-        "id": 1,
-        "name": "dev protection",
-        "target": "branch",
-        "enforcement": "active",
-        "bypass_actors": [
-            {"actor_id": actor_id, "actor_type": "User", "bypass_mode": "always"}
-        ],
-        "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
-        "rules": [{"type": "pull_request"}],
-    }
-    tag = {
-        "id": 2,
-        "name": "release tags",
-        "target": "tag",
-        "enforcement": "active",
-        "bypass_actors": [
-            {"actor_id": actor_id, "actor_type": "User", "bypass_mode": "always"}
-        ],
-        "conditions": {"ref_name": {"include": ["refs/tags/v*"], "exclude": []}},
-        "rules": [{"type": "creation"}, {"type": "deletion"}],
-    }
-    push = {
-        "id": 3,
-        "name": "repository push protections",
-        "target": "push",
-        "enforcement": "active",
-        "bypass_actors": [
-            {"actor_id": actor_id, "actor_type": "User", "bypass_mode": "always"}
-        ],
-        "conditions": {},
-        "rules": [
-            {
-                "type": "file_path_restriction",
-                "parameters": {"restricted_file_paths": ["secrets/**"]},
-            }
-        ],
-    }
+    branch, tag, push = _fixture_rulesets(actor_id)
+
+    # File::FNM_PATHNAME contract: ordinary wildcards never cross `/`, while a
+    # complete `**` component may cross zero or more components.
+    assert not _github_pathname_match("refs/tags/v6.4.9", "refs/*")
+    assert _github_pathname_match("refs/tags/v6.4.9", "refs/**")
+    assert _github_pathname_match("refs/tags/v6.4.9", "refs/tags/v*")
+    assert not _github_pathname_match("release/a/b", "release/*")
+    assert _github_pathname_match("release/a/b", "release/**/*")
+    assert _github_pathname_match("release/a", "release/**/*")
+    assert not _github_pathname_match("refs/tags/v6.4.9", "refs/tags/?")
 
     assert _ruleset_applies(
         branch,
@@ -455,27 +494,31 @@ def self_test() -> None:
         full_ref="refs/tags/v6.4.9",
         default_branch="dev",
     )
-    _verify_ref(
-        [branch, tag, push],
-        target="branch",
-        full_ref="refs/heads/dev",
-        default_branch="dev",
-        actor_id=actor_id,
-    )
-    _verify_ref(
-        [branch, tag, push],
-        target="tag",
-        full_ref="refs/tags/v6.4.9",
-        default_branch="dev",
-        actor_id=actor_id,
-    )
+    assert len(
+        _verify_ref(
+            [branch, tag, push],
+            target="branch",
+            full_ref="refs/heads/dev",
+            default_branch="dev",
+            actor_id=actor_id,
+        )
+    ) == 1
+    assert len(
+        _verify_ref(
+            [branch, tag, push],
+            target="tag",
+            full_ref="refs/tags/v6.4.9",
+            default_branch="dev",
+            actor_id=actor_id,
+        )
+    ) == 1
     assert len(_verify_push_rulesets([branch, tag, push], actor_id=actor_id)) == 1
 
-    missing = dict(branch)
-    missing["bypass_actors"] = []
+    missing_branch = dict(branch)
+    missing_branch["bypass_actors"] = []
     try:
         _verify_ref(
-            [missing],
+            [missing_branch],
             target="branch",
             full_ref="refs/heads/dev",
             default_branch="dev",
@@ -510,22 +553,24 @@ def self_test() -> None:
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
-        (root / "1.json").write_text(json.dumps(branch), encoding="utf-8")
-        (root / "2.json").write_text(json.dumps(tag), encoding="utf-8")
-        (root / "3.json").write_text(json.dumps(push), encoding="utf-8")
+        for ruleset in (branch, tag, push):
+            (root / f"{ruleset['id']}.json").write_text(
+                json.dumps(ruleset), encoding="utf-8"
+            )
         classic = root / "classic.json"
         classic.write_text("{}\n", encoding="utf-8")
-        args = argparse.Namespace(
-            ruleset_dir=root,
-            actor_id=actor_id,
-            actor_login="cbkii",
-            default_branch="dev",
-            mode="create_new_release",
-            release_tag="v6.4.9",
-            classic_protection_json=classic,
-            skip_live_push_rulesets=True,
+        verify(
+            argparse.Namespace(
+                ruleset_dir=root,
+                actor_id=actor_id,
+                actor_login="cbkii",
+                default_branch="dev",
+                mode="create_new_release",
+                release_tag="v6.4.9",
+                classic_protection_json=classic,
+                skip_live_push_rulesets=True,
+            )
         )
-        verify(args)
 
     print("OK release ruleset authority self-test")
 
