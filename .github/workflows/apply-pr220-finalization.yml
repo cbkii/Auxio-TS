@@ -27,6 +27,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/.apply-pr220-finalization.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'The workflow downloads complete branch/tag ruleset details with the owner PAT\n'
+          new = 'The File::FNM_PATHNAME contract is preserved for GitHub ref patterns.\n\nThe workflow downloads complete branch/tag ruleset details with the owner PAT\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one finalization docstring anchor, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
           python3 scripts/.apply-pr220-finalization.py
           rm -f scripts/.apply-pr220-finalization.py
           rm -f .github/workflows/apply-pr220-finalization.yml
