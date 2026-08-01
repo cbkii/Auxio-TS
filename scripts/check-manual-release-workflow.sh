@@ -115,6 +115,15 @@ def input_block(key: str) -> str:
     return text[pos:end]
 
 
+def step_block(name: str) -> str:
+    marker = f'      - name: {name}\n'
+    pos = text.find(marker)
+    if pos < 0:
+        raise SystemExit(f'Missing workflow step: {name}')
+    next_step = text.find('\n      - name:', pos + len(marker))
+    return text[pos:next_step if next_step >= 0 else len(text)]
+
+
 required_inputs = {
     'release_mode': ('required: true', 'default: create_new_release', 'type: choice'),
     'include_topway_twmedia_apk': ('required: true', 'default: true', 'type: boolean'),
@@ -160,6 +169,13 @@ for forbidden in (
 
 required_tokens = (
     'group: manual-release',
+    'Verify branch and protected-ref authority',
+    'RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}',
+    'gh api user --jq .login',
+    "gh api \"repos/${GITHUB_REPOSITORY}\" --jq '.permissions.push // false'",
+    'RELEASE_PUSH_TOKEN authentication failed or timed out',
+    'Unable to verify RELEASE_PUSH_TOKEN access',
+    'Protected-ref push actor:',
     'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
     "--jq '.[].tag_name'",
     'scripts/release-orchestrator.py',
@@ -195,6 +211,31 @@ required_tokens = (
 for token in required_tokens:
     if token not in text:
         raise SystemExit(f'Missing release transaction contract: {token}')
+
+preflight = step_block('Verify branch and protected-ref authority')
+if preflight.count('timeout --foreground 30s') != 2:
+    raise SystemExit('Protected-ref preflight must bound both GitHub API requests.')
+for token in ('actor_error=', 'permission_error=', 'if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}"'):
+    if token not in preflight:
+        raise SystemExit(f'Protected-ref preflight lacks guarded failure handling: {token}')
+
+protected_token = 'GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}'
+for step_name in ('Push immutable release tag', 'Synchronise released source metadata to dev'):
+    if protected_token not in step_block(step_name):
+        raise SystemExit(f'{step_name} does not use the protected-ref owner token.')
+if text.count(protected_token) != 2:
+    raise SystemExit('Protected-ref owner token must be scoped to exactly the two Git push steps.')
+
+release_api_token = 'GH_TOKEN: ${{ github.token }}'
+for step_name in (
+    'Resolve version and repository release state',
+    'Ensure draft release transaction exists',
+    'Upload or replace planned release assets',
+    'Verify remote release asset manifest',
+    'Apply requested status to newly created release',
+):
+    if release_api_token not in step_block(step_name):
+        raise SystemExit(f'{step_name} must retain the workflow-scoped GitHub token.')
 
 for guard in (
     "${GITHUB_WORKFLOW:-}",
