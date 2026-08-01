@@ -46,3 +46,5 @@ jobs:
           }
           git commit -m 'ci: finalise protected release authority checks'
           git push origin HEAD:refs/heads/fix/manual-release-protected-ref-auth
+
+# Trigger commit for the one-time finalization run.
