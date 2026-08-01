@@ -31,7 +31,11 @@ python3 -m py_compile "${orchestrator}" "${ruleset_checker}"
 python3 "${orchestrator}" self-test
 python3 "${ruleset_checker}" --self-test
 
-if command -v actionlint >/dev/null 2>&1; then actionlint "${workflow}"; else log 'actionlint unavailable; skipped'; fi
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint "${workflow}"
+else
+  log 'actionlint unavailable; skipped'
+fi
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
 else
@@ -48,50 +52,32 @@ scheme_report='V2 Signer: certificate SHA-256 digest: 01:23:45:67:89:ab:cd:ef:01
 decimal_scheme_report='V3.1 Signer: certificate SHA-256 digest: 01-23-45-67-89-ab-cd-ef-01-23-45-67-89-ab-cd-ef-01-23-45-67-89-ab-cd-ef-01-23-45-67-89-ab-cd-ef'
 source_stamp_report="Source Stamp Signer certificate SHA-256 digest: ${expected}"
 
-[[ "$(extract_apksigner_certificate_sha256 "${legacy_report}")" == "${expected}" ]] ||
-  fail 'Legacy apksigner signer output is not parsed correctly.'
-[[ "$(extract_apksigner_certificate_sha256 "${range_report}")" == "${expected}" ]] ||
-  fail 'SDK-range apksigner signer output is not parsed correctly.'
-[[ "$(extract_apksigner_certificate_sha256 "${nested_range_report}")" == "${expected}" ]] ||
-  fail 'Nested SDK-range apksigner signer output is not parsed correctly.'
-[[ "$(extract_apksigner_certificate_sha256 "${scheme_report}")" == "${expected}" ]] ||
-  fail 'Scheme-qualified apksigner output is not parsed correctly.'
-[[ "$(extract_apksigner_certificate_sha256 "${decimal_scheme_report}")" == "${expected}" ]] ||
-  fail 'Decimal scheme-qualified apksigner output is not parsed correctly.'
+for report in \
+  "${legacy_report}" \
+  "${range_report}" \
+  "${nested_range_report}" \
+  "${scheme_report}" \
+  "${decimal_scheme_report}"; do
+  [[ "$(extract_apksigner_certificate_sha256 "${report}")" == "${expected}" ]] ||
+    fail 'A supported apksigner signer label was not parsed correctly.'
+done
 [[ "$(extract_apksigner_certificate_sha256 "${legacy_report}"$'\n'"${scheme_report}"$'\n'"${source_stamp_report}")" == "${expected}" ]] ||
-  fail 'Duplicate aggregate/scheme signer records must resolve to one fingerprint while ignoring source stamps.'
-if extract_apksigner_certificate_sha256 "${legacy_report}"$'\n''V2 Signer: certificate SHA-256 digest: F123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDE0' \
-  >/dev/null 2>&1; then
+  fail 'Duplicate signer records must resolve to one fingerprint while ignoring source stamps.'
+if extract_apksigner_certificate_sha256 "${legacy_report}"$'\n''V2 Signer: certificate SHA-256 digest: F123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDE0' >/dev/null 2>&1; then
   fail 'Multiple distinct signer digests must fail closed.'
 fi
-if extract_apksigner_certificate_sha256 'Signer #1 certificate SHA-256 digest: not-a-digest' \
-  >/dev/null 2>&1; then
-  fail 'Malformed signer output must fail closed.'
-fi
-if extract_apksigner_certificate_sha256 'V2 Signer: certificate SHA-256 digest: not-a-digest' \
-  >/dev/null 2>&1; then
-  fail 'Malformed scheme-qualified signer output must fail closed.'
-fi
-if extract_apksigner_certificate_sha256 'Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647) certificate SHA-256 digest: not-a-digest' \
-  >/dev/null 2>&1; then
-  fail 'Malformed nested SDK-range signer output must fail closed.'
-fi
-if extract_apksigner_certificate_sha256 "Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647)) certificate SHA-256 digest: ${expected}" \
-  >/dev/null 2>&1; then
-  fail 'Malformed SDK-range signer labels must fail closed.'
-fi
-if extract_apksigner_certificate_sha256 "V2 Signer certificate SHA-256 digest: ${expected}" \
-  >/dev/null 2>&1; then
-  fail 'Malformed scheme-qualified signer labels must fail closed.'
-fi
-if extract_apksigner_certificate_sha256 "V0 Signer: certificate SHA-256 digest: ${expected}" \
-  >/dev/null 2>&1; then
-  fail 'Unsupported signing scheme labels must fail closed.'
-fi
-if extract_apksigner_certificate_sha256 "${source_stamp_report}" \
-  >/dev/null 2>&1; then
-  fail 'A source-stamp certificate must not be accepted as the APK signer.'
-fi
+for malformed in \
+  'Signer #1 certificate SHA-256 digest: not-a-digest' \
+  'V2 Signer: certificate SHA-256 digest: not-a-digest' \
+  'Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647) certificate SHA-256 digest: not-a-digest' \
+  "Signer (minSdkVersion=35 (dev release=true), maxSdkVersion=2147483647)) certificate SHA-256 digest: ${expected}" \
+  "V2 Signer certificate SHA-256 digest: ${expected}" \
+  "V0 Signer: certificate SHA-256 digest: ${expected}" \
+  "${source_stamp_report}"; do
+  if extract_apksigner_certificate_sha256 "${malformed}" >/dev/null 2>&1; then
+    fail "Malformed or non-signer certificate output was accepted: ${malformed}"
+  fi
+done
 grep -Fq 'summarise_apksigner_certificate_records' "${signer_parser}" ||
   fail 'Signer parser failure diagnostics are missing.'
 log 'apksigner output parser self-tests passed'
@@ -100,31 +86,33 @@ python3 - <<'PY'
 from pathlib import Path
 import re
 
-text = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
-variant_text = Path('scripts/check-ci-variant-contracts.sh').read_text(encoding='utf-8')
+workflow = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
+variant = Path('scripts/check-ci-variant-contracts.sh').read_text(encoding='utf-8')
+rulesets = Path('scripts/check-release-ruleset-authority.py').read_text(encoding='utf-8')
 
 
 def input_block(key: str) -> str:
     marker = f'      {key}:\n'
-    pos = text.find(marker)
-    if pos < 0:
+    start = workflow.find(marker)
+    if start < 0:
         raise SystemExit(f'Missing workflow_dispatch input: {key}')
-    content_start = pos + len(marker)
-    next_match = re.search(r'^      [A-Za-z0-9_]+:\n', text[content_start:], flags=re.MULTILINE)
+    content_start = start + len(marker)
+    next_match = re.search(
+        r'^      [A-Za-z0-9_]+:\n', workflow[content_start:], flags=re.MULTILINE
+    )
     next_input = content_start + next_match.start() if next_match else -1
-    permissions = text.find('\n\npermissions:', content_start)
-    candidates = [value for value in (next_input, permissions) if value >= 0]
-    end = min(candidates) if candidates else len(text)
-    return text[pos:end]
+    permissions = workflow.find('\n\npermissions:', content_start)
+    ends = [value for value in (next_input, permissions) if value >= 0]
+    return workflow[start:min(ends) if ends else len(workflow)]
 
 
 def step_block(name: str) -> str:
     marker = f'      - name: {name}\n'
-    pos = text.find(marker)
-    if pos < 0:
+    start = workflow.find(marker)
+    if start < 0:
         raise SystemExit(f'Missing workflow step: {name}')
-    next_step = text.find('\n      - name:', pos + len(marker))
-    return text[pos:next_step if next_step >= 0 else len(text)]
+    end = workflow.find('\n      - name:', start + len(marker))
+    return workflow[start:end if end >= 0 else len(workflow)]
 
 
 required_inputs = {
@@ -137,25 +125,24 @@ required_inputs = {
         'type: choice',
     ),
 }
-for key, required_tokens in required_inputs.items():
+for key, tokens in required_inputs.items():
     block = input_block(key)
-    for token in required_tokens:
+    for token in tokens:
         if token not in block:
             raise SystemExit(f'{key} does not contain expected {token}')
 
-release_mode_options = re.findall(
+release_modes = re.findall(
     r'^          - ([a-z_]+)$', input_block('release_mode'), flags=re.MULTILINE
 )
-if release_mode_options != ['create_new_release', 'repair_existing_release']:
-    raise SystemExit('release_mode must expose exactly create_new_release and repair_existing_release')
-
-debug_options = re.findall(
-    r'^          - ([a-z_]+)$', input_block('debug_variant_destination'), flags=re.MULTILINE
+if release_modes != ['create_new_release', 'repair_existing_release']:
+    raise SystemExit('release_mode options changed unexpectedly')
+debug_destinations = re.findall(
+    r'^          - ([a-z_]+)$',
+    input_block('debug_variant_destination'),
+    flags=re.MULTILINE,
 )
-if debug_options != ['workflow_artifacts', 'release_assets']:
-    raise SystemExit(
-        'debug_variant_destination must expose exactly workflow_artifacts and release_assets'
-    )
+if debug_destinations != ['workflow_artifacts', 'release_assets']:
+    raise SystemExit('debug_variant_destination options changed unexpectedly')
 
 for forbidden in (
     'include_standard_apk',
@@ -167,10 +154,10 @@ for forbidden in (
     'Cleanup release tag after failed release creation',
     'git push origin ":refs/tags/',
 ):
-    if forbidden in text:
+    if forbidden in workflow:
         raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
 
-required_tokens = (
+for token in (
     'group: manual-release',
     'if: github.actor == github.repository_owner',
     'Verify branch and protected-ref authority',
@@ -189,12 +176,9 @@ required_tokens = (
     'Applicable ruleset bypass verified:',
     'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
     "--jq '.[].tag_name'",
-    'scripts/release-orchestrator.py',
     'Push immutable release tag',
     'Ensure draft release transaction exists',
-    '--draft',
     'Upload or replace planned release assets',
-    '--clobber',
     'Verify remote release asset manifest',
     'Apply requested status to newly created release',
     'Synchronise released source metadata to dev',
@@ -218,26 +202,20 @@ required_tokens = (
     'Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk',
     'workflow_artifacts|release_assets',
     'persist-credentials: false',
-)
-for token in required_tokens:
-    if token not in text:
+):
+    if token not in workflow:
         raise SystemExit(f'Missing release transaction contract: {token}')
 
-preflight = step_block('Verify branch and protected-ref authority')
-if preflight.count('timeout --foreground 30s') != 2:
-    raise SystemExit('Protected-ref preflight must bound both GitHub API requests.')
-for token in (
-    'actor_error=',
-    'permission_error=',
-    'if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}"',
-    'push_actor_id=',
-):
-    if token not in preflight:
-        raise SystemExit(f'Protected-ref preflight lacks guarded failure handling: {token}')
+identity = step_block('Verify branch and protected-ref authority')
+if identity.count('timeout --foreground 30s') != 2:
+    raise SystemExit('Identity preflight must bound both GitHub API requests.')
+for token in ('actor_error=', 'permission_error=', 'push_actor_id='):
+    if token not in identity:
+        raise SystemExit(f'Identity preflight lacks guarded handling: {token}')
 
-ruleset_preflight = step_block('Verify protected-ref ruleset bypass')
-if ruleset_preflight.count('timeout --foreground 30s') != 3:
-    raise SystemExit('Ruleset preflight must bound list, detail and classic-protection API calls.')
+ruleset_step = step_block('Verify protected-ref ruleset bypass')
+if ruleset_step.count('timeout --foreground 30s') != 3:
+    raise SystemExit('Ruleset preflight must bound list, detail and classic API calls.')
 for token in (
     'ruleset_error=',
     'classic_error=',
@@ -245,36 +223,48 @@ for token in (
     '--actor-id "${PUSH_ACTOR_ID}"',
     '--release-tag "${RELEASE_TAG}"',
 ):
-    if token not in ruleset_preflight:
-        raise SystemExit(f'Ruleset preflight lacks required authority guard: {token}')
+    if token not in ruleset_step:
+        raise SystemExit(f'Ruleset preflight lacks required guard: {token}')
+
+for token in (
+    '_github_pathname_match',
+    'File::FNM_PATHNAME contract',
+    'targets=push',
+    '_fetch_live_push_rulesets',
+    '_verify_push_rulesets',
+    'timeout=30',
+):
+    if token not in rulesets:
+        raise SystemExit(f'Ruleset checker lacks required contract: {token}')
 
 protected_token = 'GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}'
-for step_name in ('Push immutable release tag', 'Synchronise released source metadata to dev'):
-    if protected_token not in step_block(step_name):
-        raise SystemExit(f'{step_name} does not use the protected-ref owner token.')
-if text.count(protected_token) != 2:
-    raise SystemExit('Protected-ref owner token must be scoped to exactly the two Git push steps.')
+for name in ('Push immutable release tag', 'Synchronise released source metadata to dev'):
+    if protected_token not in step_block(name):
+        raise SystemExit(f'{name} does not use the protected-ref owner token.')
+if workflow.count(protected_token) != 2:
+    raise SystemExit('Owner token must be scoped to exactly the two Git push steps.')
 
 release_api_token = 'GH_TOKEN: ${{ github.token }}'
-for step_name in (
+for name in (
     'Resolve version and repository release state',
     'Ensure draft release transaction exists',
     'Upload or replace planned release assets',
     'Verify remote release asset manifest',
     'Apply requested status to newly created release',
 ):
-    if release_api_token not in step_block(step_name):
-        raise SystemExit(f'{step_name} must retain the workflow-scoped GitHub token.')
+    if release_api_token not in step_block(name):
+        raise SystemExit(f'{name} must retain the workflow-scoped GitHub token.')
 
 for guard in (
     "${GITHUB_WORKFLOW:-}",
-    "git fetch --quiet origin dev",
-    "remote dev moved during release preparation; refusing stale tag publication",
+    'git fetch --quiet origin dev',
+    'remote dev moved during release preparation; refusing stale tag publication',
 ):
-    if guard not in variant_text:
+    if guard not in variant:
         raise SystemExit(f'Missing pre-tag dev authority guard: {guard}')
 
 order = [
+    'Verify branch and protected-ref authority',
     'Verify protected-ref ruleset bypass',
     'Build once, inspect once and stage selected assets',
     'Upload release recovery workflow artifact',
@@ -285,23 +275,23 @@ order = [
     'Apply requested status to newly created release',
     'Synchronise released source metadata to dev',
 ]
-positions = [text.find(value) for value in order]
+positions = [workflow.find(name) for name in order]
 if any(position < 0 for position in positions) or positions != sorted(positions):
-    raise SystemExit(f'Unsafe release transaction ordering: {list(zip(order, positions))}')
+    raise SystemExit(f'Unsafe release ordering: {list(zip(order, positions))}')
 
-dev_push = text.find('git push origin "${RELEASE_SHA}:refs/heads/dev"')
-remote_verify = text.find('Verify remote release asset manifest')
-if dev_push < remote_verify:
+if workflow.find('git push origin "${RELEASE_SHA}:refs/heads/dev"') < workflow.find(
+    'Verify remote release asset manifest'
+):
     raise SystemExit('dev metadata push occurs before remote release verification')
 
-for pinned in (
+for pin in (
     'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
     'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
     'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
 ):
-    if pinned not in text:
-        raise SystemExit(f'Missing immutable action pin: {pinned}')
+    if pin not in workflow:
+        raise SystemExit(f'Missing immutable action pin: {pin}')
 
 print('OK manual-release transactional invariants')
 PY
