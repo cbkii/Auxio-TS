@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Fail-closed validation for Manual Release protected-ref authority.
 
-The workflow fetches complete active repository ruleset JSON with the owner PAT,
-then this script verifies that every active branch or tag ruleset applying to the
+The workflow fetches complete active repository branch/tag ruleset JSON with the
+owner PAT, then this script verifies that every active ruleset applying to the
 protected `dev` branch (and, for new releases, the exact release tag) grants the
-token owner a User/always bypass. Every active push ruleset is also checked,
-because push rulesets apply repository-wide without branch targeting. Blocking
-classic branch protection enforced for administrators is rejected as well.
+token owner a User/always bypass. The script independently fetches every active
+push-target ruleset because push rulesets apply repository-wide without branch
+targeting. Blocking classic branch protection enforced for administrators is
+rejected as well.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -193,8 +196,8 @@ def _verify_push_rulesets(
 
     GitHub push rulesets do not target branches or tags. They apply to every push
     to the targeted repository/fork network, so there is no ref-name condition to
-    evaluate here. Requiring the same User/always bypass is conservative and
-    prevents a file/path/size push rule from becoming a late release blocker.
+    evaluate here. Requiring the same User/always bypass prevents a file/path/size
+    push rule from becoming a late release blocker.
     """
 
     applicable = [
@@ -214,6 +217,78 @@ def _verify_push_rulesets(
             f"repository-wide push rulesets: {names}"
         )
     return applicable
+
+
+def _run_gh_api(args: list[str], *, token: str, description: str) -> str:
+    env = os.environ.copy()
+    env["GH_TOKEN"] = token
+    try:
+        completed = subprocess.run(
+            ["gh", "api", *args],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            env=env,
+        )
+    except FileNotFoundError as exc:
+        raise AuthorityError("gh CLI is unavailable during push-ruleset validation") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise AuthorityError(f"timed out while {description}") from exc
+
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or f"exit status {completed.returncode}"
+        raise AuthorityError(f"failed while {description}: {detail}")
+    return completed.stdout
+
+
+def _fetch_live_push_rulesets() -> list[dict[str, Any]]:
+    token = os.environ.get("RELEASE_PUSH_TOKEN", "")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    if not token:
+        raise AuthorityError("RELEASE_PUSH_TOKEN is unavailable for push-ruleset inspection")
+    if not repository or "/" not in repository:
+        raise AuthorityError("GITHUB_REPOSITORY is unavailable for push-ruleset inspection")
+
+    ids_output = _run_gh_api(
+        [
+            "--paginate",
+            f"repos/{repository}/rulesets?per_page=100&includes_parents=true&targets=push",
+            "--jq",
+            ".[].id",
+        ],
+        token=token,
+        description="listing active push-target rulesets",
+    )
+    ids: list[int] = []
+    for line in ids_output.splitlines():
+        value = line.strip()
+        if not value:
+            continue
+        if not value.isdecimal():
+            raise AuthorityError(f"push-ruleset API returned an invalid id: {value}")
+        ids.append(int(value))
+
+    rulesets: list[dict[str, Any]] = []
+    for ruleset_id in sorted(set(ids)):
+        detail_text = _run_gh_api(
+            [f"repos/{repository}/rulesets/{ruleset_id}?includes_parents=true"],
+            token=token,
+            description=f"reading push ruleset {ruleset_id}",
+        )
+        try:
+            detail = json.loads(detail_text)
+        except json.JSONDecodeError as exc:
+            raise AuthorityError(
+                f"push ruleset {ruleset_id} returned invalid JSON at "
+                f"line {exc.lineno}, column {exc.colno}"
+            ) from exc
+        if not isinstance(detail, dict):
+            raise AuthorityError(f"push ruleset {ruleset_id} is not a JSON object")
+        rulesets.append(detail)
+    return rulesets
 
 
 def _verify_classic_protection(
@@ -271,22 +346,31 @@ def verify(args: argparse.Namespace) -> None:
             raise AuthorityError(f"ruleset detail is not a JSON object: {path}")
         rulesets.append(value)
 
+    live_push_rulesets = (
+        [] if args.skip_live_push_rulesets else _fetch_live_push_rulesets()
+    )
+    all_rulesets_by_id: dict[str, dict[str, Any]] = {}
+    for ruleset in [*rulesets, *live_push_rulesets]:
+        key = str(ruleset.get("id", f"anonymous-{len(all_rulesets_by_id)}"))
+        all_rulesets_by_id[key] = ruleset
+    all_rulesets = list(all_rulesets_by_id.values())
+
     branch_ref = f"refs/heads/{args.default_branch}"
     branch_rulesets = _verify_ref(
-        rulesets,
+        all_rulesets,
         target="branch",
         full_ref=branch_ref,
         default_branch=args.default_branch,
         actor_id=args.actor_id,
     )
-    push_rulesets = _verify_push_rulesets(rulesets, actor_id=args.actor_id)
+    push_rulesets = _verify_push_rulesets(all_rulesets, actor_id=args.actor_id)
 
     tag_rulesets: list[dict[str, Any]] = []
     if args.mode == "create_new_release":
         if not args.release_tag:
             raise AuthorityError("create_new_release requires --release-tag")
         tag_rulesets = _verify_ref(
-            rulesets,
+            all_rulesets,
             target="tag",
             full_ref=f"refs/tags/{args.release_tag}",
             default_branch=args.default_branch,
@@ -351,7 +435,12 @@ def self_test() -> None:
             {"actor_id": actor_id, "actor_type": "User", "bypass_mode": "always"}
         ],
         "conditions": {},
-        "rules": [{"type": "file_path_restriction", "parameters": {"restricted_file_paths": ["secrets/**"]}}],
+        "rules": [
+            {
+                "type": "file_path_restriction",
+                "parameters": {"restricted_file_paths": ["secrets/**"]},
+            }
+        ],
     }
 
     assert _ruleset_applies(
@@ -434,6 +523,7 @@ def self_test() -> None:
             mode="create_new_release",
             release_tag="v6.4.9",
             classic_protection_json=classic,
+            skip_live_push_rulesets=True,
         )
         verify(args)
 
@@ -453,6 +543,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--release-tag", default="")
     parser.add_argument("--classic-protection-json", type=Path)
+    parser.add_argument(
+        "--skip-live-push-rulesets",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     return parser
 
 
