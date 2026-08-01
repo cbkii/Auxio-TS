@@ -22,6 +22,12 @@ because the workflow was manually dispatched by the owner, and it cannot satisfy
 entry assigned to the `cbkii` user. The protected-ref token must therefore belong to the same user that
 is configured as the ruleset bypass actor.
 
+The release job is gated by `github.actor == github.repository_owner`. A non-owner dispatch is skipped
+before checkout and before any step can receive `RELEASE_PUSH_TOKEN`. This repository is currently
+owned by the personal account `cbkii`. If the repository is transferred to an organisation, replace
+that personal-owner gate and token design with an explicitly approved environment or a dedicated
+GitHub App before running another release; an organisation login cannot dispatch a workflow as a user.
+
 Configure the repository rulesets as follows:
 
 ### `dev` branch ruleset
@@ -36,13 +42,28 @@ Configure the repository rulesets as follows:
 
 - target release tags matching `v*` (or the repository's stricter equivalent that includes
   `vMAJOR.MINOR.PATCH`);
+- include the **Restrict creations** rule;
 - add `cbkii` as a bypass actor with bypass mode **Always**;
 - keep tag deletion blocked;
 - do not permit tag movement or force updates.
 
-The user bypass must be present on every ruleset that applies to `dev` or the release tag. A bypass on
-only the branch ruleset does not authorise tag creation, and a bypass on only the tag ruleset does not
-authorise the metadata fast-forward.
+The user bypass must be present on every active ruleset that applies to `dev` or the exact release tag.
+A bypass on only the branch ruleset does not authorise tag creation, and a bypass on only the tag
+ruleset does not authorise the metadata fast-forward.
+
+After resolving the exact release tag, Manual Release fetches every active branch/tag ruleset and its
+full detail with the owner token. Before any JDK, Android SDK, dependency bootstrap or APK build, it
+fails closed unless:
+
+- every active ruleset applying to `refs/heads/dev` contains the owner user ID with `User` / `always`
+  bypass;
+- for new releases, every active ruleset applying to the exact `refs/tags/vX.Y.Z` contains that same
+  bypass;
+- at least one applicable release-tag ruleset contains the `creation` restriction;
+- no classic `dev` protection enforced for administrators would block the metadata fast-forward.
+
+This is stronger than checking `.permissions.push`, which proves ordinary repository scope but not a
+ruleset bypass. The workflow summary records whether the applicable ruleset bypass was verified.
 
 An overlapping classic branch-protection rule may still reject the metadata fast-forward even when a
 ruleset bypass exists. Remove or align overlapping protection rather than weakening the maintained
@@ -56,8 +77,8 @@ and the summary reports when source metadata still requires reconciliation.
 3. Open **Settings → Rules → Rulesets**.
 4. Edit every active branch ruleset applying to `dev`; add user **cbkii** to **Bypass list** with
    **Always**.
-5. Edit every active tag ruleset applying to `v*`; add user **cbkii** to **Bypass list** with
-   **Always**.
+5. Edit every active tag ruleset applying to `v*`; enable **Restrict creations** and add user **cbkii**
+   to **Bypass list** with **Always**.
 6. Check **Settings → Branches** for an older branch-protection rule applying to `dev`. Remove it when
    it duplicates the ruleset, or align it so the owner token can perform the same ordinary
    fast-forward.
@@ -191,8 +212,9 @@ fi
 ```
 
 **STOP:** do not dispatch another release until the audit shows `RELEASE_PUSH_TOKEN`, the token owner
-is on the bypass list for every applicable branch/tag ruleset, and overlapping classic protection has
-been reconciled.
+is on the bypass list for every applicable branch/tag ruleset, release-tag creation is restricted, and
+overlapping classic protection has been reconciled. The workflow repeats these authority checks using
+the exact resolved tag and stops before expensive build work when they are not proven.
 
 ## Required secrets
 
@@ -206,6 +228,10 @@ token with:
 - repository permission: **Contents: Read and write**;
 - a bounded expiry and normal token rotation.
 
+The token's automatically available repository metadata read access is used to inspect complete
+ruleset details. The token owner must retain sufficient repository authority for GitHub to return the
+`bypass_actors` field; absence of that field fails closed.
+
 A pre-existing classic PAT can be used instead when it belongs to `cbkii` and has repository write
 scope, but a repository-scoped fine-grained PAT is preferred. Do not use an APK signing secret, deploy
 key, or another user's token as a substitute.
@@ -217,9 +243,10 @@ gh secret set RELEASE_PUSH_TOKEN -R cbkii/Auxio-TS
 ```
 
 The workflow validates this secret before dependency setup or APK building. It fails closed when the
-secret is absent, belongs to a different account, or does not report push access to this repository.
-The token is exposed only to the early authority check and the two Git push steps; GitHub Release API
-operations continue to use `GITHUB_TOKEN`.
+secret is absent, belongs to a different account, does not report push access, or cannot prove the
+owner's `User` / `always` bypass on every active ruleset applying to the protected refs. The token is
+exposed only to the early identity/access preflight, ruleset preflight and the two Git push steps;
+GitHub Release API operations continue to use `GITHUB_TOKEN`.
 
 ### APK signing
 
@@ -243,25 +270,28 @@ The required `release_mode` choice separates creation from repair.
 | `create_new_release` | Create a new immutable tag and GitHub Release | `version_tag` may be blank or explicit |
 | `repair_existing_release` | Resume or repair assets for an existing immutable tag | `version_tag` is mandatory; no increment or retagging |
 
-Run **Manual Release** from `dev` only.
+Run **Manual Release** from `dev` only, while signed in as the repository owner.
 
 ### New release
 
 A new release performs this transaction:
 
-1. Confirm the checkout is exactly the current remote `dev`.
-2. Validate `RELEASE_PUSH_TOKEN`, its owner identity and repository push access before expensive work.
-3. Resolve the target version from source metadata, strict semantic Git tags and every GitHub Release
+1. Permit only the current repository owner to enter the release job.
+2. Confirm the checkout is exactly the current remote `dev`.
+3. Validate `RELEASE_PUSH_TOKEN`, its owner identity and repository push access.
+4. Resolve the target version from source metadata, strict semantic Git tags and every GitHub Release
    returned by the paginated Releases API, including drafts, prereleases and final releases.
-4. Create a local source metadata commit only when the checked-in version differs.
-5. Build each required variant at most once.
-6. Inspect and stage APKs and sidecars, generate the compact release manifest, and upload recovery
+5. Verify the owner's bypass on every active ruleset applying to `dev` and the exact new tag, and reject
+   blocking classic branch protection.
+6. Create a local source metadata commit only when the checked-in version differs.
+7. Build each required variant at most once.
+8. Inspect and stage APKs and sidecars, generate the compact release manifest, and upload recovery
    workflow evidence.
-7. Push the immutable release tag using the owner token.
-8. Create the GitHub Release as a draft regardless of its requested final status.
-9. Upload and verify the exact selected asset set.
-10. Apply the requested draft/prerelease/final state.
-11. Fast-forward the same released metadata commit onto `dev` using the owner token.
+9. Push the immutable release tag using the owner token.
+10. Create the GitHub Release as a draft regardless of its requested final status.
+11. Upload and verify the exact selected asset set.
+12. Apply the requested draft/prerelease/final state.
+13. Fast-forward the same released metadata commit onto `dev` using the owner token.
 
 The branch update deliberately occurs after remote Release verification. A tag or draft created by an
 interrupted run is retained for repair instead of being deleted.
@@ -269,7 +299,8 @@ interrupted run is retained for repair instead of being deleted.
 ### Existing-release repair
 
 Repair mode requires an explicit strict `vMAJOR.MINOR.PATCH` tag and uses that tag as immutable source
-authority.
+authority. The branch ruleset authority is still verified because a repair may need to synchronise
+released source metadata to `dev`; the existing tag itself is not recreated.
 
 Supported states:
 
@@ -381,7 +412,11 @@ a separate 14-day artifact.
 
 Failure handling is forward-repairable:
 
-- protected-ref token failure: stop before dependency setup/build and change no release state;
+- non-owner dispatch: the release job is skipped before secret access;
+- protected-ref token identity/access failure: stop before dependency setup/build and change no release
+  state;
+- ruleset or classic-protection authority failure: stop before dependency setup/build and change no
+  release state;
 - validation failure before tag creation: no remote release state is changed;
 - tag pushed but Release absent: rerun in repair mode with that tag;
 - draft Release with missing assets: repair the same tag; do not generate another version;
@@ -394,8 +429,11 @@ Do not delete or move a valid release tag to “retry” publication.
 ## Local static validation
 
 ```bash
-python3 -m py_compile scripts/release-orchestrator.py
+python3 -m py_compile \
+  scripts/release-orchestrator.py \
+  scripts/check-release-ruleset-authority.py
 python3 scripts/release-orchestrator.py self-test
+python3 scripts/check-release-ruleset-authority.py --self-test
 bash -n scripts/check-manual-release-workflow.sh
 bash scripts/check-manual-release-workflow.sh
 bash scripts/check-ci-variant-contracts.sh
