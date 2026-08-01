@@ -6,7 +6,7 @@ on:
       - dev
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: apply-pr220-finalization
@@ -40,13 +40,13 @@ jobs:
           PY
           python3 scripts/.apply-pr220-finalization.py
           git diff --check
-          mkdir -p finalized/.github/workflows finalized/docs finalized/scripts
-          cp .github/workflows/manual-release.yml finalized/.github/workflows/manual-release.yml
+          mkdir -p finalized/docs finalized/scripts
+          cp .github/workflows/manual-release.yml finalized/manual-release.yml
           cp docs/RELEASE_WORKFLOW.md finalized/docs/RELEASE_WORKFLOW.md
           cp scripts/check-manual-release-workflow.sh finalized/scripts/check-manual-release-workflow.sh
           cp scripts/check-release-ruleset-authority.py finalized/scripts/check-release-ruleset-authority.py
           sha256sum \
-            finalized/.github/workflows/manual-release.yml \
+            finalized/manual-release.yml \
             finalized/docs/RELEASE_WORKFLOW.md \
             finalized/scripts/check-manual-release-workflow.sh \
             finalized/scripts/check-release-ruleset-authority.py \
@@ -59,3 +59,20 @@ jobs:
           path: finalized
           if-no-files-found: error
           retention-days: 3
+
+      - name: Commit non-workflow finalization files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            docs/RELEASE_WORKFLOW.md \
+            scripts/check-manual-release-workflow.sh \
+            scripts/check-release-ruleset-authority.py
+          git diff --cached --quiet && {
+            echo '::error::Finalization produced no non-workflow changes.'
+            exit 1
+          }
+          git commit -m 'ci: harden protected release authority checks'
+          git push origin HEAD:refs/heads/fix/manual-release-protected-ref-auth
