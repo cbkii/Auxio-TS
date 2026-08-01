@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Fail-closed validation for Manual Release protected-ref authority.
 
+The File::FNM_PATHNAME contract is preserved for GitHub ref patterns.
+
 The workflow downloads complete branch/tag ruleset details with the owner PAT
-and passes them to this checker. The checker independently lists and downloads
-push-target rulesets because those rules are repository-wide and have no branch
-or tag ref-name targeting.
+and passes them to this checker. The checker independently reads live
+push-target rulesets and classic ``dev`` branch protection with the same
+credential.
 
 A release is authorised only when:
 
@@ -241,11 +243,13 @@ def _verify_push_rulesets(
     return applicable
 
 
-def _run_gh_api(args: list[str], *, token: str, description: str) -> str:
+def _run_gh_api_result(
+    args: list[str], *, token: str, description: str
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["GH_TOKEN"] = token
     try:
-        completed = subprocess.run(
+        return subprocess.run(
             ["gh", "api", *args],
             check=False,
             capture_output=True,
@@ -256,10 +260,13 @@ def _run_gh_api(args: list[str], *, token: str, description: str) -> str:
             env=env,
         )
     except FileNotFoundError as exc:
-        raise AuthorityError("gh CLI is unavailable during push-ruleset validation") from exc
+        raise AuthorityError("gh CLI is unavailable during authority validation") from exc
     except subprocess.TimeoutExpired as exc:
         raise AuthorityError(f"timed out while {description}") from exc
 
+
+def _run_gh_api(args: list[str], *, token: str, description: str) -> str:
+    completed = _run_gh_api_result(args, token=token, description=description)
     if completed.returncode != 0:
         detail = completed.stderr.strip() or f"exit status {completed.returncode}"
         raise AuthorityError(f"failed while {description}: {detail}")
@@ -314,6 +321,81 @@ def _fetch_live_push_rulesets() -> list[dict[str, Any]]:
     return rulesets
 
 
+def _parse_json_object(text: str, *, description: str) -> dict[str, Any]:
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise AuthorityError(
+            f"{description} returned invalid JSON at line {exc.lineno}, "
+            f"column {exc.colno}"
+        ) from exc
+    if not isinstance(value, dict):
+        raise AuthorityError(f"{description} is not a JSON object")
+    return value
+
+
+def _fetch_live_classic_protection(default_branch: str) -> dict[str, Any]:
+    token = os.environ.get("RELEASE_PUSH_TOKEN", "")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    if not token:
+        raise AuthorityError(
+            "RELEASE_PUSH_TOKEN is unavailable for classic-protection inspection"
+        )
+    if not repository or "/" not in repository:
+        raise AuthorityError(
+            "GITHUB_REPOSITORY is unavailable for classic-protection inspection"
+        )
+
+    endpoint = f"repos/{repository}/branches/{default_branch}/protection"
+    completed = _run_gh_api_result(
+        [endpoint],
+        token=token,
+        description=f"reading classic protection for {default_branch}",
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or f"exit status {completed.returncode}"
+        if "Branch not protected" in detail:
+            return {}
+        raise AuthorityError(
+            "failed while reading classic branch protection; generic 404, "
+            "authorization failures and inaccessible resources are not treated as "
+            f"absence: {detail}"
+        )
+
+    protection = _parse_json_object(
+        completed.stdout,
+        description=f"classic protection for {default_branch}",
+    )
+
+    if not isinstance(protection.get("required_signatures"), dict):
+        signature_endpoint = f"{endpoint}/required_signatures"
+        signatures = _run_gh_api_result(
+            [signature_endpoint],
+            token=token,
+            description=f"reading required signatures for {default_branch}",
+        )
+        if signatures.returncode == 0:
+            protection["required_signatures"] = _parse_json_object(
+                signatures.stdout,
+                description=f"required signatures for {default_branch}",
+            )
+        else:
+            detail = signatures.stderr.strip() or (
+                f"exit status {signatures.returncode}"
+            )
+            # The parent protection read already proved repository authority.
+            # GitHub returns 404 when this optional protection is not enabled.
+            if "HTTP 404" in detail or "Not Found" in detail:
+                protection["required_signatures"] = {"enabled": False}
+            else:
+                raise AuthorityError(
+                    f"failed while reading required signatures for "
+                    f"{default_branch}: {detail}"
+                )
+
+    return protection
+
+
 def _verify_classic_protection(
     protection: dict[str, Any], *, actor_login: str
 ) -> None:
@@ -342,18 +424,56 @@ def _verify_classic_protection(
 
     restrictions = protection.get("restrictions")
     if isinstance(restrictions, dict):
+        users = [
+            user for user in restrictions.get("users", []) if isinstance(user, dict)
+        ]
+        teams = [
+            team for team in restrictions.get("teams", []) if isinstance(team, dict)
+        ]
+        apps = [
+            app for app in restrictions.get("apps", []) if isinstance(app, dict)
+        ]
         allowed_users = {
-            str(user.get("login", "")).lower()
-            for user in restrictions.get("users", [])
-            if isinstance(user, dict)
+            str(user.get("login", "")).lower() for user in users
         }
         if actor_login.lower() not in allowed_users:
-            blocking.append("push restrictions")
+            represented = []
+            if teams:
+                represented.append("teams")
+            if apps:
+                represented.append("GitHub Apps")
+            suffix = (
+                f"; restrictions also name {', '.join(represented)}, but user "
+                "membership/identity cannot be inferred safely"
+                if represented
+                else ""
+            )
+            blocking.append(
+                f"push restrictions do not explicitly allow user {actor_login}{suffix}"
+            )
 
     if blocking:
         raise AuthorityError(
             "classic dev branch protection is enforced for administrators and "
             "can reject the release metadata fast-forward: " + ", ".join(blocking)
+        )
+
+
+
+def _require_tag_creation_rule(
+    tag_rulesets: Iterable[dict[str, Any]], *, tag_ref: str
+) -> None:
+    has_creation_rule = any(
+        any(
+            isinstance(rule, dict) and rule.get("type") == "creation"
+            for rule in ruleset.get("rules", [])
+        )
+        for ruleset in tag_rulesets
+    )
+    if not has_creation_rule:
+        raise AuthorityError(
+            f"no active ruleset applying to {tag_ref} contains the required "
+            "creation restriction"
         )
 
 
@@ -369,7 +489,7 @@ def verify(args: argparse.Namespace) -> None:
             raise AuthorityError(f"ruleset detail is not a JSON object: {path}")
         downloaded.append(value)
 
-    push_rulesets = [] if args.skip_live_push_rulesets else _fetch_live_push_rulesets()
+    push_rulesets = _fetch_live_push_rulesets()
     by_id: dict[str, dict[str, Any]] = {}
     for ruleset in [*downloaded, *push_rulesets]:
         key = str(ruleset.get("id", f"anonymous-{len(by_id)}"))
@@ -397,22 +517,9 @@ def verify(args: argparse.Namespace) -> None:
             default_branch=args.default_branch,
             actor_id=args.actor_id,
         )
-        has_creation_rule = any(
-            any(
-                isinstance(rule, dict) and rule.get("type") == "creation"
-                for rule in ruleset.get("rules", [])
-            )
-            for ruleset in tag_rulesets
-        )
-        if not has_creation_rule:
-            raise AuthorityError(
-                f"no active ruleset applying to {tag_ref} contains the required "
-                "creation restriction"
-            )
+        _require_tag_creation_rule(tag_rulesets, tag_ref=tag_ref)
 
-    classic = _read_json(args.classic_protection_json)
-    if not isinstance(classic, dict):
-        raise AuthorityError("classic branch-protection input is not a JSON object")
+    classic = _fetch_live_classic_protection(args.default_branch)
     _verify_classic_protection(classic, actor_login=args.actor_login)
 
     print(
@@ -472,8 +579,6 @@ def self_test() -> None:
     actor_id = 150587541
     branch, tag, push = _fixture_rulesets(actor_id)
 
-    # File::FNM_PATHNAME contract: ordinary wildcards never cross `/`, while a
-    # complete `**` component may cross zero or more components.
     assert not _github_pathname_match("refs/tags/v6.4.9", "refs/*")
     assert _github_pathname_match("refs/tags/v6.4.9", "refs/**")
     assert _github_pathname_match("refs/tags/v6.4.9", "refs/tags/v*")
@@ -481,6 +586,25 @@ def self_test() -> None:
     assert _github_pathname_match("release/a/b", "release/**/*")
     assert _github_pathname_match("release/a", "release/**/*")
     assert not _github_pathname_match("refs/tags/v6.4.9", "refs/tags/?")
+
+    assert _pattern_matches(
+        "v*",
+        full_ref="refs/tags/v6.4.9",
+        target="tag",
+        default_branch="dev",
+    )
+    assert not _pattern_matches(
+        "v*",
+        full_ref="refs/tags/nightly",
+        target="tag",
+        default_branch="dev",
+    )
+    assert _pattern_matches(
+        "~ALL",
+        full_ref="refs/heads/dev",
+        target="branch",
+        default_branch="dev",
+    )
 
     assert _ruleset_applies(
         branch,
@@ -503,15 +627,15 @@ def self_test() -> None:
             actor_id=actor_id,
         )
     ) == 1
-    assert len(
-        _verify_ref(
-            [branch, tag, push],
-            target="tag",
-            full_ref="refs/tags/v6.4.9",
-            default_branch="dev",
-            actor_id=actor_id,
-        )
-    ) == 1
+    verified_tags = _verify_ref(
+        [branch, tag, push],
+        target="tag",
+        full_ref="refs/tags/v6.4.9",
+        default_branch="dev",
+        actor_id=actor_id,
+    )
+    assert len(verified_tags) == 1
+    _require_tag_creation_rule(verified_tags, tag_ref="refs/tags/v6.4.9")
     assert len(_verify_push_rulesets([branch, tag, push], actor_id=actor_id)) == 1
 
     missing_branch = dict(branch)
@@ -538,39 +662,56 @@ def self_test() -> None:
     else:
         raise AssertionError("missing push-ruleset bypass was accepted")
 
+    missing_creation = dict(tag)
+    missing_creation["rules"] = [{"type": "deletion"}]
     try:
-        _verify_classic_protection(
-            {
-                "enforce_admins": {"enabled": True},
-                "required_status_checks": {"strict": True, "contexts": ["quality"]},
-            },
-            actor_login="cbkii",
+        _require_tag_creation_rule(
+            [missing_creation], tag_ref="refs/tags/v6.4.9"
         )
     except AuthorityError:
         pass
     else:
-        raise AssertionError("blocking classic protection was accepted")
+        raise AssertionError("tag ruleset without creation restriction was accepted")
 
-    with tempfile.TemporaryDirectory() as directory:
-        root = Path(directory)
-        for ruleset in (branch, tag, push):
-            (root / f"{ruleset['id']}.json").write_text(
-                json.dumps(ruleset), encoding="utf-8"
-            )
-        classic = root / "classic.json"
-        classic.write_text("{}\n", encoding="utf-8")
-        verify(
-            argparse.Namespace(
-                ruleset_dir=root,
-                actor_id=actor_id,
-                actor_login="cbkii",
-                default_branch="dev",
-                mode="create_new_release",
-                release_tag="v6.4.9",
-                classic_protection_json=classic,
-                skip_live_push_rulesets=True,
-            )
-        )
+    for protection in (
+        {
+            "enforce_admins": {"enabled": True},
+            "required_status_checks": {
+                "strict": True,
+                "contexts": ["quality"],
+            },
+        },
+        {
+            "enforce_admins": {"enabled": True},
+            "required_signatures": {"enabled": True},
+        },
+        {
+            "enforce_admins": {"enabled": True},
+            "restrictions": {
+                "users": [],
+                "teams": [{"slug": "release-team"}],
+                "apps": [{"slug": "release-app"}],
+            },
+        },
+    ):
+        try:
+            _verify_classic_protection(protection, actor_login="cbkii")
+        except AuthorityError:
+            pass
+        else:
+            raise AssertionError("blocking classic protection was accepted")
+
+    _verify_classic_protection(
+        {
+            "enforce_admins": {"enabled": True},
+            "restrictions": {
+                "users": [{"login": "cbkii"}],
+                "teams": [],
+                "apps": [],
+            },
+        },
+        actor_login="cbkii",
+    )
 
     print("OK release ruleset authority self-test")
 
@@ -587,12 +728,6 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("create_new_release", "repair_existing_release"),
     )
     parser.add_argument("--release-tag", default="")
-    parser.add_argument("--classic-protection-json", type=Path)
-    parser.add_argument(
-        "--skip-live-push-rulesets",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
     return parser
 
 
@@ -607,7 +742,6 @@ def main(argv: list[str] | None = None) -> int:
         "--actor-id": args.actor_id,
         "--actor-login": args.actor_login,
         "--mode": args.mode,
-        "--classic-protection-json": args.classic_protection_json,
     }
     missing = [name for name, value in required.items() if value is None]
     if missing:

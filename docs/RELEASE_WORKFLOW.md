@@ -88,98 +88,132 @@ and the summary reports when source metadata still requires reconciliation.
 
 ### Read-only settings audit
 
-The following bounded, read-only audit fails closed when a required GitHub API request or JSON parse
-fails. It shows the workflow-token default, Actions secret names, active rulesets and any classic
-protection still applying to `dev`:
+The following bounded, read-only audit fails closed on GitHub API errors, malformed
+JSON and incomplete pagination. It supports GNU `timeout` on Linux/Termux and
+`gtimeout` from Homebrew coreutils on macOS.
 
 ```bash
 #!/usr/bin/env bash
+set -uo pipefail
 
 repo='cbkii/Auxio-TS'
 
-for required_command in gh jq timeout; do
-  if ! command -v "$required_command" >/dev/null 2>&1; then
-    printf 'STOP: required command is unavailable: %s\n' "$required_command" >&2
+for required_command in gh jq mktemp; do
+  command -v "$required_command" >/dev/null 2>&1 || {
+    printf 'STOP: required command is unavailable: %s
+' "$required_command" >&2
     exit 1
-  fi
+  }
 done
+
+if command -v timeout >/dev/null 2>&1; then
+  timeout_command=(timeout --foreground 30s)
+elif command -v gtimeout >/dev/null 2>&1; then
+  timeout_command=(gtimeout 30s)
+else
+  printf 'STOP: install GNU timeout (coreutils) before running this audit.
+' >&2
+  exit 1
+fi
 
 api_get() {
   local endpoint=$1
+  local errors
   local output
-  local rc
-
-  output="$(timeout --foreground 30s gh api "$endpoint" 2>&1)"
-  rc=$?
-  if ((rc != 0)); then
-    printf 'STOP: GitHub API request failed: %s\n' "$endpoint" >&2
-    printf '%s\n' "$output" >&2
-    return "$rc"
+  errors="$(mktemp)"
+  if ! output="$("${timeout_command[@]}" gh api "$endpoint" 2>"$errors")"; then
+    printf 'STOP: GitHub API request failed: %s
+' "$endpoint" >&2
+    cat "$errors" >&2
+    rm -f "$errors"
+    return 1
   fi
-
-  printf '%s\n' "$output"
+  rm -f "$errors"
+  printf '%s
+' "$output"
 }
 
-printf '\n== Workflow permission ==\n'
-workflow_permission=''
-if workflow_permission="$(api_get "repos/${repo}/actions/permissions/workflow")"; then
-  :
-else
-  exit 1
-fi
-if ! printf '%s\n' "$workflow_permission" | jq; then
-  printf 'STOP: workflow-permission response is not valid JSON.\n' >&2
-  exit 1
-fi
-
-printf '\n== Actions secret names ==\n'
-secret_index=''
-if secret_index="$(api_get "repos/${repo}/actions/secrets?per_page=100")"; then
-  :
-else
-  exit 1
-fi
-secret_names=''
-if secret_names="$(printf '%s\n' "$secret_index" | jq -r '.secrets[].name')"; then
-  printf '%s\n' "$secret_names" | sort
-else
-  printf 'STOP: Actions-secret response is not valid JSON.\n' >&2
-  exit 1
-fi
-
-printf '\n== Rulesets ==\n'
-ruleset_index=''
-if ruleset_index="$(api_get "repos/${repo}/rulesets?per_page=100")"; then
-  :
-else
-  exit 1
-fi
-ruleset_rows=''
-if ruleset_rows="$(
-  printf '%s\n' "$ruleset_index" |
-    jq -r '.[] | [.id, .name, .target, .enforcement] | @tsv'
-)"; then
-  :
-else
-  printf 'STOP: ruleset index is not valid JSON.\n' >&2
-  exit 1
-fi
-if [[ -z "$ruleset_rows" ]]; then
-  printf 'STOP: no repository rulesets were returned.\n' >&2
-  exit 1
-fi
-printf '%s\n' "$ruleset_rows"
-
-while IFS=$'\t' read -r id name target enforcement; do
-  [[ -n "$id" ]] || continue
-  printf '\n--- ruleset %s: %s (%s, %s) ---\n' "$id" "$name" "$target" "$enforcement"
-  ruleset_detail=''
-  if ruleset_detail="$(api_get "repos/${repo}/rulesets/${id}")"; then
-    :
-  else
-    exit 1
+api_pages() {
+  local endpoint=$1
+  local errors
+  local output
+  errors="$(mktemp)"
+  if ! output="$(
+    "${timeout_command[@]}" gh api --paginate --slurp "$endpoint" 2>"$errors"
+  )"; then
+    printf 'STOP: paginated GitHub API request failed: %s
+' "$endpoint" >&2
+    cat "$errors" >&2
+    rm -f "$errors"
+    return 1
   fi
-  if ! printf '%s\n' "$ruleset_detail" | jq '{
+  rm -f "$errors"
+  printf '%s
+' "$output"
+}
+
+printf '
+== Workflow permission ==
+'
+workflow_permission="$(api_get "repos/${repo}/actions/permissions/workflow")" ||
+  exit 1
+printf '%s
+' "$workflow_permission" | jq -e . || {
+  printf 'STOP: workflow-permission response is not valid JSON.
+' >&2
+  exit 1
+}
+
+printf '
+== Actions secret names ==
+'
+secret_pages="$(api_pages "repos/${repo}/actions/secrets?per_page=100")" ||
+  exit 1
+printf '%s
+' "$secret_pages" |
+  jq -er '[.[].secrets[]?.name] | unique | .[]' |
+  sort || {
+    printf 'STOP: Actions-secret response is incomplete or invalid.
+' >&2
+    exit 1
+  }
+
+printf '
+== Rulesets ==
+'
+ruleset_pages="$(api_pages "repos/${repo}/rulesets?per_page=100&includes_parents=true")" ||
+  exit 1
+ruleset_rows="$(
+  printf '%s
+' "$ruleset_pages" |
+    jq -er 'add | unique_by(.id) | .[] | [.id, .name, .target, .enforcement] | @tsv'
+)" || {
+  printf 'STOP: ruleset index is incomplete or invalid.
+' >&2
+  exit 1
+}
+[[ -n "$ruleset_rows" ]] || {
+  printf 'STOP: no repository rulesets were returned.
+' >&2
+  exit 1
+}
+printf '%s
+' "$ruleset_rows"
+
+while IFS=$'	' read -r id name target enforcement; do
+  [[ "$id" =~ ^[0-9]+$ ]] || {
+    printf 'STOP: invalid ruleset id: %s
+' "$id" >&2
+    exit 1
+  }
+  printf '
+--- ruleset %s: %s (%s, %s) ---
+' \
+    "$id" "$name" "$target" "$enforcement"
+  detail="$(api_get "repos/${repo}/rulesets/${id}?includes_parents=true")" ||
+    exit 1
+  printf '%s
+' "$detail" | jq -e '{
     id,
     name,
     target,
@@ -187,34 +221,64 @@ while IFS=$'\t' read -r id name target enforcement; do
     bypass_actors,
     conditions,
     rules
-  }'; then
-    printf 'STOP: ruleset %s response is not valid JSON.\n' "$id" >&2
+  }' || {
+    printf 'STOP: ruleset %s response is incomplete or invalid.
+' "$id" >&2
     exit 1
-  fi
+  }
 done <<< "$ruleset_rows"
 
-printf '\n== Classic dev protection, when present ==\n'
-classic_endpoint="repos/${repo}/branches/dev/protection"
-classic_protection="$(timeout --foreground 30s gh api "$classic_endpoint" 2>&1)"
-classic_rc=$?
-if ((classic_rc == 0)); then
-  if ! printf '%s\n' "$classic_protection" | jq; then
-    printf 'STOP: classic-protection response is not valid JSON.\n' >&2
+printf '
+== Classic dev protection, when present ==
+'
+classic_errors="$(mktemp)"
+if classic="$(
+  "${timeout_command[@]}" gh api \
+    "repos/${repo}/branches/dev/protection" 2>"$classic_errors"
+)"; then
+  rm -f "$classic_errors"
+  printf '%s
+' "$classic" | jq -e . || {
+    printf 'STOP: classic-protection response is not valid JSON.
+' >&2
     exit 1
-  fi
-elif [[ "$classic_protection" == *'HTTP 404'* || "$classic_protection" == *'Branch not protected'* ]]; then
-  printf 'No classic branch-protection rule applies to dev.\n'
+  }
+elif grep -Fq 'Branch not protected' "$classic_errors"; then
+  rm -f "$classic_errors"
+  printf 'No classic branch-protection rule applies to dev.
+'
 else
-  printf 'STOP: GitHub API request failed: %s\n' "$classic_endpoint" >&2
-  printf '%s\n' "$classic_protection" >&2
+  printf 'STOP: classic branch-protection inspection failed.
+' >&2
+  cat "$classic_errors" >&2
+  rm -f "$classic_errors"
   exit 1
 fi
 ```
 
-**STOP:** do not dispatch another release until the audit shows `RELEASE_PUSH_TOKEN`, the token owner
-is on the bypass list for every applicable branch/tag ruleset, release-tag creation is restricted, and
-overlapping classic protection has been reconciled. The workflow repeats these authority checks using
-the exact resolved tag and stops before expensive build work when they are not proven.
+**STOP:** do not dispatch another release until the audit shows
+`RELEASE_PUSH_TOKEN`, the token owner is on the bypass list for every applicable
+branch, tag and push ruleset, and overlapping classic protection has been
+reconciled.
+
+
+## GitHub authority references
+
+The release authority model follows GitHub's official documentation:
+
+- workflow reruns retain the original actor's privileges, while
+  `github.triggering_actor` identifies who initiated a rerun:
+  <https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs>
+- repository rulesets support `User` bypass actors and `always` bypass mode, and
+  ruleset details only expose `bypass_actors` to callers with ruleset write
+  authority:
+  <https://docs.github.com/en/rest/repos/rules>
+- reading classic branch protection and required-signature protection requires
+  repository **Administration: Read**:
+  <https://docs.github.com/en/rest/branches/branch-protection>
+- `GITHUB_TOKEN` permissions are set per workflow; the repository default remains
+  read-only:
+  <https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication>
 
 ## Required secrets
 
@@ -225,7 +289,9 @@ token with:
 
 - resource owner: `cbkii`;
 - repository access: **Only select repositories → Auxio-TS**;
-- repository permission: **Contents: Read and write**;
+- repository permissions:
+  - **Contents: Read and write** for the immutable tag and `dev` fast-forward;
+  - **Administration: Read** so the fail-closed preflight can inspect ruleset bypass actors and classic branch protection;
 - a bounded expiry and normal token rotation.
 
 The token's automatically available repository metadata read access is used to inspect complete

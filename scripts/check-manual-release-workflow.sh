@@ -26,7 +26,9 @@ for required in \
 done
 
 ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
-bash -n "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
+for script in "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"; do
+  bash -n "${script}" || fail "Shell syntax check failed for ${script}"
+done
 python3 -m py_compile "${orchestrator}" "${ruleset_checker}"
 python3 "${orchestrator}" self-test
 python3 "${ruleset_checker}" --self-test
@@ -153,24 +155,26 @@ for forbidden in (
     'include_debug_apks',
     'Cleanup release tag after failed release creation',
     'git push origin ":refs/tags/',
+    '--skip-live-push-rulesets',
+    '--classic-protection-json',
 ):
     if forbidden in workflow:
         raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
 
 for token in (
     'group: manual-release',
-    'if: github.actor == github.repository_owner',
+    'if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner',
     'Verify branch and protected-ref authority',
     'RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}',
     'gh api user > "${actor_file}"',
     'push_actor_id=',
-    "gh api \"repos/${GITHUB_REPOSITORY}\" --jq '.permissions.push // false'",
+    "gh api \"repos/${GITHUB_REPOSITORY}\"",
+    'repository_owner_id=',
     'RELEASE_PUSH_TOKEN authentication failed or timed out',
     'Unable to verify RELEASE_PUSH_TOKEN access',
     'Verify protected-ref ruleset bypass',
     'scripts/check-release-ruleset-authority.py',
     'rulesets?per_page=100&includes_parents=true&targets=branch%2Ctag',
-    'branches/dev/protection',
     'No active branch/tag rulesets were returned',
     'Protected-ref push actor:',
     'Applicable ruleset bypass verified:',
@@ -214,11 +218,10 @@ for token in ('actor_error=', 'permission_error=', 'push_actor_id='):
         raise SystemExit(f'Identity preflight lacks guarded handling: {token}')
 
 ruleset_step = step_block('Verify protected-ref ruleset bypass')
-if ruleset_step.count('timeout --foreground 30s') != 3:
-    raise SystemExit('Ruleset preflight must bound list, detail and classic API calls.')
+if ruleset_step.count('timeout --foreground 30s') != 2:
+    raise SystemExit('Ruleset preflight must bound list and detail API calls.')
 for token in (
     'ruleset_error=',
-    'classic_error=',
     'check-release-ruleset-authority.py',
     '--actor-id "${PUSH_ACTOR_ID}"',
     '--release-tag "${RELEASE_TAG}"',
@@ -233,6 +236,8 @@ for token in (
     '_fetch_live_push_rulesets',
     '_verify_push_rulesets',
     'timeout=30',
+    '_fetch_live_classic_protection',
+    'required_signatures',
 ):
     if token not in rulesets:
         raise SystemExit(f'Ruleset checker lacks required contract: {token}')
@@ -288,6 +293,7 @@ for pin in (
     'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
     'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
     'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
+    'android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699',
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
 ):
     if pin not in workflow:
