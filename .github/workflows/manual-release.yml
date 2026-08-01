@@ -72,9 +72,12 @@ jobs:
           submodules: false
           persist-credentials: false
 
-      - name: Verify branch release context
+      - name: Verify branch and protected-ref authority
         id: source
         shell: bash
+        env:
+          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          EXPECTED_PUSH_ACTOR: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" != branch || "${GITHUB_REF_NAME}" != dev ]]; then
@@ -88,7 +91,25 @@ jobs:
             echo "::error::Release checkout is stale. Re-run from the latest dev."
             exit 1
           }
-          echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+
+          [[ -n "${RELEASE_PUSH_TOKEN:-}" ]] || {
+            echo "::error::Missing RELEASE_PUSH_TOKEN. Configure a fine-grained PAT owned by ${EXPECTED_PUSH_ACTOR} with Contents read/write before running a release."
+            exit 1
+          }
+          push_actor="$(GH_TOKEN="${RELEASE_PUSH_TOKEN}" gh api user --jq .login)"
+          [[ "${push_actor,,}" == "${EXPECTED_PUSH_ACTOR,,}" ]] || {
+            echo "::error::RELEASE_PUSH_TOKEN belongs to ${push_actor}, but protected-ref bypass is expected for ${EXPECTED_PUSH_ACTOR}."
+            exit 1
+          }
+          can_push="$(GH_TOKEN="${RELEASE_PUSH_TOKEN}" gh api "repos/${GITHUB_REPOSITORY}" --jq '.permissions.push // false')"
+          [[ "${can_push}" == true ]] || {
+            echo "::error::RELEASE_PUSH_TOKEN does not report push access to ${GITHUB_REPOSITORY}."
+            exit 1
+          }
+          {
+            echo "source_sha=${source_sha}"
+            echo "push_actor=${push_actor}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Validate current release workflow contracts
         shell: bash
@@ -685,7 +706,7 @@ jobs:
         if: inputs.release_mode == 'create_new_release'
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: |
@@ -848,7 +869,7 @@ jobs:
         id: sync
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: |
           set -euo pipefail
@@ -881,6 +902,7 @@ jobs:
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
+          PUSH_ACTOR: ${{ steps.source.outputs.push_actor }}
           SELECTED: ${{ steps.selection.outputs.selected_summary }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
@@ -902,6 +924,7 @@ jobs:
             echo "- Tag: ${RELEASE_TAG:-not computed}"
             echo "- Starting dev SHA: ${SOURCE_SHA:-not resolved}"
             echo "- Release/tag SHA: ${RELEASE_SHA:-not resolved}"
+            echo "- Protected-ref push actor: ${PUSH_ACTOR:-not validated}"
             echo "- Maintained assets: ${SELECTED:-not selected}"
             echo "- Debug destination: ${DEBUG_DESTINATION:-not selected}"
             echo "- Release created in this run: ${RELEASE_CREATED:-false}"
