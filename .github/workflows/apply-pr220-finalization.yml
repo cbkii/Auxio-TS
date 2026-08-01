@@ -6,7 +6,7 @@ on:
       - dev
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: apply-pr220-finalization
@@ -39,21 +39,23 @@ jobs:
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
           python3 scripts/.apply-pr220-finalization.py
-          rm -f scripts/.apply-pr220-finalization.py
-          rm -f .github/workflows/apply-pr220-finalization.yml
           git diff --check
-          git status --short
+          mkdir -p finalized/.github/workflows finalized/docs finalized/scripts
+          cp .github/workflows/manual-release.yml finalized/.github/workflows/manual-release.yml
+          cp docs/RELEASE_WORKFLOW.md finalized/docs/RELEASE_WORKFLOW.md
+          cp scripts/check-manual-release-workflow.sh finalized/scripts/check-manual-release-workflow.sh
+          cp scripts/check-release-ruleset-authority.py finalized/scripts/check-release-ruleset-authority.py
+          sha256sum \
+            finalized/.github/workflows/manual-release.yml \
+            finalized/docs/RELEASE_WORKFLOW.md \
+            finalized/scripts/check-manual-release-workflow.sh \
+            finalized/scripts/check-release-ruleset-authority.py \
+            > finalized/SHA256SUMS
 
-      - name: Commit finalization
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --quiet && {
-            echo '::error::Finalization produced no commit.'
-            exit 1
-          }
-          git commit -m 'ci: finalise protected release authority checks'
-          git push origin HEAD:refs/heads/fix/manual-release-protected-ref-auth
+      - name: Upload finalization files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pr220-finalized-files
+          path: finalized
+          if-no-files-found: error
+          retention-days: 3
