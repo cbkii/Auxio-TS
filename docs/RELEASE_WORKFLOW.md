@@ -10,21 +10,133 @@ exact-package Magisk overlay.
 
 ## Required repository configuration
 
-The `dev` rulesets must:
+Protected release refs use two deliberately separate identities:
 
-- allow the selected GitHub Actions release identity to bypass the pull-request and required-check
-  rules for an ordinary fast-forward update;
-- continue to block branch deletion;
-- continue to block force pushes and other non-fast-forward updates.
+- `GITHUB_TOKEN` performs GitHub Release API operations and asset upload with workflow-scoped
+  `contents: write` permission;
+- the repository secret `RELEASE_PUSH_TOKEN` authenticates the two protected Git ref mutations: the
+  immutable `vX.Y.Z` tag push and the ordinary fast-forward release-metadata update to `dev`.
 
-The workflow uses `GITHUB_TOKEN` with `contents: write`. It does not force-push and rechecks the remote
-`dev` SHA immediately before synchronising source metadata.
+`GITHUB_TOKEN` is the `github-actions[bot]` identity. It does not become the repository owner merely
+because the workflow was manually dispatched by the owner, and it cannot satisfy a ruleset bypass
+entry assigned to the `cbkii` user. The protected-ref token must therefore belong to the same user that
+is configured as the ruleset bypass actor.
+
+Configure the repository rulesets as follows:
+
+### `dev` branch ruleset
+
+- target `dev` exactly;
+- keep pull requests and the repository's required checks for ordinary contributors;
+- add `cbkii` as a bypass actor with bypass mode **Always**;
+- keep branch deletion blocked;
+- keep force pushes/non-fast-forward updates blocked.
+
+### release-tag ruleset
+
+- target release tags matching `v*` (or the repository's stricter equivalent that includes
+  `vMAJOR.MINOR.PATCH`);
+- add `cbkii` as a bypass actor with bypass mode **Always**;
+- keep tag deletion blocked;
+- do not permit tag movement or force updates.
+
+The user bypass must be present on every ruleset that applies to `dev` or the release tag. A bypass on
+only the branch ruleset does not authorise tag creation, and a bypass on only the tag ruleset does not
+authorise the metadata fast-forward.
 
 An overlapping classic branch-protection rule may still reject the metadata fast-forward even when a
-ruleset bypass exists. In that case, publication remains successful, the immutable tag and Release are
-retained, and the summary reports that source metadata still requires reconciliation.
+ruleset bypass exists. Remove or align overlapping protection rather than weakening the maintained
+rulesets. Publication remains forward-repairable: the immutable tag and verified Release are retained,
+and the summary reports when source metadata still requires reconciliation.
+
+### Manual settings path
+
+1. Open **Settings → Secrets and variables → Actions → New repository secret**.
+2. Create `RELEASE_PUSH_TOKEN` using the token described below.
+3. Open **Settings → Rules → Rulesets**.
+4. Edit every active branch ruleset applying to `dev`; add user **cbkii** to **Bypass list** with
+   **Always**.
+5. Edit every active tag ruleset applying to `v*`; add user **cbkii** to **Bypass list** with
+   **Always**.
+6. Check **Settings → Branches** for an older branch-protection rule applying to `dev`. Remove it when
+   it duplicates the ruleset, or align it so the owner token can perform the same ordinary
+   fast-forward.
+7. Keep **Settings → Actions → General → Workflow permissions** at **Read and write permissions**.
+   The workflow also declares least-privilege permissions explicitly.
+
+### Read-only settings audit
+
+The following commands do not change repository settings. They show the workflow permission, secret
+names, active rulesets and any classic protection still applying to `dev`:
+
+```bash
+repo='cbkii/Auxio-TS'
+
+printf '\n== Workflow permission ==\n'
+gh api "repos/${repo}/actions/permissions/workflow" | jq
+
+printf '\n== Actions secret names ==\n'
+gh api --paginate "repos/${repo}/actions/secrets?per_page=100" \
+  --jq '.secrets[].name' | sort
+
+printf '\n== Rulesets ==\n'
+gh api --paginate "repos/${repo}/rulesets?per_page=100" \
+  --jq '.[] | [.id, .name, .target, .enforcement] | @tsv'
+
+while IFS=$'\t' read -r id name target enforcement; do
+  printf '\n--- ruleset %s: %s (%s, %s) ---\n' "$id" "$name" "$target" "$enforcement"
+  gh api "repos/${repo}/rulesets/${id}" | jq '{
+    id,
+    name,
+    target,
+    enforcement,
+    bypass_actors,
+    conditions,
+    rules
+  }'
+done < <(
+  gh api --paginate "repos/${repo}/rulesets?per_page=100" \
+    --jq '.[] | [.id, .name, .target, .enforcement] | @tsv'
+)
+
+printf '\n== Classic dev protection, when present ==\n'
+if ! gh api "repos/${repo}/branches/dev/protection" | jq; then
+  printf 'No classic branch-protection response; rulesets may be the only authority.\n'
+fi
+```
+
+**STOP:** do not dispatch another release until the audit shows `RELEASE_PUSH_TOKEN`, the token owner
+is on the bypass list for every applicable branch/tag ruleset, and overlapping classic protection has
+been reconciled.
 
 ## Required secrets
+
+### Protected-ref authentication
+
+`RELEASE_PUSH_TOKEN` is mandatory for every Manual Release run. Prefer a fine-grained personal access
+token with:
+
+- resource owner: `cbkii`;
+- repository access: **Only select repositories → Auxio-TS**;
+- repository permission: **Contents: Read and write**;
+- a bounded expiry and normal token rotation.
+
+A pre-existing classic PAT can be used instead when it belongs to `cbkii` and has repository write
+scope, but a repository-scoped fine-grained PAT is preferred. Do not use an APK signing secret, deploy
+key, or another user's token as a substitute.
+
+Create or update the Actions secret without printing the token:
+
+```bash
+gh secret set RELEASE_PUSH_TOKEN -R cbkii/Auxio-TS
+```
+
+The workflow validates this secret before dependency setup or APK building. It fails closed when the
+secret is absent, belongs to a different account, or does not report push access to this repository.
+The token is exposed only to the early authority check and the two Git push steps; GitHub Release API
+operations continue to use `GITHUB_TOKEN`.
+
+### APK signing
 
 Release signing is required only when a selected APK requiring the configured release signer must be
 built:
@@ -53,17 +165,18 @@ Run **Manual Release** from `dev` only.
 A new release performs this transaction:
 
 1. Confirm the checkout is exactly the current remote `dev`.
-2. Resolve the target version from source metadata, strict semantic Git tags and every GitHub Release
+2. Validate `RELEASE_PUSH_TOKEN`, its owner identity and repository push access before expensive work.
+3. Resolve the target version from source metadata, strict semantic Git tags and every GitHub Release
    returned by the paginated Releases API, including drafts, prereleases and final releases.
-3. Create a local source metadata commit only when the checked-in version differs.
-4. Build each required variant at most once.
-5. Inspect and stage APKs and sidecars, generate the compact release manifest, and upload recovery
+4. Create a local source metadata commit only when the checked-in version differs.
+5. Build each required variant at most once.
+6. Inspect and stage APKs and sidecars, generate the compact release manifest, and upload recovery
    workflow evidence.
-6. Push the immutable release tag.
-7. Create the GitHub Release as a draft regardless of its requested final status.
-8. Upload and verify the exact selected asset set.
-9. Apply the requested draft/prerelease/final state.
-10. Fast-forward the same released metadata commit onto `dev`.
+7. Push the immutable release tag using the owner token.
+8. Create the GitHub Release as a draft regardless of its requested final status.
+9. Upload and verify the exact selected asset set.
+10. Apply the requested draft/prerelease/final state.
+11. Fast-forward the same released metadata commit onto `dev` using the owner token.
 
 The branch update deliberately occurs after remote Release verification. A tag or draft created by an
 interrupted run is retained for repair instead of being deleted.
@@ -183,6 +296,7 @@ a separate 14-day artifact.
 
 Failure handling is forward-repairable:
 
+- protected-ref token failure: stop before dependency setup/build and change no release state;
 - validation failure before tag creation: no remote release state is changed;
 - tag pushed but Release absent: rerun in repair mode with that tag;
 - draft Release with missing assets: repair the same tag; do not generate another version;
