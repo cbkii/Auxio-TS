@@ -1,9 +1,9 @@
 name: Apply PR 220 finalization
 
 on:
-  push:
+  pull_request:
     branches:
-      - fix/pr220-finalization-trigger-2
+      - dev
 
 permissions:
   contents: write
@@ -46,5 +46,3 @@ jobs:
           }
           git commit -m 'ci: finalise protected release authority checks'
           git push origin HEAD:refs/heads/fix/manual-release-protected-ref-auth
-
-# Trigger commit for the one-time finalization run.
