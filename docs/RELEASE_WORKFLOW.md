@@ -100,8 +100,12 @@ done < <(
 )
 
 printf '\n== Classic dev protection, when present ==\n'
-if ! gh api "repos/${repo}/branches/dev/protection" | jq; then
+classic_protection=''
+if classic_protection="$(gh api "repos/${repo}/branches/dev/protection" 2>&1)"; then
+  printf '%s\n' "$classic_protection" | jq
+else
   printf 'No classic branch-protection response; rulesets may be the only authority.\n'
+  printf '%s\n' "$classic_protection" >&2
 fi
 ```
 
