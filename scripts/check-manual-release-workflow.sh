@@ -11,6 +11,7 @@ bridge_checker='scripts/check-lsposed-bridge-contracts.sh'
 app_checker='scripts/check-app-release-contracts.sh'
 signer_parser='scripts/lib/apksigner-certificate.sh'
 orchestrator='scripts/release-orchestrator.py'
+ruleset_checker='scripts/check-release-ruleset-authority.py'
 variant_checker='scripts/check-ci-variant-contracts.sh'
 
 for required in \
@@ -19,14 +20,16 @@ for required in \
   "${app_checker}" \
   "${signer_parser}" \
   "${orchestrator}" \
+  "${ruleset_checker}" \
   "${variant_checker}"; do
   [[ -f "${required}" ]] || fail "Missing ${required}"
 done
 
 ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
 bash -n "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
-python3 -m py_compile "${orchestrator}"
+python3 -m py_compile "${orchestrator}" "${ruleset_checker}"
 python3 "${orchestrator}" self-test
+python3 "${ruleset_checker}" --self-test
 
 if command -v actionlint >/dev/null 2>&1; then actionlint "${workflow}"; else log 'actionlint unavailable; skipped'; fi
 if command -v shellcheck >/dev/null 2>&1; then
@@ -169,13 +172,21 @@ for forbidden in (
 
 required_tokens = (
     'group: manual-release',
+    'if: github.actor == github.repository_owner',
     'Verify branch and protected-ref authority',
     'RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}',
-    'gh api user --jq .login',
+    'gh api user > "${actor_file}"',
+    'push_actor_id=',
     "gh api \"repos/${GITHUB_REPOSITORY}\" --jq '.permissions.push // false'",
     'RELEASE_PUSH_TOKEN authentication failed or timed out',
     'Unable to verify RELEASE_PUSH_TOKEN access',
+    'Verify protected-ref ruleset bypass',
+    'scripts/check-release-ruleset-authority.py',
+    'rulesets?per_page=100&includes_parents=true&targets=branch%2Ctag',
+    'branches/dev/protection',
+    'No active branch/tag rulesets were returned',
     'Protected-ref push actor:',
+    'Applicable ruleset bypass verified:',
     'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
     "--jq '.[].tag_name'",
     'scripts/release-orchestrator.py',
@@ -215,9 +226,27 @@ for token in required_tokens:
 preflight = step_block('Verify branch and protected-ref authority')
 if preflight.count('timeout --foreground 30s') != 2:
     raise SystemExit('Protected-ref preflight must bound both GitHub API requests.')
-for token in ('actor_error=', 'permission_error=', 'if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}"'):
+for token in (
+    'actor_error=',
+    'permission_error=',
+    'if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}"',
+    'push_actor_id=',
+):
     if token not in preflight:
         raise SystemExit(f'Protected-ref preflight lacks guarded failure handling: {token}')
+
+ruleset_preflight = step_block('Verify protected-ref ruleset bypass')
+if ruleset_preflight.count('timeout --foreground 30s') != 3:
+    raise SystemExit('Ruleset preflight must bound list, detail and classic-protection API calls.')
+for token in (
+    'ruleset_error=',
+    'classic_error=',
+    'check-release-ruleset-authority.py',
+    '--actor-id "${PUSH_ACTOR_ID}"',
+    '--release-tag "${RELEASE_TAG}"',
+):
+    if token not in ruleset_preflight:
+        raise SystemExit(f'Ruleset preflight lacks required authority guard: {token}')
 
 protected_token = 'GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}'
 for step_name in ('Push immutable release tag', 'Synchronise released source metadata to dev'):
@@ -246,6 +275,7 @@ for guard in (
         raise SystemExit(f'Missing pre-tag dev authority guard: {guard}')
 
 order = [
+    'Verify protected-ref ruleset bypass',
     'Build once, inspect once and stage selected assets',
     'Upload release recovery workflow artifact',
     'Push immutable release tag',
@@ -354,4 +384,4 @@ for checker in "${app_checker}" "${bridge_checker}"; do
     fail "${checker} does not request apksigner certificate output."
 done
 
-log 'manual release workflow, state machine and LSPosed addon checks passed'
+log 'manual release workflow, ruleset authority, state machine and LSPosed addon checks passed'
