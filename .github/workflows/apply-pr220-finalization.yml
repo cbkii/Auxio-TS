@@ -3,10 +3,7 @@ name: Apply PR 220 finalization
 on:
   push:
     branches:
-      - fix/manual-release-protected-ref-auth
-    paths:
-      - .github/workflows/apply-pr220-finalization.yml
-      - scripts/.apply-pr220-finalization.py
+      - fix/pr220-finalization-trigger
 
 permissions:
   contents: write
