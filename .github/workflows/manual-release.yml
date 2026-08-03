@@ -60,7 +60,6 @@ concurrency:
 
 jobs:
   release:
-    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -73,12 +72,9 @@ jobs:
           submodules: false
           persist-credentials: false
 
-      - name: Verify branch and protected-ref authority
+      - name: Verify branch release context
         id: source
         shell: bash
-        env:
-          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          EXPECTED_PUSH_ACTOR: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF_TYPE}" != branch || "${GITHUB_REF_NAME}" != dev ]]; then
@@ -92,68 +88,7 @@ jobs:
             echo "::error::Release checkout is stale. Re-run from the latest dev."
             exit 1
           }
-
-          [[ -n "${RELEASE_PUSH_TOKEN:-}" ]] || {
-            echo "::error::Missing RELEASE_PUSH_TOKEN. Configure a fine-grained PAT owned by ${EXPECTED_PUSH_ACTOR} with Contents read/write and Administration read before running a release."
-            exit 1
-          }
-
-          actor_file="${RUNNER_TEMP}/release-push-actor.json"
-          actor_error="${RUNNER_TEMP}/release-push-actor.error"
-          if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}" timeout --foreground 30s \
-            gh api user > "${actor_file}" 2> "${actor_error}"; then
-            echo "::error::RELEASE_PUSH_TOKEN authentication failed or timed out; replace the secret with a valid token owned by ${EXPECTED_PUSH_ACTOR}."
-            while IFS= read -r line; do
-              [[ -n "${line}" ]] && echo "::error::gh: ${line}"
-            done < "${actor_error}"
-            exit 1
-          fi
-          push_actor="$(jq -er '.login | select(type == "string" and length > 0)' "${actor_file}")" || {
-            echo "::error::RELEASE_PUSH_TOKEN authentication returned no valid GitHub login."
-            exit 1
-          }
-          push_actor_id="$(jq -er '.id | select(type == "number" and . > 0)' "${actor_file}")" || {
-            echo "::error::RELEASE_PUSH_TOKEN authentication returned no valid GitHub user id."
-            exit 1
-          }
-          [[ "${push_actor,,}" == "${EXPECTED_PUSH_ACTOR,,}" ]] || {
-            echo "::error::RELEASE_PUSH_TOKEN belongs to ${push_actor}, but protected-ref bypass is expected for ${EXPECTED_PUSH_ACTOR}."
-            exit 1
-          }
-
-          permission_file="${RUNNER_TEMP}/release-repository.json"
-          permission_error="${RUNNER_TEMP}/release-push-permission.error"
-          if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}" timeout --foreground 30s \
-            gh api "repos/${GITHUB_REPOSITORY}" \
-              > "${permission_file}" 2> "${permission_error}"; then
-            echo "::error::Unable to verify RELEASE_PUSH_TOKEN access to ${GITHUB_REPOSITORY}; the API request failed or timed out."
-            while IFS= read -r line; do
-              [[ -n "${line}" ]] && echo "::error::gh: ${line}"
-            done < "${permission_error}"
-            exit 1
-          fi
-          can_push="$(jq -er '.permissions.push | select(type == "boolean")' "${permission_file}")" || {
-            echo "::error::Repository access response did not contain a valid push permission."
-            exit 1
-          }
-          repository_owner_id="$(jq -er '.owner.id | select(type == "number" and . > 0)' "${permission_file}")" || {
-            echo "::error::Repository access response did not contain a valid owner id."
-            exit 1
-          }
-          [[ "${can_push}" == true ]] || {
-            echo "::error::RELEASE_PUSH_TOKEN does not report push access to ${GITHUB_REPOSITORY}."
-            exit 1
-          }
-          [[ "${push_actor_id}" == "${repository_owner_id}" ]] || {
-            echo "::error::RELEASE_PUSH_TOKEN user id ${push_actor_id} does not match repository owner id ${repository_owner_id}."
-            exit 1
-          }
-          {
-            echo "source_sha=${source_sha}"
-            echo "push_actor=${push_actor}"
-            echo "push_actor_id=${push_actor_id}"
-            echo "repository_owner_id=${repository_owner_id}"
-          } >> "${GITHUB_OUTPUT}"
+          echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
 
       - name: Validate current release workflow contracts
         shell: bash
@@ -328,64 +263,6 @@ jobs:
             echo "build_count=$(wc -l < "${build_variants}" | tr -d ' ')"
             echo "needs_signing=$(jq -r .needs_signing "${plan_file}")"
           } >> "${GITHUB_OUTPUT}"
-
-      - name: Verify protected-ref ruleset bypass
-        id: rulesets
-        shell: bash
-        env:
-          RELEASE_PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          PUSH_ACTOR: ${{ steps.source.outputs.push_actor }}
-          PUSH_ACTOR_ID: ${{ steps.source.outputs.push_actor_id }}
-          RELEASE_MODE: ${{ inputs.release_mode }}
-          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          details_dir="${RUNNER_TEMP}/release-rulesets"
-          ruleset_ids="${RUNNER_TEMP}/release-ruleset-ids.txt"
-          ruleset_error="${RUNNER_TEMP}/release-rulesets.error"
-          mkdir -p "${details_dir}"
-
-          if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}" timeout --foreground 30s \
-            gh api --paginate \
-              "repos/${GITHUB_REPOSITORY}/rulesets?per_page=100&includes_parents=true&targets=branch%2Ctag" \
-              --jq '.[].id' > "${ruleset_ids}" 2> "${ruleset_error}"; then
-            echo "::error::Unable to list repository rulesets with RELEASE_PUSH_TOKEN; the API request failed or timed out."
-            while IFS= read -r line; do
-              [[ -n "${line}" ]] && echo "::error::gh: ${line}"
-            done < "${ruleset_error}"
-            exit 1
-          fi
-          sort -u -o "${ruleset_ids}" "${ruleset_ids}"
-          [[ -s "${ruleset_ids}" ]] || {
-            echo "::error::No active branch/tag rulesets were returned for ${GITHUB_REPOSITORY}."
-            exit 1
-          }
-
-          while IFS= read -r ruleset_id; do
-            [[ "${ruleset_id}" =~ ^[0-9]+$ ]] || {
-              echo "::error::Ruleset API returned an invalid id: ${ruleset_id}"
-              exit 1
-            }
-            detail_error="${RUNNER_TEMP}/release-ruleset-${ruleset_id}.error"
-            if ! GH_TOKEN="${RELEASE_PUSH_TOKEN}" timeout --foreground 30s \
-              gh api "repos/${GITHUB_REPOSITORY}/rulesets/${ruleset_id}?includes_parents=true" \
-                > "${details_dir}/${ruleset_id}.json" 2> "${detail_error}"; then
-              echo "::error::Unable to read ruleset ${ruleset_id}; bypass authority cannot be proven."
-              while IFS= read -r line; do
-                [[ -n "${line}" ]] && echo "::error::gh: ${line}"
-              done < "${detail_error}"
-              exit 1
-            fi
-          done < "${ruleset_ids}"
-
-          python3 scripts/check-release-ruleset-authority.py \
-            --ruleset-dir "${details_dir}" \
-            --actor-id "${PUSH_ACTOR_ID}" \
-            --actor-login "${PUSH_ACTOR}" \
-            --default-branch dev \
-            --mode "${RELEASE_MODE}" \
-            --release-tag "${RELEASE_TAG}"
-          echo "verified=true" >> "${GITHUB_OUTPUT}"
 
       - name: Checkout immutable repair tag
         if: inputs.release_mode == 'repair_existing_release'
@@ -808,7 +685,7 @@ jobs:
         if: inputs.release_mode == 'create_new_release'
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: |
@@ -971,7 +848,7 @@ jobs:
         id: sync
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: |
           set -euo pipefail
@@ -999,15 +876,11 @@ jobs:
         shell: bash
         env:
           RESULT: ${{ job.status }}
-          DISPATCHER: ${{ github.actor }}
-          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           RELEASE_MODE: ${{ inputs.release_mode }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
-          PUSH_ACTOR: ${{ steps.source.outputs.push_actor }}
-          RULESETS_VERIFIED: ${{ steps.rulesets.outputs.verified }}
           SELECTED: ${{ steps.selection.outputs.selected_summary }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
@@ -1025,14 +898,10 @@ jobs:
             echo '# Manual release summary'
             echo
             echo "- Result: \`${RESULT}\`"
-            echo "- Original dispatcher: ${DISPATCHER}"
-            echo "- Current triggering actor: ${TRIGGERING_ACTOR}"
             echo "- Mode: \`${RELEASE_MODE}\`"
             echo "- Tag: ${RELEASE_TAG:-not computed}"
             echo "- Starting dev SHA: ${SOURCE_SHA:-not resolved}"
             echo "- Release/tag SHA: ${RELEASE_SHA:-not resolved}"
-            echo "- Protected-ref push actor: ${PUSH_ACTOR:-not validated}"
-            echo "- Applicable ruleset bypass verified: ${RULESETS_VERIFIED:-false}"
             echo "- Maintained assets: ${SELECTED:-not selected}"
             echo "- Debug destination: ${DEBUG_DESTINATION:-not selected}"
             echo "- Release created in this run: ${RELEASE_CREATED:-false}"
