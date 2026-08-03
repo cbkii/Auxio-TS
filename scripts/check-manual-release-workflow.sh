@@ -12,6 +12,7 @@ app_checker='scripts/check-app-release-contracts.sh'
 signer_parser='scripts/lib/apksigner-certificate.sh'
 orchestrator='scripts/release-orchestrator.py'
 variant_checker='scripts/check-ci-variant-contracts.sh'
+reset_checker='scripts/reset-manual-release-settings.sh'
 
 for required in \
   "${workflow}" \
@@ -19,18 +20,25 @@ for required in \
   "${app_checker}" \
   "${signer_parser}" \
   "${orchestrator}" \
-  "${variant_checker}"; do
+  "${variant_checker}" \
+  "${reset_checker}"; do
   [[ -f "${required}" ]] || fail "Missing ${required}"
 done
 
 ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
-bash -n "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
+for script in "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}" "${reset_checker}"; do
+  bash -n "${script}" || fail "Shell syntax check failed for ${script}"
+done
 python3 -m py_compile "${orchestrator}"
 python3 "${orchestrator}" self-test
 
-if command -v actionlint >/dev/null 2>&1; then actionlint "${workflow}"; else log 'actionlint unavailable; skipped'; fi
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint "${workflow}"
+else
+  log 'actionlint unavailable; skipped'
+fi
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"
+  shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}" "${reset_checker}"
 else
   log 'shellcheck unavailable; skipped'
 fi
@@ -154,12 +162,21 @@ for forbidden in (
     'include_debug_apks',
     'Cleanup release tag after failed release creation',
     'git push origin ":refs/tags/',
+    'RELEASE_PUSH_TOKEN',
+    'check-release-ruleset-authority.py',
+    'Verify protected-ref ruleset bypass',
 ):
     if forbidden in text:
         raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
 
 required_tokens = (
     'group: manual-release',
+    'cancel-in-progress: false',
+    'timeout-minutes: 90',
+    'actions: read',
+    'checks: read',
+    'contents: write',
+    'GH_TOKEN: ${{ github.token }}',
     'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
     "--jq '.[].tag_name'",
     'scripts/release-orchestrator.py',
@@ -227,6 +244,7 @@ for pinned in (
     'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10',
     'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95',
     'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c',
+    'android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699',
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
 ):
     if pinned not in text:
