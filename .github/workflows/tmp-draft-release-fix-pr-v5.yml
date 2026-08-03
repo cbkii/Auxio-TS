@@ -1,0 +1,59 @@
+name: Temporary draft release PR bridge v5
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/tmp-draft-release-fix-pr-v5.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/manual-release-draft-repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-draft-repair
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Apply and validate final repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s python3 scripts/tmp-run-draft-release-fix-v3.py
+          timeout 120s ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK workflow YAML"' .github/workflows/manual-release.yml
+          timeout 120s bash -n scripts/check-manual-release-workflow.sh
+          timeout 180s bash scripts/check-manual-release-workflow.sh
+          ! grep -Fq '/releases/tags/' .github/workflows/manual-release.yml
+          grep -Fq 'TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}' .github/workflows/manual-release.yml
+          grep -Fq 'timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases"' .github/workflows/manual-release.yml
+          grep -Fq 'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}' .github/workflows/manual-release.yml
+
+      - name: Stage validated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/validated-repair"
+          mkdir -p "${out}/.github/workflows" "${out}/scripts"
+          cp .github/workflows/manual-release.yml "${out}/.github/workflows/manual-release.yml"
+          cp scripts/check-manual-release-workflow.sh "${out}/scripts/check-manual-release-workflow.sh"
+          (
+            cd "${out}"
+            sha256sum .github/workflows/manual-release.yml scripts/check-manual-release-workflow.sh > SHA256SUMS
+          )
+
+      - name: Upload validated repair files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: validated-draft-release-repair-files
+          path: ${{ runner.temp }}/validated-repair
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
