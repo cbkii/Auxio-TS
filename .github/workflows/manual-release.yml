@@ -732,6 +732,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
           PREVIOUS_TAG: ${{ steps.plan.outputs.previous_tag }}
           RELEASE_EXISTS: ${{ steps.plan.outputs.release_exists }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
@@ -763,11 +764,11 @@ jobs:
               echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
               echo '- Exact TS18 runtime behaviour requires device validation.'
             } > "${notes}"
-            # The create endpoint returns the draft object, including its stable release ID.
-            # Do not query the published-only tag lookup endpoint afterwards.
+            # A newly pushed tag can take time to become visible to the Releases API.
+            # Always provide the validated commit SHA so the request remains valid during that window.
             timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
               -f tag_name="${RELEASE_TAG}" \
-              -f target_commitish="${RELEASE_TAG}" \
+              -f target_commitish="${RELEASE_SHA}" \
               -f name="${RELEASE_TAG}" \
               -F body=@"${notes}" \
               -F draft=true \

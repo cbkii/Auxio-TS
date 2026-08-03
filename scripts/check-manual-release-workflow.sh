@@ -199,6 +199,7 @@ for forbidden in (
     'github.actor == github.repository_owner',
     '/releases/tags/',
     'gh release upload',
+    '-f target_commitish="${RELEASE_TAG}"',
 ):
     if forbidden in text:
         raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
@@ -213,6 +214,8 @@ required_tokens = (
     'Push immutable release tag',
     'Ensure draft release transaction exists',
     'gh api --method POST "repos/${GITHUB_REPOSITORY}/releases"',
+    'RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}',
+    '-f target_commitish="${RELEASE_SHA}"',
     '-F draft=true',
     'TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}',
     'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}',
