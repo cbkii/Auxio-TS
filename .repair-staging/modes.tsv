@@ -1,2 +1,0 @@
-100644	.github/workflows/manual-release.yml
-100755	scripts/check-manual-release-workflow.sh

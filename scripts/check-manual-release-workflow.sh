@@ -197,6 +197,7 @@ for forbidden in (
     'check-release-ruleset-authority.py',
     'Verify protected-ref ruleset bypass',
     'github.actor == github.repository_owner',
+    '/releases/tags/',
 ):
     if forbidden in text:
         raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
@@ -205,12 +206,15 @@ required_tokens = (
     'group: manual-release',
     'cancel-in-progress: false',
     'GH_TOKEN: ${{ github.token }}',
-    'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
-    "--jq '.[].tag_name'",
+    'timeout 60s gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
+    "--jq '.[] | [.id, .tag_name] | @tsv'",
     'scripts/release-orchestrator.py',
     'Push immutable release tag',
     'Ensure draft release transaction exists',
-    '--draft',
+    'gh api --method POST "repos/${GITHUB_REPOSITORY}/releases"',
+    '-F draft=true',
+    'TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}',
+    'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}',
     'Upload or replace planned release assets',
     '--clobber',
     'Verify remote release asset manifest',
