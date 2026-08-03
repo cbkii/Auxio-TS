@@ -1,0 +1,48 @@
+name: Temporary draft release mode staging
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/tmp-draft-release-mode-stage.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-draft-release-mode-staging-fix-manual-release-draft-repair
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/manual-release-draft-repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-draft-repair
+          fetch-depth: 2
+
+      - name: Stage exact modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .repair-staging
+          git ls-files -s .github/workflows/manual-release.yml scripts/check-manual-release-workflow.sh \
+            | awk '{print $1 "\t" $4}' > .repair-staging/modes.tsv
+          [[ "$(wc -l < .repair-staging/modes.tsv | tr -d ' ')" == 2 ]] || {
+            echo '::error::Unable to resolve exact target file modes.'
+            exit 1
+          }
+          git add .repair-staging/modes.tsv
+          if git diff --cached --quiet; then
+            echo 'Mode staging is already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore: stage exact draft-release repair modes'
+          timeout 60s git push origin HEAD:refs/heads/fix/manual-release-draft-repair
