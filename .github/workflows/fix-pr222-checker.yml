@@ -1,0 +1,106 @@
+name: Fix PR 222 checker
+
+on:
+  push:
+    branches:
+      - fix/manual-release-simple-settings
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-pr222-checker
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    if: github.repository == 'cbkii/Auxio-TS'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-simple-settings
+          fetch-depth: 0
+
+      - name: Harden checker, validate and self-delete
+        shell: bash
+        env:
+          TARGET_BRANCH: fix/manual-release-simple-settings
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/check-manual-release-workflow.sh')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one checker anchor, found {count}: {old!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "variant_checker='scripts/check-ci-variant-contracts.sh'\n",
+              "variant_checker='scripts/check-ci-variant-contracts.sh'\n"
+              "reset_checker='scripts/reset-manual-release-settings.sh'\n",
+          )
+          replace_once(
+              '  "${orchestrator}" \\\n  "${variant_checker}"; do\n',
+              '  "${orchestrator}" \\\n  "${variant_checker}" \\\n  "${reset_checker}"; do\n',
+          )
+          replace_once(
+              'bash -n "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"\n',
+              'for script in "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}" "${reset_checker}"; do\n'
+              '  bash -n "${script}" || fail "Shell syntax check failed for ${script}"\n'
+              'done\n',
+          )
+          replace_once(
+              '  shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}"\n',
+              '  shellcheck "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}" "${reset_checker}"\n',
+          )
+          replace_once(
+              "    'git push origin \":refs/tags/',\n):\n",
+              "    'git push origin \":refs/tags/',\n"
+              "    'RELEASE_PUSH_TOKEN',\n"
+              "    'check-release-ruleset-authority.py',\n"
+              "    'Verify protected-ref ruleset bypass',\n"
+              "    'github.actor == github.repository_owner',\n"
+              "):\n",
+          )
+          replace_once(
+              "    'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',\n",
+              "    'android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699',\n"
+              "    'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',\n",
+          )
+          replace_once(
+              "for token in required_tokens:\n    if token not in text:\n        raise SystemExit(f'Missing release transaction contract: {token}')\n\n",
+              "for token in required_tokens:\n"
+              "    if token not in text:\n"
+              "        raise SystemExit(f'Missing release transaction contract: {token}')\n\n"
+              "workflow_token = 'GH_TOKEN: ${{ github.token }}'\n"
+              "if text.count(workflow_token) != 7:\n"
+              "    raise SystemExit('Manual Release must use github.token in exactly seven GitHub API/push steps.')\n\n",
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm -f -- .github/workflows/fix-pr222-checker.yml
+          bash -n scripts/check-manual-release-workflow.sh
+          bash -n scripts/reset-manual-release-settings.sh
+          bash scripts/check-manual-release-workflow.sh
+          bash scripts/check-ci-variant-contracts.sh
+          bash scripts/check-ts18-apk-reference-contracts.sh
+          git diff --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/check-manual-release-workflow.sh .github/workflows/fix-pr222-checker.yml
+          git commit -m 'test: harden simple release workflow contracts'
+          git push \
+            --force-with-lease="refs/heads/${TARGET_BRANCH}:${GITHUB_SHA}" \
+            origin "HEAD:refs/heads/${TARGET_BRANCH}"
