@@ -1,0 +1,131 @@
+name: Fix PR 222 YAML contract
+
+on:
+  push:
+    branches:
+      - fix/manual-release-simple-settings
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-pr222-yaml-contract
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    if: github.repository == 'cbkii/Auxio-TS'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-simple-settings
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Parse permissions contract, validate and self-delete
+        shell: bash
+        env:
+          TARGET_BRANCH: fix/manual-release-simple-settings
+        run: |
+          set -u
+
+          fail() {
+            printf '::error::%s\n' "$*" >&2
+            exit 1
+          }
+
+          run_required() {
+            local seconds=$1
+            shift
+            printf '[INFO] RUN (%ss):' "$seconds" >&2
+            printf ' %q' "$@" >&2
+            printf '\n' >&2
+            timeout --foreground --kill-after=10s "$seconds" "$@"
+            local rc=$?
+            ((rc == 0)) || fail "command failed or timed out with status ${rc}: $*"
+          }
+
+          [[ "${GITHUB_REF_TYPE}" == branch && "${GITHUB_REF_NAME}" == "${TARGET_BRANCH}" ]] ||
+            fail "unexpected ref: ${GITHUB_REF_TYPE}/${GITHUB_REF_NAME}"
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]] ||
+            fail 'checkout does not match the triggering commit'
+          command -v timeout >/dev/null 2>&1 || fail 'GNU timeout is unavailable'
+          command -v python3 >/dev/null 2>&1 || fail 'python3 is unavailable'
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/check-manual-release-workflow.sh')
+          text = path.read_text(encoding='utf-8')
+
+          old_yaml_check = '''ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
+'''
+          new_yaml_check = '''ruby - "${workflow}" <<'RUBY'
+          require 'yaml'
+
+          workflow_path = ARGV.fetch(0)
+          document = Psych.safe_load(
+            File.read(workflow_path),
+            permitted_classes: [],
+            permitted_symbols: [],
+            aliases: false
+          )
+          unless document.is_a?(Hash)
+            abort "::error::#{workflow_path} did not parse to a mapping"
+          end
+
+          expected_permissions = {
+            'actions' => 'read',
+            'checks' => 'read',
+            'contents' => 'write'
+          }
+          actual_permissions = document['permissions']
+          unless actual_permissions == expected_permissions
+            abort "::error::Manual Release permissions must equal #{expected_permissions.inspect}; got #{actual_permissions.inspect}"
+          end
+
+          release_job = document.dig('jobs', 'release')
+          unless release_job.is_a?(Hash) && release_job['timeout-minutes'] == 90
+            abort "::error::Manual Release job timeout must remain 90 minutes"
+          end
+
+          puts "OK #{workflow_path} permissions and job timeout"
+          RUBY
+'''
+          if text.count(old_yaml_check) != 1:
+            raise SystemExit('expected exactly one legacy YAML syntax-check command')
+          text = text.replace(old_yaml_check, new_yaml_check, 1)
+
+          for raw_token in (
+              "    'timeout-minutes: 90',\n",
+              "    'actions: read',\n",
+              "    'checks: read',\n",
+              "    'contents: write',\n",
+          ):
+              if text.count(raw_token) != 1:
+                  raise SystemExit(f'expected exactly one raw YAML contract token: {raw_token!r}')
+              text = text.replace(raw_token, '', 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm -f -- .github/workflows/fix-pr222-yaml-contract.yml
+
+          run_required 30s bash -n scripts/check-manual-release-workflow.sh
+          run_required 5m bash scripts/check-manual-release-workflow.sh
+          run_required 5m bash scripts/check-ci-variant-contracts.sh
+          run_required 5m bash scripts/check-ts18-apk-reference-contracts.sh
+          run_required 30s git diff --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- scripts/check-manual-release-workflow.sh .github/workflows/fix-pr222-yaml-contract.yml
+          git diff --cached --quiet && fail 'no YAML-contract changes were staged'
+          run_required 90s git commit -m 'test: parse Manual Release permission contract'
+          run_required 120s git push \
+            --force-with-lease="refs/heads/${TARGET_BRANCH}:${GITHUB_SHA}" \
+            origin "HEAD:refs/heads/${TARGET_BRANCH}"
