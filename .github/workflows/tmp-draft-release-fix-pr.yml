@@ -1,0 +1,65 @@
+name: Temporary draft release PR bridge
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/tmp-draft-release-fix.yml
+      - .github/workflows/tmp-draft-release-fix-pr.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/manual-release-draft-repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-draft-repair
+          fetch-depth: 2
+
+      - name: Extract and apply bounded repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          patch_script="${RUNNER_TEMP}/apply-draft-release-fix.py"
+          awk '
+            /^          python3 - <<'\''PY'\''$/ { capture=1; next }
+            capture && /^          PY$/ { exit }
+            capture { sub(/^          /, ""); print }
+          ' .github/workflows/tmp-draft-release-fix.yml > "${patch_script}"
+          [[ -s "${patch_script}" ]] || {
+            echo "::error::Unable to extract bounded patch script."
+            exit 1
+          }
+          timeout 60s python3 "${patch_script}"
+
+      - name: Validate repaired contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK workflow YAML"' .github/workflows/manual-release.yml
+          timeout 120s bash -n scripts/check-manual-release-workflow.sh
+          timeout 180s bash scripts/check-manual-release-workflow.sh
+          ! grep -Fq '/releases/tags/' .github/workflows/manual-release.yml
+          grep -Fq 'TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}' .github/workflows/manual-release.yml
+          grep -Fq 'timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases"' .github/workflows/manual-release.yml
+          grep -Fq 'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}' .github/workflows/manual-release.yml
+
+      - name: Commit repair and remove temporary bridges
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -- .github/workflows/tmp-draft-release-fix.yml .github/workflows/tmp-draft-release-fix-pr.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/manual-release.yml scripts/check-manual-release-workflow.sh \
+            .github/workflows/tmp-draft-release-fix.yml .github/workflows/tmp-draft-release-fix-pr.yml
+          git diff --cached --check
+          git commit -m 'ci: make draft release transactions ID-aware'
+          timeout 60s git push origin HEAD:refs/heads/fix/manual-release-draft-repair
