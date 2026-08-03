@@ -27,18 +27,16 @@ jobs:
           ref: fix/manual-release-draft-repair
           fetch-depth: 2
 
-      - name: Patch staged release upload by ID
+      - name: Patch release upload by ID
         shell: bash
         run: |
           set -euo pipefail
           timeout 60s python3 scripts/tmp-patch-draft-upload-by-id.py
 
-      - name: Validate complete staged repair
+      - name: Validate complete repair
         shell: bash
         run: |
           set -euo pipefail
-          cp .repair-staging/manual-release.yml .github/workflows/manual-release.yml
-          cp .repair-staging/check-manual-release-workflow.sh scripts/check-manual-release-workflow.sh
           timeout 120s ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK workflow YAML"' .github/workflows/manual-release.yml
           timeout 120s bash -n scripts/check-manual-release-workflow.sh
           timeout 180s bash scripts/check-manual-release-workflow.sh
@@ -52,6 +50,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p .repair-staging
+          cp .github/workflows/manual-release.yml .repair-staging/manual-release.yml
+          cp scripts/check-manual-release-workflow.sh .repair-staging/check-manual-release-workflow.sh
           git checkout -- .github/workflows/manual-release.yml scripts/check-manual-release-workflow.sh
           git add .repair-staging/manual-release.yml .repair-staging/check-manual-release-workflow.sh
           if git diff --cached --quiet; then
