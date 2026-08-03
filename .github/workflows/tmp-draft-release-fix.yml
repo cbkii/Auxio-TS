@@ -1,0 +1,302 @@
+name: Temporary draft release repair
+
+on:
+  push:
+    branches:
+      - fix/manual-release-draft-repair
+    paths:
+      - .github/workflows/tmp-draft-release-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-draft-repair
+          fetch-depth: 2
+
+      - name: Verify isolated bridge commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only HEAD^ HEAD)"
+          [[ "${changed}" == '.github/workflows/tmp-draft-release-fix.yml' ]] || {
+            echo "::error::Temporary bridge commit was not isolated: ${changed}"
+            exit 1
+          }
+
+      - name: Apply draft-aware release repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow_path = Path('.github/workflows/manual-release.yml')
+          checker_path = Path('scripts/check-manual-release-workflow.sh')
+          workflow = workflow_path.read_text(encoding='utf-8')
+          checker = checker_path.read_text(encoding='utf-8')
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return text.replace(old, new, 1)
+
+          old_plan = '''          git tag --list > "${git_tags}"
+          # The Releases API returns draft, prerelease and final releases. Pagination is mandatory.
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \\
+            --jq '.[].tag_name' > "${release_tags}"
+          printf '{}\\n' > "${target_release}"
+
+          python3 "${TOOL}" resolve \\
+            --mode "${RELEASE_MODE}" \\
+            --input-tag "${INPUT_TAG}" \\
+            --source-gradle app/build.gradle \\
+            --git-tags-file "${git_tags}" \\
+            --release-tags-file "${release_tags}" \\
+            --target-release-json "${target_release}" \\
+            --output "${preliminary}"
+
+          release_tag="$(jq -r .release_tag "${preliminary}")"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" > "${target_release}" 2>/dev/null; then
+            echo "Found existing GitHub Release ${release_tag}."
+          else
+            printf '{}\\n' > "${target_release}"
+          fi
+'''
+          new_plan = '''          git tag --list > "${git_tags}"
+          # List releases includes authenticated draft, prerelease and published releases.
+          # Keep an ID/tag index so draft lookup never uses the published-only tag endpoint.
+          release_index="${RUNNER_TEMP}/github-releases.tsv"
+          timeout 60s gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \\
+            --jq '.[] | [.id, .tag_name] | @tsv' > "${release_index}"
+          cut -f2 "${release_index}" > "${release_tags}"
+          printf '{}\\n' > "${target_release}"
+
+          python3 "${TOOL}" resolve \\
+            --mode "${RELEASE_MODE}" \\
+            --input-tag "${INPUT_TAG}" \\
+            --source-gradle app/build.gradle \\
+            --git-tags-file "${git_tags}" \\
+            --release-tags-file "${release_tags}" \\
+            --target-release-json "${target_release}" \\
+            --output "${preliminary}"
+
+          release_tag="$(jq -r .release_tag "${preliminary}")"
+          release_ids="${RUNNER_TEMP}/target-release-ids.txt"
+          awk -F '\\t' -v tag="${release_tag}" '$2 == tag { print $1 }' \\
+            "${release_index}" > "${release_ids}"
+          release_count="$(awk 'NF { count += 1 } END { print count + 0 }' "${release_ids}")"
+          case "${release_count}" in
+            0)
+              printf '{}\\n' > "${target_release}"
+              ;;
+            1)
+              release_id="$(cat "${release_ids}")"
+              [[ "${release_id}" =~ ^[0-9]+$ ]] || {
+                echo "::error::Release ${release_tag} resolved to invalid ID ${release_id}."
+                exit 1
+              }
+              timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" > "${target_release}"
+              jq -e --arg tag "${release_tag}" --arg id "${release_id}" \\
+                '(.id == ($id | tonumber)) and (.tag_name == $tag)' \\
+                "${target_release}" >/dev/null || {
+                  echo "::error::Release ID ${release_id} did not resolve back to ${release_tag}."
+                  exit 1
+                }
+              echo "Found existing GitHub Release ${release_tag} (ID ${release_id})."
+              ;;
+            *)
+              echo "::error::Multiple GitHub Releases unexpectedly use tag ${release_tag}."
+              exit 1
+              ;;
+          esac
+'''
+          workflow = replace_once(workflow, old_plan, new_plan, 'draft-aware release planning')
+
+          old_release = '''          created=false
+          if [[ "${RELEASE_EXISTS}" != true ]]; then
+            notes="${RUNNER_TEMP}/release-notes.md"
+            {
+              echo "## What's changed"
+              echo
+              if [[ -n "${PREVIOUS_TAG}" ]]; then
+                git log --reverse --pretty='- %s' "${PREVIOUS_TAG}..${RELEASE_TAG}"
+              else
+                echo '- Initial maintained Topway release.'
+              fi
+              echo
+              echo '## Assets'
+              echo '- topwayTwMedia is the primary signed APK.'
+              echo '- The LSPosed API 100 bridge is the signed TS18 addon for the genuine stock `com.tw.music` process.'
+              if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
+                echo '- Debug APKs were explicitly selected as GitHub Release assets.'
+                echo '- Debug APKs are diagnostic companions with separate application IDs; they are not recommended normal installs.'
+              else
+                echo '- Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.'
+              fi
+              echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
+              echo '- Exact TS18 runtime behaviour requires device validation.'
+            } > "${notes}"
+            gh release create "${RELEASE_TAG}" \\
+              --title "${RELEASE_TAG}" \\
+              --notes-file "${notes}" \\
+              --draft \\
+              --verify-tag
+            created=true
+          fi
+          release_json="${RUNNER_TEMP}/active-release.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > "${release_json}"
+          {
+'''
+          new_release = '''          created=false
+          release_json="${RUNNER_TEMP}/active-release.json"
+          if [[ "${RELEASE_EXISTS}" != true ]]; then
+            notes="${RUNNER_TEMP}/release-notes.md"
+            {
+              echo "## What's changed"
+              echo
+              if [[ -n "${PREVIOUS_TAG}" ]]; then
+                git log --reverse --pretty='- %s' "${PREVIOUS_TAG}..${RELEASE_TAG}"
+              else
+                echo '- Initial maintained Topway release.'
+              fi
+              echo
+              echo '## Assets'
+              echo '- topwayTwMedia is the primary signed APK.'
+              echo '- The LSPosed API 100 bridge is the signed TS18 addon for the genuine stock `com.tw.music` process.'
+              if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
+                echo '- Debug APKs were explicitly selected as GitHub Release assets.'
+                echo '- Debug APKs are diagnostic companions with separate application IDs; they are not recommended normal installs.'
+              else
+                echo '- Debug APKs remain short-lived workflow artifacts and are not GitHub Release assets.'
+              fi
+              echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
+              echo '- Exact TS18 runtime behaviour requires device validation.'
+            } > "${notes}"
+            # The create endpoint returns the draft object, including its stable release ID.
+            # Do not query the published-only /releases/tags/{tag} endpoint afterwards.
+            timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \\
+              -f tag_name="${RELEASE_TAG}" \\
+              -f target_commitish="${RELEASE_TAG}" \\
+              -f name="${RELEASE_TAG}" \\
+              -F body=@"${notes}" \\
+              -F draft=true \\
+              -F prerelease=false > "${release_json}"
+            created=true
+          else
+            [[ -s "${TARGET_RELEASE_FILE}" ]] || {
+              echo "::error::Existing release state file is missing for ${RELEASE_TAG}."
+              exit 1
+            }
+            cp "${TARGET_RELEASE_FILE}" "${release_json}"
+          fi
+          jq -e --arg tag "${RELEASE_TAG}" '
+            (.id | type == "number") and
+            (.tag_name == $tag) and
+            (.html_url | type == "string" and length > 0) and
+            (.draft | type == "boolean") and
+            (.prerelease | type == "boolean")
+          ' "${release_json}" >/dev/null || {
+            echo "::error::Active release object is invalid or does not match ${RELEASE_TAG}."
+            exit 1
+          }
+          {
+'''
+          workflow = replace_once(workflow, old_release, new_release, 'draft release creation')
+
+          workflow = replace_once(
+              workflow,
+              '          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}\n        run: |\n          set -euo pipefail\n          created=false',
+              '          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}\n          TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}\n        run: |\n          set -euo pipefail\n          created=false',
+              'target release file environment',
+          )
+
+          old_verify = '''          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
+        run: |
+          set -euo pipefail
+          remote_json="${RUNNER_TEMP}/verified-release.json"
+          actual_names="${RUNNER_TEMP}/actual-release-assets.txt"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > "${remote_json}"
+          jq -r '.assets[].name' "${remote_json}" | sort -u > "${actual_names}"
+'''
+          new_verify = '''          RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
+          DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]] || {
+            echo "::error::Release ID is missing or invalid for ${RELEASE_TAG}."
+            exit 1
+          }
+          remote_json="${RUNNER_TEMP}/verified-release.json"
+          actual_names="${RUNNER_TEMP}/actual-release-assets.txt"
+          timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > "${remote_json}"
+          jq -e --arg tag "${RELEASE_TAG}" --arg id "${RELEASE_ID}" \\
+            '(.id == ($id | tonumber)) and (.tag_name == $tag)' \\
+            "${remote_json}" >/dev/null || {
+              echo "::error::Remote release ID ${RELEASE_ID} no longer matches ${RELEASE_TAG}."
+              exit 1
+            }
+          jq -r '.assets[].name' "${remote_json}" | sort -u > "${actual_names}"
+'''
+          workflow = replace_once(workflow, old_verify, new_verify, 'release verification by ID')
+
+          checker = replace_once(
+              checker,
+              "    'github.actor == github.repository_owner',\n",
+              "    'github.actor == github.repository_owner',\n    '/releases/tags/',\n",
+              'published-only endpoint regression guard',
+          )
+          checker = replace_once(
+              checker,
+              "    'gh api --paginate \"repos/${GITHUB_REPOSITORY}/releases?per_page=100\"',\n    \"--jq '.[].tag_name'\",\n",
+              "    'timeout 60s gh api --paginate \"repos/${GITHUB_REPOSITORY}/releases?per_page=100\"',\n    \"--jq '.[] | [.id, .tag_name] | @tsv'\",\n",
+              'draft-aware release listing contract',
+          )
+          checker = replace_once(
+              checker,
+              "    '--draft',\n",
+              "    'gh api --method POST \"repos/${GITHUB_REPOSITORY}/releases\"',\n    '-F draft=true',\n    'TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}',\n    'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}',\n",
+              'draft creation and ID contract',
+          )
+
+          workflow_path.write_text(workflow, encoding='utf-8')
+          checker_path.write_text(checker, encoding='utf-8')
+          PY
+
+      - name: Validate repaired contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK workflow YAML"' .github/workflows/manual-release.yml
+          timeout 120s bash -n scripts/check-manual-release-workflow.sh
+          timeout 180s bash scripts/check-manual-release-workflow.sh
+          ! grep -Fq '/releases/tags/' .github/workflows/manual-release.yml
+          grep -Fq 'TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}' .github/workflows/manual-release.yml
+          grep -Fq 'timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases"' .github/workflows/manual-release.yml
+          grep -Fq 'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}' .github/workflows/manual-release.yml
+
+      - name: Commit repair and remove bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -- .github/workflows/tmp-draft-release-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/manual-release.yml scripts/check-manual-release-workflow.sh .github/workflows/tmp-draft-release-fix.yml
+          git diff --cached --check
+          git commit -m 'ci: make draft release transactions ID-aware'
+          timeout 60s git push origin HEAD:refs/heads/fix/manual-release-draft-repair
