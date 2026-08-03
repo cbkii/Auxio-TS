@@ -22,11 +22,12 @@ because the workflow was manually dispatched by the owner, and it cannot satisfy
 entry assigned to the `cbkii` user. The protected-ref token must therefore belong to the same user that
 is configured as the ruleset bypass actor.
 
-The release job is gated by `github.actor == github.repository_owner`. A non-owner dispatch is skipped
-before checkout and before any step can receive `RELEASE_PUSH_TOKEN`. This repository is currently
-owned by the personal account `cbkii`. If the repository is transferred to an organisation, replace
-that personal-owner gate and token design with an explicitly approved environment or a dedicated
-GitHub App before running another release; an organisation login cannot dispatch a workflow as a user.
+The release job requires both `github.actor` and `github.triggering_actor` to equal
+`github.repository_owner`. A non-owner dispatch or rerun is skipped before checkout and before any
+step can receive `RELEASE_PUSH_TOKEN`. This repository is currently owned by the personal account
+`cbkii`. If the repository is transferred to an organisation, replace that personal-owner gate and
+token design with an explicitly approved environment or a dedicated GitHub App before running another
+release; an organisation login cannot dispatch a workflow as a user.
 
 Configure the repository rulesets as follows:
 
@@ -52,14 +53,16 @@ A bypass on only the branch ruleset does not authorise tag creation, and a bypas
 ruleset does not authorise the metadata fast-forward.
 
 After resolving the exact release tag, Manual Release fetches every active branch/tag ruleset and its
-full detail with the owner token. Before any JDK, Android SDK, dependency bootstrap or APK build, it
-fails closed unless:
+full detail with the owner token. The validator also fetches repository-wide push rulesets and classic
+`dev` protection directly. Before any JDK, Android SDK, dependency bootstrap or APK build, it fails
+closed unless:
 
 - every active ruleset applying to `refs/heads/dev` contains the owner user ID with `User` / `always`
   bypass;
 - for new releases, every active ruleset applying to the exact `refs/tags/vX.Y.Z` contains that same
   bypass;
 - at least one applicable release-tag ruleset contains the `creation` restriction;
+- every active repository-wide push ruleset contains the same owner bypass;
 - no classic `dev` protection enforced for administrators would block the metadata fast-forward.
 
 This is stronger than checking `.permissions.push`, which proves ordinary repository scope but not a
@@ -88,9 +91,9 @@ and the summary reports when source metadata still requires reconciliation.
 
 ### Read-only settings audit
 
-The following bounded, read-only audit fails closed on GitHub API errors, malformed
-JSON and incomplete pagination. It supports GNU `timeout` on Linux/Termux and
-`gtimeout` from Homebrew coreutils on macOS.
+The following bounded, read-only audit fails closed on GitHub API errors, malformed JSON, unexpected
+schemas, unsafe workflow-token defaults and incomplete pagination. It supports GNU `timeout` on
+Linux/Termux and `gtimeout` from Homebrew coreutils on macOS.
 
 ```bash
 #!/usr/bin/env bash
@@ -100,8 +103,7 @@ repo='cbkii/Auxio-TS'
 
 for required_command in gh jq mktemp; do
   command -v "$required_command" >/dev/null 2>&1 || {
-    printf 'STOP: required command is unavailable: %s
-' "$required_command" >&2
+    printf 'STOP: required command is unavailable: %s\n' "$required_command" >&2
     exit 1
   }
 done
@@ -111,8 +113,7 @@ if command -v timeout >/dev/null 2>&1; then
 elif command -v gtimeout >/dev/null 2>&1; then
   timeout_command=(gtimeout 30s)
 else
-  printf 'STOP: install GNU timeout (coreutils) before running this audit.
-' >&2
+  printf 'STOP: install GNU timeout (coreutils) before running this audit.\n' >&2
   exit 1
 fi
 
@@ -122,15 +123,13 @@ api_get() {
   local output
   errors="$(mktemp)"
   if ! output="$("${timeout_command[@]}" gh api "$endpoint" 2>"$errors")"; then
-    printf 'STOP: GitHub API request failed: %s
-' "$endpoint" >&2
+    printf 'STOP: GitHub API request failed: %s\n' "$endpoint" >&2
     cat "$errors" >&2
     rm -f "$errors"
     return 1
   fi
   rm -f "$errors"
-  printf '%s
-' "$output"
+  printf '%s\n' "$output"
 }
 
 api_pages() {
@@ -141,115 +140,126 @@ api_pages() {
   if ! output="$(
     "${timeout_command[@]}" gh api --paginate --slurp "$endpoint" 2>"$errors"
   )"; then
-    printf 'STOP: paginated GitHub API request failed: %s
-' "$endpoint" >&2
+    printf 'STOP: paginated GitHub API request failed: %s\n' "$endpoint" >&2
     cat "$errors" >&2
     rm -f "$errors"
     return 1
   fi
   rm -f "$errors"
-  printf '%s
-' "$output"
+  printf '%s\n' "$output"
 }
 
-printf '
-== Workflow permission ==
-'
+printf '\n== Workflow permission ==\n'
 workflow_permission="$(api_get "repos/${repo}/actions/permissions/workflow")" ||
   exit 1
-printf '%s
-' "$workflow_permission" | jq -e . || {
-  printf 'STOP: workflow-permission response is not valid JSON.
-' >&2
+default_workflow_permission="$(
+  printf '%s\n' "$workflow_permission" |
+    jq -er '.default_workflow_permissions | select(. == "read" or . == "write")'
+)" || {
+  printf 'STOP: workflow-permission response is incomplete or invalid.\n' >&2
+  exit 1
+}
+[[ "$default_workflow_permission" == read ]] || {
+  printf 'STOP: repository GITHUB_TOKEN default is %s; set it to read-only.\n' \
+    "$default_workflow_permission" >&2
+  exit 1
+}
+printf 'default_workflow_permissions=%s\n' "$default_workflow_permission"
+
+printf '\n== Actions secret names ==\n'
+secret_pages="$(api_pages "repos/${repo}/actions/secrets?per_page=100")" ||
+  exit 1
+printf '%s\n' "$secret_pages" |
+  jq -e 'type == "array" and all(.[]; (.secrets | type) == "array")' \
+    >/dev/null || {
+  printf 'STOP: Actions-secret pagination response is incomplete or invalid.\n' >&2
+  exit 1
+}
+secret_names="$(
+  printf '%s\n' "$secret_pages" |
+    jq -r '[.[] | .secrets[].name] | unique | .[]' |
+    sort
+)" || {
+  printf 'STOP: Actions-secret names could not be parsed.\n' >&2
+  exit 1
+}
+printf '%s\n' "$secret_names"
+printf '%s\n' "$secret_names" | grep -Fxq RELEASE_PUSH_TOKEN || {
+  printf 'STOP: RELEASE_PUSH_TOKEN is not configured as an Actions secret.\n' >&2
   exit 1
 }
 
-printf '
-== Actions secret names ==
-'
-secret_pages="$(api_pages "repos/${repo}/actions/secrets?per_page=100")" ||
-  exit 1
-printf '%s
-' "$secret_pages" |
-  jq -er '[.[].secrets[]?.name] | unique | .[]' |
-  sort || {
-    printf 'STOP: Actions-secret response is incomplete or invalid.
-' >&2
-    exit 1
-  }
-
-printf '
-== Rulesets ==
-'
+printf '\n== Rulesets ==\n'
 ruleset_pages="$(api_pages "repos/${repo}/rulesets?per_page=100&includes_parents=true")" ||
   exit 1
+printf '%s\n' "$ruleset_pages" |
+  jq -e 'type == "array" and all(.[]; type == "array")' >/dev/null || {
+  printf 'STOP: ruleset pagination response is incomplete or invalid.\n' >&2
+  exit 1
+}
 ruleset_rows="$(
-  printf '%s
-' "$ruleset_pages" |
+  printf '%s\n' "$ruleset_pages" |
     jq -er 'add | unique_by(.id) | .[] | [.id, .name, .target, .enforcement] | @tsv'
 )" || {
-  printf 'STOP: ruleset index is incomplete or invalid.
-' >&2
+  printf 'STOP: ruleset index is incomplete or invalid.\n' >&2
   exit 1
 }
 [[ -n "$ruleset_rows" ]] || {
-  printf 'STOP: no repository rulesets were returned.
-' >&2
+  printf 'STOP: no repository rulesets were returned.\n' >&2
   exit 1
 }
-printf '%s
-' "$ruleset_rows"
+printf '%s\n' "$ruleset_rows"
 
-while IFS=$'	' read -r id name target enforcement; do
+while IFS=$'\t' read -r id name target enforcement; do
   [[ "$id" =~ ^[0-9]+$ ]] || {
-    printf 'STOP: invalid ruleset id: %s
-' "$id" >&2
+    printf 'STOP: invalid ruleset id: %s\n' "$id" >&2
     exit 1
   }
-  printf '
---- ruleset %s: %s (%s, %s) ---
-' \
+  printf '\n--- ruleset %s: %s (%s, %s) ---\n' \
     "$id" "$name" "$target" "$enforcement"
   detail="$(api_get "repos/${repo}/rulesets/${id}?includes_parents=true")" ||
     exit 1
-  printf '%s
-' "$detail" | jq -e '{
-    id,
-    name,
-    target,
-    enforcement,
-    bypass_actors,
-    conditions,
-    rules
-  }' || {
-    printf 'STOP: ruleset %s response is incomplete or invalid.
-' "$id" >&2
+  printf '%s\n' "$detail" | jq -e '
+    select(
+      (.id | type) == "number" and
+      (.name | type) == "string" and
+      (.target | type) == "string" and
+      (.enforcement | type) == "string" and
+      (.bypass_actors | type) == "array" and
+      (.conditions | type) == "object" and
+      (.rules | type) == "array"
+    ) |
+    {
+      id,
+      name,
+      target,
+      enforcement,
+      bypass_actors,
+      conditions,
+      rules
+    }
+  ' || {
+    printf 'STOP: ruleset %s response is incomplete or invalid.\n' "$id" >&2
     exit 1
   }
 done <<< "$ruleset_rows"
 
-printf '
-== Classic dev protection, when present ==
-'
+printf '\n== Classic dev protection, when present ==\n'
 classic_errors="$(mktemp)"
 if classic="$(
   "${timeout_command[@]}" gh api \
     "repos/${repo}/branches/dev/protection" 2>"$classic_errors"
 )"; then
   rm -f "$classic_errors"
-  printf '%s
-' "$classic" | jq -e . || {
-    printf 'STOP: classic-protection response is not valid JSON.
-' >&2
+  printf '%s\n' "$classic" | jq -e 'type == "object"' || {
+    printf 'STOP: classic-protection response is not a JSON object.\n' >&2
     exit 1
   }
 elif grep -Fq 'Branch not protected' "$classic_errors"; then
   rm -f "$classic_errors"
-  printf 'No classic branch-protection rule applies to dev.
-'
+  printf 'No classic branch-protection rule applies to dev.\n'
 else
-  printf 'STOP: classic branch-protection inspection failed.
-' >&2
+  printf 'STOP: classic branch-protection inspection failed.\n' >&2
   cat "$classic_errors" >&2
   rm -f "$classic_errors"
   exit 1
@@ -260,7 +270,6 @@ fi
 `RELEASE_PUSH_TOKEN`, the token owner is on the bypass list for every applicable
 branch, tag and push ruleset, and overlapping classic protection has been
 reconciled.
-
 
 ## GitHub authority references
 
@@ -299,8 +308,8 @@ ruleset details. The token owner must retain sufficient repository authority for
 `bypass_actors` field; absence of that field fails closed.
 
 A pre-existing classic PAT can be used instead when it belongs to `cbkii` and has repository write
-scope, but a repository-scoped fine-grained PAT is preferred. Do not use an APK signing secret, deploy
-key, or another user's token as a substitute.
+scope plus read access to repository administration settings, but a repository-scoped fine-grained PAT
+is preferred. Do not use an APK signing secret, deploy key, or another user's token as a substitute.
 
 Create or update the Actions secret without printing the token:
 
@@ -342,13 +351,13 @@ Run **Manual Release** from `dev` only, while signed in as the repository owner.
 
 A new release performs this transaction:
 
-1. Permit only the current repository owner to enter the release job.
+1. Permit only an owner-started and owner-rerun execution to enter the release job.
 2. Confirm the checkout is exactly the current remote `dev`.
 3. Validate `RELEASE_PUSH_TOKEN`, its owner identity and repository push access.
 4. Resolve the target version from source metadata, strict semantic Git tags and every GitHub Release
    returned by the paginated Releases API, including drafts, prereleases and final releases.
-5. Verify the owner's bypass on every active ruleset applying to `dev` and the exact new tag, and reject
-   blocking classic branch protection.
+5. Verify the owner's bypass on every active ruleset applying to `dev`, the exact new tag and any
+   repository-wide push ruleset, and reject blocking classic branch protection.
 6. Create a local source metadata commit only when the checked-in version differs.
 7. Build each required variant at most once.
 8. Inspect and stage APKs and sidecars, generate the compact release manifest, and upload recovery
@@ -478,7 +487,7 @@ a separate 14-day artifact.
 
 Failure handling is forward-repairable:
 
-- non-owner dispatch: the release job is skipped before secret access;
+- non-owner dispatch or rerun: the release job is skipped before secret access;
 - protected-ref token identity/access failure: stop before dependency setup/build and change no release
   state;
 - ruleset or classic-protection authority failure: stop before dependency setup/build and change no
