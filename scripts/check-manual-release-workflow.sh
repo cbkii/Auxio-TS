@@ -25,7 +25,38 @@ for required in \
   [[ -f "${required}" ]] || fail "Missing ${required}"
 done
 
-ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' "${workflow}"
+ruby - "${workflow}" <<'RUBY'
+require 'yaml'
+
+workflow_path = ARGV.fetch(0)
+document = Psych.safe_load(
+  File.read(workflow_path),
+  permitted_classes: [],
+  permitted_symbols: [],
+  aliases: false
+)
+unless document.is_a?(Hash)
+  abort "::error::#{workflow_path} did not parse to a mapping"
+end
+
+expected_permissions = {
+  'actions' => 'read',
+  'checks' => 'read',
+  'contents' => 'write'
+}
+actual_permissions = document['permissions']
+unless actual_permissions == expected_permissions
+  abort "::error::Manual Release permissions must equal #{expected_permissions.inspect}; got #{actual_permissions.inspect}"
+end
+
+release_job = document.dig('jobs', 'release')
+unless release_job.is_a?(Hash) && release_job['timeout-minutes'] == 90
+  abort '::error::Manual Release job timeout must remain 90 minutes'
+end
+
+puts "OK #{workflow_path} permissions and job timeout"
+RUBY
+
 for script in "$0" "${bridge_checker}" "${app_checker}" "${signer_parser}" "${variant_checker}" "${reset_checker}"; do
   bash -n "${script}" || fail "Shell syntax check failed for ${script}"
 done
@@ -165,6 +196,7 @@ for forbidden in (
     'RELEASE_PUSH_TOKEN',
     'check-release-ruleset-authority.py',
     'Verify protected-ref ruleset bypass',
+    'github.actor == github.repository_owner',
 ):
     if forbidden in text:
         raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
@@ -172,10 +204,6 @@ for forbidden in (
 required_tokens = (
     'group: manual-release',
     'cancel-in-progress: false',
-    'timeout-minutes: 90',
-    'actions: read',
-    'checks: read',
-    'contents: write',
     'GH_TOKEN: ${{ github.token }}',
     'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
     "--jq '.[].tag_name'",
@@ -212,6 +240,10 @@ required_tokens = (
 for token in required_tokens:
     if token not in text:
         raise SystemExit(f'Missing release transaction contract: {token}')
+
+workflow_token = 'GH_TOKEN: ${{ github.token }}'
+if text.count(workflow_token) != 7:
+    raise SystemExit('Manual Release must use github.token in exactly seven GitHub API/push steps.')
 
 for guard in (
     "${GITHUB_WORKFLOW:-}",
