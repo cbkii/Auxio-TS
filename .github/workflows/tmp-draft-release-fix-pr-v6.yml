@@ -1,0 +1,59 @@
+name: Temporary draft release staging bridge
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/tmp-draft-release-fix-pr-v6.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-draft-release-staging-fix-manual-release-draft-repair
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/manual-release-draft-repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-draft-repair
+          fetch-depth: 2
+
+      - name: Apply and validate final repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s python3 scripts/tmp-run-draft-release-fix-v3.py
+          timeout 120s ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK workflow YAML"' .github/workflows/manual-release.yml
+          timeout 120s bash -n scripts/check-manual-release-workflow.sh
+          timeout 180s bash scripts/check-manual-release-workflow.sh
+          ! grep -Fq '/releases/tags/' .github/workflows/manual-release.yml
+          target_marker='TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}'
+          grep -Fq "${target_marker}" .github/workflows/manual-release.yml
+          grep -Fq 'timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases"' .github/workflows/manual-release.yml
+          grep -Fq 'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}' .github/workflows/manual-release.yml
+
+      - name: Stage validated non-workflow blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .repair-staging
+          cp .github/workflows/manual-release.yml .repair-staging/manual-release.yml
+          cp scripts/check-manual-release-workflow.sh .repair-staging/check-manual-release-workflow.sh
+          git add .repair-staging/manual-release.yml .repair-staging/check-manual-release-workflow.sh
+          if git diff --cached --quiet; then
+            echo 'Validated staging blobs are already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git diff --cached --check
+          git commit -m 'chore: stage validated draft-release repair blobs'
+          timeout 60s git push origin HEAD:refs/heads/fix/manual-release-draft-repair
