@@ -162,7 +162,7 @@ fi
 log '[3/6] Inspecting repository rulesets'
 rulesets_file="$TMP_DIR/rulesets.json"
 api_to_file "$rulesets_file" --paginate --slurp \
-  "repos/$REPO/rulesets?per_page=100" || exit 1
+  "repos/$REPO/rulesets?per_page=100&includes_parents=false" || exit 1
 jq -e '
   type == "array" and
   all(.[]; type == "array") and
@@ -247,7 +247,7 @@ fi
 log '[6/6] Verifying reset'
 verify_rulesets="$TMP_DIR/verify-rulesets.json"
 api_to_file "$verify_rulesets" --paginate --slurp \
-  "repos/$REPO/rulesets?per_page=100" || exit 1
+  "repos/$REPO/rulesets?per_page=100&includes_parents=false" || exit 1
 jq -e 'type == "array" and all(.[]; type == "array")' \
   "$verify_rulesets" >/dev/null || stop 'ruleset verification response had an unexpected schema'
 remaining=$(jq -er '[.[][]] | length' "$verify_rulesets") ||
