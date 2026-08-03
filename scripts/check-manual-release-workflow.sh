@@ -197,6 +197,8 @@ for forbidden in (
     'check-release-ruleset-authority.py',
     'Verify protected-ref ruleset bypass',
     'github.actor == github.repository_owner',
+    '/releases/tags/',
+    'gh release upload',
 ):
     if forbidden in text:
         raise SystemExit(f'Retired or unsafe release token remains: {forbidden}')
@@ -205,14 +207,21 @@ required_tokens = (
     'group: manual-release',
     'cancel-in-progress: false',
     'GH_TOKEN: ${{ github.token }}',
-    'gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
-    "--jq '.[].tag_name'",
+    'timeout 60s gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100"',
+    "--jq '.[] | [.id, .tag_name] | @tsv'",
     'scripts/release-orchestrator.py',
     'Push immutable release tag',
     'Ensure draft release transaction exists',
-    '--draft',
+    'gh api --method POST "repos/${GITHUB_REPOSITORY}/releases"',
+    '-F draft=true',
+    'TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}',
+    'repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}',
     'Upload or replace planned release assets',
-    '--clobber',
+    'RELEASE_ID: ${{ steps.release.outputs.release_id }}',
+    'repos/${GITHUB_REPOSITORY}/releases/assets/${existing_id}',
+    '--connect-timeout 15',
+    '--max-time 300',
+    '--data-binary "@${path}"',
     'Verify remote release asset manifest',
     'Apply requested status to newly created release',
     'Synchronise released source metadata to dev',
@@ -236,6 +245,7 @@ required_tokens = (
     'Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk',
     'workflow_artifacts|release_assets',
     'persist-credentials: false',
+    'timeout 60s gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"',
 )
 for token in required_tokens:
     if token not in text:

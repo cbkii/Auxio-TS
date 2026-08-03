@@ -174,9 +174,12 @@ jobs:
           final_plan="${RUNNER_TEMP}/release-plan.json"
 
           git tag --list > "${git_tags}"
-          # The Releases API returns draft, prerelease and final releases. Pagination is mandatory.
-          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[].tag_name' > "${release_tags}"
+          # List releases includes authenticated draft, prerelease and published releases.
+          # Keep an ID/tag index so draft lookup never uses the published-only tag endpoint.
+          release_index="${RUNNER_TEMP}/github-releases.tsv"
+          timeout 60s gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | [.id, .tag_name] | @tsv' > "${release_index}"
+          cut -f2 "${release_index}" > "${release_tags}"
           printf '{}\n' > "${target_release}"
 
           python3 "${TOOL}" resolve \
@@ -189,11 +192,34 @@ jobs:
             --output "${preliminary}"
 
           release_tag="$(jq -r .release_tag "${preliminary}")"
-          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}" > "${target_release}" 2>/dev/null; then
-            echo "Found existing GitHub Release ${release_tag}."
-          else
-            printf '{}\n' > "${target_release}"
-          fi
+          release_ids="${RUNNER_TEMP}/target-release-ids.txt"
+          awk -F '\t' -v tag="${release_tag}" '$2 == tag { print $1 }' \
+            "${release_index}" > "${release_ids}"
+          release_count="$(awk 'NF { count += 1 } END { print count + 0 }' "${release_ids}")"
+          case "${release_count}" in
+            0)
+              printf '{}\n' > "${target_release}"
+              ;;
+            1)
+              release_id="$(cat "${release_ids}")"
+              [[ "${release_id}" =~ ^[0-9]+$ ]] || {
+                echo "::error::Release ${release_tag} resolved to invalid ID ${release_id}."
+                exit 1
+              }
+              timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" > "${target_release}"
+              jq -e --arg tag "${release_tag}" --arg id "${release_id}" \
+                '(.id == ($id | tonumber)) and (.tag_name == $tag)' \
+                "${target_release}" >/dev/null || {
+                  echo "::error::Release ID ${release_id} did not resolve back to ${release_tag}."
+                  exit 1
+                }
+              echo "Found existing GitHub Release ${release_tag} (ID ${release_id})."
+              ;;
+            *)
+              echo "::error::Multiple GitHub Releases unexpectedly use tag ${release_tag}."
+              exit 1
+              ;;
+          esac
 
           python3 "${TOOL}" resolve \
             --mode "${RELEASE_MODE}" \
@@ -709,9 +735,11 @@ jobs:
           PREVIOUS_TAG: ${{ steps.plan.outputs.previous_tag }}
           RELEASE_EXISTS: ${{ steps.plan.outputs.release_exists }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
+          TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}
         run: |
           set -euo pipefail
           created=false
+          release_json="${RUNNER_TEMP}/active-release.json"
           if [[ "${RELEASE_EXISTS}" != true ]]; then
             notes="${RUNNER_TEMP}/release-notes.md"
             {
@@ -735,15 +763,33 @@ jobs:
               echo '- The former exact-package Auxio Magisk overlay is retired and is not published.'
               echo '- Exact TS18 runtime behaviour requires device validation.'
             } > "${notes}"
-            gh release create "${RELEASE_TAG}" \
-              --title "${RELEASE_TAG}" \
-              --notes-file "${notes}" \
-              --draft \
-              --verify-tag
+            # The create endpoint returns the draft object, including its stable release ID.
+            # Do not query the published-only tag lookup endpoint afterwards.
+            timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+              -f tag_name="${RELEASE_TAG}" \
+              -f target_commitish="${RELEASE_TAG}" \
+              -f name="${RELEASE_TAG}" \
+              -F body=@"${notes}" \
+              -F draft=true \
+              -F prerelease=false > "${release_json}"
             created=true
+          else
+            [[ -s "${TARGET_RELEASE_FILE}" ]] || {
+              echo "::error::Existing release state file is missing for ${RELEASE_TAG}."
+              exit 1
+            }
+            cp "${TARGET_RELEASE_FILE}" "${release_json}"
           fi
-          release_json="${RUNNER_TEMP}/active-release.json"
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > "${release_json}"
+          jq -e --arg tag "${RELEASE_TAG}" '
+            (.id | type == "number") and
+            (.tag_name == $tag) and
+            (.html_url | type == "string" and length > 0) and
+            (.draft | type == "boolean") and
+            (.prerelease | type == "boolean")
+          ' "${release_json}" >/dev/null || {
+            echo "::error::Active release object is invalid or does not match ${RELEASE_TAG}."
+            exit 1
+          }
           {
             echo "created=${created}"
             echo "release_id=$(jq -r .id "${release_json}")"
@@ -757,27 +803,90 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
           UPLOAD_TSV: ${{ steps.assets.outputs.upload_tsv }}
           REPLACE: ${{ inputs.replace_existing_assets }}
         run: |
           set -euo pipefail
-          upload=()
+          if [[ ! -s "${UPLOAD_TSV}" ]]; then
+            echo 'No remote asset upload is required; selected triplets are already complete.'
+            exit 0
+          fi
+          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]] || {
+            echo "::error::Release ID is missing or invalid for ${RELEASE_TAG}."
+            exit 1
+          }
+
+          duplicate_names="${RUNNER_TEMP}/duplicate-upload-asset-names.txt"
+          cut -f1 "${UPLOAD_TSV}" | awk 'NF' | sort | uniq -d > "${duplicate_names}"
+          [[ ! -s "${duplicate_names}" ]] || {
+            echo '::error::The upload plan contains duplicate asset names.'
+            cat "${duplicate_names}" >&2
+            exit 1
+          }
+
+          remote_json="${RUNNER_TEMP}/upload-release.json"
+          timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > "${remote_json}"
+          jq -e --arg tag "${RELEASE_TAG}" --arg id "${RELEASE_ID}" \
+            '(.id == ($id | tonumber)) and (.tag_name == $tag)' \
+            "${remote_json}" >/dev/null || {
+              echo "::error::Upload release ID ${RELEASE_ID} does not match ${RELEASE_TAG}."
+              exit 1
+            }
+          upload_template="$(jq -r .upload_url "${remote_json}")"
+          upload_base="${upload_template%%{*}"
+          [[ "${upload_base}" == https://* && "${upload_base}" == */releases/${RELEASE_ID}/assets ]] || {
+            echo "::error::Release ${RELEASE_ID} returned an invalid upload URL."
+            exit 1
+          }
+
           while IFS=$'\t' read -r name path; do
             [[ -n "${name}" ]] || continue
             [[ -f "${path}" ]] || {
               echo "::error::Staged upload path is missing for ${name}: ${path}"
               exit 1
             }
-            upload+=("${path}#${name}")
-          done < "${UPLOAD_TSV}"
 
-          if ((${#upload[@]} == 0)); then
-            echo 'No remote asset upload is required; selected triplets are already complete.'
-          elif [[ "${REPLACE}" == true ]]; then
-            gh release upload "${RELEASE_TAG}" "${upload[@]}" --clobber
-          else
-            gh release upload "${RELEASE_TAG}" "${upload[@]}"
-          fi
+            mapfile -t existing_ids < <(
+              jq -r --arg name "${name}" '.assets[] | select(.name == $name) | .id' "${remote_json}"
+            )
+            ((${#existing_ids[@]} <= 1)) || {
+              echo "::error::Release ${RELEASE_ID} contains duplicate assets named ${name}."
+              exit 1
+            }
+            if ((${#existing_ids[@]} == 1)); then
+              existing_id="${existing_ids[0]}"
+              [[ "${existing_id}" =~ ^[0-9]+$ ]] || {
+                echo "::error::Asset ${name} resolved to invalid ID ${existing_id}."
+                exit 1
+              }
+              [[ "${REPLACE}" == true ]] || {
+                echo "::error::Asset ${name} already exists; explicit replacement was not selected."
+                exit 1
+              }
+              timeout 60s gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/releases/assets/${existing_id}"
+            fi
+
+            encoded_name="$(jq -rn --arg value "${name}" '$value | @uri')"
+            response="${RUNNER_TEMP}/uploaded-${encoded_name}.json"
+            curl --fail-with-body --silent --show-error \
+              --connect-timeout 15 \
+              --max-time 300 \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --header 'Content-Type: application/octet-stream' \
+              --data-binary "@${path}" \
+              "${upload_base}?name=${encoded_name}&label=${encoded_name}" > "${response}"
+            jq -e --arg name "${name}" \
+              '(.id | type == "number") and (.name == $name) and (.state == "uploaded")' \
+              "${response}" >/dev/null || {
+                echo "::error::GitHub returned an invalid upload result for ${name}."
+                exit 1
+              }
+          done < "${UPLOAD_TSV}"
 
       - name: Verify remote release asset manifest
         id: verify
@@ -785,6 +894,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
           RELEASE_MODE: ${{ inputs.release_mode }}
           VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
@@ -792,7 +902,17 @@ jobs:
           set -euo pipefail
           remote_json="${RUNNER_TEMP}/verified-release.json"
           actual_names="${RUNNER_TEMP}/actual-release-assets.txt"
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > "${remote_json}"
+          [[ "${RELEASE_ID}" =~ ^[0-9]+$ ]] || {
+            echo "::error::Release ID is missing or invalid for ${RELEASE_TAG}."
+            exit 1
+          }
+          timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > "${remote_json}"
+          jq -e --arg tag "${RELEASE_TAG}" --arg id "${RELEASE_ID}" \
+            '(.id == ($id | tonumber)) and (.tag_name == $tag)' \
+            "${remote_json}" >/dev/null || {
+              echo "::error::Remote release ID ${RELEASE_ID} no longer matches ${RELEASE_TAG}."
+              exit 1
+            }
           jq -r '.assets[].name' "${remote_json}" | sort -u > "${actual_names}"
 
           while IFS= read -r name; do
@@ -838,7 +958,7 @@ jobs:
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           set -euo pipefail
-          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+          timeout 60s gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
             -F draft="${DRAFT}" \
             -F prerelease="${PRERELEASE}" > "${RUNNER_TEMP}/final-release.json"
           echo "draft=$(jq -r .draft "${RUNNER_TEMP}/final-release.json")" >> "${GITHUB_OUTPUT}"
