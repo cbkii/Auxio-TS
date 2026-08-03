@@ -1,0 +1,65 @@
+name: Temporary draft release upload staging
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/tmp-draft-release-upload-stage.yml
+      - scripts/tmp-patch-draft-upload-by-id.py
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-draft-release-upload-staging-fix-manual-release-draft-repair
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/manual-release-draft-repair'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-draft-repair
+          fetch-depth: 2
+
+      - name: Patch staged release upload by ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s python3 scripts/tmp-patch-draft-upload-by-id.py
+
+      - name: Validate complete staged repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .repair-staging/manual-release.yml .github/workflows/manual-release.yml
+          cp .repair-staging/check-manual-release-workflow.sh scripts/check-manual-release-workflow.sh
+          timeout 120s ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK workflow YAML"' .github/workflows/manual-release.yml
+          timeout 120s bash -n scripts/check-manual-release-workflow.sh
+          timeout 180s bash scripts/check-manual-release-workflow.sh
+          ! grep -Fq '/releases/tags/' .github/workflows/manual-release.yml
+          ! grep -Fq 'gh release upload' .github/workflows/manual-release.yml
+          grep -Fq 'repos/${GITHUB_REPOSITORY}/releases/assets/${existing_id}' .github/workflows/manual-release.yml
+          grep -Fq -- '--max-time 300' .github/workflows/manual-release.yml
+          grep -Fq 'timeout 60s gh api --method PATCH' .github/workflows/manual-release.yml
+
+      - name: Commit staged non-workflow blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -- .github/workflows/manual-release.yml scripts/check-manual-release-workflow.sh
+          git add .repair-staging/manual-release.yml .repair-staging/check-manual-release-workflow.sh
+          if git diff --cached --quiet; then
+            echo 'ID-aware upload staging is already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git diff --cached --check
+          git commit -m 'chore: stage ID-aware draft release uploads'
+          timeout 60s git push origin HEAD:refs/heads/fix/manual-release-draft-repair
