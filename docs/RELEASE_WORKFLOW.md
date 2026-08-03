@@ -10,21 +10,320 @@ exact-package Magisk overlay.
 
 ## Required repository configuration
 
-The `dev` rulesets must:
+Protected release refs use two deliberately separate identities:
 
-- allow the selected GitHub Actions release identity to bypass the pull-request and required-check
-  rules for an ordinary fast-forward update;
-- continue to block branch deletion;
-- continue to block force pushes and other non-fast-forward updates.
+- `GITHUB_TOKEN` performs GitHub Release API operations and asset upload with workflow-scoped
+  `contents: write` permission;
+- the repository secret `RELEASE_PUSH_TOKEN` authenticates the two protected Git ref mutations: the
+  immutable `vX.Y.Z` tag push and the ordinary fast-forward release-metadata update to `dev`.
 
-The workflow uses `GITHUB_TOKEN` with `contents: write`. It does not force-push and rechecks the remote
-`dev` SHA immediately before synchronising source metadata.
+`GITHUB_TOKEN` is the `github-actions[bot]` identity. It does not become the repository owner merely
+because the workflow was manually dispatched by the owner, and it cannot satisfy a ruleset bypass
+entry assigned to the `cbkii` user. The protected-ref token must therefore belong to the same user that
+is configured as the ruleset bypass actor.
+
+The release job requires both `github.actor` and `github.triggering_actor` to equal
+`github.repository_owner`. A non-owner dispatch or rerun is skipped before checkout and before any
+step can receive `RELEASE_PUSH_TOKEN`. This repository is currently owned by the personal account
+`cbkii`. If the repository is transferred to an organisation, replace that personal-owner gate and
+token design with an explicitly approved environment or a dedicated GitHub App before running another
+release; an organisation login cannot dispatch a workflow as a user.
+
+Configure the repository rulesets as follows:
+
+### `dev` branch ruleset
+
+- target `dev` exactly;
+- keep pull requests and the repository's required checks for ordinary contributors;
+- add `cbkii` as a bypass actor with bypass mode **Always**;
+- keep branch deletion blocked;
+- keep force pushes/non-fast-forward updates blocked.
+
+### release-tag ruleset
+
+- target release tags matching `v*` (or the repository's stricter equivalent that includes
+  `vMAJOR.MINOR.PATCH`);
+- include the **Restrict creations** rule;
+- add `cbkii` as a bypass actor with bypass mode **Always**;
+- keep tag deletion blocked;
+- do not permit tag movement or force updates.
+
+The user bypass must be present on every active ruleset that applies to `dev` or the exact release tag.
+A bypass on only the branch ruleset does not authorise tag creation, and a bypass on only the tag
+ruleset does not authorise the metadata fast-forward.
+
+After resolving the exact release tag, Manual Release fetches every active branch/tag ruleset and its
+full detail with the owner token. The validator also fetches repository-wide push rulesets and classic
+`dev` protection directly. Before any JDK, Android SDK, dependency bootstrap or APK build, it fails
+closed unless:
+
+- every active ruleset applying to `refs/heads/dev` contains the owner user ID with `User` / `always`
+  bypass;
+- for new releases, every active ruleset applying to the exact `refs/tags/vX.Y.Z` contains that same
+  bypass;
+- at least one applicable release-tag ruleset contains the `creation` restriction;
+- every active repository-wide push ruleset contains the same owner bypass;
+- no classic `dev` protection enforced for administrators would block the metadata fast-forward.
+
+This is stronger than checking `.permissions.push`, which proves ordinary repository scope but not a
+ruleset bypass. The workflow summary records whether the applicable ruleset bypass was verified.
 
 An overlapping classic branch-protection rule may still reject the metadata fast-forward even when a
-ruleset bypass exists. In that case, publication remains successful, the immutable tag and Release are
-retained, and the summary reports that source metadata still requires reconciliation.
+ruleset bypass exists. Remove or align overlapping protection rather than weakening the maintained
+rulesets. Publication remains forward-repairable: the immutable tag and verified Release are retained,
+and the summary reports when source metadata still requires reconciliation.
+
+### Manual settings path
+
+1. Open **Settings → Secrets and variables → Actions → New repository secret**.
+2. Create `RELEASE_PUSH_TOKEN` using the token described below.
+3. Open **Settings → Rules → Rulesets**.
+4. Edit every active branch ruleset applying to `dev`; add user **cbkii** to **Bypass list** with
+   **Always**.
+5. Edit every active tag ruleset applying to `v*`; enable **Restrict creations** and add user **cbkii**
+   to **Bypass list** with **Always**.
+6. Check **Settings → Branches** for an older branch-protection rule applying to `dev`. Remove it when
+   it duplicates the ruleset, or align it so the owner token can perform the same ordinary
+   fast-forward.
+7. Set **Settings → Actions → General → Workflow permissions** to **Read repository contents and
+   packages permissions**. The Manual Release workflow requests its own narrow `contents: write`
+   permission explicitly; unrelated workflows should remain read-only by default.
+
+### Read-only settings audit
+
+The following bounded, read-only audit fails closed on GitHub API errors, malformed JSON, unexpected
+schemas, unsafe workflow-token defaults and incomplete pagination. It supports GNU `timeout` on
+Linux/Termux and `gtimeout` from Homebrew coreutils on macOS.
+
+```bash
+#!/usr/bin/env bash
+set -uo pipefail
+
+repo='cbkii/Auxio-TS'
+
+for required_command in gh jq mktemp; do
+  command -v "$required_command" >/dev/null 2>&1 || {
+    printf 'STOP: required command is unavailable: %s\n' "$required_command" >&2
+    exit 1
+  }
+done
+
+if command -v timeout >/dev/null 2>&1; then
+  timeout_command=(timeout --foreground 30s)
+elif command -v gtimeout >/dev/null 2>&1; then
+  timeout_command=(gtimeout 30s)
+else
+  printf 'STOP: install GNU timeout (coreutils) before running this audit.\n' >&2
+  exit 1
+fi
+
+api_get() {
+  local endpoint=$1
+  local errors
+  local output
+  errors="$(mktemp)"
+  if ! output="$("${timeout_command[@]}" gh api "$endpoint" 2>"$errors")"; then
+    printf 'STOP: GitHub API request failed: %s\n' "$endpoint" >&2
+    cat "$errors" >&2
+    rm -f "$errors"
+    return 1
+  fi
+  rm -f "$errors"
+  printf '%s\n' "$output"
+}
+
+api_pages() {
+  local endpoint=$1
+  local errors
+  local output
+  errors="$(mktemp)"
+  if ! output="$(
+    "${timeout_command[@]}" gh api --paginate --slurp "$endpoint" 2>"$errors"
+  )"; then
+    printf 'STOP: paginated GitHub API request failed: %s\n' "$endpoint" >&2
+    cat "$errors" >&2
+    rm -f "$errors"
+    return 1
+  fi
+  rm -f "$errors"
+  printf '%s\n' "$output"
+}
+
+printf '\n== Workflow permission ==\n'
+workflow_permission="$(api_get "repos/${repo}/actions/permissions/workflow")" ||
+  exit 1
+default_workflow_permission="$(
+  printf '%s\n' "$workflow_permission" |
+    jq -er '.default_workflow_permissions | select(. == "read" or . == "write")'
+)" || {
+  printf 'STOP: workflow-permission response is incomplete or invalid.\n' >&2
+  exit 1
+}
+[[ "$default_workflow_permission" == read ]] || {
+  printf 'STOP: repository GITHUB_TOKEN default is %s; set it to read-only.\n' \
+    "$default_workflow_permission" >&2
+  exit 1
+}
+printf 'default_workflow_permissions=%s\n' "$default_workflow_permission"
+
+printf '\n== Actions secret names ==\n'
+secret_pages="$(api_pages "repos/${repo}/actions/secrets?per_page=100")" ||
+  exit 1
+printf '%s\n' "$secret_pages" |
+  jq -e 'type == "array" and all(.[]; (.secrets | type) == "array")' \
+    >/dev/null || {
+  printf 'STOP: Actions-secret pagination response is incomplete or invalid.\n' >&2
+  exit 1
+}
+secret_names="$(
+  printf '%s\n' "$secret_pages" |
+    jq -r '[.[] | .secrets[].name] | unique | .[]' |
+    sort
+)" || {
+  printf 'STOP: Actions-secret names could not be parsed.\n' >&2
+  exit 1
+}
+printf '%s\n' "$secret_names"
+printf '%s\n' "$secret_names" | grep -Fxq RELEASE_PUSH_TOKEN || {
+  printf 'STOP: RELEASE_PUSH_TOKEN is not configured as an Actions secret.\n' >&2
+  exit 1
+}
+
+printf '\n== Rulesets ==\n'
+ruleset_pages="$(api_pages "repos/${repo}/rulesets?per_page=100&includes_parents=true")" ||
+  exit 1
+printf '%s\n' "$ruleset_pages" |
+  jq -e 'type == "array" and all(.[]; type == "array")' >/dev/null || {
+  printf 'STOP: ruleset pagination response is incomplete or invalid.\n' >&2
+  exit 1
+}
+ruleset_rows="$(
+  printf '%s\n' "$ruleset_pages" |
+    jq -er 'add | unique_by(.id) | .[] | [.id, .name, .target, .enforcement] | @tsv'
+)" || {
+  printf 'STOP: ruleset index is incomplete or invalid.\n' >&2
+  exit 1
+}
+[[ -n "$ruleset_rows" ]] || {
+  printf 'STOP: no repository rulesets were returned.\n' >&2
+  exit 1
+}
+printf '%s\n' "$ruleset_rows"
+
+while IFS=$'\t' read -r id name target enforcement; do
+  [[ "$id" =~ ^[0-9]+$ ]] || {
+    printf 'STOP: invalid ruleset id: %s\n' "$id" >&2
+    exit 1
+  }
+  printf '\n--- ruleset %s: %s (%s, %s) ---\n' \
+    "$id" "$name" "$target" "$enforcement"
+  detail="$(api_get "repos/${repo}/rulesets/${id}?includes_parents=true")" ||
+    exit 1
+  printf '%s\n' "$detail" | jq -e '
+    select(
+      (.id | type) == "number" and
+      (.name | type) == "string" and
+      (.target | type) == "string" and
+      (.enforcement | type) == "string" and
+      (.bypass_actors | type) == "array" and
+      (.conditions | type) == "object" and
+      (.rules | type) == "array"
+    ) |
+    {
+      id,
+      name,
+      target,
+      enforcement,
+      bypass_actors,
+      conditions,
+      rules
+    }
+  ' || {
+    printf 'STOP: ruleset %s response is incomplete or invalid.\n' "$id" >&2
+    exit 1
+  }
+done <<< "$ruleset_rows"
+
+printf '\n== Classic dev protection, when present ==\n'
+classic_errors="$(mktemp)"
+if classic="$(
+  "${timeout_command[@]}" gh api \
+    "repos/${repo}/branches/dev/protection" 2>"$classic_errors"
+)"; then
+  rm -f "$classic_errors"
+  printf '%s\n' "$classic" | jq -e 'type == "object"' || {
+    printf 'STOP: classic-protection response is not a JSON object.\n' >&2
+    exit 1
+  }
+elif grep -Fq 'Branch not protected' "$classic_errors"; then
+  rm -f "$classic_errors"
+  printf 'No classic branch-protection rule applies to dev.\n'
+else
+  printf 'STOP: classic branch-protection inspection failed.\n' >&2
+  cat "$classic_errors" >&2
+  rm -f "$classic_errors"
+  exit 1
+fi
+```
+
+**STOP:** do not dispatch another release until the audit shows
+`RELEASE_PUSH_TOKEN`, the token owner is on the bypass list for every applicable
+branch, tag and push ruleset, and overlapping classic protection has been
+reconciled.
+
+## GitHub authority references
+
+The release authority model follows GitHub's official documentation:
+
+- workflow reruns retain the original actor's privileges, while
+  `github.triggering_actor` identifies who initiated a rerun:
+  <https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs>
+- repository rulesets support `User` bypass actors and `always` bypass mode, and
+  ruleset details only expose `bypass_actors` to callers with ruleset write
+  authority:
+  <https://docs.github.com/en/rest/repos/rules>
+- reading classic branch protection and required-signature protection requires
+  repository **Administration: Read**:
+  <https://docs.github.com/en/rest/branches/branch-protection>
+- `GITHUB_TOKEN` permissions are set per workflow; the repository default remains
+  read-only:
+  <https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication>
 
 ## Required secrets
+
+### Protected-ref authentication
+
+`RELEASE_PUSH_TOKEN` is mandatory for every Manual Release run. Prefer a fine-grained personal access
+token with:
+
+- resource owner: `cbkii`;
+- repository access: **Only select repositories → Auxio-TS**;
+- repository permissions:
+  - **Contents: Read and write** for the immutable tag and `dev` fast-forward;
+  - **Administration: Read** so the fail-closed preflight can inspect ruleset bypass actors and classic branch protection;
+- a bounded expiry and normal token rotation.
+
+The token's automatically available repository metadata read access is used to inspect complete
+ruleset details. The token owner must retain sufficient repository authority for GitHub to return the
+`bypass_actors` field; absence of that field fails closed.
+
+A pre-existing classic PAT can be used instead when it belongs to `cbkii` and has repository write
+scope plus read access to repository administration settings, but a repository-scoped fine-grained PAT
+is preferred. Do not use an APK signing secret, deploy key, or another user's token as a substitute.
+
+Create or update the Actions secret without printing the token:
+
+```bash
+gh secret set RELEASE_PUSH_TOKEN -R cbkii/Auxio-TS
+```
+
+The workflow validates this secret before dependency setup or APK building. It fails closed when the
+secret is absent, belongs to a different account, does not report push access, or cannot prove the
+owner's `User` / `always` bypass on every active ruleset applying to the protected refs. The token is
+exposed only to the early identity/access preflight, ruleset preflight and the two Git push steps;
+GitHub Release API operations continue to use `GITHUB_TOKEN`.
+
+### APK signing
 
 Release signing is required only when a selected APK requiring the configured release signer must be
 built:
@@ -46,24 +345,28 @@ The required `release_mode` choice separates creation from repair.
 | `create_new_release` | Create a new immutable tag and GitHub Release | `version_tag` may be blank or explicit |
 | `repair_existing_release` | Resume or repair assets for an existing immutable tag | `version_tag` is mandatory; no increment or retagging |
 
-Run **Manual Release** from `dev` only.
+Run **Manual Release** from `dev` only, while signed in as the repository owner.
 
 ### New release
 
 A new release performs this transaction:
 
-1. Confirm the checkout is exactly the current remote `dev`.
-2. Resolve the target version from source metadata, strict semantic Git tags and every GitHub Release
+1. Permit only an owner-started and owner-rerun execution to enter the release job.
+2. Confirm the checkout is exactly the current remote `dev`.
+3. Validate `RELEASE_PUSH_TOKEN`, its owner identity and repository push access.
+4. Resolve the target version from source metadata, strict semantic Git tags and every GitHub Release
    returned by the paginated Releases API, including drafts, prereleases and final releases.
-3. Create a local source metadata commit only when the checked-in version differs.
-4. Build each required variant at most once.
-5. Inspect and stage APKs and sidecars, generate the compact release manifest, and upload recovery
+5. Verify the owner's bypass on every active ruleset applying to `dev`, the exact new tag and any
+   repository-wide push ruleset, and reject blocking classic branch protection.
+6. Create a local source metadata commit only when the checked-in version differs.
+7. Build each required variant at most once.
+8. Inspect and stage APKs and sidecars, generate the compact release manifest, and upload recovery
    workflow evidence.
-6. Push the immutable release tag.
-7. Create the GitHub Release as a draft regardless of its requested final status.
-8. Upload and verify the exact selected asset set.
-9. Apply the requested draft/prerelease/final state.
-10. Fast-forward the same released metadata commit onto `dev`.
+9. Push the immutable release tag using the owner token.
+10. Create the GitHub Release as a draft regardless of its requested final status.
+11. Upload and verify the exact selected asset set.
+12. Apply the requested draft/prerelease/final state.
+13. Fast-forward the same released metadata commit onto `dev` using the owner token.
 
 The branch update deliberately occurs after remote Release verification. A tag or draft created by an
 interrupted run is retained for repair instead of being deleted.
@@ -71,7 +374,8 @@ interrupted run is retained for repair instead of being deleted.
 ### Existing-release repair
 
 Repair mode requires an explicit strict `vMAJOR.MINOR.PATCH` tag and uses that tag as immutable source
-authority.
+authority. The branch ruleset authority is still verified because a repair may need to synchronise
+released source metadata to `dev`; the existing tag itself is not recreated.
 
 Supported states:
 
@@ -183,6 +487,11 @@ a separate 14-day artifact.
 
 Failure handling is forward-repairable:
 
+- non-owner dispatch or rerun: the release job is skipped before secret access;
+- protected-ref token identity/access failure: stop before dependency setup/build and change no release
+  state;
+- ruleset or classic-protection authority failure: stop before dependency setup/build and change no
+  release state;
 - validation failure before tag creation: no remote release state is changed;
 - tag pushed but Release absent: rerun in repair mode with that tag;
 - draft Release with missing assets: repair the same tag; do not generate another version;
@@ -195,8 +504,11 @@ Do not delete or move a valid release tag to “retry” publication.
 ## Local static validation
 
 ```bash
-python3 -m py_compile scripts/release-orchestrator.py
+python3 -m py_compile \
+  scripts/release-orchestrator.py \
+  scripts/check-release-ruleset-authority.py
 python3 scripts/release-orchestrator.py self-test
+python3 scripts/check-release-ruleset-authority.py --self-test
 bash -n scripts/check-manual-release-workflow.sh
 bash scripts/check-manual-release-workflow.sh
 bash scripts/check-ci-variant-contracts.sh
