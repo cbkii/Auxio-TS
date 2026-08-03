@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-workflow_path = Path('.repair-staging/manual-release.yml')
-checker_path = Path('.repair-staging/check-manual-release-workflow.sh')
+workflow_path = Path('.github/workflows/manual-release.yml')
+checker_path = Path('scripts/check-manual-release-workflow.sh')
 workflow = workflow_path.read_text(encoding='utf-8')
 checker = checker_path.read_text(encoding='utf-8')
 
@@ -49,7 +49,7 @@ new_upload = '''      - name: Upload or replace planned release assets
               exit 1
             }
           upload_template="$(jq -r .upload_url "${remote_json}")"
-          upload_base="${upload_template%%\{*}"
+          upload_base="${upload_template%%{*}"
           [[ "${upload_base}" == https://* && "${upload_base}" == */releases/${RELEASE_ID}/assets ]] || {
             echo "::error::Release ${RELEASE_ID} returned an invalid upload URL."
             exit 1
