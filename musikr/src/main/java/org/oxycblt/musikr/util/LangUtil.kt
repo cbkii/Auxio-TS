@@ -27,8 +27,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import org.oxycblt.musikr.BuildConfig
 import org.oxycblt.musikr.tag.Date
 
@@ -71,15 +71,12 @@ fun <T, R> CoroutineScope.map(
     output: Channel<R>,
     context: CoroutineContext = Dispatchers.Default,
     block: suspend (T) -> R?,
-): Deferred<Result<Unit>> {
-    return tryAsync(context) {
+): Deferred<Result<Unit>> =
+    tryAsyncWith(output, context) { outChannel ->
         for (item in input) {
-            block(item)?.let { output.send(it) }
+            block(item)?.let { outChannel.send(it) }
         }
-        output.close()
-        Unit
     }
-}
 
 fun <T, R> CoroutineScope.mapParallel(
     n: Int,
@@ -87,29 +84,48 @@ fun <T, R> CoroutineScope.mapParallel(
     output: Channel<R>,
     context: CoroutineContext = Dispatchers.Default,
     block: suspend (T) -> R,
-): Deferred<Result<Unit>> {
-    return tryAsync(context) {
-        val deferreds = ArrayList<Deferred<Result<Unit>>>()
-        for (i in 0 until n) {
-            val deferred =
-                tryAsync(context) {
-                    for (item in input) {
-                        block(item).let { output.send(it) }
+): Deferred<Result<Unit>> =
+    tryAsyncWith(output, context) { outChannel ->
+        kotlinx.coroutines.coroutineScope {
+            val deferreds = ArrayList<kotlinx.coroutines.Deferred<Unit>>()
+            for (i in 0 until n) {
+                val deferred =
+                    async(context) {
+                        for (item in input) {
+                            block(item).let { outChannel.send(it) }
+                        }
                     }
-                }
-            deferreds.add(deferred)
+                deferreds.add(deferred)
+            }
+            deferreds.forEach { deferred -> launch { deferred.await() } }
         }
-        deferreds.tryAwaitAll()
-        output.close()
+    }
+
+suspend fun List<Deferred<Result<Unit>>>.tryAwaitAll() {
+    try {
+        kotlinx.coroutines.coroutineScope {
+            this@tryAwaitAll.forEach { deferred -> launch { deferred.await().getOrThrow() } }
+        }
+    } catch (e: Throwable) {
+        this@tryAwaitAll.forEach {
+            it.cancel(kotlinx.coroutines.CancellationException("Sibling failed", e))
+        }
+        throw e
     }
 }
 
-suspend fun List<Deferred<Result<Unit>>>.tryAwaitAll() = awaitAll().forEach { it.getOrThrow() }
-
 fun CoroutineScope.merge(vararg deferreds: Deferred<Result<Unit>>): Deferred<Result<Unit>> =
     tryAsync(Dispatchers.Default) {
-        val results = awaitAll(*deferreds)
-        results.forEach { result -> result.getOrThrow() }
+        try {
+            kotlinx.coroutines.coroutineScope {
+                deferreds.forEach { deferred -> launch { deferred.await().getOrThrow() } }
+            }
+        } catch (e: Throwable) {
+            deferreds.forEach {
+                it.cancel(kotlinx.coroutines.CancellationException("Pipeline sibling failed", e))
+            }
+            throw e
+        }
     }
 
 /**

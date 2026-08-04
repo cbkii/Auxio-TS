@@ -106,6 +106,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         val pending = AtomicInteger(0)
         val discoveredDirectories = AtomicInteger(0)
         val discoveredFiles = AtomicInteger(0)
+        val visitedCanonicalPaths = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
         val seeding = AtomicBoolean(true)
         val workers =
             List(DIRECTORY_WORKER_COUNT) {
@@ -124,6 +125,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                                 pending,
                                 discoveredDirectories,
                                 discoveredFiles,
+                                visitedCanonicalPaths,
                             )
                         } finally {
                             pending.decrementAndGet()
@@ -173,6 +175,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                             pending,
                             discoveredDirectories,
                             discoveredFiles,
+                            visitedCanonicalPaths,
                         )
                     EnqueueResult.LimitExceeded -> Unit
                 }
@@ -190,7 +193,12 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         pending: AtomicInteger,
         discoveredDirectories: AtomicInteger,
         discoveredFiles: AtomicInteger,
+        visitedCanonicalPaths: java.util.concurrent.ConcurrentHashMap<String, Boolean>,
     ) {
+        val canonicalPath = canonicalFileOrNull(task.directory)?.absolutePath ?: return
+        if (visitedCanonicalPaths.putIfAbsent(canonicalPath, true) != null) {
+            return
+        }
         if (discoveredFiles.get() >= MAX_VISITED_FILES) {
             recordFailure(
                 task.sourceKey,
@@ -296,6 +304,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                         pending,
                         discoveredDirectories,
                         discoveredFiles,
+                        visitedCanonicalPaths,
                     )
                 EnqueueResult.LimitExceeded -> Unit
             }

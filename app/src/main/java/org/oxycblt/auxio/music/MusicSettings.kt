@@ -461,9 +461,16 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         safQuery: SAF.Query,
         mediaStoreQuery: MediaStore.Query,
     ): Boolean {
+        val deduplicatedSafQuery =
+            safQuery.copy(
+                source =
+                    org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer.deduplicateSources(
+                        safQuery.source
+                    )
+            )
         val changed =
             locationMode != mode ||
-                this.safQuery != safQuery ||
+                this.safQuery != deduplicatedSafQuery ||
                 this.mediaStoreQuery != mediaStoreQuery
         if (!changed) return false
 
@@ -472,14 +479,23 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             if (mode == LocationMode.MEDIA_STORE) {
                 emptySet()
             } else {
-                safQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
+                deduplicatedSafQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
             }
         sharedPreferences.edit(commit = true) {
             putInt(getString(R.string.set_key_locations_mode), mode.intCode)
-            putString(getString(R.string.set_key_music_locations), safQuery.source.stringify())
-            putString(getString(R.string.set_key_excluded_locations), safQuery.exclude.stringify())
-            putBoolean(getString(R.string.set_key_with_hidden), safQuery.withHidden)
-            putBoolean(getString(R.string.set_key_saf_multithread), safQuery.multithread)
+            putString(
+                getString(R.string.set_key_music_locations),
+                deduplicatedSafQuery.source.stringify(),
+            )
+            putString(
+                getString(R.string.set_key_excluded_locations),
+                deduplicatedSafQuery.exclude.stringify(),
+            )
+            putBoolean(getString(R.string.set_key_with_hidden), deduplicatedSafQuery.withHidden)
+            putBoolean(
+                getString(R.string.set_key_saf_multithread),
+                deduplicatedSafQuery.multithread,
+            )
 
             val filterMode =
                 when (mediaStoreQuery.mode) {
