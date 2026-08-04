@@ -38,6 +38,7 @@ import org.oxycblt.musikr.fs.SourceAwareFS
 import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.SourceSnapshot
+import org.oxycblt.musikr.fs.saf.SAF
 import org.oxycblt.musikr.util.startOwning
 
 /**
@@ -49,7 +50,7 @@ import org.oxycblt.musikr.util.startOwning
  * per-source traversal outcomes into the shared failure protocol.
  */
 class DirectFS
-internal constructor(configured: List<Location.Opened>, private val options: DirectFsOptions) :
+internal constructor(private val query: SAF.Query, private val options: DirectFsOptions) :
     SourceAwareFS {
     /**
      * Exact canonical duplicates are collapsed here as the last defensive boundary.
@@ -59,37 +60,63 @@ internal constructor(configured: List<Location.Opened>, private val options: Dir
      * re-established before any work is planned.
      */
     private val roots: List<Location.Opened> =
-        CanonicalSourcePolicy.collapseDuplicates(configured, SourceIdentity::canonicalKeyForLocation)
+        CanonicalSourcePolicy.collapseDuplicates(
+            query.source,
+            SourceIdentity::canonicalKeyForLocation,
+        )
+
+    private val excludedCanonicalPaths: Set<String> =
+        query.exclude.mapNotNullTo(linkedSetOf()) { location ->
+            location.uri.path?.let(CanonicalSourcePolicy::normalizePath)
+                ?: CanonicalSourcePolicy.externalStorageTreePath(location.uri)
+        }
 
     private val sourceFailures = ConcurrentHashMap<String, String>()
 
     @Volatile private var lastMetrics: DirectFsTraversalMetrics? = null
 
-    constructor(roots: List<Location.Opened>) : this(roots, DirectFsOptions.DEFAULT)
+    constructor(query: SAF.Query) : this(query, DirectFsOptions.DEFAULT)
+
+    constructor(roots: List<Location.Opened>) :
+        this(
+            SAF.Query(
+                source = roots,
+                exclude = emptyList(),
+                withHidden = false,
+                multithread = false,
+                sourceOrigins =
+                    roots.associate {
+                        SourceIdentity.canonicalKeyForLocation(it) to
+                            CanonicalSourcePolicy.Origin.EXPLICIT
+                    },
+            ),
+            DirectFsOptions.DEFAULT,
+        )
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         withContext(Dispatchers.IO) {
-            roots.groupBy(SourceIdentity::forLocation).map { (sourceKey, locations) ->
+            prepareRoots().groupBy { it.sourceKey }.map { (sourceKey, preparedRoots) ->
                 val evaluated =
-                    locations.map { location ->
-                        val root = appFacingRoot(location)
-                        val allowed = root != null && DirectFsRootPolicy.isAllowedRoot(root)
-                        val readable = allowed && listFilesSafe(requireNotNull(root)) != null
-                        RootSnapshot(location, root, readable)
+                    preparedRoots.map { root ->
+                        val readable =
+                            DirectFsRootPolicy.isAllowedRoot(root.directory) &&
+                                listFilesSafe(root.directory) != null
+                        RootSnapshot(root, readable)
                     }
                 val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
+                val first = preparedRoots.first()
                 SourceSnapshot(
                     sourceKey = sourceKey,
                     sourceType = SOURCE_TYPE,
                     // A source key may cover more than one configured folder. The first path is
                     // display metadata only; the combined fingerprint below covers every root.
-                    rootUri = locations.firstOrNull()?.uri?.toString(),
-                    rootPath = evaluated.firstOrNull()?.root?.absolutePath,
+                    rootUri = first.normalizedUri,
+                    rootPath = first.displayPath,
                     available = available,
                     fingerprint =
                         if (available) {
                             combineRootFingerprints(
-                                evaluated.map { requireNotNull(it.root) to it.location }
+                                evaluated.map { it.root }
                             )
                         } else {
                             null
@@ -97,12 +124,27 @@ internal constructor(configured: List<Location.Opened>, private val options: Dir
                     fingerprintStrength =
                         if (available) SourceFingerprintStrength.ADVISORY
                         else SourceFingerprintStrength.NONE,
+                    canonicalKey = first.canonicalKey,
+                    sourceOrigin = first.origin,
+                    traversalScope = first.scope,
                 )
             }
         }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
-        DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys }, options)
+        DirectFS(
+            query.copy(
+                source = roots.filter { SourceIdentity.forLocation(it) in sourceKeys },
+                sourceOrigins =
+                    query.sourceOrigins.filterKeys { canonicalKey ->
+                        roots.any {
+                            SourceIdentity.forLocation(it) in sourceKeys &&
+                                SourceIdentity.canonicalKeyForLocation(it) == canonicalKey
+                        }
+                    },
+            ),
+            options,
+        )
 
     override fun drainSourceFailures(): Map<String, String> =
         sourceFailures.toMap().also { sourceFailures.clear() }
@@ -117,9 +159,17 @@ internal constructor(configured: List<Location.Opened>, private val options: Dir
      */
     override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
         startOwning(files, Dispatchers.IO) { output ->
-            val metrics = DirectFsTraversal(prepareRoots(), options).explore(output)
-            lastMetrics = metrics
-            publish(metrics)
+            val traversal = DirectFsTraversal(prepareRoots(), options)
+            try {
+                val metrics = traversal.explore(output)
+                lastMetrics = metrics
+                publish(metrics)
+            } catch (e: Throwable) {
+                val metrics = traversal.metricsSnapshot()
+                lastMetrics = metrics
+                publish(metrics)
+                throw e
+            }
         }
 
     override fun track(): Flow<FSUpdate> = emptyFlow()
@@ -165,10 +215,25 @@ internal constructor(configured: List<Location.Opened>, private val options: Dir
                     canonicalPath = canonicalPath,
                     relativePath = location.path,
                     scope = CanonicalSourcePolicy.scopeOf(canonicalPath),
+                    origin =
+                        query.sourceOrigins[SourceIdentity.canonicalKeyForLocation(location)]
+                            ?: CanonicalSourcePolicy.legacyOriginForPath(canonicalPath),
+                    excludedCanonicalPaths =
+                        excludedCanonicalPaths.filterTo(linkedSetOf()) { excluded ->
+                            excluded == canonicalPath ||
+                                CanonicalSourcePolicy.isAncestorOf(canonicalPath, excluded) ||
+                                CanonicalSourcePolicy.isAncestorOf(excluded, canonicalPath)
+                        },
+                    withHidden = query.withHidden,
+                    canonicalKey = SourceIdentity.canonicalKeyForLocation(location),
+                    normalizedUri = location.uri.toString(),
+                    displayPath = canonicalPath,
                 )
             )
         }
-        return CanonicalSourcePolicy.traversalOrder(prepared) { it.canonicalPath }
+        return applyOverlapPolicy(
+            CanonicalSourcePolicy.traversalOrder(prepared) { it.canonicalPath }
+        )
     }
 
     /** Turns the explicit outcome of every source into the shared failure protocol. */
@@ -216,15 +281,32 @@ internal constructor(configured: List<Location.Opened>, private val options: Dir
         return JavaFile(CanonicalSourcePolicy.normalizePath(path) ?: path)
     }
 
-    private fun combineRootFingerprints(roots: List<Pair<JavaFile, Location.Opened>>): String {
+    internal fun combineRootFingerprints(roots: List<PreparedRoot>): String {
         val digest = MessageDigest.getInstance("SHA-256")
         roots
-            .distinctBy { CanonicalSourcePolicy.identityForPath(it.first.path) ?: it.first.path }
-            .sortedBy { it.first.absolutePath }
-            .forEach { (root, location) ->
-                digest.update(location.uri.toString().toByteArray(Charsets.UTF_8))
+            .distinctBy { it.canonicalKey }
+            .sortedBy { it.canonicalPath }
+            .forEach { root ->
+                digest.update(root.canonicalKey.toByteArray(Charsets.UTF_8))
                 digest.update(0)
-                digest.update(boundedFingerprint(root).toByteArray(Charsets.UTF_8))
+                digest.update(root.origin.name.toByteArray(Charsets.UTF_8))
+                digest.update(0)
+                digest.update(root.scope.name.toByteArray(Charsets.UTF_8))
+                digest.update(0)
+                digest.update(root.withHidden.toString().toByteArray(Charsets.UTF_8))
+                digest.update(0)
+                root.excludedCanonicalPaths
+                    .filter { excluded ->
+                        excluded == root.canonicalPath ||
+                            CanonicalSourcePolicy.isAncestorOf(root.canonicalPath, excluded) ||
+                            CanonicalSourcePolicy.isAncestorOf(excluded, root.canonicalPath)
+                    }
+                    .sorted()
+                    .forEach {
+                        digest.update(it.toByteArray(Charsets.UTF_8))
+                        digest.update(0)
+                    }
+                digest.update(boundedFingerprint(root.directory).toByteArray(Charsets.UTF_8))
                 digest.update(0)
             }
         return digest.digest().joinToString("") { "%02x".format(it) }
@@ -262,8 +344,7 @@ internal constructor(configured: List<Location.Opened>, private val options: Dir
     }
 
     private data class RootSnapshot(
-        val location: Location.Opened,
-        val root: JavaFile?,
+        val root: PreparedRoot,
         val readable: Boolean,
     )
 
@@ -290,6 +371,30 @@ internal constructor(configured: List<Location.Opened>, private val options: Dir
         internal fun shouldDescendIntoDirectory(
             name: String,
             scope: CanonicalSourcePolicy.Scope = CanonicalSourcePolicy.Scope.WHOLE_VOLUME,
-        ): Boolean = DirectFsTraversal.shouldDescendIntoDirectory(name, scope)
+            withHidden: Boolean = false,
+            origin: CanonicalSourcePolicy.Origin =
+                if (scope == CanonicalSourcePolicy.Scope.WHOLE_VOLUME) {
+                    CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK
+                } else {
+                    CanonicalSourcePolicy.Origin.EXPLICIT
+                },
+        ): Boolean =
+            DirectFsTraversal.shouldDescendIntoDirectory(name, scope, withHidden, origin)
+
+        /**
+         * Backend-enforced overlap policy. Picker filtering is advisory; a broad automatic
+         * fallback must still be suppressed when a narrower explicit source is present.
+         */
+        internal fun applyOverlapPolicy(roots: List<PreparedRoot>): List<PreparedRoot> {
+            val explicitPaths =
+                roots.filter { it.origin == CanonicalSourcePolicy.Origin.EXPLICIT }
+                    .map { it.canonicalPath }
+            return roots.filterNot { root ->
+                root.origin == CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK &&
+                    explicitPaths.any { explicit ->
+                        CanonicalSourcePolicy.isAncestorOf(root.canonicalPath, explicit)
+                    }
+            }
+        }
     }
 }

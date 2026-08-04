@@ -25,6 +25,7 @@ import javax.inject.Singleton
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.music.locations.MusicSourceCanonicalizer
 import org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 
 /** Operation-scoped source authority derived only from the user's configured music locations. */
 @Singleton
@@ -48,6 +49,9 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
         val fileRoot: File?,
         val kind: SourceKind,
         val availability: Availability,
+        val canonicalKey: String,
+        val origin: CanonicalSourcePolicy.Origin,
+        val traversalScope: CanonicalSourcePolicy.Scope?,
     )
 
     /** Immutable policy snapshot used for one browse, restore, or indexing decision. */
@@ -78,10 +82,11 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
 
     fun snapshot(): Snapshot {
         val mode = settings.locationMode
-        val configuredUris =
-            MusicSourceCanonicalizer.collapseLocations(settings.safQuery.source).map { it.uri }
+        val query = if (mode == LocationMode.MEDIA_STORE) null else settings.safQuery
+        val configured = settings.configuredSourceSpecs.distinctBy { it.canonicalKey }
         val sources =
-            configuredUris.mapIndexed { index, uri ->
+            configured.map { spec ->
+                val uri = spec.normalizedUri
                 val fileRoot = configuredFileRoot(uri, mode)
                 val kind =
                     when {
@@ -100,11 +105,14 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
                         else -> Availability.UNAVAILABLE
                     }
                 Source(
-                    id = "${mode.name}:$index:${uri}",
+                    id = "${mode.name}:${spec.canonicalKey}",
                     uri = uri,
                     fileRoot = fileRoot,
                     kind = kind,
                     availability = availability,
+                    canonicalKey = spec.canonicalKey,
+                    origin = spec.origin,
+                    traversalScope = spec.traversalScope,
                 )
             }
         // The revision keys on canonical identity so semantically equivalent aliases such as
@@ -114,7 +122,25 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
             sources,
             configurationRevision(
                 mode,
-                configuredUris.map(MusicSourceCanonicalizer::canonicalKeyOfUri),
+                if (mode == LocationMode.MEDIA_STORE) {
+                    emptyList()
+                } else {
+                    val sourceQuery = requireNotNull(query)
+                    buildList {
+                        sources.forEach {
+                            add(
+                                "source:${it.canonicalKey}|${it.origin.name}|" +
+                                    it.traversalScope?.name.orEmpty()
+                            )
+                        }
+                        sourceQuery.exclude
+                            .map(MusicSourceCanonicalizer::canonicalKeyOf)
+                            .distinct()
+                            .sorted()
+                            .forEach { add("exclude:$it") }
+                        add("withHidden:${sourceQuery.withHidden}")
+                    }
+                },
             ),
         )
     }

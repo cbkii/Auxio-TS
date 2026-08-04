@@ -18,12 +18,18 @@
 
 package org.oxycblt.musikr.fs
 
+import android.net.Uri
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29])
 class CanonicalSourcePolicyTest {
     @Test
     fun collapsesPrimarySharedStorageAliases() {
@@ -198,10 +204,105 @@ class CanonicalSourcePolicyTest {
     }
 
     @Test
-    fun uriIdentityIgnoresTrailingSeparators() {
+    fun externalStorageTreeIdentityIsStructural() {
+        val expected =
+            "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FAlbums"
+        val aliases =
+            listOf(
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FAlbums",
+                "content://com.android.externalstorage.documents/tree/PRIMARY%3AMusic%2FAlbums/",
+                "content://com.android.externalstorage.documents/tree/primary:Music/Albums",
+                "content://com.android.externalstorage.documents/tree/primary%253AMusic%252FAlbums",
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FAlbums/" +
+                    "document/primary%3AMusic%2FAlbums",
+            )
+
         assertEquals(
-            CanonicalSourcePolicy.identityForUriString("content://x/tree/primary%3AMusic"),
-            CanonicalSourcePolicy.identityForUriString("content://x/tree/primary%3AMusic/"),
+            setOf(expected),
+            aliases.mapNotNull(CanonicalSourcePolicy::canonicalUriString).toSet(),
+        )
+        assertEquals(
+            1,
+            aliases.map(CanonicalSourcePolicy::identityForUriString).toSet().size,
+        )
+        assertEquals(
+            "/storage/emulated/0/Music/Albums",
+            CanonicalSourcePolicy.externalStorageTreePath(Uri.parse(expected)),
+        )
+    }
+
+    @Test
+    fun externalStorageVolumeTokensAreCanonicalButContentsRemainCaseSensitive() {
+        assertEquals(
+            "content://com.android.externalstorage.documents/tree/ABCD-1234%3AMusic",
+            CanonicalSourcePolicy.canonicalUriString(
+                "content://com.android.externalstorage.documents/tree/abcd-1234%3AMusic"
+            ),
+        )
+        assertEquals(
+            "content://com.android.externalstorage.documents/tree/usbdisk2%3AMusic",
+            CanonicalSourcePolicy.canonicalUriString(
+                "content://com.android.externalstorage.documents/tree/USBDISK2%3AMusic"
+            ),
+        )
+        assertFalse(
+            CanonicalSourcePolicy.identityForUriString(
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic"
+            ) ==
+                CanonicalSourcePolicy.identityForUriString(
+                    "content://com.android.externalstorage.documents/tree/primary%3Amusic"
+                )
+        )
+    }
+
+    @Test
+    fun distinctDocumentBelowTreeRetainsDistinctIdentity() {
+        val tree =
+            "content://com.android.externalstorage.documents/tree/primary%3AMusic"
+        val child =
+            "$tree/document/primary%3AMusic%2FAlbums"
+
+        assertFalse(
+            CanonicalSourcePolicy.identityForUriString(tree) ==
+                CanonicalSourcePolicy.identityForUriString(child)
+        )
+        assertNull(CanonicalSourcePolicy.externalStorageTreePath(Uri.parse(child)))
+    }
+
+    @Test
+    fun malformedAndTraversalLikeExternalStorageIdsAreRejected() {
+        listOf(
+                "content://com.android.externalstorage.documents/tree/primary",
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic%2F..%2Fdata",
+                "content://com.android.externalstorage.documents/tree/primary%253AMusic%252F..%252Fdata",
+                "content://com.android.externalstorage.documents/tree/%3AMusic",
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic?unexpected=1",
+            )
+            .forEach { assertNull(it, CanonicalSourcePolicy.canonicalUriString(it)) }
+    }
+
+    @Test
+    fun unrelatedProvidersRemainOpaque() {
+        val plain = "content://example.provider/tree/primary%3AMusic"
+        val trailing = "$plain/"
+
+        assertEquals(plain, CanonicalSourcePolicy.canonicalUriString(plain))
+        assertNull(CanonicalSourcePolicy.externalStorageTreePath(Uri.parse(plain)))
+        assertFalse(
+            CanonicalSourcePolicy.identityForUriString(plain) ==
+                CanonicalSourcePolicy.identityForUriString(trailing)
+        )
+    }
+
+    @Test
+    fun legacyWholeVolumeOriginsAreConservativeAndDeterministic() {
+        assertEquals(
+            CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK,
+            CanonicalSourcePolicy.legacyOriginForPath("/storage/usbdisk0"),
+        )
+        assertEquals(
+            CanonicalSourcePolicy.Origin.EXPLICIT,
+            CanonicalSourcePolicy.legacyOriginForPath("/storage/usbdisk0/Music"),
         )
     }
 }

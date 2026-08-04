@@ -34,6 +34,7 @@ import org.junit.runner.RunWith
 import org.oxycblt.auxio.music.locations.LocationAdapter
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.music.locations.MusicSourceCanonicalizer
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
@@ -125,7 +126,91 @@ class MusicSourceCanonicalizationTest {
         seedRawSources("/sdcard/Music", "/storage/emulated/0/Music/")
 
         assertEquals(1, settings.configuredSourceCount)
-        assertEquals("file:///sdcard/Music", rawSources())
+        assertEquals("file:///storage/emulated/0/Music", rawSources())
+    }
+
+    @Test
+    fun `lone persisted alias is repaired idempotently without a new generation`() {
+        seedRawSources("/sdcard/Music")
+        val generation = settings.sourceConfigurationGeneration
+
+        assertEquals(1, settings.configuredSourceCount)
+        assertEquals("file:///storage/emulated/0/Music", rawSources())
+        assertEquals(generation, settings.sourceConfigurationGeneration)
+
+        assertEquals(1, settings.configuredSourceCount)
+        assertEquals("file:///storage/emulated/0/Music", rawSources())
+        assertEquals(generation, settings.sourceConfigurationGeneration)
+    }
+
+    @Test
+    fun `direct saf setter stores canonical sources exclusions and origin metadata`() {
+        val canonicalKey = "path:/storage/emulated/0/Music"
+        settings.safQuery =
+            SAF.Query(
+                source =
+                    listOf(
+                        location("/sdcard/Music"),
+                        location("/storage/emulated/0/Music/"),
+                    ),
+                exclude =
+                    listOf(
+                        unopened("/mnt/media_rw/usbdisk0/Podcasts"),
+                        unopened("/storage/USBDISK0/Podcasts/"),
+                    ),
+                withHidden = true,
+                multithread = false,
+                sourceOrigins =
+                    mapOf(canonicalKey to CanonicalSourcePolicy.Origin.AUTOMATIC_SUGGESTION),
+            )
+
+        assertEquals("file:///storage/emulated/0/Music", rawSources())
+        assertEquals("file:///storage/usbdisk0/Podcasts", rawExclusions())
+        val query = settings.safQuery
+        assertEquals(listOf("/storage/emulated/0/Music"), query.source.map { it.uri.path })
+        assertEquals(listOf("/storage/usbdisk0/Podcasts"), query.exclude.map { it.uri.path })
+        assertEquals(
+            CanonicalSourcePolicy.Origin.AUTOMATIC_SUGGESTION,
+            query.sourceOrigins[canonicalKey],
+        )
+        assertTrue(query.withHidden)
+    }
+
+    @Test
+    fun `explicit volume origin remains distinct from legacy fallback`() {
+        val volume = location("/storage/usbdisk0")
+        val key = "path:/storage/usbdisk0"
+        settings.safQuery =
+            query(listOf(volume)).copy(
+                sourceOrigins = mapOf(key to CanonicalSourcePolicy.Origin.EXPLICIT)
+            )
+
+        assertEquals(CanonicalSourcePolicy.Origin.EXPLICIT, settings.safQuery.sourceOrigins[key])
+
+        PreferenceManager.getDefaultSharedPreferences(context).edit(commit = true) {
+            remove("auxio_source_origins")
+        }
+        assertEquals(
+            CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK,
+            settings.safQuery.sourceOrigins[key],
+        )
+    }
+
+    @Test
+    fun `canonical setter preserves first selection order`() {
+        settings.safQuery =
+            query(
+                listOf(
+                    location("/mnt/media_rw/usbdisk0/Audio"),
+                    location("/sdcard/Music"),
+                    location("/storage/usbdisk0/Audio/"),
+                )
+            )
+
+        assertEquals(
+            "file:///storage/usbdisk0/Audio;file:///storage/emulated/0/Music",
+            rawSources(),
+        )
     }
 
     @Test
@@ -168,6 +253,28 @@ class MusicSourceCanonicalizationTest {
 
         assertEquals(first, aliased)
         assertNotEquals(first, different)
+    }
+
+    @Test
+    fun `configuration revision changes only with effective traversal policy`() {
+        val music = location("/storage/emulated/0/Music")
+        val excluded = unopened("/storage/emulated/0/Music/Podcasts")
+        val policy = ConfiguredSourcePolicy(settings)
+        settings.safQuery = query(listOf(music))
+        val baseline = policy.snapshot().configurationRevision
+
+        settings.safQuery = query(listOf(location("/sdcard/Music"), music))
+        assertEquals(baseline, policy.snapshot().configurationRevision)
+
+        settings.safQuery = query(listOf(music)).copy(multithread = true)
+        assertEquals(baseline, policy.snapshot().configurationRevision)
+
+        settings.safQuery = query(listOf(music), exclude = listOf(excluded))
+        val excludedRevision = policy.snapshot().configurationRevision
+        assertNotEquals(baseline, excludedRevision)
+
+        settings.safQuery = query(listOf(music), exclude = listOf(excluded), withHidden = true)
+        assertNotEquals(excludedRevision, policy.snapshot().configurationRevision)
     }
 
     @Test
@@ -237,11 +344,26 @@ class MusicSourceCanonicalizationTest {
             ),
         )
 
+    private fun query(
+        sources: List<Location.Opened>,
+        exclude: List<Location.Unopened> = emptyList(),
+        withHidden: Boolean = false,
+    ) =
+        SAF.Query(
+            source = sources,
+            exclude = exclude,
+            withHidden = withHidden,
+            multithread = false,
+        )
+
     private fun location(path: String): Location.Opened =
         requireNotNull(
             Location.Unopened.from(context, Uri.fromFile(File(path))).open(context),
             { "could not open $path" },
         )
+
+    private fun unopened(path: String): Location.Unopened =
+        Location.Unopened.from(context, Uri.fromFile(File(path)))
 
     private fun seedRawSources(vararg paths: String) {
         PreferenceManager.getDefaultSharedPreferences(context).edit(commit = true) {
@@ -256,6 +378,12 @@ class MusicSourceCanonicalizationTest {
         requireNotNull(
             PreferenceManager.getDefaultSharedPreferences(context)
                 .getString(context.getString(R.string.set_key_music_locations), "")
+        )
+
+    private fun rawExclusions(): String =
+        requireNotNull(
+            PreferenceManager.getDefaultSharedPreferences(context)
+                .getString(context.getString(R.string.set_key_excluded_locations), "")
         )
 
     private object NoopListener : LocationAdapter.Listener {

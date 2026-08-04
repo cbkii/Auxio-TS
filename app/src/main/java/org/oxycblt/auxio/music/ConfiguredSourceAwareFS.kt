@@ -63,6 +63,9 @@ internal class ConfiguredSourceAwareFS(
                         available = false,
                         fingerprint = null,
                         fingerprintStrength = SourceFingerprintStrength.NONE,
+                        canonicalKey = first.canonicalKey,
+                        sourceOrigin = first.origin,
+                        traversalScope = first.traversalScope,
                     )
             }
         }

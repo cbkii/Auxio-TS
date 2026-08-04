@@ -19,6 +19,8 @@
 package org.oxycblt.musikr.fs.direct
 
 import android.content.Context
+import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
 import java.io.File as JavaFile
 import java.io.IOException
 import java.nio.file.Files
@@ -27,6 +29,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -35,6 +38,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -43,8 +47,10 @@ import org.junit.runner.RunWith
 import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.File as MusicFile
+import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.Path
 import org.oxycblt.musikr.fs.Volume
+import org.oxycblt.musikr.fs.saf.SAF
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -180,6 +186,125 @@ class DirectFsTraversalTest {
     }
 
     @Test(timeout = TIMEOUT_MS)
+    fun `explicit whole volume source retains ordinary and hidden content when enabled`() =
+        runBlocking {
+            val volume = dir("volume")
+            track(dir("volume/Download"), "download.mp3")
+            track(dir("volume/.archive"), "hidden.mp3")
+
+            val root =
+                wholeVolume(volume).copy(
+                    origin = CanonicalSourcePolicy.Origin.EXPLICIT,
+                    withHidden = true,
+                )
+            val run = traverse(listOf(root))
+
+            assertEquals(
+                setOf("download.mp3", "hidden.mp3"),
+                run.files.map { it.path.name }.toSet(),
+            )
+        }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `hidden files and directories obey configured visibility`() = runBlocking {
+        val music = dir("Music")
+        track(music, ".root.mp3")
+        track(dir("Music/.archive"), "hidden.mp3")
+        track(music, "visible.mp3")
+
+        val hiddenOff = traverse(listOf(explicit(music)))
+        val hiddenOn = traverse(listOf(explicit(music).copy(withHidden = true)))
+
+        assertEquals(listOf("visible.mp3"), hiddenOff.files.map { it.path.name })
+        assertEquals(
+            setOf(".root.mp3", "hidden.mp3", "visible.mp3"),
+            hiddenOn.files.map { it.path.name }.toSet(),
+        )
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `excluded subtree is not enumerated or emitted`() = runBlocking {
+        val music = dir("Music")
+        val excluded = dir("Music/Podcasts")
+        track(excluded, "talk.mp3")
+        track(dir("Music/Albums"), "song.mp3")
+        track(music, "root.mp3")
+
+        val run =
+            traverse(
+                listOf(
+                    explicit(music).copy(excludedCanonicalPaths = setOf(excluded.canonicalPath))
+                )
+            )
+
+        assertEquals(setOf("root.mp3", "song.mp3"), run.files.map { it.path.name }.toSet())
+        assertEquals(2, run.metrics.directoriesVisited)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `excluded root completes empty without enumeration`() = runBlocking {
+        val music = dir("Music")
+        track(music, "song.mp3")
+        var enumerations = 0
+
+        val run =
+            traverse(
+                listOf(
+                    explicit(music).copy(excludedCanonicalPaths = setOf(music.canonicalPath))
+                ),
+                options().copy(listDirectory = { enumerations++; it.listFiles() }),
+            )
+
+        assertTrue(run.files.isEmpty())
+        assertEquals(0, enumerations)
+        assertEquals(SourceCompletion.COMPLETED_EMPTY, run.completion(music))
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `exclusion remains effective beneath deliberate overlapping roots`() = runBlocking {
+        val volume = dir("volume")
+        val music = dir("volume/Music")
+        val excluded = dir("volume/Music/Podcasts")
+        track(excluded, "talk.mp3")
+        track(music, "song.mp3")
+        track(dir("volume/Other"), "other.mp3")
+        val exclusions = setOf(excluded.canonicalPath)
+
+        val run =
+            traverse(
+                listOf(
+                    explicit(music).copy(excludedCanonicalPaths = exclusions),
+                    wholeVolume(volume)
+                        .copy(
+                            origin = CanonicalSourcePolicy.Origin.EXPLICIT,
+                            excludedCanonicalPaths = exclusions,
+                        ),
+                )
+            )
+
+        assertEquals(setOf("song.mp3", "other.mp3"), run.files.map { it.path.name }.toSet())
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `explicit exclusion and fallback noise policy remain independent`() = runBlocking {
+        val volume = dir("volume")
+        val excluded = dir("volume/Music/Ignore")
+        track(excluded, "ignored.mp3")
+        track(dir("volume/Music"), "song.mp3")
+        track(dir("volume/Download"), "download.mp3")
+
+        val run =
+            traverse(
+                listOf(
+                    wholeVolume(volume)
+                        .copy(excludedCanonicalPaths = setOf(excluded.canonicalPath))
+                )
+            )
+
+        assertEquals(listOf("song.mp3"), run.files.map { it.path.name })
+    }
+
+    @Test(timeout = TIMEOUT_MS)
     fun `symbolic links escaping the root are not followed`() = runBlocking {
         val music = dir("Music")
         track(music, "a.mp3")
@@ -266,22 +391,16 @@ class DirectFsTraversalTest {
         val music = dir("Music")
         repeat(32) { index -> track(music, "track-$index.mp3") }
 
-        // A single-slot channel with no consumer blocks the producer, exactly as a stalled
-        // downstream stage would.
-        val output = Channel<MusicFile>(1)
+        // One rendezvous receive proves the producer reached channel emission; with no further
+        // receiver, the next send is owned by the cancellation path below.
+        val output = Channel<MusicFile>(Channel.RENDEZVOUS)
         val traversal = DirectFsTraversal(listOf(explicit(music)), options())
-        val started = CompletableDeferred<Unit>()
 
         val failure =
             withTimeout(TIMEOUT_MS) {
                 coroutineScope {
-                    val run =
-                        async(Dispatchers.IO) {
-                            started.complete(Unit)
-                            traversal.explore(output)
-                        }
-                    started.await()
-                    delay(50)
+                    val run = async(Dispatchers.IO) { traversal.explore(output) }
+                    output.receive()
                     run.cancel(CancellationException("cancelled by test"))
                     runCatching { run.await() }.exceptionOrNull()
                 }
@@ -289,6 +408,75 @@ class DirectFsTraversalTest {
         output.close()
 
         assertTrue("expected cancellation, got $failure", failure is CancellationException)
+        assertEquals(0, traversal.metricsSnapshot().activeEnumerators)
+        assertEquals(0, traversal.metricsSnapshot().queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `cancellation during directory listing releases traversal state`() = runBlocking {
+        val music = dir("Music")
+        val entered = CompletableDeferred<Unit>()
+        val traversal =
+            DirectFsTraversal(
+                listOf(explicit(music)),
+                options()
+                    .copy(
+                        listDirectory = {
+                            entered.complete(Unit)
+                            awaitCancellation()
+                        }
+                    ),
+            )
+        val output = Channel<MusicFile>(Channel.UNLIMITED)
+
+        val failure =
+            coroutineScope {
+                val run = async(Dispatchers.IO) { traversal.explore(output) }
+                entered.await()
+                run.cancel(CancellationException("cancel during list"))
+                runCatching { run.await() }.exceptionOrNull()
+            }
+        output.close()
+
+        assertTrue(failure is CancellationException)
+        assertEquals(0, traversal.metricsSnapshot().activeEnumerators)
+        assertEquals(0, traversal.metricsSnapshot().queuedDirectories)
+        assertEquals(
+            SourceCompletion.CANCELLED,
+            traversal.metricsSnapshot().results.single().completion,
+        )
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `cancellation during entry inspection releases traversal state`() = runBlocking {
+        val music = dir("Music")
+        track(music, "song.mp3")
+        val entered = CompletableDeferred<Unit>()
+        val traversal =
+            DirectFsTraversal(
+                listOf(explicit(music)),
+                options()
+                    .copy(
+                        inspectEntry = { _, _, _ ->
+                            entered.complete(Unit)
+                            awaitCancellation()
+                        }
+                    ),
+            )
+        val output = Channel<MusicFile>(Channel.UNLIMITED)
+
+        val failure =
+            coroutineScope {
+                val run = async(Dispatchers.IO) { traversal.explore(output) }
+                entered.await()
+                run.cancel(CancellationException("cancel during stat"))
+                runCatching { run.await() }.exceptionOrNull()
+            }
+        output.close()
+
+        assertTrue(failure is CancellationException)
+        assertEquals(0, traversal.metricsSnapshot().activeEnumerators)
+        assertEquals(0, traversal.metricsSnapshot().queuedDirectories)
     }
 
     @Test(timeout = TIMEOUT_MS)
@@ -389,23 +577,168 @@ class DirectFsTraversalTest {
         val healthy = dir("Healthy")
         track(healthy, "b.mp3")
 
-        val run =
-            traverse(
+        val causalFailure = IOException("enumeration exploded")
+        val output = Channel<MusicFile>(Channel.UNLIMITED)
+        val traversal =
+            DirectFsTraversal(
                 listOf(explicit(broken), explicit(healthy)),
                 options()
                     .copy(
                         listDirectory = { directory ->
                             if (directory.canonicalPath == broken.canonicalPath) {
-                                throw IOException("enumeration exploded")
+                                throw causalFailure
                             }
                             directory.listFiles()
                         }
                     ),
             )
 
-        assertEquals(SourceCompletion.FAILED, run.completion(broken))
-        assertEquals(SourceCompletion.COMPLETED, run.completion(healthy))
-        assertEquals(listOf("b.mp3"), run.files.map { it.path.name })
+        val failure = runCatching { traversal.explore(output) }.exceptionOrNull()
+        output.close()
+        val files = mutableListOf<MusicFile>()
+        for (file in output) files += file
+        val metrics = traversal.metricsSnapshot()
+
+        assertTrue(failure === causalFailure)
+        assertEquals(SourceCompletion.FAILED, metrics.completion(broken))
+        assertEquals(SourceCompletion.COMPLETED, metrics.completion(healthy))
+        assertEquals(listOf("b.mp3"), files.map { it.path.name })
+        assertEquals(0, metrics.activeEnumerators)
+        assertEquals(0, metrics.queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `entry stat exception remains the causal scan failure`() = runBlocking {
+        val music = dir("Music")
+        track(music, "song.mp3")
+        val causalFailure = IOException("entry stat exploded")
+        val output = Channel<MusicFile>(Channel.UNLIMITED)
+        val traversal =
+            DirectFsTraversal(
+                listOf(explicit(music)),
+                options().copy(inspectEntry = { _, _, _ -> throw causalFailure }),
+            )
+
+        val failure = runCatching { traversal.explore(output) }.exceptionOrNull()
+        output.close()
+        val metrics = traversal.metricsSnapshot()
+
+        assertTrue(failure === causalFailure)
+        assertEquals(SourceCompletion.FAILED, metrics.results.single().completion)
+        assertEquals(0, metrics.activeEnumerators)
+        assertEquals(0, metrics.queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `canonical path exception remains the causal scan failure`() = runBlocking {
+        val music = dir("Music")
+        track(music, "song.mp3")
+        val causalFailure = IOException("canonical resolution exploded")
+        val output = Channel<MusicFile>(Channel.UNLIMITED)
+        val traversal =
+            DirectFsTraversal(
+                listOf(explicit(music)),
+                options().copy(resolveCanonicalPath = { throw causalFailure }),
+            )
+
+        val failure = runCatching { traversal.explore(output) }.exceptionOrNull()
+        output.close()
+        val metrics = traversal.metricsSnapshot()
+
+        assertTrue(failure === causalFailure)
+        assertEquals(SourceCompletion.FAILED, metrics.results.single().completion)
+        assertEquals(0, metrics.activeEnumerators)
+        assertEquals(0, metrics.queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `direct fs owning task fails with the traversal cause`() = runBlocking {
+        val music = dir("Music")
+        track(music, "song.mp3")
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val location =
+            requireNotNull(
+                Location.Unopened.from(context, Uri.fromFile(music)).open(context)
+            )
+        val causalFailure = IOException("mandatory traversal failure")
+        val directFs =
+            DirectFS(
+                SAF.Query(
+                    source = listOf(location),
+                    exclude = emptyList(),
+                    withHidden = false,
+                    multithread = false,
+                ),
+                options().copy(listDirectory = { throw causalFailure }),
+            )
+        val output = Channel<MusicFile>(Channel.UNLIMITED)
+
+        val result = directFs.explore(output).await()
+        val metrics = requireNotNull(directFs.lastTraversalMetrics())
+
+        assertTrue(result.exceptionOrNull() === causalFailure)
+        assertEquals(SourceCompletion.FAILED, metrics.results.single().completion)
+        assertEquals(0, metrics.activeEnumerators)
+        assertEquals(0, metrics.queuedDirectories)
+        assertTrue(runCatching { output.receive() }.exceptionOrNull() === causalFailure)
+    }
+
+    @Test
+    fun `fingerprint changes only with effective source policy`() {
+        val music = dir("Music")
+        track(music, "song.mp3")
+        val directFs = DirectFS(emptyList<Location.Opened>())
+        val root =
+            explicit(music)
+                .copy(
+                    canonicalPath = "/storage/emulated/0/Music",
+                    canonicalKey = "path:/storage/emulated/0/Music",
+                )
+        val baseline = directFs.combineRootFingerprints(listOf(root))
+
+        assertEquals(
+            baseline,
+            directFs.combineRootFingerprints(
+                listOf(
+                    root.copy(
+                        normalizedUri = "file:///sdcard/Music",
+                        displayPath = "/sdcard/Music",
+                    ),
+                    root,
+                )
+            ),
+        )
+        assertNotEquals(
+            baseline,
+            directFs.combineRootFingerprints(
+                listOf(root.copy(origin = CanonicalSourcePolicy.Origin.AUTOMATIC_SUGGESTION))
+            ),
+        )
+        assertNotEquals(
+            baseline,
+            directFs.combineRootFingerprints(listOf(root.copy(withHidden = true))),
+        )
+        assertNotEquals(
+            baseline,
+            directFs.combineRootFingerprints(
+                listOf(
+                    root.copy(
+                        excludedCanonicalPaths =
+                            setOf("/storage/emulated/0/Music/Podcasts")
+                    )
+                )
+            ),
+        )
+        assertEquals(
+            baseline,
+            directFs.combineRootFingerprints(
+                listOf(
+                    root.copy(
+                        excludedCanonicalPaths = setOf("/storage/emulated/0/Other")
+                    )
+                )
+            ),
+        )
     }
 
     @Test(timeout = TIMEOUT_MS)
@@ -417,6 +750,7 @@ class DirectFsTraversalTest {
         val run = traverse(listOf(explicit(music)))
 
         assertEquals(0, run.metrics.activeEnumerators)
+        assertEquals(0, run.metrics.queuedDirectories)
         assertTrue(run.metrics.peakQueuedDirectories >= 1)
         assertEquals(1, run.results.size)
         assertTrue(run.metrics.elapsedMs >= 0)
@@ -456,6 +790,7 @@ class DirectFsTraversalTest {
 
     private fun wholeVolume(directory: JavaFile) =
         prepared(directory, CanonicalSourcePolicy.Scope.WHOLE_VOLUME)
+            .copy(origin = CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK)
 
     private fun prepared(directory: JavaFile, scope: CanonicalSourcePolicy.Scope) =
         PreparedRoot(
@@ -485,6 +820,9 @@ class DirectFsTraversalTest {
         fun completion(directory: JavaFile): SourceCompletion? =
             results.firstOrNull { it.canonicalPath == directory.canonicalPath }?.completion
     }
+
+    private fun DirectFsTraversalMetrics.completion(directory: JavaFile): SourceCompletion? =
+        results.firstOrNull { it.canonicalPath == directory.canonicalPath }?.completion
 
     private object TestVolume : Volume.Internal {
         override val mediaStoreName: String? = null

@@ -33,13 +33,19 @@ internal object MusicSourcePathNormalizer {
         val repaired = repairDuplicatedStoragePath(uri)
         val candidate = repaired ?: uri
         if (!fileOnly) {
-            val pathUri =
-                if (candidate.scheme.isNullOrEmpty() && candidate.path?.startsWith("/") == true) {
-                    Uri.fromFile(File(requireNotNull(candidate.path)))
-                } else {
-                    candidate
+            val canonical =
+                when {
+                    candidate.scheme.isNullOrEmpty() &&
+                        candidate.path?.startsWith("/") == true ->
+                        CanonicalSourcePolicy.canonicalUriString(
+                            Uri.fromFile(File(requireNotNull(candidate.path))).toString()
+                        )
+                    else -> CanonicalSourcePolicy.canonicalUriString(candidate.toString())
                 }
-            return pathUri.toString()
+            if (canonical == null) {
+                L.w("Skipping malformed music source URI: $candidate")
+            }
+            return canonical
         }
 
         val fileUri =
@@ -98,14 +104,7 @@ internal object MusicSourcePathNormalizer {
     }
 
     private fun externalStorageTreeToFileUri(uri: Uri): Uri? {
-        if (uri.authority != "com.android.externalstorage.documents") return null
-        val encodedTree =
-            uri.pathSegments.zipWithNext().firstOrNull { it.first == "tree" }?.second ?: return null
-        val treeId = Uri.decode(encodedTree)
-        val parts = treeId.split(':', limit = 2)
-        val volume = parts.firstOrNull() ?: return null
-        val relative = parts.getOrNull(1).orEmpty().trim('/')
-        val root = if (volume == "primary") "/storage/emulated/0" else "/storage/$volume"
-        return Uri.fromFile(File(if (relative.isEmpty()) root else "$root/$relative"))
+        val path = CanonicalSourcePolicy.externalStorageTreePath(uri) ?: return null
+        return Uri.fromFile(File(path))
     }
 }

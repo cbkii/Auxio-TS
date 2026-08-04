@@ -1412,7 +1412,7 @@ constructor(
                         )
                     MediaStore.from(context, query)
                 }
-                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source)
+                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery)
             }
         val sourceAware =
             if (musicSettings.locationMode == LocationMode.MEDIA_STORE) {

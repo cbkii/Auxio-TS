@@ -45,6 +45,10 @@ data class SourceSnapshot(
     val fingerprint: String?,
     val fingerprintStrength: SourceFingerprintStrength,
     val observedAtMs: Long = System.currentTimeMillis(),
+    /** Exact configured-root identity when one snapshot represents one canonical descriptor. */
+    val canonicalKey: String? = null,
+    val sourceOrigin: CanonicalSourcePolicy.Origin? = null,
+    val traversalScope: CanonicalSourcePolicy.Scope? = null,
 )
 
 /** File systems able to plan and restrict work per source before recursive exploration. */

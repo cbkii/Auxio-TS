@@ -59,6 +59,12 @@ internal data class PreparedRoot(
     val canonicalPath: String,
     val relativePath: Path,
     val scope: CanonicalSourcePolicy.Scope,
+    val origin: CanonicalSourcePolicy.Origin = CanonicalSourcePolicy.Origin.EXPLICIT,
+    val excludedCanonicalPaths: Set<String> = emptySet(),
+    val withHidden: Boolean = false,
+    val canonicalKey: String = "path:$canonicalPath",
+    val normalizedUri: String = Uri.fromFile(directory).toString(),
+    val displayPath: String = canonicalPath,
 )
 
 /** Documented per-scope traversal safety limits. */
@@ -88,10 +94,22 @@ internal data class DirectFsTraversalMetrics(
     val filesEmitted: Int,
     val duplicateDirectoriesSuppressed: Int,
     val peakQueuedDirectories: Int,
+    val queuedDirectories: Int,
     val activeEnumerators: Int,
     val elapsedMs: Long,
     val results: List<SourceTraversalResult>,
     val slowOperations: List<SlowOperationRecord>,
+)
+
+/** Metadata collected for one listed entry as one cancellable operation group. */
+internal data class DirectEntryMetadata(
+    val javaFile: JavaFile,
+    val name: String,
+    val canonicalPath: String?,
+    val isDirectory: Boolean,
+    val isSymlink: Boolean,
+    val modifiedMs: Long,
+    val size: Long,
 )
 
 /** Tunables that production and tests share, so traversal behaviour is never test-only. */
@@ -105,7 +123,21 @@ internal data class DirectFsOptions(
     val maxSlowOperationRecords: Int = 32,
     val entryCancellationInterval: Int = 64,
     val isAllowedCanonicalPath: (String) -> Boolean = { DirectFsRootPolicy.isAllowedPath(it) },
-    val listDirectory: (JavaFile) -> Array<JavaFile>? = { it.listFiles() },
+    val listDirectory: suspend (JavaFile) -> Array<JavaFile>? = { it.listFiles() },
+    val resolveCanonicalPath: suspend (JavaFile) -> String? =
+        DirectFsTraversal::canonicalAppFacingPath,
+    val inspectEntry: suspend (JavaFile, String, String?) -> DirectEntryMetadata =
+        { child, parent, canonicalPath ->
+            DirectEntryMetadata(
+                javaFile = child,
+                name = child.name,
+                canonicalPath = canonicalPath,
+                isDirectory = child.isDirectory,
+                isSymlink = DirectFsTraversal.isSymbolicLink(child, parent, canonicalPath),
+                modifiedMs = child.lastModified(),
+                size = child.length(),
+            )
+        },
 ) {
     internal companion object {
         val DEFAULT = DirectFsOptions()
@@ -146,26 +178,43 @@ internal class DirectFsTraversal(
     private var peakQueuedDirectories = 0
     private var activeEnumerators = 0
     private var queuedDirectories = 0
+    private var startedAtMs = 0L
+    private val fatalErrors = mutableListOf<Exception>()
 
     suspend fun explore(files: Channel<File>): DirectFsTraversalMetrics {
-        val start = System.currentTimeMillis()
+        startedAtMs = System.currentTimeMillis()
         for (root in roots) {
             currentCoroutineContext().ensureActive()
             traverseSource(root, files)
         }
-        return DirectFsTraversalMetrics(
+        val metrics = metricsSnapshot()
+        fatalErrors.firstOrNull()?.let { first ->
+            fatalErrors.drop(1).forEach(first::addSuppressed)
+            throw first
+        }
+        return metrics
+    }
+
+    /** Exception-safe current metrics, including cancellation and fatal-failure cleanup. */
+    internal fun metricsSnapshot(): DirectFsTraversalMetrics =
+        DirectFsTraversalMetrics(
             directoriesVisited = directoriesVisited,
             filesEmitted = filesEmitted,
             duplicateDirectoriesSuppressed = duplicateDirectoriesSuppressed,
             peakQueuedDirectories = peakQueuedDirectories,
+            queuedDirectories = queuedDirectories,
             activeEnumerators = activeEnumerators,
-            elapsedMs = System.currentTimeMillis() - start,
+            elapsedMs =
+                if (startedAtMs == 0L) 0L else System.currentTimeMillis() - startedAtMs,
             results = results.toList(),
             slowOperations = slowOperations.toList(),
         )
-    }
 
     private suspend fun traverseSource(root: PreparedRoot, files: Channel<File>) {
+        if (isExcluded(root.canonicalPath, root.excludedCanonicalPaths)) {
+            record(root, SourceCompletion.COMPLETED_EMPTY, "Configured source is excluded")
+            return
+        }
         if (!visited.add(root.canonicalPath)) {
             duplicateDirectoriesSuppressed++
             record(
@@ -176,9 +225,13 @@ internal class DirectFsTraversal(
             return
         }
         val budget =
-            when (root.scope) {
-                CanonicalSourcePolicy.Scope.WHOLE_VOLUME -> options.wholeVolumeBudget
-                CanonicalSourcePolicy.Scope.EXPLICIT -> options.explicitBudget
+            if (
+                root.scope == CanonicalSourcePolicy.Scope.WHOLE_VOLUME &&
+                    root.origin == CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK
+            ) {
+                options.wholeVolumeBudget
+            } else {
+                options.explicitBudget
             }
         val queue = ArrayDeque<DirectoryTask>()
         queue.addLast(
@@ -202,6 +255,7 @@ internal class DirectFsTraversal(
                 queuedDirectories = queue.size
                 peakQueuedDirectories = maxOf(peakQueuedDirectories, queuedDirectories)
                 val task = queue.removeFirst()
+                queuedDirectories = queue.size
                 directoriesVisited++
                 directories++
 
@@ -222,12 +276,16 @@ internal class DirectFsTraversal(
                 val directoryDeferred = CompletableDeferred<Directory>()
                 val children = mutableListOf<File>()
                 var index = 0
+                val cancellationInterval = options.entryCancellationInterval.coerceAtLeast(1)
                 try {
                     for (entry in entries) {
-                        if (++index % options.entryCancellationInterval == 0) {
+                        if (++index % cancellationInterval == 0) {
                             currentCoroutineContext().ensureActive()
                         }
                         if (entry.isSymlink || entry.isDirectory) continue
+                        if (!root.withHidden && entry.name.startsWith('.')) continue
+                        val entryCanonical = entry.canonicalPath ?: continue
+                        if (isExcluded(entryCanonical, root.excludedCanonicalPaths)) continue
                         if (emitted >= budget.maxFiles) {
                             truncation =
                                 "DirectFS file limit (${budget.maxFiles}) reached at " +
@@ -279,11 +337,18 @@ internal class DirectFsTraversal(
 
                 for (entry in entries) {
                     if (entry.isSymlink || !entry.isDirectory) continue
-                    if (!shouldDescendIntoDirectory(entry.name, root.scope)) {
+                    if (
+                        !shouldDescendIntoDirectory(
+                            entry.name,
+                            root.scope,
+                            root.withHidden,
+                            root.origin,
+                        )
+                    ) {
                         Log.d(TAG, "DirectFS skipped noisy directory ${entry.javaFile.path}")
                         continue
                     }
-                    val childCanonical = canonicalAppFacingPath(entry.javaFile)
+                    val childCanonical = entry.canonicalPath
                     if (
                         childCanonical == null || !isWithinRoot(childCanonical, root.canonicalPath)
                     ) {
@@ -294,6 +359,7 @@ internal class DirectFsTraversal(
                         Log.w(TAG, "DirectFS skipped a protected directory at $childCanonical")
                         continue
                     }
+                    if (isExcluded(childCanonical, root.excludedCanonicalPaths)) continue
                     if (!visited.add(childCanonical)) {
                         duplicateDirectoriesSuppressed++
                         continue
@@ -324,6 +390,7 @@ internal class DirectFsTraversal(
             // One broken source must never strand the remaining configured sources.
             Log.e(TAG, "DirectFS traversal failed for ${root.canonicalPath}", e)
             record(root, SourceCompletion.FAILED, e.message ?: e.javaClass.simpleName)
+            fatalErrors += e
             return
         } finally {
             queuedDirectories = 0
@@ -340,6 +407,11 @@ internal class DirectFsTraversal(
     private fun record(root: PreparedRoot, completion: SourceCompletion, detail: String? = null) {
         results.add(SourceTraversalResult(root.sourceKey, root.canonicalPath, completion, detail))
     }
+
+    private fun isExcluded(candidate: String, exclusions: Set<String>): Boolean =
+        exclusions.any { excluded ->
+            candidate == excluded || candidate.startsWith("$excluded/")
+        }
 
     private fun rootUnavailableResult(root: PreparedRoot): SourceTraversalResult {
         val exists = runCatching { root.directory.exists() }.getOrDefault(false)
@@ -369,33 +441,54 @@ internal class DirectFsTraversal(
      * Returns `null` when the directory cannot be enumerated, which the caller turns into either a
      * source-level outcome or a skipped child.
      */
-    private fun enumerate(task: DirectoryTask, root: PreparedRoot): List<DirectEntry>? {
-        val start = System.currentTimeMillis()
-        val listed =
-            try {
-                options.listDirectory(task.directory)
-            } catch (e: RuntimeException) {
-                Log.d(TAG, "DirectFS listing failed for ${task.directory.path}", e)
-                null
+    private suspend fun enumerate(
+        task: DirectoryTask,
+        root: PreparedRoot,
+    ): List<DirectEntryMetadata>? {
+        activeEnumerators++
+        try {
+            currentCoroutineContext().ensureActive()
+            val listStart = System.currentTimeMillis()
+            val listed =
+                try {
+                    try {
+                        options.listDirectory(task.directory)
+                    } catch (e: SecurityException) {
+                        Log.d(TAG, "DirectFS listing denied for ${task.directory.path}", e)
+                        null
+                    }
+                } finally {
+                    recordSlowOperation(
+                        task.directory.path,
+                        "listFiles",
+                        listStart,
+                        root.sourceKey,
+                    )
+                } ?: return null
+            currentCoroutineContext().ensureActive()
+            val entries = ArrayList<DirectEntryMetadata>(listed.size)
+            val groupSize = options.entryCancellationInterval.coerceAtLeast(1)
+            var groupStart = System.currentTimeMillis()
+            for ((index, child) in listed.withIndex()) {
+                if (index % groupSize == 0) {
+                    currentCoroutineContext().ensureActive()
+                    groupStart = System.currentTimeMillis()
+                }
+                val canonicalPath = options.resolveCanonicalPath(child)
+                entries += options.inspectEntry(child, task.canonicalPath, canonicalPath)
+                if ((index + 1) % groupSize == 0 || index == listed.lastIndex) {
+                    recordSlowOperation(
+                        task.directory.path,
+                        "statEntries",
+                        groupStart,
+                        root.sourceKey,
+                    )
+                }
             }
-        recordSlowOperation(task.directory.path, "listFiles", start, root.sourceKey)
-        if (listed == null) return null
-        activeEnumerators = 1
-        val statStart = System.currentTimeMillis()
-        val entries =
-            listed.map { child ->
-                DirectEntry(
-                    javaFile = child,
-                    name = child.name,
-                    isDirectory = child.isDirectory,
-                    isSymlink = isSymbolicLink(child, task.canonicalPath),
-                    modifiedMs = child.lastModified(),
-                    size = child.length(),
-                )
-            }
-        recordSlowOperation(task.directory.path, "statEntries", statStart, root.sourceKey)
-        activeEnumerators = 0
-        return entries
+            return entries
+        } finally {
+            activeEnumerators--
+        }
     }
 
     private fun recordSlowOperation(
@@ -428,15 +521,6 @@ internal class DirectFsTraversal(
         val depth: Int,
     )
 
-    private data class DirectEntry(
-        val javaFile: JavaFile,
-        val name: String,
-        val isDirectory: Boolean,
-        val isSymlink: Boolean,
-        val modifiedMs: Long,
-        val size: Long,
-    )
-
     internal companion object {
         private const val TAG = "DirectFS"
 
@@ -463,10 +547,20 @@ internal class DirectFsTraversal(
         internal fun shouldDescendIntoDirectory(
             name: String,
             scope: CanonicalSourcePolicy.Scope,
+            withHidden: Boolean = false,
+            origin: CanonicalSourcePolicy.Origin =
+                if (scope == CanonicalSourcePolicy.Scope.WHOLE_VOLUME) {
+                    CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK
+                } else {
+                    CanonicalSourcePolicy.Origin.EXPLICIT
+                },
         ): Boolean {
             if (name.isBlank() || name == "." || name == "..") return false
-            if (name.startsWith('.')) return false
-            if (scope == CanonicalSourcePolicy.Scope.EXPLICIT) return true
+            if (!withHidden && name.startsWith('.')) return false
+            if (
+                scope != CanonicalSourcePolicy.Scope.WHOLE_VOLUME ||
+                    origin != CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK
+            ) return true
             return name.lowercase(java.util.Locale.ROOT) !in NOISY_DIRECTORY_NAMES
         }
 
@@ -499,15 +593,18 @@ internal class DirectFsTraversal(
          * comparing the canonical path with the already canonical parent, which detects the same
          * escapes without any platform dependency.
          */
-        internal fun isSymbolicLink(entry: JavaFile, parentCanonicalPath: String): Boolean {
+        internal fun isSymbolicLink(
+            entry: JavaFile,
+            parentCanonicalPath: String,
+            canonicalPath: String?,
+        ): Boolean {
             try {
                 val stat = android.system.Os.lstat(entry.absolutePath)
                 return android.system.OsConstants.S_ISLNK(stat.st_mode)
             } catch (_: Throwable) {
                 // The syscall is unavailable on this host; use the canonical comparison below.
             }
-            val canonical = canonicalAppFacingPath(entry) ?: return true
-            return canonical != "$parentCanonicalPath/${entry.name}"
+            return canonicalPath == null || canonicalPath != "$parentCanonicalPath/${entry.name}"
         }
 
         internal fun mimeTypeOf(file: JavaFile): String =

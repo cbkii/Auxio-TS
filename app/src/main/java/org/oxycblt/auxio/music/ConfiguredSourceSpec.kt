@@ -20,6 +20,7 @@ package org.oxycblt.auxio.music
 
 import android.net.Uri
 import org.oxycblt.auxio.music.locations.LocationMode
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 
 /** Immutable source identity parsed before attempting to open a provider or filesystem root. */
 data class ConfiguredSourceSpec(
@@ -35,6 +36,8 @@ data class ConfiguredSourceSpec(
     val mode: LocationMode,
     val displayPath: String,
     val accessState: AccessState,
+    val origin: CanonicalSourcePolicy.Origin = CanonicalSourcePolicy.Origin.EXPLICIT,
+    val traversalScope: CanonicalSourcePolicy.Scope? = null,
 ) {
     enum class AccessState {
         AVAILABLE,

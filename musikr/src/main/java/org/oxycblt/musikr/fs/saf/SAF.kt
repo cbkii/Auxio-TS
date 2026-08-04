@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import org.oxycblt.musikr.fs.AddedMs
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.Directory
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
@@ -100,6 +101,7 @@ private constructor(
                     }
                 }
                 val first = locations.firstOrNull()
+                val canonicalKey = first?.let(SourceIdentity::canonicalKeyForLocation)
                 SourceSnapshot(
                     sourceKey = sourceKey,
                     sourceType = SOURCE_TYPE,
@@ -112,6 +114,11 @@ private constructor(
                     fingerprintStrength =
                         if (available) SourceFingerprintStrength.ADVISORY
                         else SourceFingerprintStrength.NONE,
+                    canonicalKey = canonicalKey,
+                    sourceOrigin = canonicalKey?.let(query.sourceOrigins::get),
+                    traversalScope =
+                        first?.uri?.let(CanonicalSourcePolicy::externalStorageTreePath)
+                            ?.let(CanonicalSourcePolicy::scopeOf),
                 )
             }
         }
@@ -264,6 +271,8 @@ private constructor(
         val exclude: List<Location.Unopened>,
         val withHidden: Boolean,
         val multithread: Boolean,
+        /** Origin keyed by the shared canonical identity of each configured source. */
+        val sourceOrigins: Map<String, CanonicalSourcePolicy.Origin> = emptyMap(),
     )
 
     @RequiresApi(Build.VERSION_CODES.Q)

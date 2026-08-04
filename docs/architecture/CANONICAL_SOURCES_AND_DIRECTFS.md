@@ -57,10 +57,13 @@ instead of object equality.
   the path stays case-sensitive, matching how Android storage actually behaves;
 - anything that does not end up under `/storage/` is rejected.
 
-Identity is then `path:<normalised path>` for file-backed sources and `uri:<trimmed uri>` for
-provider-backed ones. `scopeOf` reports `WHOLE_VOLUME` for a volume root such as
-`/storage/emulated/0` or `/storage/usbdisk0`, and `EXPLICIT` for anything the user picked inside a
-volume.
+Identity is then `path:<normalised path>` for file-backed sources. ExternalStorageProvider tree
+URIs are parsed structurally: encoded and decoded separators, `primary` case, removable-volume
+token case, trailing separators and an equivalent tree/document form converge on one stable encoded
+tree URI. Malformed, over-encoded and traversal-like document IDs are rejected. A distinct document
+below a tree remains distinct, and unrelated providers stay opaque rather than being compared by
+guessed semantics. `scopeOf` reports `WHOLE_VOLUME` for a volume root such as
+`/storage/emulated/0` or `/storage/usbdisk0`, and `EXPLICIT` for a narrower folder.
 
 `SourceIdentity.forLocation` is unchanged. It is a database primary key with volume granularity and
 must keep that granularity; canonical deduplication uses the narrower
@@ -83,11 +86,18 @@ First-selected ordering is preserved everywhere.
 ## Migration behaviour
 
 `MusicSettingsImpl.repairPersistedSourceDuplicates` is a read-repair invoked from `safQuery`,
-`configuredSourceSpecs` and the configured-source count. It rewrites the persisted list only when
-collapsing actually shortens it, and it deliberately does **not** touch the source-configuration
-generation: dropping an exact canonical duplicate cannot change the effective scan scope, so it must
-not queue another full rescan or invalidate the cached library that Auxio-TS starts from. The repair
-is idempotent — a second read finds nothing to change.
+`configuredSourceSpecs` and the configured-source count. The same canonicalisation boundary is used
+by the direct `safQuery` setter and `applySourceConfiguration`: it normalises, validates,
+canonicalises and deduplicates both roots and explicit exclusions before serialising them. Repair
+therefore also rewrites a lone `/sdcard/...` or `/mnt/media_rw/...` alias when its canonical
+serialisation differs. It deliberately does **not** touch the source-configuration generation when
+the effective configuration is unchanged, and a second read is a no-op.
+
+Source origin is persisted by canonical key as `EXPLICIT`, `AUTOMATIC_SUGGESTION` or
+`WHOLE_VOLUME_FALLBACK`. Picker/manual choices carry their real origin. Legacy whole-volume entries
+default conservatively to fallback; legacy narrower entries default to explicit. Effective
+configuration revisions and DirectFS fingerprints include origin, scope, hidden policy and explicit
+exclusions, but not raw aliases or duplicate formatting.
 
 ## Ancestor and descendant overlap
 
@@ -96,6 +106,8 @@ deliberate choice:
 
 - a whole-volume candidate that is only a fallback suggestion is suppressed in the picker when a
   narrower explicit source already exists on that volume;
+- `DirectFS.prepareRoots` enforces the same fallback suppression defensively, so correctness does
+  not depend on the picker;
 - an explicitly selected overlapping root is kept, and the picker warns that the wider root already
   covers the narrower one;
 - `CanonicalSourcePolicy.traversalOrder` puts narrow explicit roots before whole-volume roots and
@@ -147,30 +159,37 @@ channel-ownership contract while letting the bounded channel apply real back-pre
 Each configured source produces exactly one outcome: `COMPLETED`, `COMPLETED_EMPTY`,
 `TEMPORARILY_UNAVAILABLE`, `PERMISSION_REQUIRED`, `TRUNCATED`, `CANCELLED` or `FAILED`. `DirectFS`
 maps those onto the shared `TYPE|detail` source-failure protocol, so a truncated or unavailable
-source is reported instead of silently producing a short library.
+source is reported instead of silently producing a short library. An unexpected `FAILED` result is
+also rethrown after later roots receive their terminal outcomes. The owning exploration task and
+file channel therefore retain the causal exception; a caller cannot accidentally commit a
+successful generation merely by forgetting to drain the diagnostic side channel. Cancellation is
+rethrown as cancellation after deterministic cleanup.
 
 ### Metrics
 
 `DirectFsTraversalMetrics` is deterministic and comparable across runs: directories visited, files
-emitted, duplicate directories suppressed, peak queued directories, active enumerators, elapsed
-time, per-source results and a bounded list of slow operations (path, operation, elapsed time,
-source key, queued and active counts). Slow operations are recorded, never traced per file.
+emitted, duplicate directories suppressed, current and peak queued directories, active enumerators,
+elapsed time, per-source results and a bounded list of slow operations (path, operation, elapsed
+time, source key, queued and active counts). The enumerator is marked active before `listFiles`,
+restored in `finally`, and checks cancellation before each bounded metadata-operation group. Slow
+operations are recorded, never traced per file.
 
 ## Directory exclusion policy
 
-The policy knows the scope of the source:
+DirectFS receives the complete effective query, including canonical exclusions and `withHidden`.
+An excluded root or subtree is rejected by canonical path equality/ancestry under every overlapping
+root. Explicit exclusions remain separate from fallback noise policy. Dot-files and dot-directories
+are included only when `withHidden` is enabled.
+
+Noise and budget policy uses both scope and persisted origin:
 
 - **Explicit** — a folder the user selected. Ordinary child directories are scanned even when they
   have generic names such as `Download` or `Movies`, because inside `/storage/emulated/0/My Audio`
-  those are content, not platform trees. Symbolic-link escapes, protected paths, genuinely
-  unreadable platform-restricted children and hidden directories are still skipped.
-- **Whole volume** — an accidental or automatically suggested volume root. The stronger name
+  those are content, not platform trees. An explicitly selected volume root keeps this policy too.
+  Symbolic-link escapes, protected paths and genuinely unreadable children are still skipped.
+- **Whole-volume fallback** — a broad automatic fallback. The stronger name
   exclusions (`Android`, `Download`, `DCIM`, `Pictures`, `Movies`, known head-unit noise
   directories) and a tighter directory budget apply.
-
-**Known limitation.** Hidden directories are skipped in DirectFS regardless of the "with hidden"
-preference, which is only plumbed into the SAF backend. This is unchanged by this work and is
-recorded here so it is not mistaken for a regression.
 
 ## App-UID and root authority boundary
 
@@ -191,23 +210,25 @@ playback.
 ## Tests
 
 - `musikr/src/test/java/org/oxycblt/musikr/fs/CanonicalSourcePolicyTest.kt` — aliases, backing-volume
-  mapping, case behaviour, duplicated prefixes, rejections, scopes, ancestry, collapse order and
+  mapping, case behaviour, duplicated prefixes, structural external-storage tree identity,
+  malformed/traversal rejection, opaque-provider semantics, scopes, ancestry, collapse order and
   traversal order.
 - `musikr/src/test/java/org/oxycblt/musikr/fs/direct/DirectFsTraversalTest.kt` — executable
   traversals over real temporary trees, every one with a bounded timeout: small explicit folder,
   empty folder, nested folders, exact duplicate roots, trailing-slash aliases, whole volume plus a
   nested source, explicit-versus-whole-volume exclusions, symlink escape, alias directories
   resolving onto one canonical path, unreadable child, unavailable root, a root disappearing during
-  traversal, cancellation, downstream back-pressure, directory and file safety limits, depth
-  truncation, one completion per source, an exception in one enumeration, protected canonical
-  children, and no coordinator state left behind.
+  traversal, explicit exclusions, hidden content on/off, cancellation during listing and metadata,
+  downstream back-pressure, directory and file safety limits, depth truncation, one completion per
+  source, causal listing/canonical failures, later-source completion, DirectFS owning-task failure,
+  protected canonical children, and no coordinator state left behind.
 - `musikr/src/test/java/org/oxycblt/musikr/fs/direct/DirectFsRootPolicyTest.kt` — root allow-list and
   per-scope descent policy.
 - `app/src/test/java/org/oxycblt/auxio/music/MusicSourceCanonicalizationTest.kt` — duplicates are
-  never persisted, aliases are one source, re-selecting is not a configuration change, persisted
-  duplicates are migrated once without a new generation, distinct sources keep selection order,
-  source-key selection cannot re-expand, the configuration revision is stable across aliases, the
-  picker refuses duplicates, and overlap is recognised without silent removal.
+  never persisted, aliases are one source, direct setter canonicalisation, lone-alias idempotent
+  repair, canonical exclusions and origin metadata, re-selecting is not a configuration change,
+  distinct sources keep selection order, effective-policy revisions, picker duplicate rejection and
+  overlap recognition without silent removal.
 - `musikr/src/androidTest/java/org/oxycblt/musikr/fs/direct/DirectFSInstrumentedTest.kt` —
   deterministic on-device completion and metrics under rendezvous back-pressure.
 

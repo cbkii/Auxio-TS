@@ -97,10 +97,14 @@ internal object MusicSourceCanonicalizer {
     fun hasNarrowerSourceOn(existingPaths: List<String>, path: String): Boolean =
         existingPaths.any { CanonicalSourcePolicy.isAncestorOf(path, it) }
 
-    /** The app-facing canonical path of [location], or `null` for provider-backed sources. */
+    /** The app-facing canonical path of [location], when the provider exposes structural identity. */
     fun appFacingPathOf(location: Location): String? = appFacingPathOfUri(location.uri)
 
-    /** The app-facing canonical path of [uri], or `null` for provider-backed sources. */
+    /** The app-facing canonical path of [uri], or `null` for an opaque provider-backed source. */
     fun appFacingPathOfUri(uri: Uri): String? =
-        if (uri.scheme == "file") uri.path?.let(CanonicalSourcePolicy::normalizePath) else null
+        if (uri.scheme == "file") {
+            uri.path?.let(CanonicalSourcePolicy::normalizePath)
+        } else {
+            CanonicalSourcePolicy.externalStorageTreePath(uri)
+        }
 }

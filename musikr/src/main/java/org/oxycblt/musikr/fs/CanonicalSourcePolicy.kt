@@ -18,6 +18,9 @@
 
 package org.oxycblt.musikr.fs
 
+import android.net.Uri
+import java.io.File
+
 /**
  * The single canonical identity, scope and overlap policy for configured music sources.
  *
@@ -32,6 +35,16 @@ package org.oxycblt.musikr.fs
  * playback, is only guaranteed there.
  */
 object CanonicalSourcePolicy {
+    /** How a configured source entered the durable source configuration. */
+    enum class Origin {
+        /** The user entered or picked this exact source. */
+        EXPLICIT,
+        /** The source was selected from bounded discovery suggestions. */
+        AUTOMATIC_SUGGESTION,
+        /** The source is a broad fallback used only when no narrower explicit source exists. */
+        WHOLE_VOLUME_FALLBACK,
+    }
+
     /** How wide a configured source root is, which decides traversal noise policy and budgets. */
     enum class Scope {
         /** A user-selected folder narrower than a whole volume. Scanned without name filtering. */
@@ -47,6 +60,8 @@ object CanonicalSourcePolicy {
     private const val URI_IDENTITY_PREFIX = "uri:"
 
     private const val PRIMARY_SHARED_STORAGE = "/storage/emulated/0"
+
+    private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
 
     private val PROTECTED_ROOTS =
         listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
@@ -116,9 +131,58 @@ object CanonicalSourcePolicy {
     fun identityForPath(path: String): String? =
         normalizePath(path)?.let { PATH_IDENTITY_PREFIX + it }
 
+    /**
+     * Canonical serialisation of a configured URI.
+     *
+     * ExternalStorageProvider tree URIs have documented structural identity in their tree document
+     * ID. Encoded and decoded separator forms are therefore normalised into one stable URI. Other
+     * providers remain opaque: their exact trimmed URI is retained rather than guessing that two
+     * provider-specific grants are equivalent.
+     */
+    fun canonicalUriString(rawUri: String): String? {
+        val value = rawUri.trim()
+        if (value.isEmpty()) return null
+        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return null
+        if (uri.scheme == "file") {
+            val path = uri.path?.let(::normalizePath) ?: return null
+            return Uri.fromFile(File(path)).toString()
+        }
+        if (
+            uri.scheme.equals("content", ignoreCase = true) &&
+                uri.authority.equals(EXTERNAL_STORAGE_AUTHORITY, ignoreCase = true)
+        ) {
+            return canonicalExternalStorageUri(uri)
+        }
+        return value
+    }
+
     /** The canonical identity of a provider-backed source URI. */
     fun identityForUriString(uri: String): String =
-        URI_IDENTITY_PREFIX + uri.trim().trimEnd('/').ifEmpty { uri.trim() }
+        URI_IDENTITY_PREFIX +
+            (canonicalUriString(uri) ?: "invalid:${uri.trim()}")
+
+    /**
+     * App-facing path represented by an ExternalStorageProvider tree URI.
+     *
+     * A distinct document below the granted tree is not treated as the tree root. DirectFS may use
+     * this conversion only for a plain tree grant or an equivalent tree/document representation.
+     */
+    fun externalStorageTreePath(uri: Uri): String? {
+        if (
+            !uri.scheme.equals("content", ignoreCase = true) ||
+                !uri.authority.equals(EXTERNAL_STORAGE_AUTHORITY, ignoreCase = true)
+        ) return null
+        val ids = externalStorageDocumentIds(uri) ?: return null
+        if (ids.documentId != null && ids.documentId != ids.treeId) return null
+        val (volume, relative) = splitExternalStorageDocumentId(ids.treeId) ?: return null
+        val root =
+            if (volume == "primary") PRIMARY_SHARED_STORAGE else "/storage/$volume"
+        return normalizePath(if (relative.isEmpty()) root else "$root/$relative")
+    }
+
+    /** Conservative deterministic origin for configurations written before origin metadata. */
+    fun legacyOriginForPath(path: String?): Origin =
+        if (path != null && isVolumeRoot(path)) Origin.WHOLE_VOLUME_FALLBACK else Origin.EXPLICIT
 
     /**
      * Collapses exact canonical duplicates, preserving the first configured occurrence.
@@ -235,4 +299,94 @@ object CanonicalSourcePolicy {
             USB_VOLUME.matches(token) -> token.lowercase()
             else -> token
         }
+
+    private fun canonicalExternalStorageUri(uri: Uri): String? {
+        if (uri.query != null || uri.fragment != null) return null
+        val ids = externalStorageDocumentIds(uri) ?: return null
+        val encodedTree = Uri.encode(ids.treeId)
+        return buildString {
+            append("content://")
+            append(EXTERNAL_STORAGE_AUTHORITY)
+            append("/tree/")
+            append(encodedTree)
+            val documentId = ids.documentId
+            if (documentId != null && documentId != ids.treeId) {
+                append("/document/")
+                append(Uri.encode(documentId))
+            }
+        }
+    }
+
+    /** Parses both encoded separators and provider-equivalent decoded path separators. */
+    private fun externalStorageDocumentIds(uri: Uri): ExternalStorageDocumentIds? {
+        val encodedPath = uri.encodedPath?.trim('/') ?: return null
+        val segments = encodedPath.split('/').filter { it.isNotEmpty() }
+        if (segments.firstOrNull() != "tree") return null
+        val documentMarker =
+            segments.indices.drop(2).firstOrNull { index ->
+                segments[index] == "document" &&
+                    index + 1 < segments.size &&
+                    normalizeExternalStorageDocumentId(
+                        segments.subList(index + 1, segments.size)
+                    ) != null
+            }
+        val treeEnd = documentMarker ?: segments.size
+        if (treeEnd <= 1) return null
+        val treeId = normalizeExternalStorageDocumentId(segments.subList(1, treeEnd)) ?: return null
+        val documentId =
+            documentMarker?.let { marker ->
+                if (marker + 1 >= segments.size) return null
+                normalizeExternalStorageDocumentId(segments.subList(marker + 1, segments.size))
+                    ?: return null
+            }
+        return ExternalStorageDocumentIds(treeId, documentId)
+    }
+
+    private fun normalizeExternalStorageDocumentId(encodedParts: List<String>): String? {
+        val decoded =
+            encodedParts
+                .joinToString("/") { fullyDecode(it) }
+                .replace('\\', '/')
+                .replace(Regex("/{2,}"), "/")
+                .trim('/')
+        if (decoded.any { it == '\u0000' || it == '\n' || it == '\r' }) return null
+        val separator = decoded.indexOf(':')
+        if (separator <= 0) return null
+        val rawVolume = decoded.substring(0, separator)
+        if (!rawVolume.matches(Regex("^[A-Za-z0-9._-]+$"))) return null
+        val volume =
+            if (rawVolume.equals("primary", ignoreCase = true)) {
+                "primary"
+            } else {
+                normalizeVolumeToken(rawVolume)
+            }
+        val rawRelative = decoded.substring(separator + 1).trim('/')
+        val relativeParts = rawRelative.split('/').filter { it.isNotEmpty() }
+        if (relativeParts.any { it == "." || it == ".." }) return null
+        val relative = relativeParts.joinToString("/")
+        return "$volume:$relative"
+    }
+
+    private fun splitExternalStorageDocumentId(documentId: String): Pair<String, String>? {
+        val separator = documentId.indexOf(':')
+        if (separator <= 0) return null
+        return documentId.substring(0, separator) to documentId.substring(separator + 1)
+    }
+
+    private fun fullyDecode(value: String): String {
+        var decoded = value
+        repeat(8) {
+            val next = Uri.decode(decoded)
+            if (next == decoded) return decoded
+            decoded = next
+        }
+        // Refuse deliberately over-encoded input instead of assigning it a different identity at
+        // another boundary that happens to decode one more time.
+        return if (Uri.decode(decoded) == decoded) decoded else "\u0000"
+    }
+
+    private data class ExternalStorageDocumentIds(
+        val treeId: String,
+        val documentId: String?,
+    )
 }
