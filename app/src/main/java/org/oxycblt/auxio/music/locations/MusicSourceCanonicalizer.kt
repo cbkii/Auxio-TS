@@ -30,8 +30,8 @@ import org.oxycblt.musikr.fs.SourceIdentity
  * One physical folder must have exactly one identity wherever the app persists, displays, counts,
  * compares or explores it. Persistence, the source picker and backend construction therefore all
  * derive identity from here rather than from object equality, which only ever compared raw URIs and
- * so treated `/sdcard/Music`, `/storage/emulated/0/Music/` and a duplicate entry of the same path as
- * three distinct sources.
+ * so treated `/sdcard/Music`, `/storage/emulated/0/Music/` and a duplicate entry of the same path
+ * as three distinct sources.
  */
 internal object MusicSourceCanonicalizer {
     /**
@@ -47,13 +47,16 @@ internal object MusicSourceCanonicalizer {
     fun canonicalKeyOfUri(uri: Uri): String = SourceIdentity.canonicalKeyForUri(uri)
 
     /** The canonical identity of an opened or unopened location. */
-    fun canonicalKeyOf(location: Location): String = SourceIdentity.canonicalKeyForLocation(location)
+    fun canonicalKeyOf(location: Location): String =
+        SourceIdentity.canonicalKeyForLocation(location)
 
     /** Collapses exact canonical duplicates in persisted entries, keeping the first occurrence. */
     fun collapseEntries(entries: List<String>, fileOnly: Boolean): List<String> =
         CanonicalSourcePolicy.collapseDuplicates(entries) { canonicalKeyOfEntry(it, fileOnly) }
 
-    /** Collapses exact canonical duplicates in a list of locations, keeping the first occurrence. */
+    /**
+     * Collapses exact canonical duplicates in a list of locations, keeping the first occurrence.
+     */
     fun <T : Location> collapseLocations(locations: List<T>): List<T> =
         CanonicalSourcePolicy.collapseDuplicates(locations, ::canonicalKeyOf)
 
@@ -97,7 +100,9 @@ internal object MusicSourceCanonicalizer {
     fun hasNarrowerSourceOn(existingPaths: List<String>, path: String): Boolean =
         existingPaths.any { CanonicalSourcePolicy.isAncestorOf(path, it) }
 
-    /** The app-facing canonical path of [location], when the provider exposes structural identity. */
+    /**
+     * The app-facing canonical path of [location], when the provider exposes structural identity.
+     */
     fun appFacingPathOf(location: Location): String? = appFacingPathOfUri(location.uri)
 
     /** The app-facing canonical path of [uri], or `null` for an opaque provider-backed source. */

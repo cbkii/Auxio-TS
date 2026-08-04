@@ -31,6 +31,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.locations.LocationAdapter
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.music.locations.MusicSourceCanonicalizer
@@ -148,11 +149,7 @@ class MusicSourceCanonicalizationTest {
         val canonicalKey = "path:/storage/emulated/0/Music"
         settings.safQuery =
             SAF.Query(
-                source =
-                    listOf(
-                        location("/sdcard/Music"),
-                        location("/storage/emulated/0/Music/"),
-                    ),
+                source = listOf(location("/sdcard/Music"), location("/storage/emulated/0/Music/")),
                 exclude =
                     listOf(
                         unopened("/mnt/media_rw/usbdisk0/Podcasts"),
@@ -181,9 +178,8 @@ class MusicSourceCanonicalizationTest {
         val volume = location("/storage/usbdisk0")
         val key = "path:/storage/usbdisk0"
         settings.safQuery =
-            query(listOf(volume)).copy(
-                sourceOrigins = mapOf(key to CanonicalSourcePolicy.Origin.EXPLICIT)
-            )
+            query(listOf(volume))
+                .copy(sourceOrigins = mapOf(key to CanonicalSourcePolicy.Origin.EXPLICIT))
 
         assertEquals(CanonicalSourcePolicy.Origin.EXPLICIT, settings.safQuery.sourceOrigins[key])
 
@@ -348,13 +344,7 @@ class MusicSourceCanonicalizationTest {
         sources: List<Location.Opened>,
         exclude: List<Location.Unopened> = emptyList(),
         withHidden: Boolean = false,
-    ) =
-        SAF.Query(
-            source = sources,
-            exclude = exclude,
-            withHidden = withHidden,
-            multithread = false,
-        )
+    ) = SAF.Query(source = sources, exclude = exclude, withHidden = withHidden, multithread = false)
 
     private fun location(path: String): Location.Opened =
         requireNotNull(

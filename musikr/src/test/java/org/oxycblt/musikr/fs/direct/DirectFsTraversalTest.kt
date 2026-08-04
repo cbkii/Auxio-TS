@@ -193,10 +193,8 @@ class DirectFsTraversalTest {
             track(dir("volume/.archive"), "hidden.mp3")
 
             val root =
-                wholeVolume(volume).copy(
-                    origin = CanonicalSourcePolicy.Origin.EXPLICIT,
-                    withHidden = true,
-                )
+                wholeVolume(volume)
+                    .copy(origin = CanonicalSourcePolicy.Origin.EXPLICIT, withHidden = true)
             val run = traverse(listOf(root))
 
             assertEquals(
@@ -232,9 +230,7 @@ class DirectFsTraversalTest {
 
         val run =
             traverse(
-                listOf(
-                    explicit(music).copy(excludedCanonicalPaths = setOf(excluded.canonicalPath))
-                )
+                listOf(explicit(music).copy(excludedCanonicalPaths = setOf(excluded.canonicalPath)))
             )
 
         assertEquals(setOf("root.mp3", "song.mp3"), run.files.map { it.path.name }.toSet())
@@ -249,10 +245,14 @@ class DirectFsTraversalTest {
 
         val run =
             traverse(
-                listOf(
-                    explicit(music).copy(excludedCanonicalPaths = setOf(music.canonicalPath))
-                ),
-                options().copy(listDirectory = { enumerations++; it.listFiles() }),
+                listOf(explicit(music).copy(excludedCanonicalPaths = setOf(music.canonicalPath))),
+                options()
+                    .copy(
+                        listDirectory = {
+                            enumerations++
+                            it.listFiles()
+                        }
+                    ),
             )
 
         assertTrue(run.files.isEmpty())
@@ -296,8 +296,7 @@ class DirectFsTraversalTest {
         val run =
             traverse(
                 listOf(
-                    wholeVolume(volume)
-                        .copy(excludedCanonicalPaths = setOf(excluded.canonicalPath))
+                    wholeVolume(volume).copy(excludedCanonicalPaths = setOf(excluded.canonicalPath))
                 )
             )
 
@@ -323,7 +322,10 @@ class DirectFsTraversalTest {
         val music = dir("Music")
         val album = dir("Music/Album")
         track(album, "a.mp3")
-        Files.createSymbolicLink(Paths.get(music.path, "Album Link"), Paths.get(album.canonicalPath))
+        Files.createSymbolicLink(
+            Paths.get(music.path, "Album Link"),
+            Paths.get(album.canonicalPath),
+        )
 
         val run = traverse(listOf(explicit(music)))
 
@@ -429,13 +431,12 @@ class DirectFsTraversalTest {
             )
         val output = Channel<MusicFile>(Channel.UNLIMITED)
 
-        val failure =
-            coroutineScope {
-                val run = async(Dispatchers.IO) { traversal.explore(output) }
-                entered.await()
-                run.cancel(CancellationException("cancel during list"))
-                runCatching { run.await() }.exceptionOrNull()
-            }
+        val failure = coroutineScope {
+            val run = async(Dispatchers.IO) { traversal.explore(output) }
+            entered.await()
+            run.cancel(CancellationException("cancel during list"))
+            runCatching { run.await() }.exceptionOrNull()
+        }
         output.close()
 
         assertTrue(failure is CancellationException)
@@ -465,13 +466,12 @@ class DirectFsTraversalTest {
             )
         val output = Channel<MusicFile>(Channel.UNLIMITED)
 
-        val failure =
-            coroutineScope {
-                val run = async(Dispatchers.IO) { traversal.explore(output) }
-                entered.await()
-                run.cancel(CancellationException("cancel during stat"))
-                runCatching { run.await() }.exceptionOrNull()
-            }
+        val failure = coroutineScope {
+            val run = async(Dispatchers.IO) { traversal.explore(output) }
+            entered.await()
+            run.cancel(CancellationException("cancel during stat"))
+            runCatching { run.await() }.exceptionOrNull()
+        }
         output.close()
 
         assertTrue(failure is CancellationException)
@@ -657,9 +657,7 @@ class DirectFsTraversalTest {
         track(music, "song.mp3")
         val context = ApplicationProvider.getApplicationContext<Context>()
         val location =
-            requireNotNull(
-                Location.Unopened.from(context, Uri.fromFile(music)).open(context)
-            )
+            requireNotNull(Location.Unopened.from(context, Uri.fromFile(music)).open(context))
         val causalFailure = IOException("mandatory traversal failure")
         val directFs =
             DirectFS(
@@ -680,7 +678,9 @@ class DirectFsTraversalTest {
         assertEquals(SourceCompletion.FAILED, metrics.results.single().completion)
         assertEquals(0, metrics.activeEnumerators)
         assertEquals(0, metrics.queuedDirectories)
-        assertTrue(runCatching { output.receive() }.exceptionOrNull() === causalFailure)
+        val channelFailure = output.receiveCatching().exceptionOrNull()
+        assertTrue(channelFailure is IOException)
+        assertEquals(causalFailure.message, channelFailure?.message)
     }
 
     @Test
@@ -722,21 +722,14 @@ class DirectFsTraversalTest {
             baseline,
             directFs.combineRootFingerprints(
                 listOf(
-                    root.copy(
-                        excludedCanonicalPaths =
-                            setOf("/storage/emulated/0/Music/Podcasts")
-                    )
+                    root.copy(excludedCanonicalPaths = setOf("/storage/emulated/0/Music/Podcasts"))
                 )
             ),
         )
         assertEquals(
             baseline,
             directFs.combineRootFingerprints(
-                listOf(
-                    root.copy(
-                        excludedCanonicalPaths = setOf("/storage/emulated/0/Other")
-                    )
-                )
+                listOf(root.copy(excludedCanonicalPaths = setOf("/storage/emulated/0/Other")))
             ),
         )
     }

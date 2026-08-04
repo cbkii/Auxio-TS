@@ -156,9 +156,7 @@ class MusicSourcePathNormalizerTest {
                 "content://com.android.externalstorage.documents/tree/primary",
                 "content://com.android.externalstorage.documents/tree/primary%3AMusic%2F..%2Fdata",
             )
-            .forEach {
-                assertNull(MusicSourcePathNormalizer.normalizePersistedLocation(it, false))
-            }
+            .forEach { assertNull(MusicSourcePathNormalizer.normalizePersistedLocation(it, false)) }
     }
 
     @Test

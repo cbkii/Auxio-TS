@@ -204,8 +204,7 @@ internal class DirectFsTraversal(
             peakQueuedDirectories = peakQueuedDirectories,
             queuedDirectories = queuedDirectories,
             activeEnumerators = activeEnumerators,
-            elapsedMs =
-                if (startedAtMs == 0L) 0L else System.currentTimeMillis() - startedAtMs,
+            elapsedMs = if (startedAtMs == 0L) 0L else System.currentTimeMillis() - startedAtMs,
             results = results.toList(),
             slowOperations = slowOperations.toList(),
         )
@@ -352,7 +351,10 @@ internal class DirectFsTraversal(
                     if (
                         childCanonical == null || !isWithinRoot(childCanonical, root.canonicalPath)
                     ) {
-                        Log.w(TAG, "DirectFS skipped an escaped directory at ${entry.javaFile.path}")
+                        Log.w(
+                            TAG,
+                            "DirectFS skipped an escaped directory at ${entry.javaFile.path}",
+                        )
                         continue
                     }
                     if (!options.isAllowedCanonicalPath(childCanonical)) {
@@ -409,9 +411,7 @@ internal class DirectFsTraversal(
     }
 
     private fun isExcluded(candidate: String, exclusions: Set<String>): Boolean =
-        exclusions.any { excluded ->
-            candidate == excluded || candidate.startsWith("$excluded/")
-        }
+        exclusions.any { excluded -> candidate == excluded || candidate.startsWith("$excluded/") }
 
     private fun rootUnavailableResult(root: PreparedRoot): SourceTraversalResult {
         val exists = runCatching { root.directory.exists() }.getOrDefault(false)
@@ -458,12 +458,7 @@ internal class DirectFsTraversal(
                         null
                     }
                 } finally {
-                    recordSlowOperation(
-                        task.directory.path,
-                        "listFiles",
-                        listStart,
-                        root.sourceKey,
-                    )
+                    recordSlowOperation(task.directory.path, "listFiles", listStart, root.sourceKey)
                 } ?: return null
             currentCoroutineContext().ensureActive()
             val entries = ArrayList<DirectEntryMetadata>(listed.size)
@@ -560,7 +555,8 @@ internal class DirectFsTraversal(
             if (
                 scope != CanonicalSourcePolicy.Scope.WHOLE_VOLUME ||
                     origin != CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK
-            ) return true
+            )
+                return true
             return name.lowercase(java.util.Locale.ROOT) !in NOISY_DIRECTORY_NAMES
         }
 

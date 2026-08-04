@@ -221,10 +221,7 @@ class CanonicalSourcePolicyTest {
             setOf(expected),
             aliases.mapNotNull(CanonicalSourcePolicy::canonicalUriString).toSet(),
         )
-        assertEquals(
-            1,
-            aliases.map(CanonicalSourcePolicy::identityForUriString).toSet().size,
-        )
+        assertEquals(1, aliases.map(CanonicalSourcePolicy::identityForUriString).toSet().size)
         assertEquals(
             "/storage/emulated/0/Music/Albums",
             CanonicalSourcePolicy.externalStorageTreePath(Uri.parse(expected)),
@@ -257,10 +254,8 @@ class CanonicalSourcePolicyTest {
 
     @Test
     fun distinctDocumentBelowTreeRetainsDistinctIdentity() {
-        val tree =
-            "content://com.android.externalstorage.documents/tree/primary%3AMusic"
-        val child =
-            "$tree/document/primary%3AMusic%2FAlbums"
+        val tree = "content://com.android.externalstorage.documents/tree/primary%3AMusic"
+        val child = "$tree/document/primary%3AMusic%2FAlbums"
 
         assertFalse(
             CanonicalSourcePolicy.identityForUriString(tree) ==

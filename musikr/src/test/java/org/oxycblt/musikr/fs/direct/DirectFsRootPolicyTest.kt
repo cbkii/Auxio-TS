@@ -131,10 +131,7 @@ class DirectFsRootPolicyTest {
         val volume = prepared("usbdisk0", CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK)
         val explicit = prepared("usbdisk0/Music", CanonicalSourcePolicy.Origin.EXPLICIT)
         val automatic =
-            prepared(
-                "usbdisk0/Podcasts",
-                CanonicalSourcePolicy.Origin.AUTOMATIC_SUGGESTION,
-            )
+            prepared("usbdisk0/Podcasts", CanonicalSourcePolicy.Origin.AUTOMATIC_SUGGESTION)
 
         assertEquals(
             listOf(explicit, automatic),
@@ -146,8 +143,7 @@ class DirectFsRootPolicyTest {
     fun backendRetainsDeliberateExplicitOverlapsAndDistinctVolumes() {
         val explicitVolume = prepared("usbdisk0", CanonicalSourcePolicy.Origin.EXPLICIT)
         val nested = prepared("usbdisk0/Music", CanonicalSourcePolicy.Origin.EXPLICIT)
-        val otherFallback =
-            prepared("usbdisk1", CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK)
+        val otherFallback = prepared("usbdisk1", CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK)
 
         assertEquals(
             listOf(nested, explicitVolume, otherFallback),

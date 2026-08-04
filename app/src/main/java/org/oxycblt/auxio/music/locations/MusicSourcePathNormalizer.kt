@@ -35,8 +35,7 @@ internal object MusicSourcePathNormalizer {
         if (!fileOnly) {
             val canonical =
                 when {
-                    candidate.scheme.isNullOrEmpty() &&
-                        candidate.path?.startsWith("/") == true ->
+                    candidate.scheme.isNullOrEmpty() && candidate.path?.startsWith("/") == true ->
                         CanonicalSourcePolicy.canonicalUriString(
                             Uri.fromFile(File(requireNotNull(candidate.path))).toString()
                         )
@@ -84,8 +83,7 @@ internal object MusicSourcePathNormalizer {
             } catch (_: Exception) {
                 File(normalized).absoluteFile
             }
-        val appFacing =
-            CanonicalSourcePolicy.normalizePath(canonical.absolutePath) ?: return null
+        val appFacing = CanonicalSourcePolicy.normalizePath(canonical.absolutePath) ?: return null
         return Uri.fromFile(File(appFacing))
     }
 

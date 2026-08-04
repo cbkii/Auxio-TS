@@ -301,8 +301,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     origin =
                         query.sourceOrigins[canonicalKey]
                             ?: CanonicalSourcePolicy.legacyOriginForPath(appFacingPath),
-                    traversalScope =
-                        appFacingPath?.let(CanonicalSourcePolicy::scopeOf),
+                    traversalScope = appFacingPath?.let(CanonicalSourcePolicy::scopeOf),
                 )
             }
         }
@@ -476,7 +475,10 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                         MediaStore.FilterMode.EXCLUDE -> IntegerTable.FILTER_MODE_EXCLUDE
                     }
                 putInt(getString(R.string.set_key_filter_mode), filterMode)
-                putString(getString(R.string.set_key_filtered_locations), value.filtered.stringify())
+                putString(
+                    getString(R.string.set_key_filtered_locations),
+                    value.filtered.stringify(),
+                )
                 putBoolean(getString(R.string.set_key_exclude_non_music), value.excludeNonMusic)
                 apply()
             }
@@ -490,7 +492,8 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     ): Boolean {
         // Collapse before comparing and before persisting so a duplicate can never be stored, and
         // so re-selecting the same folders is not mistaken for a configuration change.
-        val canonicalQuery = canonicalizeSafQuery(safQuery, fileOnly = mode == LocationMode.DIRECT_FS)
+        val canonicalQuery =
+            canonicalizeSafQuery(safQuery, fileOnly = mode == LocationMode.DIRECT_FS)
         val changed =
             locationMode != mode ||
                 this.safQuery != canonicalQuery ||
@@ -754,9 +757,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             }
             .toMap(linkedMapOf())
 
-    private fun serializeOrigins(
-        origins: Map<String, CanonicalSourcePolicy.Origin>
-    ): String =
+    private fun serializeOrigins(origins: Map<String, CanonicalSourcePolicy.Origin>): String =
         origins.entries.joinToString(separator = ";") { (key, origin) ->
             "${android.net.Uri.encode(key)}=${origin.name}"
         }
@@ -787,9 +788,9 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     /** Normalises a persisted list and collapses exact canonical duplicates. */
     private fun String.toCanonicalEntries(fileOnly: Boolean): List<String> =
         MusicSourceCanonicalizer.collapseEntries(
-            splitEscaped { it == ';' }.filter { it.isNotBlank() }.mapNotNull {
-                MusicSourcePathNormalizer.normalizePersistedLocation(it, fileOnly)
-            },
+            splitEscaped { it == ';' }
+                .filter { it.isNotBlank() }
+                .mapNotNull { MusicSourcePathNormalizer.normalizePersistedLocation(it, fileOnly) },
             fileOnly,
         )
 
@@ -830,7 +831,8 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             rawSources == serialisedSources &&
                 rawExcludes == serialisedExcludes &&
                 rawOrigins == serialisedOrigins
-        ) return
+        )
+            return
         sharedPreferences.edit(commit = true) {
             putString(sourceKey, serialisedSources)
             putString(excludeKey, serialisedExcludes)

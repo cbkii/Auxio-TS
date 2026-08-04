@@ -77,58 +77,59 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
 
     constructor(query: SAF.Query) : this(query, DirectFsOptions.DEFAULT)
 
-    constructor(roots: List<Location.Opened>) :
-        this(
-            SAF.Query(
-                source = roots,
-                exclude = emptyList(),
-                withHidden = false,
-                multithread = false,
-                sourceOrigins =
-                    roots.associate {
-                        SourceIdentity.canonicalKeyForLocation(it) to
-                            CanonicalSourcePolicy.Origin.EXPLICIT
-                    },
-            ),
-            DirectFsOptions.DEFAULT,
-        )
+    constructor(
+        roots: List<Location.Opened>
+    ) : this(
+        SAF.Query(
+            source = roots,
+            exclude = emptyList(),
+            withHidden = false,
+            multithread = false,
+            sourceOrigins =
+                roots.associate {
+                    SourceIdentity.canonicalKeyForLocation(it) to
+                        CanonicalSourcePolicy.Origin.EXPLICIT
+                },
+        ),
+        DirectFsOptions.DEFAULT,
+    )
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         withContext(Dispatchers.IO) {
-            prepareRoots().groupBy { it.sourceKey }.map { (sourceKey, preparedRoots) ->
-                val evaluated =
-                    preparedRoots.map { root ->
-                        val readable =
-                            DirectFsRootPolicy.isAllowedRoot(root.directory) &&
-                                listFilesSafe(root.directory) != null
-                        RootSnapshot(root, readable)
-                    }
-                val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
-                val first = preparedRoots.first()
-                SourceSnapshot(
-                    sourceKey = sourceKey,
-                    sourceType = SOURCE_TYPE,
-                    // A source key may cover more than one configured folder. The first path is
-                    // display metadata only; the combined fingerprint below covers every root.
-                    rootUri = first.normalizedUri,
-                    rootPath = first.displayPath,
-                    available = available,
-                    fingerprint =
-                        if (available) {
-                            combineRootFingerprints(
-                                evaluated.map { it.root }
-                            )
-                        } else {
-                            null
-                        },
-                    fingerprintStrength =
-                        if (available) SourceFingerprintStrength.ADVISORY
-                        else SourceFingerprintStrength.NONE,
-                    canonicalKey = first.canonicalKey,
-                    sourceOrigin = first.origin,
-                    traversalScope = first.scope,
-                )
-            }
+            prepareRoots()
+                .groupBy { it.sourceKey }
+                .map { (sourceKey, preparedRoots) ->
+                    val evaluated =
+                        preparedRoots.map { root ->
+                            val readable =
+                                DirectFsRootPolicy.isAllowedRoot(root.directory) &&
+                                    listFilesSafe(root.directory) != null
+                            RootSnapshot(root, readable)
+                        }
+                    val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
+                    val first = preparedRoots.first()
+                    SourceSnapshot(
+                        sourceKey = sourceKey,
+                        sourceType = SOURCE_TYPE,
+                        // A source key may cover more than one configured folder. The first path is
+                        // display metadata only; the combined fingerprint below covers every root.
+                        rootUri = first.normalizedUri,
+                        rootPath = first.displayPath,
+                        available = available,
+                        fingerprint =
+                            if (available) {
+                                combineRootFingerprints(evaluated.map { it.root })
+                            } else {
+                                null
+                            },
+                        fingerprintStrength =
+                            if (available) SourceFingerprintStrength.ADVISORY
+                            else SourceFingerprintStrength.NONE,
+                        canonicalKey = first.canonicalKey,
+                        sourceOrigin = first.origin,
+                        traversalScope = first.scope,
+                    )
+                }
         }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
@@ -343,10 +344,7 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
         return null
     }
 
-    private data class RootSnapshot(
-        val root: PreparedRoot,
-        val readable: Boolean,
-    )
+    private data class RootSnapshot(val root: PreparedRoot, val readable: Boolean)
 
     internal companion object {
         private const val TAG = "DirectFS"
@@ -378,16 +376,16 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
                 } else {
                     CanonicalSourcePolicy.Origin.EXPLICIT
                 },
-        ): Boolean =
-            DirectFsTraversal.shouldDescendIntoDirectory(name, scope, withHidden, origin)
+        ): Boolean = DirectFsTraversal.shouldDescendIntoDirectory(name, scope, withHidden, origin)
 
         /**
-         * Backend-enforced overlap policy. Picker filtering is advisory; a broad automatic
-         * fallback must still be suppressed when a narrower explicit source is present.
+         * Backend-enforced overlap policy. Picker filtering is advisory; a broad automatic fallback
+         * must still be suppressed when a narrower explicit source is present.
          */
         internal fun applyOverlapPolicy(roots: List<PreparedRoot>): List<PreparedRoot> {
             val explicitPaths =
-                roots.filter { it.origin == CanonicalSourcePolicy.Origin.EXPLICIT }
+                roots
+                    .filter { it.origin == CanonicalSourcePolicy.Origin.EXPLICIT }
                     .map { it.canonicalPath }
             return roots.filterNot { root ->
                 root.origin == CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK &&

@@ -117,7 +117,9 @@ private constructor(
                     canonicalKey = canonicalKey,
                     sourceOrigin = canonicalKey?.let(query.sourceOrigins::get),
                     traversalScope =
-                        first?.uri?.let(CanonicalSourcePolicy::externalStorageTreePath)
+                        first
+                            ?.uri
+                            ?.let(CanonicalSourcePolicy::externalStorageTreePath)
                             ?.let(CanonicalSourcePolicy::scopeOf),
                 )
             }

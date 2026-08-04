@@ -158,8 +158,7 @@ object CanonicalSourcePolicy {
 
     /** The canonical identity of a provider-backed source URI. */
     fun identityForUriString(uri: String): String =
-        URI_IDENTITY_PREFIX +
-            (canonicalUriString(uri) ?: "invalid:${uri.trim()}")
+        URI_IDENTITY_PREFIX + (canonicalUriString(uri) ?: "invalid:${uri.trim()}")
 
     /**
      * App-facing path represented by an ExternalStorageProvider tree URI.
@@ -171,12 +170,12 @@ object CanonicalSourcePolicy {
         if (
             !uri.scheme.equals("content", ignoreCase = true) ||
                 !uri.authority.equals(EXTERNAL_STORAGE_AUTHORITY, ignoreCase = true)
-        ) return null
+        )
+            return null
         val ids = externalStorageDocumentIds(uri) ?: return null
         if (ids.documentId != null && ids.documentId != ids.treeId) return null
         val (volume, relative) = splitExternalStorageDocumentId(ids.treeId) ?: return null
-        val root =
-            if (volume == "primary") PRIMARY_SHARED_STORAGE else "/storage/$volume"
+        val root = if (volume == "primary") PRIMARY_SHARED_STORAGE else "/storage/$volume"
         return normalizePath(if (relative.isEmpty()) root else "$root/$relative")
     }
 
@@ -219,9 +218,7 @@ object CanonicalSourcePolicy {
                             else -> 0
                         }
                     },
-                    { (_, item) ->
-                        -(path(item)?.let(::normalizePath)?.count { it == '/' } ?: 0)
-                    },
+                    { (_, item) -> -(path(item)?.let(::normalizePath)?.count { it == '/' } ?: 0) },
                     { (index, _) -> index },
                 )
             )
@@ -236,9 +233,9 @@ object CanonicalSourcePolicy {
     }
 
     /**
-     * Repairs historically mis-joined paths such as
-     * `/storage/emulated/0/storage/emulated/0/Music`, which older builds could persist when a
-     * volume root was concatenated with an already absolute path.
+     * Repairs historically mis-joined paths such as `/storage/emulated/0/storage/emulated/0/Music`,
+     * which older builds could persist when a volume root was concatenated with an already absolute
+     * path.
      */
     private fun repairDuplicatedPrefix(path: String): String {
         val dynamicRoots =
@@ -385,8 +382,5 @@ object CanonicalSourcePolicy {
         return if (Uri.decode(decoded) == decoded) decoded else "\u0000"
     }
 
-    private data class ExternalStorageDocumentIds(
-        val treeId: String,
-        val documentId: String?,
-    )
+    private data class ExternalStorageDocumentIds(val treeId: String, val documentId: String?)
 }

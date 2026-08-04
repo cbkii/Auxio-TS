@@ -93,8 +93,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private val includeLocationAdapter: LocationAdapter<Location.Opened> =
         LocationAdapter(includeLocationListener)
-    private val includeLocationOrigins =
-        linkedMapOf<String, CanonicalSourcePolicy.Origin>()
+    private val includeLocationOrigins = linkedMapOf<String, CanonicalSourcePolicy.Origin>()
     private val excludeLocationAdapter: LocationAdapter<Location.Unopened> =
         LocationAdapter(excludeLocationListener)
     private val filterLocationAdapter: LocationAdapter<Location.Unopened> =
@@ -794,8 +793,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             pendingLocationCallback = null
             return
         }
-        val canonicalUri =
-            CanonicalSourcePolicy.canonicalUriString(uri.toString())?.let(Uri::parse)
+        val canonicalUri = CanonicalSourcePolicy.canonicalUriString(uri.toString())?.let(Uri::parse)
         if (canonicalUri == null) {
             L.w("SAF picker returned a malformed or traversal-like tree URI: $uri")
             ctx.showToast(R.string.err_bad_location)
@@ -864,9 +862,8 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         val explicitConfiguredPaths =
             includeLocationAdapter.locations.mapNotNull { location ->
                 val key = MusicSourceCanonicalizer.canonicalKeyOf(location)
-                if (
-                    includeLocationOrigins[key] != CanonicalSourcePolicy.Origin.EXPLICIT
-                ) return@mapNotNull null
+                if (includeLocationOrigins[key] != CanonicalSourcePolicy.Origin.EXPLICIT)
+                    return@mapNotNull null
                 MusicSourceCanonicalizer.appFacingPathOf(location)
             }
         val configuredKeys =
