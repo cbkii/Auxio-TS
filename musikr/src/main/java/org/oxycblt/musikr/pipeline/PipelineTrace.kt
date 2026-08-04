@@ -20,7 +20,7 @@ package org.oxycblt.musikr.pipeline
 
 import android.os.SystemClock
 import android.util.Log
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicIntegerArray
 import java.util.concurrent.atomic.AtomicLong
 
 /** Bounded milestone transitions of one scan attempt. */
@@ -45,27 +45,25 @@ internal enum class PipelineStage {
  * exact stage that never advanced.
  *
  * Each milestone is emitted at most once per scan session, so the total release logging volume of a
- * scan is a small constant regardless of library size. Per-file logging stays in the existing
- * debug-only slow-item warnings.
+ * scan is a small constant regardless of library size. Callers mark lifecycle transitions outside
+ * per-item hot loops; item counters remain atomic because stages update them concurrently.
  */
 internal class PipelineTrace(private val sessionId: Long) {
     private val startedAtMs = SystemClock.elapsedRealtime()
-    private val emitted = java.util.concurrent.ConcurrentHashMap<PipelineStage, AtomicBoolean>()
+    private val emitted = AtomicIntegerArray(PipelineStage.entries.size)
     private val exploredCount = AtomicLong(0)
     private val loadedCount = AtomicLong(0)
     private val evaluatedCount = AtomicLong(0)
 
-    fun countExplored() = exploredCount.incrementAndGet()
+    fun countExplored(): Long = exploredCount.incrementAndGet()
 
-    fun countLoaded() = loadedCount.incrementAndGet()
+    fun countLoaded(): Long = loadedCount.incrementAndGet()
 
-    fun countEvaluated() = evaluatedCount.incrementAndGet()
+    fun countEvaluated(): Long = evaluatedCount.incrementAndGet()
 
-    /** Emits [stage] at most once. Terminal outcomes are always emitted. */
+    /** Emits [stage] at most once. */
     fun mark(stage: PipelineStage, detail: String? = null, error: Throwable? = null) {
-        val first =
-            emitted.computeIfAbsent(stage) { AtomicBoolean(false) }.compareAndSet(false, true)
-        if (!first && error == null) return
+        if (!emitted.compareAndSet(stage.ordinal, 0, 1)) return
         val message = buildString {
             append("scan=")
             append(sessionId)
