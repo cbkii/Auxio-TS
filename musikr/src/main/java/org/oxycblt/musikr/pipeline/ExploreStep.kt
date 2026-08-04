@@ -104,9 +104,9 @@ private class ExploreStepImpl(
             }
 
         val classified = Channel<Classified>(PipelinePolicy.BUFFER_CAPACITY)
+        trace?.mark(PipelineStage.CLASSIFICATION_STARTED)
         val classifiedTask =
             scope.mapParallel(parallelism, files, classified, Dispatchers.IO) { file ->
-                trace?.mark(PipelineStage.CLASSIFICATION_STARTED)
                 if (!FileClassification.isPotentialMusicFile(file)) {
                     return@mapParallel Finalized(NotAudio)
                 }
