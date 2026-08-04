@@ -86,6 +86,7 @@ class MusicSourceConfigurationTest {
 
         settings.acknowledgeSourceConfiguration(
             generation = claimed.generation,
+            attemptId = claimed.attemptId ?: "",
             unresolvedSourceKeys = emptySet(),
             outcome = "Success",
         )
@@ -115,7 +116,7 @@ class MusicSourceConfigurationTest {
         settings.forceLocationUpdate()
         val currentGeneration = settings.sourceConfigurationGeneration
 
-        settings.acknowledgeSourceConfiguration(oldGeneration, emptySet(), "Success")
+        settings.acknowledgeSourceConfiguration(oldGeneration, "test", emptySet(), "Success")
 
         assertEquals(currentGeneration, settings.sourceConfigurationCheckpoint?.generation)
         assertEquals(

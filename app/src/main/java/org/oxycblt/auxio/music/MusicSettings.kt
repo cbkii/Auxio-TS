@@ -99,15 +99,24 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     /** Mark a pending generation running without clearing its durable record. */
     fun claimPendingConfiguration(): SourceConfigurationCheckpoint? = null
 
-    /** Resolve only a matching generation after a structured scan result. */
+    /** Resolve only a matching generation and attempt after a structured scan result. */
     fun acknowledgeSourceConfiguration(
         generation: Long,
+        attemptId: String,
         unresolvedSourceKeys: Set<String>,
         outcome: String,
     ) = Unit
 
-    /** Return a matching interrupted or failed generation to retryable Pending state. */
-    fun returnSourceConfigurationToPending(generation: Long, outcome: String) = Unit
+    /** Complete a failed attempt, returning the generation to a retryable state if applicable. */
+    fun failSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        retryable: Boolean,
+        outcome: String,
+    ) = Unit
+
+    /** Mark the current attempt as interrupted by process or service lifecycle. */
+    fun markAttemptInterrupted(generation: Long, attemptId: String, outcome: String) = Unit
 
     /** Retain a committed generation while recording currently unavailable configured roots. */
     fun markSourcesUnresolved(sourceKeys: Set<String>, outcome: String) = Unit
@@ -317,6 +326,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                         .getLong(KEY_CHECKPOINT_LAST_ATTEMPT, Long.MIN_VALUE)
                         .takeUnless { it == Long.MIN_VALUE },
                 lastOutcome = sharedPreferences.getString(KEY_CHECKPOINT_LAST_OUTCOME, null),
+                attemptId = sharedPreferences.getString(KEY_CHECKPOINT_ATTEMPT_ID, null),
             )
         }
 
@@ -461,16 +471,9 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         safQuery: SAF.Query,
         mediaStoreQuery: MediaStore.Query,
     ): Boolean {
-        val deduplicatedSafQuery =
-            safQuery.copy(
-                source =
-                    org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer.deduplicateSources(
-                        safQuery.source
-                    )
-            )
         val changed =
             locationMode != mode ||
-                this.safQuery != deduplicatedSafQuery ||
+                this.safQuery != safQuery ||
                 this.mediaStoreQuery != mediaStoreQuery
         if (!changed) return false
 
@@ -479,23 +482,14 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             if (mode == LocationMode.MEDIA_STORE) {
                 emptySet()
             } else {
-                deduplicatedSafQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
+                safQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
             }
         sharedPreferences.edit(commit = true) {
             putInt(getString(R.string.set_key_locations_mode), mode.intCode)
-            putString(
-                getString(R.string.set_key_music_locations),
-                deduplicatedSafQuery.source.stringify(),
-            )
-            putString(
-                getString(R.string.set_key_excluded_locations),
-                deduplicatedSafQuery.exclude.stringify(),
-            )
-            putBoolean(getString(R.string.set_key_with_hidden), deduplicatedSafQuery.withHidden)
-            putBoolean(
-                getString(R.string.set_key_saf_multithread),
-                deduplicatedSafQuery.multithread,
-            )
+            putString(getString(R.string.set_key_music_locations), safQuery.source.stringify())
+            putString(getString(R.string.set_key_excluded_locations), safQuery.exclude.stringify())
+            putBoolean(getString(R.string.set_key_with_hidden), safQuery.withHidden)
+            putBoolean(getString(R.string.set_key_saf_multithread), safQuery.multithread)
 
             val filterMode =
                 when (mediaStoreQuery.mode) {
@@ -534,19 +528,23 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         val checkpoint = sourceConfigurationCheckpoint ?: return null
         if (
             checkpoint.state != SourceConfigurationCheckpoint.State.PENDING &&
-                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING
+                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING &&
+                checkpoint.state != SourceConfigurationCheckpoint.State.FAILED_RETRYABLE
         ) {
             return null
         }
+        val attemptId = java.util.UUID.randomUUID().toString()
         val claimed =
             checkpoint.copy(
                 state = SourceConfigurationCheckpoint.State.RUNNING,
                 lastAttemptAtMs = System.currentTimeMillis(),
+                attemptId = attemptId,
             )
         sharedPreferences.edit(commit = true) {
             putBoolean(KEY_PENDING_INITIAL_SCAN, true)
             putString(KEY_CHECKPOINT_STATE, claimed.state.name)
             putLong(KEY_CHECKPOINT_LAST_ATTEMPT, requireNotNull(claimed.lastAttemptAtMs))
+            putString(KEY_CHECKPOINT_ATTEMPT_ID, attemptId)
         }
         return claimed
     }
@@ -554,10 +552,13 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     @Synchronized
     override fun acknowledgeSourceConfiguration(
         generation: Long,
+        attemptId: String,
         unresolvedSourceKeys: Set<String>,
         outcome: String,
     ) {
         if (generation != sourceConfigurationGeneration) return
+        val currentCheckpoint = sourceConfigurationCheckpoint
+        if (currentCheckpoint?.attemptId != attemptId) return
         val state =
             if (unresolvedSourceKeys.isEmpty()) {
                 SourceConfigurationCheckpoint.State.COMMITTED
@@ -573,11 +574,33 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     }
 
     @Synchronized
-    override fun returnSourceConfigurationToPending(generation: Long, outcome: String) {
+    override fun failSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        retryable: Boolean,
+        outcome: String,
+    ) {
         if (generation != sourceConfigurationGeneration) return
+        val currentCheckpoint = sourceConfigurationCheckpoint
+        if (currentCheckpoint?.attemptId != attemptId) return
+        val state =
+            if (retryable) SourceConfigurationCheckpoint.State.FAILED_RETRYABLE
+            else SourceConfigurationCheckpoint.State.FAILED_FINAL
+        sharedPreferences.edit(commit = true) {
+            putBoolean(KEY_PENDING_INITIAL_SCAN, retryable)
+            putString(KEY_CHECKPOINT_STATE, state.name)
+            putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
+        }
+    }
+
+    @Synchronized
+    override fun markAttemptInterrupted(generation: Long, attemptId: String, outcome: String) {
+        if (generation != sourceConfigurationGeneration) return
+        val currentCheckpoint = sourceConfigurationCheckpoint
+        if (currentCheckpoint?.attemptId != attemptId) return
         sharedPreferences.edit(commit = true) {
             putBoolean(KEY_PENDING_INITIAL_SCAN, true)
-            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.PENDING.name)
+            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.INTERRUPTED.name)
             putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
         }
     }
@@ -726,6 +749,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         const val KEY_CHECKPOINT_UNRESOLVED = "auxio_source_checkpoint_unresolved"
         const val KEY_CHECKPOINT_LAST_ATTEMPT = "auxio_source_checkpoint_last_attempt"
         const val KEY_CHECKPOINT_LAST_OUTCOME = "auxio_source_checkpoint_last_outcome"
+        const val KEY_CHECKPOINT_ATTEMPT_ID = "auxio_source_checkpoint_attempt_id"
     }
 }
 

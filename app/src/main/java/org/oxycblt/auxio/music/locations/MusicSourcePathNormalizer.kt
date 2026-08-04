@@ -21,7 +21,6 @@ package org.oxycblt.auxio.music.locations
 import android.net.Uri
 import androidx.core.net.toUri
 import java.io.File
-import org.oxycblt.musikr.fs.Location
 import timber.log.Timber as L
 
 /** Mode-aware persisted Music Source normalisation used before runtime backend creation. */
@@ -105,18 +104,6 @@ internal object MusicSourcePathNormalizer {
             clean.endsWith("/..") ||
             clean.contains("/./") ||
             clean.endsWith("/.")
-    }
-
-    fun <T : Location> deduplicateSources(sources: List<T>): List<T> {
-        val seen = mutableSetOf<String>()
-        val result = mutableListOf<T>()
-        for (source in sources) {
-            val key = org.oxycblt.musikr.fs.SourceIdentity.forLocation(source)
-            if (seen.add(key)) {
-                result.add(source)
-            }
-        }
-        return result
     }
 
     fun repairDuplicatedStoragePath(uri: Uri): Uri? {

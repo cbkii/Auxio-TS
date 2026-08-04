@@ -692,8 +692,10 @@ constructor(
                 preparedReplacementHandoff = false
                 currentIndexingState as? IndexingState.Indexing
             } ?: return
-        current.request?.let(IndexRequestPolicy::checkpointGeneration)?.let {
-            musicSettings.returnSourceConfigurationToPending(it, outcome.name)
+        current.request?.let(IndexRequestPolicy::checkpointGeneration)?.let { generation ->
+            current.request.attemptId?.let { attemptId ->
+                musicSettings.markAttemptInterrupted(generation, attemptId, outcome.name)
+            }
         }
         L.w(
             "Prepared indexing interruption [outcome=$outcome phase=${current.progress.phase} " +
@@ -857,10 +859,14 @@ constructor(
                             throw e
                         } catch (e: Exception) {
                             checkpointGeneration?.let {
-                                musicSettings.returnSourceConfigurationToPending(
-                                    it,
-                                    "TemporarilyUnavailable",
-                                )
+                                request.attemptId?.let { attemptId ->
+                                    musicSettings.failSourceConfigurationAttempt(
+                                        generation = it,
+                                        attemptId = attemptId,
+                                        retryable = true,
+                                        outcome = "TemporarilyUnavailable",
+                                    )
+                                }
                             }
                             lastSourceScanOutcome =
                                 SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys)
@@ -908,11 +914,14 @@ constructor(
                             musicSettings.sourceConfigurationCheckpoint
                                 ?.unresolvedSourceKeys
                                 .orEmpty() - (request.sourceKeys ?: emptySet())
-                        musicSettings.acknowledgeSourceConfiguration(
-                            it,
-                            unresolvedSourceKeys = unresolved,
-                            outcome = "Success",
-                        )
+                        request.attemptId?.let { attemptId ->
+                            musicSettings.acknowledgeSourceConfiguration(
+                                it,
+                                attemptId = attemptId,
+                                unresolvedSourceKeys = unresolved,
+                                outcome = "Success",
+                            )
+                        }
                     }
                     emitIndexingCompletion(null)
                     return@traceSuspend
@@ -940,11 +949,15 @@ constructor(
                         locations.any { !it.path.volume.isAccessible() }
                 ) {
                     L.w("One or more legacy music sources are inaccessible. Preserving cache.")
-                    checkpointGeneration?.let {
-                        musicSettings.returnSourceConfigurationToPending(
-                            it,
-                            "TemporarilyUnavailable",
-                        )
+                    checkpointGeneration?.let { generation ->
+                        request.attemptId?.let { attemptId ->
+                            musicSettings.failSourceConfigurationAttempt(
+                                generation,
+                                attemptId,
+                                true,
+                                "TemporarilyUnavailable",
+                            )
+                        }
                     }
                     musicSettings.lastScanFailed = true
                     emitIndexingCompletion(Exception("Music source inaccessible"))
@@ -1012,11 +1025,15 @@ constructor(
                         when (sourceOutcome) {
                             is SourceScanOutcome.PermissionRequired,
                             is SourceScanOutcome.TemporarilyUnavailable -> {
-                                checkpointGeneration?.let {
-                                    musicSettings.returnSourceConfigurationToPending(
-                                        it,
-                                        sourceOutcome.javaClass.simpleName,
-                                    )
+                                checkpointGeneration?.let { generation ->
+                                    request.attemptId?.let { attemptId ->
+                                        musicSettings.failSourceConfigurationAttempt(
+                                            generation,
+                                            attemptId,
+                                            true,
+                                            sourceOutcome.javaClass.simpleName,
+                                        )
+                                    }
                                 }
                                 emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
                                 musicSettings.lastScanFailed = true
@@ -1030,11 +1047,15 @@ constructor(
                                         musicSettings.sourceConfigurationCheckpoint
                                             ?.unresolvedSourceKeys
                                             .orEmpty() - attemptedSourceKeys
-                                    musicSettings.acknowledgeSourceConfiguration(
-                                        generation,
-                                        retained + sourceOutcome.unresolvedSourceKeys,
-                                        sourceOutcome.javaClass.simpleName,
-                                    )
+                                    request.attemptId?.let { attemptId ->
+                                        musicSettings.acknowledgeSourceConfiguration(
+                                            generation,
+                                            attemptId = attemptId,
+                                            unresolvedSourceKeys =
+                                                retained + sourceOutcome.unresolvedSourceKeys,
+                                            outcome = sourceOutcome.javaClass.simpleName,
+                                        )
+                                    }
                                 }
                                 musicSettings.lastScanFailed = true
                                 emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
@@ -1062,32 +1083,45 @@ constructor(
                     when (sourceOutcome) {
                         is SourceScanOutcome.Success,
                         is SourceScanOutcome.AuthoritativeEmpty ->
-                            musicSettings.acknowledgeSourceConfiguration(
-                                generation,
-                                unresolvedSourceKeys = retainedUnresolved,
-                                outcome = sourceOutcome.javaClass.simpleName,
-                            )
+                            request.attemptId?.let { attemptId ->
+                                musicSettings.acknowledgeSourceConfiguration(
+                                    generation,
+                                    attemptId = attemptId,
+                                    unresolvedSourceKeys = retainedUnresolved,
+                                    outcome = sourceOutcome.javaClass.simpleName,
+                                )
+                            }
                         is SourceScanOutcome.Partial ->
-                            musicSettings.acknowledgeSourceConfiguration(
-                                generation,
-                                unresolvedSourceKeys =
-                                    retainedUnresolved + sourceOutcome.unresolvedSourceKeys,
-                                outcome = "Partial",
-                            )
+                            request.attemptId?.let { attemptId ->
+                                musicSettings.acknowledgeSourceConfiguration(
+                                    generation,
+                                    attemptId = attemptId,
+                                    unresolvedSourceKeys =
+                                        retainedUnresolved + sourceOutcome.unresolvedSourceKeys,
+                                    outcome = "Partial",
+                                )
+                            }
                         is SourceScanOutcome.Truncated ->
-                            musicSettings.acknowledgeSourceConfiguration(
-                                generation,
-                                unresolvedSourceKeys =
-                                    retainedUnresolved + sourceOutcome.unresolvedSourceKeys,
-                                outcome = "Truncated",
-                            )
+                            request.attemptId?.let { attemptId ->
+                                musicSettings.acknowledgeSourceConfiguration(
+                                    generation,
+                                    attemptId = attemptId,
+                                    unresolvedSourceKeys =
+                                        retainedUnresolved + sourceOutcome.unresolvedSourceKeys,
+                                    outcome = "Truncated",
+                                )
+                            }
                         is SourceScanOutcome.PermissionRequired,
                         is SourceScanOutcome.TemporarilyUnavailable,
                         SourceScanOutcome.Cancelled ->
-                            musicSettings.returnSourceConfigurationToPending(
-                                generation,
-                                sourceOutcome.javaClass.simpleName,
-                            )
+                            request.attemptId?.let { attemptId ->
+                                musicSettings.failSourceConfigurationAttempt(
+                                    generation,
+                                    attemptId,
+                                    true,
+                                    sourceOutcome.javaClass.simpleName,
+                                )
+                            }
                     }
                 }
                 emitStartupLibraryStatus(
@@ -1118,8 +1152,14 @@ constructor(
                 lastSourceScanOutcome = SourceScanOutcome.Cancelled
                 val terminalOutcome =
                     preparedInterruptionOutcome ?: IndexingTerminalOutcome.CANCELLED
-                checkpointGeneration?.let {
-                    musicSettings.returnSourceConfigurationToPending(it, terminalOutcome.name)
+                checkpointGeneration?.let { generation ->
+                    request.attemptId?.let { attemptId ->
+                        musicSettings.markAttemptInterrupted(
+                            generation,
+                            attemptId,
+                            terminalOutcome.name,
+                        )
+                    }
                 }
                 val directReplacementHandoff =
                     synchronized(this) {
@@ -1137,8 +1177,15 @@ constructor(
                 }
                 throw e
             } catch (e: Exception) {
-                checkpointGeneration?.let {
-                    musicSettings.returnSourceConfigurationToPending(it, "Failed")
+                checkpointGeneration?.let { generation ->
+                    request.attemptId?.let { attemptId ->
+                        musicSettings.failSourceConfigurationAttempt(
+                            generation,
+                            attemptId,
+                            true,
+                            "Failed",
+                        )
+                    }
                 }
                 musicSettings.lastScanFailed = true
                 L.w(e, "Indexing failed; committed source generations remain readable")

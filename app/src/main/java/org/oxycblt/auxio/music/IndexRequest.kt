@@ -36,6 +36,7 @@ data class IndexRequest(
     val metadataProfile: MetadataProfile? = null,
     val configurationGeneration: Long? = null,
     val sourceKeys: Set<String>? = null,
+    val attemptId: String? = null,
 )
 
 /** Shared request semantics used on both sides of the repository/service attachment boundary. */

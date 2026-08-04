@@ -756,6 +756,7 @@ private constructor(
                             },
                         withCache = checkpoint == null,
                         configurationGeneration = checkpoint?.generation,
+                        attemptId = checkpoint?.attemptId,
                         sourceKeys =
                             musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) {
                                 it.sourceKey

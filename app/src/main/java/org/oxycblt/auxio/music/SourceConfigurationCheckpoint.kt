@@ -24,11 +24,17 @@ data class SourceConfigurationCheckpoint(
     val unresolvedSourceKeys: Set<String> = emptySet(),
     val lastAttemptAtMs: Long? = null,
     val lastOutcome: String? = null,
+    val attemptId: String? = null,
 ) {
     enum class State {
         PENDING,
         RUNNING,
         PARTIALLY_COMMITTED,
         COMMITTED,
+        INTERRUPTED,
+        FAILED_RETRYABLE,
+        FAILED_FINAL,
+        CANCELLED,
+        TIMED_OUT,
     }
 }

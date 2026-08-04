@@ -46,6 +46,8 @@ import org.oxycblt.musikr.pipeline.InvalidSong
 import org.oxycblt.musikr.pipeline.NewSong
 import org.oxycblt.musikr.pipeline.NotAudio
 import org.oxycblt.musikr.pipeline.PipelinePolicy
+import org.oxycblt.musikr.pipeline.PipelineStage
+import org.oxycblt.musikr.pipeline.PipelineTrace
 import org.oxycblt.musikr.pipeline.RawPlaylist
 import org.oxycblt.musikr.pipeline.RawSong
 import org.oxycblt.musikr.util.merge
@@ -176,6 +178,8 @@ internal object SourceScanCommitPolicy {
     ): Boolean = allAttemptedSourcesFailed(commit) && !hasPreservedReadableRows
 }
 
+private val scanSessionIds = AtomicLong(0L)
+
 private class MusikrImpl(
     private val context: Context,
     private val config: Config,
@@ -194,6 +198,9 @@ private class MusikrImpl(
             requireNotNull(incremental) { "An incremental scan plan requires an IncrementalCache" }
             incremental.beginScan(plan)
         }
+
+        val trace = PipelineTrace(scanSessionIds.incrementAndGet())
+        trace.mark(PipelineStage.SCAN_STARTED, detail = "generation=${plan?.configurationRevision}")
 
         try {
             emitProgress(IndexingProgress.Stage(IndexingPhase.DISCOVERING))
@@ -223,7 +230,8 @@ private class MusikrImpl(
                     currentItem = item,
                 )
             val exploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
-            val exploredTask = exploreStep.explore(this, exploredChannel)
+            trace.mark(PipelineStage.ENUMERATION_STARTED)
+            val exploredTask = exploreStep.explore(this, exploredChannel, trace)
             val lastExtractionEmitMs = AtomicLong(0L)
             val trackedExploredChannel = Channel<Explored>(PipelinePolicy.BUFFER_CAPACITY)
             val trackedExploredTask =
@@ -231,6 +239,9 @@ private class MusikrImpl(
                     var lastEmitMs = 0L
                     for (item in exploredChannel) {
                         explored.incrementAndGet()
+                        if (trace.countExplored() == 1L) {
+                            trace.mark(PipelineStage.FIRST_FILE_EMITTED)
+                        }
                         val now = System.currentTimeMillis()
                         if (
                             currentPhase() == IndexingPhase.DISCOVERING &&
@@ -244,8 +255,10 @@ private class MusikrImpl(
                     if (currentPhase() == IndexingPhase.DISCOVERING) {
                         emitProgress(progress())
                     }
+                    trace.mark(PipelineStage.ENUMERATION_COMPLETED)
                 }
             val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
+            trace.mark(PipelineStage.EXTRACTION_STARTED)
             val extractedTask =
                 extractStep.extract(
                     this,
@@ -269,6 +282,7 @@ private class MusikrImpl(
                     var lastEmitMs = 0L
                     for (item in extractedChannel) {
                         loaded.incrementAndGet()
+                        trace.countLoaded()
                         advancePhase(IndexingPhase.EXTRACTING)
                         val now = System.currentTimeMillis()
                         if (
@@ -283,8 +297,10 @@ private class MusikrImpl(
                     if (currentPhase() == IndexingPhase.EXTRACTING) {
                         emitProgress(progress())
                     }
+                    trace.mark(PipelineStage.EXTRACTION_COMPLETED)
                 }
             var lastEvaluationEmitMs = 0L
+            trace.mark(PipelineStage.EVALUATION_STARTED)
             var resultLibrary =
                 evaluateStep.evaluate(
                     trackedExtractedChannel,
@@ -296,9 +312,15 @@ private class MusikrImpl(
                             emitProgress(progress(item.displayName()))
                         }
                     },
-                    onItemCompleted = { evaluated.incrementAndGet() },
+                    onItemCompleted = {
+                        evaluated.incrementAndGet()
+                        trace.countEvaluated()
+                    },
                 )
-            merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask).await()
+            trace.mark(PipelineStage.EVALUATION_COMPLETED)
+            merge(exploredTask, extractedTask, trackedExploredTask, trackedExtractedTask)
+                .await()
+                .getOrThrow()
             emitProgress(IndexingProgress.Stage(IndexingPhase.FINALISING))
 
             val commit = if (plan != null) incremental?.commitScan() else null
@@ -312,8 +334,7 @@ private class MusikrImpl(
                     // A transient provider or mount failure may leave an older committed generation
                     // readable. Reload that generation instead of publishing the empty in-flight
                     // graph. When no readable rows remain, fail explicitly so callers preserve
-                    // their
-                    // previous library state and expose source recovery rather than confirmed
+                    // their previous library state and expose source recovery rather than confirmed
                     // empty.
                     val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
                     if (
@@ -325,11 +346,14 @@ private class MusikrImpl(
                 }
             }
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
+            trace.mark(PipelineStage.PIPELINE_COMPLETED)
             LibraryResultImpl(config, resultLibrary, commit?.failedSources.orEmpty())
         } catch (e: CancellationException) {
+            trace.mark(PipelineStage.PIPELINE_CANCELLED, error = e)
             abortIncremental(plan, incremental, e)
             throw e
         } catch (e: Throwable) {
+            trace.mark(PipelineStage.PIPELINE_FAILED, error = e)
             abortIncremental(plan, incremental, e)
             throw e
         }
