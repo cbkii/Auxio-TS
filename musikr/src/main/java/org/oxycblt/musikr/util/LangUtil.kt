@@ -20,26 +20,30 @@ package org.oxycblt.musikr.util
 
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import org.oxycblt.musikr.BuildConfig
 import org.oxycblt.musikr.tag.Date
 
 /**
- * Runs [block] in a new coroutine, capturing any non-cancellation failure as a [Result].
+ * Runs [block] in a new coroutine and captures failures raised while that coroutine is still active.
  *
- * Cancellation of this coroutine itself is rethrown so that structured concurrency and user
- * cancellation stay distinguishable from fatal pipeline errors.
+ * Actual cancellation of this coroutine is rethrown so structured concurrency and user cancellation
+ * remain distinguishable from a peer-channel cancellation or a block that throws
+ * [CancellationException] as its own failure signal.
  */
 fun CoroutineScope.tryAsync(
     context: CoroutineContext,
@@ -78,7 +82,7 @@ fun <T> CoroutineScope.tryAsyncWith(
         } catch (e: CancellationException) {
             channel.cancel(e)
             rethrowIfSelfCancelled(e)
-            return@async Result.failure(e.unwrapPipelineCause())
+            Result.failure(e.unwrapPipelineCause())
         } catch (e: Throwable) {
             channel.close(e)
             Result.failure(e)
@@ -96,8 +100,8 @@ fun <T, R> CoroutineScope.map(
  * Maps [input] into [output] with [n] parallel workers.
  *
  * Ownership contract:
- * - the workers share one parent scope, so the first worker failure immediately cancels its
- *   siblings instead of waiting for workers that are blocked on a channel;
+ * - the first failed worker cancels its siblings without allocating a second waiter coroutine for
+ *   every worker;
  * - [output] is closed normally only when every worker completed successfully;
  * - on failure [output] is closed with the causal exception and [input] is cancelled with it, so a
  *   suspended upstream producer fails fast instead of blocking forever on back-pressure;
@@ -121,13 +125,15 @@ private fun <T, R> CoroutineScope.mapParallelInternal(
     async(context) {
         try {
             coroutineScope {
-                repeat(n.coerceAtLeast(1)) {
-                    launch(context) {
-                        for (item in input) {
-                            block(item)?.let { output.send(it) }
+                val workers =
+                    List(n.coerceAtLeast(1)) {
+                        tryAsync(context) {
+                            for (item in input) {
+                                block(item)?.let { output.send(it) }
+                            }
                         }
                     }
-                }
+                workers.tryAwaitAll()
             }
             output.close()
             Result.success(Unit)
@@ -135,7 +141,7 @@ private fun <T, R> CoroutineScope.mapParallelInternal(
             input.cancel(e)
             output.cancel(e)
             rethrowIfSelfCancelled(e)
-            return@async Result.failure(e.unwrapPipelineCause())
+            Result.failure(e.unwrapPipelineCause())
         } catch (e: Throwable) {
             // Cancel the input so a producer suspended on back-pressure unwinds immediately, and
             // close the output with the cause so downstream consumers observe the original error.
@@ -146,17 +152,52 @@ private fun <T, R> CoroutineScope.mapParallelInternal(
     }
 
 /**
- * Awaits every task, failing as soon as the first one fails.
+ * Awaits every task and cancels unfinished siblings as soon as the first task fails.
  *
- * Siblings that are still running are cancelled with the causal exception so that a task blocked on
- * a channel whose peer already failed cannot stall the wait indefinitely.
+ * Completion handlers observe the existing deferreds directly. This avoids the previous one-waiter
+ * coroutine per deferred while still detecting a later-list failure when an earlier task is blocked.
+ * A task that is independently cancelled, or that completes with
+ * `Result.failure(CancellationException)`, is a failed stage unless the caller's own job is cancelled.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 suspend fun List<Deferred<Result<Unit>>>.tryAwaitAll() {
+    if (isEmpty()) return
+
+    val remaining = AtomicInteger(size)
+    val completion = CompletableDeferred<Result<Unit>>()
+    val handles = ArrayList<DisposableHandle>(size)
+
+    for (deferred in this) {
+        handles +=
+            deferred.invokeOnCompletion { completionCause ->
+                val result: Result<Unit> =
+                    if (completionCause != null) {
+                        Result.failure(completionCause.unwrapPipelineCause())
+                    } else {
+                        try {
+                            deferred.getCompleted()
+                        } catch (e: Throwable) {
+                            Result.failure(e)
+                        }
+                    }
+
+                if (result.isFailure) {
+                    if (completion.complete(result)) {
+                        cancelAll(requireNotNull(result.exceptionOrNull()))
+                    }
+                } else if (remaining.decrementAndGet() == 0) {
+                    completion.complete(Result.success(Unit))
+                }
+            }
+    }
+
     try {
-        coroutineScope { forEach { deferred -> launch { deferred.await().getOrThrow() } } }
-    } catch (e: Throwable) {
-        cancelAll(e)
-        throw e
+        val result = completion.await()
+        // Prefer genuine parent/user cancellation if it races a stage completion callback.
+        currentCoroutineContext().ensureActive()
+        result.getOrThrow()
+    } finally {
+        handles.forEach(DisposableHandle::dispose)
     }
 }
 
@@ -164,26 +205,23 @@ suspend fun List<Deferred<Result<Unit>>>.tryAwaitAll() {
  * Merges several pipeline tasks into a single task that fails fast.
  *
  * The first failure cancels the remaining tasks with the causal exception, which in turn lets each
- * stage close or cancel the channels it owns. The original exception is preserved as the result.
+ * stage close or cancel the channels it owns. The original causal chain is preserved in the result.
  */
 fun CoroutineScope.merge(vararg deferreds: Deferred<Result<Unit>>): Deferred<Result<Unit>> =
     tryAsync(Dispatchers.Default) { deferreds.toList().tryAwaitAll() }
 
-/**
- * Rethrows [e] only when this coroutine itself was cancelled.
- *
- * A channel cancelled by a failed peer stage also raises [CancellationException] inside a still
- * active coroutine. Rethrowing it there would cancel the whole pipeline scope and mask the fatal
- * cause as an ordinary cancellation, so such exceptions are reported as failures instead.
- */
+/** Rethrows [e] when this coroutine's own job has been cancelled. */
 private suspend fun rethrowIfSelfCancelled(e: CancellationException) {
-    if (!currentCoroutineContext().isActive) {
+    try {
+        currentCoroutineContext().ensureActive()
+    } catch (_: CancellationException) {
         throw e
     }
 }
 
 /** Unwraps the causal exception a peer stage attached when it cancelled a shared channel. */
-private fun CancellationException.unwrapPipelineCause(): Throwable = cause ?: this
+private fun Throwable.unwrapPipelineCause(): Throwable =
+    if (this is CancellationException) cause ?: this else this
 
 private fun List<Deferred<Result<Unit>>>.cancelAll(cause: Throwable) {
     val cancellation =
