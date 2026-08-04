@@ -136,10 +136,11 @@ class PipelineFailFastTest {
     @Test
     fun `a worker cancellation signal is reported as a stage failure`() = runBlocking {
         val failure = CancellationException("worker aborted its item")
-        val input = Channel<Int>(1).apply {
-            trySend(1)
-            close()
-        }
+        val input =
+            Channel<Int>(1).apply {
+                trySend(1)
+                close()
+            }
         val output = Channel<Int>(1)
 
         val result =
@@ -159,8 +160,7 @@ class PipelineFailFastTest {
         val stage = CompletableDeferred<Result<Unit>>()
         stage.cancel(failure)
 
-        val result =
-            withTimeout(TIMEOUT_MS) { coroutineScope { merge(stage).await() } }
+        val result = withTimeout(TIMEOUT_MS) { coroutineScope { merge(stage).await() } }
 
         assertTrue(result.isFailure)
         assertCausalFailure(failure, result.exceptionOrNull())
@@ -171,8 +171,7 @@ class PipelineFailFastTest {
         val failure = CancellationException("stage returned cancellation failure")
         val stage = CompletableDeferred(Result.failure<Unit>(failure))
 
-        val result =
-            withTimeout(TIMEOUT_MS) { coroutineScope { merge(stage).await() } }
+        val result = withTimeout(TIMEOUT_MS) { coroutineScope { merge(stage).await() } }
 
         assertTrue(result.isFailure)
         assertCausalFailure(failure, result.exceptionOrNull())

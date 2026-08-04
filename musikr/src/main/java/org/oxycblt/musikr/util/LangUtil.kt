@@ -39,7 +39,8 @@ import org.oxycblt.musikr.BuildConfig
 import org.oxycblt.musikr.tag.Date
 
 /**
- * Runs [block] in a new coroutine and captures failures raised while that coroutine is still active.
+ * Runs [block] in a new coroutine and captures failures raised while that coroutine is still
+ * active.
  *
  * Actual cancellation of this coroutine is rethrown so structured concurrency and user cancellation
  * remain distinguishable from a peer-channel cancellation or a block that throws
@@ -155,9 +156,10 @@ private fun <T, R> CoroutineScope.mapParallelInternal(
  * Awaits every task and cancels unfinished siblings as soon as the first task fails.
  *
  * Completion handlers observe the existing deferreds directly. This avoids the previous one-waiter
- * coroutine per deferred while still detecting a later-list failure when an earlier task is blocked.
- * A task that is independently cancelled, or that completes with
- * `Result.failure(CancellationException)`, is a failed stage unless the caller's own job is cancelled.
+ * coroutine per deferred while still detecting a later-list failure when an earlier task is
+ * blocked. A task that is independently cancelled, or that completes with
+ * `Result.failure(CancellationException)`, is a failed stage unless the caller's own job is
+ * cancelled.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 suspend fun List<Deferred<Result<Unit>>>.tryAwaitAll() {
