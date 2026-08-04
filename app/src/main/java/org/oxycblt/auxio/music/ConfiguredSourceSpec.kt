@@ -25,6 +25,13 @@ import org.oxycblt.auxio.music.locations.LocationMode
 data class ConfiguredSourceSpec(
     val normalizedUri: Uri,
     val sourceKey: String,
+    /**
+     * Canonical identity of this exact root.
+     *
+     * [sourceKey] is volume-scoped, so several folders on one volume share it. Deduplication,
+     * counting and comparison must use this narrower identity instead.
+     */
+    val canonicalKey: String,
     val mode: LocationMode,
     val displayPath: String,
     val accessState: AccessState,

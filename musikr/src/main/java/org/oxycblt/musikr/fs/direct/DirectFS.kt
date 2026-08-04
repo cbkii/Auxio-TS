@@ -18,50 +18,62 @@
 
 package org.oxycblt.musikr.fs.direct
 
-import android.net.Uri
 import android.util.Log
-import android.webkit.MimeTypeMap
 import java.io.File as JavaFile
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.isActive
-import org.oxycblt.musikr.fs.AddedMs
-import org.oxycblt.musikr.fs.Directory
+import kotlinx.coroutines.withContext
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.fs.Location
-import org.oxycblt.musikr.fs.Path
 import org.oxycblt.musikr.fs.SourceAwareFS
 import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.SourceSnapshot
-import org.oxycblt.musikr.util.tryAsyncWith
+import org.oxycblt.musikr.util.startOwning
 
-class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
+/**
+ * Filesystem backend that reads configured folders through ordinary app-UID access.
+ *
+ * Traversal itself is delegated to [DirectFsTraversal], which owns a single explicit work queue per
+ * source and therefore completes structurally. This class is responsible for the source-level
+ * contract around it: canonical root identity, exact-duplicate collapse, fingerprints, and turning
+ * per-source traversal outcomes into the shared failure protocol.
+ */
+class DirectFS
+internal constructor(configured: List<Location.Opened>, private val options: DirectFsOptions) :
+    SourceAwareFS {
+    /**
+     * Exact canonical duplicates are collapsed here as the last defensive boundary.
+     *
+     * Persistence and the source picker collapse them first, but a backend that fingerprints,
+     * counts or traverses one physical folder twice is never correct, so the invariant is
+     * re-established before any work is planned.
+     */
+    private val roots: List<Location.Opened> =
+        CanonicalSourcePolicy.collapseDuplicates(configured, SourceIdentity::canonicalKeyForLocation)
+
     private val sourceFailures = ConcurrentHashMap<String, String>()
 
+    @Volatile private var lastMetrics: DirectFsTraversalMetrics? = null
+
+    constructor(roots: List<Location.Opened>) : this(roots, DirectFsOptions.DEFAULT)
+
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
-        kotlinx.coroutines.withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             roots.groupBy(SourceIdentity::forLocation).map { (sourceKey, locations) ->
                 val evaluated =
                     locations.map { location ->
-                        val root = location.uri.path?.let(::JavaFile)
-                        val allowed = root != null && isAllowedRoot(root)
+                        val root = appFacingRoot(location)
+                        val allowed = root != null && DirectFsRootPolicy.isAllowedRoot(root)
                         val readable = allowed && listFilesSafe(requireNotNull(root)) != null
                         RootSnapshot(location, root, readable)
                     }
@@ -90,239 +102,100 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
-        DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys })
+        DirectFS(roots.filter { SourceIdentity.forLocation(it) in sourceKeys }, options)
 
     override fun drainSourceFailures(): Map<String, String> =
         sourceFailures.toMap().also { sourceFailures.clear() }
 
-    override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
-        tryAsyncWith(files, Dispatchers.IO) { output -> exploreBounded(output) }
-    }
+    /**
+     * Hands the traversal back to the pipeline immediately.
+     *
+     * The returned task is the sole owner of [files]: it closes the channel on success, closes it
+     * with the causal exception on failure and cancels it on cancellation. Returning before the
+     * traversal finishes is what lets a bounded channel apply real back-pressure instead of
+     * deadlocking against a consumer that has not been started yet.
+     */
+    override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
+        startOwning(files, Dispatchers.IO) { output ->
+            val metrics = DirectFsTraversal(prepareRoots(), options).explore(output)
+            lastMetrics = metrics
+            publish(metrics)
+        }
 
     override fun track(): Flow<FSUpdate> = emptyFlow()
 
-    private suspend fun exploreBounded(files: Channel<File>) = coroutineScope {
-        val queue = LinkedBlockingQueue<DirectoryTask>(MAX_PENDING_DIRECTORIES)
-        val pending = AtomicInteger(0)
-        val discoveredDirectories = AtomicInteger(0)
-        val discoveredFiles = AtomicInteger(0)
-        val seeding = AtomicBoolean(true)
-        val workers =
-            List(DIRECTORY_WORKER_COUNT) {
-                async(Dispatchers.IO) {
-                    while (isActive) {
-                        val task = queue.poll(QUEUE_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)
-                        if (task == null) {
-                            if (!seeding.get() && pending.get() == 0) return@async
-                            continue
-                        }
-                        try {
-                            processDirectory(
-                                task,
-                                files,
-                                queue,
-                                pending,
-                                discoveredDirectories,
-                                discoveredFiles,
-                            )
-                        } finally {
-                            pending.decrementAndGet()
-                        }
-                    }
-                }
-            }
+    /** Deterministic measurements of the most recent traversal, for diagnostics and tests. */
+    internal fun lastTraversalMetrics(): DirectFsTraversalMetrics? = lastMetrics
 
-        try {
-            for (location in roots) {
-                val sourceKey = SourceIdentity.forLocation(location)
-                if (location.uri.scheme != "file") {
-                    recordFailure(
-                        sourceKey,
-                        "TEMPORARILY_UNAVAILABLE|Unsupported DirectFS URI ${location.uri}",
-                    )
-                    continue
-                }
-                val root = location.uri.path?.let(::JavaFile)
-                val canonicalRoot = root?.let(::canonicalFileOrNull)
-                if (
-                    root == null || canonicalRoot == null || !isAllowedCanonicalRoot(canonicalRoot)
-                ) {
-                    recordFailure(
-                        sourceKey,
-                        "TEMPORARILY_UNAVAILABLE|Unsafe or missing DirectFS source ${location.uri}",
-                    )
-                    continue
-                }
-                val task =
-                    DirectoryTask(
-                        directory = root,
-                        canonicalRoot = canonicalRoot,
-                        relativePath = location.path,
-                        parent = null,
-                        depth = 0,
-                        sourceKey = sourceKey,
-                        configuredRootTask = true,
-                    )
-                when (enqueueDirectory(queue, pending, discoveredDirectories, task)) {
-                    EnqueueResult.Enqueued -> Unit
-                    EnqueueResult.ProcessInline ->
-                        processDirectory(
-                            task,
-                            files,
-                            queue,
-                            pending,
-                            discoveredDirectories,
-                            discoveredFiles,
-                        )
-                    EnqueueResult.LimitExceeded -> Unit
-                }
-            }
-        } finally {
-            seeding.set(false)
-        }
-        workers.awaitAll()
-    }
-
-    private suspend fun processDirectory(
-        task: DirectoryTask,
-        files: Channel<File>,
-        queue: LinkedBlockingQueue<DirectoryTask>,
-        pending: AtomicInteger,
-        discoveredDirectories: AtomicInteger,
-        discoveredFiles: AtomicInteger,
-    ) {
-        if (discoveredFiles.get() >= MAX_VISITED_FILES) {
-            recordFailure(
-                task.sourceKey,
-                "TRUNCATED|DirectFS file limit reached at ${task.directory.path}",
-            )
-            return
-        }
-        if (task.depth > MAX_DEPTH) {
-            recordFailure(
-                task.sourceKey,
-                "TRUNCATED|DirectFS maximum depth exceeded at ${task.directory.path}",
-            )
-            return
-        }
-        if (!isWithinCanonicalRoot(task.directory, task.canonicalRoot)) {
-            recordFailure(
-                task.sourceKey,
-                "DirectFS traversal left the configured source at ${task.directory.path}",
-            )
-            return
-        }
-
-        val entries = listFilesSafe(task.directory)
-        if (entries == null) {
-            val detail = "DirectFS directory is unavailable at ${task.directory.path}"
-            if (task.configuredRootTask) {
-                recordFailure(task.sourceKey, "TEMPORARILY_UNAVAILABLE|$detail")
-            } else {
-                Log.w(TAG, "Skipping unreadable child directory ${task.directory.path}")
-            }
-            return
-        }
-
-        val directoryDeferred = CompletableDeferred<Directory>()
-        val children = mutableListOf<File>()
-        try {
-            for (entry in entries) {
-                if (entry.isSymlink || entry.isDirectory) continue
-                if (discoveredFiles.incrementAndGet() > MAX_VISITED_FILES) {
-                    recordFailure(
-                        task.sourceKey,
-                        "TRUNCATED|DirectFS file limit reached at ${task.directory.path}",
-                    )
-                    break
-                }
-                val item = entry.javaFile
-                val file =
-                    File(
-                        Uri.fromFile(item),
-                        task.relativePath.file(entry.name),
-                        object : AddedMs {
-                            override suspend fun resolve() = entry.modifiedMs
-                        },
-                        entry.modifiedMs,
-                        getMimeType(item),
-                        entry.size,
-                        directoryDeferred,
-                    )
-                children.add(file)
-                files.send(file)
-            }
-        } finally {
-            if (!directoryDeferred.isCompleted) {
-                directoryDeferred.complete(
-                    Directory(
-                        Uri.fromFile(task.directory),
-                        task.relativePath,
-                        task.parent,
-                        children,
-                    )
-                )
-            }
-        }
-
-        for (entry in entries) {
-            if (entry.isSymlink || !entry.isDirectory) continue
-            if (!shouldDescendIntoDirectory(entry.name)) {
-                Log.d(TAG, "DirectFS skipped noisy directory ${entry.javaFile.path}")
-                continue
-            }
-            val item = entry.javaFile
-            if (!isWithinCanonicalRoot(item, task.canonicalRoot)) {
-                Log.w(TAG, "DirectFS skipped an escaped directory at ${item.path}")
-                continue
-            }
-            val childTask =
-                DirectoryTask(
-                    directory = item,
-                    canonicalRoot = task.canonicalRoot,
-                    relativePath = task.relativePath.file(entry.name),
-                    parent = directoryDeferred,
-                    depth = task.depth + 1,
-                    sourceKey = task.sourceKey,
-                    configuredRootTask = false,
-                )
-            when (enqueueDirectory(queue, pending, discoveredDirectories, childTask)) {
-                EnqueueResult.Enqueued -> Unit
-                EnqueueResult.ProcessInline ->
-                    processDirectory(
-                        childTask,
-                        files,
-                        queue,
-                        pending,
-                        discoveredDirectories,
-                        discoveredFiles,
-                    )
-                EnqueueResult.LimitExceeded -> Unit
-            }
-        }
-    }
-
-    private fun enqueueDirectory(
-        queue: LinkedBlockingQueue<DirectoryTask>,
-        pending: AtomicInteger,
-        discoveredDirectories: AtomicInteger,
-        task: DirectoryTask,
-    ): EnqueueResult {
-        while (true) {
-            val current = discoveredDirectories.get()
-            if (current >= MAX_VISITED_DIRECTORIES) {
+    /**
+     * Resolves configured roots into canonical, ordered traversal roots.
+     *
+     * Ordering places narrow explicit folders before whole-volume roots so an explicit source
+     * always keeps its own unfiltered policy. The traversal's shared visited set then suppresses
+     * the overlapping part of the wider root instead of scanning it twice.
+     */
+    private fun prepareRoots(): List<PreparedRoot> {
+        val prepared = mutableListOf<PreparedRoot>()
+        for (location in roots) {
+            val sourceKey = SourceIdentity.forLocation(location)
+            if (location.uri.scheme != "file") {
                 recordFailure(
-                    task.sourceKey,
-                    "TRUNCATED|DirectFS directory limit reached at ${task.directory.path}",
+                    sourceKey,
+                    "TEMPORARILY_UNAVAILABLE|Unsupported DirectFS URI ${location.uri}",
                 )
-                return EnqueueResult.LimitExceeded
+                continue
             }
-            if (discoveredDirectories.compareAndSet(current, current + 1)) break
+            val root = appFacingRoot(location)
+            val canonicalPath = root?.let(DirectFsTraversal::canonicalAppFacingPath)
+            if (
+                root == null ||
+                    canonicalPath == null ||
+                    !options.isAllowedCanonicalPath(canonicalPath)
+            ) {
+                recordFailure(
+                    sourceKey,
+                    "TEMPORARILY_UNAVAILABLE|Unsafe or missing DirectFS source ${location.uri}",
+                )
+                continue
+            }
+            prepared.add(
+                PreparedRoot(
+                    sourceKey = sourceKey,
+                    directory = root,
+                    canonicalPath = canonicalPath,
+                    relativePath = location.path,
+                    scope = CanonicalSourcePolicy.scopeOf(canonicalPath),
+                )
+            )
         }
-        pending.incrementAndGet()
-        if (queue.offer(task)) return EnqueueResult.Enqueued
-        pending.decrementAndGet()
-        return EnqueueResult.ProcessInline
+        return CanonicalSourcePolicy.traversalOrder(prepared) { it.canonicalPath }
+    }
+
+    /** Turns the explicit outcome of every source into the shared failure protocol. */
+    private fun publish(metrics: DirectFsTraversalMetrics) {
+        for (result in metrics.results) {
+            val detail = result.detail ?: result.canonicalPath
+            when (result.completion) {
+                SourceCompletion.COMPLETED,
+                SourceCompletion.COMPLETED_EMPTY,
+                SourceCompletion.CANCELLED -> Unit
+                SourceCompletion.TEMPORARILY_UNAVAILABLE ->
+                    recordFailure(result.sourceKey, "TEMPORARILY_UNAVAILABLE|$detail")
+                SourceCompletion.PERMISSION_REQUIRED ->
+                    recordFailure(result.sourceKey, "PERMISSION_REQUIRED|$detail")
+                SourceCompletion.TRUNCATED -> recordFailure(result.sourceKey, "TRUNCATED|$detail")
+                SourceCompletion.FAILED -> recordFailure(result.sourceKey, detail)
+            }
+        }
+        Log.i(
+            TAG,
+            "DirectFS traversal finished in ${metrics.elapsedMs}ms " +
+                "[directories=${metrics.directoriesVisited}, files=${metrics.filesEmitted}, " +
+                "duplicatesSuppressed=${metrics.duplicateDirectoriesSuppressed}, " +
+                "peakQueued=${metrics.peakQueuedDirectories}, " +
+                "slowOperations=${metrics.slowOperations.size}, " +
+                "outcomes=${metrics.results.map { "${it.canonicalPath}=${it.completion}" }}]",
+        )
     }
 
     private fun recordFailure(sourceKey: String, detail: String) {
@@ -331,9 +204,22 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         }
     }
 
+    /**
+     * The app-facing file for [location].
+     *
+     * A configured root may still be persisted as a privileged backing path from an older build.
+     * Scanning and playback both require the app-facing namespace, so the alias is collapsed before
+     * the path is opened.
+     */
+    private fun appFacingRoot(location: Location.Opened): JavaFile? {
+        val path = location.uri.path ?: return null
+        return JavaFile(CanonicalSourcePolicy.normalizePath(path) ?: path)
+    }
+
     private fun combineRootFingerprints(roots: List<Pair<JavaFile, Location.Opened>>): String {
         val digest = MessageDigest.getInstance("SHA-256")
         roots
+            .distinctBy { CanonicalSourcePolicy.identityForPath(it.first.path) ?: it.first.path }
             .sortedBy { it.first.absolutePath }
             .forEach { (root, location) ->
                 digest.update(location.uri.toString().toByteArray(Charsets.UTF_8))
@@ -352,18 +238,17 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         listFilesSafe(root)
             .orEmpty()
             .asSequence()
-            .filterNot { it.isSymlink }
             .sortedBy { it.name.lowercase(Locale.ROOT) }
             .take(FINGERPRINT_ENTRY_LIMIT)
             .forEach {
                 update(
-                    "${it.name}\u0000${it.isDirectory}\u0000${it.modifiedMs}\u0000${it.size}\u0000"
+                    "${it.name}\u0000${it.isDirectory}\u0000${it.lastModified()}\u0000${it.length()}\u0000"
                 )
             }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private fun listFilesSafe(directory: JavaFile): List<DirectEntry>? {
+    private fun listFilesSafe(directory: JavaFile): List<JavaFile>? {
         val local =
             try {
                 directory.listFiles()
@@ -371,19 +256,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                 Log.d(TAG, "Direct listing unavailable for ${directory.path}", e)
                 null
             }
-        if (local != null) {
-            return local.map {
-                DirectEntry(
-                    javaFile = it,
-                    name = it.name,
-                    isDirectory = it.isDirectory,
-                    isSymlink = isSymbolicLinkCompat(it),
-                    modifiedMs = it.lastModified(),
-                    size = it.length(),
-                )
-            }
-        }
-
+        if (local != null) return local.toList()
         Log.w(TAG, "DirectFS source is unavailable or inaccessible: ${directory.path}")
         return null
     }
@@ -394,119 +267,29 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         val readable: Boolean,
     )
 
-    private data class DirectEntry(
-        val javaFile: JavaFile,
-        val name: String,
-        val isDirectory: Boolean,
-        val isSymlink: Boolean,
-        val modifiedMs: Long,
-        val size: Long,
-    )
-
-    private data class DirectoryTask(
-        val directory: JavaFile,
-        val canonicalRoot: JavaFile,
-        val relativePath: Path,
-        val parent: Deferred<Directory>?,
-        val depth: Int,
-        val sourceKey: String,
-        val configuredRootTask: Boolean,
-    )
-
-    private enum class EnqueueResult {
-        Enqueued,
-        ProcessInline,
-        LimitExceeded,
-    }
-
-    private fun getMimeType(file: JavaFile): String =
-        MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
-            ?: "application/octet-stream"
-
     internal companion object {
         private const val TAG = "DirectFS"
         private const val SOURCE_TYPE = "DIRECT_FS"
-        private const val MAX_DEPTH = 32
         private const val FINGERPRINT_ENTRY_LIMIT = 128
-        internal const val DIRECTORY_WORKER_COUNT = 3
-        internal const val MAX_PENDING_DIRECTORIES = 512
+
         internal const val MAX_VISITED_DIRECTORIES = 100_000
         internal const val MAX_VISITED_FILES = 50_000
-        private const val QUEUE_POLL_INTERVAL_MS = 100L
-        private val skippedDirectoryNames =
-            setOf(
-                "android",
-                "download",
-                "dcim",
-                "pictures",
-                "movies",
-                ".zjinnova",
-                ".tcfg",
-                ".dfmusiclog",
-            )
 
-        private val protectedRoots =
-            listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
-
-        fun isSymbolicLinkCompat(file: JavaFile): Boolean =
-            try {
-                val stat = android.system.Os.lstat(file.absolutePath)
-                android.system.OsConstants.S_ISLNK(stat.st_mode)
-            } catch (_: Exception) {
-                false
-            }
-
-        fun isAllowedRoot(file: JavaFile): Boolean =
-            canonicalFileOrNull(file)?.let(::isAllowedCanonicalRoot) == true
-
-        internal fun shouldDescendIntoDirectory(name: String): Boolean =
-            name.isNotBlank() &&
-                name != "." &&
-                name != ".." &&
-                !name.startsWith('.') &&
-                name.lowercase(Locale.ROOT) !in skippedDirectoryNames
-
-        internal fun isWithinCanonicalRoot(candidate: JavaFile, canonicalRoot: JavaFile): Boolean {
-            var cursor = canonicalFileOrNull(candidate) ?: return false
-            while (true) {
-                if (cursor == canonicalRoot) return true
-                cursor = cursor.parentFile ?: return false
-            }
-        }
+        fun isAllowedRoot(file: JavaFile): Boolean = DirectFsRootPolicy.isAllowedRoot(file)
 
         internal fun isExpectedRestrictedSharedStorageChild(
             directory: JavaFile,
             canonicalRoot: JavaFile,
-        ): Boolean {
-            if (canonicalRoot.path.trimEnd('/') != "/storage/emulated/0") return false
-            val canonicalDirectory = canonicalFileOrNull(directory) ?: return false
-            val rootPath = canonicalRoot.path.trimEnd('/')
-            val relative = canonicalDirectory.path.removePrefix(rootPath).trimStart('/')
-            return relative == "Android/data" ||
-                relative.startsWith("Android/data/") ||
-                relative == "Android/obb" ||
-                relative.startsWith("Android/obb/")
-        }
+        ): Boolean =
+            DirectFsRootPolicy.isExpectedRestrictedSharedStorageChild(directory, canonicalRoot)
 
-        private fun canonicalFileOrNull(file: JavaFile): JavaFile? =
-            try {
-                file.canonicalFile
-            } catch (_: Exception) {
-                null
-            }
-
-        private fun isAllowedCanonicalRoot(canonical: JavaFile): Boolean {
-            val path = canonical.path.trimEnd('/')
-            if (path.isBlank()) return false
-            if (protectedRoots.any { path == it.trimEnd('/') }) return false
-            if (
-                path.startsWith("/data/") ||
-                    path.startsWith("/system/") ||
-                    path.startsWith("/vendor/")
-            ) {
-                return false
-            }
-            return path.startsWith("/storage/") || path.startsWith("/mnt/media_rw/")
-        }
+        /**
+         * Whole-volume descent policy, kept as the default so existing callers and policy tests
+         * keep describing the stricter of the two scopes.
+         */
+        internal fun shouldDescendIntoDirectory(
+            name: String,
+            scope: CanonicalSourcePolicy.Scope = CanonicalSourcePolicy.Scope.WHOLE_VOLUME,
+        ): Boolean = DirectFsTraversal.shouldDescendIntoDirectory(name, scope)
     }
 }

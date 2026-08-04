@@ -23,6 +23,7 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.music.locations.LocationMode
+import org.oxycblt.auxio.music.locations.MusicSourceCanonicalizer
 import org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
 
 /** Operation-scoped source authority derived only from the user's configured music locations. */
@@ -77,7 +78,8 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
 
     fun snapshot(): Snapshot {
         val mode = settings.locationMode
-        val configuredUris = settings.safQuery.source.map { it.uri }
+        val configuredUris =
+            MusicSourceCanonicalizer.collapseLocations(settings.safQuery.source).map { it.uri }
         val sources =
             configuredUris.mapIndexed { index, uri ->
                 val fileRoot = configuredFileRoot(uri, mode)
@@ -105,7 +107,16 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
                     availability = availability,
                 )
             }
-        return Snapshot(mode, sources, configurationRevision(mode, configuredUris))
+        // The revision keys on canonical identity so semantically equivalent aliases such as
+        // /sdcard/Music and /storage/emulated/0/Music never look like a configuration change.
+        return Snapshot(
+            mode,
+            sources,
+            configurationRevision(
+                mode,
+                configuredUris.map(MusicSourceCanonicalizer::canonicalKeyOfUri),
+            ),
+        )
     }
 
     /** Compatibility view for DirectFS and raw Fast Resume callers. */
@@ -216,13 +227,13 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
                 UUID_STORAGE_PATH.matches(path)
         }
 
-        private fun configurationRevision(mode: LocationMode, uris: List<Uri>): Long {
+        private fun configurationRevision(mode: LocationMode, canonicalKeys: List<String>): Long {
             var hash = 1125899906842597L
             val text = buildString {
                 append(mode.name)
-                uris.forEach {
+                canonicalKeys.forEach {
                     append('\u0000')
-                    append(it.toString())
+                    append(it)
                 }
             }
             text.forEach { hash = hash * 31L + it.code }

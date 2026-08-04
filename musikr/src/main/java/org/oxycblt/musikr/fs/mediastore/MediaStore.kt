@@ -29,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
@@ -49,7 +48,7 @@ import org.oxycblt.musikr.fs.path.VolumeManager
 import org.oxycblt.musikr.fs.saf.contentResolverSafe
 import org.oxycblt.musikr.fs.saf.useQuery
 import org.oxycblt.musikr.fs.track.LocationObserver
-import org.oxycblt.musikr.util.tryAsyncWith
+import org.oxycblt.musikr.util.startOwning
 
 internal object MediaStoreFilterPolicy {
     fun shouldRequireIsMusic(query: MediaStore.Query): Boolean =
@@ -121,8 +120,8 @@ private constructor(
         sourceFailures.toMap().also { sourceFailures.clear() }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
-        tryAsyncWith(files, Dispatchers.IO) {
+    override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
+        startOwning(files, Dispatchers.IO) {
             val projection = BASE_PROJECTION + pathInterpreterFactory.projection
             val (selector, args) = buildSelector()
             val seenIdentities = mutableSetOf<String>()
@@ -189,7 +188,6 @@ private constructor(
                 }
             }
         }
-    }
 
     override fun track(): Flow<FSUpdate> = callbackFlow {
         val observer =

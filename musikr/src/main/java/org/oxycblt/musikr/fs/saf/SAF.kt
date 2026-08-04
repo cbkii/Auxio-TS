@@ -50,8 +50,8 @@ import org.oxycblt.musikr.fs.SourceFingerprintStrength
 import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.SourceSnapshot
 import org.oxycblt.musikr.fs.track.LocationObserver
+import org.oxycblt.musikr.util.startOwning
 import org.oxycblt.musikr.util.tryAsync
-import org.oxycblt.musikr.util.tryAsyncWith
 import org.oxycblt.musikr.util.tryAwaitAll
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -128,37 +128,38 @@ private constructor(
     override fun drainSourceFailures(): Map<String, String> =
         sourceFailures.toMap().also { sourceFailures.clear() }
 
-    override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> = coroutineScope {
-        tryAsyncWith(files, Dispatchers.IO) {
-            query.source
-                .map { location ->
-                    val sourceKey = SourceIdentity.forLocation(location)
-                    tryAsync(Dispatchers.IO) {
-                        val result =
-                            exploreDirectoryImpl(
-                                    location.uri,
-                                    DocumentsContract.getTreeDocumentId(location.uri),
-                                    location.path,
-                                    null,
-                                    query.exclude.mapTo(mutableSetOf()) { it.path },
-                                    files,
-                                )
-                                .await()
-                        result.exceptionOrNull()?.let { error ->
-                            val kind =
-                                if (error.hasSecurityCause()) {
-                                    "PERMISSION_REQUIRED"
-                                } else {
-                                    "TEMPORARILY_UNAVAILABLE"
-                                }
-                            sourceFailures[sourceKey] =
-                                "$kind|${error.message ?: error.javaClass.simpleName}"
+    override suspend fun explore(files: Channel<File>): Deferred<Result<Unit>> =
+        startOwning(files, Dispatchers.IO) {
+            coroutineScope {
+                query.source
+                    .map { location ->
+                        val sourceKey = SourceIdentity.forLocation(location)
+                        tryAsync(Dispatchers.IO) {
+                            val result =
+                                exploreDirectoryImpl(
+                                        location.uri,
+                                        DocumentsContract.getTreeDocumentId(location.uri),
+                                        location.path,
+                                        null,
+                                        query.exclude.mapTo(mutableSetOf()) { it.path },
+                                        files,
+                                    )
+                                    .await()
+                            result.exceptionOrNull()?.let { error ->
+                                val kind =
+                                    if (error.hasSecurityCause()) {
+                                        "PERMISSION_REQUIRED"
+                                    } else {
+                                        "TEMPORARILY_UNAVAILABLE"
+                                    }
+                                sourceFailures[sourceKey] =
+                                    "$kind|${error.message ?: error.javaClass.simpleName}"
+                            }
                         }
                     }
-                }
-                .tryAwaitAll()
+                    .tryAwaitAll()
+            }
         }
-    }
 
     override fun track(): Flow<FSUpdate> = callbackFlow {
         val observers = mutableListOf<LocationObserver>()

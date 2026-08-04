@@ -28,6 +28,7 @@ import javax.inject.Inject
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.locations.LocationMode
+import org.oxycblt.auxio.music.locations.MusicSourceCanonicalizer
 import org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
 import org.oxycblt.auxio.settings.Settings
 import org.oxycblt.auxio.util.PerfTimer
@@ -260,6 +261,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         get() {
             if (locationMode == LocationMode.MEDIA_STORE) return emptyList()
             val fileOnly = locationMode == LocationMode.DIRECT_FS
+            repairPersistedSourceDuplicates(fileOnly)
             val locations =
                 unlikelyToBeNull(
                         sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
@@ -284,6 +286,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 ConfiguredSourceSpec(
                     normalizedUri = uri,
                     sourceKey = SourceIdentity.forLocation(location),
+                    canonicalKey = MusicSourceCanonicalizer.canonicalKeyOf(location),
                     mode = locationMode,
                     displayPath =
                         uri.path?.takeIf { it.isNotBlank() } ?: location.path.components.unixString,
@@ -373,6 +376,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     override var safQuery: SAF.Query
         get() {
+            repairPersistedSourceDuplicates(fileOnly = locationMode == LocationMode.DIRECT_FS)
             val locations =
                 unlikelyToBeNull(
                         sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
@@ -461,9 +465,13 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         safQuery: SAF.Query,
         mediaStoreQuery: MediaStore.Query,
     ): Boolean {
+        // Collapse before comparing and before persisting so a duplicate can never be stored, and
+        // so re-selecting the same folders is not mistaken for a configuration change.
+        val canonicalQuery =
+            safQuery.copy(source = MusicSourceCanonicalizer.collapseLocations(safQuery.source))
         val changed =
             locationMode != mode ||
-                this.safQuery != safQuery ||
+                this.safQuery != canonicalQuery ||
                 this.mediaStoreQuery != mediaStoreQuery
         if (!changed) return false
 
@@ -472,14 +480,20 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             if (mode == LocationMode.MEDIA_STORE) {
                 emptySet()
             } else {
-                safQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
+                canonicalQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
             }
         sharedPreferences.edit(commit = true) {
             putInt(getString(R.string.set_key_locations_mode), mode.intCode)
-            putString(getString(R.string.set_key_music_locations), safQuery.source.stringify())
-            putString(getString(R.string.set_key_excluded_locations), safQuery.exclude.stringify())
-            putBoolean(getString(R.string.set_key_with_hidden), safQuery.withHidden)
-            putBoolean(getString(R.string.set_key_saf_multithread), safQuery.multithread)
+            putString(
+                getString(R.string.set_key_music_locations),
+                canonicalQuery.source.stringify(),
+            )
+            putString(
+                getString(R.string.set_key_excluded_locations),
+                canonicalQuery.exclude.stringify(),
+            )
+            putBoolean(getString(R.string.set_key_with_hidden), canonicalQuery.withHidden)
+            putBoolean(getString(R.string.set_key_saf_multithread), canonicalQuery.multithread)
 
             val filterMode =
                 when (mediaStoreQuery.mode) {
@@ -642,27 +656,66 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     }
 
     private fun List<Location>.stringify(): String =
-        joinToString(separator = ";") { it.uri.toString().replace(";", "\\;") }
+        MusicSourceCanonicalizer.collapseLocations(this).joinToString(separator = ";") {
+            it.uri.toString().replace(";", "\\;")
+        }
 
-    private fun rawConfiguredSourceCount(fileOnly: Boolean): Int =
-        unlikelyToBeNull(
+    /**
+     * Effective configured source count, which is what the user configured and what will actually
+     * be scanned. Exact canonical duplicates are not separate sources and must never be counted as
+     * such: the TS18 diagnostic that motivated this work reported two identical
+     * `/storage/emulated/0/Music` entries as `configuredSourceCount=2`.
+     */
+    private fun rawConfiguredSourceCount(fileOnly: Boolean): Int {
+        repairPersistedSourceDuplicates(fileOnly)
+        return unlikelyToBeNull(
                 sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
             )
-            .splitEscaped { it == ';' }
-            .count { normalizePersistedLocation(it, fileOnly) != null }
+            .toCanonicalEntries(fileOnly)
+            .size
+    }
 
     private fun String.toOpenedLocations(fileOnly: Boolean): List<Location.Opened> =
-        splitEscaped { it == ';' }
-            .mapNotNull { normalizePersistedLocation(it, fileOnly) }
-            .mapNotNull { Location.Unopened.from(context, it.toUri()).open(context) }
+        toCanonicalEntries(fileOnly).mapNotNull {
+            Location.Unopened.from(context, it.toUri()).open(context)
+        }
 
     private fun String.toUnopenedLocations(fileOnly: Boolean): List<Location.Unopened> =
-        splitEscaped { it == ';' }
-            .mapNotNull { normalizePersistedLocation(it, fileOnly) }
-            .mapNotNull { Location.Unopened.from(context, it.toUri()) }
+        toCanonicalEntries(fileOnly).mapNotNull { Location.Unopened.from(context, it.toUri()) }
 
-    private fun normalizePersistedLocation(value: String, fileOnly: Boolean): String? =
-        MusicSourcePathNormalizer.normalizePersistedLocation(value, fileOnly)
+    /** Normalises a persisted list and collapses exact canonical duplicates. */
+    private fun String.toCanonicalEntries(fileOnly: Boolean): List<String> =
+        MusicSourceCanonicalizer.collapseEntries(
+            splitEscaped { it == ';' }.filter { it.isNotBlank() }.mapNotNull {
+                normalizePersistedLocation(it, fileOnly)
+            },
+            fileOnly,
+        )
+
+    /**
+     * One-shot read-repair for source lists persisted by older builds.
+     *
+     * The repair is idempotent and deliberately does not touch
+     * [KEY_SOURCE_CONFIGURATION_GENERATION]: dropping an exact canonical duplicate cannot change
+     * the effective scan scope, so it must not queue another full rescan or invalidate the cached
+     * library.
+     */
+    private fun repairPersistedSourceDuplicates(fileOnly: Boolean) {
+        val key = getString(R.string.set_key_music_locations)
+        val raw = unlikelyToBeNull(sharedPreferences.getString(key, ""))
+        val stored = raw.splitEscaped { it == ';' }.filter { it.isNotBlank() }
+        if (stored.size < 2) return
+        val collapsed = MusicSourceCanonicalizer.collapseEntries(stored, fileOnly)
+        if (collapsed.size == stored.size) return
+        sharedPreferences.edit {
+            putString(key, collapsed.joinToString(separator = ";") { it.replace(";", "\\;") })
+            apply()
+        }
+        L.i(
+            "Collapsed ${stored.size - collapsed.size} duplicate music source(s) without " +
+                "changing the source configuration generation"
+        )
+    }
 
     private inline fun String.splitEscaped(selector: (Char) -> Boolean): List<String> {
         val split = mutableListOf<String>()
