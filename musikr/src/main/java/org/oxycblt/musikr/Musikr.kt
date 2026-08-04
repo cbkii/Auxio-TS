@@ -239,8 +239,9 @@ private class MusikrImpl(
                     var lastEmitMs = 0L
                     for (item in exploredChannel) {
                         explored.incrementAndGet()
-                        trace.countExplored()
-                        trace.mark(PipelineStage.FIRST_FILE_EMITTED)
+                        if (trace.countExplored() == 1L) {
+                            trace.mark(PipelineStage.FIRST_FILE_EMITTED)
+                        }
                         val now = System.currentTimeMillis()
                         if (
                             currentPhase() == IndexingPhase.DISCOVERING &&
@@ -257,13 +258,13 @@ private class MusikrImpl(
                     trace.mark(PipelineStage.ENUMERATION_COMPLETED)
                 }
             val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
+            trace.mark(PipelineStage.EXTRACTION_STARTED)
             val extractedTask =
                 extractStep.extract(
                     this,
                     trackedExploredChannel,
                     extractedChannel,
                     onItemStarted = { item ->
-                        trace.mark(PipelineStage.EXTRACTION_STARTED)
                         advancePhase(IndexingPhase.EXTRACTING)
                         val now = System.currentTimeMillis()
                         val prior = lastExtractionEmitMs.get()
@@ -299,11 +300,11 @@ private class MusikrImpl(
                     trace.mark(PipelineStage.EXTRACTION_COMPLETED)
                 }
             var lastEvaluationEmitMs = 0L
+            trace.mark(PipelineStage.EVALUATION_STARTED)
             var resultLibrary =
                 evaluateStep.evaluate(
                     trackedExtractedChannel,
                     onItemStarted = { item ->
-                        trace.mark(PipelineStage.EVALUATION_STARTED)
                         advancePhase(IndexingPhase.EVALUATING)
                         val now = System.currentTimeMillis()
                         if (now - lastEvaluationEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
@@ -333,8 +334,7 @@ private class MusikrImpl(
                     // A transient provider or mount failure may leave an older committed generation
                     // readable. Reload that generation instead of publishing the empty in-flight
                     // graph. When no readable rows remain, fail explicitly so callers preserve
-                    // their
-                    // previous library state and expose source recovery rather than confirmed
+                    // their previous library state and expose source recovery rather than confirmed
                     // empty.
                     val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
                     if (
