@@ -34,8 +34,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.musikr.util.map
@@ -71,7 +71,7 @@ class PipelineFailFastTest {
             }
 
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
         assertTrue(received.isEmpty())
     }
 
@@ -98,7 +98,7 @@ class PipelineFailFastTest {
             }
 
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
     }
 
     @Test
@@ -121,7 +121,7 @@ class PipelineFailFastTest {
             }
 
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
         var closeCause: Throwable? = null
         while (true) {
             val next = output.receiveCatching()
@@ -130,7 +130,52 @@ class PipelineFailFastTest {
                 break
             }
         }
-        assertSame(failure, closeCause)
+        assertCausalFailure(failure, closeCause)
+    }
+
+    @Test
+    fun `a worker cancellation signal is reported as a stage failure`() = runBlocking {
+        val failure = CancellationException("worker aborted its item")
+        val input = Channel<Int>(1).apply {
+            trySend(1)
+            close()
+        }
+        val output = Channel<Int>(1)
+
+        val result =
+            withTimeout(TIMEOUT_MS) {
+                coroutineScope {
+                    mapParallel(2, input, output, Dispatchers.Default) { throw failure }.await()
+                }
+            }
+
+        assertTrue(result.isFailure)
+        assertCausalFailure(failure, result.exceptionOrNull())
+    }
+
+    @Test
+    fun `an independently cancelled deferred fails the aggregate`() = runBlocking {
+        val failure = CancellationException("stage cancelled independently")
+        val stage = CompletableDeferred<Result<Unit>>()
+        stage.cancel(failure)
+
+        val result =
+            withTimeout(TIMEOUT_MS) { coroutineScope { merge(stage).await() } }
+
+        assertTrue(result.isFailure)
+        assertCausalFailure(failure, result.exceptionOrNull())
+    }
+
+    @Test
+    fun `a cancellation result fails the aggregate`() = runBlocking {
+        val failure = CancellationException("stage returned cancellation failure")
+        val stage = CompletableDeferred(Result.failure<Unit>(failure))
+
+        val result =
+            withTimeout(TIMEOUT_MS) { coroutineScope { merge(stage).await() } }
+
+        assertTrue(result.isFailure)
+        assertCausalFailure(failure, result.exceptionOrNull())
     }
 
     @Test
@@ -162,7 +207,7 @@ class PipelineFailFastTest {
             }
 
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
         assertTrue(produced.get() < 1_000)
     }
 
@@ -183,7 +228,7 @@ class PipelineFailFastTest {
             }
 
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
     }
 
     @Test
@@ -268,7 +313,7 @@ class ExploreStepFailFastTest {
         val failure = IllegalStateException("enumeration failed")
         val result = explore(ThrowingFS(failure))
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
     }
 
     @Test
@@ -276,7 +321,7 @@ class ExploreStepFailFastTest {
         val failure = IllegalStateException("enumeration failed late")
         val result = explore(EmittingThenFailingFS(failure, count = 8))
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
     }
 
     @Test
@@ -284,7 +329,7 @@ class ExploreStepFailFastTest {
         val failure = IllegalStateException("cache read failed")
         val result = explore(EmittingFS(count = 16), cache = ThrowingCache(failure))
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
     }
 
     @Test
@@ -293,7 +338,7 @@ class ExploreStepFailFastTest {
         val result =
             explore(EmittingFS(count = 16), cache = HitCache, covers = ThrowingCovers(failure))
         assertTrue(result.isFailure)
-        assertSame(failure, result.exceptionOrNull())
+        assertCausalFailure(failure, result.exceptionOrNull())
     }
 
     @Test
@@ -331,6 +376,18 @@ class ExploreStepFailFastTest {
                 merge(task, drain).await()
             }
         }
+}
+
+private fun assertCausalFailure(expected: Throwable, actual: Throwable?) {
+    var cursor = actual
+    while (cursor != null) {
+        if (cursor === expected) return
+        cursor = cursor.cause
+    }
+    fail(
+        "Expected ${expected.javaClass.name}: ${expected.message} in failure cause chain, " +
+            "but received ${actual?.javaClass?.name}: ${actual?.message}"
+    )
 }
 
 private const val TIMEOUT_MS = 20_000L
