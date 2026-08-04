@@ -75,7 +75,7 @@ internal class ConfiguredSourceAwareFS(
     override fun selectSources(sourceKeys: Set<String>): FS =
         ConfiguredSourceAwareFS(
             delegate = (delegate as? SourceAwareFS)?.selectSources(sourceKeys) ?: delegate,
-            specs = specs.filter { it.sourceKey in sourceKeys },
+            configured = specs.filter { it.sourceKey in sourceKeys },
         )
 
     override fun drainSourceFailures(): Map<String, String> {
