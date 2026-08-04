@@ -42,7 +42,11 @@ import org.oxycblt.musikr.util.tryAsync
 import org.oxycblt.musikr.util.tryAsyncWith
 
 internal interface ExploreStep {
-    suspend fun explore(scope: CoroutineScope, explored: Channel<Explored>): Deferred<Result<Unit>>
+    suspend fun explore(
+        scope: CoroutineScope,
+        explored: Channel<Explored>,
+        trace: PipelineTrace? = null,
+    ): Deferred<Result<Unit>>
 
     companion object {
         fun from(
@@ -79,6 +83,7 @@ private class ExploreStepImpl(
     override suspend fun explore(
         scope: CoroutineScope,
         explored: Channel<Explored>,
+        trace: PipelineTrace?,
     ): Deferred<Result<Unit>> {
         val filteredFs =
             if (noisyDirs.isNotEmpty() || pathKeywords.isNotEmpty()) {
@@ -101,6 +106,7 @@ private class ExploreStepImpl(
         val classified = Channel<Classified>(PipelinePolicy.BUFFER_CAPACITY)
         val classifiedTask =
             scope.mapParallel(parallelism, files, classified, Dispatchers.IO) { file ->
+                trace?.mark(PipelineStage.CLASSIFICATION_STARTED)
                 if (!FileClassification.isPotentialMusicFile(file)) {
                     return@mapParallel Finalized(NotAudio)
                 }
@@ -125,6 +131,12 @@ private class ExploreStepImpl(
                 for (playlist in storage.storedPlaylists.read()) it.send(RawPlaylist(playlist))
             }
 
+        val classificationTrackingTask =
+            scope.tryAsync(Dispatchers.Default) {
+                classifiedTask.await().getOrThrow()
+                trace?.mark(PipelineStage.CLASSIFICATION_COMPLETED)
+            }
+
         val mergeTask =
             scope.tryAsyncWith(explored, Dispatchers.Default) {
                 for (item in finalized) it.send(item.explored)
@@ -145,6 +157,7 @@ private class ExploreStepImpl(
             filesTask,
             sourceFailureTask,
             classifiedTask,
+            classificationTrackingTask,
             exploredTask,
             playlistsTask,
             mergeTask,
