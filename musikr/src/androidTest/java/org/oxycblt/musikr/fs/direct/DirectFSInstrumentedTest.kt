@@ -37,13 +37,13 @@ import org.oxycblt.musikr.fs.Location
 @RunWith(AndroidJUnit4::class)
 class DirectFSInstrumentedTest {
     @Test
-    fun boundedQueueFallsBackWithoutDroppingDirectories() = runBlocking {
+    fun deterministicTraversalVisitsEveryDirectoryExactlyOnce() = runBlocking {
         withTimeout(TEST_TIMEOUT_MS) {
             val context = InstrumentationRegistry.getInstrumentation().targetContext
             val parent = requireNotNull(context.getExternalFilesDir(null))
             val root = JavaFile(parent, "directfs-queue-${System.nanoTime()}")
             assertTrue(root.mkdirs())
-            val directoryCount = DirectFS.MAX_PENDING_DIRECTORIES * 2 + 1
+            val directoryCount = DIRECTORY_COUNT
 
             try {
                 repeat(directoryCount) { index ->
@@ -59,8 +59,8 @@ class DirectFSInstrumentedTest {
                 val directFs = DirectFS(listOf(location))
                 val explorationCall = async { directFs.explore(output) }
 
-                // Hold consumers briefly so non-root workers block and the bounded
-                // directory queue deterministically reaches capacity.
+                // Hold the consumer briefly so the rendezvous channel applies real
+                // back-pressure to the coordinator before anything is drained.
                 delay(250)
                 val discovered = mutableListOf<MusicFile>()
                 for (file in output) discovered += file
@@ -69,6 +69,16 @@ class DirectFSInstrumentedTest {
                 assertTrue(exploration.await().isSuccess)
                 assertEquals(directoryCount, discovered.size)
                 assertTrue(directFs.drainSourceFailures().isEmpty())
+
+                val metrics = requireNotNull(directFs.lastTraversalMetrics())
+                assertEquals(directoryCount + 1, metrics.directoriesVisited)
+                assertEquals(directoryCount, metrics.filesEmitted)
+                assertEquals(0, metrics.duplicateDirectoriesSuppressed)
+                assertEquals(0, metrics.activeEnumerators)
+                assertEquals(
+                    listOf(SourceCompletion.COMPLETED),
+                    metrics.results.map { it.completion },
+                )
             } finally {
                 root.deleteRecursively()
             }
@@ -77,5 +87,6 @@ class DirectFSInstrumentedTest {
 
     private companion object {
         const val TEST_TIMEOUT_MS = 60_000L
+        const val DIRECTORY_COUNT = 512
     }
 }

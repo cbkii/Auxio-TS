@@ -105,6 +105,7 @@ internal data class DirectFsOptions(
     val maxSlowOperationRecords: Int = 32,
     val entryCancellationInterval: Int = 64,
     val isAllowedCanonicalPath: (String) -> Boolean = { DirectFsRootPolicy.isAllowedPath(it) },
+    val listDirectory: (JavaFile) -> Array<JavaFile>? = { it.listFiles() },
 ) {
     internal companion object {
         val DEFAULT = DirectFsOptions()
@@ -289,6 +290,10 @@ internal class DirectFsTraversal(
                         Log.w(TAG, "DirectFS skipped an escaped directory at ${entry.javaFile.path}")
                         continue
                     }
+                    if (!options.isAllowedCanonicalPath(childCanonical)) {
+                        Log.w(TAG, "DirectFS skipped a protected directory at $childCanonical")
+                        continue
+                    }
                     if (!visited.add(childCanonical)) {
                         duplicateDirectoriesSuppressed++
                         continue
@@ -368,7 +373,7 @@ internal class DirectFsTraversal(
         val start = System.currentTimeMillis()
         val listed =
             try {
-                task.directory.listFiles()
+                options.listDirectory(task.directory)
             } catch (e: RuntimeException) {
                 Log.d(TAG, "DirectFS listing failed for ${task.directory.path}", e)
                 null

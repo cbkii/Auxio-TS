@@ -20,6 +20,7 @@ package org.oxycblt.auxio.music.locations
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -434,16 +435,17 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         return@launch
                     }
 
-            if (accessibleCandidates.isEmpty()) {
+            val candidates = filterRedundantCandidates(accessibleCandidates)
+            if (candidates.isEmpty()) {
                 showManualPathEntry(disableThirdParty, requiresPlayableSource, callback)
                 return@launch
             }
 
             AlertDialog.Builder(ctx)
                 .setTitle(R.string.set_select_source)
-                .setItems(accessibleCandidates.toTypedArray()) { _, which ->
+                .setItems(candidates.toTypedArray()) { _, which ->
                     validateAndAcceptPath(
-                        accessibleCandidates[which],
+                        candidates[which],
                         disableThirdParty,
                         requiresPlayableSource,
                         callback,
@@ -780,14 +782,74 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private fun addIncludeLocation(location: Location.Unopened) {
         val ctx = context ?: return
-        val opened = location.open(ctx)
-        if (opened != null) {
-            includeLocationAdapter.add(opened)
-            updateSaveButtonState()
-        } else {
-            ctx.showToast(R.string.err_bad_location)
+        val opened =
+            location.open(ctx)
+                ?: run {
+                    ctx.showToast(R.string.err_bad_location)
+                    return
+                }
+        // An exact canonical duplicate is never a second source, so it is refused at the boundary
+        // where the user can still see why.
+        if (!includeLocationAdapter.add(opened)) {
+            ctx.showToast(R.string.err_duplicate_location)
+            return
+        }
+        warnAboutOverlap(ctx, opened)
+        updateSaveButtonState()
+    }
+
+    /**
+     * Reports an ancestor/descendant overlap instead of silently resolving it.
+     *
+     * Removing a deliberate custom source could shrink the effective scan scope, so both roots are
+     * kept. DirectFS orders the narrow root first and suppresses the overlapping subtree of the
+     * wider one through its shared canonical visited set, so nothing is scanned twice.
+     */
+    private fun warnAboutOverlap(ctx: Context, added: Location.Opened) {
+        val others = includeLocationAdapter.locations.filterNot { it === added }
+        val overlaps =
+            MusicSourceCanonicalizer.ancestorOf(others, added) != null ||
+                MusicSourceCanonicalizer.descendantsOf(others, added).isNotEmpty()
+        if (overlaps) {
+            L.w("Configured music source $added overlaps another configured source")
+            ctx.showToast(R.string.lng_overlapping_location)
         }
     }
+
+    /**
+     * Removes candidates that are already configured or that would only widen an existing source.
+     *
+     * The picker previously listed configured roots again, which is how one folder could be added
+     * twice, and offered whole-volume fallbacks even when a narrower source on the same volume was
+     * already configured.
+     */
+    private fun filterRedundantCandidates(candidates: List<String>): List<String> {
+        val configuredPaths =
+            includeLocationAdapter.locations.mapNotNull(MusicSourceCanonicalizer::appFacingPathOf)
+        val configuredKeys =
+            includeLocationAdapter.locations
+                .map(MusicSourceCanonicalizer::canonicalKeyOf)
+                .toMutableSet()
+        return candidates.filter { candidate ->
+            // Candidates are app-facing paths, so canonical identity is derived from the path.
+            val path =
+                MusicSourceCanonicalizer.appFacingPathOfUri(Uri.fromFile(File(candidate)))
+                    ?: return@filter true
+            if (!configuredKeys.add(MusicSourceCanonicalizer.canonicalKeyOfUri(pathUri(path)))) {
+                return@filter false
+            }
+            if (
+                MusicSourceCanonicalizer.isWholeVolumePath(path) &&
+                    MusicSourceCanonicalizer.hasNarrowerSourceOn(configuredPaths, path)
+            ) {
+                L.d("Suppressing whole-volume candidate $path behind a narrower configured source")
+                return@filter false
+            }
+            true
+        }
+    }
+
+    private fun pathUri(path: String): Uri = Uri.fromFile(File(path))
 
     private fun updateModeUI(binding: DialogMusicLocationsBinding) {
         with(binding) {

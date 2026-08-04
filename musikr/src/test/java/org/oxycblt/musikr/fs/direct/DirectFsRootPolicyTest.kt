@@ -22,6 +22,7 @@ import java.io.File
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isAllowedRoot
 import org.oxycblt.musikr.fs.direct.DirectFS.Companion.isExpectedRestrictedSharedStorageChild
 import org.oxycblt.musikr.fs.direct.DirectFS.Companion.shouldDescendIntoDirectory
@@ -75,6 +76,7 @@ class DirectFsRootPolicyTest {
     fun traversalBudgetsRemainBoundedForAccidentalWholeVolumeSelections() {
         assertTrue(DirectFS.MAX_VISITED_FILES in 1_000..100_000)
         assertTrue(DirectFS.MAX_VISITED_DIRECTORIES in 1_000..100_000)
+        assertTrue(WHOLE_VOLUME_MAX_DIRECTORIES in 1_000..DirectFS.MAX_VISITED_DIRECTORIES)
     }
 
     @Test
@@ -84,5 +86,23 @@ class DirectFsRootPolicyTest {
         }
         assertTrue(shouldDescendIntoDirectory("Music"))
         assertTrue(shouldDescendIntoDirectory("My Audio"))
+    }
+
+    @Test
+    fun explicitlySelectedFoldersKeepOrdinaryChildrenWithGenericNames() {
+        // A folder the user picked is scanned as asked: "Download" inside "/…/My Audio" is
+        // ordinary content, not one of the platform's own media trees.
+        listOf("Android", "Download", "DCIM", "Pictures", "Movies", "Music").forEach {
+            assertTrue(it, shouldDescendIntoDirectory(it, CanonicalSourcePolicy.Scope.EXPLICIT))
+        }
+    }
+
+    @Test
+    fun everyScopeStillRefusesHiddenAndRelativeDirectories() {
+        CanonicalSourcePolicy.Scope.entries.forEach { scope ->
+            listOf(".cache", ".", "..", " ").forEach {
+                assertFalse("$scope/$it", shouldDescendIntoDirectory(it, scope))
+            }
+        }
     }
 }
