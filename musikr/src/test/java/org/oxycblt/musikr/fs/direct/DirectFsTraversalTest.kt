@@ -712,6 +712,32 @@ class DirectFsTraversalTest {
             )
         }
 
+    @Test(timeout = TIMEOUT_MS)
+    fun `source snapshot is unavailable when any root in its volume is rejected`() = runBlocking {
+        val accepted = dir("Accepted")
+        val rejected = JavaFile(tmp, "Rejected")
+        val path = rootPath()
+        val acceptedLocation = Location.Opened(Uri.fromFile(accepted), path)
+        val rejectedLocation = Location.Opened(Uri.fromFile(rejected), path)
+        val directFs =
+            DirectFS(
+                SAF.Query(
+                    source = listOf(acceptedLocation, rejectedLocation),
+                    exclude = emptyList(),
+                    withHidden = false,
+                    multithread = false,
+                ),
+                options().copy(isAllowedCanonicalPath = { it == accepted.canonicalPath }),
+            )
+
+        val snapshot = directFs.sourceSnapshots().single()
+
+        assertFalse(snapshot.available)
+        assertEquals(null, snapshot.fingerprint)
+        assertEquals(SourceFingerprintStrength.NONE, snapshot.fingerprintStrength)
+        assertTrue(directFs.drainSourceFailures().containsKey(snapshot.sourceKey))
+    }
+
     @Test
     fun `fingerprint changes only with effective source policy`() {
         val music = dir("Music")

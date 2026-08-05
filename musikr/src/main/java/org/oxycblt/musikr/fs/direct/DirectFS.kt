@@ -109,7 +109,11 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
                                 listFilesSafe(root.directory) != null
                         RootSnapshot(root, readable)
                     }
-                val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
+                // One snapshot represents the complete volume-scoped source. A fingerprint of
+                // only the surviving subset could incorrectly suppress a scan after another
+                // configured root was rejected, so availability requires every configured root.
+                val available =
+                    preparedRoots.size == configuredRoots.size && evaluated.all { it.readable }
                 val first = preparedRoots.first()
                 SourceSnapshot(
                     sourceKey = sourceKey,
