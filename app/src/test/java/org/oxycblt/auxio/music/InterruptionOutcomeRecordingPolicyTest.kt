@@ -56,6 +56,7 @@ class InterruptionOutcomeRecordingPolicyTest {
     fun `non-authoritative interruption records without durable completion`() {
         val refresh = IndexRequest(IndexReason.USER_REFRESH, withCache = true)
 
+        // A normal refresh has no attempt lease, so its cancellation path remains reportable.
         assertTrue(
             IndexRequestPolicy.shouldRecordInterruptionOutcome(
                 refresh,
