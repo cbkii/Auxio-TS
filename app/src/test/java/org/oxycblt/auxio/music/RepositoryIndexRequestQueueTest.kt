@@ -110,20 +110,51 @@ class RepositoryIndexRequestQueueTest {
 
     @Test
     fun metadataEnrichmentDoesNotOwnTheCommittedSourceCheckpoint() {
+        val owner = SourceScanAttemptOwner("process", "service")
         val enrichment =
             IndexRequest(
                 IndexReason.METADATA_ENRICHMENT,
                 withCache = true,
                 metadataProfile = MetadataProfile.FULL,
                 configurationGeneration = 9L,
+                attemptId = "attempt",
+                attemptOwner = owner,
             )
 
-        assertNull(IndexRequestPolicy.checkpointGeneration(enrichment))
+        assertNull(IndexRequestPolicy.checkpointAuthority(enrichment))
         assertEquals(
             9L,
             IndexRequestPolicy.checkpointGeneration(
                 enrichment.copy(reason = IndexReason.INITIAL_CONFIGURATION)
             ),
         )
+    }
+
+    @Test
+    fun enrichmentMergedWhileSourceScanRunsCannotReplaceItsAttemptAuthority() {
+        val owner = SourceScanAttemptOwner("process", "service")
+        val source =
+            IndexRequest(
+                IndexReason.INITIAL_CONFIGURATION,
+                withCache = false,
+                metadataProfile = MetadataProfile.LEAN,
+                configurationGeneration = 10L,
+                sourceKeys = setOf("direct:internal"),
+                attemptId = "source-attempt",
+                attemptOwner = owner,
+            )
+        val merged =
+            IndexRequestPolicy.merge(
+                source,
+                IndexRequest(
+                    IndexReason.METADATA_ENRICHMENT,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.FULL,
+                    configurationGeneration = 10L,
+                ),
+            )
+
+        assertEquals(source, merged)
+        assertEquals("source-attempt", IndexRequestPolicy.checkpointAuthority(merged)?.attemptId)
     }
 }

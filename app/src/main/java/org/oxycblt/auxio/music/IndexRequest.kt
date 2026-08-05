@@ -36,6 +36,14 @@ data class IndexRequest(
     val metadataProfile: MetadataProfile? = null,
     val configurationGeneration: Long? = null,
     val sourceKeys: Set<String>? = null,
+    val attemptId: String? = null,
+    val attemptOwner: SourceScanAttemptOwner? = null,
+)
+
+data class SourceScanAttemptAuthority(
+    val generation: Long,
+    val attemptId: String,
+    val owner: SourceScanAttemptOwner,
 )
 
 /** Shared request semantics used on both sides of the repository/service attachment boundary. */
@@ -45,10 +53,21 @@ internal object IndexRequestPolicy {
      * does not own that source-configuration checkpoint. An interrupted optional enrichment must
      * therefore never regress a committed source generation back to pending.
      */
+    fun requiresAttemptClaim(request: IndexRequest): Boolean =
+        request.reason == IndexReason.INITIAL_CONFIGURATION ||
+            request.reason == IndexReason.USER_RETRY
+
+    fun checkpointAuthority(request: IndexRequest): SourceScanAttemptAuthority? {
+        if (!requiresAttemptClaim(request)) return null
+        return SourceScanAttemptAuthority(
+            generation = request.configurationGeneration ?: return null,
+            attemptId = request.attemptId ?: return null,
+            owner = request.attemptOwner ?: return null,
+        )
+    }
+
     fun checkpointGeneration(request: IndexRequest): Long? =
-        request.configurationGeneration.takeUnless {
-            request.reason == IndexReason.METADATA_ENRICHMENT
-        }
+        checkpointAuthority(request)?.generation
 
     fun merge(current: IndexRequest?, incoming: IndexRequest): IndexRequest {
         if (current == null) return incoming

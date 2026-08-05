@@ -145,10 +145,11 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                         StartupPerformanceReport.CaptureContext(
                             authority = "user-started-settings-export",
                             sourceState =
-                                "mode=${musicSettings.locationMode};" +
+                                    "mode=${musicSettings.locationMode};" +
                                     "generation=${musicSettings.sourceConfigurationGeneration};" +
-                                    "checkpoint=${musicSettings.sourceConfigurationCheckpoint};" +
-                                    "sources=${musicSettings.configuredSourceSpecs}",
+                                    "checkpoint=" +
+                                    "${musicSettings.sourceConfigurationCheckpoint?.diagnosticSummary()};" +
+                                    "sources=${configuredSourcesDiagnosticSummary()}",
                             commit = BuildConfig.BUILD_COMMIT,
                         )
                     )
@@ -254,6 +255,12 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                 .ifBlank { none }
         val checkpointText =
             checkpoint?.let { "${it.state.name.lowercase()} generation ${it.generation}" } ?: none
+        findPreference<Preference>(getString(R.string.set_key_retry_source_setup))?.isEnabled =
+            checkpoint?.let {
+                it.state ==
+                    org.oxycblt.auxio.music.SourceConfigurationCheckpoint.State.RUNNING ||
+                    it.canClaim(org.oxycblt.auxio.music.SourceScanClaimReason.USER_RETRY)
+            } == true
         val lastAttempt =
             checkpoint
                 ?.lastAttemptAtMs
@@ -275,5 +282,22 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                 lastAttempt,
                 checkpoint?.lastOutcome ?: none,
             )
+    }
+
+    private fun configuredSourcesDiagnosticSummary(): String {
+        val sources = musicSettings.configuredSourceSpecs
+        val visible =
+            sources.take(MAX_DIAGNOSTIC_SOURCES).map {
+                "${it.sourceKey.take(MAX_DIAGNOSTIC_SOURCE_LENGTH)}:" +
+                    "${it.accessState}:${it.origin}:${it.traversalScope}:" +
+                    it.displayPath.take(MAX_DIAGNOSTIC_SOURCE_LENGTH)
+            }
+        val omitted = (sources.size - visible.size).coerceAtLeast(0)
+        return if (omitted == 0) visible.toString() else "$visible;omitted=$omitted"
+    }
+
+    private companion object {
+        const val MAX_DIAGNOSTIC_SOURCES = 8
+        const val MAX_DIAGNOSTIC_SOURCE_LENGTH = 160
     }
 }

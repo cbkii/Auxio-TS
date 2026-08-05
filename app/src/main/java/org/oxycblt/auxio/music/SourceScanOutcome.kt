@@ -45,9 +45,27 @@ sealed interface SourceScanOutcome {
         override val unresolvedSourceKeys: Set<String>,
     ) : SourceScanOutcome
 
-    data object Cancelled : SourceScanOutcome {
-        override val unresolvedSourceKeys = emptySet<String>()
-    }
+    data class Cancelled(override val unresolvedSourceKeys: Set<String> = emptySet()) :
+        SourceScanOutcome
+
+    data class Interrupted(
+        val terminalOutcome: IndexingTerminalOutcome,
+        override val unresolvedSourceKeys: Set<String> = emptySet(),
+    ) : SourceScanOutcome
+
+    data class TimedOut(
+        val phase: String,
+        val noProgressMs: Long,
+        val detail: String,
+        override val unresolvedSourceKeys: Set<String> = emptySet(),
+    ) : SourceScanOutcome
+
+    data class Failed(
+        val retryable: Boolean,
+        val failureClass: String,
+        val failureMessage: String?,
+        override val unresolvedSourceKeys: Set<String> = emptySet(),
+    ) : SourceScanOutcome
 
     companion object {
         fun classify(

@@ -203,4 +203,15 @@ class IndexRequestCoalescerTest {
             )
         )
     }
+
+    @Test
+    fun `old finally callback cannot clear a newer indexing job lease`() {
+        val lease = IndexJobLease()
+        val old = lease.begin()
+        val newer = lease.begin()
+
+        assertFalse(lease.complete(old))
+        assertTrue(lease.complete(newer))
+        assertFalse(lease.complete(newer))
+    }
 }

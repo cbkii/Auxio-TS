@@ -805,6 +805,24 @@ class DirectFsTraversalTest {
     }
 
     @Test(timeout = TIMEOUT_MS)
+    fun `live work observer reports meaningful progress and terminal cleanup`() = runBlocking {
+        val music = dir("Music")
+        track(music, "a.mp3")
+        track(dir("Music/Album"), "b.mp3")
+        val snapshots = mutableListOf<DirectFsWorkProgress>()
+
+        traverse(
+            listOf(explicit(music)),
+            options().copy(onWorkProgress = { snapshots.add(it) }),
+        )
+
+        assertTrue(snapshots.any { it.directoriesVisited >= 2 })
+        assertTrue(snapshots.any { it.entriesInspected >= 2 })
+        assertEquals(0, snapshots.last().activeEnumerators)
+        assertEquals(0, snapshots.last().queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
     fun `protected canonical children are never descended into`() = runBlocking {
         val music = dir("Music")
         track(music, "a.mp3")

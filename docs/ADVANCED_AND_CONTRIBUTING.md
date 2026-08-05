@@ -64,6 +64,7 @@ Read:
 - [Exact TS18 device context](CODEX_TS18_DEVICE_CONTEXT.md)
 - [Fast interaction startup](architecture/FAST_INTERACTION_STARTUP.md)
 - [Incremental library pipeline](architecture/INCREMENTAL_LIBRARY_PIPELINE.md)
+- [Source-scan attempt leases and watchdog](architecture/SOURCE_SCAN_ATTEMPT_LEASES.md)
 - [Startup profiles and benchmarks](architecture/STARTUP_PROFILES_BENCHMARKS.md)
 - [Exact TS18 startup validation](validation/EXACT_TS18_STARTUP_VALIDATION.md)
 

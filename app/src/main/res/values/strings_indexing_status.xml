@@ -17,9 +17,13 @@
     <string name="indexing_replacement_pending" translatable="false">A newer source selection is waiting</string>
     <string name="indexing_stalled" translatable="false">No progress for over one minute</string>
     <string name="indexing_overdue" translatable="false">This scan is taking unusually long</string>
+    <string name="indexing_no_progress_timeout" translatable="false">This stage stopped making progress and will be terminated</string>
     <string name="indexing_cancelled" translatable="false">Music loading was cancelled</string>
     <string name="indexing_service_stopped" translatable="false">Music loading stopped when the service closed</string>
-    <string name="indexing_timed_out" translatable="false">Music loading reached the 30-minute safety limit</string>
+    <string name="indexing_superseded" translatable="false">A newer source configuration replaced this scan</string>
+    <string name="indexing_timed_out" translatable="false">Music loading stopped after its stage-aware safety limit</string>
+    <string name="indexing_source_unavailable" translatable="false">A configured music source is unavailable</string>
+    <string name="indexing_partial_success" translatable="false">Music loaded with unresolved sources</string>
     <string name="indexing_failed_detail" translatable="false">Tap for error details, or retry the configured sources.</string>
     <string name="indexing_terminal_detail" translatable="false">Review the details, or retry the configured sources.</string>
     <string name="indexing_time_seconds" translatable="false">%1$ds</string>

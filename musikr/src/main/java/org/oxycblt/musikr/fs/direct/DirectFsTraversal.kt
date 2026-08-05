@@ -138,6 +138,7 @@ internal data class DirectFsOptions(
                 size = child.length(),
             )
         },
+    val onWorkProgress: (DirectFsWorkProgress) -> Unit = {},
 ) {
     internal companion object {
         val DEFAULT = DirectFsOptions()
@@ -173,6 +174,7 @@ internal class DirectFsTraversal(
     private val results = mutableListOf<SourceTraversalResult>()
     private val slowOperations = ArrayDeque<SlowOperationRecord>()
     private var directoriesVisited = 0
+    private var entriesInspected = 0
     private var filesEmitted = 0
     private var duplicateDirectoriesSuppressed = 0
     private var peakQueuedDirectories = 0
@@ -257,6 +259,7 @@ internal class DirectFsTraversal(
                 queuedDirectories = queue.size
                 directoriesVisited++
                 directories++
+                publishWorkProgress()
 
                 val entries = enumerate(task, root)
                 if (entries == null) {
@@ -396,6 +399,7 @@ internal class DirectFsTraversal(
             return
         } finally {
             queuedDirectories = 0
+            publishWorkProgress()
         }
 
         when {
@@ -446,6 +450,7 @@ internal class DirectFsTraversal(
         root: PreparedRoot,
     ): List<DirectEntryMetadata>? {
         activeEnumerators++
+        publishWorkProgress()
         try {
             currentCoroutineContext().ensureActive()
             val listStart = System.currentTimeMillis()
@@ -471,6 +476,7 @@ internal class DirectFsTraversal(
                 }
                 val canonicalPath = options.resolveCanonicalPath(child)
                 entries += options.inspectEntry(child, task.canonicalPath, canonicalPath)
+                entriesInspected++
                 if ((index + 1) % groupSize == 0 || index == listed.lastIndex) {
                     recordSlowOperation(
                         task.directory.path,
@@ -478,12 +484,29 @@ internal class DirectFsTraversal(
                         groupStart,
                         root.sourceKey,
                     )
+                    publishWorkProgress()
                 }
             }
             return entries
         } finally {
             activeEnumerators--
+            publishWorkProgress()
         }
+    }
+
+    private fun publishWorkProgress() {
+        runCatching {
+                options.onWorkProgress(
+                    DirectFsWorkProgress(
+                        directoriesVisited = directoriesVisited,
+                        entriesInspected = entriesInspected,
+                        filesEmitted = filesEmitted,
+                        queuedDirectories = queuedDirectories,
+                        activeEnumerators = activeEnumerators,
+                    )
+                )
+            }
+            .onFailure { Log.w(TAG, "DirectFS progress observer failed", it) }
     }
 
     private fun recordSlowOperation(

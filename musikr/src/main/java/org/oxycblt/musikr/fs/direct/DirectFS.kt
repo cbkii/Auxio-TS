@@ -41,6 +41,15 @@ import org.oxycblt.musikr.fs.SourceSnapshot
 import org.oxycblt.musikr.fs.saf.SAF
 import org.oxycblt.musikr.util.startOwning
 
+/** Bounded live DirectFS work counters used by the app's no-progress watchdog. */
+data class DirectFsWorkProgress(
+    val directoriesVisited: Int,
+    val entriesInspected: Int,
+    val filesEmitted: Int,
+    val queuedDirectories: Int,
+    val activeEnumerators: Int,
+)
+
 /**
  * Filesystem backend that reads configured folders through ordinary app-UID access.
  *
@@ -76,6 +85,11 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
     @Volatile private var lastMetrics: DirectFsTraversalMetrics? = null
 
     constructor(query: SAF.Query) : this(query, DirectFsOptions.DEFAULT)
+
+    constructor(
+        query: SAF.Query,
+        onWorkProgress: (DirectFsWorkProgress) -> Unit,
+    ) : this(query, DirectFsOptions.DEFAULT.copy(onWorkProgress = onWorkProgress))
 
     constructor(
         roots: List<Location.Opened>

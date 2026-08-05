@@ -23,6 +23,7 @@ import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -107,6 +108,33 @@ class MusicSettingsIndexingTriggerTest {
         assertEquals(0, listener.indexingSettingChanges)
         assertEquals(0, listener.locationChanges)
         assertEquals(1, listener.generatedPlaylistChanges)
+    }
+
+    @Test
+    fun `generated playlist refresh during source work cannot reopen its checkpoint`() {
+        settings.forceLocationUpdate()
+        val generation = settings.sourceConfigurationGeneration
+        val owner = SourceScanAttemptOwner("process", "service")
+        val claimed =
+            requireNotNull(
+                settings.claimPendingConfiguration(
+                    generation,
+                    owner,
+                    "source-attempt",
+                    100L,
+                    SourceScanClaimReason.CONFIGURATION_CHANGE,
+                )
+            )
+
+        dispatch(context.getString(R.string.set_key_generated_playlists))
+
+        assertEquals(SourceConfigurationCheckpoint.State.RUNNING, claimed.state)
+        assertEquals("source-attempt", settings.sourceConfigurationCheckpoint?.attemptId)
+        assertTrue(
+            settings.ownsSourceConfigurationAttempt(generation, "source-attempt", owner)
+        )
+        assertEquals(0, listener.indexingSettingChanges)
+        assertEquals(0, listener.locationChanges)
     }
 
     @Test

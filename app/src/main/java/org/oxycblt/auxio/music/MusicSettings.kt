@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.music
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -98,18 +99,55 @@ interface MusicSettings : Settings<MusicSettings.Listener> {
     val sourceConfigurationCheckpoint: SourceConfigurationCheckpoint?
         get() = null
 
-    /** Mark a pending generation running without clearing its durable record. */
-    fun claimPendingConfiguration(): SourceConfigurationCheckpoint? = null
+    /** Terminalise a persisted owner that cannot survive this process/service lifecycle. */
+    fun recoverInterruptedSourceConfiguration(
+        owner: SourceScanAttemptOwner,
+        nowMs: Long,
+    ): SourceConfigurationCheckpoint? = sourceConfigurationCheckpoint
 
-    /** Resolve only a matching generation after a structured scan result. */
-    fun acknowledgeSourceConfiguration(
+    /** Atomically allocate one attempt for an eligible generation. */
+    fun claimPendingConfiguration(
+        expectedGeneration: Long,
+        owner: SourceScanAttemptOwner,
+        attemptId: String,
+        nowMs: Long,
+        reason: SourceScanClaimReason,
+    ): SourceConfigurationCheckpoint? = null
+
+    /** Explicitly transfer one live lease inside the same process. */
+    fun handoffSourceConfigurationAttempt(
         generation: Long,
-        unresolvedSourceKeys: Set<String>,
-        outcome: String,
-    ) = Unit
+        attemptId: String,
+        fromOwner: SourceScanAttemptOwner,
+        toOwner: SourceScanAttemptOwner,
+        nowMs: Long,
+    ): Boolean = false
 
-    /** Return a matching interrupted or failed generation to retryable Pending state. */
-    fun returnSourceConfigurationToPending(generation: Long, outcome: String) = Unit
+    /** Verify generation, attempt and lifecycle ownership before repository work or publication. */
+    fun ownsSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        owner: SourceScanAttemptOwner,
+    ): Boolean = false
+
+    /** Persist bounded meaningful progress only for the current owner. */
+    fun heartbeatSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        owner: SourceScanAttemptOwner,
+        nowMs: Long,
+        progress: SourceScanAttemptProgress,
+    ): Boolean = false
+
+    /** Assign exactly one terminal result, optionally publishing compatible library state. */
+    fun completeSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        owner: SourceScanAttemptOwner,
+        nowMs: Long,
+        completion: SourceScanAttemptCompletion,
+        publishAfterCommit: () -> Unit = {},
+    ): Boolean = false
 
     /** Retain a committed generation while recording currently unavailable configured roots. */
     fun markSourcesUnresolved(sourceKeys: Set<String>, outcome: String) = Unit
@@ -314,32 +352,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         }
 
     override val sourceConfigurationCheckpoint: SourceConfigurationCheckpoint?
-        get() {
-            val generation = sourceConfigurationGeneration
-            if (generation <= 0L) return null
-            val storedState =
-                SourceConfigurationCheckpoint.State.entries.firstOrNull {
-                    it.name == sharedPreferences.getString(KEY_CHECKPOINT_STATE, null)
-                }
-            val state =
-                storedState
-                    ?: if (sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) {
-                        SourceConfigurationCheckpoint.State.PENDING
-                    } else {
-                        SourceConfigurationCheckpoint.State.COMMITTED
-                    }
-            return SourceConfigurationCheckpoint(
-                generation = generation,
-                state = state,
-                unresolvedSourceKeys =
-                    sharedPreferences.getStringSet(KEY_CHECKPOINT_UNRESOLVED, emptySet()).orEmpty(),
-                lastAttemptAtMs =
-                    sharedPreferences
-                        .getLong(KEY_CHECKPOINT_LAST_ATTEMPT, Long.MIN_VALUE)
-                        .takeUnless { it == Long.MIN_VALUE },
-                lastOutcome = sharedPreferences.getString(KEY_CHECKPOINT_LAST_OUTCOME, null),
-            )
-        }
+        get() = synchronized(SOURCE_CHECKPOINT_LOCK) { readSourceConfigurationCheckpointLocked() }
 
     override val generatedPlaylistsEnabled: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_generated_playlists), false)
@@ -491,12 +504,11 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             }
         }
 
-    @Synchronized
     override fun applySourceConfiguration(
         mode: LocationMode,
         safQuery: SAF.Query,
         mediaStoreQuery: MediaStore.Query,
-    ): Boolean {
+    ): Boolean = synchronized(SOURCE_CHECKPOINT_LOCK) {
         // Collapse before comparing and before persisting so a duplicate can never be stored, and
         // so re-selecting the same folders is not mistaken for a configuration change.
         val canonicalQuery =
@@ -505,16 +517,40 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             locationMode != mode ||
                 this.safQuery != canonicalQuery ||
                 this.mediaStoreQuery != mediaStoreQuery
-        if (!changed) return false
+        if (!changed) return@synchronized false
 
         val nextGeneration = sourceConfigurationGeneration + 1L
+        val nowMs = System.currentTimeMillis()
+        val priorCheckpoint = readSourceConfigurationCheckpointLocked()
+        val supersededAttempt =
+            priorCheckpoint?.attempt?.let { attempt ->
+                if (attempt.isTerminal) {
+                    attempt
+                } else {
+                    attempt.copy(
+                        heartbeatAtMs = nowMs,
+                        terminalAtMs = nowMs,
+                        terminalOutcome = SourceScanAttemptOutcome.SUPERSEDED,
+                        reason = "Superseded by source configuration generation $nextGeneration",
+                    )
+                }
+            } ?: priorCheckpoint?.previousAttempt
         val configuredKeys =
             if (mode == LocationMode.MEDIA_STORE) {
                 emptySet()
             } else {
                 canonicalQuery.source.mapTo(linkedSetOf()) { SourceIdentity.forLocation(it) }
             }
-        sharedPreferences.edit(commit = true) {
+        val pendingCheckpoint =
+            SourceConfigurationCheckpoint(
+                generation = nextGeneration,
+                state = SourceConfigurationCheckpoint.State.PENDING,
+                unresolvedSourceKeys =
+                    priorCheckpoint?.unresolvedSourceKeys?.intersect(configuredKeys).orEmpty(),
+                previousAttempt = supersededAttempt,
+                reason = "Source configuration changed",
+            )
+        val persisted = commitPreferences {
             putInt(getString(R.string.set_key_locations_mode), mode.intCode)
             putString(
                 getString(R.string.set_key_music_locations),
@@ -543,88 +579,255 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 mediaStoreQuery.excludeNonMusic,
             )
             putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
-            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
             putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
-            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.PENDING.name)
-            putStringSet(
-                KEY_CHECKPOINT_UNRESOLVED,
-                sourceConfigurationCheckpoint
-                    ?.unresolvedSourceKeys
-                    ?.intersect(configuredKeys)
-                    .orEmpty(),
-            )
-            remove(KEY_CHECKPOINT_LAST_ATTEMPT)
-            remove(KEY_CHECKPOINT_LAST_OUTCOME)
+            writeCheckpointLocked(this, pendingCheckpoint)
+        }
+        if (!persisted) {
+            L.e("Failed to persist source configuration generation $nextGeneration")
+            return@synchronized false
         }
         L.i("Persisted source configuration generation $nextGeneration [mode=$mode]")
-        return true
+        true
     }
 
-    @Synchronized
-    override fun claimPendingConfiguration(): SourceConfigurationCheckpoint? {
-        val checkpoint = sourceConfigurationCheckpoint ?: return null
-        if (
-            checkpoint.state != SourceConfigurationCheckpoint.State.PENDING &&
-                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING
-        ) {
-            return null
+    override fun recoverInterruptedSourceConfiguration(
+        owner: SourceScanAttemptOwner,
+        nowMs: Long,
+    ): SourceConfigurationCheckpoint? = synchronized(SOURCE_CHECKPOINT_LOCK) {
+        val checkpoint = readSourceConfigurationCheckpointLocked() ?: return@synchronized null
+        val attempt = checkpoint.attempt ?: return@synchronized checkpoint
+        if (checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING || attempt.isTerminal) {
+            return@synchronized checkpoint
         }
+        if (attempt.owner == owner) return@synchronized checkpoint
+        val processRestarted = attempt.owner.processId != owner.processId
+        val outcome =
+            if (processRestarted) {
+                SourceScanAttemptOutcome.PROCESS_INTERRUPTED
+            } else {
+                SourceScanAttemptOutcome.SERVICE_STOPPED
+            }
+        val recovered =
+            checkpoint.copy(
+                state = SourceConfigurationCheckpoint.State.INTERRUPTED,
+                attempt =
+                    attempt.copy(
+                        heartbeatAtMs = nowMs,
+                        terminalAtMs = nowMs,
+                        terminalOutcome = outcome,
+                        reason =
+                            if (processRestarted) {
+                                "Recovered after process recreation"
+                            } else {
+                                "Recovered after service lifecycle recreation"
+                            },
+                    ),
+                reason = outcome.name,
+            )
+        check(
+            commitPreferences {
+            writeCheckpointLocked(this, recovered)
+            putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
+            }
+        ) { "Unable to terminalise stale source attempt ${attempt.attemptId}" }
+        recovered
+    }
+
+    override fun claimPendingConfiguration(
+        expectedGeneration: Long,
+        owner: SourceScanAttemptOwner,
+        attemptId: String,
+        nowMs: Long,
+        reason: SourceScanClaimReason,
+    ): SourceConfigurationCheckpoint? = synchronized(SOURCE_CHECKPOINT_LOCK) {
+        require(attemptId.isNotBlank())
+        val checkpoint = readSourceConfigurationCheckpointLocked() ?: return@synchronized null
+        if (checkpoint.generation != expectedGeneration || !checkpoint.canClaim(reason)) {
+            return@synchronized null
+        }
+        if (
+            checkpoint.attempt?.attemptId == attemptId ||
+                checkpoint.previousAttempt?.attemptId == attemptId
+        ) {
+            return@synchronized null
+        }
+        val currentAttempt = checkpoint.attempt
+        if (currentAttempt != null && !currentAttempt.isTerminal) return@synchronized null
+        val attempt =
+            SourceScanAttemptRecord(
+                generation = expectedGeneration,
+                attemptId = attemptId,
+                owner = owner,
+                claimedAtMs = nowMs,
+                heartbeatAtMs = nowMs,
+                progress = SourceScanAttemptProgress("PREPARING"),
+                reason = "Claimed for ${reason.name}",
+            )
         val claimed =
             checkpoint.copy(
                 state = SourceConfigurationCheckpoint.State.RUNNING,
-                lastAttemptAtMs = System.currentTimeMillis(),
+                attempt = attempt,
+                previousAttempt = currentAttempt ?: checkpoint.previousAttempt,
+                reason = "Attempt running",
             )
-        sharedPreferences.edit(commit = true) {
-            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
-            putString(KEY_CHECKPOINT_STATE, claimed.state.name)
-            putLong(KEY_CHECKPOINT_LAST_ATTEMPT, requireNotNull(claimed.lastAttemptAtMs))
+        if (!commitPreferences { writeCheckpointLocked(this, claimed) }) {
+            return@synchronized null
         }
-        return claimed
+        claimed
     }
 
-    @Synchronized
-    override fun acknowledgeSourceConfiguration(
+    override fun handoffSourceConfigurationAttempt(
         generation: Long,
-        unresolvedSourceKeys: Set<String>,
-        outcome: String,
-    ) {
-        if (generation != sourceConfigurationGeneration) return
-        val state =
-            if (unresolvedSourceKeys.isEmpty()) {
-                SourceConfigurationCheckpoint.State.COMMITTED
-            } else {
-                SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED
-            }
-        sharedPreferences.edit(commit = true) {
-            putBoolean(KEY_PENDING_INITIAL_SCAN, false)
-            putString(KEY_CHECKPOINT_STATE, state.name)
-            putStringSet(KEY_CHECKPOINT_UNRESOLVED, unresolvedSourceKeys)
-            putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
+        attemptId: String,
+        fromOwner: SourceScanAttemptOwner,
+        toOwner: SourceScanAttemptOwner,
+        nowMs: Long,
+    ): Boolean = synchronized(SOURCE_CHECKPOINT_LOCK) {
+        if (fromOwner.processId != toOwner.processId) return@synchronized false
+        val checkpoint = readSourceConfigurationCheckpointLocked() ?: return@synchronized false
+        val attempt = checkpoint.attempt ?: return@synchronized false
+        if (
+            checkpoint.generation != generation ||
+                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING ||
+                attempt.attemptId != attemptId ||
+                attempt.owner != fromOwner ||
+                attempt.isTerminal
+        ) {
+            return@synchronized false
         }
+        val handedOff =
+            checkpoint.copy(
+                attempt =
+                    attempt.copy(
+                        owner = toOwner,
+                        heartbeatAtMs = nowMs,
+                        reason = "Explicit same-process lifecycle handoff",
+                    ),
+                reason = "Attempt owner handed off",
+            )
+        commitPreferences { writeCheckpointLocked(this, handedOff) }
     }
 
-    @Synchronized
-    override fun returnSourceConfigurationToPending(generation: Long, outcome: String) {
-        if (generation != sourceConfigurationGeneration) return
-        sharedPreferences.edit(commit = true) {
-            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
-            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.PENDING.name)
-            putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
-        }
+    override fun ownsSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        owner: SourceScanAttemptOwner,
+    ): Boolean = synchronized(SOURCE_CHECKPOINT_LOCK) {
+        val checkpoint = readSourceConfigurationCheckpointLocked() ?: return@synchronized false
+        val attempt = checkpoint.attempt ?: return@synchronized false
+        checkpoint.generation == generation &&
+            checkpoint.state == SourceConfigurationCheckpoint.State.RUNNING &&
+            attempt.attemptId == attemptId &&
+            attempt.owner == owner &&
+            !attempt.isTerminal
     }
 
-    @Synchronized
+    override fun heartbeatSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        owner: SourceScanAttemptOwner,
+        nowMs: Long,
+        progress: SourceScanAttemptProgress,
+    ): Boolean = synchronized(SOURCE_CHECKPOINT_LOCK) {
+        val checkpoint = readSourceConfigurationCheckpointLocked() ?: return@synchronized false
+        val attempt = checkpoint.attempt ?: return@synchronized false
+        if (
+            checkpoint.generation != generation ||
+                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING ||
+                attempt.attemptId != attemptId ||
+                attempt.owner != owner ||
+                attempt.isTerminal
+        ) {
+            return@synchronized false
+        }
+        val boundedProgress =
+            progress.copy(currentItem = progress.currentItem?.take(MAX_DIAGNOSTIC_TEXT_LENGTH))
+        val updated =
+            checkpoint.copy(
+                attempt =
+                    attempt.copy(
+                        heartbeatAtMs = nowMs,
+                        progress = boundedProgress,
+                        reason = "Meaningful ${boundedProgress.phase.lowercase()} progress",
+                    )
+            )
+        sharedPreferences.edit { writeCheckpointLocked(this, updated) }
+        true
+    }
+
+    override fun completeSourceConfigurationAttempt(
+        generation: Long,
+        attemptId: String,
+        owner: SourceScanAttemptOwner,
+        nowMs: Long,
+        completion: SourceScanAttemptCompletion,
+        publishAfterCommit: () -> Unit,
+    ): Boolean = synchronized(SOURCE_CHECKPOINT_LOCK) {
+        val checkpoint = readSourceConfigurationCheckpointLocked() ?: return@synchronized false
+        val attempt = checkpoint.attempt ?: return@synchronized false
+        if (
+            checkpoint.generation != generation ||
+                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING ||
+                attempt.attemptId != attemptId ||
+                attempt.owner != owner ||
+                attempt.isTerminal
+        ) {
+            return@synchronized false
+        }
+        val terminalAttempt =
+            attempt.copy(
+                heartbeatAtMs = nowMs,
+                terminalAtMs = nowMs,
+                terminalOutcome = completion.outcome,
+                reason = completion.reason.take(MAX_DIAGNOSTIC_TEXT_LENGTH),
+                failureClass = completion.failureClass?.take(MAX_DIAGNOSTIC_TEXT_LENGTH),
+                failureMessage = completion.failureMessage?.take(MAX_DIAGNOSTIC_TEXT_LENGTH),
+            )
+        val completed =
+            checkpoint.copy(
+                state = completion.checkpointState(),
+                unresolvedSourceKeys = completion.unresolvedSourceKeys,
+                attempt = terminalAttempt,
+                reason = completion.reason.take(MAX_DIAGNOSTIC_TEXT_LENGTH),
+            )
+        val editor = sharedPreferences.edit()
+        writeCheckpointLocked(editor, completed)
+        editor
+            .putBoolean(
+                getString(R.string.set_key_library_last_scan_failed),
+                completion.lastScanFailed,
+            )
+        completion.publishedRevision?.let {
+            editor.putString(getString(R.string.set_key_library_revision), it.toString())
+        }
+        completion.publishedLibraryState?.let {
+            editor.putString(getString(R.string.set_key_library_state), it.name)
+        }
+        if (!editor.commit()) return@synchronized false
+        publishAfterCommit()
+        true
+    }
+
     override fun markSourcesUnresolved(sourceKeys: Set<String>, outcome: String) {
         if (sourceKeys.isEmpty()) return
-        val checkpoint = sourceConfigurationCheckpoint ?: return
-        sharedPreferences.edit(commit = true) {
-            putBoolean(KEY_PENDING_INITIAL_SCAN, false)
-            putString(
-                KEY_CHECKPOINT_STATE,
-                SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED.name,
-            )
-            putStringSet(KEY_CHECKPOINT_UNRESOLVED, checkpoint.unresolvedSourceKeys + sourceKeys)
-            putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
+        synchronized(SOURCE_CHECKPOINT_LOCK) {
+            val checkpoint = readSourceConfigurationCheckpointLocked() ?: return@synchronized
+            val state =
+                when (checkpoint.state) {
+                    SourceConfigurationCheckpoint.State.COMMITTED,
+                    SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED ->
+                        SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED
+                    else -> checkpoint.state
+                }
+            val updated =
+                checkpoint.copy(
+                    state = state,
+                    unresolvedSourceKeys = checkpoint.unresolvedSourceKeys + sourceKeys,
+                    reason = outcome.take(MAX_DIAGNOSTIC_TEXT_LENGTH),
+                )
+            if (!commitPreferences { writeCheckpointLocked(this, updated) }) {
+                L.e("Failed to persist unresolved source checkpoint")
+            }
         }
     }
 
@@ -633,16 +836,39 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         listeners.forEach { it.onMusicLocationsChanged() }
     }
 
-    @Synchronized
     private fun markInitialScanPending() {
-        val nextGeneration = sourceConfigurationGeneration + 1L
-        sharedPreferences.edit(commit = true) {
-            putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
-            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
-            putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
-            putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.PENDING.name)
-            remove(KEY_CHECKPOINT_LAST_ATTEMPT)
-            remove(KEY_CHECKPOINT_LAST_OUTCOME)
+        synchronized(SOURCE_CHECKPOINT_LOCK) {
+            val nextGeneration = sourceConfigurationGeneration + 1L
+            val nowMs = System.currentTimeMillis()
+            val prior = readSourceConfigurationCheckpointLocked()
+            val superseded =
+                prior?.attempt?.let { attempt ->
+                    if (attempt.isTerminal) {
+                        attempt
+                    } else {
+                        attempt.copy(
+                            heartbeatAtMs = nowMs,
+                            terminalAtMs = nowMs,
+                            terminalOutcome = SourceScanAttemptOutcome.SUPERSEDED,
+                            reason = "Superseded by forced generation $nextGeneration",
+                        )
+                    }
+                } ?: prior?.previousAttempt
+            val pending =
+                SourceConfigurationCheckpoint(
+                    generation = nextGeneration,
+                    state = SourceConfigurationCheckpoint.State.PENDING,
+                    unresolvedSourceKeys = prior?.unresolvedSourceKeys.orEmpty(),
+                    previousAttempt = superseded,
+                    reason = "Forced source refresh",
+                )
+            check(
+                commitPreferences {
+                putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
+                putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+                writeCheckpointLocked(this, pending)
+                }
+            ) { "Unable to persist forced source generation $nextGeneration" }
         }
     }
 
@@ -855,6 +1081,262 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         )
     }
 
+    private fun readSourceConfigurationCheckpointLocked(): SourceConfigurationCheckpoint? {
+        val generation = sourceConfigurationGeneration
+        if (generation <= 0L) return null
+        val storedState =
+            SourceConfigurationCheckpoint.State.entries.firstOrNull {
+                it.name == sharedPreferences.getString(KEY_CHECKPOINT_STATE, null)
+            }
+        val state =
+            storedState
+                ?: if (sharedPreferences.getBoolean(KEY_PENDING_INITIAL_SCAN, false)) {
+                    SourceConfigurationCheckpoint.State.PENDING
+                } else {
+                    SourceConfigurationCheckpoint.State.COMMITTED
+                }
+        var attempt = readAttemptLocked(ATTEMPT_PREFIX, generation)
+        if (attempt == null && state == SourceConfigurationCheckpoint.State.RUNNING) {
+            // Migration for checkpoints written before attempt leases existed. It is deliberately
+            // treated as ownerless so startup recovery records it interrupted before any retry.
+            val claimedAt =
+                sharedPreferences
+                    .getLong(KEY_CHECKPOINT_LAST_ATTEMPT, Long.MIN_VALUE)
+                    .takeUnless { it == Long.MIN_VALUE }
+                    ?: 0L
+            attempt =
+                SourceScanAttemptRecord(
+                    generation = generation,
+                    attemptId = "legacy-generation-$generation",
+                    owner = SourceScanAttemptOwner("legacy-process", "legacy-lifecycle"),
+                    claimedAtMs = claimedAt,
+                    heartbeatAtMs = claimedAt,
+                    progress = SourceScanAttemptProgress("UNKNOWN"),
+                    reason = "Migrated checkpoint without attempt identity",
+                )
+        }
+        return SourceConfigurationCheckpoint(
+            generation = generation,
+            state = state,
+            unresolvedSourceKeys =
+                sharedPreferences.getStringSet(KEY_CHECKPOINT_UNRESOLVED, emptySet()).orEmpty(),
+            attempt = attempt,
+            previousAttempt = readAttemptLocked(PREVIOUS_ATTEMPT_PREFIX, generation),
+            reason =
+                sharedPreferences.getString(KEY_CHECKPOINT_REASON, null)
+                    ?: sharedPreferences.getString(KEY_CHECKPOINT_LAST_OUTCOME, null),
+        )
+    }
+
+    private fun readAttemptLocked(
+        prefix: String,
+        fallbackGeneration: Long,
+    ): SourceScanAttemptRecord? {
+        val attemptId = sharedPreferences.getString(prefix + ATTEMPT_ID_SUFFIX, null) ?: return null
+        val processId =
+            sharedPreferences.getString(prefix + OWNER_PROCESS_SUFFIX, null) ?: "legacy-process"
+        val lifecycleId =
+            sharedPreferences.getString(prefix + OWNER_LIFECYCLE_SUFFIX, null)
+                ?: "legacy-lifecycle"
+        val claimedAt = sharedPreferences.getLong(prefix + CLAIMED_AT_SUFFIX, 0L)
+        val heartbeatAt = sharedPreferences.getLong(prefix + HEARTBEAT_AT_SUFFIX, claimedAt)
+        val phase = sharedPreferences.getString(prefix + PROGRESS_PHASE_SUFFIX, null)
+        val progress =
+            phase?.let {
+                SourceScanAttemptProgress(
+                    phase = it,
+                    explored = sharedPreferences.getInt(prefix + PROGRESS_EXPLORED_SUFFIX, 0),
+                    loaded = sharedPreferences.getInt(prefix + PROGRESS_LOADED_SUFFIX, 0),
+                    evaluated = sharedPreferences.getInt(prefix + PROGRESS_EVALUATED_SUFFIX, 0),
+                    currentItem = sharedPreferences.getString(prefix + PROGRESS_ITEM_SUFFIX, null),
+                    directFsDirectoriesVisited =
+                        sharedPreferences.optionalInt(prefix + PROGRESS_DIRECTORIES_SUFFIX),
+                    directFsEntriesInspected =
+                        sharedPreferences.optionalInt(prefix + PROGRESS_ENTRIES_SUFFIX),
+                    directFsFilesEmitted =
+                        sharedPreferences.optionalInt(prefix + PROGRESS_FILES_SUFFIX),
+                    queuedDirectFsWork =
+                        sharedPreferences.optionalInt(prefix + PROGRESS_QUEUED_SUFFIX),
+                    activeDirectFsEnumerators =
+                        sharedPreferences.optionalInt(prefix + PROGRESS_ACTIVE_SUFFIX),
+                )
+            }
+        return SourceScanAttemptRecord(
+            generation =
+                sharedPreferences.getLong(prefix + ATTEMPT_GENERATION_SUFFIX, fallbackGeneration),
+            attemptId = attemptId,
+            owner = SourceScanAttemptOwner(processId, lifecycleId),
+            claimedAtMs = claimedAt,
+            heartbeatAtMs = heartbeatAt,
+            progress = progress,
+            terminalAtMs =
+                sharedPreferences
+                    .getLong(prefix + TERMINAL_AT_SUFFIX, Long.MIN_VALUE)
+                    .takeUnless { it == Long.MIN_VALUE },
+            terminalOutcome =
+                SourceScanAttemptOutcome.entries.firstOrNull {
+                    it.name == sharedPreferences.getString(prefix + TERMINAL_OUTCOME_SUFFIX, null)
+                },
+            reason = sharedPreferences.getString(prefix + ATTEMPT_REASON_SUFFIX, null),
+            failureClass = sharedPreferences.getString(prefix + FAILURE_CLASS_SUFFIX, null),
+            failureMessage = sharedPreferences.getString(prefix + FAILURE_MESSAGE_SUFFIX, null),
+        )
+    }
+
+    private fun writeCheckpointLocked(
+        editor: SharedPreferences.Editor,
+        checkpoint: SourceConfigurationCheckpoint,
+    ) {
+        val attempt = checkpoint.attempt
+        val previousAttempt = checkpoint.previousAttempt
+        require(attempt == null || attempt.generation == checkpoint.generation)
+        require(attempt == null || (attempt.terminalAtMs == null) == (attempt.terminalOutcome == null))
+        require(previousAttempt == null || previousAttempt.isTerminal)
+        require(
+            previousAttempt == null ||
+                (previousAttempt.terminalAtMs == null) ==
+                    (previousAttempt.terminalOutcome == null)
+        )
+        if (checkpoint.state == SourceConfigurationCheckpoint.State.RUNNING) {
+            require(attempt != null && !attempt.isTerminal)
+        } else if (attempt != null) {
+            require(attempt.isTerminal)
+        }
+        editor.putBoolean(
+            KEY_PENDING_INITIAL_SCAN,
+            checkpoint.state == SourceConfigurationCheckpoint.State.PENDING ||
+                checkpoint.state == SourceConfigurationCheckpoint.State.INTERRUPTED,
+        )
+        editor.putString(KEY_CHECKPOINT_STATE, checkpoint.state.name)
+        editor.putStringSet(KEY_CHECKPOINT_UNRESOLVED, checkpoint.unresolvedSourceKeys)
+        editor.putString(KEY_CHECKPOINT_REASON, checkpoint.reason)
+        editor.writeAttempt(ATTEMPT_PREFIX, checkpoint.attempt)
+        editor.writeAttempt(PREVIOUS_ATTEMPT_PREFIX, checkpoint.previousAttempt)
+        editor.remove(KEY_CHECKPOINT_LAST_ATTEMPT)
+        editor.remove(KEY_CHECKPOINT_LAST_OUTCOME)
+    }
+
+    private inline fun commitPreferences(
+        mutate: SharedPreferences.Editor.() -> Unit
+    ): Boolean {
+        val editor = sharedPreferences.edit()
+        editor.mutate()
+        return editor.commit()
+    }
+
+    private fun SharedPreferences.Editor.writeAttempt(
+        prefix: String,
+        attempt: SourceScanAttemptRecord?,
+    ) {
+        val keys =
+            listOf(
+                ATTEMPT_ID_SUFFIX,
+                ATTEMPT_GENERATION_SUFFIX,
+                OWNER_PROCESS_SUFFIX,
+                OWNER_LIFECYCLE_SUFFIX,
+                CLAIMED_AT_SUFFIX,
+                HEARTBEAT_AT_SUFFIX,
+                TERMINAL_AT_SUFFIX,
+                TERMINAL_OUTCOME_SUFFIX,
+                ATTEMPT_REASON_SUFFIX,
+                FAILURE_CLASS_SUFFIX,
+                FAILURE_MESSAGE_SUFFIX,
+                PROGRESS_PHASE_SUFFIX,
+                PROGRESS_EXPLORED_SUFFIX,
+                PROGRESS_LOADED_SUFFIX,
+                PROGRESS_EVALUATED_SUFFIX,
+                PROGRESS_ITEM_SUFFIX,
+                PROGRESS_DIRECTORIES_SUFFIX,
+                PROGRESS_ENTRIES_SUFFIX,
+                PROGRESS_FILES_SUFFIX,
+                PROGRESS_QUEUED_SUFFIX,
+                PROGRESS_ACTIVE_SUFFIX,
+            )
+        if (attempt == null) {
+            keys.forEach { remove(prefix + it) }
+            return
+        }
+        putString(prefix + ATTEMPT_ID_SUFFIX, attempt.attemptId)
+        putLong(prefix + ATTEMPT_GENERATION_SUFFIX, attempt.generation)
+        putString(prefix + OWNER_PROCESS_SUFFIX, attempt.owner.processId)
+        putString(prefix + OWNER_LIFECYCLE_SUFFIX, attempt.owner.lifecycleId)
+        putLong(prefix + CLAIMED_AT_SUFFIX, attempt.claimedAtMs)
+        putLong(prefix + HEARTBEAT_AT_SUFFIX, attempt.heartbeatAtMs)
+        attempt.terminalAtMs?.let { putLong(prefix + TERMINAL_AT_SUFFIX, it) }
+            ?: remove(prefix + TERMINAL_AT_SUFFIX)
+        putString(prefix + TERMINAL_OUTCOME_SUFFIX, attempt.terminalOutcome?.name)
+        putString(prefix + ATTEMPT_REASON_SUFFIX, attempt.reason)
+        putString(prefix + FAILURE_CLASS_SUFFIX, attempt.failureClass)
+        putString(prefix + FAILURE_MESSAGE_SUFFIX, attempt.failureMessage)
+        putString(prefix + PROGRESS_PHASE_SUFFIX, attempt.progress?.phase)
+        if (attempt.progress != null) {
+            putInt(prefix + PROGRESS_EXPLORED_SUFFIX, attempt.progress.explored)
+            putInt(prefix + PROGRESS_LOADED_SUFFIX, attempt.progress.loaded)
+            putInt(prefix + PROGRESS_EVALUATED_SUFFIX, attempt.progress.evaluated)
+            putString(prefix + PROGRESS_ITEM_SUFFIX, attempt.progress.currentItem)
+            putOptionalInt(
+                prefix + PROGRESS_DIRECTORIES_SUFFIX,
+                attempt.progress.directFsDirectoriesVisited,
+            )
+            putOptionalInt(
+                prefix + PROGRESS_ENTRIES_SUFFIX,
+                attempt.progress.directFsEntriesInspected,
+            )
+            putOptionalInt(prefix + PROGRESS_FILES_SUFFIX, attempt.progress.directFsFilesEmitted)
+            putOptionalInt(prefix + PROGRESS_QUEUED_SUFFIX, attempt.progress.queuedDirectFsWork)
+            putOptionalInt(
+                prefix + PROGRESS_ACTIVE_SUFFIX,
+                attempt.progress.activeDirectFsEnumerators,
+            )
+        } else {
+            remove(prefix + PROGRESS_EXPLORED_SUFFIX)
+            remove(prefix + PROGRESS_LOADED_SUFFIX)
+            remove(prefix + PROGRESS_EVALUATED_SUFFIX)
+            remove(prefix + PROGRESS_ITEM_SUFFIX)
+            remove(prefix + PROGRESS_DIRECTORIES_SUFFIX)
+            remove(prefix + PROGRESS_ENTRIES_SUFFIX)
+            remove(prefix + PROGRESS_FILES_SUFFIX)
+            remove(prefix + PROGRESS_QUEUED_SUFFIX)
+            remove(prefix + PROGRESS_ACTIVE_SUFFIX)
+        }
+    }
+
+    private fun SharedPreferences.optionalInt(key: String): Int? =
+        if (contains(key)) getInt(key, 0) else null
+
+    private fun SharedPreferences.Editor.putOptionalInt(
+        key: String,
+        value: Int?,
+    ) {
+        if (value == null) remove(key) else putInt(key, value)
+    }
+
+    private fun SourceScanAttemptCompletion.checkpointState(): SourceConfigurationCheckpoint.State =
+        when (outcome) {
+            SourceScanAttemptOutcome.SUCCESS,
+            SourceScanAttemptOutcome.AUTHORITATIVE_EMPTY ->
+                if (unresolvedSourceKeys.isEmpty()) {
+                    SourceConfigurationCheckpoint.State.COMMITTED
+                } else {
+                    SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED
+                }
+            SourceScanAttemptOutcome.PARTIAL_SUCCESS,
+            SourceScanAttemptOutcome.TRUNCATED ->
+                SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED
+            SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
+            SourceScanAttemptOutcome.PERMISSION_REQUIRED,
+            SourceScanAttemptOutcome.FAILED_RETRYABLE ->
+                SourceConfigurationCheckpoint.State.FAILED_RETRYABLE
+            SourceScanAttemptOutcome.FAILED_FINAL ->
+                SourceConfigurationCheckpoint.State.FAILED_FINAL
+            SourceScanAttemptOutcome.CANCELLED -> SourceConfigurationCheckpoint.State.CANCELLED
+            SourceScanAttemptOutcome.TIMED_OUT -> SourceConfigurationCheckpoint.State.TIMED_OUT
+            SourceScanAttemptOutcome.SERVICE_STOPPED,
+            SourceScanAttemptOutcome.PROCESS_INTERRUPTED,
+            SourceScanAttemptOutcome.SUPERSEDED ->
+                SourceConfigurationCheckpoint.State.INTERRUPTED
+        }
+
     private inline fun String.splitEscaped(selector: (Char) -> Boolean): List<String> {
         val split = mutableListOf<String>()
         var currentString = ""
@@ -894,6 +1376,8 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     }
 
     private companion object {
+        val SOURCE_CHECKPOINT_LOCK = Any()
+        const val MAX_DIAGNOSTIC_TEXT_LENGTH = 240
         const val KEY_TS18_SYSTEM_SOURCE_FILTER = "auxio_ts18_system_source_filter"
         const val KEY_PENDING_INITIAL_SCAN = "auxio_pending_initial_music_scan"
         const val KEY_SOURCE_CONFIGURATION_GENERATION = "auxio_source_configuration_generation"
@@ -902,6 +1386,30 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         const val KEY_CHECKPOINT_UNRESOLVED = "auxio_source_checkpoint_unresolved"
         const val KEY_CHECKPOINT_LAST_ATTEMPT = "auxio_source_checkpoint_last_attempt"
         const val KEY_CHECKPOINT_LAST_OUTCOME = "auxio_source_checkpoint_last_outcome"
+        const val KEY_CHECKPOINT_REASON = "auxio_source_checkpoint_reason"
+        const val ATTEMPT_PREFIX = "auxio_source_checkpoint_attempt_"
+        const val PREVIOUS_ATTEMPT_PREFIX = "auxio_source_checkpoint_previous_attempt_"
+        const val ATTEMPT_ID_SUFFIX = "id"
+        const val ATTEMPT_GENERATION_SUFFIX = "generation"
+        const val OWNER_PROCESS_SUFFIX = "owner_process"
+        const val OWNER_LIFECYCLE_SUFFIX = "owner_lifecycle"
+        const val CLAIMED_AT_SUFFIX = "claimed_at"
+        const val HEARTBEAT_AT_SUFFIX = "heartbeat_at"
+        const val TERMINAL_AT_SUFFIX = "terminal_at"
+        const val TERMINAL_OUTCOME_SUFFIX = "terminal_outcome"
+        const val ATTEMPT_REASON_SUFFIX = "reason"
+        const val FAILURE_CLASS_SUFFIX = "failure_class"
+        const val FAILURE_MESSAGE_SUFFIX = "failure_message"
+        const val PROGRESS_PHASE_SUFFIX = "progress_phase"
+        const val PROGRESS_EXPLORED_SUFFIX = "progress_explored"
+        const val PROGRESS_LOADED_SUFFIX = "progress_loaded"
+        const val PROGRESS_EVALUATED_SUFFIX = "progress_evaluated"
+        const val PROGRESS_ITEM_SUFFIX = "progress_item"
+        const val PROGRESS_DIRECTORIES_SUFFIX = "progress_directories"
+        const val PROGRESS_ENTRIES_SUFFIX = "progress_entries"
+        const val PROGRESS_FILES_SUFFIX = "progress_files"
+        const val PROGRESS_QUEUED_SUFFIX = "progress_queued"
+        const val PROGRESS_ACTIVE_SUFFIX = "progress_active"
     }
 }
 
