@@ -280,15 +280,12 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
     /**
      * Retains configured identity when every root for a volume is rejected during preparation.
      *
-     * Incremental planning distinguishes "configured but unavailable" from "no configured
-     * sources". Returning this advisory row therefore prevents a transient canonical-path or
-     * access failure from collapsing the configuration into an empty preflight result. Actual
-     * enumeration remains authoritative and still requires an allowed app-facing root.
+     * Incremental planning distinguishes "configured but unavailable" from "no configured sources".
+     * Returning this advisory row therefore prevents a transient canonical-path or access failure
+     * from collapsing the configuration into an empty preflight result. Actual enumeration remains
+     * authoritative and still requires an allowed app-facing root.
      */
-    private fun unavailableSnapshot(
-        sourceKey: String,
-        location: Location.Opened,
-    ): SourceSnapshot {
+    private fun unavailableSnapshot(sourceKey: String, location: Location.Opened): SourceSnapshot {
         val canonicalKey = SourceIdentity.canonicalKeyForLocation(location)
         val normalizedPath = location.uri.path?.let(CanonicalSourcePolicy::normalizePath)
         return SourceSnapshot(
