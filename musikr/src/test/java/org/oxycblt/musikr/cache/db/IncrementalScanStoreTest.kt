@@ -274,8 +274,7 @@ class IncrementalScanStoreTest {
         assertFalse(db.incrementalDao().sourceLedger(source.sourceKey)?.available ?: true)
         assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
 
-        val successfulPlan =
-            store.planScan(listOf(readded), false, MetadataProfile.LEAN, 3L)
+        val successfulPlan = store.planScan(listOf(readded), false, MetadataProfile.LEAN, 3L)
         store.beginScan(successfulPlan)
         store.stage(cachedFile("alpha.mp3", 2L))
         store.commitScan()

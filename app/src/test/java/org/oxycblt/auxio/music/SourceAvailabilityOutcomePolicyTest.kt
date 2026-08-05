@@ -28,15 +28,11 @@ class SourceAvailabilityOutcomePolicyTest {
         val outcome =
             SourceScanOutcome.classify(
                 configuredSourceKeys = setOf("usb0"),
-                failedSources =
-                    mapOf("usb0" to "TEMPORARILY_UNAVAILABLE|preflight unavailable"),
+                failedSources = mapOf("usb0" to "TEMPORARILY_UNAVAILABLE|preflight unavailable"),
                 songCount = 1,
             )
 
-        assertEquals(
-            SourceScanOutcome.Partial(emptySet(), setOf("usb0")),
-            outcome,
-        )
+        assertEquals(SourceScanOutcome.Partial(emptySet(), setOf("usb0")), outcome)
     }
 
     @Test
@@ -44,15 +40,11 @@ class SourceAvailabilityOutcomePolicyTest {
         val outcome =
             SourceScanOutcome.classify(
                 configuredSourceKeys = setOf("usb0", "usb1"),
-                failedSources =
-                    mapOf("usb0" to "TEMPORARILY_UNAVAILABLE|preflight unavailable"),
+                failedSources = mapOf("usb0" to "TEMPORARILY_UNAVAILABLE|preflight unavailable"),
                 songCount = 1,
             )
 
-        assertEquals(
-            SourceScanOutcome.Partial(setOf("usb1"), setOf("usb0")),
-            outcome,
-        )
+        assertEquals(SourceScanOutcome.Partial(setOf("usb1"), setOf("usb0")), outcome)
     }
 
     @Test
@@ -60,8 +52,7 @@ class SourceAvailabilityOutcomePolicyTest {
         val outcome =
             SourceScanOutcome.classify(
                 configuredSourceKeys = setOf("usb0"),
-                failedSources =
-                    mapOf("usb0" to "TEMPORARILY_UNAVAILABLE|preflight unavailable"),
+                failedSources = mapOf("usb0" to "TEMPORARILY_UNAVAILABLE|preflight unavailable"),
                 songCount = 0,
             )
 
