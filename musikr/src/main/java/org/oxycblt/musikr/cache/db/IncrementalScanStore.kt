@@ -74,7 +74,9 @@ internal class IncrementalScanStore(
         db.withTransaction {
             for (ledger in dao.sourceLedgers()) {
                 if (
-                    ledger.sourceKey !in currentSourceKeys && ledger.lastCommittedGeneration != null
+                    ledger.available &&
+                        ledger.sourceKey !in currentSourceKeys &&
+                        ledger.lastCommittedGeneration != null
                 ) {
                     // Omission is a candidate removal only. Keep the old generation visible until
                     // the replacement source configuration commits successfully.
@@ -108,8 +110,16 @@ internal class IncrementalScanStore(
                         previous
                             .observed(snapshot)
                             .copy(
-                                // A transient unmount must not hide the last committed generation.
-                                available = snapshot.available || previous.available
+                                // Planning may observe physical availability, but only a successful
+                                // source-generation commit may change committed visibility. This
+                                // keeps an active source readable through a transient unmount and
+                                // keeps a user-removed source hidden until a re-add succeeds.
+                                available =
+                                    if (previous.lastCommittedGeneration != null) {
+                                        previous.available
+                                    } else {
+                                        snapshot.available
+                                    }
                             )
                     }
                 dao.upsertSourceLedger(observed)

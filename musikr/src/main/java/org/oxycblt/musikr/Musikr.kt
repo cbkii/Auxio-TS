@@ -357,7 +357,7 @@ private class MusikrImpl(
             LibraryResultImpl(
                 config = config,
                 library = resultLibrary,
-                failedSources = commit?.failedSources.orEmpty(),
+                failedSources = IncrementalResultFailurePolicy.effectiveFailures(commit),
                 enrichmentOnly = commit?.enrichmentOnly == true,
                 enrichmentComplete = commit?.enrichmentComplete ?: true,
             )

@@ -243,6 +243,45 @@ class IncrementalScanStoreTest {
         assertEquals(setOf(source.sourceKey), commit.removedSources)
         assertEquals(0, db.incrementalLibraryDao().songCount())
         assertEquals(1, db.readDao().selectAllSongs().size)
+
+        val repeated = store.planScan(emptyList(), true, MetadataProfile.LEAN, 2L)
+        assertFalse(repeated.hasWork)
+        assertTrue(repeated.removedSourceKeys.isEmpty())
+    }
+
+    @Test
+    fun `failed re-add keeps a committed removal hidden until success`() = runBlocking {
+        val source = snapshot("v1")
+        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        val removal = store.planScan(emptyList(), true, MetadataProfile.LEAN, 2L)
+        store.beginScan(removal)
+        store.commitScan()
+        assertFalse(db.incrementalDao().sourceLedger(source.sourceKey)?.available ?: true)
+        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
+
+        val readded = source.copy(fingerprint = "v2")
+        val failedPlan = store.planScan(listOf(readded), false, MetadataProfile.LEAN, 3L)
+        assertFalse(db.incrementalDao().sourceLedger(source.sourceKey)?.available ?: true)
+        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
+        store.beginScan(failedPlan)
+        store.markSourceFailed(source.sourceKey, "re-add failed")
+        store.commitScan()
+
+        assertFalse(db.incrementalDao().sourceLedger(source.sourceKey)?.available ?: true)
+        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
+
+        val successfulPlan =
+            store.planScan(listOf(readded), false, MetadataProfile.LEAN, 3L)
+        store.beginScan(successfulPlan)
+        store.stage(cachedFile("alpha.mp3", 2L))
+        store.commitScan()
+
+        assertTrue(db.incrementalDao().sourceLedger(source.sourceKey)?.available == true)
+        assertEquals(1, store.compatibilityCachedFiles().toList().size)
     }
 
     @Test
