@@ -25,6 +25,7 @@ import java.io.File as JavaFile
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -97,6 +98,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
 
     override fun track(): Flow<FSUpdate> = emptyFlow()
 
+
     private suspend fun exploreBounded(files: Channel<File>) = coroutineScope {
         val queue = Channel<DirectoryTask>(Channel.UNLIMITED)
         val activeTasks = AtomicInteger(0)
@@ -104,6 +106,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         val discoveredFiles = AtomicInteger(0)
         val visitedRoots = ConcurrentHashMap.newKeySet<String>()
         val visitedDirectories = ConcurrentHashMap.newKeySet<String>()
+        val seedingComplete = AtomicBoolean(false)
 
         val workers =
             List(DIRECTORY_WORKER_COUNT) {
@@ -120,7 +123,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                                 visitedDirectories,
                             )
                         } finally {
-                            if (activeTasks.decrementAndGet() == 0) {
+                            if (activeTasks.decrementAndGet() == 0 && seedingComplete.get()) {
                                 queue.close()
                             }
                         }
@@ -129,7 +132,6 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
             }
 
         try {
-            var enqueuedAtLeastOne = false
             for (location in roots) {
                 val sourceKey = SourceIdentity.forLocation(location)
                 if (location.uri.scheme != "file") {
@@ -173,22 +175,21 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                         configuredRootTask = true,
                     )
 
-                if (
-                    enqueueDirectory(queue, activeTasks, discoveredDirectories, task) !=
-                        EnqueueResult.LimitExceeded
-                ) {
-                    enqueuedAtLeastOne = true
-                }
-            }
-            if (!enqueuedAtLeastOne) {
-                queue.close()
+                enqueueDirectory(queue, activeTasks, discoveredDirectories, task)
             }
         } catch (e: Exception) {
             queue.close(e)
             throw e
+        } finally {
+            seedingComplete.set(true)
+            if (activeTasks.get() == 0) {
+                queue.close()
+            }
         }
         workers.awaitAll()
     }
+
+
 
     private suspend fun processDirectory(
         task: DirectoryTask,
@@ -280,7 +281,11 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                 continue
             }
             val item = entry.javaFile
-            val canonicalChild = canonicalFileOrNull(item) ?: continue
+            val canonicalChild = canonicalFileOrNull(item)
+            if (canonicalChild == null) {
+                Log.w(TAG, "DirectFS skipped unresolvable directory ${item.path}")
+                continue
+            }
             if (!isWithinCanonicalRoot(canonicalChild, task.canonicalRoot)) {
                 Log.w(TAG, "DirectFS skipped an escaped directory at ${item.path}")
                 continue
@@ -303,6 +308,7 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
             enqueueDirectory(queue, activeTasks, discoveredDirectories, childTask)
         }
     }
+
 
     private fun enqueueDirectory(
         queue: Channel<DirectoryTask>,
