@@ -941,11 +941,14 @@ class DirectFsTraversalTest {
         val snapshots = mutableListOf<DirectFsWorkProgress>()
         var fakeNow = 0L
 
-        // Advance the clock only on each call to count controllable intervals.
+        // Fixed clock: all intermediate callbacks occur at the same timestamp, so every
+        // intermediate callback after the first is suppressed. Only the first meaningful
+        // snapshot (when the rate-limit window opens) and the forced terminal cleanup snapshot
+        // are delivered, giving at most 2 snapshots total.
         val clock: () -> Long = { fakeNow }
 
-        // Large interval: every intermediate callback is rate-limited by the fixed fake clock,
-        // so only the forced terminal cleanup snapshot is guaranteed.
+        // Large interval: intermediate callbacks are rate-limited by the fixed fake clock;
+        // only the first meaningful snapshot and the forced terminal cleanup are delivered.
         traverse(
             listOf(explicit(music)),
             options()
@@ -956,11 +959,19 @@ class DirectFsTraversalTest {
                 ),
         )
 
-        // The forced terminal cleanup snapshot must always be delivered.
+        // With a fixed clock and a MAX_VALUE interval, at most two snapshots arrive:
+        // the first meaningful progress snapshot and the forced terminal cleanup.
         assertTrue("at least the forced final snapshot must be delivered", snapshots.isNotEmpty())
+        assertTrue(
+            "fixed clock must bound callbacks to at most 2 (first + terminal), got ${snapshots.size}",
+            snapshots.size <= 2,
+        )
         val last = snapshots.last()
         assertEquals("final activeEnumerators must be zero", 0, last.activeEnumerators)
         assertEquals("final queuedDirectories must be zero", 0, last.queuedDirectories)
+        // The forced terminal snapshot must reflect final file and directory totals.
+        assertTrue("final snapshot must report files emitted", last.filesEmitted >= 1)
+        assertTrue("final snapshot must report directories visited", last.directoriesVisited >= 1)
     }
 
     @Test(timeout = TIMEOUT_MS)
@@ -993,7 +1004,8 @@ class DirectFsTraversalTest {
         assertEquals(0, last.queuedDirectories)
     }
 
-
+    @Test(timeout = TIMEOUT_MS)
+    fun `protected canonical children are never descended into`() = runBlocking {
         val music = dir("Music")
         track(music, "a.mp3")
         val secret = dir("Music/Secret")

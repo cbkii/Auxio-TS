@@ -23,8 +23,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Proves the `shouldRecord` rule applied in [MusicRepository.prepareIndexingInterruption] and the
- * [CancellationException] catch path:
+ * Proves the `shouldRecordInterruptionOutcome` rule in [IndexRequestPolicy], which is applied in
+ * [MusicRepository.prepareIndexingInterruption] and the [CancellationException] catch path:
  *
  * - authoritative request + durable completion accepted  => record
  * - authoritative request + durable completion rejected  => do NOT record
@@ -32,9 +32,8 @@ import org.junit.Test
  */
 class InterruptionOutcomeRecordingPolicyTest {
 
-    /** Mimics the `shouldRecord` expression used in both interrupted/cancelled paths. */
     private fun shouldRecord(request: IndexRequest, durableCompletionAccepted: Boolean): Boolean =
-        IndexRequestPolicy.checkpointAuthority(request) == null || durableCompletionAccepted
+        IndexRequestPolicy.shouldRecordInterruptionOutcome(request, durableCompletionAccepted)
 
     // -------------------------------------------------------------------------
     // Non-authoritative requests (no checkpoint lease)

@@ -74,6 +74,19 @@ internal object IndexRequestPolicy {
     fun checkpointGeneration(request: IndexRequest): Long? =
         checkpointAuthority(request)?.generation
 
+    /**
+     * Whether an interruption or cancellation outcome should be recorded for [request].
+     *
+     * Non-authoritative requests (no checkpoint lease) always record so that non-source refresh
+     * interruptions are visible. Authoritative requests record only when the durable checkpoint
+     * completion was accepted; a rejected completion means the checkpoint was already terminal, and
+     * a duplicate late interruption must not overwrite that outcome.
+     */
+    fun shouldRecordInterruptionOutcome(
+        request: IndexRequest,
+        durableCompletionAccepted: Boolean,
+    ): Boolean = checkpointAuthority(request) == null || durableCompletionAccepted
+
     /** Builds a user retry without bypassing an active retryable source checkpoint. */
     fun sourceRetryRequest(
         checkpoint: SourceConfigurationCheckpoint?,
