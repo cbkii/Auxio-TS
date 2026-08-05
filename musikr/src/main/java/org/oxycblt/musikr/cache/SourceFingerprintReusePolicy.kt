@@ -97,6 +97,10 @@ object SourceFingerprintReusePolicy {
     /**
      * Returns the reason this source must be scanned, or `null` when its committed generation may
      * be reused as-is.
+     *
+     * Source correctness gates deliberately precede a metadata-profile upgrade. A changed or
+     * invalidated source remains an authoritative source scan even when the same request also asks
+     * for richer metadata; the profile request must never conceal why reuse was unsafe.
      */
     fun scanReason(
         strength: SourceFingerprintStrength,
@@ -115,22 +119,26 @@ object SourceFingerprintReusePolicy {
         if (previous.configurationRevision != configurationRevision) {
             return SourceScanReason.CONFIGURATION_CHANGED
         }
-        if (profileUpgrade) return SourceScanReason.METADATA_PROFILE_UPGRADE
         if (previous.invalidated) return SourceScanReason.INVALIDATED
         if (previous.fingerprint != fingerprint || previous.fingerprintStrength != strength.name) {
             return SourceScanReason.FINGERPRINT_CHANGED
         }
-        return when (confidence(strength, fingerprint)) {
-            SourceFingerprintConfidence.UNAVAILABLE -> SourceScanReason.FINGERPRINT_UNAVAILABLE
-            SourceFingerprintConfidence.STRONG -> null
+
+        when (confidence(strength, fingerprint)) {
+            SourceFingerprintConfidence.UNAVAILABLE ->
+                return SourceScanReason.FINGERPRINT_UNAVAILABLE
             SourceFingerprintConfidence.ADVISORY -> {
                 val lastSuccess = previous.lastSuccessfulScanMs
-                if (lastSuccess == null || nowMs - lastSuccess >= ADVISORY_REFRESH_MS) {
-                    SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED
-                } else {
-                    null
+                val ageMs = lastSuccess?.let { nowMs - it }
+                // Persisted timestamps use wall clock. A clock rollback/future timestamp is not
+                // evidence that the advisory observation remains fresh, so fail safe to a scan.
+                if (ageMs == null || ageMs < 0L || ageMs >= ADVISORY_REFRESH_MS) {
+                    return SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED
                 }
             }
+            SourceFingerprintConfidence.STRONG -> Unit
         }
+
+        return if (profileUpgrade) SourceScanReason.METADATA_PROFILE_UPGRADE else null
     }
 }
