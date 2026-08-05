@@ -21,6 +21,7 @@ package org.oxycblt.auxio.music.locations
 import android.net.Uri
 import androidx.core.net.toUri
 import java.io.File
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import timber.log.Timber as L
 
 /** Mode-aware persisted Music Source normalisation used before runtime backend creation. */
@@ -32,13 +33,18 @@ internal object MusicSourcePathNormalizer {
         val repaired = repairDuplicatedStoragePath(uri)
         val candidate = repaired ?: uri
         if (!fileOnly) {
-            val pathUri =
-                if (candidate.scheme.isNullOrEmpty() && candidate.path?.startsWith("/") == true) {
-                    Uri.fromFile(File(requireNotNull(candidate.path)))
-                } else {
-                    candidate
+            val canonical =
+                when {
+                    candidate.scheme.isNullOrEmpty() && candidate.path?.startsWith("/") == true ->
+                        CanonicalSourcePolicy.canonicalUriString(
+                            Uri.fromFile(File(requireNotNull(candidate.path))).toString()
+                        )
+                    else -> CanonicalSourcePolicy.canonicalUriString(candidate.toString())
                 }
-            return pathUri.toString()
+            if (canonical == null) {
+                L.w("Skipping malformed music source URI: $candidate")
+            }
+            return canonical
         }
 
         val fileUri =
@@ -49,121 +55,54 @@ internal object MusicSourcePathNormalizer {
                 "content" -> externalStorageTreeToFileUri(candidate)
                 else -> null
             }?.let(::repairAndCanonicalizeFileUri)
-        val path = fileUri?.path ?: return null
-        if (!isSafeDirectPath(path)) {
-            L.w("Skipping unsafe DirectFS source: $candidate")
-            return null
-        }
+        if (fileUri?.path == null) return null
         if (fileUri != candidate) {
             L.i("Normalised DirectFS source $candidate -> $fileUri")
         }
         return fileUri.toString()
     }
 
+    /**
+     * Canonicalises a file URI through the shared policy.
+     *
+     * Canonicalising an app-facing vold path may resolve it back onto `/mnt/media_rw`, so the
+     * result is normalised again: the ordinary app UID can only enumerate and play the app-facing
+     * namespace.
+     */
     private fun repairAndCanonicalizeFileUri(uri: Uri): Uri? {
-        val repairedUri = repairDuplicatedStoragePath(uri) ?: uri
-        val rawPath = repairedUri.path ?: return null
-        if (containsDotSegment(rawPath)) {
-            L.w("Skipping DirectFS source with path traversal segment: $uri")
-            return null
-        }
-        val appFacingPath = normaliseSharedStorageAlias(rawPath)
+        val rawPath = uri.path ?: return null
+        val normalized =
+            CanonicalSourcePolicy.normalizePath(rawPath)
+                ?: run {
+                    L.w("Skipping unusable DirectFS source path: $uri")
+                    return null
+                }
         val canonical =
             try {
-                File(appFacingPath).canonicalFile
+                File(normalized).canonicalFile
             } catch (_: Exception) {
-                File(appFacingPath).absoluteFile
+                File(normalized).absoluteFile
             }
-        // Canonicalising an app-facing vold path may resolve it back to /mnt/media_rw. Persist the
-        // app-facing namespace again so the normal app UID can enumerate and play the source.
-        return Uri.fromFile(File(normaliseSharedStorageAlias(canonical.absolutePath)))
+        val appFacing = CanonicalSourcePolicy.normalizePath(canonical.absolutePath) ?: return null
+        return Uri.fromFile(File(appFacing))
     }
 
-    internal fun normaliseSharedStorageAlias(path: String): String {
-        val clean = path.trimEnd('/').ifEmpty { "/" }
-        if (clean == "/sdcard") return "/storage/emulated/0"
-        if (clean.startsWith("/sdcard/")) {
-            return "/storage/emulated/0/" + clean.removePrefix("/sdcard/")
-        }
-        val rawVolume =
-            Regex(
-                    "^/mnt/media_rw/(usbdisk\\d+|[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})(/.*)?$",
-                    RegexOption.IGNORE_CASE,
-                )
-                .matchEntire(clean)
-        return if (rawVolume != null) {
-            "/storage/${rawVolume.groupValues[1]}${rawVolume.groupValues[2]}"
-        } else {
-            clean
-        }
-    }
-
-    private fun containsDotSegment(path: String): Boolean {
-        val clean = path.replace('\\', '/')
-        return clean.contains("/../") ||
-            clean.endsWith("/..") ||
-            clean.contains("/./") ||
-            clean.endsWith("/.")
-    }
+    /** Legacy alias-collapse entry point, retained for callers that only hold a raw path. */
+    internal fun normaliseSharedStorageAlias(path: String): String =
+        CanonicalSourcePolicy.normalizePath(path) ?: path.trimEnd('/').ifEmpty { "/" }
 
     fun repairDuplicatedStoragePath(uri: Uri): Uri? {
         val path = uri.path ?: return null
-        val repaired = repairDuplicatedStoragePath(path) ?: return null
+        val repaired = CanonicalSourcePolicy.normalizePath(path) ?: return null
+        if (repaired == path) return null
         val repairedUri =
             if (uri.scheme == "file") Uri.fromFile(File(repaired)) else repaired.toUri()
-        L.i("Repaired duplicated music source path $uri -> $repairedUri")
+        L.i("Repaired music source path $uri -> $repairedUri")
         return repairedUri
     }
 
-    private fun repairDuplicatedStoragePath(path: String): String? {
-        val dynamicRoots =
-            listOf(
-                    Regex("^/storage/usbdisk\\d+", RegexOption.IGNORE_CASE),
-                    Regex("^/mnt/media_rw/usbdisk\\d+", RegexOption.IGNORE_CASE),
-                    Regex("^/storage/auxio-root/usbdisk\\d+", RegexOption.IGNORE_CASE),
-                    Regex("^/storage/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
-                    Regex("^/mnt/media_rw/[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"),
-                )
-                .mapNotNull { it.find(path)?.value }
-        val prefixes = listOf("/storage/emulated/0", "/sdcard") + dynamicRoots
-        for (prefix in prefixes.distinct()) {
-            val duplicated = prefix + prefix
-            if (path == duplicated || path.startsWith(duplicated + "/")) {
-                return prefix + path.removePrefix(duplicated)
-            }
-        }
-        return null
-    }
-
     private fun externalStorageTreeToFileUri(uri: Uri): Uri? {
-        if (uri.authority != "com.android.externalstorage.documents") return null
-        val encodedTree =
-            uri.pathSegments.zipWithNext().firstOrNull { it.first == "tree" }?.second ?: return null
-        val treeId = Uri.decode(encodedTree)
-        val parts = treeId.split(':', limit = 2)
-        val volume = parts.firstOrNull() ?: return null
-        val relative = parts.getOrNull(1).orEmpty().trim('/')
-        val root = if (volume == "primary") "/storage/emulated/0" else "/storage/$volume"
-        return Uri.fromFile(File(if (relative.isEmpty()) root else "$root/$relative"))
-    }
-
-    private fun isSafeDirectPath(path: String): Boolean {
-        val clean = path.replace('\\', '/').trimEnd('/')
-        if (clean.isBlank()) return false
-        if (containsDotSegment(clean)) return false
-        val protected =
-            listOf("/", "/system", "/vendor", "/data", "/proc", "/sys", "/dev", "/acct", "/config")
-        if (protected.any { clean == it }) return false
-        if (
-            clean.startsWith("/data/") ||
-                clean.startsWith("/system/") ||
-                clean.startsWith("/vendor/")
-        ) {
-            return false
-        }
-        return clean.startsWith("/storage/") ||
-            clean.startsWith("/mnt/media_rw/") ||
-            clean.startsWith("/sdcard/") ||
-            clean == "/sdcard"
+        val path = CanonicalSourcePolicy.externalStorageTreePath(uri) ?: return null
+        return Uri.fromFile(File(path))
     }
 }

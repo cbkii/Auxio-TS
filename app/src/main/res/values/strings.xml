@@ -494,6 +494,8 @@
     <string name="err_no_app">No app found that can handle this task</string>
     <!-- No folders in the "Music Folders" setting -->
     <string name="err_bad_location">This folder is not supported</string>
+    <string name="err_duplicate_location">This folder is already a music source</string>
+    <string name="lng_overlapping_location">This folder overlaps another music source. It will only be scanned once.</string>
     <string name="lbl_no_folders">No folders</string>
 
     <!-- Description Namespace | Accessibility Strings -->

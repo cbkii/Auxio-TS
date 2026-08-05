@@ -90,6 +90,25 @@ fun <T> CoroutineScope.tryAsyncWith(
         }
     }
 
+/**
+ * Starts [block] as the sole owner of [channel] without waiting for it to finish.
+ *
+ * A file-system adapter must hand its producer back to the pipeline before the first item is
+ * consumed, otherwise a bounded channel deadlocks its own consumer: the producer suspends on
+ * back-pressure while the consumer has not been constructed yet. Wrapping the producer in
+ * `coroutineScope { ... }` has exactly that effect, because `coroutineScope` only returns once its
+ * children complete.
+ *
+ * The producer is still a child of the calling coroutine, so structured cancellation, failure
+ * propagation and the [tryAsyncWith] ownership contract are all preserved.
+ */
+suspend fun <T> startOwning(
+    channel: Channel<T>,
+    context: CoroutineContext,
+    block: suspend (Channel<T>) -> Unit,
+): Deferred<Result<Unit>> =
+    CoroutineScope(currentCoroutineContext()).tryAsyncWith(channel, context, block)
+
 fun <T, R> CoroutineScope.map(
     input: Channel<T>,
     output: Channel<R>,

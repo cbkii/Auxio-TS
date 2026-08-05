@@ -26,6 +26,7 @@ import org.oxycblt.auxio.databinding.ItemNoLocationsBinding
 import org.oxycblt.auxio.list.recycler.DialogRecyclerView
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.inflater
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.Location
 import timber.log.Timber as L
 
@@ -58,8 +59,26 @@ class LocationAdapter<T : Location>(private val listener: Listener) :
         }
     }
 
-    fun add(location: T) {
-        if (_locations.contains(location)) return
+    /** Whether [location] is already present, compared by canonical identity. */
+    fun contains(location: T): Boolean {
+        val key = MusicSourceCanonicalizer.canonicalKeyOf(location)
+        return _locations.any { MusicSourceCanonicalizer.canonicalKeyOf(it) == key }
+    }
+
+    /**
+     * Adds [location] unless an equivalent source is already listed.
+     *
+     * Object equality only compares raw URIs, so it treats `/sdcard/Music`,
+     * `/storage/emulated/0/Music/` and a repeated entry of the same folder as distinct sources.
+     * Canonical identity is the only comparison that matches what will actually be scanned.
+     *
+     * @return whether the location was added.
+     */
+    fun add(location: T): Boolean {
+        if (contains(location)) {
+            L.d("Ignoring duplicate location $location")
+            return false
+        }
         L.d("Adding $location")
         val wasEmpty = _locations.isEmpty()
         _locations.add(location)
@@ -68,17 +87,29 @@ class LocationAdapter<T : Location>(private val listener: Listener) :
         } else {
             notifyItemInserted(_locations.lastIndex)
         }
+        return true
     }
 
+    /** Adds every location that is not already represented, preserving selection order. */
     fun addAll(locations: List<T>) {
-        L.d("Adding ${locations.size} locations")
+        val accepted =
+            CanonicalSourcePolicy.collapseDuplicates(
+                    locations,
+                    MusicSourceCanonicalizer::canonicalKeyOf,
+                )
+                .filterNot(::contains)
+        if (accepted.size != locations.size) {
+            L.d("Ignored ${locations.size - accepted.size} duplicate location(s)")
+        }
+        if (accepted.isEmpty()) return
+        L.d("Adding ${accepted.size} locations")
         val wasEmpty = _locations.isEmpty()
         val oldSize = _locations.size
-        _locations.addAll(locations)
-        if (wasEmpty && locations.isNotEmpty()) {
+        _locations.addAll(accepted)
+        if (wasEmpty) {
             notifyItemChanged(0)
-        } else if (locations.isNotEmpty()) {
-            notifyItemRangeInserted(oldSize, locations.size)
+        } else {
+            notifyItemRangeInserted(oldSize, accepted.size)
         }
     }
 

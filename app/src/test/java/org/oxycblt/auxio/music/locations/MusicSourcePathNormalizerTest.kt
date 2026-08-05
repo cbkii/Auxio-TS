@@ -133,6 +133,33 @@ class MusicSourcePathNormalizerTest {
     }
 
     @Test
+    fun safCanonicalisesEncodedDecodedAndEquivalentDocumentTreeForms() {
+        val expected =
+            "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FAlbums"
+        listOf(
+                "content://com.android.externalstorage.documents/tree/PRIMARY:Music/Albums/",
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FAlbums",
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic%2FAlbums/" +
+                    "document/primary%3AMusic%2FAlbums",
+            )
+            .forEach {
+                assertEquals(
+                    expected,
+                    MusicSourcePathNormalizer.normalizePersistedLocation(it, false),
+                )
+            }
+    }
+
+    @Test
+    fun safRejectsMalformedExternalStorageTreeIds() {
+        listOf(
+                "content://com.android.externalstorage.documents/tree/primary",
+                "content://com.android.externalstorage.documents/tree/primary%3AMusic%2F..%2Fdata",
+            )
+            .forEach { assertNull(MusicSourcePathNormalizer.normalizePersistedLocation(it, false)) }
+    }
+
+    @Test
     fun directFsRejectsUnknownThirdPartyContentUri() {
         assertNull(
             MusicSourcePathNormalizer.normalizePersistedLocation(

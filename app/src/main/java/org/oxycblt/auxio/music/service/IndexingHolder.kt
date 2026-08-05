@@ -528,7 +528,7 @@ private constructor(
                 LocationMode.MEDIA_STORE ->
                     MediaStore.from(workerContext, musicSettings.mediaStoreQuery)
                 LocationMode.SAF -> SAF.from(workerContext, musicSettings.safQuery)
-                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery.source)
+                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery)
             }
         trackingJob =
             indexScope.launch {

@@ -36,8 +36,14 @@ import org.oxycblt.musikr.fs.SourceSnapshot
  */
 internal class ConfiguredSourceAwareFS(
     private val delegate: FS,
-    private val specs: List<ConfiguredSourceSpec>,
+    configured: List<ConfiguredSourceSpec>,
 ) : SourceAwareFS {
+    /**
+     * Exact canonical duplicates never describe two sources, so they are collapsed before any
+     * snapshot, count or failure is derived from them.
+     */
+    private val specs: List<ConfiguredSourceSpec> = configured.distinctBy { it.canonicalKey }
+
     override suspend fun sourceSnapshots(): List<SourceSnapshot> {
         val actual =
             (delegate as? SourceAwareFS)?.sourceSnapshots().orEmpty().associateByTo(linkedMapOf()) {
@@ -57,6 +63,9 @@ internal class ConfiguredSourceAwareFS(
                         available = false,
                         fingerprint = null,
                         fingerprintStrength = SourceFingerprintStrength.NONE,
+                        canonicalKey = first.canonicalKey,
+                        sourceOrigin = first.origin,
+                        traversalScope = first.traversalScope,
                     )
             }
         }
@@ -66,7 +75,7 @@ internal class ConfiguredSourceAwareFS(
     override fun selectSources(sourceKeys: Set<String>): FS =
         ConfiguredSourceAwareFS(
             delegate = (delegate as? SourceAwareFS)?.selectSources(sourceKeys) ?: delegate,
-            specs = specs.filter { it.sourceKey in sourceKeys },
+            configured = specs.filter { it.sourceKey in sourceKeys },
         )
 
     override fun drainSourceFailures(): Map<String, String> {

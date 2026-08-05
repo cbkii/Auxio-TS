@@ -58,6 +58,7 @@ class RemovableStorageEventPolicyTest {
         ConfiguredSourceSpec(
             normalizedUri = Uri.parse("file://$path"),
             sourceKey = key,
+            canonicalKey = "path:$path",
             mode = mode,
             displayPath = path,
             accessState = ConfiguredSourceSpec.AccessState.AVAILABLE,

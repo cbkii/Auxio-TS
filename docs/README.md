@@ -28,6 +28,7 @@ Auxio-TS targets TS18, Topway and DoFun Variety head units. Choose the section t
 - [Release workflow](RELEASE_WORKFLOW.md)
 - [Fast interaction startup](architecture/FAST_INTERACTION_STARTUP.md)
 - [Incremental library pipeline](architecture/INCREMENTAL_LIBRARY_PIPELINE.md)
+- [Canonical music sources and DirectFS traversal](architecture/CANONICAL_SOURCES_AND_DIRECTFS.md)
 - [Startup profiles and benchmarks](architecture/STARTUP_PROFILES_BENCHMARKS.md)
 - [Exact TS18 startup validation](validation/EXACT_TS18_STARTUP_VALIDATION.md)
 

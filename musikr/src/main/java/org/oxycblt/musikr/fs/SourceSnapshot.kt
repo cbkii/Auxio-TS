@@ -18,6 +18,8 @@
 
 package org.oxycblt.musikr.fs
 
+import android.net.Uri
+
 /** Whether a source fingerprint can safely suppress a scan by itself. */
 enum class SourceFingerprintStrength {
     /** The provider exposes a generation-like token covering the complete configured source. */
@@ -43,6 +45,10 @@ data class SourceSnapshot(
     val fingerprint: String?,
     val fingerprintStrength: SourceFingerprintStrength,
     val observedAtMs: Long = System.currentTimeMillis(),
+    /** Exact configured-root identity when one snapshot represents one canonical descriptor. */
+    val canonicalKey: String? = null,
+    val sourceOrigin: CanonicalSourcePolicy.Origin? = null,
+    val traversalScope: CanonicalSourcePolicy.Scope? = null,
 )
 
 /** File systems able to plan and restrict work per source before recursive exploration. */
@@ -61,6 +67,24 @@ object SourceIdentity {
     fun forFile(file: File): String = forVolume(file.path.volume)
 
     fun forLocation(location: Location): String = forVolume(location.path.volume)
+
+    /**
+     * The canonical identity of one configured root.
+     *
+     * [forLocation] is volume-scoped because the incremental cache tracks availability per volume,
+     * so several distinct folders on one volume deliberately share a scan key. Deduplication needs
+     * the narrower identity of the exact configured root, which is what this returns.
+     */
+    fun canonicalKeyForLocation(location: Location): String = canonicalKeyForUri(location.uri)
+
+    /** The canonical identity of one configured source URI. */
+    fun canonicalKeyForUri(uri: Uri): String =
+        if (uri.scheme == "file") {
+            uri.path?.let(CanonicalSourcePolicy::identityForPath)
+                ?: CanonicalSourcePolicy.identityForUriString(uri.toString())
+        } else {
+            CanonicalSourcePolicy.identityForUriString(uri.toString())
+        }
 
     fun forVolume(volume: Volume): String =
         when (volume) {

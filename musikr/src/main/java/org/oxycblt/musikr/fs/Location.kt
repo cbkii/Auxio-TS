@@ -67,7 +67,9 @@ sealed class Location(val uri: Uri, val path: Path) {
         private fun isUnopened(context: Context, uri: Uri) =
             uri.scheme != "file" &&
                 context.contentResolverSafe.persistedUriPermissions.none {
-                    it.uri == uri && it.isReadPermission
+                    it.isReadPermission &&
+                        SourceIdentity.canonicalKeyForUri(it.uri) ==
+                            SourceIdentity.canonicalKeyForUri(uri)
                 }
 
         companion object {

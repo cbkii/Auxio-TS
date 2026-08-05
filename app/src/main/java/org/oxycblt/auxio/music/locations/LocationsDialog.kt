@@ -20,6 +20,7 @@ package org.oxycblt.auxio.music.locations
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -55,6 +56,7 @@ import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.ui.ViewBindingMaterialDialogFragment
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.showToast
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.Volume
 import org.oxycblt.musikr.fs.mediastore.MediaStore
@@ -68,6 +70,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         object : LocationAdapter.Listener {
             override fun onRemoveLocation(location: Location) {
                 includeLocationAdapter.remove(location as Location.Opened)
+                includeLocationOrigins.remove(MusicSourceCanonicalizer.canonicalKeyOf(location))
                 updateSaveButtonState()
             }
         }
@@ -90,6 +93,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
     private val includeLocationAdapter: LocationAdapter<Location.Opened> =
         LocationAdapter(includeLocationListener)
+    private val includeLocationOrigins = linkedMapOf<String, CanonicalSourcePolicy.Origin>()
     private val excludeLocationAdapter: LocationAdapter<Location.Unopened> =
         LocationAdapter(excludeLocationListener)
     private val filterLocationAdapter: LocationAdapter<Location.Unopened> =
@@ -109,6 +113,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     private var pendingRequiresPlayableSource = true
     private var candidateDiscoveryGeneration = 0L
     private var permissionGrantedInSession = false
+    private var pendingSourceOrigin = CanonicalSourcePolicy.Origin.EXPLICIT
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         DialogMusicLocationsBinding.inflate(inflater)
@@ -178,8 +183,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         binding.locationsFilterAdd.contentDescription = getString(R.string.desc_add_folder)
         binding.locationsExtrasDropdown.setText(R.string.set_extra_settings)
         binding.locationsAutoDetect.setOnClickListener {
+            pendingSourceOrigin = CanonicalSourcePolicy.Origin.AUTOMATIC_SUGGESTION
             pendingRequiresPlayableSource = true
-            pendingLocationCallback = { location -> addIncludeLocation(location) }
+            pendingLocationCallback = { location ->
+                addIncludeLocation(location, pendingSourceOrigin)
+            }
             showCandidatePathPicker(disableThirdParty = false)
         }
 
@@ -207,8 +215,11 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
 
         // Set up add folder buttons
         binding.locationsIncludeAdd.setOnClickListener {
+            pendingSourceOrigin = CanonicalSourcePolicy.Origin.EXPLICIT
             pendingRequiresPlayableSource = true
-            pendingLocationCallback = { location -> addIncludeLocation(location) }
+            pendingLocationCallback = { location ->
+                addIncludeLocation(location, pendingSourceOrigin)
+            }
             onNewLocation(openDocumentTreeLauncher, disableThirdParty = false)
         }
         binding.locationsExcludeAdd.setOnClickListener {
@@ -257,6 +268,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         // Load SAF data
         musicSettings.safQuery.let { query ->
             includeLocationAdapter.addAll(query.source)
+            includeLocationOrigins.clear()
+            query.source.forEach { location ->
+                val key = MusicSourceCanonicalizer.canonicalKeyOf(location)
+                includeLocationOrigins[key] =
+                    query.sourceOrigins[key]
+                        ?: CanonicalSourcePolicy.legacyOriginForPath(
+                            MusicSourceCanonicalizer.appFacingPathOf(location)
+                        )
+            }
             excludeLocationAdapter.addAll(query.exclude)
             binding.locationsWithHiddenSwitch.isChecked = query.withHidden
             binding.locationsMultithreadSwitch.isChecked = query.multithread
@@ -361,6 +381,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         if (pendingLocationCallback === callback) {
             pendingLocationCallback = null
             pendingRequiresPlayableSource = true
+            pendingSourceOrigin = CanonicalSourcePolicy.Origin.EXPLICIT
         }
     }
 
@@ -377,6 +398,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
                         candidateDiscoveryGeneration++
                         loadingDialog?.dismiss()
+                        pendingSourceOrigin = CanonicalSourcePolicy.Origin.EXPLICIT
                         showManualPathEntry(disableThirdParty, requiresPlayableSource, callback)
                     }
                     .setNegativeButton(R.string.lbl_cancel) { _, _ ->
@@ -434,22 +456,26 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         return@launch
                     }
 
-            if (accessibleCandidates.isEmpty()) {
+            val candidates = filterRedundantCandidates(accessibleCandidates)
+            if (candidates.isEmpty()) {
+                pendingSourceOrigin = CanonicalSourcePolicy.Origin.EXPLICIT
                 showManualPathEntry(disableThirdParty, requiresPlayableSource, callback)
                 return@launch
             }
 
             AlertDialog.Builder(ctx)
                 .setTitle(R.string.set_select_source)
-                .setItems(accessibleCandidates.toTypedArray()) { _, which ->
+                .setItems(candidates.toTypedArray()) { _, which ->
+                    pendingSourceOrigin = originForCandidate(candidates[which])
                     validateAndAcceptPath(
-                        accessibleCandidates[which],
+                        candidates[which],
                         disableThirdParty,
                         requiresPlayableSource,
                         callback,
                     )
                 }
                 .setNeutralButton(R.string.set_enter_path_manually) { _, _ ->
+                    pendingSourceOrigin = CanonicalSourcePolicy.Origin.EXPLICIT
                     showManualPathEntry(disableThirdParty, requiresPlayableSource, callback)
                 }
                 .setNegativeButton(R.string.lbl_cancel) { _, _ ->
@@ -767,9 +793,16 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             pendingLocationCallback = null
             return
         }
-        val location = Location.Unopened.from(ctx, uri)
+        val canonicalUri = CanonicalSourcePolicy.canonicalUriString(uri.toString())?.let(Uri::parse)
+        if (canonicalUri == null) {
+            L.w("SAF picker returned a malformed or traversal-like tree URI: $uri")
+            ctx.showToast(R.string.err_bad_location)
+            pendingLocationCallback = null
+            return
+        }
+        val location = Location.Unopened.from(ctx, canonicalUri)
 
-        if (shouldRejectThirdPartyLocation(uri, location, disableThirdParty)) {
+        if (shouldRejectThirdPartyLocation(canonicalUri, location, disableThirdParty)) {
             ctx.showToast(R.string.err_bad_location)
             pendingLocationCallback = null
             return
@@ -778,16 +811,92 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         pendingLocationCallback = null
     }
 
-    private fun addIncludeLocation(location: Location.Unopened) {
+    private fun addIncludeLocation(
+        location: Location.Unopened,
+        origin: CanonicalSourcePolicy.Origin,
+    ) {
         val ctx = context ?: return
-        val opened = location.open(ctx)
-        if (opened != null) {
-            includeLocationAdapter.add(opened)
-            updateSaveButtonState()
-        } else {
-            ctx.showToast(R.string.err_bad_location)
+        val opened =
+            location.open(ctx)
+                ?: run {
+                    ctx.showToast(R.string.err_bad_location)
+                    return
+                }
+        // An exact canonical duplicate is never a second source, so it is refused at the boundary
+        // where the user can still see why.
+        if (!includeLocationAdapter.add(opened)) {
+            ctx.showToast(R.string.err_duplicate_location)
+            return
+        }
+        includeLocationOrigins[MusicSourceCanonicalizer.canonicalKeyOf(opened)] = origin
+        warnAboutOverlap(ctx, opened)
+        updateSaveButtonState()
+    }
+
+    /**
+     * Reports an ancestor/descendant overlap instead of silently resolving it.
+     *
+     * Removing a deliberate custom source could shrink the effective scan scope, so both roots are
+     * kept. DirectFS orders the narrow root first and suppresses the overlapping subtree of the
+     * wider one through its shared canonical visited set, so nothing is scanned twice.
+     */
+    private fun warnAboutOverlap(ctx: Context, added: Location.Opened) {
+        val others = includeLocationAdapter.locations.filterNot { it === added }
+        val overlaps =
+            MusicSourceCanonicalizer.ancestorOf(others, added) != null ||
+                MusicSourceCanonicalizer.descendantsOf(others, added).isNotEmpty()
+        if (overlaps) {
+            L.w("Configured music source $added overlaps another configured source")
+            ctx.showToast(R.string.lng_overlapping_location)
         }
     }
+
+    /**
+     * Removes candidates that are already configured or that would only widen an existing source.
+     *
+     * The picker previously listed configured roots again, which is how one folder could be added
+     * twice, and offered whole-volume fallbacks even when a narrower explicit source on the same
+     * volume was already configured.
+     */
+    private fun filterRedundantCandidates(candidates: List<String>): List<String> {
+        val explicitConfiguredPaths =
+            includeLocationAdapter.locations.mapNotNull { location ->
+                val key = MusicSourceCanonicalizer.canonicalKeyOf(location)
+                if (includeLocationOrigins[key] != CanonicalSourcePolicy.Origin.EXPLICIT)
+                    return@mapNotNull null
+                MusicSourceCanonicalizer.appFacingPathOf(location)
+            }
+        val configuredKeys =
+            includeLocationAdapter.locations
+                .map(MusicSourceCanonicalizer::canonicalKeyOf)
+                .toMutableSet()
+        return candidates.filter { candidate ->
+            // Candidates are app-facing paths, so canonical identity is derived from the path.
+            val path =
+                MusicSourceCanonicalizer.appFacingPathOfUri(Uri.fromFile(File(candidate)))
+                    ?: return@filter true
+            if (!configuredKeys.add(MusicSourceCanonicalizer.canonicalKeyOfUri(pathUri(path)))) {
+                return@filter false
+            }
+            if (
+                MusicSourceCanonicalizer.isWholeVolumePath(path) &&
+                    MusicSourceCanonicalizer.hasNarrowerSourceOn(explicitConfiguredPaths, path)
+            ) {
+                L.d("Suppressing whole-volume candidate $path behind a narrower configured source")
+                return@filter false
+            }
+            true
+        }
+    }
+
+    private fun pathUri(path: String): Uri = Uri.fromFile(File(path))
+
+    private fun originForCandidate(path: String): CanonicalSourcePolicy.Origin =
+        if (MusicSourceCanonicalizer.isWholeVolumePath(path)) {
+            CanonicalSourcePolicy.Origin.WHOLE_VOLUME_FALLBACK
+        } else {
+            CanonicalSourcePolicy.Origin.AUTOMATIC_SUGGESTION
+        }
 
     private fun updateModeUI(binding: DialogMusicLocationsBinding) {
         with(binding) {
@@ -1006,6 +1115,15 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                     exclude = excludeLocationAdapter.locations,
                     withHidden = binding.locationsWithHiddenSwitch.isChecked,
                     multithread = binding.locationsMultithreadSwitch.isChecked,
+                    sourceOrigins =
+                        includeLocationAdapter.locations.associate { location ->
+                            val key = MusicSourceCanonicalizer.canonicalKeyOf(location)
+                            key to
+                                (includeLocationOrigins[key]
+                                    ?: CanonicalSourcePolicy.legacyOriginForPath(
+                                        MusicSourceCanonicalizer.appFacingPathOf(location)
+                                    ))
+                        },
                 )
             } else {
                 currentSafQuery
