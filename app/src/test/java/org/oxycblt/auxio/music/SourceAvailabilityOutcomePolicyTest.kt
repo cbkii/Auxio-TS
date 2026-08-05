@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/** Verifies that unavailable-source evidence cannot be promoted to full source authority. */
 class SourceAvailabilityOutcomePolicyTest {
     @Test
     fun `retained rows do not turn an unobserved source into full success`() {
