@@ -1,16 +1,16 @@
 name: Temporary PR 232 Kotlin formatter
 
 on:
-  push:
+  pull_request:
     branches:
-      - copilot/reintroduce-incremental-performance
+      - dev
 
 permissions:
   contents: write
 
 jobs:
   format-and-remove-self:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.number == 232 && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
