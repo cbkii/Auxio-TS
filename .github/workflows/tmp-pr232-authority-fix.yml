@@ -1,6 +1,9 @@
 name: Temporary PR 232 authority repair
 
 on:
+  pull_request:
+    branches:
+      - dev
   push:
     branches:
       - copilot/reintroduce-incremental-performance
@@ -19,20 +22,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Check out exact workflow event
-        uses: actions/checkout@v4
+      - name: Check out exact PR head
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          fetch-depth: 3
-          ref: ${{ github.sha }}
+          fetch-depth: 4
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify isolated repair commits
         shell: bash
         run: |
           set -eu
-          test "$(git rev-parse HEAD^)" = "14b8e04b47d703ce4055e466a09018a84ab435ab"
-          test "$(git rev-parse HEAD^^)" = "d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3"
+          test "$(git rev-parse HEAD^)" = "cbb03cf3467e09210b47ec25dbce0fa1798bba9f"
+          test "$(git rev-parse HEAD^^)" = "14b8e04b47d703ce4055e466a09018a84ab435ab"
+          test "$(git rev-parse HEAD^^^)" = "d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3"
           test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/tmp-pr232-authority-fix.yml"
-          test "$(git diff --name-only HEAD^^ HEAD^)" = ".github/scripts/tmp-pr232-authority-fix.py"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = ".github/workflows/tmp-pr232-authority-fix.yml"
+          test "$(git diff --name-only HEAD^^^ HEAD^^)" = ".github/scripts/tmp-pr232-authority-fix.py"
           python3 -m py_compile .github/scripts/tmp-pr232-authority-fix.py
 
       - name: Apply focused authority patch
