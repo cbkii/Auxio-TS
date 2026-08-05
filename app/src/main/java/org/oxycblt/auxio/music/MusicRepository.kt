@@ -664,6 +664,8 @@ constructor(
             }
             if (request.reason == IndexReason.USER_REFRESH) {
                 L.i("Retrying failed non-checkpoint refresh through normal source authority")
+                requestIndex(request)
+                return@launch
             }
             for (sourceKey in request.sourceKeys.orEmpty()) invalidateSource(sourceKey)
             requestIndex(request)
