@@ -760,11 +760,13 @@ constructor(
         if (current != null) {
             completeAttemptForInterruption(current, outcome)
         } else if (request != null) {
-            completeSourceAttemptForInterruption(request, outcome, null)
-            recordSourceScanOutcome(
-                request,
-                sourceOutcomeForInterruption(outcome, request = request),
-            )
+            val accepted = completeSourceAttemptForInterruption(request, outcome, null)
+            if (accepted) {
+                recordSourceScanOutcome(
+                    request,
+                    sourceOutcomeForInterruption(outcome, request = request),
+                )
+            }
         } else {
             return
         }
@@ -2079,8 +2081,13 @@ constructor(
         outcome: IndexingTerminalOutcome,
     ) {
         state.request?.let { request ->
-            completeSourceAttemptForInterruption(request, outcome, null)
-            recordSourceScanOutcome(request, sourceOutcomeForInterruption(outcome, state, request))
+            val accepted = completeSourceAttemptForInterruption(request, outcome, null)
+            if (accepted) {
+                recordSourceScanOutcome(
+                    request,
+                    sourceOutcomeForInterruption(outcome, state, request),
+                )
+            }
         }
     }
 

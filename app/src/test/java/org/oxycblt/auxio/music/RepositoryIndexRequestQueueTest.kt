@@ -296,4 +296,53 @@ class RepositoryIndexRequestQueueTest {
         assertEquals(source, merged)
         assertEquals("source-attempt", IndexRequestPolicy.checkpointAuthority(merged)?.attemptId)
     }
+
+    @Test
+    fun authoritativeInterruptionHasCheckpointAuthorityWhileNonAuthoritativeDoesNot() {
+        val owner = SourceScanAttemptOwner("process", "service")
+        val authoritative =
+            IndexRequest(
+                IndexReason.INITIAL_CONFIGURATION,
+                withCache = false,
+                configurationGeneration = 5L,
+                attemptId = "attempt-1",
+                attemptOwner = owner,
+            )
+        val nonAuthoritative =
+            IndexRequest(
+                IndexReason.USER_REFRESH,
+                withCache = true,
+                configurationGeneration = 5L,
+            )
+
+        // Only an authoritative request has a checkpoint authority. A stale interruption using
+        // an authoritative request will have its outcome rejected when the checkpoint completion
+        // is rejected. A non-authoritative request records its outcome unconditionally because
+        // it never writes to the checkpoint.
+        assertNull(IndexRequestPolicy.checkpointAuthority(nonAuthoritative))
+        val authority = IndexRequestPolicy.checkpointAuthority(authoritative)
+        requireNotNull(authority)
+        assertEquals(5L, authority.generation)
+        assertEquals("attempt-1", authority.attemptId)
+        assertTrue(IndexRequestPolicy.recordsSourceOutcome(nonAuthoritative))
+        assertTrue(IndexRequestPolicy.recordsSourceOutcome(authoritative))
+    }
+
+    @Test
+    fun nonAuthoritativeRefreshOutcomeIsAlwaysRecorded() {
+        // A USER_REFRESH or SOURCE_OBSERVER request has no checkpoint authority. Its outcome is
+        // recorded via recordsSourceOutcome regardless of any checkpoint state, because it never
+        // holds a source-attempt lease.
+        val refreshReasons =
+            listOf(
+                IndexReason.USER_REFRESH,
+                IndexReason.SOURCE_OBSERVER,
+                IndexReason.COMPATIBILITY_RECOVERY,
+            )
+        for (reason in refreshReasons) {
+            val request = IndexRequest(reason, withCache = true, configurationGeneration = 3L)
+            assertNull(IndexRequestPolicy.checkpointAuthority(request))
+            assertTrue(IndexRequestPolicy.recordsSourceOutcome(request))
+        }
+    }
 }

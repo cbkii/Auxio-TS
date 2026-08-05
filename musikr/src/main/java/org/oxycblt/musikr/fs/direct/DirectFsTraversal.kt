@@ -138,7 +138,17 @@ internal data class DirectFsOptions(
                 size = child.length(),
             )
         },
-    val onWorkProgress: (DirectFsWorkProgress) -> Unit = {},
+    /**
+     * Observer for live DirectFS work counters. `null` means no observer; progress snapshots are
+     * never allocated or dispatched.
+     */
+    val onWorkProgress: ((DirectFsWorkProgress) -> Unit)? = null,
+    /**
+     * Minimum wall-clock interval between non-forced progress callbacks. `0` means publish on
+     * every eligible call site, which is only appropriate in tests that need to observe every
+     * snapshot.
+     */
+    val progressIntervalMs: Long = 250L,
 ) {
     internal companion object {
         val DEFAULT = DirectFsOptions()
@@ -182,6 +192,9 @@ internal class DirectFsTraversal(
     private var queuedDirectories = 0
     private var startedAtMs = 0L
     private val fatalErrors = mutableListOf<Exception>()
+
+    /** Wall-clock timestamp of the most recent progress callback invocation. */
+    private var lastProgressPublishedAtMs = 0L
 
     suspend fun explore(files: Channel<File>): DirectFsTraversalMetrics {
         startedAtMs = System.currentTimeMillis()
@@ -402,7 +415,7 @@ internal class DirectFsTraversal(
             return
         } finally {
             queuedDirectories = 0
-            publishWorkProgress()
+            publishWorkProgress(force = true)
         }
 
         when {
@@ -497,9 +510,19 @@ internal class DirectFsTraversal(
         }
     }
 
-    private fun publishWorkProgress() {
+    private fun publishWorkProgress(force: Boolean = false) {
+        // No-observer fast path: avoid allocating DirectFsWorkProgress when nobody is listening.
+        val observer = options.onWorkProgress ?: return
+        if (!force) {
+            val interval = options.progressIntervalMs
+            if (interval > 0L) {
+                val now = System.currentTimeMillis()
+                if (now - lastProgressPublishedAtMs < interval) return
+                lastProgressPublishedAtMs = now
+            }
+        }
         runCatching {
-                options.onWorkProgress(
+                observer(
                     DirectFsWorkProgress(
                         directoriesVisited = directoriesVisited,
                         entriesInspected = entriesInspected,
