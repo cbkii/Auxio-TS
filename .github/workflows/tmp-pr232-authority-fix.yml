@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          test "$(git rev-parse HEAD^)" = "f03886146cf2130303fd39bc75a7794d253176b5"
+          test "$(git rev-parse HEAD^)" = "55ba44f21f657e08725e66394a7c565a152209d1"
           git merge-base --is-ancestor d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3 HEAD
           actual="$(git diff --name-only d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3 HEAD | LC_ALL=C sort)"
           expected="$(printf '%s\n' .github/scripts/tmp-pr232-authority-fix.py .github/workflows/tmp-pr232-authority-fix.yml | LC_ALL=C sort)"
@@ -60,6 +60,27 @@ jobs:
         shell: bash
         run: python3 .github/scripts/tmp-pr232-authority-fix.py
 
+      - name: Align preserved unavailable-source regression
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("musikr/src/test/java/org/oxycblt/musikr/cache/db/IncrementalScanStoreTest.kt")
+          text = path.read_text(encoding="utf-8")
+          old = '''        assertEquals(setOf(usb1.sourceKey), next.reuseSourceKeys)
+                  assertEquals(2, db.readDao().selectAllSongs().size)
+          '''
+          new = '''        assertEquals(setOf(usb0.sourceKey, usb1.sourceKey), next.reuseSourceKeys)
+                  assertTrue(db.incrementalDao().sourceLedger(usb0.sourceKey)?.available == true)
+                  assertEquals(2, store.compatibilityCachedFiles().toList().size)
+                  assertEquals(2, db.readDao().selectAllSongs().size)
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one unavailable-source assertion block, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
       - name: Format Kotlin
         shell: bash
         run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
@@ -73,7 +94,7 @@ jobs:
           rc=$?
           if [[ ${rc} -ne 0 ]]; then
             echo '--- generated test context ---'
-            nl -ba musikr/src/test/java/org/oxycblt/musikr/cache/db/IncrementalScanStoreTest.kt | sed -n '210,235p'
+            nl -ba musikr/src/test/java/org/oxycblt/musikr/cache/db/IncrementalScanStoreTest.kt | sed -n '200,460p'
             echo '--- test XML ---'
             find musikr/build/test-results -type f -name '*.xml' -print -exec cat {} \; || true
           fi
