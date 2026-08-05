@@ -43,7 +43,7 @@ jobs:
       - name: Apply repository Kotlin formatting
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh spotlessApply
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply
           git diff --check
           git rm .github/workflows/temporary-pr232-spotless.yml
 
