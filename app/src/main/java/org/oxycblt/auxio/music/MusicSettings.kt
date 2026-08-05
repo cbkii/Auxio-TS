@@ -879,14 +879,13 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     previousAttempt = superseded,
                     reason = "Forced source refresh",
                 )
-            check(
-                commitPreferences {
-                    putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
-                    putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
-                    writeCheckpointLocked(this, pending)
-                }
-            ) {
-                "Unable to persist forced source generation $nextGeneration"
+            val persisted = commitPreferences {
+                putBoolean(getString(R.string.set_key_library_last_scan_failed), false)
+                putLong(KEY_SOURCE_CONFIGURATION_GENERATION, nextGeneration)
+                writeCheckpointLocked(this, pending)
+            }
+            if (!persisted) {
+                L.e("Unable to persist forced source generation $nextGeneration")
             }
         }
     }
@@ -1206,8 +1205,11 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     ) {
         val attempt = checkpoint.attempt
         val previousAttempt = checkpoint.previousAttempt
-        fun SourceScanAttemptRecord.hasConsistentTerminalPair(): Boolean =
-            (terminalAtMs == null) == (terminalOutcome == null)
+        fun SourceScanAttemptRecord.hasConsistentTerminalPair(): Boolean {
+            val hasTerminalAt = terminalAtMs != null
+            val hasTerminalOutcome = terminalOutcome != null
+            return hasTerminalAt == hasTerminalOutcome
+        }
 
         require(attempt == null || attempt.generation == checkpoint.generation)
         require(attempt == null || attempt.hasConsistentTerminalPair())
