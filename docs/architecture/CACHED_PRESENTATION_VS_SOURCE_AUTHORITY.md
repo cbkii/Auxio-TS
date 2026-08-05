@@ -90,18 +90,18 @@ lease and are outside authority ownership.
 
 ## Source configuration identity
 
-`SourceConfigurationIdentity` is now the single definition of the configuration revision, shared by
+`SourceConfigurationIdentity` is the single definition of the configuration revision, shared by
 `ConfiguredSourcePolicy.snapshot()` (browse/restore decisions) and
 `MusicRepositoryImpl.sourceConfigurationRevision()` (the value written to the per-source ledger).
 Before this change the two disagreed, and the ledger copy was order-sensitive and included
 interpretation settings.
 
-The revision decides whether every committed source generation is discarded, so:
+The revision decides whether every committed source generation is reusable, so:
 
 1. semantically equal configurations must produce the same identity — canonical keys, sorting and
    deduplication remove alias, ordering and duplicate noise before hashing;
-2. settings that only reinterpret already-extracted rows must be excluded — they may still request a
-   library refresh, but must never invalidate filesystem authority.
+2. settings that only reinterpret already-extracted rows must be excluded — they may still request
+   a library refresh, but they must never invalidate filesystem authority.
 
 ### Included material
 
@@ -144,7 +144,8 @@ strength an adapter claims:
 | `UNAVAILABLE` | no trustworthy change token | never; the source is enumerated |
 
 A missing or blank token is downgraded to `UNAVAILABLE` regardless of the reported strength, so an
-adapter that returns `ADVISORY` with nothing in it can never suppress a scan.
+adapter that returns `ADVISORY` with nothing in it can never suppress a scan. A persisted advisory
+timestamp from the future or across a wall-clock rollback also fails safe to a scan.
 
 **Observed:** no filesystem adapter currently produces `AUTHORITATIVE`. DirectFS and SAF produce
 `ADVISORY` when they can observe a root sample or root-document metadata; MediaStore produces
@@ -156,23 +157,29 @@ a `SourceScanReason`:
 
 1. `FORCED` — cache bypass requested;
 2. `NEVER_COMMITTED` — no committed generation to reuse;
-3. `PREVIOUS_SCAN_INCOMPLETE` — the last attempt did not finish;
+3. `PREVIOUS_SCAN_INCOMPLETE` — the last authoritative attempt did not finish;
 4. `CONFIGURATION_CHANGED` — the ledger revision differs from the current identity;
-5. `METADATA_PROFILE_UPGRADE` — a richer profile than the committed one is requested;
-6. `INVALIDATED` — an observer or mount event invalidated the source;
-7. `FINGERPRINT_CHANGED` — token or strength differs from the committed value;
-8. `FINGERPRINT_UNAVAILABLE` / `ADVISORY_FINGERPRINT_EXPIRED` — confidence is insufficient.
+5. `INVALIDATED` — an observer or mount event invalidated the source;
+6. `FINGERPRINT_CHANGED` — token or claimed strength differs from the committed value;
+7. `FINGERPRINT_UNAVAILABLE` / `ADVISORY_FINGERPRINT_EXPIRED` — confidence is insufficient;
+8. `METADATA_PROFILE_UPGRADE` — only after source correctness is otherwise established, request
+   richer metadata without taking source membership authority.
+
+The profile-upgrade check is deliberately last. A changed, invalidated or untrusted source remains
+an authoritative source scan even when the request also asks for richer metadata.
 
 ## First-scan and incremental contracts
 
 ### A new or materially changed configuration
 
 - one source-authoritative scan under an attempt lease;
+- cache bypass still uses the source-aware incremental planner in forced mode when the cache and
+  filesystem expose the required capabilities;
 - stale source rows are never proof that the new configuration succeeded — the changed revision
   forces `CONFIGURATION_CHANGED` for every affected source;
 - the canonical effective source set is used, not the raw persisted list;
 - publication happens only while the generation and attempt are still current;
-- on failure the previous committed library is preserved and an actionable
+- on failure the previous committed library and ledger remain readable and an actionable
   `SourceScanOutcome` is reported;
 - a Lean profile may publish a playback-first base library when it is still a valid authoritative
   base.
@@ -183,10 +190,17 @@ a `SourceScanReason`:
 | --- | --- |
 | unchanged, strong fingerprint | committed rows reused and streamed into the published library |
 | changed | enumerated and updated in place |
-| unavailable | prior committed generation preserved, source marked unresolved |
-| removed by the user | hidden immediately, rows removed only after the new configuration commits |
+| temporarily unavailable | prior committed generation remains readable; the source is reported unresolved and full success is impossible |
+| removed by the user | omission is a candidate only; prior rows stay visible until the replacement configuration commits successfully |
+| failed/cancelled replacement | candidate removals are not applied; the prior configuration remains visible |
+| re-add of a previously removed source | retained rows stay hidden while planning and after failure; a successful generation restores committed visibility |
+| repeated unchanged removal | already-hidden ledgers are not rediscovered as removal work, so the next identical plan is no-work |
 | truncated (DirectFS depth/count bounds) | `Truncated` outcome; full success is never claimed |
-| partial multi-source | healthy siblings commit; failed sources retain their generation and unresolved keys |
+| partial multi-source | healthy siblings commit; failed or unobserved sources retain their generation and unresolved keys |
+
+Planner-detected unavailable sources are converted into request-scoped temporary failures before
+repository classification. Retained rows therefore produce `Partial`, while an all-unavailable scan
+with no readable rows remains `TemporarilyUnavailable`; neither can acknowledge full success.
 
 ## Metadata, enrichment and generated playlists
 
@@ -198,11 +212,15 @@ hydration, and generated playlists. Each later stage may fail without invalidati
 - enrichment holds no checkpoint lease (`IndexRequestPolicy.requiresAttemptClaim` excludes it) and
   never records a source outcome (`recordsSourceOutcome` excludes it), so an enrichment failure
   cannot regress a committed source generation or reopen the source checkpoint;
+- an enrichment-only plan is created only when every selected source is being scanned solely for
+  `METADATA_PROFILE_UPGRADE`; correctness reasons always take precedence;
+- enrichment does not allocate or advance a source generation, change fingerprints/configuration
+  authority, add or remove source membership, or run destructive cover cleanup;
+- incomplete enrichment is surfaced as a partial optional result and does not emit
+  `EnrichmentComplete`; the committed base library and source checkpoint remain valid;
 - a non-authoritative result whose `configurationGeneration` is older than the current
-  configuration generation is discarded before publication and reported as `SUPERSEDED`. This closes
-  the one remaining window in which a long enrichment started under an older configuration could
-  overwrite a library that a newer authoritative scan had already committed. The newer generation
-  owns the reported source outcome, so the discarded request records none;
+  configuration generation is discarded before publication and reported as `SUPERSEDED`. The newer
+  generation owns the reported source outcome, so the discarded request records none;
 - generated playlists are opt-in and default off, are derived after the base library is available,
   are cancellable and coalesced, cannot mutate source authority, and changing the preference cannot
   trigger a source rescan (the preference is excluded from the configuration identity).
@@ -211,36 +229,39 @@ hydration, and generated playlists. Each later stage may fail without invalidati
 
 `LibraryResultImpl.cleanup()` retains only the covers referenced by the library that was just
 published, so it is destructive whenever that library is not a complete authoritative view.
-`CoverCleanupPolicy` now gates the invocation. Cleanup runs only when **all** of the following hold:
+`CoverCleanupPolicy` gates the invocation. Cleanup runs only when **all** of the following hold:
 
 1. a new library was actually published;
-2. the publication used the complete metadata profile — a Lean publication is deliberately
-   incomplete and is followed by enrichment, so it must not define the retained cover set;
-3. no configured source is still unresolved;
-4. no source was unobserved during this scan;
-5. the terminal outcome is `Success` or `AuthoritativeEmpty`.
+2. the publication used the complete metadata profile;
+3. the run was not enrichment-only;
+4. no configured source is still unresolved;
+5. no source was unobserved during this scan;
+6. the terminal outcome is `Success` or `AuthoritativeEmpty`.
 
-Any failure, partial, truncated, permission or unavailability outcome therefore cannot remove
-resources still required by the last-known-good library.
+Any Lean, enrichment-only, failed, partial, truncated, permission or unavailability outcome therefore
+cannot remove resources still required by the last-known-good library.
 
 **Observed:** cleanup is no longer restricted to non-incremental scans. Reused sources stream their
 complete committed rows into the published library (`ExploreStep` +
-`IncrementalCache.reusedCachedFiles`), so an incremental publication that satisfies the five
-conditions above is a complete view and can safely reclaim expired covers.
+`IncrementalCache.reusedCachedFiles`), so an incremental publication that satisfies the conditions
+above is a complete authoritative view and can safely reclaim expired covers.
 
 ## Tests
 
-New host tests:
+Focused host tests added or extended by this stage include:
 
-- `musikr/src/test/.../cache/SourceFingerprintReusePolicyTest.kt` — strong reuse, advisory reuse
-  inside its window, advisory expiry, advisory-without-token never reusing, absent fingerprint
-  support, changed and strengthened tokens, and the ordering of the correctness gates.
-- `app/src/test/.../music/SourceConfigurationIdentityTest.kt` — one shared definition across lanes,
-  order and alias independence, traversal-affecting material, backend mode changes, interpretation
-  and scheduling settings never invalidating authority, and mode-scoped material.
-- `app/src/test/.../music/CoverCleanupPolicyTest.kt` — cleanup after a complete authoritative
-  success or authoritative-empty, and skipping for unpublished, lean, unresolved, unobserved,
-  partial and truncated results.
+- `SourceFingerprintReusePolicyTest` — strong/advisory confidence, expiry, blank tokens, clock
+  rollback, strengthened/changed tokens and correctness-gate precedence;
+- `SourceConfigurationIdentityTest` — one shared identity, order/alias independence, mode scoping
+  and exclusion of interpretation/resource settings;
+- `IncrementalIndexPlannerTest` — forced first scans, source-aware fallback rules, scoped retries and
+  removal-only empty configurations;
+- `IncrementalScanStoreTest` — generation commit/rollback, enrichment membership isolation,
+  deferred removals, removal-only commits, repeated-removal no-work, failed re-add visibility,
+  temporary unmount preservation and multi-source isolation;
+- `IncrementalResultFailurePolicyTest` and `SourceAvailabilityOutcomePolicyTest` — planner-detected
+  unavailability and incomplete enrichment cannot be reported as full success;
+- `CoverCleanupPolicyTest` — cleanup only after a complete authoritative publication.
 
 These complement the existing suites. Coverage of the required scenario matrix
 (**Observed** unless noted):
@@ -250,26 +271,26 @@ These complement the existing suites. Coverage of the required scenario matrix
 | 1 | immediate cached startup with no provider access | `StartupLibraryPolicyTest`, `DeferredStartupHydrationTest`, `ImmediateLaneArchitectureTest` |
 | 2 | cached startup then unchanged strong-fingerprint reuse | `IncrementalScanStoreTest`, `SourceFingerprintReusePolicyTest` |
 | 3 | advisory fingerprint requiring validation | `SourceFingerprintReusePolicyTest`, `IncrementalIndexPlannerTest` |
-| 4 | first configuration scan bypassing stale authority | `SourceConfigurationIdentityTest`, `IncrementalScanStoreTest`, `RepositoryIndexRequestQueueTest` |
+| 4 | first configuration scan using pending/committed generations | `IncrementalIndexPlannerTest`, `IncrementalScanStoreTest`, `RepositoryIndexRequestQueueTest` |
 | 5 | failed new configuration preserves the prior library | `IncrementalScanStoreTest`, `SourceScanCommitPolicyTest` |
 | 6 | source-local incremental update | `IncrementalScanStoreTest` |
-| 7 | removed source | `IncrementalScanStoreTest` |
-| 8 | temporarily unavailable source | `IncrementalScanStoreTest`, `SourceScanOutcomeTest` |
-| 9 | partial multi-source success | `IncrementalScanStoreTest`, `SourceScanOutcomeTest` |
-| 10 | enrichment failure after a base commit | `RepositoryIndexRequestQueueTest` (enrichment owns no checkpoint and records no source outcome) |
+| 7 | removed source and removal-only configuration | `IncrementalScanStoreTest` |
+| 8 | temporarily unavailable source | `IncrementalScanStoreTest`, `SourceAvailabilityOutcomePolicyTest` |
+| 9 | partial multi-source success | `IncrementalScanStoreTest`, `SourceScanOutcomeTest`, `SourceAvailabilityOutcomePolicyTest` |
+| 10 | enrichment failure after a base commit | `IncrementalScanStoreTest`, `IncrementalResultFailurePolicyTest` |
 | 11 | generated-playlist failure after a base commit | `GeneratedPlaylistCoordinatorTest` |
 | 12 | stale enrichment after a newer generation | `RepositoryIndexRequestQueueTest.staleEnrichmentIsDiscardedAfterANewerSourceGeneration` |
 | 13 | cover cleanup after successful publication | `CoverCleanupPolicyTest` |
-| 14 | cleanup skipped after failure | `CoverCleanupPolicyTest` |
+| 14 | cleanup skipped after failure or enrichment | `CoverCleanupPolicyTest` |
 | 15 | process recreation during cached presentation | `StartupLibraryPolicyTest` |
-| 16 | process recreation during an authoritative scan | `IncrementalScanStoreTest` (stale pending generation restart), `MusicSourceConfigurationTest` (checkpoint claim/recovery), `InterruptionOutcomeRecordingPolicyTest` |
+| 16 | process recreation during an authoritative scan | `IncrementalScanStoreTest`, `MusicSourceConfigurationTest`, `InterruptionOutcomeRecordingPolicyTest` |
 | 17 | repeated warm launch | `StartupLibraryPolicyTest`, `DeferredStartupHydrationTest` |
-| 18 | large synthetic libraries | 5,000-row committed fixture in `IncrementalScanStoreTest`; 5,000 and 20,000 in the `startup-benchmark` fixtures. A 20,000-row Room host test is deliberately not added — it would add minutes to ordinary CI for no additional contract |
-| 19 | API 29 storage behaviour | Robolectric `@Config(sdk = [29])` across the music and startup suites |
+| 18 | large synthetic libraries | 5,000-row committed fixture in `IncrementalScanStoreTest`; 5,000 and 20,000 in `startup-benchmark` fixtures |
+| 19 | API 29 storage behaviour | Robolectric `@Config(sdk = [29])` across music/startup suites and maintained API 29 CI |
 | 20 | DirectFS, SAF and MediaStore backends | `DirectFsRootPolicyTest`, `DirectFsTraversalTest`, `MediaStoreFilterPolicyTest`, `MusicSourceConfigurationTest` |
 
-Assertions are on state, authority and bounded work; no device-independent
-timing thresholds are asserted in ordinary CI.
+Assertions are on state, authority and bounded work; ordinary CI does not assert device-independent
+latency thresholds.
 
 ## Benchmarks
 
@@ -277,8 +298,6 @@ Comparative metrics are collected through the existing `startup-benchmark` modul
 deterministic 500 / 5,000 / 20,000-song fixtures. Report **median and variability** across
 iterations, never a single run, and always with the commit, variant, fixture, device, iteration
 count and compilation mode attached.
-
-Matrix:
 
 | Metric | Fixtures |
 | --- | --- |
@@ -319,4 +338,5 @@ Not performed in this change. All eleven items remain outstanding
 One playback service, one queue owner, one MediaSession and one notification authority are
 unchanged. Root is never the playback authority and protected storage is never enumerated as root.
 The `topwayTwMusic` and `topwayTwMedia` variants keep distinct package/component contracts, API 29
-support is preserved, and no APKs, logs or credentials are added.
+support is preserved, and no APKs, logs, credentials, Room schema changes or temporary workflows are
+present in the final diff.
