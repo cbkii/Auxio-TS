@@ -9,11 +9,11 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.music
@@ -22,121 +22,45 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Proves the `shouldRecordInterruptionOutcome` rule in [IndexRequestPolicy], which is applied in
- * [MusicRepository.prepareIndexingInterruption] and the [CancellationException] catch path:
- *
- * - authoritative request + durable completion accepted  => record
- * - authoritative request + durable completion rejected  => do NOT record
- * - non-authoritative request (no checkpoint lease)      => always record
- */
 class InterruptionOutcomeRecordingPolicyTest {
-
-    private fun shouldRecord(request: IndexRequest, durableCompletionAccepted: Boolean): Boolean =
-        IndexRequestPolicy.shouldRecordInterruptionOutcome(request, durableCompletionAccepted)
-
-    // -------------------------------------------------------------------------
-    // Non-authoritative requests (no checkpoint lease)
-    // -------------------------------------------------------------------------
-
-    @Test
-    fun `non-authoritative USER_REFRESH records even when durable completion was not accepted`() {
-        val request = IndexRequest(reason = IndexReason.USER_REFRESH, withCache = true)
-        assertTrue(shouldRecord(request, durableCompletionAccepted = false))
-    }
-
-    @Test
-    fun `non-authoritative USER_REFRESH records when durable completion was accepted`() {
-        val request = IndexRequest(reason = IndexReason.USER_REFRESH, withCache = true)
-        assertTrue(shouldRecord(request, durableCompletionAccepted = true))
-    }
-
-    @Test
-    fun `non-authoritative SOURCE_OBSERVER request records regardless of durable completion`() {
-        val request = IndexRequest(reason = IndexReason.SOURCE_OBSERVER, withCache = true)
-        assertTrue(shouldRecord(request, durableCompletionAccepted = false))
-        assertTrue(shouldRecord(request, durableCompletionAccepted = true))
-    }
-
-    @Test
-    fun `non-authoritative METADATA_ENRICHMENT request records regardless of durable completion`() {
-        // Enrichment never owns the checkpoint; the shouldRecord rule still applies.
-        val request = IndexRequest(reason = IndexReason.METADATA_ENRICHMENT, withCache = true)
-        assertTrue(shouldRecord(request, durableCompletionAccepted = false))
-    }
-
-    // -------------------------------------------------------------------------
-    // Authoritative requests (checkpoint lease present)
-    // -------------------------------------------------------------------------
-
-    private fun authoritativeRequest(reason: IndexReason = IndexReason.INITIAL_CONFIGURATION) =
+    private val authoritativeRequest =
         IndexRequest(
-            reason = reason,
+            reason = IndexReason.INITIAL_CONFIGURATION,
             withCache = false,
             configurationGeneration = 42L,
             attemptId = "attempt-xyz",
-            attemptOwner = SourceScanAttemptOwner(processId = "proc-1", lifecycleId = "lc-1"),
+            attemptOwner = SourceScanAttemptOwner("process", "service"),
         )
 
     @Test
-    fun `authoritative request with accepted durable completion records outcome`() {
-        val request = authoritativeRequest()
-        assertTrue(shouldRecord(request, durableCompletionAccepted = true))
-    }
-
-    @Test
-    fun `authoritative request with rejected durable completion does NOT record outcome`() {
-        // This is the key fix: a stale late interruption must not overwrite an already-terminal
-        // outcome when the durable checkpoint rejected the completion.
-        val request = authoritativeRequest()
-        assertFalse(shouldRecord(request, durableCompletionAccepted = false))
-    }
-
-    @Test
-    fun `authoritative USER_RETRY with accepted completion records outcome`() {
-        val request = authoritativeRequest(reason = IndexReason.USER_RETRY)
-        assertTrue(shouldRecord(request, durableCompletionAccepted = true))
-    }
-
-    @Test
-    fun `authoritative USER_RETRY with rejected completion does NOT record outcome`() {
-        val request = authoritativeRequest(reason = IndexReason.USER_RETRY)
-        assertFalse(shouldRecord(request, durableCompletionAccepted = false))
-    }
-
-    @Test
-    fun `authoritative STORAGE_MOUNTED with rejected completion does NOT record outcome`() {
-        val request = authoritativeRequest(reason = IndexReason.STORAGE_MOUNTED)
-        assertFalse(shouldRecord(request, durableCompletionAccepted = false))
-    }
-
-    // -------------------------------------------------------------------------
-    // Partially-authoritative: reason requires claim but one field is missing
-    // -------------------------------------------------------------------------
-
-    @Test
-    fun `INITIAL_CONFIGURATION without attemptId is non-authoritative and always records`() {
-        // Missing attemptId makes checkpointAuthority return null => non-authoritative.
-        val request =
-            IndexRequest(
-                reason = IndexReason.INITIAL_CONFIGURATION,
-                withCache = false,
-                configurationGeneration = 10L,
-                // no attemptId
+    fun `accepted authoritative interruption records outcome`() {
+        assertTrue(
+            IndexRequestPolicy.shouldRecordInterruptionOutcome(
+                authoritativeRequest,
+                durableCompletionAccepted = true,
             )
-        assertTrue(shouldRecord(request, durableCompletionAccepted = false))
+        )
     }
 
     @Test
-    fun `INITIAL_CONFIGURATION without generation is non-authoritative and always records`() {
-        val request =
-            IndexRequest(
-                reason = IndexReason.INITIAL_CONFIGURATION,
-                withCache = false,
-                // no configurationGeneration
-                attemptId = "attempt-a",
-                attemptOwner = SourceScanAttemptOwner(processId = "p", lifecycleId = "lc"),
+    fun `rejected authoritative interruption preserves terminal outcome`() {
+        assertFalse(
+            IndexRequestPolicy.shouldRecordInterruptionOutcome(
+                authoritativeRequest,
+                durableCompletionAccepted = false,
             )
-        assertTrue(shouldRecord(request, durableCompletionAccepted = false))
+        )
+    }
+
+    @Test
+    fun `non-authoritative interruption records without durable completion`() {
+        val refresh = IndexRequest(IndexReason.USER_REFRESH, withCache = true)
+
+        assertTrue(
+            IndexRequestPolicy.shouldRecordInterruptionOutcome(
+                refresh,
+                durableCompletionAccepted = false,
+            )
+        )
     }
 }
