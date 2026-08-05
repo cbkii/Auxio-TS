@@ -42,6 +42,8 @@ internal object IncrementalIndexPlanner {
         profile: MetadataProfile,
         configurationRevision: Long,
         targetSourceKeys: Set<String>? = null,
+        allowEmptySourceSet: Boolean = false,
+        applyRemovedSources: Boolean = true,
         legacyWriteOnly: (MutableCache) -> MutableCache,
     ): Prepared {
         val incremental = cache as? IncrementalCache
@@ -68,7 +70,7 @@ internal object IncrementalIndexPlanner {
                 throw SourcePreflightException("Music-source preflight failed", e)
             }
 
-        if (observedSnapshots.isEmpty()) {
+        if (observedSnapshots.isEmpty() && !allowEmptySourceSet) {
             throw SourcePreflightException("Music-source preflight returned no configured sources")
         }
 
@@ -107,19 +109,43 @@ internal object IncrementalIndexPlanner {
                 metadataProfile = profile,
                 configurationRevision = configurationRevision,
             )
+        val removalScopedPlan =
+            if (applyRemovedSources) completePlan
+            else completePlan.copy(removedSourceKeys = emptySet())
         val plan =
             if (targetSourceKeys == null) {
-                completePlan
+                removalScopedPlan.copy(
+                    enrichmentOnly =
+                        removalScopedPlan.scanSources.isNotEmpty() &&
+                            removalScopedPlan.removedSourceKeys.isEmpty() &&
+                            removalScopedPlan.scanSources.all {
+                                removalScopedPlan.scanReasons[it.sourceKey] ==
+                                    org.oxycblt.musikr.cache.SourceScanReason
+                                        .METADATA_PROFILE_UPGRADE
+                            }
+                )
             } else {
                 val selectedSources =
-                    completePlan.scanSources.filter { it.sourceKey in targetSourceKeys }
+                    removalScopedPlan.scanSources.filter { it.sourceKey in targetSourceKeys }
+                val selectedKeys = selectedSources.mapTo(linkedSetOf()) { it.sourceKey }
+                val selectedReasons =
+                    removalScopedPlan.scanReasons.filterKeys { it in selectedKeys }
                 val deferredSourceKeys =
-                    completePlan.scanSourceKeys - targetSourceKeys +
-                        (completePlan.unavailableSourceKeys - targetSourceKeys)
-                completePlan.copy(
+                    removalScopedPlan.scanSourceKeys - targetSourceKeys +
+                        (removalScopedPlan.unavailableSourceKeys - targetSourceKeys)
+                removalScopedPlan.copy(
                     scanSources = selectedSources,
-                    reuseSourceKeys = completePlan.reuseSourceKeys + deferredSourceKeys,
-                    unavailableSourceKeys = completePlan.unavailableSourceKeys,
+                    scanReasons = selectedReasons,
+                    reuseSourceKeys = removalScopedPlan.reuseSourceKeys + deferredSourceKeys,
+                    unavailableSourceKeys = removalScopedPlan.unavailableSourceKeys,
+                    enrichmentOnly =
+                        selectedSources.isNotEmpty() &&
+                            removalScopedPlan.removedSourceKeys.isEmpty() &&
+                            selectedSources.all {
+                                selectedReasons[it.sourceKey] ==
+                                    org.oxycblt.musikr.cache.SourceScanReason
+                                        .METADATA_PROFILE_UPGRADE
+                            },
                 )
             }
         return Prepared(

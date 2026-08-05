@@ -45,6 +45,62 @@ import org.oxycblt.musikr.library.MetadataProfile
 
 class IncrementalIndexPlannerTest {
     @Test
+    fun noCacheRequestUsesAForcedSourceLedgerPlan() = runBlocking {
+        val source =
+            SourceSnapshot(
+                sourceKey = "direct:a",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk0",
+                rootPath = "/storage/usbdisk0",
+                available = true,
+                fingerprint = "a",
+                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+            )
+        val original = FakeSourceAwareFs(snapshots = listOf(source))
+        val cache = FakeIncrementalCache()
+        var legacyFallbackUsed = false
+
+        val prepared =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = false,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 1L,
+                legacyWriteOnly = {
+                    legacyFallbackUsed = true
+                    it
+                },
+            )
+
+        assertTrue(prepared.plan?.force == true)
+        assertTrue(cache.plannedForce == true)
+        assertTrue(!legacyFallbackUsed)
+    }
+
+    @Test
+    fun explicitEmptyConfigurationMayProduceARemovalOnlyPlan() = runBlocking {
+        val original = FakeSourceAwareFs()
+        val cache = FakeIncrementalCache()
+
+        val prepared =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = false,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 2L,
+                targetSourceKeys = emptySet(),
+                allowEmptySourceSet = true,
+                legacyWriteOnly = { it },
+            )
+
+        assertEquals(emptySet<String>(), cache.plannedSnapshotKeys)
+        assertTrue(prepared.plan != null)
+        assertEquals(emptySet<String>(), original.selectedSourceKeys)
+    }
+
+    @Test
     fun unavailableAdvisorySnapshotStillAttemptsRealEnumeration() = runBlocking {
         val sourceKey = "third-party:file:///storage/emulated/0/Audio"
         val original =
@@ -205,6 +261,7 @@ class IncrementalIndexPlannerTest {
 
     private class FakeIncrementalCache : MutableCache, IncrementalCache {
         var plannedSnapshots: List<SourceSnapshot>? = null
+        var plannedForce: Boolean? = null
         val plannedSnapshotKeys: Set<String>?
             get() = plannedSnapshots?.mapTo(linkedSetOf()) { it.sourceKey }
 
@@ -217,6 +274,7 @@ class IncrementalIndexPlannerTest {
             configurationRevision: Long,
         ): IncrementalScanPlan {
             plannedSnapshots = snapshots
+            plannedForce = force
             return IncrementalScanPlan(
                 scanId = "scan",
                 scanSources = snapshots.filter { it.available },

@@ -51,6 +51,11 @@ class CoverCleanupPolicyTest {
     }
 
     @Test
+    fun `optional enrichment never owns destructive cleanup`() {
+        assertFalse(evaluate(enrichmentOnly = true).allowed)
+    }
+
+    @Test
     fun `retained unresolved sources block cleanup`() {
         assertFalse(evaluate(unresolvedSourceKeys = setOf("usb1")).allowed)
     }
@@ -84,6 +89,7 @@ class CoverCleanupPolicyTest {
         unresolvedSourceKeys: Set<String> = emptySet(),
         unavailableSourceKeys: Set<String> = emptySet(),
         completeMetadata: Boolean = true,
+        enrichmentOnly: Boolean = false,
     ) =
         CoverCleanupPolicy.evaluate(
             published = published,
@@ -91,5 +97,6 @@ class CoverCleanupPolicyTest {
             unresolvedSourceKeys = unresolvedSourceKeys,
             unavailableSourceKeys = unavailableSourceKeys,
             completeMetadata = completeMetadata,
+            enrichmentOnly = enrichmentOnly,
         )
 }

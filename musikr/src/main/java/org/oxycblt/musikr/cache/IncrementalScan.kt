@@ -32,11 +32,14 @@ data class IncrementalScanPlan(
     val metadataProfile: MetadataProfile,
     val configurationRevision: Long,
     val force: Boolean,
+    val scanReasons: Map<String, SourceScanReason> = emptyMap(),
+    val removedSourceKeys: Set<String> = emptySet(),
+    val enrichmentOnly: Boolean = false,
 ) {
     val scanSourceKeys: Set<String> = scanSources.mapTo(linkedSetOf()) { it.sourceKey }
 
     val hasWork: Boolean
-        get() = scanSources.isNotEmpty()
+        get() = scanSources.isNotEmpty() || removedSourceKeys.isNotEmpty()
 }
 
 /** Result of atomically publishing all successful source generations in a scan. */
@@ -49,6 +52,9 @@ data class IncrementalScanCommit(
     val changedRows: Int,
     val removedRows: Int,
     val metadataProfile: MetadataProfile,
+    val removedSources: Set<String> = emptySet(),
+    val enrichmentOnly: Boolean = false,
+    val enrichmentComplete: Boolean = true,
 )
 
 /**

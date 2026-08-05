@@ -126,6 +126,10 @@ interface LibraryResult {
     val failedSources: Map<String, String>
         get() = emptyMap()
 
+    /** Whether optional rich work observed every member of the committed base generation. */
+    val enrichmentComplete: Boolean
+        get() = true
+
     /** Delete only resources proven expired by the successfully published generation. */
     suspend fun cleanup()
 }
@@ -331,23 +335,32 @@ private class MusikrImpl(
                         "${commit.changedRows} changed and ${commit.removedRows} removed rows",
                 )
                 if (SourceScanCommitPolicy.allAttemptedSourcesFailed(commit)) {
-                    // A transient provider or mount failure may leave an older committed generation
-                    // readable. Reload that generation instead of publishing the empty in-flight
-                    // graph. When no readable rows remain, fail explicitly so callers preserve
-                    // their previous library state and expose source recovery rather than confirmed
-                    // empty.
                     val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
                     if (
                         SourceScanCommitPolicy.rejectsAsAuthoritativeEmpty(commit, hasPreservedRows)
                     ) {
                         throw SourceScanFailureException(commit.failedSources)
                     }
+                }
+                if (
+                    commit.enrichmentOnly ||
+                        commit.removedSources.isNotEmpty() ||
+                        commit.failedSources.isNotEmpty() ||
+                        commit.unavailableSources.isNotEmpty()
+                ) {
+                    // Publish the durable graph, not the intentionally incomplete in-flight graph.
                     resultLibrary = Musikr.loadCached(context, config)
                 }
             }
             Log.d("Musikr", "Indexing took ${System.currentTimeMillis() - start}ms")
             trace.mark(PipelineStage.PIPELINE_COMPLETED)
-            LibraryResultImpl(config, resultLibrary, commit?.failedSources.orEmpty())
+            LibraryResultImpl(
+                config = config,
+                library = resultLibrary,
+                failedSources = commit?.failedSources.orEmpty(),
+                enrichmentOnly = commit?.enrichmentOnly == true,
+                enrichmentComplete = commit?.enrichmentComplete ?: true,
+            )
         } catch (e: CancellationException) {
             trace.mark(PipelineStage.PIPELINE_CANCELLED, error = e)
             abortIncremental(plan, incremental, e)
@@ -393,9 +406,11 @@ private class LibraryResultImpl(
     private val config: Config,
     override val library: MutableLibrary,
     override val failedSources: Map<String, String>,
+    private val enrichmentOnly: Boolean,
+    override val enrichmentComplete: Boolean,
 ) : LibraryResult {
     override suspend fun cleanup() {
-        if (config.cleanupCovers) {
+        if (config.cleanupCovers && !enrichmentOnly) {
             config.storage.covers.cleanup(library.songs.mapNotNull { it.cover })
         }
     }

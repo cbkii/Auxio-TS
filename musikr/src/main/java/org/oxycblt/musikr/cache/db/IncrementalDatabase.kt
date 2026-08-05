@@ -238,6 +238,14 @@ internal interface IncrementalScanDao {
     )
     suspend fun pendingCount(scanId: String, sourceKey: String): Int
 
+    @Query("SELECT COUNT(*) FROM ScanSeenData WHERE scanId = :scanId AND sourceKey = :sourceKey")
+    suspend fun seenCount(scanId: String, sourceKey: String): Int
+
+    @Query(
+        "SELECT COUNT(*) FROM IndexedSongData WHERE sourceKey = :sourceKey AND generation = :generation"
+    )
+    suspend fun committedSongCount(sourceKey: String, generation: Long): Int
+
     @Query(
         "INSERT OR REPLACE INTO IndexedSongData (sourceKey, generation, stableUid, uri, displayPath, fileName, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, artworkRef, metadataProfile, enrichmentRevision) " +
             "SELECT sourceKey, :generation, sourceKey || ':' || uri, uri, displayPath, fileName, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, artworkRef, metadataProfile, :enrichmentRevision FROM ScanSeenData WHERE scanId = :scanId AND sourceKey = :sourceKey"

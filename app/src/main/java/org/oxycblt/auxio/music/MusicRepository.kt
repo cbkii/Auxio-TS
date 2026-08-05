@@ -968,7 +968,7 @@ constructor(
                         isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                         availableProcessors = Runtime.getRuntime().availableProcessors(),
                     )
-                val requestedSourceKeys = request.sourceKeys?.takeIf { it.isNotEmpty() }
+                val requestedSourceKeys = request.sourceKeys
                 val allConfiguredSourceKeys =
                     musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
                 val attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
@@ -978,66 +978,61 @@ constructor(
                         sourceKeys = requestedSourceKeys.takeIf { !request.withCache },
                     )
                 val prepared =
-                    if (!request.withCache) {
-                        L.i(
-                            "Using simple source-authoritative scan; incremental preflight bypassed"
-                        )
-                        IncrementalIndexPlanner.Prepared(
+                    try {
+                        IncrementalIndexPlanner.prepare(
                             fs = rawFs,
-                            cache = WriteOnlyMutableCache(cache),
-                            plan = null,
+                            cache = cache,
+                            withCache = request.withCache,
+                            profile = resolvedProfile,
+                            configurationRevision = sourceConfigurationRevision(),
+                            targetSourceKeys = requestedSourceKeys,
+                            allowEmptySourceSet =
+                                checkpointAuthority != null &&
+                                    requestedSourceKeys?.isEmpty() == true &&
+                                    allConfiguredSourceKeys.isEmpty(),
+                            applyRemovedSources = checkpointAuthority != null,
+                            legacyWriteOnly = ::WriteOnlyMutableCache,
                         )
-                    } else {
-                        try {
-                            IncrementalIndexPlanner.prepare(
-                                fs = rawFs,
-                                cache = cache,
-                                withCache = true,
-                                profile = resolvedProfile,
-                                configurationRevision = sourceConfigurationRevision(),
-                                targetSourceKeys = requestedSourceKeys,
-                                legacyWriteOnly = ::WriteOnlyMutableCache,
-                            )
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            recordSourceScanOutcome(
-                                request,
-                                SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
-                            )
-                            completeSourceAttempt(
-                                request = request,
-                                outcome = SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
-                                unresolvedSourceKeys = attemptedSourceKeys,
-                                reason = "Music-source preflight unavailable",
-                                failure = e,
-                                lastScanFailed = true,
-                            )
-                            if (
-                                checkpointAuthority == null &&
-                                    IndexRequestPolicy.recordsSourceOutcome(request)
-                            ) {
-                                musicSettings.lastScanFailed = true
-                            }
-                            emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
-                            L.w(
-                                e,
-                                "Music-source preflight failed; preserving the last readable library",
-                            )
-                            emitIndexingCompletion(
-                                sessionId,
-                                e,
-                                IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
-                            )
-                            return@traceSuspend
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        recordSourceScanOutcome(
+                            request,
+                            SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
+                        )
+                        completeSourceAttempt(
+                            request = request,
+                            outcome = SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
+                            unresolvedSourceKeys = attemptedSourceKeys,
+                            reason = "Music-source preflight unavailable",
+                            failure = e,
+                            lastScanFailed = true,
+                        )
+                        if (
+                            checkpointAuthority == null &&
+                                IndexRequestPolicy.recordsSourceOutcome(request)
+                        ) {
+                            musicSettings.lastScanFailed = true
                         }
+                        emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                        L.w(
+                            e,
+                            "Music-source preflight failed; preserving the last readable library",
+                        )
+                        emitIndexingCompletion(
+                            sessionId,
+                            e,
+                            IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                        )
+                        return@traceSuspend
                     }
                 val plan = prepared.plan
                 L.i(
                     "Resolved scan policy [workers=$workerCount profile=$resolvedProfile " +
                         "reason=${request.reason} generation=${request.configurationGeneration} " +
                         "scan=${plan?.scanSourceKeys} reuse=${plan?.reuseSourceKeys} " +
-                        "unavailable=${plan?.unavailableSourceKeys}]"
+                        "unavailable=${plan?.unavailableSourceKeys} " +
+                        "removed=${plan?.removedSourceKeys} enrichmentOnly=${plan?.enrichmentOnly}]"
                 )
 
                 if (
@@ -1333,7 +1328,8 @@ constructor(
                 val publishedState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
                 val priorUnresolved =
                     musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
-                val retainedUnresolved = priorUnresolved - attemptedSourceKeys
+                val retainedUnresolved =
+                    priorUnresolved - attemptedSourceKeys - plan?.removedSourceKeys.orEmpty()
                 val unresolved = retainedUnresolved + sourceOutcome.unresolvedSourceKeys
                 val effectiveSourceOutcome =
                     when {
@@ -1407,6 +1403,7 @@ constructor(
                             unresolvedSourceKeys = unresolved,
                             unavailableSourceKeys = plan?.unavailableSourceKeys.orEmpty(),
                             completeMetadata = resolvedProfile == MetadataProfile.FULL,
+                            enrichmentOnly = plan?.enrichmentOnly == true,
                         )
                     if (cleanup.allowed) {
                         result.cleanup()
@@ -1423,7 +1420,7 @@ constructor(
                     emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
                     requestGeneratedPlaylistRefresh()
                 }
-                if (resolvedProfile == MetadataProfile.FULL) {
+                if (resolvedProfile == MetadataProfile.FULL && result.enrichmentComplete) {
                     emitStartupReadinessState(StartupReadinessState.EnrichmentComplete)
                 }
                 emitIndexingCompletion(
@@ -1767,7 +1764,8 @@ constructor(
             // The retained set is only complete once rich extraction has run, and the invocation
             // itself is additionally gated on a complete authoritative outcome by
             // CoverCleanupPolicy.
-            cleanupCovers = metadataProfile == MetadataProfile.FULL,
+            cleanupCovers =
+                metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,
         )
     }
 

@@ -45,9 +45,11 @@ internal object CoverCleanupPolicy {
         unresolvedSourceKeys: Set<String>,
         unavailableSourceKeys: Set<String>,
         completeMetadata: Boolean,
+        enrichmentOnly: Boolean = false,
     ): Decision =
         when {
             !published -> Decision(false, "no-new-generation-published")
+            enrichmentOnly -> Decision(false, "enrichment-does-not-own-cleanup")
             !completeMetadata -> Decision(false, "lean-publication-is-not-complete")
             unresolvedSourceKeys.isNotEmpty() -> Decision(false, "unresolved-sources-retained")
             unavailableSourceKeys.isNotEmpty() -> Decision(false, "sources-unobserved")
