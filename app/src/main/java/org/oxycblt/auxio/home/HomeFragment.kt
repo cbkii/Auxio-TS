@@ -580,8 +580,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                         IndexingTerminalOutcome.TIMED_OUT -> R.string.indexing_timed_out
                         IndexingTerminalOutcome.SOURCE_UNAVAILABLE ->
                             R.string.indexing_source_unavailable
-                        IndexingTerminalOutcome.PARTIAL_SUCCESS ->
-                            R.string.indexing_partial_success
+                        IndexingTerminalOutcome.PARTIAL_SUCCESS -> R.string.indexing_partial_success
                         IndexingTerminalOutcome.FAILED -> R.string.err_index_failed
                         IndexingTerminalOutcome.SUCCESS -> R.string.lbl_indexing
                     }

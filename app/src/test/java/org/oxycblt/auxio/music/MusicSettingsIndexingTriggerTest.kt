@@ -115,26 +115,28 @@ class MusicSettingsIndexingTriggerTest {
         settings.forceLocationUpdate()
         val generation = settings.sourceConfigurationGeneration
         val owner = SourceScanAttemptOwner("process", "service")
-        val claimed =
-            requireNotNull(
-                settings.claimPendingConfiguration(
-                    generation,
-                    owner,
-                    "source-attempt",
-                    100L,
-                    SourceScanClaimReason.CONFIGURATION_CHANGE,
-                )
+        requireNotNull(
+            settings.claimPendingConfiguration(
+                generation,
+                owner,
+                "source-attempt",
+                100L,
+                SourceScanClaimReason.CONFIGURATION_CHANGE,
             )
+        )
+        val indexingChangesBeforeDispatch = listener.indexingSettingChanges
+        val locationChangesBeforeDispatch = listener.locationChanges
 
         dispatch(context.getString(R.string.set_key_generated_playlists))
 
-        assertEquals(SourceConfigurationCheckpoint.State.RUNNING, claimed.state)
-        assertEquals("source-attempt", settings.sourceConfigurationCheckpoint?.attemptId)
-        assertTrue(
-            settings.ownsSourceConfigurationAttempt(generation, "source-attempt", owner)
+        assertEquals(
+            SourceConfigurationCheckpoint.State.RUNNING,
+            settings.sourceConfigurationCheckpoint?.state,
         )
-        assertEquals(0, listener.indexingSettingChanges)
-        assertEquals(0, listener.locationChanges)
+        assertEquals("source-attempt", settings.sourceConfigurationCheckpoint?.attemptId)
+        assertTrue(settings.ownsSourceConfigurationAttempt(generation, "source-attempt", owner))
+        assertEquals(indexingChangesBeforeDispatch, listener.indexingSettingChanges)
+        assertEquals(locationChangesBeforeDispatch, listener.locationChanges)
     }
 
     @Test

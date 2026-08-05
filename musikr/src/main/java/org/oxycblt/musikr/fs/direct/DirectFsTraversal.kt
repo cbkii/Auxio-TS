@@ -386,6 +386,9 @@ internal class DirectFsTraversal(
                         )
                     )
                 }
+                queuedDirectories = queue.size
+                peakQueuedDirectories = maxOf(peakQueuedDirectories, queuedDirectories)
+                publishWorkProgress()
                 if (hardStop) break
             }
         } catch (e: CancellationException) {

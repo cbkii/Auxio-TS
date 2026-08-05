@@ -23,6 +23,11 @@ SharedPreferences remains the Android 10-compatible durable store. State-changin
 handoffs and completions use one process-wide lock and synchronous preference commit. Progress
 heartbeats use asynchronous persistence and never change ownership.
 
+Successful source publication follows one explicit lock order: the source-checkpoint lock before
+the repository monitor. The in-memory library is published while the exact generation/attempt
+commit still excludes replacement claims; repository code must not invoke a source-checkpoint
+operation while holding its monitor.
+
 ## Legal transitions
 
 | From | Event | To |
@@ -108,5 +113,7 @@ Exported diagnostics include generation, attempt/owner identity, timestamps, pha
 no-progress duration, replacement status, terminal outcome and bounded unresolved-source evidence.
 The UI keeps one source-status card and presents terminal retry actions without promoting raw IDs.
 
-Physical TS18 validation is still required for process kill, service recreation, USB removal/remount,
-slow whole-volume DirectFS traversal and ACC sleep/wake behaviour.
+**Confidence: Requires TS18 validation.** Physical evidence is still required for process kill,
+service recreation, USB removal/remount, slow whole-volume DirectFS traversal and ACC sleep/wake
+behaviour. **Porting decision: pending device evidence; retain the lifecycle design unchanged until
+that campaign is complete.**

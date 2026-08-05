@@ -57,6 +57,10 @@ internal object IndexRequestPolicy {
         request.reason == IndexReason.INITIAL_CONFIGURATION ||
             request.reason == IndexReason.USER_RETRY
 
+    /** Whether this request may replace the compatibility outcome of a source scan. */
+    fun recordsSourceOutcome(request: IndexRequest): Boolean =
+        request.reason != IndexReason.METADATA_ENRICHMENT
+
     fun checkpointAuthority(request: IndexRequest): SourceScanAttemptAuthority? {
         if (!requiresAttemptClaim(request)) return null
         return SourceScanAttemptAuthority(
@@ -88,9 +92,11 @@ internal object IndexRequestPolicy {
             primary.reason == IndexReason.INITIAL_CONFIGURATION ||
                 primary.reason == IndexReason.USER_RETRY
         ) {
-            return primary.copy(
-                sourceKeys = mergeSourceKeys(primary.sourceKeys, secondary.sourceKeys)
-            )
+            return if (requiresAttemptClaim(secondary)) {
+                primary.copy(sourceKeys = mergeSourceKeys(primary.sourceKeys, secondary.sourceKeys))
+            } else {
+                primary
+            }
         }
         return primary.copy(
             withCache = current.withCache && incoming.withCache,

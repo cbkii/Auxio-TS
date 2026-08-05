@@ -811,13 +811,11 @@ class DirectFsTraversalTest {
         track(dir("Music/Album"), "b.mp3")
         val snapshots = mutableListOf<DirectFsWorkProgress>()
 
-        traverse(
-            listOf(explicit(music)),
-            options().copy(onWorkProgress = { snapshots.add(it) }),
-        )
+        traverse(listOf(explicit(music)), options().copy(onWorkProgress = { snapshots.add(it) }))
 
         assertTrue(snapshots.any { it.directoriesVisited >= 2 })
         assertTrue(snapshots.any { it.entriesInspected >= 2 })
+        assertTrue(snapshots.any { it.queuedDirectories > 0 })
         assertEquals(0, snapshots.last().activeEnumerators)
         assertEquals(0, snapshots.last().queuedDirectories)
     }

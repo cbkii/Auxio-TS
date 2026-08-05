@@ -137,8 +137,7 @@ data class SourceConfigurationCheckpoint(
             record
                 ?.heartbeatAtMs
                 ?.takeIf { state == State.RUNNING && nowMs > it }
-                ?.let { nowMs - it }
-                ?: 0L
+                ?.let { nowMs - it } ?: 0L
         return buildString {
             append("generation=").append(generation)
             append(";state=").append(state)

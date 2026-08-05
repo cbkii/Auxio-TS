@@ -1144,15 +1144,18 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 currentMediaStoreQuery
             }
 
-        val changed =
-            musicSettings.applySourceConfiguration(
-                mode = locationMode,
-                safQuery = newSafQuery,
-                mediaStoreQuery = newMediaStoreQuery,
-            )
-        if (!changed && permissionGrantedInSession) {
-            L.d("Storage permission changed; queuing one source-authoritative scan")
-            musicSettings.forceLocationUpdate()
+        val permissionChanged = permissionGrantedInSession
+        requireActivity().lifecycleScope.launch(Dispatchers.IO) {
+            val changed =
+                musicSettings.applySourceConfiguration(
+                    mode = locationMode,
+                    safQuery = newSafQuery,
+                    mediaStoreQuery = newMediaStoreQuery,
+                )
+            if (!changed && permissionChanged) {
+                L.d("Storage permission changed; queuing one source-authoritative scan")
+                musicSettings.forceLocationUpdate()
+            }
         }
     }
 

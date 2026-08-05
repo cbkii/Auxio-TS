@@ -27,12 +27,15 @@ import android.os.SystemClock
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
-import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
@@ -47,6 +50,7 @@ import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.ObservationMode
+import org.oxycblt.auxio.music.SourceConfigurationCheckpoint
 import org.oxycblt.auxio.music.SourceScanAttemptOwner
 import org.oxycblt.auxio.music.SourceScanClaimReason
 import org.oxycblt.auxio.music.SourceScanProcessIdentity
@@ -99,6 +103,7 @@ private constructor(
 
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
+    private val attachmentReady = CompletableDeferred<Unit>()
 
     private var currentIndexJob: Job? = null
     private val indexJobLease = IndexJobLease()
@@ -110,6 +115,8 @@ private constructor(
     private var watchdogJob: Job? = null
     private var sourceConfigurationJob: Job? = null
     private var attached = false
+    private var attachmentJob: Job? = null
+    private var workerRegistered = false
     private var activeStartupOrigin: StartupScanOrigin? = null
     private var pendingStartupOrigin: StartupScanOrigin? = null
     private var lastHandledSourceConfigurationGeneration = Long.MIN_VALUE
@@ -139,27 +146,46 @@ private constructor(
             if (attached) return
             attached = true
         }
-        val recovered =
-            musicSettings.recoverInterruptedSourceConfiguration(
-                owner = attemptOwner,
-                nowMs = System.currentTimeMillis(),
-            )
-        if (recovered?.state == org.oxycblt.auxio.music.SourceConfigurationCheckpoint.State.INTERRUPTED) {
-            L.w(
-                "Recovered stale source attempt before worker attachment " +
-                    "[generation=${recovered.generation} attempt=${recovered.attemptId} " +
-                    "outcome=${recovered.terminalOutcome}]"
-            )
-        }
-        musicSettings.registerListener(this)
-        musicRepository.addUpdateListener(this)
-        musicRepository.addIndexingListener(this)
-        musicRepository.registerWorker(this)
-        playbackManager.addListener(this)
-        // Observer attachment is cheap: it registers notifications only. Provider enumeration and
-        // extraction remain planner-controlled and notification bursts are conflated below.
-        if (musicSettings.shouldBeObserving) startTracking()
-        updateRemovableStorageReceiver()
+        attachmentJob =
+            indexScope.launch {
+                try {
+                    val recovered =
+                        musicSettings.recoverInterruptedSourceConfiguration(
+                            owner = attemptOwner,
+                            nowMs = System.currentTimeMillis(),
+                        )
+                    if (recovered?.state == SourceConfigurationCheckpoint.State.INTERRUPTED) {
+                        L.w(
+                            "Recovered stale source attempt before worker attachment " +
+                                "[generation=${recovered.generation} " +
+                                "attempt=${recovered.attemptId} " +
+                                "outcome=${recovered.terminalOutcome}]"
+                        )
+                    }
+                    withContext(Dispatchers.Main.immediate) {
+                        if (!synchronized(this@IndexingHolder) { attached }) {
+                            return@withContext
+                        }
+                        musicSettings.registerListener(this@IndexingHolder)
+                        musicRepository.addUpdateListener(this@IndexingHolder)
+                        musicRepository.addIndexingListener(this@IndexingHolder)
+                        musicRepository.registerWorker(this@IndexingHolder)
+                        playbackManager.addListener(this@IndexingHolder)
+                        workerRegistered = true
+                        // Observer attachment is cheap: it registers notifications only. Provider
+                        // enumeration and extraction remain planner-controlled and notification
+                        // bursts are conflated below.
+                        if (musicSettings.shouldBeObserving) startTracking()
+                        updateRemovableStorageReceiver()
+                        attachmentReady.complete(Unit)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    attachmentReady.completeExceptionally(e)
+                    L.e(e, "Unable to recover and attach the indexing worker")
+                }
+            }
     }
 
     fun release() {
@@ -177,6 +203,8 @@ private constructor(
         watchdogJob = null
         sourceConfigurationJob?.cancel()
         sourceConfigurationJob = null
+        attachmentJob?.cancel()
+        attachmentJob = null
         stopTracking()
         unregisterRemovableStorageReceiver()
         observationRequestJob?.cancel()
@@ -193,11 +221,14 @@ private constructor(
         pendingIndexRequest = null
         indexJob.cancel()
         wakeLock.releaseSafe()
-        musicRepository.unregisterWorker(this)
-        playbackManager.removeListener(this)
-        musicRepository.removeIndexingListener(this)
-        musicRepository.removeUpdateListener(this)
-        musicSettings.unregisterListener(this)
+        if (workerRegistered) {
+            workerRegistered = false
+            musicRepository.unregisterWorker(this)
+            playbackManager.removeListener(this)
+            musicRepository.removeIndexingListener(this)
+            musicRepository.removeUpdateListener(this)
+            musicSettings.unregisterListener(this)
+        }
     }
 
     @Synchronized
@@ -223,6 +254,7 @@ private constructor(
             startupJob =
                 indexScope.launch {
                     try {
+                        attachmentReady.await()
                         val sourceAuthority =
                             StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
                                 workerContext,
@@ -240,8 +272,9 @@ private constructor(
                         musicRepository.startup(this@IndexingHolder)
                         val pendingConfiguration = musicSettings.sourceConfigurationCheckpoint
                         if (
-                            pendingConfiguration?.canClaim(SourceScanClaimReason.STARTUP_RECOVERY) ==
-                                true
+                            pendingConfiguration?.canClaim(
+                                SourceScanClaimReason.STARTUP_RECOVERY
+                            ) == true
                         ) {
                             lastHandledSourceConfigurationGeneration =
                                 pendingConfiguration.generation
@@ -434,7 +467,13 @@ private constructor(
 
     @Synchronized
     private fun startIndexLocked(request: IndexRequest) {
-        val authorisedRequest = authoriseAttemptAtStart(request) ?: return
+        val authorisedRequest =
+            authoriseAttemptAtStart(request)
+                ?: run {
+                    L.w("Dropping unauthorised indexing request [request=$request]")
+                    musicRepository.setPendingIndexReplacement(false)
+                    return
+                }
         L.i("Starting new indexing job [request=$authorisedRequest]")
         musicRepository.setPendingIndexReplacement(false)
         activeIndexRequest = authorisedRequest
@@ -497,8 +536,7 @@ private constructor(
         val claimReason =
             when {
                 request.reason == IndexReason.USER_RETRY -> SourceScanClaimReason.USER_RETRY
-                checkpoint.state ==
-                    org.oxycblt.auxio.music.SourceConfigurationCheckpoint.State.INTERRUPTED ->
+                checkpoint.state == SourceConfigurationCheckpoint.State.INTERRUPTED ->
                     SourceScanClaimReason.STARTUP_RECOVERY
                 else -> SourceScanClaimReason.CONFIGURATION_CHANGE
             }
@@ -509,13 +547,14 @@ private constructor(
                 attemptId = UUID.randomUUID().toString(),
                 nowMs = System.currentTimeMillis(),
                 reason = claimReason,
-            ) ?: run {
-                L.w(
-                    "Source attempt claim rejected " +
-                        "[reason=${request.reason} generation=$expectedGeneration]"
-                )
-                return null
-            }
+            )
+                ?: run {
+                    L.w(
+                        "Source attempt claim rejected " +
+                            "[reason=${request.reason} generation=$expectedGeneration]"
+                    )
+                    return null
+                }
         return request.copy(
             configurationGeneration = claimed.generation,
             sourceKeys =
@@ -595,8 +634,7 @@ private constructor(
                                 directFsFilesEmitted = state.directFsFilesEmitted,
                                 queuedDirectFsWork = state.queuedDirectFsWork,
                                 activeDirectFsEnumerators = state.activeDirectFsEnumerators,
-                                nonAuthoritativeWorkDeferred =
-                                    state.nonAuthoritativeWorkDeferred,
+                                nonAuthoritativeWorkDeferred = state.nonAuthoritativeWorkDeferred,
                             )
                         )
                     musicRepository.updateIndexingWatchdog(decision)

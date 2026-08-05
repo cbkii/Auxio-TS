@@ -21,6 +21,7 @@ package org.oxycblt.auxio.music
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.musikr.library.MetadataProfile
 
@@ -122,11 +123,30 @@ class RepositoryIndexRequestQueueTest {
             )
 
         assertNull(IndexRequestPolicy.checkpointAuthority(enrichment))
+        assertFalse(IndexRequestPolicy.recordsSourceOutcome(enrichment))
         assertEquals(
             9L,
             IndexRequestPolicy.checkpointGeneration(
                 enrichment.copy(reason = IndexReason.INITIAL_CONFIGURATION)
             ),
+        )
+    }
+
+    @Test
+    fun sourceRequestsRemainAllowedToRecordSourceOutcome() {
+        assertTrue(
+            IndexRequestPolicy.recordsSourceOutcome(
+                IndexRequest(IndexReason.USER_REFRESH, withCache = true)
+            )
+        )
+        assertTrue(
+            IndexRequestPolicy.recordsSourceOutcome(
+                IndexRequest(
+                    IndexReason.INITIAL_CONFIGURATION,
+                    withCache = false,
+                    configurationGeneration = 7L,
+                )
+            )
         )
     }
 

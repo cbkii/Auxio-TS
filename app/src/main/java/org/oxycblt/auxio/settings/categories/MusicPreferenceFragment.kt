@@ -145,7 +145,7 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
                         StartupPerformanceReport.CaptureContext(
                             authority = "user-started-settings-export",
                             sourceState =
-                                    "mode=${musicSettings.locationMode};" +
+                                "mode=${musicSettings.locationMode};" +
                                     "generation=${musicSettings.sourceConfigurationGeneration};" +
                                     "checkpoint=" +
                                     "${musicSettings.sourceConfigurationCheckpoint?.diagnosticSummary()};" +
@@ -257,8 +257,7 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
             checkpoint?.let { "${it.state.name.lowercase()} generation ${it.generation}" } ?: none
         findPreference<Preference>(getString(R.string.set_key_retry_source_setup))?.isEnabled =
             checkpoint?.let {
-                it.state ==
-                    org.oxycblt.auxio.music.SourceConfigurationCheckpoint.State.RUNNING ||
+                it.state == org.oxycblt.auxio.music.SourceConfigurationCheckpoint.State.RUNNING ||
                     it.canClaim(org.oxycblt.auxio.music.SourceScanClaimReason.USER_RETRY)
             } == true
         val lastAttempt =

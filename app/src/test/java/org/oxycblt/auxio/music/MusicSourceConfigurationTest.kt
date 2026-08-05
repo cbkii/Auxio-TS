@@ -167,7 +167,9 @@ class MusicSourceConfigurationTest {
                 150L,
             )
         )
-        assertFalse(settings.ownsSourceConfigurationAttempt(claimed.generation, "attempt-a", ownerA))
+        assertFalse(
+            settings.ownsSourceConfigurationAttempt(claimed.generation, "attempt-a", ownerA)
+        )
         assertTrue(
             settings.ownsSourceConfigurationAttempt(
                 claimed.generation,
@@ -300,7 +302,10 @@ class MusicSourceConfigurationTest {
             )
         )
         assertTerminal(SourceConfigurationCheckpoint.State.TIMED_OUT, true)
-        assertEquals(setOf("direct:usb"), settings.sourceConfigurationCheckpoint?.unresolvedSourceKeys)
+        assertEquals(
+            setOf("direct:usb"),
+            settings.sourceConfigurationCheckpoint?.unresolvedSourceKeys,
+        )
     }
 
     @Test
@@ -507,9 +512,7 @@ class MusicSourceConfigurationTest {
 
             assertEquals(1, futures.count { it.get() })
             assertNotNull(settings.sourceConfigurationCheckpoint?.terminalOutcome)
-            assertFalse(
-                complete(claimed, ownerA, successCompletion(UUID.randomUUID()), 300L)
-            )
+            assertFalse(complete(claimed, ownerA, successCompletion(UUID.randomUUID()), 300L))
         } finally {
             executor.shutdownNow()
         }
@@ -527,8 +530,7 @@ class MusicSourceConfigurationTest {
         val migrated = requireNotNull(settings.sourceConfigurationCheckpoint)
         assertEquals("legacy-generation-6", migrated.attemptId)
         assertEquals(SourceConfigurationCheckpoint.State.RUNNING, migrated.state)
-        val recovered =
-            requireNotNull(settings.recoverInterruptedSourceConfiguration(ownerA, 200L))
+        val recovered = requireNotNull(settings.recoverInterruptedSourceConfiguration(ownerA, 200L))
         assertEquals(SourceScanAttemptOutcome.PROCESS_INTERRUPTED, recovered.terminalOutcome)
     }
 
@@ -602,12 +604,7 @@ class MusicSourceConfigurationTest {
         return claimed
     }
 
-    private fun assertProcessDeathAt(
-        phase: String,
-        explored: Int,
-        loaded: Int,
-        evaluated: Int,
-    ) {
+    private fun assertProcessDeathAt(phase: String, explored: Int, loaded: Int, evaluated: Int) {
         prepareAttemptAt(phase, explored, loaded, evaluated)
         val recovered =
             requireNotNull(

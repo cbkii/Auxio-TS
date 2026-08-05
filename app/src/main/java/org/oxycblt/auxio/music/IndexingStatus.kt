@@ -31,26 +31,24 @@ enum class IndexingTerminalOutcome {
     TIMED_OUT,
 }
 
-class IndexingInterruptedException(
-    val outcome: IndexingTerminalOutcome,
-    detail: String? = null,
-) :
+class IndexingInterruptedException(val outcome: IndexingTerminalOutcome, detail: String? = null) :
     IllegalStateException(
         detail
             ?: when (outcome) {
-            IndexingTerminalOutcome.CANCELLED -> "Music loading was cancelled"
-            IndexingTerminalOutcome.SERVICE_STOPPED ->
-                "Music loading stopped because the playback service was destroyed"
-            IndexingTerminalOutcome.SUPERSEDED ->
-                "Music loading was superseded by a newer source configuration"
-            IndexingTerminalOutcome.TIMED_OUT ->
-                "Music loading stopped after its stage-aware safety limit"
-            IndexingTerminalOutcome.SOURCE_UNAVAILABLE -> "A configured music source is unavailable"
-            IndexingTerminalOutcome.PARTIAL_SUCCESS ->
-                "Music loading completed with one or more unresolved sources"
-            IndexingTerminalOutcome.FAILED -> "Music loading failed"
-            IndexingTerminalOutcome.SUCCESS -> "Music loading finished"
-        }
+                IndexingTerminalOutcome.CANCELLED -> "Music loading was cancelled"
+                IndexingTerminalOutcome.SERVICE_STOPPED ->
+                    "Music loading stopped because the playback service was destroyed"
+                IndexingTerminalOutcome.SUPERSEDED ->
+                    "Music loading was superseded by a newer source configuration"
+                IndexingTerminalOutcome.TIMED_OUT ->
+                    "Music loading stopped after its stage-aware safety limit"
+                IndexingTerminalOutcome.SOURCE_UNAVAILABLE ->
+                    "A configured music source is unavailable"
+                IndexingTerminalOutcome.PARTIAL_SUCCESS ->
+                    "Music loading completed with one or more unresolved sources"
+                IndexingTerminalOutcome.FAILED -> "Music loading failed"
+                IndexingTerminalOutcome.SUCCESS -> "Music loading finished"
+            }
     )
 
 enum class IndexingWatchdogState {
