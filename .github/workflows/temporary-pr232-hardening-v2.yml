@@ -42,7 +42,24 @@ jobs:
 
       - name: Apply focused Prompt 4 hardening
         shell: bash
-        run: python3 .github/pr232-hardening.py
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/pr232-hardening.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''plan_boundary = text.index("                val plan = prepared\\n", prepare_start)
+          catch_old = "                } catch (e: Exception) {\\n"
+          catch_index = text.find(catch_old, prepare_start, plan_boundary)
+          '''
+          new = '''catch_old = "                } catch (e: Exception) {\\n"
+          catch_index = text.find(catch_old, prepare_start)
+          '''
+          if text.count(old) != 1:
+              raise RuntimeError('Temporary patch script catch anchor changed')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          python3 .github/pr232-hardening.py
 
       - name: Format and run focused validation
         shell: bash
