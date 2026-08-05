@@ -539,6 +539,8 @@ private constructor(
         val claimReason =
             when {
                 request.reason == IndexReason.USER_RETRY -> SourceScanClaimReason.USER_RETRY
+                request.reason == IndexReason.STORAGE_MOUNTED ->
+                    SourceScanClaimReason.SOURCE_AVAILABLE
                 checkpoint.state == SourceConfigurationCheckpoint.State.INTERRUPTED ->
                     SourceScanClaimReason.STARTUP_RECOVERY
                 else -> SourceScanClaimReason.CONFIGURATION_CHANGE

@@ -55,7 +55,8 @@ internal object IndexRequestPolicy {
      */
     fun requiresAttemptClaim(request: IndexRequest): Boolean =
         request.reason == IndexReason.INITIAL_CONFIGURATION ||
-            request.reason == IndexReason.USER_RETRY
+            request.reason == IndexReason.USER_RETRY ||
+            request.reason == IndexReason.STORAGE_MOUNTED
 
     /** Whether this request may replace the compatibility outcome of a source scan. */
     fun recordsSourceOutcome(request: IndexRequest): Boolean =
@@ -73,6 +74,40 @@ internal object IndexRequestPolicy {
     fun checkpointGeneration(request: IndexRequest): Long? =
         checkpointAuthority(request)?.generation
 
+    /** Builds a user retry without bypassing an active retryable source checkpoint. */
+    fun sourceRetryRequest(
+        checkpoint: SourceConfigurationCheckpoint?,
+        currentGeneration: Long,
+        configuredSourceKeys: Set<String>,
+        hasRevision: Boolean,
+    ): IndexRequest? {
+        if (configuredSourceKeys.isEmpty()) return null
+        if (
+            checkpoint == null || checkpoint.state == SourceConfigurationCheckpoint.State.COMMITTED
+        ) {
+            return IndexRequest(
+                reason = IndexReason.USER_REFRESH,
+                withCache = true,
+                configurationGeneration = currentGeneration,
+                sourceKeys = configuredSourceKeys,
+            )
+        }
+        if (
+            checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING &&
+                !checkpoint.canClaim(SourceScanClaimReason.USER_RETRY)
+        ) {
+            return null
+        }
+        return IndexRequest(
+            reason = IndexReason.USER_RETRY,
+            withCache =
+                checkpoint.state == SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED &&
+                    hasRevision,
+            configurationGeneration = checkpoint.generation,
+            sourceKeys = checkpoint.unresolvedSourceKeys.ifEmpty { configuredSourceKeys },
+        )
+    }
+
     fun merge(current: IndexRequest?, incoming: IndexRequest): IndexRequest {
         if (current == null) return incoming
         val currentGeneration = current.configurationGeneration
@@ -85,13 +120,16 @@ internal object IndexRequestPolicy {
             return if (incomingGeneration > currentGeneration) incoming else current
         }
 
+        val currentRequiresClaim = requiresAttemptClaim(current)
+        val incomingRequiresClaim = requiresAttemptClaim(incoming)
+        if (currentRequiresClaim != incomingRequiresClaim) {
+            return if (currentRequiresClaim) current else incoming
+        }
+
         val primary =
             if (priority(incoming.reason) > priority(current.reason)) incoming else current
         val secondary = if (primary === current) incoming else current
-        if (
-            primary.reason == IndexReason.INITIAL_CONFIGURATION ||
-                primary.reason == IndexReason.USER_RETRY
-        ) {
+        if (requiresAttemptClaim(primary)) {
             return if (requiresAttemptClaim(secondary)) {
                 primary.copy(sourceKeys = mergeSourceKeys(primary.sourceKeys, secondary.sourceKeys))
             } else {

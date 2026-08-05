@@ -645,33 +645,28 @@ constructor(
     override fun retrySourceConfiguration() {
         compatibilityHydrationScope.launch {
             optionalWorkGate.awaitOpen()
-            val checkpoint = musicSettings.sourceConfigurationCheckpoint ?: return@launch
-            if (
-                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING &&
-                    !checkpoint.canClaim(SourceScanClaimReason.USER_RETRY)
-            ) {
+            val configuredSourceKeys =
+                musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
+            val request =
+                IndexRequestPolicy.sourceRetryRequest(
+                    checkpoint = musicSettings.sourceConfigurationCheckpoint,
+                    currentGeneration = musicSettings.sourceConfigurationGeneration,
+                    configuredSourceKeys = configuredSourceKeys,
+                    hasRevision = musicSettings.revision != null,
+                )
+            if (request == null) {
+                val checkpoint = musicSettings.sourceConfigurationCheckpoint
                 L.i(
-                    "Ignoring source retry for non-retryable checkpoint " +
-                        "[generation=${checkpoint.generation} state=${checkpoint.state}]"
+                    "Ignoring source retry without a retryable source " +
+                        "[generation=${checkpoint?.generation} state=${checkpoint?.state}]"
                 )
                 return@launch
             }
-            val sourceKeys =
-                checkpoint.unresolvedSourceKeys.ifEmpty {
-                    musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
-                }
-            for (sourceKey in sourceKeys) invalidateSource(sourceKey)
-            requestIndex(
-                IndexRequest(
-                    reason = IndexReason.USER_RETRY,
-                    withCache =
-                        checkpoint.state ==
-                            SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED &&
-                            musicSettings.revision != null,
-                    configurationGeneration = checkpoint.generation,
-                    sourceKeys = sourceKeys,
-                )
-            )
+            if (request.reason == IndexReason.USER_REFRESH) {
+                L.i("Retrying failed non-checkpoint refresh through normal source authority")
+            }
+            for (sourceKey in request.sourceKeys.orEmpty()) invalidateSource(sourceKey)
+            requestIndex(request)
         }
     }
 

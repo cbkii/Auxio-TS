@@ -38,6 +38,7 @@ operation while holding its monitor.
 | `RUNNING` | explicit same-process owner handoff | `RUNNING` (same attempt, new lifecycle owner) |
 | `RUNNING` | complete readable full/empty publication | `COMMITTED` |
 | `RUNNING` | complete readable partial publication | `PARTIALLY_COMMITTED` |
+| retryable unavailable/partial | configured source becomes readable | `RUNNING` (new attempt ID) |
 | `RUNNING` | temporary/provider/fatal retryable failure | `FAILED_RETRYABLE` |
 | `RUNNING` | non-retryable fatal failure | `FAILED_FINAL` |
 | `RUNNING` | user cancellation | `CANCELLED` |
@@ -69,6 +70,12 @@ starts.
 Metadata enrichment has no source-attempt authority even when it carries a committed generation for
 cache identity. Generated-playlist refresh does not use the indexing request path. Neither can claim,
 reopen or commit an initial source checkpoint.
+
+A mounted-source recovery may claim only a retryable unavailable or partial checkpoint and receives
+a new attempt ID. It cannot automatically reopen a user-cancelled or timed-out attempt. If a failed
+ordinary refresh has no retryable checkpoint, the Retry action issues a normal configured-source
+refresh instead of silently doing nothing; it does not invent attempt authority for a committed
+generation.
 
 ## Stage-aware watchdog
 

@@ -151,6 +151,125 @@ class RepositoryIndexRequestQueueTest {
     }
 
     @Test
+    fun mountedSourceRecoveryRequiresAttemptAuthority() {
+        val owner = SourceScanAttemptOwner("process", "service")
+        val mounted =
+            IndexRequest(
+                reason = IndexReason.STORAGE_MOUNTED,
+                withCache = true,
+                configurationGeneration = 7L,
+                sourceKeys = setOf("direct:usb"),
+                attemptId = "mounted-attempt",
+                attemptOwner = owner,
+            )
+
+        assertTrue(IndexRequestPolicy.requiresAttemptClaim(mounted))
+        assertEquals(7L, IndexRequestPolicy.checkpointAuthority(mounted)?.generation)
+        assertEquals("mounted-attempt", IndexRequestPolicy.checkpointAuthority(mounted)?.attemptId)
+    }
+
+    @Test
+    fun retryFallsBackToNormalRefreshWithoutARetryableCheckpoint() {
+        val configured = setOf("direct:internal", "direct:usb")
+        val committed =
+            SourceConfigurationCheckpoint(
+                generation = 9L,
+                state = SourceConfigurationCheckpoint.State.COMMITTED,
+            )
+
+        val withoutCheckpoint =
+            requireNotNull(
+                IndexRequestPolicy.sourceRetryRequest(
+                    checkpoint = null,
+                    currentGeneration = 9L,
+                    configuredSourceKeys = configured,
+                    hasRevision = true,
+                )
+            )
+        val afterCommittedRefresh =
+            requireNotNull(
+                IndexRequestPolicy.sourceRetryRequest(
+                    checkpoint = committed,
+                    currentGeneration = 9L,
+                    configuredSourceKeys = configured,
+                    hasRevision = true,
+                )
+            )
+
+        assertEquals(IndexReason.USER_REFRESH, withoutCheckpoint.reason)
+        assertEquals(IndexReason.USER_REFRESH, afterCommittedRefresh.reason)
+        assertEquals(configured, afterCommittedRefresh.sourceKeys)
+        assertFalse(IndexRequestPolicy.requiresAttemptClaim(afterCommittedRefresh))
+    }
+
+    @Test
+    fun retryableCheckpointStillCreatesAnAttemptClaimRequest() {
+        val checkpoint =
+            SourceConfigurationCheckpoint(
+                generation = 11L,
+                state = SourceConfigurationCheckpoint.State.FAILED_RETRYABLE,
+                unresolvedSourceKeys = setOf("direct:usb"),
+            )
+
+        val retry =
+            requireNotNull(
+                IndexRequestPolicy.sourceRetryRequest(
+                    checkpoint = checkpoint,
+                    currentGeneration = 11L,
+                    configuredSourceKeys = setOf("direct:internal", "direct:usb"),
+                    hasRevision = true,
+                )
+            )
+
+        assertEquals(IndexReason.USER_RETRY, retry.reason)
+        assertEquals(setOf("direct:usb"), retry.sourceKeys)
+        assertTrue(IndexRequestPolicy.requiresAttemptClaim(retry))
+        assertNull(
+            IndexRequestPolicy.sourceRetryRequest(
+                checkpoint =
+                    checkpoint.copy(state = SourceConfigurationCheckpoint.State.FAILED_FINAL),
+                currentGeneration = 11L,
+                configuredSourceKeys = setOf("direct:internal", "direct:usb"),
+                hasRevision = true,
+            )
+        )
+    }
+
+    @Test
+    fun mountedAttemptCannotBeDisplacedOrBroadenedByOrdinaryRefresh() {
+        val mounted =
+            IndexRequest(
+                reason = IndexReason.STORAGE_MOUNTED,
+                withCache = true,
+                configurationGeneration = 12L,
+                sourceKeys = setOf("direct:usb"),
+            )
+
+        val merged =
+            IndexRequestPolicy.merge(
+                IndexRequest(
+                    reason = IndexReason.USER_REFRESH,
+                    withCache = false,
+                    configurationGeneration = 12L,
+                ),
+                mounted,
+            )
+
+        assertEquals(mounted, merged)
+        assertEquals(
+            mounted,
+            IndexRequestPolicy.merge(
+                mounted,
+                IndexRequest(
+                    reason = IndexReason.USER_REFRESH,
+                    withCache = false,
+                    configurationGeneration = 12L,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun enrichmentMergedWhileSourceScanRunsCannotReplaceItsAttemptAuthority() {
         val owner = SourceScanAttemptOwner("process", "service")
         val source =

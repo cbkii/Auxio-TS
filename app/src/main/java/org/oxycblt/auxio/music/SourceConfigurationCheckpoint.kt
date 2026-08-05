@@ -82,6 +82,7 @@ enum class SourceScanClaimReason {
     CONFIGURATION_CHANGE,
     STARTUP_RECOVERY,
     USER_RETRY,
+    SOURCE_AVAILABLE,
 }
 
 /** Terminal values persisted atomically with checkpoint/library compatibility state. */
@@ -179,7 +180,9 @@ data class SourceConfigurationCheckpoint(
                 reason == SourceScanClaimReason.STARTUP_RECOVERY ||
                     reason == SourceScanClaimReason.USER_RETRY
             State.PARTIALLY_COMMITTED,
-            State.FAILED_RETRYABLE,
+            State.FAILED_RETRYABLE ->
+                reason == SourceScanClaimReason.USER_RETRY ||
+                    reason == SourceScanClaimReason.SOURCE_AVAILABLE
             State.CANCELLED,
             State.TIMED_OUT -> reason == SourceScanClaimReason.USER_RETRY
             State.RUNNING,

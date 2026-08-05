@@ -357,6 +357,68 @@ class MusicSourceConfigurationTest {
     }
 
     @Test
+    fun `mounted source can claim and complete a retryable generation`() {
+        val unavailable = pendingAndClaim()
+        assertTrue(
+            complete(
+                unavailable,
+                ownerA,
+                completion(
+                    SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
+                    unresolved = setOf("direct:usb"),
+                    lastScanFailed = true,
+                ),
+                200L,
+            )
+        )
+
+        val mountedAttempt =
+            requireNotNull(
+                settings.claimPendingConfiguration(
+                    unavailable.generation,
+                    ownerB,
+                    "mounted-attempt",
+                    300L,
+                    SourceScanClaimReason.SOURCE_AVAILABLE,
+                )
+            )
+        assertEquals(SourceConfigurationCheckpoint.State.RUNNING, mountedAttempt.state)
+        assertEquals("mounted-attempt", mountedAttempt.attemptId)
+
+        val revision = UUID.randomUUID()
+        assertTrue(complete(mountedAttempt, ownerB, successCompletion(revision), 400L))
+        assertTerminal(SourceConfigurationCheckpoint.State.COMMITTED, false)
+        assertTrue(settings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty().isEmpty())
+    }
+
+    @Test
+    fun `mounted source cannot automatically reopen a cancelled attempt`() {
+        val cancelled = pendingAndClaim()
+        assertTrue(
+            complete(
+                cancelled,
+                ownerA,
+                completion(SourceScanAttemptOutcome.CANCELLED, lastScanFailed = false),
+                200L,
+            )
+        )
+
+        assertNull(
+            settings.claimPendingConfiguration(
+                cancelled.generation,
+                ownerB,
+                "mounted-attempt",
+                300L,
+                SourceScanClaimReason.SOURCE_AVAILABLE,
+            )
+        )
+        assertEquals(
+            SourceConfigurationCheckpoint.State.CANCELLED,
+            settings.sourceConfigurationCheckpoint?.state,
+        )
+    }
+
+    @Test
     fun `partial source success publishes a readable library and unresolved keys`() {
         val claimed = pendingAndClaim()
         val revision = UUID.randomUUID()
