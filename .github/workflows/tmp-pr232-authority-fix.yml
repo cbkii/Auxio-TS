@@ -1,0 +1,76 @@
+name: Temporary PR 232 authority repair
+
+on:
+  push:
+    branches:
+      - copilot/reintroduce-incremental-performance
+    paths:
+      - .github/workflows/tmp-pr232-authority-fix.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-pr232-authority-fix
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact workflow event
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
+          ref: ${{ github.sha }}
+
+      - name: Verify isolated repair commits
+        shell: bash
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD^)" = "14b8e04b47d703ce4055e466a09018a84ab435ab"
+          test "$(git rev-parse HEAD^^)" = "d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/tmp-pr232-authority-fix.yml"
+          test "$(git diff --name-only HEAD^^ HEAD^)" = ".github/scripts/tmp-pr232-authority-fix.py"
+          python3 -m py_compile .github/scripts/tmp-pr232-authority-fix.py
+
+      - name: Apply focused authority patch
+        shell: bash
+        run: python3 .github/scripts/tmp-pr232-authority-fix.py
+
+      - name: Format Kotlin
+        shell: bash
+        run: ./gradlew --no-daemon spotlessKotlinApply
+
+      - name: Run focused Musikr tests
+        shell: bash
+        run: >-
+          ./gradlew --no-daemon :musikr:testDebugUnitTest
+          --tests org.oxycblt.musikr.cache.db.IncrementalScanStoreTest
+
+      - name: Run focused app tests
+        shell: bash
+        run: >-
+          ./gradlew --no-daemon :app:testTopwayTwMediaDebugUnitTest
+          --tests org.oxycblt.auxio.music.IncrementalIndexPlannerTest
+          --tests org.oxycblt.auxio.music.CoverCleanupPolicyTest
+
+      - name: Remove temporary machinery and verify diff
+        shell: bash
+        run: |
+          set -eu
+          rm .github/scripts/tmp-pr232-authority-fix.py
+          rm .github/workflows/tmp-pr232-authority-fix.yml
+          git diff --check
+          test -z "$(git status --short | grep -E '\.(apk|aab|zip|tar|gz|log)$' || true)"
+
+      - name: Commit and push focused repair
+        shell: bash
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Complete source-authoritative incremental lanes"
+          git push origin HEAD:copilot/reintroduce-incremental-performance
