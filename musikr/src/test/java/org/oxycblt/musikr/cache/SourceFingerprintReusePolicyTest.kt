@@ -79,6 +79,24 @@ class SourceFingerprintReusePolicyTest {
     }
 
     @Test
+    fun `future advisory timestamp is not treated as fresh evidence`() {
+        // Ledger timestamps use wall clock. A clock rollback or a future persisted timestamp must
+        // fail safe to validation rather than extending advisory reuse indefinitely.
+        assertEquals(
+            SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED,
+            reason(
+                strength = SourceFingerprintStrength.ADVISORY,
+                fingerprint = "shallow-1",
+                previous =
+                    committed(
+                        fingerprint = "shallow-1",
+                        lastSuccessfulScanMs = now + ADVISORY_WINDOW,
+                    ),
+            ),
+        )
+    }
+
+    @Test
     fun `advisory fingerprint without a token is never proof of an unchanged source`() {
         // A shallow directory observation that produced nothing must not suppress enumeration just
         // because the previous scan also produced nothing.
@@ -126,6 +144,31 @@ class SourceFingerprintReusePolicyTest {
                 strength = SourceFingerprintStrength.ADVISORY,
                 fingerprint = "shallow-2",
                 previous = committed(fingerprint = "shallow-1"),
+            ),
+        )
+    }
+
+    @Test
+    fun `source changes outrank a simultaneous metadata profile upgrade`() {
+        assertEquals(
+            SourceScanReason.FINGERPRINT_CHANGED,
+            reason(
+                strength = SourceFingerprintStrength.ADVISORY,
+                fingerprint = "shallow-2",
+                previous = committed(fingerprint = "shallow-1"),
+                profileUpgrade = true,
+            ),
+        )
+        assertEquals(
+            SourceScanReason.INVALIDATED,
+            reason(
+                previous =
+                    committed(
+                            fingerprint = "token-1",
+                            strength = SourceFingerprintStrength.AUTHORITATIVE,
+                        )
+                        .copy(invalidated = true),
+                profileUpgrade = true,
             ),
         )
     }
