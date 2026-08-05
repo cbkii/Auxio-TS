@@ -144,9 +144,8 @@ internal data class DirectFsOptions(
      */
     val onWorkProgress: ((DirectFsWorkProgress) -> Unit)? = null,
     /**
-     * Minimum wall-clock interval between non-forced progress callbacks. `0` means publish on
-     * every eligible call site, which is only appropriate in tests that need to observe every
-     * snapshot.
+     * Minimum wall-clock interval between non-forced progress callbacks. `0` means publish on every
+     * eligible call site, which is only appropriate in tests that need to observe every snapshot.
      */
     val progressIntervalMs: Long = 250L,
     /**

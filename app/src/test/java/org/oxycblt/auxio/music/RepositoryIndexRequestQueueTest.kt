@@ -309,11 +309,7 @@ class RepositoryIndexRequestQueueTest {
                 attemptOwner = owner,
             )
         val nonAuthoritative =
-            IndexRequest(
-                IndexReason.USER_REFRESH,
-                withCache = true,
-                configurationGeneration = 5L,
-            )
+            IndexRequest(IndexReason.USER_REFRESH, withCache = true, configurationGeneration = 5L)
 
         // Only an authoritative request has a checkpoint authority. A stale interruption using
         // an authoritative request will have its outcome rejected when the checkpoint completion
