@@ -49,6 +49,8 @@ import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.File as MusicFile
 import org.oxycblt.musikr.fs.Location
 import org.oxycblt.musikr.fs.Path
+import org.oxycblt.musikr.fs.SourceFingerprintStrength
+import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.fs.Volume
 import org.oxycblt.musikr.fs.saf.SAF
 import org.robolectric.RobolectricTestRunner
@@ -682,6 +684,33 @@ class DirectFsTraversalTest {
         assertTrue(channelFailure is IOException)
         assertEquals(causalFailure.message, channelFailure?.message)
     }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `source snapshots retain configured identity when root preparation rejects it`() =
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val location =
+                requireNotNull(
+                    Location.Unopened.from(context, Uri.fromFile(JavaFile("/system"))).open(context)
+                )
+            val directFs = DirectFS(listOf(location))
+            val sourceKey = SourceIdentity.forLocation(location)
+
+            val snapshot = directFs.sourceSnapshots().single()
+
+            assertEquals(sourceKey, snapshot.sourceKey)
+            assertEquals(location.uri.toString(), snapshot.rootUri)
+            assertEquals(location.uri.path, snapshot.rootPath)
+            assertFalse(snapshot.available)
+            assertEquals(null, snapshot.fingerprint)
+            assertEquals(SourceFingerprintStrength.NONE, snapshot.fingerprintStrength)
+            assertTrue(
+                directFs
+                    .drainSourceFailures()
+                    .getValue(sourceKey)
+                    .startsWith("TEMPORARILY_UNAVAILABLE|")
+            )
+        }
 
     @Test
     fun `fingerprint changes only with effective source policy`() {

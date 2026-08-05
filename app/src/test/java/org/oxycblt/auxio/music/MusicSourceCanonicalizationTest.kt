@@ -235,6 +235,24 @@ class MusicSourceCanonicalizationTest {
     }
 
     @Test
+    fun `persisted saf source without a grant remains permission required`() {
+        settings.locationMode = LocationMode.SAF
+        val persisted =
+            "content://com.android.externalstorage.documents/tree/primary%3AMusic"
+        PreferenceManager.getDefaultSharedPreferences(context).edit(commit = true) {
+            putString(context.getString(R.string.set_key_music_locations), persisted)
+        }
+
+        val spec = settings.configuredSourceSpecs.single()
+
+        assertEquals(1, settings.configuredSourceCount)
+        assertEquals(persisted, spec.normalizedUri.toString())
+        assertEquals("/storage/emulated/0/Music", spec.displayPath)
+        assertEquals(ConfiguredSourceSpec.AccessState.PERMISSION_REQUIRED, spec.accessState)
+        assertTrue(settings.safQuery.source.isEmpty())
+    }
+
+    @Test
     fun `configuration revision is stable across semantically equal aliases`() {
         val policy = ConfiguredSourcePolicy(settings)
 

@@ -263,8 +263,15 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             if (locationMode == LocationMode.MEDIA_STORE) return emptyList()
             val fileOnly = locationMode == LocationMode.DIRECT_FS
             repairPersistedSourceDuplicates(fileOnly)
-            val query = safQuery
-            val locations = query.source
+            // Descriptors come from the canonical persisted list rather than safQuery.source.
+            // Opening a revoked SAF grant legitimately fails, but the configured identity must
+            // survive so planning can report PERMISSION_REQUIRED instead of "no sources".
+            val locations =
+                unlikelyToBeNull(
+                        sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
+                    )
+                    .toUnopenedLocations(fileOnly)
+            val origins = resolvedOrigins(locations)
             val grants = context.contentResolver.persistedUriPermissions
             return locations.map { location ->
                 val uri = location.uri
@@ -299,7 +306,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                             ?: location.path.components.unixString,
                     accessState = access,
                     origin =
-                        query.sourceOrigins[canonicalKey]
+                        origins[canonicalKey]
                             ?: CanonicalSourcePolicy.legacyOriginForPath(appFacingPath),
                     traversalScope = appFacingPath?.let(CanonicalSourcePolicy::scopeOf),
                 )
@@ -724,7 +731,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     }
 
     private fun resolvedOrigins(
-        locations: List<Location.Opened>
+        locations: List<Location>
     ): Map<String, CanonicalSourcePolicy.Origin> {
         val stored = parseOrigins(sharedPreferences.getString(KEY_SOURCE_ORIGINS, null))
         return buildMap {
@@ -802,6 +809,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
      * the effective scan scope, so it must not queue another full rescan or invalidate the cached
      * library.
      */
+    @Synchronized
     private fun repairPersistedSourceDuplicates(fileOnly: Boolean) {
         val sourceKey = getString(R.string.set_key_music_locations)
         val excludeKey = getString(R.string.set_key_excluded_locations)
@@ -833,7 +841,10 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 rawOrigins == serialisedOrigins
         )
             return
-        sharedPreferences.edit(commit = true) {
+        // apply() updates the in-memory preference map before returning and persists it
+        // asynchronously. Serialising this read-repair prevents concurrent getters from queuing
+        // the same migration while keeping disk I/O off the caller (often the main thread).
+        sharedPreferences.edit {
             putString(sourceKey, serialisedSources)
             putString(excludeKey, serialisedExcludes)
             putString(KEY_SOURCE_ORIGINS, serialisedOrigins)

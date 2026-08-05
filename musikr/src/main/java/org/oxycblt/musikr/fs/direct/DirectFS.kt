@@ -96,40 +96,43 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         withContext(Dispatchers.IO) {
-            prepareRoots()
-                .groupBy { it.sourceKey }
-                .map { (sourceKey, preparedRoots) ->
-                    val evaluated =
-                        preparedRoots.map { root ->
-                            val readable =
-                                DirectFsRootPolicy.isAllowedRoot(root.directory) &&
-                                    listFilesSafe(root.directory) != null
-                            RootSnapshot(root, readable)
-                        }
-                    val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
-                    val first = preparedRoots.first()
-                    SourceSnapshot(
-                        sourceKey = sourceKey,
-                        sourceType = SOURCE_TYPE,
-                        // A source key may cover more than one configured folder. The first path is
-                        // display metadata only; the combined fingerprint below covers every root.
-                        rootUri = first.normalizedUri,
-                        rootPath = first.displayPath,
-                        available = available,
-                        fingerprint =
-                            if (available) {
-                                combineRootFingerprints(evaluated.map { it.root })
-                            } else {
-                                null
-                            },
-                        fingerprintStrength =
-                            if (available) SourceFingerprintStrength.ADVISORY
-                            else SourceFingerprintStrength.NONE,
-                        canonicalKey = first.canonicalKey,
-                        sourceOrigin = first.origin,
-                        traversalScope = first.scope,
-                    )
+            val preparedBySourceKey = prepareRoots().groupBy { it.sourceKey }
+            roots.groupBy(SourceIdentity::forLocation).map { (sourceKey, configuredRoots) ->
+                val preparedRoots = preparedBySourceKey[sourceKey].orEmpty()
+                if (preparedRoots.isEmpty()) {
+                    return@map unavailableSnapshot(sourceKey, configuredRoots.first())
                 }
+                val evaluated =
+                    preparedRoots.map { root ->
+                        val readable =
+                            DirectFsRootPolicy.isAllowedRoot(root.directory) &&
+                                listFilesSafe(root.directory) != null
+                        RootSnapshot(root, readable)
+                    }
+                val available = evaluated.isNotEmpty() && evaluated.all { it.readable }
+                val first = preparedRoots.first()
+                SourceSnapshot(
+                    sourceKey = sourceKey,
+                    sourceType = SOURCE_TYPE,
+                    // A source key may cover more than one configured folder. The first path is
+                    // display metadata only; the combined fingerprint below covers every root.
+                    rootUri = first.normalizedUri,
+                    rootPath = first.displayPath,
+                    available = available,
+                    fingerprint =
+                        if (available) {
+                            combineRootFingerprints(evaluated.map { it.root })
+                        } else {
+                            null
+                        },
+                    fingerprintStrength =
+                        if (available) SourceFingerprintStrength.ADVISORY
+                        else SourceFingerprintStrength.NONE,
+                    canonicalKey = first.canonicalKey,
+                    sourceOrigin = first.origin,
+                    traversalScope = first.scope,
+                )
+            }
         }
 
     override fun selectSources(sourceKeys: Set<String>): FS =
@@ -268,6 +271,38 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
         if (sourceFailures.putIfAbsent(sourceKey, detail) == null) {
             Log.w(TAG, detail)
         }
+    }
+
+    /**
+     * Retains configured identity when every root for a volume is rejected during preparation.
+     *
+     * Incremental planning distinguishes "configured but unavailable" from "no configured
+     * sources". Returning this advisory row therefore prevents a transient canonical-path or
+     * access failure from collapsing the configuration into an empty preflight result. Actual
+     * enumeration remains authoritative and still requires an allowed app-facing root.
+     */
+    private fun unavailableSnapshot(
+        sourceKey: String,
+        location: Location.Opened,
+    ): SourceSnapshot {
+        val canonicalKey = SourceIdentity.canonicalKeyForLocation(location)
+        val normalizedPath = location.uri.path?.let(CanonicalSourcePolicy::normalizePath)
+        return SourceSnapshot(
+            sourceKey = sourceKey,
+            sourceType = SOURCE_TYPE,
+            rootUri =
+                CanonicalSourcePolicy.canonicalUriString(location.uri.toString())
+                    ?: location.uri.toString(),
+            rootPath = normalizedPath ?: location.uri.path,
+            available = false,
+            fingerprint = null,
+            fingerprintStrength = SourceFingerprintStrength.NONE,
+            canonicalKey = canonicalKey,
+            sourceOrigin =
+                query.sourceOrigins[canonicalKey]
+                    ?: CanonicalSourcePolicy.legacyOriginForPath(normalizedPath),
+            traversalScope = normalizedPath?.let(CanonicalSourcePolicy::scopeOf),
+        )
     }
 
     /**
