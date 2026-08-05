@@ -1,0 +1,68 @@
+name: Temporary PR 232 hardening v2
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-and-remove-self:
+    if: github.event.pull_request.number == 232 && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: copilot/reintroduce-incremental-performance
+          fetch-depth: 2
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply focused Prompt 4 hardening
+        shell: bash
+        run: python3 .github/pr232-hardening.py
+
+      - name: Format and run focused validation
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply
+          bash ./scripts/ci-gradle.sh \
+            :app:testTopwayTwMediaDebugUnitTest \
+            :musikr:testDebugUnitTest
+          git diff --check
+          git rm .github/pr232-hardening.py
+          git rm .github/workflows/temporary-pr232-hardening-v2.yml
+
+      - name: Commit focused hardening and remove temporary files
+        shell: bash
+        env:
+          BRANCH: copilot/reintroduce-incremental-performance
+        run: |
+          git config user.name "cbkii"
+          git config user.email "150587541+cbkii@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo "::error::Hardening produced no task-owned change."; exit 1; }
+          git commit -m "Harden Prompt 4 authority boundaries"
+          git push origin "HEAD:${BRANCH}"
