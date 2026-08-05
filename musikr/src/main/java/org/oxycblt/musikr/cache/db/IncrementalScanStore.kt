@@ -30,6 +30,7 @@ import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.IncrementalScanCommit
 import org.oxycblt.musikr.cache.IncrementalScanPlan
+import org.oxycblt.musikr.cache.SourceFingerprintReusePolicy
 import org.oxycblt.musikr.cache.incrementalRank
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Components
@@ -116,30 +117,18 @@ internal class IncrementalScanStore(
                 val profileUpgrade =
                     previousProfile == null ||
                         metadataProfile.incrementalRank > previousProfile.incrementalRank
-                val fingerprintChanged =
-                    previous == null ||
-                        previous.fingerprint != snapshot.fingerprint ||
-                        previous.fingerprintStrength != snapshot.fingerprintStrength.name
-                val invalidated =
-                    previous != null &&
-                        previous.invalidationVersion > previous.committedInvalidationVersion
-                val advisoryExpired =
-                    snapshot.fingerprintStrength == SourceFingerprintStrength.ADVISORY &&
-                        (previous?.lastSuccessfulScanMs == null ||
-                            now - previous.lastSuccessfulScanMs >= ADVISORY_REFRESH_MS)
-                val mustScan =
-                    force ||
-                        previous == null ||
-                        previous.lastCommittedGeneration == null ||
-                        previous.incomplete ||
-                        previous.configurationRevision != configurationRevision ||
-                        profileUpgrade ||
-                        invalidated ||
-                        fingerprintChanged ||
-                        advisoryExpired ||
-                        snapshot.fingerprintStrength == SourceFingerprintStrength.NONE
+                val scanReason =
+                    SourceFingerprintReusePolicy.scanReason(
+                        strength = snapshot.fingerprintStrength,
+                        fingerprint = snapshot.fingerprint,
+                        previous = previous?.reuseState(),
+                        force = force,
+                        profileUpgrade = profileUpgrade,
+                        configurationRevision = configurationRevision,
+                        nowMs = now,
+                    )
 
-                if (mustScan) scanSources += snapshot else reuse += snapshot.sourceKey
+                if (scanReason != null) scanSources += snapshot else reuse += snapshot.sourceKey
             }
         }
 
@@ -581,9 +570,20 @@ internal class IncrementalScanStore(
         override suspend fun resolve(): Long = value
     }
 
+    /** Projects only the durable fields the pure reuse policy is allowed to consult. */
+    private fun SourceLedgerData.reuseState() =
+        SourceFingerprintReusePolicy.LedgerState(
+            hasCommittedGeneration = lastCommittedGeneration != null,
+            incomplete = incomplete,
+            configurationRevision = configurationRevision,
+            invalidated = invalidationVersion > committedInvalidationVersion,
+            fingerprint = fingerprint,
+            fingerprintStrength = fingerprintStrength,
+            lastSuccessfulScanMs = lastSuccessfulScanMs,
+        )
+
     companion object {
         private const val PAGE_SIZE = 256
-        private const val ADVISORY_REFRESH_MS = 6 * 60 * 60 * 1000L
         private const val FULL_ENRICHMENT_REVISION = 1L
         private const val MAX_ERROR_LENGTH = 512
         private const val STATE_PENDING = "PENDING"

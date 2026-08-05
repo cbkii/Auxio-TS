@@ -1304,6 +1304,31 @@ constructor(
                             else -> throw SourceScanFailureException(scopedFailures)
                         }
                     }
+                val currentConfigurationGeneration = musicSettings.sourceConfigurationGeneration
+                if (
+                    checkpointAuthority == null &&
+                        IndexRequestPolicy.isSupersededByNewerConfiguration(
+                            request,
+                            currentConfigurationGeneration,
+                        )
+                ) {
+                    // Optional lanes hold no checkpoint lease, so this is the only thing stopping a
+                    // result computed for an older source configuration from replacing the library
+                    // a newer authoritative scan already committed. The newer generation owns the
+                    // reported source outcome, so this one is discarded without recording anything.
+                    L.w(
+                        "Discarding non-authoritative result superseded by a newer source " +
+                            "configuration [reason=${request.reason} " +
+                            "request=${request.configurationGeneration} " +
+                            "current=$currentConfigurationGeneration]"
+                    )
+                    emitIndexingCompletion(
+                        sessionId,
+                        error = null,
+                        outcome = IndexingTerminalOutcome.SUPERSEDED,
+                    )
+                    return@traceSuspend
+                }
                 val isEmpty = publishedLibrary.songs.isEmpty()
                 val publishedState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
                 val priorUnresolved =
@@ -1375,7 +1400,19 @@ constructor(
                     }
                 }
                 try {
-                    result.cleanup()
+                    val cleanup =
+                        CoverCleanupPolicy.evaluate(
+                            published = true,
+                            outcome = effectiveSourceOutcome,
+                            unresolvedSourceKeys = unresolved,
+                            unavailableSourceKeys = plan?.unavailableSourceKeys.orEmpty(),
+                            completeMetadata = resolvedProfile == MetadataProfile.FULL,
+                        )
+                    if (cleanup.allowed) {
+                        result.cleanup()
+                    } else {
+                        L.d("Skipping cover cleanup [reason=${cleanup.reason}]")
+                    }
                 } catch (cleanupFailure: Exception) {
                     L.w(cleanupFailure, "Post-publication cover cleanup failed")
                 }
@@ -1727,7 +1764,10 @@ constructor(
             dimensionPolicy = DrivingStartupPolicy.dimensions(metadataProfile),
             artworkPolicy = DrivingStartupPolicy.artworkPolicy(metadataProfile),
             scanPlan = scanPlan,
-            cleanupCovers = scanPlan == null && metadataProfile == MetadataProfile.FULL,
+            // The retained set is only complete once rich extraction has run, and the invocation
+            // itself is additionally gated on a complete authoritative outcome by
+            // CoverCleanupPolicy.
+            cleanupCovers = metadataProfile == MetadataProfile.FULL,
         )
     }
 
@@ -1765,18 +1805,11 @@ constructor(
         }
     }
 
-    private fun sourceConfigurationRevision(): Long {
-        val material = buildString {
-            append(musicSettings.locationMode)
-            append('|').append(musicSettings.safQuery)
-            append('|').append(musicSettings.mediaStoreQuery)
-            append('|').append(musicSettings.rootAccessPolicy)
-            append('|').append(musicSettings.ts18SystemSourceFilter)
-            append('|').append(musicSettings.separators)
-            append('|').append(musicSettings.intelligentSorting)
-        }
-        return material.hashCode().toLong() and 0xffffffffL
-    }
+    private fun sourceConfigurationRevision(): Long =
+        // One shared definition with ConfiguredSourcePolicy. Interpretation and resource settings
+        // are deliberately excluded so a separator or sort-order change refreshes the library
+        // without invalidating every committed source generation.
+        SourceConfigurationIdentity.revision(musicSettings)
 
     private fun emitStartupReadinessState(state: StartupReadinessState) {
         startupReadinessController.publishCapability(state)
