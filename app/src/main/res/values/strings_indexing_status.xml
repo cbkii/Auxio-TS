@@ -26,6 +26,7 @@
     <string name="indexing_partial_success" translatable="false">Music loaded with unresolved sources</string>
     <string name="indexing_failed_detail" translatable="false">Tap for error details, or retry the configured sources.</string>
     <string name="indexing_terminal_detail" translatable="false">Review the details, or retry the configured sources.</string>
+    <string name="indexing_superseded_detail" translatable="false">Review the details when the new scan completes.</string>
     <string name="indexing_time_seconds" translatable="false">%1$ds</string>
     <string name="indexing_time_minutes" translatable="false">%1$dm %2$ds</string>
     <string name="indexing_time_hours" translatable="false">%1$dh %2$dm</string>

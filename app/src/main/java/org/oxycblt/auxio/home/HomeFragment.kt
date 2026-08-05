@@ -586,13 +586,13 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                     }
                 )
                 binding.homeIndexingSummary.setText(
-                    if (
+                    when {
                         state.outcome == IndexingTerminalOutcome.FAILED ||
-                            state.outcome == IndexingTerminalOutcome.SOURCE_UNAVAILABLE
-                    ) {
-                        R.string.indexing_failed_detail
-                    } else {
-                        R.string.indexing_terminal_detail
+                            state.outcome == IndexingTerminalOutcome.SOURCE_UNAVAILABLE ->
+                            R.string.indexing_failed_detail
+                        state.outcome == IndexingTerminalOutcome.SUPERSEDED ->
+                            R.string.indexing_superseded_detail
+                        else -> R.string.indexing_terminal_detail
                     }
                 )
                 binding.homeIndexingDetail.text = state.error?.localizedMessage.orEmpty()

@@ -134,7 +134,8 @@ object IndexingWatchdogPolicy {
                         "${input.directFsDirectoriesVisited} entries=" +
                         "${input.directFsEntriesInspected} files=" +
                         "${input.directFsFilesEmitted} queued=${input.queuedDirectFsWork} " +
-                        "active=${input.activeDirectFsEnumerators} elapsedMs=$noProgress",
+                        "active=${input.activeDirectFsEnumerators} noProgressMs=$noProgress " +
+                        "totalMs=$totalElapsed",
             )
         }
         val state =

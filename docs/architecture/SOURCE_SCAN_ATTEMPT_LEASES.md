@@ -68,8 +68,8 @@ job/session gates reject an old `finally`, progress callback or terminal callbac
 starts.
 
 Metadata enrichment has no source-attempt authority even when it carries a committed generation for
-cache identity. Generated-playlist refresh does not use the indexing request path. Neither can claim,
-reopen or commit an initial source checkpoint.
+cache identity. Generated-playlist refresh does not use the indexing request path. Neither operation
+can claim, reopen, or commit an initial source checkpoint.
 
 A mounted-source recovery may claim only a retryable unavailable or partial checkpoint and receives
 a new attempt ID. It cannot automatically reopen a user-cancelled or timed-out attempt. If a failed
@@ -113,7 +113,9 @@ not replaced.
 | temporary unavailable | `FAILED_RETRYABLE` | previous value | `true` | previous library retained |
 | fatal retryable failure | `FAILED_RETRYABLE` | previous value | `true` | previous library retained |
 | user cancellation | `CANCELLED` | previous value | `false` | previous library retained |
-| service/process interruption | `INTERRUPTED` | previous value | `false` | previous library retained |
+| service lifecycle stop | `INTERRUPTED` (attempt: `SERVICE_STOPPED`) | previous value | `false` | previous library retained |
+| process death | `INTERRUPTED` (attempt: `PROCESS_INTERRUPTED`) | previous value | `false` | previous library retained |
+| replaced by newer configuration | `INTERRUPTED` (attempt: `SUPERSEDED`) | previous value | `false` | previous library retained |
 | watchdog timeout | `TIMED_OUT` | previous value | `true` | previous library retained |
 
 Exported diagnostics include generation, attempt/owner identity, timestamps, phase/counts,

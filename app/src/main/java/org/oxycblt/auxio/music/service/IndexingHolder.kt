@@ -645,6 +645,13 @@ private constructor(
                     musicRepository.updateIndexingWatchdog(decision)
                     if (decision.shouldTerminate) {
                         synchronized(this@IndexingHolder) {
+                            // Re-read the current session inside the lock to guard against a
+                            // replacement scan that started between the state sample above and
+                            // this termination block. If the session changed, the decision was
+                            // about the old scan; skip termination so the new scan is unaffected.
+                            val currentSession =
+                                musicRepository.indexingState as? IndexingState.Indexing
+                            if (currentSession?.sessionId != state.sessionId) return@synchronized
                             pendingIndexRequest = null
                             directReplacementHandoff = false
                             musicRepository.setPendingIndexReplacement(false)

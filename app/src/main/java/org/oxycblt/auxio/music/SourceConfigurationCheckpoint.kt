@@ -121,7 +121,7 @@ data class SourceConfigurationCheckpoint(
         get() = attempt?.terminalOutcome ?: previousAttempt?.terminalOutcome
 
     val lastOutcome: String?
-        get() = reason ?: terminalOutcome?.name
+        get() = terminalOutcome?.name ?: reason
 
     /** Bounded export form that distinguishes attempts without dumping unbounded source data. */
     fun diagnosticSummary(nowMs: Long = System.currentTimeMillis()): String {

@@ -713,7 +713,9 @@ constructor(
                     currentIndexingState as? IndexingState.Indexing ?: return@synchronized null
                 if (
                     active.watchdogState == decision.state &&
-                        active.noProgressDurationMs == decision.noProgressMs
+                        active.noProgressDurationMs == decision.noProgressMs &&
+                        active.noProgressDeadlineMs == decision.noProgressDeadlineMs &&
+                        active.watchdogDetail == decision.detail
                 ) {
                     return@synchronized null
                 }
