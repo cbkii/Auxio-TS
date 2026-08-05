@@ -564,26 +564,35 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val binding = requireBinding()
         when (state) {
             is IndexingState.Completed -> {
-                binding.homeIndexingContainer.isInvisible = state.error == null
-                binding.homeIndexingProgress.isInvisible = state.error != null
-                binding.homeIndexingError.isInvisible = state.error == null
-                binding.homeIndexingActions.isVisible = state.error != null
-                binding.homeIndexingRetry.isVisible = state.error != null
+                val actionable = state.outcome != IndexingTerminalOutcome.SUCCESS
+                binding.homeIndexingContainer.isInvisible = !actionable
+                binding.homeIndexingProgress.isInvisible = actionable
+                binding.homeIndexingError.isInvisible = !actionable
+                binding.homeIndexingActions.isVisible = actionable
+                binding.homeIndexingRetry.isVisible =
+                    state.outcome != IndexingTerminalOutcome.SUPERSEDED
                 binding.homeIndexingCancel.isVisible = false
                 binding.homeIndexingTitle.setText(
                     when (state.outcome) {
                         IndexingTerminalOutcome.CANCELLED -> R.string.indexing_cancelled
                         IndexingTerminalOutcome.SERVICE_STOPPED -> R.string.indexing_service_stopped
+                        IndexingTerminalOutcome.SUPERSEDED -> R.string.indexing_superseded
                         IndexingTerminalOutcome.TIMED_OUT -> R.string.indexing_timed_out
+                        IndexingTerminalOutcome.SOURCE_UNAVAILABLE ->
+                            R.string.indexing_source_unavailable
+                        IndexingTerminalOutcome.PARTIAL_SUCCESS -> R.string.indexing_partial_success
                         IndexingTerminalOutcome.FAILED -> R.string.err_index_failed
                         IndexingTerminalOutcome.SUCCESS -> R.string.lbl_indexing
                     }
                 )
                 binding.homeIndexingSummary.setText(
-                    if (state.outcome == IndexingTerminalOutcome.FAILED) {
-                        R.string.indexing_failed_detail
-                    } else {
-                        R.string.indexing_terminal_detail
+                    when {
+                        state.outcome == IndexingTerminalOutcome.FAILED ||
+                            state.outcome == IndexingTerminalOutcome.SOURCE_UNAVAILABLE ->
+                            R.string.indexing_failed_detail
+                        state.outcome == IndexingTerminalOutcome.SUPERSEDED ->
+                            R.string.indexing_superseded_detail
+                        else -> R.string.indexing_terminal_detail
                     }
                 )
                 binding.homeIndexingDetail.text = state.error?.localizedMessage.orEmpty()
@@ -618,7 +627,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 }
                 binding.homeIndexingError.isInvisible = true
                 binding.homeIndexingActions.isVisible = true
-                binding.homeIndexingRetry.isVisible = true
+                binding.homeIndexingRetry.isVisible = false
                 binding.homeIndexingCancel.isVisible = true
                 binding.homeIndexingSummary.text =
                     when (val progress = state.progress) {
@@ -666,6 +675,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                         details.add(getString(R.string.indexing_stalled))
                     IndexingWatchdogState.OVERDUE ->
                         details.add(getString(R.string.indexing_overdue))
+                    IndexingWatchdogState.NO_PROGRESS_TIMEOUT ->
+                        details.add(getString(R.string.indexing_no_progress_timeout))
                     IndexingWatchdogState.HEALTHY -> Unit
                 }
                 binding.homeIndexingDetail.text = details.joinToString("\n")

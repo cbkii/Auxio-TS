@@ -64,9 +64,11 @@ import org.oxycblt.musikr.Storage
 import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.IncrementalScanPlan
 import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 import org.oxycblt.musikr.fs.FS
 import org.oxycblt.musikr.fs.FSUpdate
 import org.oxycblt.musikr.fs.direct.DirectFS
+import org.oxycblt.musikr.fs.direct.DirectFsWorkProgress
 import org.oxycblt.musikr.fs.mediastore.MediaStore
 import org.oxycblt.musikr.fs.saf.SAF
 import org.oxycblt.musikr.library.MetadataProfile
@@ -243,10 +245,13 @@ interface MusicRepository {
     fun prepareIndexingReplacementHandoff() = Unit
 
     /** Update the elapsed/no-progress watchdog state without restarting the pipeline. */
-    fun updateIndexingWatchdog(state: IndexingWatchdogState) = Unit
+    fun updateIndexingWatchdog(decision: IndexingWatchdogDecision) = Unit
 
     /** Record service teardown before cancelling the owning coroutine. */
-    fun prepareIndexingInterruption(outcome: IndexingTerminalOutcome) = Unit
+    fun prepareIndexingInterruption(
+        outcome: IndexingTerminalOutcome,
+        request: IndexRequest? = null,
+    ) = Unit
 
     /** Rebuild only optional generated playlists from the current base library. */
     suspend fun refreshGeneratedPlaylists(force: Boolean = false) = Unit
@@ -357,6 +362,17 @@ sealed interface IndexingState {
         val lastProgressAtElapsedMs: Long = startedAtElapsedMs,
         val pendingReplacement: Boolean = false,
         val watchdogState: IndexingWatchdogState = IndexingWatchdogState.HEALTHY,
+        val watchdogDetail: String = "",
+        val noProgressDurationMs: Long = 0L,
+        val noProgressDeadlineMs: Long = 0L,
+        val sourceScope: IndexingSourceScope = IndexingSourceScope.UNKNOWN,
+        val firstFileEmitted: Boolean = false,
+        val directFsDirectoriesVisited: Int? = null,
+        val directFsEntriesInspected: Int? = null,
+        val directFsFilesEmitted: Int? = null,
+        val queuedDirectFsWork: Int? = null,
+        val activeDirectFsEnumerators: Int? = null,
+        val nonAuthoritativeWorkDeferred: Boolean = false,
     ) : IndexingState
 
     /**
@@ -398,6 +414,7 @@ constructor(
     @Volatile private var indexingWorker: IndexingWorker? = null
     private val pendingIndexRequests = RepositoryIndexRequestQueue()
     private val indexingSessionIds = AtomicLong(0L)
+    private val indexingSessionGate = IndexingSessionGate()
     private val deviceLibraryGeneration = AtomicLong(0L)
     private val userLibraryGeneration = AtomicLong(0L)
     private val compatibilityHydrationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -409,6 +426,8 @@ constructor(
     @Volatile private var preparedInterruptionOutcome: IndexingTerminalOutcome? = null
     @Volatile private var preparedReplacementHandoff = false
     @Volatile private var lastProgressLogAtElapsedMs = 0L
+    @Volatile private var lastHeartbeatPersistedAtElapsedMs = 0L
+    @Volatile private var lastDirectFsProgressLogAtElapsedMs = 0L
     @Volatile private var lastLoggedProgressPhase: IndexingPhase? = null
     @Volatile
     override var lastSourceScanOutcome: SourceScanOutcome? = null
@@ -503,9 +522,11 @@ constructor(
                 }
                 L.d("Unregistering worker $worker")
                 indexingWorker = null
-                if (currentIndexingState is IndexingState.Indexing) {
+                val activeState = currentIndexingState as? IndexingState.Indexing
+                if (activeState != null) {
                     val outcome =
                         preparedInterruptionOutcome ?: IndexingTerminalOutcome.SERVICE_STOPPED
+                    indexingSessionGate.complete(activeState.sessionId)
                     previousCompletedState =
                         IndexingState.Completed(IndexingInterruptedException(outcome), outcome)
                     currentIndexingState = null
@@ -624,24 +645,30 @@ constructor(
     override fun retrySourceConfiguration() {
         compatibilityHydrationScope.launch {
             optionalWorkGate.awaitOpen()
-            val checkpoint = musicSettings.sourceConfigurationCheckpoint
-            val sourceKeys =
-                checkpoint?.unresolvedSourceKeys.orEmpty().ifEmpty {
-                    musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
-                }
-            for (sourceKey in sourceKeys) invalidateSource(sourceKey)
-            val requiresAuthoritativeInitial =
-                checkpoint?.state == SourceConfigurationCheckpoint.State.PENDING ||
-                    checkpoint?.state == SourceConfigurationCheckpoint.State.RUNNING
-            requestIndex(
-                IndexRequest(
-                    reason = IndexReason.USER_RETRY,
-                    withCache = !requiresAuthoritativeInitial,
-                    configurationGeneration =
-                        checkpoint?.generation ?: musicSettings.sourceConfigurationGeneration,
-                    sourceKeys = sourceKeys,
+            val configuredSourceKeys =
+                musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
+            val request =
+                IndexRequestPolicy.sourceRetryRequest(
+                    checkpoint = musicSettings.sourceConfigurationCheckpoint,
+                    currentGeneration = musicSettings.sourceConfigurationGeneration,
+                    configuredSourceKeys = configuredSourceKeys,
+                    hasRevision = musicSettings.revision != null,
                 )
-            )
+            if (request == null) {
+                val checkpoint = musicSettings.sourceConfigurationCheckpoint
+                L.i(
+                    "Ignoring source retry without a retryable source " +
+                        "[generation=${checkpoint?.generation} state=${checkpoint?.state}]"
+                )
+                return@launch
+            }
+            if (request.reason == IndexReason.USER_REFRESH) {
+                L.i("Retrying failed non-checkpoint refresh through normal source authority")
+                requestIndex(request)
+                return@launch
+            }
+            for (sourceKey in request.sourceKeys.orEmpty()) invalidateSource(sourceKey)
+            requestIndex(request)
         }
     }
 
@@ -653,12 +680,22 @@ constructor(
         val changed =
             synchronized(this) {
                 val current =
-                    currentIndexingState as? IndexingState.Indexing ?: return@synchronized false
-                if (current.pendingReplacement == pending) return@synchronized false
+                    currentIndexingState as? IndexingState.Indexing ?: return@synchronized null
+                if (current.pendingReplacement == pending) return@synchronized null
                 currentIndexingState = current.copy(pendingReplacement = pending)
-                true
+                current
             }
-        if (changed) dispatchIndexingState()
+        if (changed != null) {
+            diagnosticJournal.log(
+                DiagnosticJournal.CAT_INDEXING,
+                "Replacement",
+                "session=${changed.sessionId} generation=" +
+                    "${changed.request?.configurationGeneration} attempt=" +
+                    "${changed.request?.attemptId} pending=$pending",
+                result = if (pending) "PENDING" else "CLEARED",
+            )
+            dispatchIndexingState()
+        }
     }
 
     override fun prepareIndexingReplacementHandoff() {
@@ -669,35 +706,77 @@ constructor(
         L.i("Prepared direct indexing-generation handoff")
     }
 
-    override fun updateIndexingWatchdog(state: IndexingWatchdogState) {
-        val current =
+    override fun updateIndexingWatchdog(decision: IndexingWatchdogDecision) {
+        val update =
             synchronized(this) {
                 val active =
                     currentIndexingState as? IndexingState.Indexing ?: return@synchronized null
-                if (active.watchdogState == state) return@synchronized null
-                currentIndexingState = active.copy(watchdogState = state)
-                active
+                if (
+                    active.watchdogState == decision.state &&
+                        active.noProgressDurationMs == decision.noProgressMs &&
+                        active.noProgressDeadlineMs == decision.noProgressDeadlineMs &&
+                        active.watchdogDetail == decision.detail
+                ) {
+                    return@synchronized null
+                }
+                currentIndexingState =
+                    active.copy(
+                        watchdogState = decision.state,
+                        watchdogDetail = decision.detail,
+                        noProgressDurationMs = decision.noProgressMs,
+                        noProgressDeadlineMs = decision.noProgressDeadlineMs,
+                    )
+                active to (active.watchdogState != decision.state)
             } ?: return
-        L.w(
-            "Indexing watchdog changed [state=$state phase=${current.progress.phase} " +
-                "item=${current.progress.currentItem}]"
-        )
+        val (current, stateChanged) = update
+        if (stateChanged) {
+            L.w(
+                "Indexing watchdog changed [state=${decision.state} " +
+                    "phase=${current.progress.phase} item=${current.progress.currentItem} " +
+                    "detail=${decision.detail}]"
+            )
+            diagnosticJournal.log(
+                DiagnosticJournal.CAT_INDEXING,
+                "Watchdog",
+                "session=${current.sessionId} generation=" +
+                    "${current.request?.configurationGeneration} attempt=" +
+                    "${current.request?.attemptId} ${decision.detail}",
+                result = decision.state.name,
+            )
+        }
         dispatchIndexingState()
     }
 
-    override fun prepareIndexingInterruption(outcome: IndexingTerminalOutcome) {
+    override fun prepareIndexingInterruption(
+        outcome: IndexingTerminalOutcome,
+        request: IndexRequest?,
+    ) {
         val current =
             synchronized(this) {
                 preparedInterruptionOutcome = outcome
-                preparedReplacementHandoff = false
+                if (outcome != IndexingTerminalOutcome.SUPERSEDED) {
+                    preparedReplacementHandoff = false
+                }
                 currentIndexingState as? IndexingState.Indexing
-            } ?: return
-        current.request?.let(IndexRequestPolicy::checkpointGeneration)?.let {
-            musicSettings.returnSourceConfigurationToPending(it, outcome.name)
+            }
+        if (current != null) {
+            completeAttemptForInterruption(current, outcome)
+        } else if (request != null) {
+            val durableAccepted = completeSourceAttemptForInterruption(request, outcome, null)
+            // Record when: (a) non-authoritative (no checkpoint lease, so durable completion is
+            // never applicable), or (b) the durable completion was actually accepted.
+            if (IndexRequestPolicy.shouldRecordInterruptionOutcome(request, durableAccepted)) {
+                recordSourceScanOutcome(
+                    request,
+                    sourceOutcomeForInterruption(outcome, request = request),
+                )
+            }
+        } else {
+            return
         }
         L.w(
-            "Prepared indexing interruption [outcome=$outcome phase=${current.progress.phase} " +
-                "item=${current.progress.currentItem}]"
+            "Prepared indexing interruption [outcome=$outcome phase=${current?.progress?.phase} " +
+                "item=${current?.progress?.currentItem}]"
         )
     }
 
@@ -724,9 +803,10 @@ constructor(
                         val pendingCheckpoint = musicSettings.sourceConfigurationCheckpoint
                         if (
                             pendingCheckpoint?.state !=
-                                SourceConfigurationCheckpoint.State.PENDING &&
-                                pendingCheckpoint?.state !=
-                                    SourceConfigurationCheckpoint.State.RUNNING
+                                SourceConfigurationCheckpoint.State.RUNNING &&
+                                pendingCheckpoint?.canClaim(
+                                    SourceScanClaimReason.STARTUP_RECOVERY
+                                ) != true
                         ) {
                             worker.requestIndex(
                                 IndexRequest(
@@ -801,13 +881,71 @@ constructor(
                 "profile=${request.metadataProfile} generation=${request.configurationGeneration})"
         ) {
             yield()
-            val checkpointGeneration = IndexRequestPolicy.checkpointGeneration(request)
+            val checkpointAuthority = IndexRequestPolicy.checkpointAuthority(request)
             if (indexingWorker !== worker) {
                 L.w("Index requested from unregistered worker; ignoring")
+                completeSourceAttemptForInterruption(
+                    request,
+                    IndexingTerminalOutcome.SERVICE_STOPPED,
+                    null,
+                )
+                return@traceSuspend
+            }
+            if (IndexRequestPolicy.requiresAttemptClaim(request) && checkpointAuthority == null) {
+                L.w(
+                    "Authoritative source request has no attempt lease; ignoring [request=$request]"
+                )
+                return@traceSuspend
+            }
+            if (
+                checkpointAuthority != null &&
+                    !musicSettings.ownsSourceConfigurationAttempt(
+                        checkpointAuthority.generation,
+                        checkpointAuthority.attemptId,
+                        checkpointAuthority.owner,
+                    )
+            ) {
+                L.w(
+                    "Stale source attempt cannot begin repository indexing " +
+                        "[generation=${checkpointAuthority.generation} " +
+                        "attempt=${checkpointAuthority.attemptId}]"
+                )
                 return@traceSuspend
             }
 
-            beginIndexing(request)
+            val sessionId =
+                try {
+                    beginIndexing(request)
+                } catch (e: Exception) {
+                    val attemptedKeys = attemptedSourceKeys(request)
+                    recordSourceScanOutcome(
+                        request,
+                        SourceScanOutcome.Failed(
+                            retryable = true,
+                            failureClass = e.javaClass.name,
+                            failureMessage = e.message,
+                            unresolvedSourceKeys = attemptedKeys,
+                        ),
+                    )
+                    val completed =
+                        completeSourceAttempt(
+                            request = request,
+                            outcome = SourceScanAttemptOutcome.FAILED_RETRYABLE,
+                            unresolvedSourceKeys = attemptedKeys,
+                            reason = "Failed to initialise indexing session",
+                            failure = e,
+                            lastScanFailed = true,
+                        )
+                    if (
+                        !completed &&
+                            checkpointAuthority == null &&
+                            IndexRequestPolicy.recordsSourceOutcome(request)
+                    ) {
+                        musicSettings.lastScanFailed = true
+                    }
+                    L.w(e, "Unable to initialise indexing session")
+                    return@traceSuspend
+                }
             try {
                 val playbackActive = worker.playbackActiveSnapshot()
                 val resolvedProfile =
@@ -817,6 +955,10 @@ constructor(
                         playbackActive = playbackActive,
                         isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                     )
+                updateNonAuthoritativeWorkDeferred(
+                    sessionId,
+                    resolvedProfile == MetadataProfile.LEAN && playbackActive,
+                )
                 val currentRevision = musicSettings.revision
                 val newRevision = currentRevision?.takeIf { request.withCache } ?: UUID.randomUUID()
                 val workerCount =
@@ -831,7 +973,10 @@ constructor(
                     musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
                 val attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
                 val rawFs =
-                    createFileSystem(sourceKeys = requestedSourceKeys.takeIf { !request.withCache })
+                    createFileSystem(
+                        sessionId = sessionId,
+                        sourceKeys = requestedSourceKeys.takeIf { !request.withCache },
+                    )
                 val prepared =
                     if (!request.withCache) {
                         L.i(
@@ -856,21 +1001,34 @@ constructor(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            checkpointGeneration?.let {
-                                musicSettings.returnSourceConfigurationToPending(
-                                    it,
-                                    "TemporarilyUnavailable",
-                                )
+                            recordSourceScanOutcome(
+                                request,
+                                SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
+                            )
+                            completeSourceAttempt(
+                                request = request,
+                                outcome = SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
+                                unresolvedSourceKeys = attemptedSourceKeys,
+                                reason = "Music-source preflight unavailable",
+                                failure = e,
+                                lastScanFailed = true,
+                            )
+                            if (
+                                checkpointAuthority == null &&
+                                    IndexRequestPolicy.recordsSourceOutcome(request)
+                            ) {
+                                musicSettings.lastScanFailed = true
                             }
-                            lastSourceScanOutcome =
-                                SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys)
-                            musicSettings.lastScanFailed = true
                             emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
                             L.w(
                                 e,
                                 "Music-source preflight failed; preserving the last readable library",
                             )
-                            emitIndexingCompletion(e)
+                            emitIndexingCompletion(
+                                sessionId,
+                                e,
+                                IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                            )
                             return@traceSuspend
                         }
                     }
@@ -903,18 +1061,45 @@ constructor(
                             )
                         )
                     }
-                    checkpointGeneration?.let {
-                        val unresolved =
-                            musicSettings.sourceConfigurationCheckpoint
-                                ?.unresolvedSourceKeys
-                                .orEmpty() - (request.sourceKeys ?: emptySet())
-                        musicSettings.acknowledgeSourceConfiguration(
-                            it,
-                            unresolvedSourceKeys = unresolved,
-                            outcome = "Success",
-                        )
-                    }
-                    emitIndexingCompletion(null)
+                    val unresolved =
+                        musicSettings.sourceConfigurationCheckpoint
+                            ?.unresolvedSourceKeys
+                            .orEmpty() - (request.sourceKeys ?: emptySet())
+                    val empty = synchronized(this) { library?.songs?.isEmpty() == true }
+                    recordSourceScanOutcome(
+                        request,
+                        when {
+                            unresolved.isNotEmpty() ->
+                                SourceScanOutcome.Partial(
+                                    committedSourceKeys = attemptedSourceKeys - unresolved,
+                                    unresolvedSourceKeys = unresolved,
+                                )
+                            empty -> SourceScanOutcome.AuthoritativeEmpty(attemptedSourceKeys)
+                            else -> SourceScanOutcome.Success(attemptedSourceKeys)
+                        },
+                    )
+                    completeSourceAttempt(
+                        request = request,
+                        outcome =
+                            if (empty) {
+                                SourceScanAttemptOutcome.AUTHORITATIVE_EMPTY
+                            } else {
+                                SourceScanAttemptOutcome.SUCCESS
+                            },
+                        unresolvedSourceKeys = unresolved,
+                        reason = "Configured sources unchanged",
+                        lastScanFailed = unresolved.isNotEmpty(),
+                    )
+                    emitIndexingCompletion(
+                        sessionId,
+                        error = null,
+                        outcome =
+                            if (unresolved.isEmpty()) {
+                                IndexingTerminalOutcome.SUCCESS
+                            } else {
+                                IndexingTerminalOutcome.PARTIAL_SUCCESS
+                            },
+                    )
                     return@traceSuspend
                 }
 
@@ -940,14 +1125,31 @@ constructor(
                         locations.any { !it.path.volume.isAccessible() }
                 ) {
                     L.w("One or more legacy music sources are inaccessible. Preserving cache.")
-                    checkpointGeneration?.let {
-                        musicSettings.returnSourceConfigurationToPending(
-                            it,
-                            "TemporarilyUnavailable",
-                        )
+                    val unavailable = Exception("Music source inaccessible")
+                    recordSourceScanOutcome(
+                        request,
+                        SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
+                    )
+                    completeSourceAttempt(
+                        request = request,
+                        outcome = SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
+                        unresolvedSourceKeys = attemptedSourceKeys,
+                        reason = "Legacy SAF source inaccessible",
+                        failure = unavailable,
+                        lastScanFailed = true,
+                    )
+                    if (
+                        checkpointAuthority == null &&
+                            IndexRequestPolicy.recordsSourceOutcome(request)
+                    ) {
+                        musicSettings.lastScanFailed = true
                     }
-                    musicSettings.lastScanFailed = true
-                    emitIndexingCompletion(Exception("Music source inaccessible"))
+                    emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                    emitIndexingCompletion(
+                        sessionId,
+                        unavailable,
+                        IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                    )
                     return@traceSuspend
                 }
 
@@ -969,8 +1171,12 @@ constructor(
                             pathKeywords = pathKeywords,
                             rootGate = rootGate,
                         )
-                        .run(::emitIndexingProgress)
-                emitIndexingProgress(IndexingProgress.Stage(IndexingPhase.FINALISING))
+                        .run { progress -> emitIndexingProgress(sessionId, request, progress) }
+                emitIndexingProgress(
+                    sessionId,
+                    request,
+                    IndexingProgress.Stage(IndexingPhase.FINALISING),
+                )
                 L.d("Index finished in ${System.currentTimeMillis() - start}ms")
                 val scopedFailures =
                     if (requestedSourceKeys == null) {
@@ -984,7 +1190,7 @@ constructor(
                         failedSources = scopedFailures,
                         songCount = result.library.songs.size,
                     )
-                lastSourceScanOutcome = sourceOutcome
+                recordSourceScanOutcome(request, sourceOutcome)
 
                 if (
                     plan == null &&
@@ -993,8 +1199,31 @@ constructor(
                 ) {
                     if (locations.any { !it.path.volume.isAccessible() }) {
                         L.w("Legacy scan became inaccessible. Preserving cache.")
-                        musicSettings.lastScanFailed = true
-                        emitIndexingCompletion(Exception("Source became inaccessible during scan"))
+                        val unavailable = Exception("Source became inaccessible during scan")
+                        recordSourceScanOutcome(
+                            request,
+                            SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
+                        )
+                        completeSourceAttempt(
+                            request = request,
+                            outcome = SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
+                            unresolvedSourceKeys = attemptedSourceKeys,
+                            reason = "Legacy SAF source became inaccessible",
+                            failure = unavailable,
+                            lastScanFailed = true,
+                        )
+                        if (
+                            checkpointAuthority == null &&
+                                IndexRequestPolicy.recordsSourceOutcome(request)
+                        ) {
+                            musicSettings.lastScanFailed = true
+                        }
+                        emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                        emitIndexingCompletion(
+                            sessionId,
+                            unavailable,
+                            IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                        )
                         return@traceSuspend
                     }
                 }
@@ -1012,83 +1241,143 @@ constructor(
                         when (sourceOutcome) {
                             is SourceScanOutcome.PermissionRequired,
                             is SourceScanOutcome.TemporarilyUnavailable -> {
-                                checkpointGeneration?.let {
-                                    musicSettings.returnSourceConfigurationToPending(
-                                        it,
-                                        sourceOutcome.javaClass.simpleName,
-                                    )
-                                }
+                                val outcome =
+                                    if (sourceOutcome is SourceScanOutcome.PermissionRequired) {
+                                        SourceScanAttemptOutcome.PERMISSION_REQUIRED
+                                    } else {
+                                        SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE
+                                    }
+                                val failure = SourceScanFailureException(scopedFailures)
+                                completeSourceAttempt(
+                                    request = request,
+                                    outcome = outcome,
+                                    unresolvedSourceKeys = sourceOutcome.unresolvedSourceKeys,
+                                    reason = sourceOutcome.javaClass.simpleName,
+                                    failure = failure,
+                                    lastScanFailed = true,
+                                )
                                 emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
-                                musicSettings.lastScanFailed = true
-                                emitIndexingCompletion(SourceScanFailureException(scopedFailures))
+                                if (
+                                    checkpointAuthority == null &&
+                                        IndexRequestPolicy.recordsSourceOutcome(request)
+                                ) {
+                                    musicSettings.lastScanFailed = true
+                                }
+                                emitIndexingCompletion(
+                                    sessionId,
+                                    failure,
+                                    IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                                )
                                 return@traceSuspend
                             }
                             is SourceScanOutcome.Partial,
                             is SourceScanOutcome.Truncated -> {
-                                checkpointGeneration?.let { generation ->
-                                    val retained =
-                                        musicSettings.sourceConfigurationCheckpoint
-                                            ?.unresolvedSourceKeys
-                                            .orEmpty() - attemptedSourceKeys
-                                    musicSettings.acknowledgeSourceConfiguration(
-                                        generation,
+                                val retained =
+                                    musicSettings.sourceConfigurationCheckpoint
+                                        ?.unresolvedSourceKeys
+                                        .orEmpty() - attemptedSourceKeys
+                                val failure = SourceScanFailureException(scopedFailures)
+                                completeSourceAttempt(
+                                    request = request,
+                                    outcome = SourceScanAttemptOutcome.FAILED_RETRYABLE,
+                                    unresolvedSourceKeys =
                                         retained + sourceOutcome.unresolvedSourceKeys,
-                                        sourceOutcome.javaClass.simpleName,
-                                    )
+                                    reason =
+                                        "${sourceOutcome.javaClass.simpleName} result not publishable",
+                                    failure = failure,
+                                    lastScanFailed = true,
+                                )
+                                if (
+                                    checkpointAuthority == null &&
+                                        IndexRequestPolicy.recordsSourceOutcome(request)
+                                ) {
+                                    musicSettings.lastScanFailed = true
                                 }
-                                musicSettings.lastScanFailed = true
                                 emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
-                                emitIndexingCompletion(SourceScanFailureException(scopedFailures))
+                                emitIndexingCompletion(
+                                    sessionId,
+                                    failure,
+                                    IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                                )
                                 return@traceSuspend
                             }
                             else -> throw SourceScanFailureException(scopedFailures)
                         }
                     }
-                musicSettings.revision = newRevision
-                emitLibrary(publishedLibrary)
+                val isEmpty = publishedLibrary.songs.isEmpty()
+                val publishedState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
+                val priorUnresolved =
+                    musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
+                val retainedUnresolved = priorUnresolved - attemptedSourceKeys
+                val unresolved = retainedUnresolved + sourceOutcome.unresolvedSourceKeys
+                val effectiveSourceOutcome =
+                    when {
+                        unresolved.isEmpty() -> sourceOutcome
+                        sourceOutcome is SourceScanOutcome.Success ->
+                            SourceScanOutcome.Partial(sourceOutcome.committedSourceKeys, unresolved)
+                        sourceOutcome is SourceScanOutcome.AuthoritativeEmpty ->
+                            SourceScanOutcome.Partial(emptySet(), unresolved)
+                        else -> sourceOutcome
+                    }
+                recordSourceScanOutcome(request, effectiveSourceOutcome)
+                val partial =
+                    effectiveSourceOutcome is SourceScanOutcome.Partial ||
+                        effectiveSourceOutcome is SourceScanOutcome.Truncated ||
+                        unresolved.isNotEmpty()
+                val attemptOutcome =
+                    when (effectiveSourceOutcome) {
+                        is SourceScanOutcome.Success -> SourceScanAttemptOutcome.SUCCESS
+                        is SourceScanOutcome.AuthoritativeEmpty ->
+                            SourceScanAttemptOutcome.AUTHORITATIVE_EMPTY
+                        is SourceScanOutcome.Partial -> SourceScanAttemptOutcome.PARTIAL_SUCCESS
+                        is SourceScanOutcome.Truncated -> SourceScanAttemptOutcome.TRUNCATED
+                        is SourceScanOutcome.PermissionRequired ->
+                            SourceScanAttemptOutcome.PERMISSION_REQUIRED
+                        is SourceScanOutcome.TemporarilyUnavailable ->
+                            SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE
+                        is SourceScanOutcome.Cancelled -> SourceScanAttemptOutcome.CANCELLED
+                        is SourceScanOutcome.Interrupted,
+                        is SourceScanOutcome.TimedOut,
+                        is SourceScanOutcome.Failed ->
+                            error("Terminal source outcome cannot be published")
+                    }
+                var libraryChanged = false
+                if (checkpointAuthority != null) {
+                    val accepted =
+                        completeSourceAttempt(
+                            request = request,
+                            outcome = attemptOutcome,
+                            unresolvedSourceKeys = unresolved,
+                            reason = effectiveSourceOutcome.javaClass.simpleName,
+                            publishedRevision = newRevision,
+                            publishedLibraryState = publishedState,
+                            lastScanFailed = partial,
+                            publishAfterCommit = {
+                                libraryChanged = replaceLibrary(publishedLibrary)
+                            },
+                        )
+                    if (!accepted) {
+                        throw IllegalStateException(
+                            "Source attempt lost ownership before library publication"
+                        )
+                    }
+                    if (libraryChanged) {
+                        withContext(Dispatchers.Main) {
+                            dispatchLibraryChange(device = true, user = true)
+                        }
+                    }
+                } else {
+                    musicSettings.revision = newRevision
+                    emitLibrary(publishedLibrary)
+                    musicSettings.libraryState = publishedState
+                    if (request.reason != IndexReason.METADATA_ENRICHMENT) {
+                        musicSettings.lastScanFailed = partial
+                    }
+                }
                 try {
                     result.cleanup()
                 } catch (cleanupFailure: Exception) {
                     L.w(cleanupFailure, "Post-publication cover cleanup failed")
-                }
-                val isEmpty = publishedLibrary.songs.isEmpty()
-                musicSettings.libraryState =
-                    if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
-                musicSettings.lastScanFailed = false
-                checkpointGeneration?.let { generation ->
-                    val priorUnresolved =
-                        musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
-                    val retainedUnresolved = priorUnresolved - attemptedSourceKeys
-                    when (sourceOutcome) {
-                        is SourceScanOutcome.Success,
-                        is SourceScanOutcome.AuthoritativeEmpty ->
-                            musicSettings.acknowledgeSourceConfiguration(
-                                generation,
-                                unresolvedSourceKeys = retainedUnresolved,
-                                outcome = sourceOutcome.javaClass.simpleName,
-                            )
-                        is SourceScanOutcome.Partial ->
-                            musicSettings.acknowledgeSourceConfiguration(
-                                generation,
-                                unresolvedSourceKeys =
-                                    retainedUnresolved + sourceOutcome.unresolvedSourceKeys,
-                                outcome = "Partial",
-                            )
-                        is SourceScanOutcome.Truncated ->
-                            musicSettings.acknowledgeSourceConfiguration(
-                                generation,
-                                unresolvedSourceKeys =
-                                    retainedUnresolved + sourceOutcome.unresolvedSourceKeys,
-                                outcome = "Truncated",
-                            )
-                        is SourceScanOutcome.PermissionRequired,
-                        is SourceScanOutcome.TemporarilyUnavailable,
-                        SourceScanOutcome.Cancelled ->
-                            musicSettings.returnSourceConfigurationToPending(
-                                generation,
-                                sourceOutcome.javaClass.simpleName,
-                            )
-                    }
                 }
                 emitStartupLibraryStatus(
                     if (isEmpty) StartupLibraryStatus.Empty else StartupLibraryStatus.Usable
@@ -1100,7 +1389,16 @@ constructor(
                 if (resolvedProfile == MetadataProfile.FULL) {
                     emitStartupReadinessState(StartupReadinessState.EnrichmentComplete)
                 }
-                emitIndexingCompletion(null)
+                emitIndexingCompletion(
+                    sessionId,
+                    error = null,
+                    outcome =
+                        if (partial) {
+                            IndexingTerminalOutcome.PARTIAL_SUCCESS
+                        } else {
+                            IndexingTerminalOutcome.SUCCESS
+                        },
+                )
 
                 if (resolvedProfile == MetadataProfile.LEAN && !isEmpty) {
                     // The worker defers this while playback is active, so rich extraction cannot
@@ -1115,11 +1413,19 @@ constructor(
                     )
                 }
             } catch (e: CancellationException) {
-                lastSourceScanOutcome = SourceScanOutcome.Cancelled
                 val terminalOutcome =
                     preparedInterruptionOutcome ?: IndexingTerminalOutcome.CANCELLED
-                checkpointGeneration?.let {
-                    musicSettings.returnSourceConfigurationToPending(it, terminalOutcome.name)
+                // Complete the durable attempt first so a stale authoritative cancellation cannot
+                // replace an already-terminal outcome via the subsequent record call.
+                val durableAccepted =
+                    completeSourceAttemptForInterruption(request, terminalOutcome, e)
+                // Record when non-authoritative (no checkpoint lease) or the durable completion
+                // was accepted; mirrors the same rule in prepareIndexingInterruption.
+                if (IndexRequestPolicy.shouldRecordInterruptionOutcome(request, durableAccepted)) {
+                    recordSourceScanOutcome(
+                        request,
+                        sourceOutcomeForInterruption(terminalOutcome, request = request),
+                    )
                 }
                 val directReplacementHandoff =
                     synchronized(this) {
@@ -1130,6 +1436,7 @@ constructor(
                 } else {
                     withContext(NonCancellable) {
                         emitIndexingCompletion(
+                            sessionId,
                             IndexingInterruptedException(terminalOutcome),
                             terminalOutcome,
                         )
@@ -1137,12 +1444,40 @@ constructor(
                 }
                 throw e
             } catch (e: Exception) {
-                checkpointGeneration?.let {
-                    musicSettings.returnSourceConfigurationToPending(it, "Failed")
+                val attemptedKeys = attemptedSourceKeys(request)
+                recordSourceScanOutcome(
+                    request,
+                    SourceScanOutcome.Failed(
+                        retryable = true,
+                        failureClass = e.javaClass.name,
+                        failureMessage = e.message,
+                        unresolvedSourceKeys =
+                            musicSettings.sourceConfigurationCheckpoint
+                                ?.unresolvedSourceKeys
+                                .orEmpty() + attemptedKeys,
+                    ),
+                )
+                val completedAttempt =
+                    completeSourceAttempt(
+                        request = request,
+                        outcome = SourceScanAttemptOutcome.FAILED_RETRYABLE,
+                        unresolvedSourceKeys =
+                            musicSettings.sourceConfigurationCheckpoint
+                                ?.unresolvedSourceKeys
+                                .orEmpty() + attemptedKeys,
+                        reason = "Fatal indexing failure",
+                        failure = e,
+                        lastScanFailed = true,
+                    )
+                if (
+                    !completedAttempt &&
+                        checkpointAuthority == null &&
+                        request.reason != IndexReason.METADATA_ENRICHMENT
+                ) {
+                    musicSettings.lastScanFailed = true
                 }
-                musicSettings.lastScanFailed = true
                 L.w(e, "Indexing failed; committed source generations remain readable")
-                emitIndexingCompletion(e, IndexingTerminalOutcome.FAILED)
+                emitIndexingCompletion(sessionId, e, IndexingTerminalOutcome.FAILED)
             }
         }
 
@@ -1396,7 +1731,7 @@ constructor(
         )
     }
 
-    private fun createFileSystem(sourceKeys: Set<String>? = null): FS {
+    private fun createFileSystem(sessionId: Long, sourceKeys: Set<String>? = null): FS {
         val delegate =
             when (musicSettings.locationMode) {
                 LocationMode.SAF -> SAF.from(context, musicSettings.safQuery)
@@ -1412,7 +1747,10 @@ constructor(
                         )
                     MediaStore.from(context, query)
                 }
-                LocationMode.DIRECT_FS -> DirectFS(musicSettings.safQuery)
+                LocationMode.DIRECT_FS ->
+                    DirectFS(musicSettings.safQuery) { progress ->
+                        updateDirectFsWorkProgress(sessionId, progress)
+                    }
             }
         val sourceAware =
             if (musicSettings.locationMode == LocationMode.MEDIA_STORE) {
@@ -1448,10 +1786,13 @@ constructor(
         startupReadinessController.publishLibraryStatus(status)
     }
 
-    private fun beginIndexing(request: IndexRequest) {
+    private fun beginIndexing(request: IndexRequest): Long {
         val now = SystemClock.elapsedRealtime()
         lastProgressLogAtElapsedMs = 0L
+        lastHeartbeatPersistedAtElapsedMs = 0L
+        lastDirectFsProgressLogAtElapsedMs = 0L
         lastLoggedProgressPhase = null
+        val sessionId = indexingSessionIds.incrementAndGet()
         val attemptedKeys =
             request.sourceKeys?.takeIf { it.isNotEmpty() }
                 ?: musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
@@ -1462,54 +1803,117 @@ constructor(
                 .map { it.displayPath }
                 .distinct()
                 .toList()
+        val sourceScope = indexingSourceScope(attemptedKeys)
         synchronized(this) {
             preparedInterruptionOutcome = null
             preparedReplacementHandoff = false
+            indexingSessionGate.begin(sessionId)
             currentIndexingState =
                 IndexingState.Indexing(
                     progress = IndexingProgress.Stage(IndexingPhase.PREPARING),
-                    sessionId = indexingSessionIds.incrementAndGet(),
+                    sessionId = sessionId,
                     request = request,
                     locationMode = musicSettings.locationMode,
                     sourceLabels = labels,
                     startedAtElapsedMs = now,
                     lastProgressAtElapsedMs = now,
+                    sourceScope = sourceScope,
                 )
         }
         L.i(
             "Indexing session started [reason=${request.reason} mode=${musicSettings.locationMode} " +
-                "generation=${request.configurationGeneration} sources=$labels]"
+                "generation=${request.configurationGeneration} attempt=${request.attemptId} " +
+                "owner=${request.attemptOwner?.lifecycleId} scope=$sourceScope sources=$labels]"
         )
         diagnosticJournal.log(
             DiagnosticJournal.CAT_INDEXING,
             "Started",
-            "session=${indexingStateSessionId()} reason=${request.reason} " +
+            "session=$sessionId reason=${request.reason} " +
                 "mode=${musicSettings.locationMode} generation=${request.configurationGeneration} " +
-                "sources=$labels",
+                "attempt=${request.attemptId} owner=${request.attemptOwner?.lifecycleId} " +
+                "scope=$sourceScope sources=$labels",
         )
         dispatchIndexingState()
+        return sessionId
     }
 
-    private suspend fun emitIndexingProgress(progress: IndexingProgress) {
+    private fun updateNonAuthoritativeWorkDeferred(sessionId: Long, deferred: Boolean) {
+        if (!deferred) return
+        synchronized(this) {
+            val current = currentIndexingState as? IndexingState.Indexing ?: return
+            if (current.sessionId != sessionId || !indexingSessionGate.isCurrent(sessionId)) return
+            currentIndexingState = current.copy(nonAuthoritativeWorkDeferred = true)
+        }
+    }
+
+    private suspend fun emitIndexingProgress(
+        sessionId: Long,
+        request: IndexRequest,
+        progress: IndexingProgress,
+    ) {
         yield()
         val now = SystemClock.elapsedRealtime()
-        synchronized(this) {
-            val current = currentIndexingState as? IndexingState.Indexing
-            currentIndexingState =
-                if (current != null) {
+        val update =
+            synchronized(this) {
+                val current = currentIndexingState as? IndexingState.Indexing
+                if (
+                    current == null ||
+                        current.sessionId != sessionId ||
+                        !indexingSessionGate.isCurrent(sessionId)
+                ) {
+                    return@synchronized null
+                }
+                val meaningful = progress.isMeaningfulAfter(current.progress)
+                if (!meaningful) return@synchronized null
+                val phaseChanged = progress.phase != current.progress.phase
+                val firstFileEmitted =
+                    current.firstFileEmitted ||
+                        ((progress as? IndexingProgress.Songs)?.explored ?: 0) > 0
+                val updated =
                     current.copy(
                         progress = progress,
                         lastProgressAtElapsedMs = now,
                         watchdogState = IndexingWatchdogState.HEALTHY,
+                        watchdogDetail = "",
+                        noProgressDurationMs = 0L,
+                        firstFileEmitted = firstFileEmitted,
                     )
-                } else {
-                    IndexingState.Indexing(
-                        progress = progress,
-                        sessionId = indexingSessionIds.incrementAndGet(),
-                        startedAtElapsedMs = now,
-                        lastProgressAtElapsedMs = now,
-                    )
-                }
+                currentIndexingState = updated
+                updated to phaseChanged
+            } ?: return
+        val (updatedState, phaseChanged) = update
+        val shouldPersistHeartbeat =
+            synchronized(this) {
+                val shouldPersist =
+                    phaseChanged ||
+                        lastHeartbeatPersistedAtElapsedMs == 0L ||
+                        now - lastHeartbeatPersistedAtElapsedMs >= HEARTBEAT_PERSIST_INTERVAL_MS
+                if (shouldPersist) lastHeartbeatPersistedAtElapsedMs = now
+                shouldPersist
+            }
+        if (shouldPersistHeartbeat) {
+            IndexRequestPolicy.checkpointAuthority(request)?.let { authority ->
+                val counts = progress.counts()
+                musicSettings.heartbeatSourceConfigurationAttempt(
+                    generation = authority.generation,
+                    attemptId = authority.attemptId,
+                    owner = authority.owner,
+                    nowMs = System.currentTimeMillis(),
+                    progress =
+                        SourceScanAttemptProgress(
+                            phase = progress.phase.name,
+                            explored = counts.explored,
+                            loaded = counts.loaded,
+                            evaluated = counts.evaluated,
+                            currentItem = progress.currentItem,
+                            directFsDirectoriesVisited = updatedState.directFsDirectoriesVisited,
+                            directFsEntriesInspected = updatedState.directFsEntriesInspected,
+                            directFsFilesEmitted = updatedState.directFsFilesEmitted,
+                            queuedDirectFsWork = updatedState.queuedDirectFsWork,
+                            activeDirectFsEnumerators = updatedState.activeDirectFsEnumerators,
+                        ),
+                )
+            }
         }
         if (
             progress.phase != lastLoggedProgressPhase ||
@@ -1525,11 +1929,101 @@ constructor(
             diagnosticJournal.log(
                 DiagnosticJournal.CAT_INDEXING,
                 "Progress",
-                "session=${indexingStateSessionId()} phase=${progress.phase}$counts " +
-                    "item=${progress.currentItem}",
+                "session=$sessionId generation=${request.configurationGeneration} " +
+                    "attempt=${request.attemptId} phase=${progress.phase}$counts " +
+                    "item=${progress.currentItem} firstFile=${updatedState.firstFileEmitted}",
             )
         }
         dispatchIndexingState()
+    }
+
+    private fun updateDirectFsWorkProgress(sessionId: Long, progress: DirectFsWorkProgress) {
+        val now = SystemClock.elapsedRealtime()
+        val update =
+            synchronized(this) {
+                val current = currentIndexingState as? IndexingState.Indexing
+                if (
+                    current == null ||
+                        current.sessionId != sessionId ||
+                        !indexingSessionGate.isCurrent(sessionId)
+                ) {
+                    return@synchronized null
+                }
+                val meaningful =
+                    progress.directoriesVisited > (current.directFsDirectoriesVisited ?: -1) ||
+                        progress.entriesInspected > (current.directFsEntriesInspected ?: -1) ||
+                        progress.filesEmitted > (current.directFsFilesEmitted ?: -1)
+                val updated =
+                    current.copy(
+                        lastProgressAtElapsedMs =
+                            if (meaningful) now else current.lastProgressAtElapsedMs,
+                        watchdogState =
+                            if (meaningful) {
+                                IndexingWatchdogState.HEALTHY
+                            } else {
+                                current.watchdogState
+                            },
+                        watchdogDetail = if (meaningful) "" else current.watchdogDetail,
+                        noProgressDurationMs = if (meaningful) 0L else current.noProgressDurationMs,
+                        firstFileEmitted = current.firstFileEmitted || progress.filesEmitted > 0,
+                        directFsDirectoriesVisited = progress.directoriesVisited,
+                        directFsEntriesInspected = progress.entriesInspected,
+                        directFsFilesEmitted = progress.filesEmitted,
+                        queuedDirectFsWork = progress.queuedDirectories,
+                        activeDirectFsEnumerators = progress.activeEnumerators,
+                    )
+                currentIndexingState = updated
+                val persistHeartbeat =
+                    meaningful &&
+                        (lastHeartbeatPersistedAtElapsedMs == 0L ||
+                            now - lastHeartbeatPersistedAtElapsedMs >=
+                                HEARTBEAT_PERSIST_INTERVAL_MS)
+                if (persistHeartbeat) lastHeartbeatPersistedAtElapsedMs = now
+                val logProgress =
+                    meaningful &&
+                        (lastDirectFsProgressLogAtElapsedMs == 0L ||
+                            now - lastDirectFsProgressLogAtElapsedMs >= PROGRESS_LOG_INTERVAL_MS)
+                if (logProgress) lastDirectFsProgressLogAtElapsedMs = now
+                Triple(updated, persistHeartbeat, logProgress)
+            } ?: return
+        val (updated, persistHeartbeat, logProgress) = update
+        if (persistHeartbeat) {
+            updated.request
+                ?.let { IndexRequestPolicy.checkpointAuthority(it) }
+                ?.let { authority ->
+                    val counts = updated.progress.counts()
+                    musicSettings.heartbeatSourceConfigurationAttempt(
+                        generation = authority.generation,
+                        attemptId = authority.attemptId,
+                        owner = authority.owner,
+                        nowMs = System.currentTimeMillis(),
+                        progress =
+                            SourceScanAttemptProgress(
+                                phase = updated.progress.phase.name,
+                                explored = counts.explored,
+                                loaded = counts.loaded,
+                                evaluated = counts.evaluated,
+                                currentItem = updated.progress.currentItem,
+                                directFsDirectoriesVisited = progress.directoriesVisited,
+                                directFsEntriesInspected = progress.entriesInspected,
+                                directFsFilesEmitted = progress.filesEmitted,
+                                queuedDirectFsWork = progress.queuedDirectories,
+                                activeDirectFsEnumerators = progress.activeEnumerators,
+                            ),
+                    )
+                }
+        }
+        if (logProgress) {
+            diagnosticJournal.log(
+                DiagnosticJournal.CAT_INDEXING,
+                "DirectFS progress",
+                "session=$sessionId generation=" +
+                    "${updated.request?.configurationGeneration} attempt=" +
+                    "${updated.request?.attemptId} directories=${progress.directoriesVisited} " +
+                    "entries=${progress.entriesInspected} files=${progress.filesEmitted} " +
+                    "queued=${progress.queuedDirectories} active=${progress.activeEnumerators}",
+            )
+        }
     }
 
     private suspend fun emitLibrary(
@@ -1538,15 +2032,7 @@ constructor(
         user: Boolean = true,
     ) {
         val emitStart = System.currentTimeMillis()
-        val changed =
-            synchronized(this) {
-                if (library === newLibrary) {
-                    false
-                } else {
-                    library = newLibrary
-                    true
-                }
-            }
+        val changed = replaceLibrary(newLibrary)
         if (!changed) {
             L.d("Library instance has not changed, skipping update")
             return
@@ -1559,40 +2045,223 @@ constructor(
         L.d("emitLibrary completed in ${System.currentTimeMillis() - emitStart}ms")
     }
 
+    private fun replaceLibrary(newLibrary: MutableLibrary): Boolean =
+        synchronized(this) {
+            if (library === newLibrary) {
+                false
+            } else {
+                library = newLibrary
+                true
+            }
+        }
+
+    private fun completeSourceAttempt(
+        request: IndexRequest,
+        outcome: SourceScanAttemptOutcome,
+        unresolvedSourceKeys: Set<String>,
+        reason: String,
+        failure: Throwable? = null,
+        publishedRevision: UUID? = null,
+        publishedLibraryState: LibraryState? = null,
+        lastScanFailed: Boolean,
+        publishAfterCommit: () -> Unit = {},
+    ): Boolean {
+        val authority = IndexRequestPolicy.checkpointAuthority(request) ?: return false
+        return musicSettings.completeSourceConfigurationAttempt(
+            generation = authority.generation,
+            attemptId = authority.attemptId,
+            owner = authority.owner,
+            nowMs = System.currentTimeMillis(),
+            completion =
+                SourceScanAttemptCompletion(
+                    outcome = outcome,
+                    unresolvedSourceKeys = unresolvedSourceKeys,
+                    reason = reason,
+                    failureClass = failure?.javaClass?.name,
+                    failureMessage = failure?.message,
+                    publishedRevision = publishedRevision,
+                    publishedLibraryState = publishedLibraryState,
+                    lastScanFailed = lastScanFailed,
+                ),
+            publishAfterCommit = publishAfterCommit,
+        )
+    }
+
+    private fun completeAttemptForInterruption(
+        state: IndexingState.Indexing,
+        outcome: IndexingTerminalOutcome,
+    ) {
+        state.request?.let { request ->
+            val accepted = completeSourceAttemptForInterruption(request, outcome, null)
+            if (accepted) {
+                recordSourceScanOutcome(
+                    request,
+                    sourceOutcomeForInterruption(outcome, state, request),
+                )
+            }
+        }
+    }
+
+    private fun recordSourceScanOutcome(request: IndexRequest, outcome: SourceScanOutcome) {
+        if (IndexRequestPolicy.recordsSourceOutcome(request)) lastSourceScanOutcome = outcome
+    }
+
+    private fun completeSourceAttemptForInterruption(
+        request: IndexRequest,
+        outcome: IndexingTerminalOutcome,
+        failure: Throwable?,
+    ): Boolean {
+        val state = synchronized(this) { currentIndexingState as? IndexingState.Indexing }
+        val attemptedSources = attemptedSourceKeys(request)
+        val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
+        val unresolved =
+            when (outcome) {
+                IndexingTerminalOutcome.TIMED_OUT,
+                IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                IndexingTerminalOutcome.FAILED -> retained + attemptedSources
+                else -> retained
+            }
+        val attemptOutcome =
+            when (outcome) {
+                IndexingTerminalOutcome.SUCCESS -> SourceScanAttemptOutcome.SUCCESS
+                IndexingTerminalOutcome.PARTIAL_SUCCESS -> SourceScanAttemptOutcome.PARTIAL_SUCCESS
+                IndexingTerminalOutcome.SOURCE_UNAVAILABLE ->
+                    SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE
+                IndexingTerminalOutcome.FAILED -> SourceScanAttemptOutcome.FAILED_RETRYABLE
+                IndexingTerminalOutcome.CANCELLED -> SourceScanAttemptOutcome.CANCELLED
+                IndexingTerminalOutcome.SERVICE_STOPPED -> SourceScanAttemptOutcome.SERVICE_STOPPED
+                IndexingTerminalOutcome.SUPERSEDED -> SourceScanAttemptOutcome.SUPERSEDED
+                IndexingTerminalOutcome.TIMED_OUT -> SourceScanAttemptOutcome.TIMED_OUT
+            }
+        val reason =
+            if (outcome == IndexingTerminalOutcome.TIMED_OUT) {
+                state?.watchdogDetail?.ifBlank { null } ?: "Stage-aware watchdog timeout"
+            } else {
+                outcome.name
+            }
+        return completeSourceAttempt(
+            request = request,
+            outcome = attemptOutcome,
+            unresolvedSourceKeys = unresolved,
+            reason = reason,
+            failure = failure,
+            lastScanFailed =
+                outcome == IndexingTerminalOutcome.TIMED_OUT ||
+                    outcome == IndexingTerminalOutcome.SOURCE_UNAVAILABLE ||
+                    outcome == IndexingTerminalOutcome.FAILED,
+        )
+    }
+
+    private fun sourceOutcomeForInterruption(
+        outcome: IndexingTerminalOutcome,
+        state: IndexingState.Indexing? =
+            synchronized(this) { currentIndexingState as? IndexingState.Indexing },
+        request: IndexRequest? = state?.request,
+    ): SourceScanOutcome {
+        val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
+        val attempted = request?.let(::attemptedSourceKeys).orEmpty()
+        val unresolved = retained + attempted
+        return when (outcome) {
+            IndexingTerminalOutcome.CANCELLED -> SourceScanOutcome.Cancelled(retained)
+            IndexingTerminalOutcome.TIMED_OUT ->
+                SourceScanOutcome.TimedOut(
+                    phase = state?.progress?.phase?.name.orEmpty(),
+                    noProgressMs = state?.noProgressDurationMs ?: 0L,
+                    detail = state?.watchdogDetail.orEmpty(),
+                    unresolvedSourceKeys = unresolved,
+                )
+            IndexingTerminalOutcome.SOURCE_UNAVAILABLE ->
+                SourceScanOutcome.TemporarilyUnavailable(unresolved)
+            IndexingTerminalOutcome.FAILED ->
+                SourceScanOutcome.Failed(true, "IndexingFailure", null, unresolved)
+            IndexingTerminalOutcome.SUCCESS,
+            IndexingTerminalOutcome.PARTIAL_SUCCESS,
+            IndexingTerminalOutcome.SERVICE_STOPPED,
+            IndexingTerminalOutcome.SUPERSEDED -> SourceScanOutcome.Interrupted(outcome, retained)
+        }
+    }
+
+    private fun indexingSourceScope(attemptedSourceKeys: Set<String>): IndexingSourceScope {
+        if (musicSettings.locationMode != LocationMode.DIRECT_FS) {
+            return IndexingSourceScope.UNKNOWN
+        }
+        val scopes =
+            musicSettings.configuredSourceSpecs
+                .asSequence()
+                .filter { it.sourceKey in attemptedSourceKeys }
+                .mapNotNull { it.traversalScope }
+                .toSet()
+        return when {
+            scopes.isEmpty() -> IndexingSourceScope.UNKNOWN
+            scopes == setOf(CanonicalSourcePolicy.Scope.EXPLICIT) -> IndexingSourceScope.NARROW
+            scopes == setOf(CanonicalSourcePolicy.Scope.WHOLE_VOLUME) ->
+                IndexingSourceScope.WHOLE_VOLUME
+            else -> IndexingSourceScope.MIXED
+        }
+    }
+
+    private fun attemptedSourceKeys(request: IndexRequest): Set<String> =
+        request.sourceKeys?.takeIf { it.isNotEmpty() }
+            ?: musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
+
+    private fun IndexingProgress.isMeaningfulAfter(previous: IndexingProgress): Boolean {
+        if (phase != previous.phase || currentItem != previous.currentItem) return true
+        val currentCounts = counts()
+        val previousCounts = previous.counts()
+        return currentCounts != previousCounts
+    }
+
+    private fun IndexingProgress.counts(): ProgressCounts =
+        if (this is IndexingProgress.Songs) {
+            ProgressCounts(explored, loaded, evaluated)
+        } else {
+            ProgressCounts(0, 0, 0)
+        }
+
+    private data class ProgressCounts(val explored: Int, val loaded: Int, val evaluated: Int)
+
     private suspend fun emitIndexingCompletion(
+        sessionId: Long,
         error: Exception?,
         outcome: IndexingTerminalOutcome =
             if (error == null) IndexingTerminalOutcome.SUCCESS else IndexingTerminalOutcome.FAILED,
     ) {
         yield()
-        val completed =
+        val completedState =
             synchronized(this) {
-                if (currentIndexingState !is IndexingState.Indexing) {
-                    return@synchronized false
+                val active = currentIndexingState as? IndexingState.Indexing
+                if (
+                    active == null ||
+                        active.sessionId != sessionId ||
+                        !indexingSessionGate.complete(sessionId)
+                ) {
+                    return@synchronized null
                 }
                 previousCompletedState = IndexingState.Completed(error, outcome)
                 currentIndexingState = null
                 preparedInterruptionOutcome = null
                 preparedReplacementHandoff = false
-                true
+                active
             }
-        if (!completed) {
-            L.d("Ignoring duplicate indexing completion [outcome=$outcome]")
+        if (completedState == null) {
+            L.d(
+                "Ignoring stale or duplicate indexing completion [session=$sessionId outcome=$outcome]"
+            )
             return
         }
         L.i("Dispatching indexing completion [outcome=$outcome error=$error]")
         diagnosticJournal.log(
             DiagnosticJournal.CAT_INDEXING,
             "Completed",
-            "outcome=$outcome error=${error?.javaClass?.name.orEmpty()} " +
-                "message=${error?.message.orEmpty()} sourceOutcome=$lastSourceScanOutcome",
+            "session=$sessionId generation=${completedState.request?.configurationGeneration} " +
+                "attempt=${completedState.request?.attemptId} outcome=$outcome " +
+                "error=${error?.javaClass?.name.orEmpty()} " +
+                "message=${error?.message.orEmpty()} sourceOutcome=$lastSourceScanOutcome " +
+                "watchdog=${completedState.watchdogDetail}",
             result = outcome.name,
         )
         dispatchIndexingState()
     }
-
-    private fun indexingStateSessionId(): Long =
-        synchronized(this) { (currentIndexingState as? IndexingState.Indexing)?.sessionId ?: 0L }
 
     private fun dispatchIndexingState() {
         for (listener in indexingListeners) {
@@ -1602,6 +2271,7 @@ constructor(
 
     private companion object {
         const val PROGRESS_LOG_INTERVAL_MS = 5_000L
+        const val HEARTBEAT_PERSIST_INTERVAL_MS = 5_000L
     }
 
     private fun dispatchLibraryChange(device: Boolean, user: Boolean) {

@@ -36,6 +36,14 @@ data class IndexRequest(
     val metadataProfile: MetadataProfile? = null,
     val configurationGeneration: Long? = null,
     val sourceKeys: Set<String>? = null,
+    val attemptId: String? = null,
+    val attemptOwner: SourceScanAttemptOwner? = null,
+)
+
+data class SourceScanAttemptAuthority(
+    val generation: Long,
+    val attemptId: String,
+    val owner: SourceScanAttemptOwner,
 )
 
 /** Shared request semantics used on both sides of the repository/service attachment boundary. */
@@ -45,10 +53,73 @@ internal object IndexRequestPolicy {
      * does not own that source-configuration checkpoint. An interrupted optional enrichment must
      * therefore never regress a committed source generation back to pending.
      */
+    fun requiresAttemptClaim(request: IndexRequest): Boolean =
+        request.reason == IndexReason.INITIAL_CONFIGURATION ||
+            request.reason == IndexReason.USER_RETRY ||
+            request.reason == IndexReason.STORAGE_MOUNTED
+
+    /** Whether this request may replace the compatibility outcome of a source scan. */
+    fun recordsSourceOutcome(request: IndexRequest): Boolean =
+        request.reason != IndexReason.METADATA_ENRICHMENT
+
+    fun checkpointAuthority(request: IndexRequest): SourceScanAttemptAuthority? {
+        if (!requiresAttemptClaim(request)) return null
+        return SourceScanAttemptAuthority(
+            generation = request.configurationGeneration ?: return null,
+            attemptId = request.attemptId ?: return null,
+            owner = request.attemptOwner ?: return null,
+        )
+    }
+
     fun checkpointGeneration(request: IndexRequest): Long? =
-        request.configurationGeneration.takeUnless {
-            request.reason == IndexReason.METADATA_ENRICHMENT
+        checkpointAuthority(request)?.generation
+
+    /**
+     * Whether an interruption or cancellation outcome should be recorded for [request].
+     *
+     * Non-authoritative requests (no checkpoint lease) always record so that non-source refresh
+     * interruptions are visible. Authoritative requests record only when the durable checkpoint
+     * completion was accepted; a rejected completion means the checkpoint was already terminal, and
+     * a duplicate late interruption must not overwrite that outcome.
+     */
+    fun shouldRecordInterruptionOutcome(
+        request: IndexRequest,
+        durableCompletionAccepted: Boolean,
+    ): Boolean = checkpointAuthority(request) == null || durableCompletionAccepted
+
+    /** Builds a user retry without bypassing an active retryable source checkpoint. */
+    fun sourceRetryRequest(
+        checkpoint: SourceConfigurationCheckpoint?,
+        currentGeneration: Long,
+        configuredSourceKeys: Set<String>,
+        hasRevision: Boolean,
+    ): IndexRequest? {
+        if (configuredSourceKeys.isEmpty()) return null
+        if (
+            checkpoint == null || checkpoint.state == SourceConfigurationCheckpoint.State.COMMITTED
+        ) {
+            return IndexRequest(
+                reason = IndexReason.USER_REFRESH,
+                withCache = true,
+                configurationGeneration = currentGeneration,
+                sourceKeys = configuredSourceKeys,
+            )
         }
+        if (
+            checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING &&
+                !checkpoint.canClaim(SourceScanClaimReason.USER_RETRY)
+        ) {
+            return null
+        }
+        return IndexRequest(
+            reason = IndexReason.USER_RETRY,
+            withCache =
+                checkpoint.state == SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED &&
+                    hasRevision,
+            configurationGeneration = checkpoint.generation,
+            sourceKeys = checkpoint.unresolvedSourceKeys.ifEmpty { configuredSourceKeys },
+        )
+    }
 
     fun merge(current: IndexRequest?, incoming: IndexRequest): IndexRequest {
         if (current == null) return incoming
@@ -62,16 +133,21 @@ internal object IndexRequestPolicy {
             return if (incomingGeneration > currentGeneration) incoming else current
         }
 
+        val currentRequiresClaim = requiresAttemptClaim(current)
+        val incomingRequiresClaim = requiresAttemptClaim(incoming)
+        if (currentRequiresClaim != incomingRequiresClaim) {
+            return if (currentRequiresClaim) current else incoming
+        }
+
         val primary =
             if (priority(incoming.reason) > priority(current.reason)) incoming else current
         val secondary = if (primary === current) incoming else current
-        if (
-            primary.reason == IndexReason.INITIAL_CONFIGURATION ||
-                primary.reason == IndexReason.USER_RETRY
-        ) {
-            return primary.copy(
-                sourceKeys = mergeSourceKeys(primary.sourceKeys, secondary.sourceKeys)
-            )
+        if (requiresAttemptClaim(primary)) {
+            return if (requiresAttemptClaim(secondary)) {
+                primary.copy(sourceKeys = mergeSourceKeys(primary.sourceKeys, secondary.sourceKeys))
+            } else {
+                primary
+            }
         }
         return primary.copy(
             withCache = current.withCache && incoming.withCache,

@@ -25,25 +25,35 @@ import android.content.IntentFilter
 import android.os.PowerManager
 import android.os.SystemClock
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.music.IndexReason
 import org.oxycblt.auxio.music.IndexRequest
+import org.oxycblt.auxio.music.IndexRequestPolicy
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.IndexingTerminalOutcome
+import org.oxycblt.auxio.music.IndexingWatchdogInput
 import org.oxycblt.auxio.music.IndexingWatchdogPolicy
-import org.oxycblt.auxio.music.IndexingWatchdogState
 import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.ObservationMode
+import org.oxycblt.auxio.music.SourceConfigurationCheckpoint
+import org.oxycblt.auxio.music.SourceScanAttemptOwner
+import org.oxycblt.auxio.music.SourceScanClaimReason
+import org.oxycblt.auxio.music.SourceScanProcessIdentity
 import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupOptionalWorkGate
 import org.oxycblt.auxio.music.locations.LocationMode
@@ -93,8 +103,10 @@ private constructor(
 
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
+    private val attachmentReady = CompletableDeferred<Boolean>()
 
     private var currentIndexJob: Job? = null
+    private val indexJobLease = IndexJobLease()
     private var activeIndexRequest: IndexRequest? = null
     private var pendingIndexRequest: IndexRequest? = null
     private var directReplacementHandoff = false
@@ -103,9 +115,16 @@ private constructor(
     private var watchdogJob: Job? = null
     private var sourceConfigurationJob: Job? = null
     private var attached = false
+    private var attachmentJob: Job? = null
+    private var workerRegistered = false
     private var activeStartupOrigin: StartupScanOrigin? = null
     private var pendingStartupOrigin: StartupScanOrigin? = null
     private var lastHandledSourceConfigurationGeneration = Long.MIN_VALUE
+    private val attemptOwner =
+        SourceScanAttemptOwner(
+            processId = SourceScanProcessIdentity.processId,
+            lifecycleId = UUID.randomUUID().toString(),
+        )
     private val indexingNotification = IndexingNotification(workerContext)
     private val observingNotification = ObservingNotification(workerContext)
     private val wakeLock =
@@ -127,15 +146,46 @@ private constructor(
             if (attached) return
             attached = true
         }
-        musicSettings.registerListener(this)
-        musicRepository.addUpdateListener(this)
-        musicRepository.addIndexingListener(this)
-        musicRepository.registerWorker(this)
-        playbackManager.addListener(this)
-        // Observer attachment is cheap: it registers notifications only. Provider enumeration and
-        // extraction remain planner-controlled and notification bursts are conflated below.
-        if (musicSettings.shouldBeObserving) startTracking()
-        updateRemovableStorageReceiver()
+        attachmentJob =
+            indexScope.launch {
+                try {
+                    val recovered =
+                        musicSettings.recoverInterruptedSourceConfiguration(
+                            owner = attemptOwner,
+                            nowMs = System.currentTimeMillis(),
+                        )
+                    if (recovered?.state == SourceConfigurationCheckpoint.State.INTERRUPTED) {
+                        L.w(
+                            "Recovered stale source attempt before worker attachment " +
+                                "[generation=${recovered.generation} " +
+                                "attempt=${recovered.attemptId} " +
+                                "outcome=${recovered.terminalOutcome}]"
+                        )
+                    }
+                    withContext(Dispatchers.Main.immediate) {
+                        if (!synchronized(this@IndexingHolder) { attached }) {
+                            return@withContext
+                        }
+                        musicSettings.registerListener(this@IndexingHolder)
+                        musicRepository.addUpdateListener(this@IndexingHolder)
+                        musicRepository.addIndexingListener(this@IndexingHolder)
+                        musicRepository.registerWorker(this@IndexingHolder)
+                        playbackManager.addListener(this@IndexingHolder)
+                        workerRegistered = true
+                        // Observer attachment is cheap: it registers notifications only. Provider
+                        // enumeration and extraction remain planner-controlled and notification
+                        // bursts are conflated below.
+                        if (musicSettings.shouldBeObserving) startTracking()
+                        updateRemovableStorageReceiver()
+                        attachmentReady.complete(true)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    attachmentReady.complete(false)
+                    L.e(e, "Unable to recover and attach the indexing worker")
+                }
+            }
     }
 
     fun release() {
@@ -153,24 +203,32 @@ private constructor(
         watchdogJob = null
         sourceConfigurationJob?.cancel()
         sourceConfigurationJob = null
+        attachmentJob?.cancel()
+        attachmentJob = null
         stopTracking()
         unregisterRemovableStorageReceiver()
         observationRequestJob?.cancel()
         observationRequestJob = null
         directReplacementHandoff = false
         if (currentIndexJob?.isActive == true) {
-            musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.SERVICE_STOPPED)
+            musicRepository.prepareIndexingInterruption(
+                IndexingTerminalOutcome.SERVICE_STOPPED,
+                activeIndexRequest,
+            )
             currentIndexJob?.cancel()
         }
         currentIndexJob = null
         pendingIndexRequest = null
         indexJob.cancel()
         wakeLock.releaseSafe()
-        musicRepository.unregisterWorker(this)
-        playbackManager.removeListener(this)
-        musicRepository.removeIndexingListener(this)
-        musicRepository.removeUpdateListener(this)
-        musicSettings.unregisterListener(this)
+        if (workerRegistered) {
+            workerRegistered = false
+            musicRepository.unregisterWorker(this)
+            playbackManager.removeListener(this)
+            musicRepository.removeIndexingListener(this)
+            musicRepository.removeUpdateListener(this)
+            musicSettings.unregisterListener(this)
+        }
     }
 
     @Synchronized
@@ -196,6 +254,10 @@ private constructor(
             startupJob =
                 indexScope.launch {
                     try {
+                        if (!attachmentReady.await()) {
+                            L.e("Indexing startup blocked because worker attachment failed")
+                            return@launch
+                        }
                         val sourceAuthority =
                             StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
                                 workerContext,
@@ -211,15 +273,16 @@ private constructor(
                         // wait
                         // for su, source traversal, or a library scan.
                         musicRepository.startup(this@IndexingHolder)
-                        val pendingConfiguration =
-                            synchronized(this@IndexingHolder) {
-                                musicSettings.claimPendingConfiguration()?.also { checkpoint ->
-                                    lastHandledSourceConfigurationGeneration = checkpoint.generation
-                                }
-                            }
-                        if (pendingConfiguration != null) {
+                        val pendingConfiguration = musicSettings.sourceConfigurationCheckpoint
+                        if (
+                            pendingConfiguration?.canClaim(
+                                SourceScanClaimReason.STARTUP_RECOVERY
+                            ) == true
+                        ) {
+                            lastHandledSourceConfigurationGeneration =
+                                pendingConfiguration.generation
                             L.i(
-                                "Claiming durable source configuration for a simple initial scan " +
+                                "Scheduling durable source configuration for a simple initial scan " +
                                     "[generation=${pendingConfiguration.generation}]"
                             )
                             requestIndex(
@@ -370,9 +433,11 @@ private constructor(
                         playbackActive = playbackActiveSnapshot(),
                         observationMode = musicSettings.observationMode,
                     )
-                if (directReplacementHandoff) {
-                    musicRepository.prepareIndexingReplacementHandoff()
-                }
+                musicRepository.prepareIndexingInterruption(
+                    IndexingTerminalOutcome.SUPERSEDED,
+                    activeIndexRequest,
+                )
+                if (directReplacementHandoff) musicRepository.prepareIndexingReplacementHandoff()
                 L.i(
                     "Replacement request supersedes active indexing " +
                         "[reason=${request.reason} active=$activeGeneration " +
@@ -405,15 +470,27 @@ private constructor(
 
     @Synchronized
     private fun startIndexLocked(request: IndexRequest) {
-        L.i("Starting new indexing job [request=$request]")
+        val authorisedRequest =
+            authoriseAttemptAtStart(request)
+                ?: run {
+                    L.w("Dropping unauthorised indexing request [request=$request]")
+                    musicRepository.setPendingIndexReplacement(false)
+                    return
+                }
+        L.i("Starting new indexing job [request=$authorisedRequest]")
         musicRepository.setPendingIndexReplacement(false)
-        activeIndexRequest = request
-        currentIndexJob =
-            indexScope.launch {
+        activeIndexRequest = authorisedRequest
+        val jobToken = indexJobLease.begin()
+        val job =
+            indexScope.launch(start = CoroutineStart.LAZY) {
                 try {
-                    musicRepository.index(this@IndexingHolder, request)
+                    musicRepository.index(this@IndexingHolder, authorisedRequest)
                 } finally {
                     synchronized(this@IndexingHolder) {
+                        if (!indexJobLease.complete(jobToken)) {
+                            L.w("Ignoring stale indexing-job cleanup [token=$jobToken]")
+                            return@synchronized
+                        }
                         currentIndexJob = null
                         activeIndexRequest = null
                         val directHandoff = directReplacementHandoff
@@ -442,6 +519,55 @@ private constructor(
                     }
                 }
             }
+        currentIndexJob = job
+        job.start()
+    }
+
+    private fun authoriseAttemptAtStart(request: IndexRequest): IndexRequest? {
+        if (!IndexRequestPolicy.requiresAttemptClaim(request)) return request
+        IndexRequestPolicy.checkpointAuthority(request)?.let { authority ->
+            return request.takeIf {
+                musicSettings.ownsSourceConfigurationAttempt(
+                    authority.generation,
+                    authority.attemptId,
+                    authority.owner,
+                )
+            }
+        }
+        val expectedGeneration = request.configurationGeneration ?: return null
+        val checkpoint = musicSettings.sourceConfigurationCheckpoint ?: return null
+        val claimReason =
+            when {
+                request.reason == IndexReason.USER_RETRY -> SourceScanClaimReason.USER_RETRY
+                request.reason == IndexReason.STORAGE_MOUNTED ->
+                    SourceScanClaimReason.SOURCE_AVAILABLE
+                checkpoint.state == SourceConfigurationCheckpoint.State.INTERRUPTED ->
+                    SourceScanClaimReason.STARTUP_RECOVERY
+                else -> SourceScanClaimReason.CONFIGURATION_CHANGE
+            }
+        val claimed =
+            musicSettings.claimPendingConfiguration(
+                expectedGeneration = expectedGeneration,
+                owner = attemptOwner,
+                attemptId = UUID.randomUUID().toString(),
+                nowMs = System.currentTimeMillis(),
+                reason = claimReason,
+            )
+                ?: run {
+                    L.w(
+                        "Source attempt claim rejected " +
+                            "[reason=${request.reason} generation=$expectedGeneration]"
+                    )
+                    return null
+                }
+        return request.copy(
+            configurationGeneration = claimed.generation,
+            sourceKeys =
+                request.sourceKeys
+                    ?: musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey },
+            attemptId = requireNotNull(claimed.attemptId),
+            attemptOwner = attemptOwner,
+        )
     }
 
     @Synchronized
@@ -451,7 +577,10 @@ private constructor(
         musicRepository.setPendingIndexReplacement(false)
         if (currentIndexJob?.isActive == true) {
             L.i("Cancelling active indexing job at user request")
-            musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
+            musicRepository.prepareIndexingInterruption(
+                IndexingTerminalOutcome.CANCELLED,
+                activeIndexRequest,
+            )
             currentIndexJob?.cancel()
         }
     }
@@ -490,24 +619,55 @@ private constructor(
                     val state =
                         musicRepository.indexingState as? IndexingState.Indexing ?: return@launch
                     wakeLock.acquireSafe()
-                    val watchdogState =
+                    val progress = state.progress
+                    val songs = progress as? org.oxycblt.musikr.IndexingProgress.Songs
+                    val decision =
                         IndexingWatchdogPolicy.classify(
-                            nowElapsedMs = SystemClock.elapsedRealtime(),
-                            startedAtElapsedMs = state.startedAtElapsedMs,
-                            lastProgressAtElapsedMs = state.lastProgressAtElapsedMs,
-                        )
-                    musicRepository.updateIndexingWatchdog(watchdogState)
-                    if (watchdogState == IndexingWatchdogState.OVERDUE) {
-                        synchronized(this@IndexingHolder) {
-                            pendingIndexRequest = null
-                            directReplacementHandoff = false
-                            musicRepository.setPendingIndexReplacement(false)
-                            musicRepository.prepareIndexingInterruption(
-                                IndexingTerminalOutcome.TIMED_OUT
+                            IndexingWatchdogInput(
+                                nowElapsedMs = SystemClock.elapsedRealtime(),
+                                startedAtElapsedMs = state.startedAtElapsedMs,
+                                lastProgressAtElapsedMs = state.lastProgressAtElapsedMs,
+                                phase = progress.phase,
+                                firstFileEmitted = state.firstFileEmitted,
+                                sourceScope = state.sourceScope,
+                                explored = songs?.explored ?: 0,
+                                loaded = songs?.loaded ?: 0,
+                                evaluated = songs?.evaluated ?: 0,
+                                currentItem = progress.currentItem,
+                                directFsDirectoriesVisited = state.directFsDirectoriesVisited,
+                                directFsEntriesInspected = state.directFsEntriesInspected,
+                                directFsFilesEmitted = state.directFsFilesEmitted,
+                                queuedDirectFsWork = state.queuedDirectFsWork,
+                                activeDirectFsEnumerators = state.activeDirectFsEnumerators,
+                                nonAuthoritativeWorkDeferred = state.nonAuthoritativeWorkDeferred,
                             )
-                            currentIndexJob?.cancel()
-                        }
-                        return@launch
+                        )
+                    musicRepository.updateIndexingWatchdog(decision)
+                    if (decision.shouldTerminate) {
+                        val timedOutCurrentSession =
+                            synchronized(this@IndexingHolder) {
+                                // Re-read the current session inside the lock to guard against a
+                                // replacement scan that started between the state sample above and
+                                // this termination block. If the session changed, the decision was
+                                // about the old scan; keep watching so the replacement remains
+                                // protected by this watchdog job.
+                                val currentSession =
+                                    musicRepository.indexingState as? IndexingState.Indexing
+                                if (currentSession?.sessionId != state.sessionId) {
+                                    false
+                                } else {
+                                    pendingIndexRequest = null
+                                    directReplacementHandoff = false
+                                    musicRepository.setPendingIndexReplacement(false)
+                                    musicRepository.prepareIndexingInterruption(
+                                        IndexingTerminalOutcome.TIMED_OUT,
+                                        activeIndexRequest,
+                                    )
+                                    currentIndexJob?.cancel()
+                                    true
+                                }
+                            }
+                        if (timedOutCurrentSession) return@launch
                     }
                 }
             }
@@ -592,7 +752,10 @@ private constructor(
             if (it.isActive) {
                 directReplacementHandoff = false
                 L.i("Cancelling active indexing job due to source change")
-                musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
+                musicRepository.prepareIndexingInterruption(
+                    IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                    activeIndexRequest,
+                )
                 it.cancel()
             }
         }
@@ -607,7 +770,10 @@ private constructor(
         ) {
             directReplacementHandoff = false
             L.i("Cancelling indexing work targeting removed sources $sourceKeys")
-            musicRepository.prepareIndexingInterruption(IndexingTerminalOutcome.CANCELLED)
+            musicRepository.prepareIndexingInterruption(
+                IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                activeIndexRequest,
+            )
             currentIndexJob?.cancel()
         }
         pendingIndexRequest =
@@ -728,7 +894,7 @@ private constructor(
                 delay(SOURCE_CONFIGURATION_DEBOUNCE_MS)
                 val (checkpoint, shouldHandle) =
                     synchronized(this@IndexingHolder) {
-                        val pending = musicSettings.claimPendingConfiguration()
+                        val pending = musicSettings.sourceConfigurationCheckpoint
                         val currentGeneration =
                             pending?.generation ?: musicSettings.sourceConfigurationGeneration
                         if (currentGeneration == lastHandledSourceConfigurationGeneration) {
@@ -828,4 +994,18 @@ internal object IndexReplacementHandoffPolicy {
         playbackActive &&
             (request.metadataProfile == MetadataProfile.FULL ||
                 observationMode == ObservationMode.WHEN_IDLE)
+}
+
+/** Prevents an older coroutine's finally block from clearing a newer job slot. */
+internal class IndexJobLease {
+    private var nextToken = 0L
+    private var activeToken: Long? = null
+
+    fun begin(): Long = (++nextToken).also { activeToken = it }
+
+    fun complete(token: Long): Boolean {
+        if (activeToken != token) return false
+        activeToken = null
+        return true
+    }
 }

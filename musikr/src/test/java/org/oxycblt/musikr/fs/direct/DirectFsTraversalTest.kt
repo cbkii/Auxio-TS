@@ -805,6 +805,206 @@ class DirectFsTraversalTest {
     }
 
     @Test(timeout = TIMEOUT_MS)
+    fun `live work observer reports meaningful progress and terminal cleanup`() = runBlocking {
+        val music = dir("Music")
+        track(music, "a.mp3")
+        track(dir("Music/Album"), "b.mp3")
+        val snapshots = mutableListOf<DirectFsWorkProgress>()
+
+        traverse(
+            listOf(explicit(music)),
+            options().copy(onWorkProgress = { snapshots.add(it) }, progressIntervalMs = 0L),
+        )
+
+        assertTrue(snapshots.any { it.directoriesVisited >= 2 })
+        assertTrue(snapshots.any { it.entriesInspected >= 2 })
+        assertTrue(snapshots.any { it.queuedDirectories > 0 })
+        assertEquals(0, snapshots.last().activeEnumerators)
+        assertEquals(0, snapshots.last().queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `no-observer traversal performs no progress callback work`() = runBlocking {
+        val music = dir("Music")
+        track(music, "a.mp3")
+        track(music, "b.mp3")
+        track(music, "c.mp3")
+
+        // onWorkProgress is null (default): the traversal must complete without any allocation
+        // or dispatch overhead. We verify that completing without an observer does not throw and
+        // that a subsequent observer-enabled traversal still works.
+        traverse(listOf(explicit(music)), options())
+        val snapshots = mutableListOf<DirectFsWorkProgress>()
+        traverse(
+            listOf(explicit(music)),
+            options().copy(onWorkProgress = { snapshots.add(it) }, progressIntervalMs = 0L),
+        )
+        assertTrue(snapshots.isNotEmpty())
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `rate-limited observer suppresses intermediate callbacks but delivers final cleanup`() =
+        runBlocking {
+            val music = dir("Music")
+            track(music, "a.mp3")
+            track(dir("Music/Sub1"), "b.mp3")
+            track(dir("Music/Sub2"), "c.mp3")
+            val snapshots = mutableListOf<DirectFsWorkProgress>()
+
+            // A very large interval so every intermediate callback is suppressed.
+            traverse(
+                listOf(explicit(music)),
+                options()
+                    .copy(
+                        onWorkProgress = { snapshots.add(it) },
+                        progressIntervalMs = Long.MAX_VALUE,
+                    ),
+            )
+
+            // At least the forced terminal cleanup snapshot must be delivered.
+            assertTrue(snapshots.isNotEmpty())
+            val last = snapshots.last()
+            assertEquals(0, last.activeEnumerators)
+            assertEquals(0, last.queuedDirectories)
+        }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `throttled observer still sees meaningful final counters in the forced snapshot`() =
+        runBlocking {
+            val music = dir("Music")
+            track(music, "x.mp3")
+            track(dir("Music/Deep"), "y.mp3")
+            val snapshots = mutableListOf<DirectFsWorkProgress>()
+
+            traverse(
+                listOf(explicit(music)),
+                options()
+                    .copy(
+                        onWorkProgress = { snapshots.add(it) },
+                        progressIntervalMs = Long.MAX_VALUE,
+                    ),
+            )
+
+            val last = snapshots.last()
+            assertTrue(last.filesEmitted >= 2)
+            assertTrue(last.directoriesVisited >= 2)
+        }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `zero-interval observer sees all intermediate progress snapshots`() = runBlocking {
+        val music = dir("Music")
+        track(music, "a.mp3")
+        track(dir("Music/Sub"), "b.mp3")
+        val snapshots = mutableListOf<DirectFsWorkProgress>()
+
+        traverse(
+            listOf(explicit(music)),
+            options().copy(onWorkProgress = { snapshots.add(it) }, progressIntervalMs = 0L),
+        )
+
+        // More than one snapshot must have been recorded with progressIntervalMs=0.
+        assertTrue(snapshots.size > 1)
+        assertTrue(snapshots.any { it.directoriesVisited >= 2 })
+        assertTrue(snapshots.any { it.entriesInspected >= 1 })
+        assertEquals(0, snapshots.last().activeEnumerators)
+        assertEquals(0, snapshots.last().queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `no-observer traversal never reads progress clock`() = runBlocking {
+        val music = dir("Music")
+        track(music, "a.mp3")
+        track(dir("Music/Sub"), "b.mp3")
+        var clockReadCount = 0
+        val clock: () -> Long = {
+            clockReadCount++
+            0L
+        }
+
+        // With no observer the fast path must return before the clock is ever read.
+        traverse(
+            listOf(explicit(music)),
+            options().copy(onWorkProgress = null, progressClockMs = clock),
+        )
+
+        assertEquals("progress clock must not be read when observer is null", 0, clockReadCount)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `controlled clock bounds and coalesces hot entry-group callbacks`() = runBlocking {
+        val music = dir("Music")
+        track(music, "a.mp3")
+        track(music, "b.mp3")
+        track(music, "c.mp3")
+        track(dir("Music/Sub"), "d.mp3")
+
+        val snapshots = mutableListOf<DirectFsWorkProgress>()
+        var fakeNow = 0L
+
+        // Fixed clock: all intermediate callbacks occur at the same timestamp, so every
+        // intermediate callback after the first is suppressed. Only the first meaningful
+        // snapshot (when the rate-limit window opens) and the forced terminal cleanup snapshot
+        // are delivered, giving at most 2 snapshots total.
+        val clock: () -> Long = { fakeNow }
+
+        // Large interval: intermediate callbacks are rate-limited by the fixed fake clock;
+        // only the first meaningful snapshot and the forced terminal cleanup are delivered.
+        traverse(
+            listOf(explicit(music)),
+            options()
+                .copy(
+                    onWorkProgress = { snapshots.add(it) },
+                    progressIntervalMs = Long.MAX_VALUE,
+                    progressClockMs = clock,
+                ),
+        )
+
+        // With a fixed clock and a MAX_VALUE interval, at most two snapshots arrive:
+        // the first meaningful progress snapshot and the forced terminal cleanup.
+        assertTrue("at least the forced final snapshot must be delivered", snapshots.isNotEmpty())
+        assertTrue(
+            "fixed clock must bound callbacks to at most 2 (first + terminal), got ${snapshots.size}",
+            snapshots.size <= 2,
+        )
+        val last = snapshots.last()
+        assertEquals("final activeEnumerators must be zero", 0, last.activeEnumerators)
+        assertEquals("final queuedDirectories must be zero", 0, last.queuedDirectories)
+        // The forced terminal snapshot must reflect final file and directory totals.
+        assertTrue("final snapshot must report files emitted", last.filesEmitted >= 1)
+        assertTrue("final snapshot must report directories visited", last.directoriesVisited >= 1)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
+    fun `advancing controlled clock allows next throttled callback through`() = runBlocking {
+        val music = dir("Music")
+        track(music, "a.mp3")
+        track(dir("Music/Sub1"), "b.mp3")
+        track(dir("Music/Sub2"), "c.mp3")
+
+        val snapshots = mutableListOf<DirectFsWorkProgress>()
+        var fakeNow = 0L
+        // Advance the clock past the interval threshold on each call so every callback is allowed.
+        val clock: () -> Long = { fakeNow.also { fakeNow += 1_000L } }
+
+        traverse(
+            listOf(explicit(music)),
+            options()
+                .copy(
+                    onWorkProgress = { snapshots.add(it) },
+                    progressIntervalMs = 250L,
+                    progressClockMs = clock,
+                ),
+        )
+
+        // With the clock always advancing past the interval, more than one snapshot should arrive
+        // (not just the forced terminal one).
+        assertTrue("advancing clock must allow multiple callbacks", snapshots.size > 1)
+        val last = snapshots.last()
+        assertEquals(0, last.activeEnumerators)
+        assertEquals(0, last.queuedDirectories)
+    }
+
+    @Test(timeout = TIMEOUT_MS)
     fun `protected canonical children are never descended into`() = runBlocking {
         val music = dir("Music")
         track(music, "a.mp3")

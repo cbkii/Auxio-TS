@@ -24,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.music.IndexReason
 import org.oxycblt.auxio.music.IndexRequest
+import org.oxycblt.auxio.music.IndexRequestPolicy
 import org.oxycblt.auxio.music.ObservationMode
 import org.oxycblt.musikr.library.MetadataProfile
 
@@ -42,16 +43,22 @@ class IndexRequestCoalescerTest {
             )
         for (first in IndexReason.entries) {
             for (second in IndexReason.entries) {
-                val merged =
-                    IndexRequestCoalescer.merge(
-                        IndexRequest(first, withCache = true, configurationGeneration = 9L),
-                        IndexRequest(second, withCache = true, configurationGeneration = 9L),
-                    )
+                val firstRequest =
+                    IndexRequest(first, withCache = true, configurationGeneration = 9L)
+                val secondRequest =
+                    IndexRequest(second, withCache = true, configurationGeneration = 9L)
+                val merged = IndexRequestCoalescer.merge(firstRequest, secondRequest)
+                val firstRequiresClaim = IndexRequestPolicy.requiresAttemptClaim(firstRequest)
+                val secondRequiresClaim = IndexRequestPolicy.requiresAttemptClaim(secondRequest)
                 val expected =
-                    if (strongestFirst.indexOf(first) <= strongestFirst.indexOf(second)) {
-                        first
+                    if (firstRequiresClaim != secondRequiresClaim) {
+                        if (firstRequiresClaim) first else second
                     } else {
-                        second
+                        if (strongestFirst.indexOf(first) <= strongestFirst.indexOf(second)) {
+                            first
+                        } else {
+                            second
+                        }
                     }
                 assertEquals("$first + $second", expected, merged.reason)
             }
@@ -134,6 +141,7 @@ class IndexRequestCoalescerTest {
             )
 
         assertEquals(setOf("usb:a", "usb:b"), merged.sourceKeys)
+        assertTrue(IndexRequestPolicy.requiresAttemptClaim(merged))
     }
 
     @Test
@@ -202,5 +210,16 @@ class IndexRequestCoalescerTest {
                 observationMode = ObservationMode.WHEN_IDLE,
             )
         )
+    }
+
+    @Test
+    fun `old finally callback cannot clear a newer indexing job lease`() {
+        val lease = IndexJobLease()
+        val old = lease.begin()
+        val newer = lease.begin()
+
+        assertFalse(lease.complete(old))
+        assertTrue(lease.complete(newer))
+        assertFalse(lease.complete(newer))
     }
 }

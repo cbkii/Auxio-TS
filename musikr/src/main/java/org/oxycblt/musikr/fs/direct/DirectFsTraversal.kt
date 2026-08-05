@@ -138,6 +138,22 @@ internal data class DirectFsOptions(
                 size = child.length(),
             )
         },
+    /**
+     * Observer for live DirectFS work counters. `null` means no observer; progress snapshots are
+     * never allocated or dispatched.
+     */
+    val onWorkProgress: ((DirectFsWorkProgress) -> Unit)? = null,
+    /**
+     * Minimum wall-clock interval between non-forced progress callbacks. `0` means publish on every
+     * eligible call site, which is only appropriate in tests that need to observe every snapshot.
+     */
+    val progressIntervalMs: Long = 250L,
+    /**
+     * Monotonic clock for progress-callback rate limiting. Defaults to milliseconds derived from
+     * [System.nanoTime]. Injected in tests to control throttle behaviour deterministically without
+     * real wall-clock dependency.
+     */
+    val progressClockMs: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
     internal companion object {
         val DEFAULT = DirectFsOptions()
@@ -173,6 +189,7 @@ internal class DirectFsTraversal(
     private val results = mutableListOf<SourceTraversalResult>()
     private val slowOperations = ArrayDeque<SlowOperationRecord>()
     private var directoriesVisited = 0
+    private var entriesInspected = 0
     private var filesEmitted = 0
     private var duplicateDirectoriesSuppressed = 0
     private var peakQueuedDirectories = 0
@@ -180,6 +197,9 @@ internal class DirectFsTraversal(
     private var queuedDirectories = 0
     private var startedAtMs = 0L
     private val fatalErrors = mutableListOf<Exception>()
+
+    /** Monotonic timestamp (ms) of the most recent progress callback invocation; null = never. */
+    private var lastProgressPublishedAt: Long? = null
 
     suspend fun explore(files: Channel<File>): DirectFsTraversalMetrics {
         startedAtMs = System.currentTimeMillis()
@@ -257,6 +277,7 @@ internal class DirectFsTraversal(
                 queuedDirectories = queue.size
                 directoriesVisited++
                 directories++
+                publishWorkProgress()
 
                 val entries = enumerate(task, root)
                 if (entries == null) {
@@ -383,6 +404,9 @@ internal class DirectFsTraversal(
                         )
                     )
                 }
+                queuedDirectories = queue.size
+                peakQueuedDirectories = maxOf(peakQueuedDirectories, queuedDirectories)
+                publishWorkProgress()
                 if (hardStop) break
             }
         } catch (e: CancellationException) {
@@ -396,6 +420,7 @@ internal class DirectFsTraversal(
             return
         } finally {
             queuedDirectories = 0
+            publishWorkProgress(force = true)
         }
 
         when {
@@ -446,6 +471,7 @@ internal class DirectFsTraversal(
         root: PreparedRoot,
     ): List<DirectEntryMetadata>? {
         activeEnumerators++
+        publishWorkProgress()
         try {
             currentCoroutineContext().ensureActive()
             val listStart = System.currentTimeMillis()
@@ -471,6 +497,7 @@ internal class DirectFsTraversal(
                 }
                 val canonicalPath = options.resolveCanonicalPath(child)
                 entries += options.inspectEntry(child, task.canonicalPath, canonicalPath)
+                entriesInspected++
                 if ((index + 1) % groupSize == 0 || index == listed.lastIndex) {
                     recordSlowOperation(
                         task.directory.path,
@@ -478,12 +505,41 @@ internal class DirectFsTraversal(
                         groupStart,
                         root.sourceKey,
                     )
+                    publishWorkProgress()
                 }
             }
             return entries
         } finally {
             activeEnumerators--
+            publishWorkProgress()
         }
+    }
+
+    private fun publishWorkProgress(force: Boolean = false) {
+        // No-observer fast path: avoid allocating DirectFsWorkProgress or reading the clock when
+        // nobody is listening.
+        val observer = options.onWorkProgress ?: return
+        if (!force) {
+            val interval = options.progressIntervalMs
+            if (interval > 0L) {
+                val now = options.progressClockMs()
+                val last = lastProgressPublishedAt
+                if (last != null && now - last < interval) return
+                lastProgressPublishedAt = now
+            }
+        }
+        runCatching {
+                observer(
+                    DirectFsWorkProgress(
+                        directoriesVisited = directoriesVisited,
+                        entriesInspected = entriesInspected,
+                        filesEmitted = filesEmitted,
+                        queuedDirectories = queuedDirectories,
+                        activeEnumerators = activeEnumerators,
+                    )
+                )
+            }
+            .onFailure { Log.w(TAG, "DirectFS progress observer failed", it) }
     }
 
     private fun recordSlowOperation(
