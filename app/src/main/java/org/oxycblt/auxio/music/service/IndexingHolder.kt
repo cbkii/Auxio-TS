@@ -103,7 +103,7 @@ private constructor(
 
     private val indexJob = Job()
     private val indexScope = CoroutineScope(indexJob + Dispatchers.IO)
-    private val attachmentReady = CompletableDeferred<Unit>()
+    private val attachmentReady = CompletableDeferred<Boolean>()
 
     private var currentIndexJob: Job? = null
     private val indexJobLease = IndexJobLease()
@@ -177,12 +177,12 @@ private constructor(
                         // bursts are conflated below.
                         if (musicSettings.shouldBeObserving) startTracking()
                         updateRemovableStorageReceiver()
-                        attachmentReady.complete(Unit)
+                        attachmentReady.complete(true)
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    attachmentReady.completeExceptionally(e)
+                    attachmentReady.complete(false)
                     L.e(e, "Unable to recover and attach the indexing worker")
                 }
             }
@@ -254,7 +254,10 @@ private constructor(
             startupJob =
                 indexScope.launch {
                     try {
-                        attachmentReady.await()
+                        if (!attachmentReady.await()) {
+                            L.e("Indexing startup blocked because worker attachment failed")
+                            return@launch
+                        }
                         val sourceAuthority =
                             StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
                                 workerContext,
