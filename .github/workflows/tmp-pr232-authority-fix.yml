@@ -20,21 +20,18 @@ jobs:
       - name: Check out exact PR head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          fetch-depth: 5
+          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify isolated repair commits
         shell: bash
         run: |
           set -eu
-          test "$(git rev-parse HEAD^)" = "0c50bb214ca13622e7f67c07a8bf882692a49683"
-          test "$(git rev-parse HEAD^^)" = "cbb03cf3467e09210b47ec25dbce0fa1798bba9f"
-          test "$(git rev-parse HEAD^^^)" = "14b8e04b47d703ce4055e466a09018a84ab435ab"
-          test "$(git rev-parse HEAD^^^^)" = "d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3"
-          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/tmp-pr232-authority-fix.yml"
-          test "$(git diff --name-only HEAD^^ HEAD^)" = ".github/workflows/tmp-pr232-authority-fix.yml"
-          test "$(git diff --name-only HEAD^^^ HEAD^^)" = ".github/workflows/tmp-pr232-authority-fix.yml"
-          test "$(git diff --name-only HEAD^^^^ HEAD^^^)" = ".github/scripts/tmp-pr232-authority-fix.py"
+          test "$(git rev-parse HEAD^)" = "f03886146cf2130303fd39bc75a7794d253176b5"
+          git merge-base --is-ancestor d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3 HEAD
+          actual="$(git diff --name-only d1ab9d352f7bc7b50d23cf4917a3d0b05b0a86a3 HEAD | LC_ALL=C sort)"
+          expected="$(printf '%s\n' .github/scripts/tmp-pr232-authority-fix.py .github/workflows/tmp-pr232-authority-fix.yml | LC_ALL=C sort)"
+          test "${actual}" = "${expected}"
           python3 -m py_compile .github/scripts/tmp-pr232-authority-fix.py
 
       - name: Set up JDK 21
@@ -69,9 +66,18 @@ jobs:
 
       - name: Run focused Musikr tests
         shell: bash
-        run: >-
-          bash ./scripts/ci-gradle.sh :musikr:testDebugUnitTest
-          --tests org.oxycblt.musikr.cache.db.IncrementalScanStoreTest
+        run: |
+          set +e
+          bash ./scripts/ci-gradle.sh :musikr:testDebugUnitTest \
+            --tests org.oxycblt.musikr.cache.db.IncrementalScanStoreTest
+          rc=$?
+          if [[ ${rc} -ne 0 ]]; then
+            echo '--- generated test context ---'
+            nl -ba musikr/src/test/java/org/oxycblt/musikr/cache/db/IncrementalScanStoreTest.kt | sed -n '210,235p'
+            echo '--- test XML ---'
+            find musikr/build/test-results -type f -name '*.xml' -print -exec cat {} \; || true
+          fi
+          exit ${rc}
 
       - name: Run focused app tests
         shell: bash
