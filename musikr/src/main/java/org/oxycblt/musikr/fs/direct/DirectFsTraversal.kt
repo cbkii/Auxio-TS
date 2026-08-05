@@ -149,6 +149,12 @@ internal data class DirectFsOptions(
      * snapshot.
      */
     val progressIntervalMs: Long = 250L,
+    /**
+     * Monotonic clock for progress-callback rate limiting. Defaults to milliseconds derived from
+     * [System.nanoTime]. Injected in tests to control throttle behaviour deterministically without
+     * real wall-clock dependency.
+     */
+    val progressClockMs: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
     internal companion object {
         val DEFAULT = DirectFsOptions()
@@ -193,8 +199,8 @@ internal class DirectFsTraversal(
     private var startedAtMs = 0L
     private val fatalErrors = mutableListOf<Exception>()
 
-    /** Wall-clock timestamp of the most recent progress callback invocation. */
-    private var lastProgressPublishedAtMs = 0L
+    /** Monotonic timestamp (ms) of the most recent progress callback invocation; null = never. */
+    private var lastProgressPublishedAt: Long? = null
 
     suspend fun explore(files: Channel<File>): DirectFsTraversalMetrics {
         startedAtMs = System.currentTimeMillis()
@@ -511,14 +517,16 @@ internal class DirectFsTraversal(
     }
 
     private fun publishWorkProgress(force: Boolean = false) {
-        // No-observer fast path: avoid allocating DirectFsWorkProgress when nobody is listening.
+        // No-observer fast path: avoid allocating DirectFsWorkProgress or reading the clock when
+        // nobody is listening.
         val observer = options.onWorkProgress ?: return
         if (!force) {
             val interval = options.progressIntervalMs
             if (interval > 0L) {
-                val now = System.currentTimeMillis()
-                if (now - lastProgressPublishedAtMs < interval) return
-                lastProgressPublishedAtMs = now
+                val now = options.progressClockMs()
+                val last = lastProgressPublishedAt
+                if (last != null && now - last < interval) return
+                lastProgressPublishedAt = now
             }
         }
         runCatching {

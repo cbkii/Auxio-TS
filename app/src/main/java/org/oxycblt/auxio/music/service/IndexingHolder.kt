@@ -210,7 +210,7 @@ private constructor(
         observationRequestJob?.cancel()
         observationRequestJob = null
         directReplacementHandoff = false
-        if (currentIndexJob != null) {
+        if (currentIndexJob?.isActive == true) {
             musicRepository.prepareIndexingInterruption(
                 IndexingTerminalOutcome.SERVICE_STOPPED,
                 activeIndexRequest,

@@ -760,8 +760,12 @@ constructor(
         if (current != null) {
             completeAttemptForInterruption(current, outcome)
         } else if (request != null) {
-            val accepted = completeSourceAttemptForInterruption(request, outcome, null)
-            if (accepted) {
+            val durableAccepted = completeSourceAttemptForInterruption(request, outcome, null)
+            // Record when: (a) non-authoritative (no checkpoint lease, so durable completion is
+            // never applicable), or (b) the durable completion was actually accepted.
+            val shouldRecord =
+                IndexRequestPolicy.checkpointAuthority(request) == null || durableAccepted
+            if (shouldRecord) {
                 recordSourceScanOutcome(
                     request,
                     sourceOutcomeForInterruption(outcome, request = request),
@@ -1411,11 +1415,20 @@ constructor(
             } catch (e: CancellationException) {
                 val terminalOutcome =
                     preparedInterruptionOutcome ?: IndexingTerminalOutcome.CANCELLED
-                recordSourceScanOutcome(
-                    request,
-                    sourceOutcomeForInterruption(terminalOutcome, request = request),
-                )
-                completeSourceAttemptForInterruption(request, terminalOutcome, e)
+                // Complete the durable attempt first so a stale authoritative cancellation cannot
+                // replace an already-terminal outcome via the subsequent record call.
+                val durableAccepted =
+                    completeSourceAttemptForInterruption(request, terminalOutcome, e)
+                // Record when non-authoritative (no checkpoint lease) or the durable completion
+                // was accepted; mirrors the same rule in prepareIndexingInterruption.
+                val shouldRecord =
+                    IndexRequestPolicy.checkpointAuthority(request) == null || durableAccepted
+                if (shouldRecord) {
+                    recordSourceScanOutcome(
+                        request,
+                        sourceOutcomeForInterruption(terminalOutcome, request = request),
+                    )
+                }
                 val directReplacementHandoff =
                     synchronized(this) {
                         preparedReplacementHandoff.also { preparedReplacementHandoff = false }
