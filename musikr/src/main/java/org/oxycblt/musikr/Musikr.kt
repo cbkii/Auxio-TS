@@ -248,6 +248,7 @@ private class MusikrImpl(
                                 now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS
                         ) {
                             lastEmitMs = now
+                            trace.heartbeat()
                             emitProgress(progress(item.displayName()))
                         }
                         trackedExploredChannel.send(item)
@@ -272,6 +273,7 @@ private class MusikrImpl(
                             now - prior >= PipelinePolicy.PROGRESS_INTERVAL_MS &&
                                 lastExtractionEmitMs.compareAndSet(prior, now)
                         ) {
+                            trace.heartbeat()
                             emitProgress(progress(item.displayName()))
                         }
                     },
@@ -290,6 +292,7 @@ private class MusikrImpl(
                                 now - lastEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS
                         ) {
                             lastEmitMs = now
+                            trace.heartbeat()
                             emitProgress(progress(item.displayName()))
                         }
                         trackedExtractedChannel.send(item)
@@ -309,6 +312,7 @@ private class MusikrImpl(
                         val now = System.currentTimeMillis()
                         if (now - lastEvaluationEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {
                             lastEvaluationEmitMs = now
+                            trace.heartbeat()
                             emitProgress(progress(item.displayName()))
                         }
                     },

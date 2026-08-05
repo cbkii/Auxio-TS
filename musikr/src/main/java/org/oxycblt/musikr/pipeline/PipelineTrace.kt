@@ -50,6 +50,15 @@ internal enum class PipelineStage {
  */
 internal class PipelineTrace(private val sessionId: Long) {
     private val startedAtMs = SystemClock.elapsedRealtime()
+
+    private val lastProgressAtMs = AtomicLong(SystemClock.elapsedRealtime())
+
+    fun heartbeat() {
+        lastProgressAtMs.set(SystemClock.elapsedRealtime())
+    }
+
+    fun getLastProgressAtMs(): Long = lastProgressAtMs.get()
+
     private val emitted = AtomicIntegerArray(PipelineStage.entries.size)
     private val exploredCount = AtomicLong(0)
     private val loadedCount = AtomicLong(0)

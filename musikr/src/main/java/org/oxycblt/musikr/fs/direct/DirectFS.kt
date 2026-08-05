@@ -25,9 +25,6 @@ import java.io.File as JavaFile
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -38,7 +35,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.isActive
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Directory
 import org.oxycblt.musikr.fs.FS
@@ -102,37 +98,38 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
     override fun track(): Flow<FSUpdate> = emptyFlow()
 
     private suspend fun exploreBounded(files: Channel<File>) = coroutineScope {
-        val queue = LinkedBlockingQueue<DirectoryTask>(MAX_PENDING_DIRECTORIES)
-        val pending = AtomicInteger(0)
+        val queue = Channel<DirectoryTask>(Channel.UNLIMITED)
+        val activeTasks = AtomicInteger(0)
         val discoveredDirectories = AtomicInteger(0)
         val discoveredFiles = AtomicInteger(0)
-        val seeding = AtomicBoolean(true)
+        val visitedRoots = ConcurrentHashMap.newKeySet<String>()
+        val visitedDirectories = ConcurrentHashMap.newKeySet<String>()
+
         val workers =
             List(DIRECTORY_WORKER_COUNT) {
                 async(Dispatchers.IO) {
-                    while (isActive) {
-                        val task = queue.poll(QUEUE_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS)
-                        if (task == null) {
-                            if (!seeding.get() && pending.get() == 0) return@async
-                            continue
-                        }
+                    for (task in queue) {
                         try {
                             processDirectory(
                                 task,
                                 files,
                                 queue,
-                                pending,
+                                activeTasks,
                                 discoveredDirectories,
                                 discoveredFiles,
+                                visitedDirectories,
                             )
                         } finally {
-                            pending.decrementAndGet()
+                            if (activeTasks.decrementAndGet() == 0) {
+                                queue.close()
+                            }
                         }
                     }
                 }
             }
 
         try {
+            var enqueuedAtLeastOne = false
             for (location in roots) {
                 val sourceKey = SourceIdentity.forLocation(location)
                 if (location.uri.scheme != "file") {
@@ -153,6 +150,18 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                     )
                     continue
                 }
+
+                val canonicalPath = canonicalRoot.absolutePath
+                if (!visitedRoots.add(canonicalPath)) {
+                    Log.d(TAG, "DirectFS skipped duplicate root $canonicalPath")
+                    continue
+                }
+
+                if (!visitedDirectories.add(canonicalPath)) {
+                    Log.d(TAG, "DirectFS skipped duplicate directory $canonicalPath")
+                    continue
+                }
+
                 val task =
                     DirectoryTask(
                         directory = root,
@@ -163,22 +172,20 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                         sourceKey = sourceKey,
                         configuredRootTask = true,
                     )
-                when (enqueueDirectory(queue, pending, discoveredDirectories, task)) {
-                    EnqueueResult.Enqueued -> Unit
-                    EnqueueResult.ProcessInline ->
-                        processDirectory(
-                            task,
-                            files,
-                            queue,
-                            pending,
-                            discoveredDirectories,
-                            discoveredFiles,
-                        )
-                    EnqueueResult.LimitExceeded -> Unit
+
+                if (
+                    enqueueDirectory(queue, activeTasks, discoveredDirectories, task) !=
+                        EnqueueResult.LimitExceeded
+                ) {
+                    enqueuedAtLeastOne = true
                 }
             }
-        } finally {
-            seeding.set(false)
+            if (!enqueuedAtLeastOne) {
+                queue.close()
+            }
+        } catch (e: Exception) {
+            queue.close(e)
+            throw e
         }
         workers.awaitAll()
     }
@@ -186,10 +193,11 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
     private suspend fun processDirectory(
         task: DirectoryTask,
         files: Channel<File>,
-        queue: LinkedBlockingQueue<DirectoryTask>,
-        pending: AtomicInteger,
+        queue: Channel<DirectoryTask>,
+        activeTasks: AtomicInteger,
         discoveredDirectories: AtomicInteger,
         discoveredFiles: AtomicInteger,
+        visitedDirectories: MutableSet<String>,
     ) {
         if (discoveredFiles.get() >= MAX_VISITED_FILES) {
             recordFailure(
@@ -272,10 +280,16 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                 continue
             }
             val item = entry.javaFile
-            if (!isWithinCanonicalRoot(item, task.canonicalRoot)) {
+            val canonicalChild = canonicalFileOrNull(item) ?: continue
+            if (!isWithinCanonicalRoot(canonicalChild, task.canonicalRoot)) {
                 Log.w(TAG, "DirectFS skipped an escaped directory at ${item.path}")
                 continue
             }
+            if (!visitedDirectories.add(canonicalChild.absolutePath)) {
+                Log.d(TAG, "DirectFS skipped duplicate traversal of ${canonicalChild.absolutePath}")
+                continue
+            }
+
             val childTask =
                 DirectoryTask(
                     directory = item,
@@ -286,25 +300,13 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
                     sourceKey = task.sourceKey,
                     configuredRootTask = false,
                 )
-            when (enqueueDirectory(queue, pending, discoveredDirectories, childTask)) {
-                EnqueueResult.Enqueued -> Unit
-                EnqueueResult.ProcessInline ->
-                    processDirectory(
-                        childTask,
-                        files,
-                        queue,
-                        pending,
-                        discoveredDirectories,
-                        discoveredFiles,
-                    )
-                EnqueueResult.LimitExceeded -> Unit
-            }
+            enqueueDirectory(queue, activeTasks, discoveredDirectories, childTask)
         }
     }
 
     private fun enqueueDirectory(
-        queue: LinkedBlockingQueue<DirectoryTask>,
-        pending: AtomicInteger,
+        queue: Channel<DirectoryTask>,
+        activeTasks: AtomicInteger,
         discoveredDirectories: AtomicInteger,
         task: DirectoryTask,
     ): EnqueueResult {
@@ -319,10 +321,13 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
             }
             if (discoveredDirectories.compareAndSet(current, current + 1)) break
         }
-        pending.incrementAndGet()
-        if (queue.offer(task)) return EnqueueResult.Enqueued
-        pending.decrementAndGet()
-        return EnqueueResult.ProcessInline
+        activeTasks.incrementAndGet()
+        val result = queue.trySend(task)
+        if (result.isSuccess) {
+            return EnqueueResult.Enqueued
+        }
+        activeTasks.decrementAndGet()
+        return EnqueueResult.LimitExceeded
     }
 
     private fun recordFailure(sourceKey: String, detail: String) {

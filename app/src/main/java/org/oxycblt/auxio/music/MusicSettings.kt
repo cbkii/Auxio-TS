@@ -273,6 +273,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                 unlikelyToBeNull(
                         sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
                     )
+                    .splitEscaped { it == ';' }
                     .toUnopenedLocations(fileOnly)
             val grants = context.contentResolver.persistedUriPermissions
             return locations.map { location ->
@@ -383,11 +384,20 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     override var safQuery: SAF.Query
         get() {
-            val locations =
+            val rawLocations =
                 unlikelyToBeNull(
                         sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
                     )
-                    .toOpenedLocations(fileOnly = locationMode == LocationMode.DIRECT_FS)
+                    .splitEscaped { it == ';' }
+            val deduplicatedLocations =
+                org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer.deduplicateSources(
+                    rawLocations,
+                    fileOnly = locationMode == LocationMode.DIRECT_FS,
+                )
+            val locations =
+                deduplicatedLocations.toOpenedLocations(
+                    fileOnly = locationMode == LocationMode.DIRECT_FS
+                )
             val excludedLocations =
                 unlikelyToBeNull(
                         sharedPreferences.getString(
@@ -395,6 +405,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                             "",
                         )
                     )
+                    .splitEscaped { it == ';' }
                     .toUnopenedLocations(fileOnly = locationMode == LocationMode.DIRECT_FS)
             val withHidden =
                 sharedPreferences.getBoolean(getString(R.string.set_key_with_hidden), false)
@@ -434,6 +445,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                             "",
                         )
                     )
+                    .splitEscaped { it == ';' }
                     .toUnopenedLocations(fileOnly = false)
             val excludeNonMusic =
                 sharedPreferences.getBoolean(getString(R.string.set_key_exclude_non_music), true)
@@ -683,21 +695,29 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     private fun List<Location>.stringify(): String =
         joinToString(separator = ";") { it.uri.toString().replace(";", "\\;") }
 
-    private fun rawConfiguredSourceCount(fileOnly: Boolean): Int =
-        unlikelyToBeNull(
-                sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
+    private fun rawConfiguredSourceCount(fileOnly: Boolean): Int {
+        val rawLocations =
+            unlikelyToBeNull(
+                    sharedPreferences.getString(getString(R.string.set_key_music_locations), "")
+                )
+                .splitEscaped { it == ';' }
+        return org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer.deduplicateSources(
+                rawLocations,
+                fileOnly,
             )
-            .splitEscaped { it == ';' }
-            .count { normalizePersistedLocation(it, fileOnly) != null }
+            .size
+    }
 
-    private fun String.toOpenedLocations(fileOnly: Boolean): List<Location.Opened> =
-        splitEscaped { it == ';' }
-            .mapNotNull { normalizePersistedLocation(it, fileOnly) }
-            .mapNotNull { Location.Unopened.from(context, it.toUri()).open(context) }
+    private fun List<String>.toOpenedLocations(fileOnly: Boolean): List<Location.Opened> =
+        mapNotNull {
+            Location.Unopened.from(context, it.toUri()).open(context)
+        }
 
-    private fun String.toUnopenedLocations(fileOnly: Boolean): List<Location.Unopened> =
-        splitEscaped { it == ';' }
-            .mapNotNull { normalizePersistedLocation(it, fileOnly) }
+    private fun List<String>.toUnopenedLocations(fileOnly: Boolean): List<Location.Unopened> =
+        mapNotNull {
+                org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
+                    .normalizePersistedLocation(it, fileOnly)
+            }
             .mapNotNull { Location.Unopened.from(context, it.toUri()) }
 
     private fun normalizePersistedLocation(value: String, fileOnly: Boolean): String? =

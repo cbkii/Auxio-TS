@@ -147,6 +147,43 @@ internal object MusicSourcePathNormalizer {
         return Uri.fromFile(File(if (relative.isEmpty()) root else "$root/$relative"))
     }
 
+    fun deduplicateSources(locations: List<String>, fileOnly: Boolean): List<String> {
+        val normalized = locations.mapNotNull { normalizePersistedLocation(it, fileOnly) }
+        if (!fileOnly) return normalized.distinct()
+
+        val parsed = normalized.mapNotNull { it.toUri().path?.let { path -> it to path } }
+        val roots = mutableListOf<Pair<String, String>>()
+        for (item in parsed) {
+            val (uri, path) = item
+            val cleanPath = path.trimEnd('/')
+            if (cleanPath.isEmpty()) continue
+
+            // Check if this path is an ancestor or descendant of an existing root
+            var shouldAdd = true
+            val iterator = roots.iterator()
+            while (iterator.hasNext()) {
+                val (existingUri, existingPath) = iterator.next()
+                if (cleanPath == existingPath) {
+                    shouldAdd = false
+                    break
+                } else if (cleanPath.startsWith("$existingPath/")) {
+                    // Current is a descendant of existing, skip
+                    shouldAdd = false
+                    L.i("Deduplicated descendant source $cleanPath (covered by $existingPath)")
+                    break
+                } else if (existingPath.startsWith("$cleanPath/")) {
+                    // Current is an ancestor of existing, replace existing
+                    iterator.remove()
+                    L.i("Deduplicated descendant source $existingPath (covered by $cleanPath)")
+                }
+            }
+            if (shouldAdd) {
+                roots.add(item)
+            }
+        }
+        return roots.map { it.first }
+    }
+
     private fun isSafeDirectPath(path: String): Boolean {
         val clean = path.replace('\\', '/').trimEnd('/')
         if (clean.isBlank()) return false
