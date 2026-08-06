@@ -51,6 +51,15 @@ startup_workflow=.github/workflows/startup-performance.yml
 benchmark_workflow=.github/workflows/startup-benchmarks.yml
 screenshots_workflow=.github/workflows/ui-screenshots.yml
 release_workflow=.github/workflows/manual-release.yml
+release_script_dir=scripts/manual-release
+release_surface=$(mktemp)
+cleanup_release_surface() { rm -f -- "$release_surface"; }
+trap cleanup_release_surface EXIT
+mapfile -t release_scripts < <(find "$release_script_dir" -maxdepth 1 -type f -name '*.sh' -print | sort)
+if ((${#release_scripts[@]} != 19)); then
+  fail "Manual Release implementation script count is ${#release_scripts[@]}, expected 19"
+fi
+cat "$release_workflow" "${release_scripts[@]}" > "$release_surface"
 scope_script=scripts/ci-scope.sh
 gradle_wrapper=scripts/ci-gradle.sh
 built_apk_check=scripts/check-built-topway-apks.sh
@@ -153,20 +162,23 @@ for path in \
   require_absent "$path" 'StandardRelease' "$path has no retired StandardRelease task"
   require_absent "$path" 'standard-release.apk' "$path has no retired standard release asset"
 done
-require_absent "$release_workflow" 'include_standard_apk' 'manual release has no standard selection'
-require_absent "$release_workflow" 'include_debug_apks' 'manual release has no retired debug boolean'
-require_contains "$release_workflow" 'debug_variant_destination:' 'manual release exposes the debug destination choice'
-require_contains "$release_workflow" '- workflow_artifacts' 'manual release exposes workflow-only debug publication'
-require_contains "$release_workflow" '- release_assets' 'manual release exposes GitHub Release debug publication'
-require_contains "$release_workflow" 'topway-twmedia-debug.apk' 'manual release labels the debug app separately'
-require_contains "$release_workflow" 'lsposed-api100-bridge-debug.apk' 'manual release labels the debug addon separately'
-require_contains "$release_workflow" 'debug_artifact_dir' 'manual release isolates built debug companions'
-require_contains "$release_workflow" 'upload_tsv' 'manual release isolates and maps selected GitHub Release assets'
-require_contains "$release_workflow" "if: inputs.debug_variant_destination == 'workflow_artifacts'" 'workflow-only mode uploads short-lived debug artifacts'
-require_contains "$release_workflow" '[[ "${DEBUG_DESTINATION}" == release_assets ]]' 'release-assets mode adds debug companions to the published asset set'
-require_contains "$release_workflow" 'Debug APKs are forbidden unless debug_variant_destination=release_assets.' 'manual release rejects accidental debug publication'
-require_contains "$release_workflow" 'check-app-release-contracts.sh' 'manual release validates the staged primary APK identity'
-require_contains "$release_workflow" 'check-release-diagnostics-boundary.sh "${asset_path}"' 'manual release verifies diagnostics are absent from the release APK'
+require_absent "$release_surface" 'include_standard_apk' 'manual release has no standard selection'
+require_absent "$release_surface" 'include_debug_apks' 'manual release has no retired debug boolean'
+require_absent "$release_workflow" 'debug_variant_destination:' 'manual release hides internal debug destination terminology'
+require_contains "$release_workflow" 'publish_debug_apks:' 'manual release exposes one user-friendly debug publication switch'
+require_contains "$release_workflow" 'run: bash scripts/manual-release/' 'manual release delegates implementation to bounded syntax-checked scripts'
+require_contains "$release_surface" 'true) DEBUG_DESTINATION=release_assets ;;' 'enabled debug publication maps to Release assets'
+require_contains "$release_surface" 'false) DEBUG_DESTINATION=workflow_artifacts ;;' 'disabled debug publication maps to workflow-only artifacts'
+require_contains "$release_surface" 'topway-twmedia-debug.apk' 'manual release labels the debug app separately'
+require_contains "$release_surface" 'lsposed-api100-bridge-debug.apk' 'manual release labels the debug addon separately'
+require_contains "$release_surface" 'debug_artifact_dir' 'manual release isolates built debug companions'
+require_contains "$release_surface" 'upload_tsv' 'manual release isolates and maps selected GitHub Release assets'
+require_contains "$release_surface" 'replace_names_file' 'manual release carries the automatic interrupted-triplet replacement plan'
+require_contains "$release_workflow" "if: steps.selection.outputs.debug_destination == 'workflow_artifacts'" 'workflow-only mode uploads short-lived debug artifacts'
+require_contains "$release_surface" '[[ "${DEBUG_DESTINATION}" == release_assets ]]' 'release-assets mode adds debug companions to the published asset set'
+require_contains "$release_surface" 'Debug APKs are forbidden unless the resolved debug destination is release_assets.' 'manual release rejects accidental debug publication'
+require_contains "$release_surface" 'check-app-release-contracts.sh' 'manual release validates the staged primary APK identity'
+require_contains "$release_surface" 'check-release-diagnostics-boundary.sh "${asset_path}"' 'manual release verifies diagnostics are absent from the release APK'
 require_absent_regex "$benchmark_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$' 'startup benchmark has no standard choice regardless of indentation'
 require_absent_regex "$screenshots_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$' 'Roborazzi workflow has no standard choice regardless of indentation'
 
@@ -174,10 +186,10 @@ require_contains "$mode_file" 'fun defaultFor(topwayCompatFlavor: Boolean)' 'lau
 require_contains "$mode_test" 'default policy is explicit for both compatibility states' 'pure launcher default policy covers true and false states'
 require_contains "$mode_test" 'topwayCompatFlavor = false' 'non-Topway fallback policy remains covered without a distributable flavour'
 
-# Manual Release calls this contract both before planning and again after building the local release
-# commit. The second call is the last read-only branch-authority guard before a tag is pushed.
+# New-release publication calls this contract after preparing the local metadata commit.
+# This is the final read-only branch-authority guard before an immutable tag is pushed.
 if [[ "${GITHUB_WORKFLOW:-}" == 'Manual Release' ]]; then
-  if git fetch --quiet origin dev && remote_dev=$(git rev-parse origin/dev 2>/dev/null); then
+  if timeout 60s git fetch --quiet origin dev && remote_dev=$(git rev-parse origin/dev 2>/dev/null); then
     current_head=$(git rev-parse HEAD)
     current_parent=$(git rev-parse HEAD^ 2>/dev/null || true)
     if [[ "$current_head" == "$remote_dev" || "$current_parent" == "$remote_dev" ]]; then
