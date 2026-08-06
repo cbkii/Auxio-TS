@@ -22,6 +22,10 @@ fi
   echo "::error::Release ID is missing or invalid for ${RELEASE_TAG}."
   exit 1
 }
+[[ -f "${REPLACE_NAMES_FILE}" ]] || {
+  echo "::error::Asset replacement plan is missing: ${REPLACE_NAMES_FILE}"
+  exit 1
+}
 
 duplicate_names="${RUNNER_TEMP}/duplicate-upload-asset-names.txt"
 cut -f1 "${UPLOAD_TSV}" | awk 'NF' | sort | uniq -d > "${duplicate_names}"
@@ -66,10 +70,10 @@ while IFS=$'\t' read -r name path; do
       echo "::error::Asset ${name} resolved to invalid ID ${existing_id}."
       exit 1
     }
-    [[ "${REPLACE}" == true ]] || {
-      echo "::error::Asset ${name} already exists; explicit replacement was not selected."
+    if [[ "${REPLACE}" != true ]] && ! grep -Fxq -- "${name}" "${REPLACE_NAMES_FILE}"; then
+      echo "::error::Asset ${name} exists but the validated repair plan did not authorise replacement."
       exit 1
-    }
+    fi
     timeout 60s gh api --method DELETE \
       "repos/${GITHUB_REPOSITORY}/releases/assets/${existing_id}"
   fi
