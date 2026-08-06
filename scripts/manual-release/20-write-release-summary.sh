@@ -44,7 +44,7 @@
   fi
   echo
   echo '- Each required variant was built at most once.'
-  echo '- Existing complete triplets were reused in repair mode; partial triplets require explicit replacement.'
+  echo '- Existing complete triplets were reused; interrupted partial triplets were rebuilt and repaired automatically.'
   echo '- topwayTwMedia remains the primary APK.'
   echo '- The API 100 LSPosed bridge remains static-scoped only to genuine stock com.tw.music.'
   echo '- The exact-package topwayTwMusic Magisk release lane remains retired.'
