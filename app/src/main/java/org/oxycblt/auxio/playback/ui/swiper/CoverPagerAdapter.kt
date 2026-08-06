@@ -140,6 +140,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
     fun bind(song: Song, listener: StepperOverlay.Listener) {
         this.song = song
         binding.cover.bind(song)
+        binding.coverVisualizer.configureTrack(song.uid.toString(), song.durationMs)
         binding.coverFastSeekOverlay.listener = listener
         updateVisualizerState(VisualizerState.Disabled, UISettings.VisualizerMode.OFF)
     }
