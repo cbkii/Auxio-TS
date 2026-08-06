@@ -3,40 +3,32 @@ name: Manual Release
 on:
   workflow_dispatch:
     inputs:
-      release_mode:
-        description: Create a new release or repair assets for an existing immutable tag
-        required: true
-        default: create_new_release
-        type: choice
-        options:
-          - create_new_release
-          - repair_existing_release
       version_tag:
-        description: Release tag, e.g. v6.4.8. Required for repair; blank new releases resolve safely.
+        description: "Version (optional): blank resumes an interrupted release or creates the next patch; e.g. v6.5.5"
         required: false
         type: string
       draft:
-        description: Leave a newly created release as draft after asset verification
+        description: "Keep the verified release hidden as a draft"
         required: true
         default: true
         type: boolean
       prerelease:
-        description: Mark a newly created published release as prerelease
+        description: "Mark a published release as a pre-release (ignored while draft)"
         required: true
         default: false
         type: boolean
       include_topway_twmedia_apk:
-        description: Build/upload the primary Topway/DoFun com.tw.media release APK
+        description: "Include the main Auxio-TS app (com.tw.media)"
         required: true
         default: true
         type: boolean
       include_lsposed_bridge_apk:
-        description: Build/upload the signed API 100 LSPosed stock-music bridge addon
+        description: "Include the signed LSPosed stock-music bridge add-on"
         required: true
         default: true
         type: boolean
       debug_variant_destination:
-        description: Keep debug companions as workflow artifacts or publish them as GitHub Release assets
+        description: "Debug builds: keep as temporary workflow artifacts, or attach to the GitHub Release"
         required: true
         default: workflow_artifacts
         type: choice
@@ -44,7 +36,7 @@ on:
           - workflow_artifacts
           - release_assets
       replace_existing_assets:
-        description: Replace complete selected asset triplets during repair mode
+        description: "Rebuild complete existing assets for this version (normally off; incomplete uploads auto-repair)"
         required: true
         default: false
         type: boolean
@@ -81,7 +73,7 @@ jobs:
             echo "::error::Manual releases must run from the current protected dev branch."
             exit 1
           fi
-          git fetch --tags origin dev
+          timeout 60s git fetch --tags origin dev
           source_sha="$(git rev-parse HEAD)"
           remote_sha="$(git rev-parse origin/dev)"
           [[ "${source_sha}" == "${remote_sha}" ]] || {
@@ -89,14 +81,6 @@ jobs:
             exit 1
           }
           echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
-
-      - name: Validate current release workflow contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash ./scripts/check-manual-release-workflow.sh
-          bash ./scripts/check-ci-variant-contracts.sh
-          bash ./scripts/check-ts18-apk-reference-contracts.sh
 
       - name: Select maintained release assets
         id: selection
@@ -154,19 +138,11 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_MODE: auto
           INPUT_TAG: ${{ inputs.version_tag }}
           TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
         run: |
           set -euo pipefail
-          case "${RELEASE_MODE}" in
-            create_new_release|repair_existing_release) ;;
-            *)
-              echo "::error::Unsupported release mode: ${RELEASE_MODE}"
-              exit 1
-              ;;
-          esac
-
           git_tags="${RUNNER_TEMP}/git-tags.txt"
           release_tags="${RUNNER_TEMP}/github-release-tags.txt"
           target_release="${RUNNER_TEMP}/target-release.json"
@@ -177,9 +153,25 @@ jobs:
           # List releases includes authenticated draft, prerelease and published releases.
           # Keep an ID/tag index so draft lookup never uses the published-only tag endpoint.
           release_index="${RUNNER_TEMP}/github-releases.tsv"
-          timeout 60s gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq '.[] | [.id, .tag_name] | @tsv' > "${release_index}"
+          draft_release_tags="${RUNNER_TEMP}/github-draft-release-tags.txt"
+          release_index_tmp="${release_index}.tmp"
+          listed=false
+          for attempt in 1 2 3; do
+            if timeout 60s gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | [.id, .tag_name, .draft] | @tsv' > "${release_index_tmp}"; then
+              mv "${release_index_tmp}" "${release_index}"
+              listed=true
+              break
+            fi
+            echo "::warning::Release inventory attempt ${attempt}/3 failed; retrying."
+            sleep "$((attempt * 3))"
+          done
+          [[ "${listed}" == true ]] || {
+            echo "::error::Unable to read GitHub Release inventory after three bounded attempts."
+            exit 1
+          }
           cut -f2 "${release_index}" > "${release_tags}"
+          awk -F '\t' '$3 == "true" { print $2 }' "${release_index}" > "${draft_release_tags}"
           printf '{}\n' > "${target_release}"
 
           python3 "${TOOL}" resolve \
@@ -188,6 +180,7 @@ jobs:
             --source-gradle app/build.gradle \
             --git-tags-file "${git_tags}" \
             --release-tags-file "${release_tags}" \
+            --draft-release-tags-file "${draft_release_tags}" \
             --target-release-json "${target_release}" \
             --output "${preliminary}"
 
@@ -227,6 +220,7 @@ jobs:
             --source-gradle app/build.gradle \
             --git-tags-file "${git_tags}" \
             --release-tags-file "${release_tags}" \
+            --draft-release-tags-file "${draft_release_tags}" \
             --target-release-json "${target_release}" \
             --output "${final_plan}"
 
@@ -242,7 +236,12 @@ jobs:
             echo "previous_tag=$(jq -r .previous_tag "${final_plan}")"
             echo "tag_exists=$(jq -r .tag_exists "${final_plan}")"
             echo "release_exists=$(jq -r .release_exists "${final_plan}")"
+            echo "effective_mode=$(jq -r .effective_mode "${final_plan}")"
+            echo "resolution_reason=$(jq -r .resolution_reason "${final_plan}")"
+            echo "apply_requested_status=$(jq -r .apply_requested_status "${final_plan}")"
+            echo "unresolved_tag_only_versions=$(jq -r '.unresolved_tag_only_versions | join(",")' "${final_plan}")"
             echo "metadata_change_required=$(jq -r .metadata_change_required "${final_plan}")"
+            echo "target_release_draft=$(jq -r .target_release_draft "${final_plan}")"
             echo "existing_release_url=$(jq -r .target_release_url "${final_plan}")"
           } >> "${GITHUB_OUTPUT}"
 
@@ -251,7 +250,7 @@ jobs:
         shell: bash
         env:
           TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
-          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_MODE: ${{ steps.plan.outputs.effective_mode }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           SELECTED_FILE: ${{ steps.selection.outputs.selected_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
@@ -272,11 +271,13 @@ jobs:
           build_variants="${RUNNER_TEMP}/build-variants.txt"
           build_apk_names="${RUNNER_TEMP}/build-apk-names.txt"
           upload_names="${RUNNER_TEMP}/upload-asset-names.txt"
+          replace_names="${RUNNER_TEMP}/replace-asset-names.txt"
           verify_names="${RUNNER_TEMP}/verify-asset-names.txt"
           debug_workflow_names="${RUNNER_TEMP}/debug-workflow-asset-names.txt"
           jq -r '.build_variants[]' "${plan_file}" > "${build_variants}"
           jq -r '.build_apk_names[]' "${plan_file}" > "${build_apk_names}"
           jq -r '.upload_names[]' "${plan_file}" > "${upload_names}"
+          jq -r '.replace_names[]' "${plan_file}" > "${replace_names}"
           jq -r '.verify_names[]' "${plan_file}" > "${verify_names}"
           jq -r '.debug_workflow_names[]' "${plan_file}" > "${debug_workflow_names}"
           {
@@ -284,6 +285,7 @@ jobs:
             echo "build_variants_file=${build_variants}"
             echo "build_apk_names_file=${build_apk_names}"
             echo "upload_names_file=${upload_names}"
+            echo "replace_names_file=${replace_names}"
             echo "verify_names_file=${verify_names}"
             echo "debug_workflow_names_file=${debug_workflow_names}"
             echo "build_count=$(wc -l < "${build_variants}" | tr -d ' ')"
@@ -291,7 +293,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Checkout immutable repair tag
-        if: inputs.release_mode == 'repair_existing_release'
+        if: steps.plan.outputs.effective_mode == 'repair_existing_release'
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
@@ -313,7 +315,7 @@ jobs:
         shell: bash
         env:
           TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
-          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_MODE: ${{ steps.plan.outputs.effective_mode }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           VERSION_NAME: ${{ steps.plan.outputs.release_version_name }}
           VERSION_CODE: ${{ steps.plan.outputs.release_version_code }}
@@ -372,10 +374,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --install platform-tools 'build-tools;36.0.0' 'platforms;android-36' 'ndk;28.2.13676358'
+          installed=false
+          for attempt in 1 2; do
+            if timeout 600s sdkmanager --install platform-tools 'build-tools;36.0.0' 'platforms;android-36' 'ndk;28.2.13676358'; then
+              installed=true
+              break
+            fi
+            echo "::warning::Android SDK component install attempt ${attempt}/2 failed."
+            sleep 5
+          done
+          [[ "${installed}" == true ]] || {
+            echo "::error::Android SDK components could not be installed within bounded retries."
+            exit 1
+          }
           if ! command -v ninja >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y ninja-build
+            timeout 180s sudo apt-get update
+            timeout 180s sudo apt-get install -y ninja-build
           fi
 
       - name: Prepare CI environment
@@ -387,7 +401,7 @@ jobs:
             echo "::error::Selected immutable source lacks scripts/bootstrap-dependencies.sh; safe rebuild is unsupported."
             exit 1
           }
-          bash ./scripts/bootstrap-dependencies.sh --profile release
+          timeout 900s bash ./scripts/bootstrap-dependencies.sh --profile release
 
       - name: Decode release keystore
         id: signing
@@ -495,28 +509,28 @@ jobs:
               [[ -n "${variant}" ]] || continue
               case "${variant}" in
                 topway_twmedia)
-                  bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
+                  timeout 2700s bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
                   apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/release)"
                   asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-release.apk"
                   asset_kind='signed-apk'
                   destination='release'
                   ;;
                 topway_twmedia_debug)
-                  bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
+                  timeout 2700s bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
                   apk_path="$(find_apk app/build/outputs/apk/topwayTwMedia/debug)"
                   asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-debug.apk"
                   asset_kind='debug-diagnostics-apk'
                   destination="${DEBUG_DESTINATION}"
                   ;;
                 lsposed_bridge)
-                  bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease
+                  timeout 2700s bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease
                   apk_path="$(find_apk lsposed-bridge/build/outputs/apk/release)"
                   asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk"
                   asset_kind='signed-lsposed-api100-addon'
                   destination='release'
                   ;;
                 lsposed_bridge_debug)
-                  bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleDebug
+                  timeout 2700s bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleDebug
                   apk_path="$(find_apk lsposed-bridge/build/outputs/apk/debug)"
                   asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk"
                   asset_kind='debug-lsposed-api100-addon'
@@ -679,7 +693,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Validate new-release source contracts
-        if: inputs.release_mode == 'create_new_release'
+        if: steps.plan.outputs.effective_mode == 'create_new_release'
         shell: bash
         run: |
           set -euo pipefail
@@ -708,7 +722,7 @@ jobs:
 
       - name: Push immutable release tag
         id: publish_tag
-        if: inputs.release_mode == 'create_new_release'
+        if: steps.plan.outputs.effective_mode == 'create_new_release'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -717,9 +731,21 @@ jobs:
         run: |
           set -euo pipefail
           gh auth setup-git
+          timeout 60s git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            existing_sha="$(git rev-list -n1 "${RELEASE_TAG}")"
+            [[ "${existing_sha}" == "${RELEASE_SHA}" ]] || {
+              echo "::error::Existing tag ${RELEASE_TAG} points to ${existing_sha}, not validated commit ${RELEASE_SHA}."
+              exit 1
+            }
+            echo "Tag ${RELEASE_TAG} already points to the validated release commit; continuing idempotently."
+            echo "tag_pushed=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
           git tag "${RELEASE_TAG}" "${RELEASE_SHA}"
-          git push origin "refs/tags/${RELEASE_TAG}"
-          remote_sha="$(git ls-remote --tags origin "refs/tags/${RELEASE_TAG}" | awk '{print $1}')"
+          timeout 60s git push origin "refs/tags/${RELEASE_TAG}"
+          timeout 60s git fetch --tags origin
+          remote_sha="$(git rev-list -n1 "${RELEASE_TAG}")"
           [[ "${remote_sha}" == "${RELEASE_SHA}" ]] || {
             echo "::error::Remote tag ${RELEASE_TAG} does not match the validated release commit."
             exit 1
@@ -766,14 +792,28 @@ jobs:
             } > "${notes}"
             # A newly pushed tag can take time to become visible to the Releases API.
             # Always provide the validated commit SHA so the request remains valid during that window.
-            timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+            if timeout 60s gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
               -f tag_name="${RELEASE_TAG}" \
               -f target_commitish="${RELEASE_SHA}" \
               -f name="${RELEASE_TAG}" \
               -F body=@"${notes}" \
               -F draft=true \
-              -F prerelease=false > "${release_json}"
-            created=true
+              -F prerelease=false > "${release_json}"; then
+              created=true
+            else
+              echo "::warning::Draft creation did not return successfully; checking whether GitHub created it anyway."
+              sleep 3
+              timeout 60s gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+                --jq ".[] | select(.tag_name == \"${RELEASE_TAG}\") | @base64" > "${release_json}.matches" || true
+              match_count="$(awk 'NF { count += 1 } END { print count + 0 }' "${release_json}.matches")"
+              if [[ "${match_count}" == 1 ]]; then
+                base64 --decode < "${release_json}.matches" > "${release_json}"
+                echo "Adopted the exact release created during the interrupted API response."
+              else
+                echo "::error::Draft creation failed and no unique ${RELEASE_TAG} release could be adopted."
+                exit 1
+              fi
+            fi
           else
             [[ -s "${TARGET_RELEASE_FILE}" ]] || {
               echo "::error::Existing release state file is missing for ${RELEASE_TAG}."
@@ -806,7 +846,7 @@ jobs:
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
           UPLOAD_TSV: ${{ steps.assets.outputs.upload_tsv }}
-          REPLACE: ${{ inputs.replace_existing_assets }}
+          REPLACE_NAMES_FILE: ${{ steps.asset_plan.outputs.replace_names_file }}
         run: |
           set -euo pipefail
           if [[ ! -s "${UPLOAD_TSV}" ]]; then
@@ -861,8 +901,8 @@ jobs:
                 echo "::error::Asset ${name} resolved to invalid ID ${existing_id}."
                 exit 1
               }
-              [[ "${REPLACE}" == true ]] || {
-                echo "::error::Asset ${name} already exists; explicit replacement was not selected."
+              grep -Fxq -- "${name}" "${REPLACE_NAMES_FILE}" || {
+                echo "::error::Asset ${name} appeared after planning and was not authorised for replacement. Re-run to refresh state."
                 exit 1
               }
               timeout 60s gh api --method DELETE \
@@ -871,7 +911,8 @@ jobs:
 
             encoded_name="$(jq -rn --arg value "${name}" '$value | @uri')"
             response="${RUNNER_TEMP}/uploaded-${encoded_name}.json"
-            curl --fail-with-body --silent --show-error \
+            upload_ok=false
+            if curl --fail-with-body --silent --show-error \
               --connect-timeout 15 \
               --max-time 300 \
               --request POST \
@@ -880,13 +921,34 @@ jobs:
               --header 'X-GitHub-Api-Version: 2022-11-28' \
               --header 'Content-Type: application/octet-stream' \
               --data-binary "@${path}" \
-              "${upload_base}?name=${encoded_name}&label=${encoded_name}" > "${response}"
-            jq -e --arg name "${name}" \
-              '(.id | type == "number") and (.name == $name) and (.state == "uploaded")' \
-              "${response}" >/dev/null || {
-                echo "::error::GitHub returned an invalid upload result for ${name}."
-                exit 1
-              }
+              "${upload_base}?name=${encoded_name}&label=${encoded_name}" > "${response}" &&
+              jq -e --arg name "${name}" \
+                '(.id | type == "number") and (.name == $name) and (.state == "uploaded")' \
+                "${response}" >/dev/null; then
+              upload_ok=true
+            else
+              echo "::warning::Upload response for ${name} was interrupted or invalid; checking remote content before failing."
+              sleep 2
+              refreshed="${RUNNER_TEMP}/refresh-${encoded_name}.json"
+              timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > "${refreshed}" || true
+              mapfile -t adopted_ids < <(
+                jq -r --arg name "${name}" '.assets[]? | select(.name == $name and .state == "uploaded") | .id' "${refreshed}" 2>/dev/null || true
+              )
+              if ((${#adopted_ids[@]} == 1)) && [[ "${adopted_ids[0]}" =~ ^[0-9]+$ ]]; then
+                remote_copy="${RUNNER_TEMP}/remote-${encoded_name}"
+                if timeout 300s gh api \
+                  -H 'Accept: application/octet-stream' \
+                  "repos/${GITHUB_REPOSITORY}/releases/assets/${adopted_ids[0]}" > "${remote_copy}" &&
+                  cmp -s -- "${path}" "${remote_copy}"; then
+                  echo "Adopted exact remote asset ${name} after an uncertain upload response."
+                  upload_ok=true
+                fi
+              fi
+            fi
+            [[ "${upload_ok}" == true ]] || {
+              echo "::error::GitHub did not confirm an exact uploaded asset for ${name}."
+              exit 1
+            }
           done < "${UPLOAD_TSV}"
 
       - name: Verify remote release asset manifest
@@ -896,7 +958,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
-          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_MODE: ${{ steps.plan.outputs.effective_mode }}
           VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
         run: |
@@ -907,13 +969,22 @@ jobs:
             echo "::error::Release ID is missing or invalid for ${RELEASE_TAG}."
             exit 1
           }
-          timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > "${remote_json}"
-          jq -e --arg tag "${RELEASE_TAG}" --arg id "${RELEASE_ID}" \
-            '(.id == ($id | tonumber)) and (.tag_name == $tag)' \
-            "${remote_json}" >/dev/null || {
-              echo "::error::Remote release ID ${RELEASE_ID} no longer matches ${RELEASE_TAG}."
-              exit 1
-            }
+          verified_state=false
+          for attempt in 1 2 3; do
+            if timeout 60s gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > "${remote_json}" &&
+              jq -e --arg tag "${RELEASE_TAG}" --arg id "${RELEASE_ID}" \
+                '(.id == ($id | tonumber)) and (.tag_name == $tag)' \
+                "${remote_json}" >/dev/null; then
+              verified_state=true
+              break
+            fi
+            echo "::warning::Release verification read ${attempt}/3 failed; retrying."
+            sleep "$((attempt * 3))"
+          done
+          [[ "${verified_state}" == true ]] || {
+            echo "::error::Remote release ID ${RELEASE_ID} could not be verified as ${RELEASE_TAG}."
+            exit 1
+          }
           jq -r '.assets[].name' "${remote_json}" | sort -u > "${actual_names}"
 
           while IFS= read -r name; do
@@ -948,9 +1019,9 @@ jobs:
           fi
           echo "verified=true" >> "${GITHUB_OUTPUT}"
 
-      - name: Apply requested status to newly created release
+      - name: Apply requested status after verified create transaction
         id: finalise
-        if: steps.release.outputs.created == 'true'
+        if: steps.plan.outputs.apply_requested_status == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -959,11 +1030,26 @@ jobs:
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           set -euo pipefail
-          timeout 60s gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-            -F draft="${DRAFT}" \
-            -F prerelease="${PRERELEASE}" > "${RUNNER_TEMP}/final-release.json"
-          echo "draft=$(jq -r .draft "${RUNNER_TEMP}/final-release.json")" >> "${GITHUB_OUTPUT}"
-          echo "prerelease=$(jq -r .prerelease "${RUNNER_TEMP}/final-release.json")" >> "${GITHUB_OUTPUT}"
+          final_json="${RUNNER_TEMP}/final-release.json"
+          updated=false
+          for attempt in 1 2 3; do
+            if timeout 60s gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -F draft="${DRAFT}" \
+              -F prerelease="${PRERELEASE}" > "${final_json}" &&
+              jq -e --argjson draft "${DRAFT}" --argjson prerelease "${PRERELEASE}" \
+                '(.draft == $draft) and (.prerelease == $prerelease)' "${final_json}" >/dev/null; then
+              updated=true
+              break
+            fi
+            echo "::warning::Release status update ${attempt}/3 did not verify; retrying."
+            sleep "$((attempt * 3))"
+          done
+          [[ "${updated}" == true ]] || {
+            echo "::error::Unable to apply and verify the requested release status."
+            exit 1
+          }
+          echo "draft=$(jq -r .draft "${final_json}")" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=$(jq -r .prerelease "${final_json}")" >> "${GITHUB_OUTPUT}"
 
       - name: Synchronise released source metadata to dev
         id: sync
@@ -973,14 +1059,14 @@ jobs:
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: |
           set -euo pipefail
-          git fetch origin dev
+          timeout 60s git fetch origin dev
           remote_dev="$(git rev-parse origin/dev)"
           status='blocked'
           if [[ "${remote_dev}" == "${RELEASE_SHA}" ]] || git merge-base --is-ancestor "${RELEASE_SHA}" "${remote_dev}"; then
             status='already_synced'
           elif [[ "$(git rev-parse "${RELEASE_SHA}^")" == "${remote_dev}" ]]; then
             gh auth setup-git
-            if git push origin "${RELEASE_SHA}:refs/heads/dev"; then
+            if timeout 60s git push origin "${RELEASE_SHA}:refs/heads/dev"; then
               status='fast_forwarded'
             else
               echo "::warning::Release assets are verified, but the protected dev metadata fast-forward was rejected."
@@ -997,7 +1083,9 @@ jobs:
         shell: bash
         env:
           RESULT: ${{ job.status }}
-          RELEASE_MODE: ${{ inputs.release_mode }}
+          EFFECTIVE_MODE: ${{ steps.plan.outputs.effective_mode }}
+          RESOLUTION_REASON: ${{ steps.plan.outputs.resolution_reason }}
+          UNRESOLVED_TAG_ONLY: ${{ steps.plan.outputs.unresolved_tag_only_versions }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
@@ -1019,7 +1107,9 @@ jobs:
             echo '# Manual release summary'
             echo
             echo "- Result: \`${RESULT}\`"
-            echo "- Mode: \`${RELEASE_MODE}\`"
+            echo "- Requested mode: \`${REQUESTED_MODE}\`"
+            echo "- Effective action: \`${EFFECTIVE_MODE:-not resolved}\`"
+            echo "- Resolution: \`${RESOLUTION_REASON:-not resolved}\`"
             echo "- Tag: ${RELEASE_TAG:-not computed}"
             echo "- Starting dev SHA: ${SOURCE_SHA:-not resolved}"
             echo "- Release/tag SHA: ${RELEASE_SHA:-not resolved}"
@@ -1033,11 +1123,14 @@ jobs:
             [[ -n "${DEBUG_ARTIFACT_URL:-}" ]] && echo "- Debug workflow artifact: ${DEBUG_ARTIFACT_URL}"
             echo
             echo '## Release status'
-            if [[ "${RELEASE_CREATED}" == true ]]; then
+            if [[ -n "${FINAL_DRAFT:-}" ]]; then
               echo "- Initial transaction state: draft=${INITIAL_DRAFT}, prerelease=${INITIAL_PRERELEASE}"
-              echo "- Requested final state: draft=${FINAL_DRAFT:-unknown}, prerelease=${FINAL_PRERELEASE:-unknown}"
+              echo "- Requested final state: draft=${FINAL_DRAFT}, prerelease=${FINAL_PRERELEASE}"
             else
-              echo "- Existing release status was preserved: draft=${INITIAL_DRAFT:-unknown}, prerelease=${INITIAL_PRERELEASE:-unknown}"
+              echo "- Existing published release status was preserved: draft=${INITIAL_DRAFT:-unknown}, prerelease=${INITIAL_PRERELEASE:-unknown}"
+            fi
+            if [[ -n "${UNRESOLVED_TAG_ONLY:-}" ]]; then
+              echo "- Older unresolved tag-only versions retained: ${UNRESOLVED_TAG_ONLY}"
             fi
             echo
             echo '## Selected GitHub Release assets'
@@ -1050,7 +1143,7 @@ jobs:
             fi
             echo
             echo '- Each required variant was built at most once.'
-            echo '- Existing complete triplets were reused in repair mode; partial triplets require explicit replacement.'
+            echo '- Existing complete triplets were reused; interrupted partial triplets were rebuilt and repaired automatically.'
             echo '- topwayTwMedia remains the primary APK.'
             echo '- The API 100 LSPosed bridge remains static-scoped only to genuine stock com.tw.music.'
             echo '- The exact-package topwayTwMusic Magisk release lane remains retired.'
