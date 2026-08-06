@@ -60,6 +60,63 @@ jobs:
           PY
           python3 /tmp/pr232-final-authority.py
 
+      - name: Correct exact-root regression expectations
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          identity = Path('musikr/src/test/java/org/oxycblt/musikr/fs/SourceIdentityTest.kt')
+          text = identity.read_text()
+          text = text.replace(
+              'import org.junit.Test\n\nclass SourceIdentityTest {',
+              'import org.junit.Test\nimport org.junit.runner.RunWith\nimport org.robolectric.RobolectricTestRunner\nimport org.robolectric.annotation.Config\n\n@RunWith(RobolectricTestRunner::class)\n@Config(sdk = [29])\nclass SourceIdentityTest {',
+          )
+          identity.write_text(text)
+
+          direct = Path('musikr/src/test/java/org/oxycblt/musikr/fs/direct/DirectFsTraversalTest.kt')
+          text = direct.read_text()
+          old = '''            val sourceKey = SourceIdentity.forLocation(location)
+
+            val snapshot = directFs.sourceSnapshots().single()
+'''
+          new = '''            val sourceKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", location)
+
+            val snapshot = directFs.sourceSnapshots().single()
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'STOP rejected-root identity anchor: {text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''        val snapshot = directFs.sourceSnapshots().single()
+
+        assertFalse(snapshot.available)
+        assertEquals(null, snapshot.fingerprint)
+        assertEquals(SourceFingerprintStrength.NONE, snapshot.fingerprintStrength)
+        assertTrue(directFs.drainSourceFailures().containsKey(snapshot.sourceKey))
+'''
+          new = '''        val acceptedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", acceptedLocation)
+        val rejectedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", rejectedLocation)
+        val snapshots = directFs.sourceSnapshots().associateBy { it.sourceKey }
+
+        assertEquals(2, snapshots.size)
+        val acceptedSnapshot = requireNotNull(snapshots[acceptedKey])
+        assertTrue(acceptedSnapshot.available)
+        assertTrue(acceptedSnapshot.fingerprint != null)
+        assertEquals(SourceFingerprintStrength.ADVISORY, acceptedSnapshot.fingerprintStrength)
+        val rejectedSnapshot = requireNotNull(snapshots[rejectedKey])
+        assertFalse(rejectedSnapshot.available)
+        assertEquals(null, rejectedSnapshot.fingerprint)
+        assertEquals(SourceFingerprintStrength.NONE, rejectedSnapshot.fingerprintStrength)
+        val failures = directFs.drainSourceFailures()
+        assertFalse(failures.containsKey(acceptedKey))
+        assertTrue(failures.containsKey(rejectedKey))
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'STOP independent-root expectation anchor: {text.count(old)}')
+          direct.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Format Kotlin
         shell: bash
         run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
