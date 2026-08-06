@@ -65,53 +65,22 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
-
           identity = Path('musikr/src/test/java/org/oxycblt/musikr/fs/SourceIdentityTest.kt')
           text = identity.read_text()
-          text = text.replace(
-              'import org.junit.Test\n\nclass SourceIdentityTest {',
-              'import org.junit.Test\nimport org.junit.runner.RunWith\nimport org.robolectric.RobolectricTestRunner\nimport org.robolectric.annotation.Config\n\n@RunWith(RobolectricTestRunner::class)\n@Config(sdk = [29])\nclass SourceIdentityTest {',
-          )
-          identity.write_text(text)
-
+          old = 'import org.junit.Test\n\nclass SourceIdentityTest {'
+          new = 'import org.junit.Test\nimport org.junit.runner.RunWith\nimport org.robolectric.RobolectricTestRunner\nimport org.robolectric.annotation.Config\n\n@RunWith(RobolectricTestRunner::class)\n@Config(sdk = [29])\nclass SourceIdentityTest {'
+          if text.count(old) != 1:
+              raise SystemExit(f'STOP identity runner anchor: {text.count(old)}')
+          identity.write_text(text.replace(old, new, 1))
           direct = Path('musikr/src/test/java/org/oxycblt/musikr/fs/direct/DirectFsTraversalTest.kt')
           text = direct.read_text()
-          old = '''            val sourceKey = SourceIdentity.forLocation(location)
-
-            val snapshot = directFs.sourceSnapshots().single()
-'''
-          new = '''            val sourceKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", location)
-
-            val snapshot = directFs.sourceSnapshots().single()
-'''
+          old = '            val sourceKey = SourceIdentity.forLocation(location)\n\n            val snapshot = directFs.sourceSnapshots().single()\n'
+          new = '            val sourceKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", location)\n\n            val snapshot = directFs.sourceSnapshots().single()\n'
           if text.count(old) != 1:
               raise SystemExit(f'STOP rejected-root identity anchor: {text.count(old)}')
           text = text.replace(old, new, 1)
-
-          old = '''        val snapshot = directFs.sourceSnapshots().single()
-
-        assertFalse(snapshot.available)
-        assertEquals(null, snapshot.fingerprint)
-        assertEquals(SourceFingerprintStrength.NONE, snapshot.fingerprintStrength)
-        assertTrue(directFs.drainSourceFailures().containsKey(snapshot.sourceKey))
-'''
-          new = '''        val acceptedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", acceptedLocation)
-        val rejectedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", rejectedLocation)
-        val snapshots = directFs.sourceSnapshots().associateBy { it.sourceKey }
-
-        assertEquals(2, snapshots.size)
-        val acceptedSnapshot = requireNotNull(snapshots[acceptedKey])
-        assertTrue(acceptedSnapshot.available)
-        assertTrue(acceptedSnapshot.fingerprint != null)
-        assertEquals(SourceFingerprintStrength.ADVISORY, acceptedSnapshot.fingerprintStrength)
-        val rejectedSnapshot = requireNotNull(snapshots[rejectedKey])
-        assertFalse(rejectedSnapshot.available)
-        assertEquals(null, rejectedSnapshot.fingerprint)
-        assertEquals(SourceFingerprintStrength.NONE, rejectedSnapshot.fingerprintStrength)
-        val failures = directFs.drainSourceFailures()
-        assertFalse(failures.containsKey(acceptedKey))
-        assertTrue(failures.containsKey(rejectedKey))
-'''
+          old = '        val snapshot = directFs.sourceSnapshots().single()\n\n        assertFalse(snapshot.available)\n        assertEquals(null, snapshot.fingerprint)\n        assertEquals(SourceFingerprintStrength.NONE, snapshot.fingerprintStrength)\n        assertTrue(directFs.drainSourceFailures().containsKey(snapshot.sourceKey))\n'
+          new = '        val acceptedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", acceptedLocation)\n        val rejectedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", rejectedLocation)\n        val snapshots = directFs.sourceSnapshots().associateBy { it.sourceKey }\n\n        assertEquals(2, snapshots.size)\n        val acceptedSnapshot = requireNotNull(snapshots[acceptedKey])\n        assertTrue(acceptedSnapshot.available)\n        assertTrue(acceptedSnapshot.fingerprint != null)\n        assertEquals(SourceFingerprintStrength.ADVISORY, acceptedSnapshot.fingerprintStrength)\n        val rejectedSnapshot = requireNotNull(snapshots[rejectedKey])\n        assertFalse(rejectedSnapshot.available)\n        assertEquals(null, rejectedSnapshot.fingerprint)\n        assertEquals(SourceFingerprintStrength.NONE, rejectedSnapshot.fingerprintStrength)\n        val failures = directFs.drainSourceFailures()\n        assertFalse(failures.containsKey(acceptedKey))\n        assertTrue(failures.containsKey(rejectedKey))\n'
           if text.count(old) != 1:
               raise SystemExit(f'STOP independent-root expectation anchor: {text.count(old)}')
           direct.write_text(text.replace(old, new, 1))
