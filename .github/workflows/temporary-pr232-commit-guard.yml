@@ -1,0 +1,325 @@
+name: Temporary PR 232 final commit guard
+
+on:
+  pull_request:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-and-remove-self:
+    if: github.event.pull_request.number == 232 && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: copilot/reintroduce-incremental-performance
+          fetch-depth: 2
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
+        shell: bash
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+
+      - name: Prepare CI environment
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
+
+      - name: Apply final safe-point authority guard
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'STOP: expected one match in {path}, found {count}')
+              target.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          config = 'musikr/src/main/java/org/oxycblt/musikr/Config.kt'
+          replace_once(
+              config,
+              '''    /** Cover garbage collection is maintenance work, not part of ordinary incremental scans. */
+          val cleanupCovers: Boolean = scanPlan == null,
+          )
+          ''',
+              '''    /** Cover garbage collection is maintenance work, not part of ordinary incremental scans. */
+          val cleanupCovers: Boolean = scanPlan == null,
+          /** Full generation/attempt check performed immediately before durable source commit. */
+          val sourceCommitAuthorised: () -> Boolean = { true },
+          /** Pure in-memory guard rechecked inside the Room transaction before its first write. */
+          val sourceCommitStillCurrent: () -> Boolean = { true },
+          )
+          ''',
+          )
+
+          scan = 'musikr/src/main/java/org/oxycblt/musikr/cache/IncrementalScan.kt'
+          replace_once(
+              scan,
+              '''    suspend fun commitScan(): IncrementalScanCommit
+          ''',
+              '''    /**
+           * Atomically publish staged rows only while [commitGuard] still owns the current scan.
+           * Implementations must evaluate the guard inside the durable transaction before mutation.
+           */
+          suspend fun commitScan(commitGuard: () -> Boolean = { true }): IncrementalScanCommit
+          ''',
+          )
+
+          store = 'musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalScanStore.kt'
+          replace_once(
+              store,
+              '''    override suspend fun commitScan(): IncrementalScanCommit {
+          ''',
+              '''    override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {
+          ''',
+          )
+          replace_once(
+              store,
+              '''        var committedSuccessfully = false
+          try {
+              db.withTransaction {
+                  if (plan.enrichmentOnly) {
+          ''',
+              '''        var committedSuccessfully = false
+          try {
+              ensureCommitCurrent(commitGuard)
+              db.withTransaction {
+                  // This is the last safe point before any ledger, fingerprint, tombstone or
+                  // enrichment mutation. Keep it pure to avoid checkpoint/Room lock inversion.
+                  ensureCommitCurrent(commitGuard)
+                  if (plan.enrichmentOnly) {
+          ''',
+          )
+          replace_once(
+              store,
+              '''    override suspend fun abortScan(cause: Throwable?) {
+          ''',
+              '''    private fun ensureCommitCurrent(commitGuard: () -> Boolean) {
+              if (!commitGuard()) {
+                  throw CancellationException("Incremental source commit lost current authority")
+              }
+          }
+
+          override suspend fun abortScan(cause: Throwable?) {
+          ''',
+          )
+
+          musikr = 'musikr/src/main/java/org/oxycblt/musikr/Musikr.kt'
+          replace_once(
+              musikr,
+              '''            val commit = if (plan != null) incremental?.commitScan() else null
+          ''',
+              '''            val commit =
+                  if (plan != null) {
+                      if (!config.sourceCommitAuthorised()) {
+                          throw CancellationException(
+                              "Source scan lost generation or attempt authority before commit"
+                          )
+                      }
+                      incremental?.commitScan(config.sourceCommitStillCurrent)
+                  } else {
+                      null
+                  }
+          ''',
+          )
+
+          repository = 'app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt'
+          replace_once(
+              repository,
+              '''                        metadataProfile = resolvedProfile,
+                          scanPlan = plan,
+                      )
+          ''',
+              '''                        metadataProfile = resolvedProfile,
+                          scanPlan = plan,
+                          sessionId = sessionId,
+                          request = request,
+                          checkpointAuthority = checkpointAuthority,
+                      )
+          ''',
+          )
+          replace_once(
+              repository,
+              '''        fs: FS,
+              metadataProfile: MetadataProfile,
+              scanPlan: IncrementalScanPlan?,
+          ): Config {
+          ''',
+              '''        fs: FS,
+              metadataProfile: MetadataProfile,
+              scanPlan: IncrementalScanPlan?,
+              sessionId: Long,
+              request: IndexRequest,
+              checkpointAuthority: SourceScanAttemptAuthority?,
+          ): Config {
+          ''',
+          )
+          replace_once(
+              repository,
+              '''            cleanupCovers =
+                  metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,
+          )
+          }
+
+          private fun createFileSystem(sessionId: Long, sourceKeys: Set<String>? = null): FS {
+          ''',
+              '''            cleanupCovers =
+                  metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,
+              sourceCommitAuthorised = {
+                  val stillCurrent =
+                      sourceCommitStillCurrent(sessionId) &&
+                          !IndexRequestPolicy.isSupersededByNewerConfiguration(
+                              request,
+                              musicSettings.sourceConfigurationGeneration,
+                          ) &&
+                          (checkpointAuthority == null ||
+                              musicSettings.ownsSourceConfigurationAttempt(
+                                  checkpointAuthority.generation,
+                                  checkpointAuthority.attemptId,
+                                  checkpointAuthority.owner,
+                              ))
+                  if (!stillCurrent) markSourceCommitSuperseded(sessionId, request)
+                  stillCurrent
+              },
+              sourceCommitStillCurrent = { sourceCommitStillCurrent(sessionId) },
+          )
+          }
+
+          private fun sourceCommitStillCurrent(sessionId: Long): Boolean =
+              synchronized(this) {
+                  indexingSessionGate.isCurrent(sessionId) &&
+                      preparedInterruptionOutcome == null &&
+                      !preparedReplacementHandoff
+              }
+
+          private fun markSourceCommitSuperseded(sessionId: Long, request: IndexRequest) {
+              synchronized(this) {
+                  if (preparedInterruptionOutcome == null) {
+                      preparedInterruptionOutcome = IndexingTerminalOutcome.SUPERSEDED
+                  }
+              }
+              L.w(
+                  "Rejecting stale source commit [session=$sessionId " +
+                      "generation=${request.configurationGeneration} attempt=${request.attemptId}]"
+              )
+          }
+
+          private fun createFileSystem(sessionId: Long, sourceKeys: Set<String>? = null): FS {
+          ''',
+          )
+
+          planner_test = 'app/src/test/java/org/oxycblt/auxio/music/IncrementalIndexPlannerTest.kt'
+          replace_once(
+              planner_test,
+              '''        override suspend fun commitScan(): IncrementalScanCommit {
+          ''',
+              '''        override suspend fun commitScan(
+                  commitGuard: () -> Boolean
+              ): IncrementalScanCommit {
+                  check(commitGuard())
+          ''',
+          )
+
+          store_test = 'musikr/src/test/java/org/oxycblt/musikr/cache/db/IncrementalScanStoreTest.kt'
+          replace_once(
+              store_test,
+              '''import org.junit.Assert.assertNull
+          import org.junit.Assert.assertTrue
+          ''',
+              '''import org.junit.Assert.assertNull
+          import org.junit.Assert.assertTrue
+          import org.junit.Assert.fail
+          ''',
+          )
+          marker = '''    @Test
+          fun `changed file that no longer validates is removed only after successful commit`() =
+          '''
+          test = '''    @Test
+          fun `authority loss at the Room commit boundary preserves the prior generation`() =
+              runBlocking {
+                  val original = snapshot("v1")
+                  val first = store.planScan(listOf(original), false, MetadataProfile.LEAN, 1L)
+                  store.beginScan(first)
+                  store.stage(cachedFile("alpha.mp3", modifiedMs = 1L))
+                  store.commitScan()
+
+                  val replacement =
+                      store.planScan(
+                          listOf(original.copy(fingerprint = "v2")),
+                          false,
+                          MetadataProfile.FULL,
+                          2L,
+                      )
+                  store.beginScan(replacement)
+                  store.stage(cachedFile("alpha.mp3", modifiedMs = 2L))
+                  var guardChecks = 0
+                  val cancelled =
+                      try {
+                          store.commitScan { guardChecks++ == 0 }
+                          fail("Expected authority loss at the in-transaction guard")
+                          null
+                      } catch (expected: CancellationException) {
+                          expected
+                      }
+                  store.abortScan(cancelled)
+
+                  assertEquals(2, guardChecks)
+                  assertEquals("v1", db.incrementalDao().sourceLedger(original.sourceKey)?.fingerprint)
+                  assertEquals(
+                      1L,
+                      db.readDao()
+                          .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+                          ?.modifiedMs,
+                  )
+                  assertEquals(1, db.incrementalLibraryDao().songCount())
+                  assertNull(store.activePlan())
+              }
+
+          '''
+          target = Path(store_test)
+          text = target.read_text(encoding='utf-8')
+          if text.count(marker) != 1:
+              raise SystemExit('STOP: commit-guard test insertion point changed')
+          target.write_text(text.replace(marker, test + marker, 1), encoding='utf-8')
+          PY
+
+      - name: Format and run focused validation
+        shell: bash
+        run: |
+          bash ./scripts/ci-gradle.sh spotlessKotlinApply
+          bash ./scripts/ci-gradle.sh \
+            :app:testTopwayTwMediaDebugUnitTest \
+            :musikr:testDebugUnitTest
+          git diff --check
+          git rm -f .github/workflows/temporary-pr232-commit-guard.yml
+
+      - name: Commit guarded source publication and remove runner
+        shell: bash
+        env:
+          BRANCH: copilot/reintroduce-incremental-performance
+        run: |
+          git config user.name "cbkii"
+          git config user.email "150587541+cbkii@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo "::error::Commit guard produced no task-owned change."; exit 1; }
+          git commit -m "Guard incremental commit with current scan authority"
+          git push origin "HEAD:${BRANCH}"
