@@ -40,6 +40,20 @@ data class IncrementalScanPlan(
 
     val hasWork: Boolean
         get() = scanSources.isNotEmpty() || removedSourceKeys.isNotEmpty()
+
+    companion object {
+        /** Single definition of the optional metadata-only lane. */
+        fun isEnrichmentOnly(
+            scanSources: List<SourceSnapshot>,
+            removedSourceKeys: Set<String>,
+            scanReasons: Map<String, SourceScanReason>,
+        ): Boolean =
+            scanSources.isNotEmpty() &&
+                removedSourceKeys.isEmpty() &&
+                scanSources.all {
+                    scanReasons[it.sourceKey] == SourceScanReason.METADATA_PROFILE_UPGRADE
+                }
+    }
 }
 
 /** Result of atomically publishing all successful source generations in a scan. */

@@ -38,6 +38,8 @@ internal object CoverCleanupPolicy {
      * @param completeMetadata Whether the published library used the complete metadata profile. A
      *   lean publication is deliberately incomplete and is followed by enrichment, so it must not
      *   define the retained cover set.
+     * @param enrichmentOnly Whether the scan only upgraded optional metadata. Enrichment never owns
+     *   authoritative source membership or the retained cover set.
      */
     fun evaluate(
         published: Boolean,
@@ -45,7 +47,7 @@ internal object CoverCleanupPolicy {
         unresolvedSourceKeys: Set<String>,
         unavailableSourceKeys: Set<String>,
         completeMetadata: Boolean,
-        enrichmentOnly: Boolean = false,
+        enrichmentOnly: Boolean,
     ): Decision =
         when {
             !published -> Decision(false, "no-new-generation-published")

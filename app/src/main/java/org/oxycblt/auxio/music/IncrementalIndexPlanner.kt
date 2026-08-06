@@ -116,13 +116,11 @@ internal object IncrementalIndexPlanner {
             if (targetSourceKeys == null) {
                 removalScopedPlan.copy(
                     enrichmentOnly =
-                        removalScopedPlan.scanSources.isNotEmpty() &&
-                            removalScopedPlan.removedSourceKeys.isEmpty() &&
-                            removalScopedPlan.scanSources.all {
-                                removalScopedPlan.scanReasons[it.sourceKey] ==
-                                    org.oxycblt.musikr.cache.SourceScanReason
-                                        .METADATA_PROFILE_UPGRADE
-                            }
+                        IncrementalScanPlan.isEnrichmentOnly(
+                            scanSources = removalScopedPlan.scanSources,
+                            removedSourceKeys = removalScopedPlan.removedSourceKeys,
+                            scanReasons = removalScopedPlan.scanReasons,
+                        )
                 )
             } else {
                 val selectedSources =
@@ -139,13 +137,11 @@ internal object IncrementalIndexPlanner {
                     reuseSourceKeys = removalScopedPlan.reuseSourceKeys + deferredSourceKeys,
                     unavailableSourceKeys = removalScopedPlan.unavailableSourceKeys,
                     enrichmentOnly =
-                        selectedSources.isNotEmpty() &&
-                            removalScopedPlan.removedSourceKeys.isEmpty() &&
-                            selectedSources.all {
-                                selectedReasons[it.sourceKey] ==
-                                    org.oxycblt.musikr.cache.SourceScanReason
-                                        .METADATA_PROFILE_UPGRADE
-                            },
+                        IncrementalScanPlan.isEnrichmentOnly(
+                            scanSources = selectedSources,
+                            removedSourceKeys = removalScopedPlan.removedSourceKeys,
+                            scanReasons = selectedReasons,
+                        ),
                 )
             }
         return Prepared(

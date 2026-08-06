@@ -31,6 +31,7 @@ import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.IncrementalScanCommit
 import org.oxycblt.musikr.cache.IncrementalScanPlan
 import org.oxycblt.musikr.cache.SourceFingerprintReusePolicy
+import org.oxycblt.musikr.cache.SourceScanReason
 import org.oxycblt.musikr.cache.incrementalRank
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Components
@@ -64,12 +65,13 @@ internal class IncrementalScanStore(
     ): IncrementalScanPlan {
         check(currentPlan == null) { "Cannot plan a second scan while one is active" }
         val scanSources = mutableListOf<SourceSnapshot>()
-        val scanReasons = linkedMapOf<String, org.oxycblt.musikr.cache.SourceScanReason>()
+        val scanReasons = linkedMapOf<String, SourceScanReason>()
         val reuse = linkedSetOf<String>()
         val unavailable = linkedSetOf<String>()
         val removed = linkedSetOf<String>()
         val distinctSnapshots = snapshots.distinctBy { it.sourceKey }
         val currentSourceKeys = distinctSnapshots.mapTo(linkedSetOf()) { it.sourceKey }
+        val nowMs = System.currentTimeMillis()
 
         db.withTransaction {
             for (ledger in dao.sourceLedgers()) {
@@ -144,7 +146,7 @@ internal class IncrementalScanStore(
                         force = force,
                         profileUpgrade = profileUpgrade,
                         configurationRevision = configurationRevision,
-                        nowMs = System.currentTimeMillis(),
+                        nowMs = nowMs,
                     )
                 if (reason == null) {
                     reuse += snapshot.sourceKey
@@ -156,12 +158,11 @@ internal class IncrementalScanStore(
         }
 
         val enrichmentOnly =
-            scanSources.isNotEmpty() &&
-                removed.isEmpty() &&
-                scanSources.all {
-                    scanReasons[it.sourceKey] ==
-                        org.oxycblt.musikr.cache.SourceScanReason.METADATA_PROFILE_UPGRADE
-                }
+            IncrementalScanPlan.isEnrichmentOnly(
+                scanSources = scanSources,
+                removedSourceKeys = removed,
+                scanReasons = scanReasons,
+            )
         return IncrementalScanPlan(
             scanId = UUID.randomUUID().toString(),
             scanSources = scanSources,

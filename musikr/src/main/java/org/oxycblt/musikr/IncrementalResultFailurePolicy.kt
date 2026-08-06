@@ -31,14 +31,6 @@ internal object IncrementalResultFailurePolicy {
                 "TEMPORARILY_UNAVAILABLE|Source preflight did not observe this source",
             )
         }
-        if (commit.enrichmentOnly && !commit.enrichmentComplete) {
-            for (sourceKey in commit.committedSources) {
-                failures.putIfAbsent(
-                    sourceKey,
-                    "ENRICHMENT_INCOMPLETE|Optional metadata did not cover membership",
-                )
-            }
-        }
         return failures
     }
 }

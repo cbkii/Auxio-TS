@@ -995,7 +995,7 @@ constructor(
                         )
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (e: Exception) {
+                    } catch (e: SourcePreflightException) {
                         recordSourceScanOutcome(
                             request,
                             SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
@@ -1173,6 +1173,31 @@ constructor(
                     IndexingProgress.Stage(IndexingPhase.FINALISING),
                 )
                 L.d("Index finished in ${System.currentTimeMillis() - start}ms")
+                val currentConfigurationGeneration = musicSettings.sourceConfigurationGeneration
+                if (
+                    checkpointAuthority == null &&
+                        IndexRequestPolicy.isSupersededByNewerConfiguration(
+                            request,
+                            currentConfigurationGeneration,
+                        )
+                ) {
+                    // Optional lanes hold no checkpoint lease, so this is the only thing stopping a
+                    // result computed for an older source configuration from replacing the library
+                    // a newer authoritative scan already committed. The newer generation owns the
+                    // reported source outcome, so this one is discarded without recording anything.
+                    L.w(
+                        "Discarding non-authoritative result superseded by a newer source " +
+                            "configuration [reason=${request.reason} " +
+                            "request=${request.configurationGeneration} " +
+                            "current=$currentConfigurationGeneration]"
+                    )
+                    emitIndexingCompletion(
+                        sessionId,
+                        error = null,
+                        outcome = IndexingTerminalOutcome.SUPERSEDED,
+                    )
+                    return@traceSuspend
+                }
                 val scopedFailures =
                     if (requestedSourceKeys == null) {
                         result.failedSources
@@ -1299,31 +1324,6 @@ constructor(
                             else -> throw SourceScanFailureException(scopedFailures)
                         }
                     }
-                val currentConfigurationGeneration = musicSettings.sourceConfigurationGeneration
-                if (
-                    checkpointAuthority == null &&
-                        IndexRequestPolicy.isSupersededByNewerConfiguration(
-                            request,
-                            currentConfigurationGeneration,
-                        )
-                ) {
-                    // Optional lanes hold no checkpoint lease, so this is the only thing stopping a
-                    // result computed for an older source configuration from replacing the library
-                    // a newer authoritative scan already committed. The newer generation owns the
-                    // reported source outcome, so this one is discarded without recording anything.
-                    L.w(
-                        "Discarding non-authoritative result superseded by a newer source " +
-                            "configuration [reason=${request.reason} " +
-                            "request=${request.configurationGeneration} " +
-                            "current=$currentConfigurationGeneration]"
-                    )
-                    emitIndexingCompletion(
-                        sessionId,
-                        error = null,
-                        outcome = IndexingTerminalOutcome.SUPERSEDED,
-                    )
-                    return@traceSuspend
-                }
                 val isEmpty = publishedLibrary.songs.isEmpty()
                 val publishedState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
                 val priorUnresolved =
@@ -1342,9 +1342,10 @@ constructor(
                     }
                 recordSourceScanOutcome(request, effectiveSourceOutcome)
                 val partial =
-                    effectiveSourceOutcome is SourceScanOutcome.Partial ||
-                        effectiveSourceOutcome is SourceScanOutcome.Truncated ||
-                        unresolved.isNotEmpty()
+                    effectiveSourceOutcome.isPartialSessionResult(
+                        unresolvedSourceKeys = unresolved,
+                        enrichmentComplete = result.enrichmentComplete,
+                    )
                 val attemptOutcome =
                     when (effectiveSourceOutcome) {
                         is SourceScanOutcome.Success -> SourceScanAttemptOutcome.SUCCESS

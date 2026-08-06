@@ -227,6 +227,33 @@ class IncrementalScanStoreTest {
     }
 
     @Test
+    fun `unavailable configured source blocks committed removal`() = runBlocking {
+        val omitted = snapshot("usb0", "/storage/usbdisk0")
+        val unavailable = snapshot("usb1", "/storage/usbdisk1")
+        val first = store.planScan(listOf(omitted, unavailable), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L, "/storage/usbdisk0"))
+        store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
+        store.commitScan()
+
+        val replacement =
+            store.planScan(
+                listOf(unavailable.copy(available = false, fingerprint = null)),
+                false,
+                MetadataProfile.LEAN,
+                2L,
+            )
+        assertEquals(setOf(omitted.sourceKey), replacement.removedSourceKeys)
+        assertEquals(setOf(unavailable.sourceKey), replacement.unavailableSourceKeys)
+        store.beginScan(replacement)
+        val commit = store.commitScan()
+
+        assertTrue(commit.removedSources.isEmpty())
+        assertTrue(db.incrementalDao().sourceLedger(omitted.sourceKey)?.available == true)
+        assertEquals(2, store.compatibilityCachedFiles().toList().size)
+    }
+
+    @Test
     fun `removal-only configuration commits deterministically`() = runBlocking {
         val source = snapshot("v1")
         val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)

@@ -133,6 +133,18 @@ class RepositoryIndexRequestQueueTest {
                 10L,
             )
         )
+        assertTrue(
+            IndexRequestPolicy.isSupersededByNewerConfiguration(
+                enrichment.copy(reason = IndexReason.USER_REFRESH),
+                10L,
+            )
+        )
+        assertTrue(
+            IndexRequestPolicy.isSupersededByNewerConfiguration(
+                enrichment.copy(reason = IndexReason.SOURCE_OBSERVER),
+                10L,
+            )
+        )
     }
 
     @Test

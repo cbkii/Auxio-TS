@@ -163,8 +163,9 @@ uses `SourceScanOutcome`:
 A non-authoritative result whose configuration generation is older than the current generation is
 discarded before publication and reported as `SUPERSEDED`.
 
-**Requires device validation:** real mount-name swaps, FAT timestamp behaviour and ACC sleep/wake
-transitions on `s9863a1h10_Natv`.
+Physical TS18 mount-name swaps, FAT timestamp behaviour and ACC sleep/wake transitions remain
+unverified. [Evidence confidence: Requires TS18 validation]
+[Porting decision: Requires exact-device runtime validation on `s9863a1h10_Natv`].
 
 ## Lean and Full metadata
 
@@ -299,6 +300,8 @@ Host tests cover:
 - database migration and committed-generation projections;
 - a 5,000-row committed fixture with a bounded first-page query.
 
-**Requires device validation:** cold boot, process death, launcher restart, Bluetooth/media-button
-launch, hardware-key Next/Previous, source removal while playing, real two-volume mount-order
-changes, ACC sleep/wake and active indexing during playback on the exact TS18 build.
+Cold boot, process death, launcher restart, Bluetooth/media-button launch, hardware-key
+Next/Previous, source removal while playing, real two-volume mount-order changes, ACC sleep/wake
+and active indexing during playback remain unverified on the exact TS18 build.
+[Evidence confidence: Requires TS18 validation]
+[Porting decision: Requires exact-device runtime validation before release claims].

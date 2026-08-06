@@ -60,4 +60,29 @@ class SourceAvailabilityOutcomePolicyTest {
         assertTrue(outcome is SourceScanOutcome.TemporarilyUnavailable)
         assertEquals(setOf("usb0"), outcome.unresolvedSourceKeys)
     }
+
+    @Test
+    fun `incomplete optional enrichment makes only the session result partial`() {
+        val outcome = SourceScanOutcome.Success(setOf("usb0"))
+
+        assertTrue(
+            outcome.isPartialSessionResult(
+                unresolvedSourceKeys = emptySet(),
+                enrichmentComplete = false,
+            )
+        )
+        assertTrue(outcome.unresolvedSourceKeys.isEmpty())
+    }
+
+    @Test
+    fun `complete optional enrichment does not make a successful session partial`() {
+        val outcome = SourceScanOutcome.Success(setOf("usb0"))
+
+        assertTrue(
+            !outcome.isPartialSessionResult(
+                unresolvedSourceKeys = emptySet(),
+                enrichmentComplete = true,
+            )
+        )
+    }
 }

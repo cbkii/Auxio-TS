@@ -40,7 +40,7 @@ class IncrementalResultFailurePolicyTest {
     }
 
     @Test
-    fun `incomplete enrichment is visible as a partial optional result`() {
+    fun `incomplete enrichment remains separate from source failures`() {
         val commit =
             commit(
                 committedSources = setOf("source"),
@@ -48,9 +48,19 @@ class IncrementalResultFailurePolicyTest {
                 enrichmentComplete = false,
             )
 
-        val failures = IncrementalResultFailurePolicy.effectiveFailures(commit)
+        assertTrue(IncrementalResultFailurePolicy.effectiveFailures(commit).isEmpty())
+    }
 
-        assertTrue(failures.getValue("source").startsWith("ENRICHMENT_INCOMPLETE|"))
+    @Test
+    fun `complete enrichment reports no source failures`() {
+        val commit =
+            commit(
+                committedSources = setOf("source"),
+                enrichmentOnly = true,
+                enrichmentComplete = true,
+            )
+
+        assertTrue(IncrementalResultFailurePolicy.effectiveFailures(commit).isEmpty())
     }
 
     private fun commit(

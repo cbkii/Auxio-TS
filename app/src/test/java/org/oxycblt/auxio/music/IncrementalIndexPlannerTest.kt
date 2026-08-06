@@ -80,8 +80,9 @@ class IncrementalIndexPlannerTest {
 
     @Test
     fun explicitEmptyConfigurationMayProduceARemovalOnlyPlan() = runBlocking {
+        val removed = setOf("direct:removed")
         val original = FakeSourceAwareFs()
-        val cache = FakeIncrementalCache()
+        val cache = FakeIncrementalCache(removedSourceKeys = removed)
 
         val prepared =
             IncrementalIndexPlanner.prepare(
@@ -94,9 +95,23 @@ class IncrementalIndexPlannerTest {
                 allowEmptySourceSet = true,
                 legacyWriteOnly = { it },
             )
+        val withoutRemovalAuthority =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = false,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 2L,
+                targetSourceKeys = emptySet(),
+                allowEmptySourceSet = true,
+                applyRemovedSources = false,
+                legacyWriteOnly = { it },
+            )
 
         assertEquals(emptySet<String>(), cache.plannedSnapshotKeys)
-        assertTrue(prepared.plan != null)
+        assertEquals(removed, prepared.plan?.removedSourceKeys)
+        assertTrue(prepared.plan?.hasWork == true)
+        assertTrue(withoutRemovalAuthority.plan?.removedSourceKeys.orEmpty().isEmpty())
         assertEquals(emptySet<String>(), original.selectedSourceKeys)
     }
 
@@ -207,6 +222,37 @@ class IncrementalIndexPlannerTest {
     }
 
     @Test
+    fun ledgerPlanningFailurePropagatesInsteadOfBecomingPreflightUnavailable() = runBlocking {
+        val source =
+            SourceSnapshot(
+                sourceKey = "direct:a",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk0",
+                rootPath = "/storage/usbdisk0",
+                available = true,
+                fingerprint = "a",
+                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+            )
+        val failure = IllegalStateException("Room ledger failure")
+        val original = FakeSourceAwareFs(snapshots = listOf(source))
+        val cache = FakeIncrementalCache(planningFailure = failure)
+
+        try {
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = true,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 1L,
+                legacyWriteOnly = { it },
+            )
+            fail("Expected ledger planning failure")
+        } catch (actual: IllegalStateException) {
+            assertTrue(actual === failure)
+        }
+    }
+
+    @Test
     fun emptyPreflightFailsWithoutPublishingAnEmptyScan() = runBlocking {
         val original = FakeSourceAwareFs()
         val cache = FakeIncrementalCache()
@@ -259,7 +305,10 @@ class IncrementalIndexPlannerTest {
         override fun track(): Flow<FSUpdate> = emptyFlow()
     }
 
-    private class FakeIncrementalCache : MutableCache, IncrementalCache {
+    private class FakeIncrementalCache(
+        private val removedSourceKeys: Set<String> = emptySet(),
+        private val planningFailure: RuntimeException? = null,
+    ) : MutableCache, IncrementalCache {
         var plannedSnapshots: List<SourceSnapshot>? = null
         var plannedForce: Boolean? = null
         val plannedSnapshotKeys: Set<String>?
@@ -273,6 +322,7 @@ class IncrementalIndexPlannerTest {
             metadataProfile: MetadataProfile,
             configurationRevision: Long,
         ): IncrementalScanPlan {
+            planningFailure?.let { throw it }
             plannedSnapshots = snapshots
             plannedForce = force
             return IncrementalScanPlan(
@@ -284,6 +334,7 @@ class IncrementalIndexPlannerTest {
                 metadataProfile = metadataProfile,
                 configurationRevision = configurationRevision,
                 force = force,
+                removedSourceKeys = removedSourceKeys,
             )
         }
 

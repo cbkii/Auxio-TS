@@ -317,23 +317,35 @@ count and compilation mode attached.
 
 ## Physical TS18 validation — outstanding
 
-Not performed in this change. All eleven items remain outstanding
+Not performed in this change. All twenty Prompt 4 items remain outstanding.
 [Evidence confidence: Requires TS18 validation]
-[Porting decision: Requires TS18 runtime validation]:
+[Porting decision: Requires exact-device runtime validation]:
 
 1. MediaStore with permission;
-2. SAF persisted tree;
-3. DirectFS internal Music folder;
-4. DirectFS removable USB;
+2. persisted SAF tree;
+3. DirectFS `/storage/emulated/0/Music`;
+4. DirectFS removable `/storage/usbdiskN`;
 5. cold boot;
-6. process kill;
-7. ACC sleep/wake;
-8. source unmount/remount;
-9. cancel/retry;
-10. three consecutive warm launches;
-11. playback during deferred enrichment.
+6. process kill and relaunch;
+7. service recreation;
+8. ACC sleep/wake;
+9. USB removal and remount;
+10. cancel and immediate retry;
+11. mounted-source automatic recovery;
+12. three consecutive warm launches;
+13. playback during deferred enrichment;
+14. generated playlists disabled and enabled;
+15. source removal detection;
+16. no duplicate songs;
+17. no stale `RUNNING` attempt;
+18. no indefinite `DISCOVERING`;
+19. prior-library retention after failure;
+20. production `com.tw.media` behaviour.
 
 ## Safety boundaries preserved
+
+Repository/static compatibility claim: [Evidence confidence: Observed in current code and CI]
+[Porting decision: Preserve for maintained variants; exact TS18 behaviour requires runtime validation].
 
 One playback service, one queue owner, one MediaSession and one notification authority are
 unchanged. Root is never the playback authority and protected storage is never enumerated as root.
