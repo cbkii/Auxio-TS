@@ -35,7 +35,10 @@ Auxio-TS targets TS18, Topway and DoFun Variety head units. Choose the section t
 - [Exact TS18 startup validation](validation/EXACT_TS18_STARTUP_VALIDATION.md)
 
 The source-authority documents define one backend-qualified ledger identity per canonical configured
-root and require a current generation/session guard at the final durable commit boundary.
+root. Durable publication uses a full generation/attempt check immediately before Room, followed by
+a pure in-memory current-session guard as the transaction's first operation. Existing volume-derived
+file attribution remains a legacy read fallback only; new SAF and DirectFS work carries the exact
+configured-root key end to end.
 
 ## 🔬 Evidence and reference
 
