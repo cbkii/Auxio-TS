@@ -63,7 +63,7 @@ class FftSpectrumMapperWaveformTest {
     @Test
     fun changingFrameSourceResetsTransientActivity() {
         val mapper = FftSpectrumMapper()
-        val fft = ByteArray(512).apply { this[24] = 100 }
+        val fft = createToneFft()
         mapper.update(fft, SAMPLE_RATE_MILLIHZ)
         fft[24] = 0
         fft[80] = 100
@@ -74,6 +74,54 @@ class FftSpectrumMapperWaveformTest {
 
         assertEquals(0f, mapper.lastActivity, 0.0001f)
     }
+
+    @Test
+    fun sourceChangesAndResetRebuildSharedFrequencyCoordinates() {
+        val mapper = FftSpectrumMapper()
+        val fft = createToneFft()
+        val waveform = createToneWaveform(1000f)
+
+        mapper.update(fft, SAMPLE_RATE_MILLIHZ)
+        val firstGeneration = mapper.mappingGenerationForTest()
+
+        mapper.updateWaveform(waveform, SAMPLE_RATE_MILLIHZ)
+        assertEquals(firstGeneration + 1, mapper.mappingGenerationForTest())
+
+        mapper.update(fft, SAMPLE_RATE_MILLIHZ)
+        assertEquals(firstGeneration + 2, mapper.mappingGenerationForTest())
+
+        mapper.reset()
+        mapper.update(fft, SAMPLE_RATE_MILLIHZ)
+        assertEquals(firstGeneration + 3, mapper.mappingGenerationForTest())
+    }
+
+    @Test
+    fun unusableWaveformMappingDecaysWithoutReusingStaleCoordinates() {
+        val mapper = FftSpectrumMapper()
+        val waveform = createToneWaveform(1000f)
+
+        mapper.updateWaveform(waveform, SAMPLE_RATE_MILLIHZ)
+        val initialContour = mapper.bands.maxOf { abs(it) }
+        val initialEnvelope = mapper.globalEnvelope
+        val validGeneration = mapper.mappingGenerationForTest()
+
+        mapper.updateWaveform(waveform, 0)
+        val invalidGeneration = mapper.mappingGenerationForTest()
+
+        assertEquals(validGeneration + 1, invalidGeneration)
+        assertTrue(mapper.bands.maxOf { abs(it) } < initialContour)
+        assertTrue(mapper.globalEnvelope < initialEnvelope)
+
+        val firstDecayContour = mapper.bands.maxOf { abs(it) }
+        val firstDecayEnvelope = mapper.globalEnvelope
+        mapper.updateWaveform(waveform, 0)
+
+        assertEquals(invalidGeneration, mapper.mappingGenerationForTest())
+        assertTrue(mapper.bands.maxOf { abs(it) } < firstDecayContour)
+        assertTrue(mapper.globalEnvelope < firstDecayEnvelope)
+    }
+
+    private fun createToneFft(): ByteArray = ByteArray(512).apply { this[24] = 100 }
 
     private fun createToneWaveform(frequencyHz: Float): ByteArray =
         ByteArray(512) { index ->
