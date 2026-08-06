@@ -30,19 +30,26 @@ import timber.log.Timber as L
 class TopwayMusicEntryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        var removeTask = true
         try {
-            routeEntry()
+            removeTask = routeEntry()
         } finally {
-            // Theme.NoDisplay activities must finish before onResume completes, including failures.
-            finish()
+            // Keep full-player launches in Recents, but remove the transient floating-only task.
+            if (removeTask && isTaskRoot) {
+                finishAndRemoveTask()
+            } else {
+                finish()
+            }
         }
     }
 
-    private fun routeEntry() {
+    private fun routeEntry(): Boolean {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val floatingOnly =
             prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
-        when (TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)) {
+        return when (
+            TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)
+        ) {
             TopwayMusicEntryPolicy.Route.FLOATING_CONTROLS_ONLY -> {
                 L.i("Topway music entry routed to persistent floating controls")
                 CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
@@ -57,6 +64,7 @@ class TopwayMusicEntryActivity : Activity() {
                 } else {
                     CarOverlaySettings.setEnabled(this, true)
                 }
+                true
             }
             TopwayMusicEntryPolicy.Route.FULL_PLAYER -> {
                 L.i("Topway music entry routed to full player action=${intent.action}")
@@ -72,6 +80,7 @@ class TopwayMusicEntryActivity : Activity() {
                         }
                     }
                 startActivity(fullPlayerIntent)
+                false
             }
         }
     }
