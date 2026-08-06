@@ -50,9 +50,22 @@ jobs:
                       body = body.replace('#!/usr/bin/env bash\n', '#!/usr/bin/env bash\n' + directive, 1)
               script.write_text(body, encoding='utf-8')
 
+          manual = Path('scripts/check-manual-release-workflow.sh')
+          manual_text = manual.read_text(encoding='utf-8')
+          old_surface = "surface = text + '\\n' + '\\n'.join(script_text.values())\n"
+          new_surface = "orchestrator_text = Path('scripts/release-orchestrator.py').read_text(encoding='utf-8')\nsurface = text + '\\n' + orchestrator_text + '\\n' + '\\n'.join(script_text.values())\n"
+          if manual_text.count(old_surface) != 1:
+              raise SystemExit('::error::Unable to include the orchestrator in Manual Release static validation.')
+          manual_text = manual_text.replace(old_surface, new_surface, 1)
+          old_status = "print('OK Manual Release workflow, form, bounded scripts and transaction ordering')\nPY\n\ntmp=\"$(mktemp -d)\""
+          new_status = "print('OK Manual Release workflow, form, bounded scripts and transaction ordering')\nPY\npython_validation_status=$?\n((python_validation_status == 0)) || fail 'Manual Release static contract validation failed.'\n\ntmp=\"$(mktemp -d)\""
+          if manual_text.count(old_status) != 1:
+              raise SystemExit('::error::Unable to make Manual Release static validation fail closed.')
+          manual_text = manual_text.replace(old_status, new_status, 1)
+          manual.write_text(manual_text, encoding='utf-8')
+
           path = Path('scripts/check-ci-variant-contracts.sh')
           text = path.read_text(encoding='utf-8')
-
           variable_anchor = 'release_workflow=.github/workflows/manual-release.yml\n'
           variable_replacement = '''release_workflow=.github/workflows/manual-release.yml
           release_script_dir=scripts/manual-release
@@ -111,7 +124,6 @@ jobs:
           if text.count(old_guard) != 1:
               raise SystemExit('::error::Unable to locate pre-tag dev authority guard.')
           text = text.replace(old_guard, new_guard, 1)
-
           old_comment = '''# Manual Release calls this contract both before planning and again after building the local release
           # commit. The second call is the last read-only branch-authority guard before a tag is pushed.
           '''
@@ -122,6 +134,33 @@ jobs:
               raise SystemExit('::error::Unable to locate stale Manual Release guard comment.')
           text = text.replace(old_comment, new_comment, 1)
           path.write_text(text, encoding='utf-8')
+
+          startup = Path('scripts/check-startup-performance-contracts.sh')
+          startup_text = startup.read_text(encoding='utf-8')
+          startup_anchor = 'release_workflow=.github/workflows/manual-release.yml\n'
+          startup_replacement = '''release_workflow=.github/workflows/manual-release.yml
+          release_script_dir=scripts/manual-release
+          release_surface=$(mktemp)
+          cleanup_release_surface() { rm -f -- "$release_surface"; }
+          trap cleanup_release_surface EXIT
+          mapfile -t release_scripts < <(find "$release_script_dir" -maxdepth 1 -type f -name '*.sh' -print | sort)
+          ((${#release_scripts[@]} == 19)) || fail "expected 19 Manual Release implementation scripts"
+          cat "$release_workflow" "${release_scripts[@]}" > "$release_surface"
+          '''
+          if startup_text.count(startup_anchor) != 1:
+              raise SystemExit('::error::Unable to locate startup Manual Release anchor.')
+          startup_text = startup_text.replace(startup_anchor, startup_replacement, 1)
+          startup_replacements = {
+              'require_contains "$release_workflow" \'bash ./scripts/check-startup-performance-contracts.sh "${asset_path}"\'': 'require_contains "$release_surface" \'bash ./scripts/check-startup-performance-contracts.sh "${asset_path}"\'',
+              'require_contains "$release_workflow" \'.sha256\'': 'require_contains "$release_surface" \'.sha256\'',
+              'require_contains "$release_workflow" \'.metadata.txt\'': 'require_contains "$release_surface" \'.metadata.txt\'',
+              'require_absent "$release_workflow" \'include_standard_apk\'': 'require_absent "$release_surface" \'include_standard_apk\'',
+          }
+          for old, new in startup_replacements.items():
+              if startup_text.count(old) != 1:
+                  raise SystemExit(f'::error::Unable to locate startup release contract: {old}')
+              startup_text = startup_text.replace(old, new, 1)
+          startup.write_text(startup_text, encoding='utf-8')
 
           docs = Path('docs/RELEASE_WORKFLOW.md')
           docs_text = docs.read_text(encoding='utf-8')
@@ -139,12 +178,13 @@ jobs:
 
           bash -n scripts/check-ci-variant-contracts.sh
           bash -n scripts/check-manual-release-workflow.sh
+          bash -n scripts/check-startup-performance-contracts.sh
           timeout 180s bash scripts/check-manual-release-workflow.sh
           timeout 180s bash scripts/check-ci-variant-contracts.sh
           git diff --check
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scripts/manual-release scripts/check-ci-variant-contracts.sh docs/RELEASE_WORKFLOW.md
+          git add scripts/manual-release scripts/check-manual-release-workflow.sh scripts/check-ci-variant-contracts.sh scripts/check-startup-performance-contracts.sh docs/RELEASE_WORKFLOW.md
           git commit -m 'test: align CI with bounded Manual Release scripts'
           timeout 60s git push origin HEAD:fix/manual-release-idempotent-resume
