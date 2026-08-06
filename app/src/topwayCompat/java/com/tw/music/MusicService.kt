@@ -19,11 +19,12 @@
 package com.tw.music
 
 import android.content.Intent
-import android.os.IBinder
 import android.os.Binder
-import org.oxycblt.auxio.ts18bridge.IAuxioBridgeCommand
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
 import org.oxycblt.auxio.AuxioService
-import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceContract
+import org.oxycblt.auxio.ts18bridge.IAuxioBridgeCommand
 import timber.log.Timber
 
 /**
@@ -37,31 +38,75 @@ import timber.log.Timber
  */
 class MusicService : AuxioService() {
 
-    private val bridgeBinder = object : IAuxioBridgeCommand.Stub() {
-        override fun dispatchCommand(
-            protocolVersion: Int,
-            commandId: Int,
-            commandType: String,
-            seekPos: Long,
-            sourceAdapter: String,
-            clientGeneration: Long,
-            clientTimestamp: Long
-        ): Int {
-            // Validate protocol version
-            if (protocolVersion != 1) return 8 // RESULT_VERSION_MISMATCH
+    private val handler = Handler(Looper.getMainLooper())
 
-            // Validate caller UID is System UID (1000) for stock shim
-            val callingUid = Binder.getCallingUid()
-            if (callingUid != android.os.Process.SYSTEM_UID) {
-                Timber.w("Rejecting untrusted bridge command from UID $callingUid")
-                return 6 // RESULT_UNTRUSTED
+    // Extremely simplistic deduplication to avoid double commands
+    private var lastCommandId: Long = -1
+
+    // For seeking, track the requested state, though realistically this service binding
+    // might need to inject the proper dependencies to forward to `PlaybackStateManager` or
+    // `PlaybackStateHolder`.
+    // A full canonical queue integration requires injecting the proper state managers here.
+
+    private val bridgeBinder =
+        object : IAuxioBridgeCommand.Stub() {
+            override fun dispatchCommand(
+                protocolVersion: Int,
+                commandId: Long,
+                commandType: String,
+                seekPos: Long,
+                sourceAdapter: String,
+                clientGeneration: Long,
+                clientTimestamp: Long,
+            ): Int {
+                // Validate protocol version
+                if (protocolVersion != 1) return 8 // RESULT_VERSION_MISMATCH
+
+                // Validate caller UID is System UID (1000) for stock shim
+                val callingUid = Binder.getCallingUid()
+                if (callingUid != android.os.Process.SYSTEM_UID) {
+                    Timber.w("Rejecting untrusted bridge command from UID $callingUid")
+                    return 6 // RESULT_UNTRUSTED
+                }
+
+                if (commandId == lastCommandId && commandId != 0L) {
+                    return 2 // RESULT_DUPLICATE
+                }
+                lastCommandId = commandId
+
+                // Enqueue operation onto the main thread (canonical playback path expectation)
+                handler.post {
+                    Timber.d("Bridge command enqueued: type=$commandType, seekPos=$seekPos")
+                    val session = sessionToken
+                    if (session != null) {
+                        val controller =
+                            android.support.v4.media.session.MediaControllerCompat(
+                                this@MusicService,
+                                session,
+                            )
+                        val transportControls = controller.transportControls
+                        when (commandType) {
+                            "PREVIOUS" -> transportControls.skipToPrevious()
+                            "NEXT" -> transportControls.skipToNext()
+                            "PLAY" -> transportControls.play()
+                            "PAUSE" -> transportControls.pause()
+                            "SEEK" -> if (seekPos >= 0L) transportControls.seekTo(seekPos)
+                            "PLAY_PAUSE" ->
+                                if (
+                                    controller.playbackState?.state ==
+                                        android.support.v4.media.session.PlaybackStateCompat
+                                            .STATE_PLAYING
+                                )
+                                    transportControls.pause()
+                                else transportControls.play()
+                            else -> Timber.w("Unknown bridge command type: $commandType")
+                        }
+                    }
+                }
+
+                return 1 // RESULT_ACCEPTED
             }
-
-            // In a real implementation we would enqueue onto canonical queue, handling deduplication.
-            // For now, we accept to signify positive acknowledgment
-            return 1 // RESULT_ACCEPTED
         }
-    }
 
     override fun onBind(intent: Intent): IBinder? {
         if (intent.action == "org.oxycblt.auxio.ts18bridge.ACTION_BIND_COMMAND") {

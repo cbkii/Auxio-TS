@@ -73,7 +73,7 @@ jobs:
         env:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/lsposed-bridge-gradle.log
         run: |
-                    bash ./scripts/ci-gradle.sh \
+          bash ./scripts/ci-gradle.sh \
             :app:testTopwayTwMediaDebugUnitTest \
             :app:assembleTopwayTwMediaDebug
 
