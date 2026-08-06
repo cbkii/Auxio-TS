@@ -1,9 +1,8 @@
-name: Temporary PR 232 final commit guard
+name: Temporary PR 232 final authority model
 
 on:
   pull_request:
-    branches:
-      - dev
+    branches: [dev]
 
 permissions:
   contents: write
@@ -12,314 +11,379 @@ jobs:
   patch-test-and-remove-self:
     if: github.event.pull_request.number == 232 && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
     steps:
-      - name: Check out exact PR branch
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: copilot/reintroduce-incremental-performance
           fetch-depth: 2
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
           java-version: "21"
-
-      - name: Write local.properties for Android SDK
-        shell: bash
-        run: |
-          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
-          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
-
-      - name: Prepare CI environment
-        shell: bash
+      - name: Configure Android SDK
+        run: printf 'sdk.dir=%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}" > local.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+      - name: Prepare dependencies
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-
-      - name: Apply final safe-point authority guard
+      - name: Apply final Prompt 4 authority patch
         shell: bash
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import re
 
-          def replace_once(path: str, old: str, new: str) -> None:
-              target = Path(path)
-              text = target.read_text(encoding='utf-8')
-              count = text.count(old)
+          def replace_once(path, old, new):
+              p = Path(path); text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"STOP anchor {path}: {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          def sub_once(path, pattern, replacement):
+              p = Path(path); text = p.read_text()
+              text, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
               if count != 1:
-                  raise SystemExit(f'STOP: expected one match in {path}, found {count}')
-              target.write_text(text.replace(old, new, 1), encoding='utf-8')
+                  raise SystemExit(f"STOP regex {path}: {count}")
+              p.write_text(text)
 
-          config = 'musikr/src/main/java/org/oxycblt/musikr/Config.kt'
-          replace_once(
-              config,
-              '''    /** Cover garbage collection is maintenance work, not part of ordinary incremental scans. */
-          val cleanupCovers: Boolean = scanPlan == null,
-          )
-          ''',
-              '''    /** Cover garbage collection is maintenance work, not part of ordinary incremental scans. */
-          val cleanupCovers: Boolean = scanPlan == null,
-          /** Full generation/attempt check performed immediately before durable source commit. */
-          val sourceCommitAuthorised: () -> Boolean = { true },
-          /** Pure in-memory guard rechecked inside the Room transaction before its first write. */
-          val sourceCommitStillCurrent: () -> Boolean = { true },
-          )
-          ''',
-          )
+          # Last-safe-point durable commit guard.
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/Config.kt',
+              '    val cleanupCovers: Boolean = scanPlan == null,\n)',
+              '    val cleanupCovers: Boolean = scanPlan == null,\n'
+              '    /** Full generation/attempt check immediately before durable source commit. */\n'
+              '    val sourceCommitAuthorised: () -> Boolean = { true },\n'
+              '    /** Pure in-memory guard rechecked inside Room before its first mutation. */\n'
+              '    val sourceCommitStillCurrent: () -> Boolean = { true },\n)')
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/cache/IncrementalScan.kt',
+              '    suspend fun commitScan(): IncrementalScanCommit\n',
+              '    /** Commit staged rows only while [commitGuard] owns the current scan. */\n'
+              '    suspend fun commitScan(commitGuard: () -> Boolean = { true }): IncrementalScanCommit\n')
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalScanStore.kt',
+              '    override suspend fun commitScan(): IncrementalScanCommit {\n',
+              '    override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {\n')
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalScanStore.kt',
+              '        var committedSuccessfully = false\n        try {\n            db.withTransaction {\n',
+              '        var committedSuccessfully = false\n        try {\n'
+              '            ensureCommitCurrent(commitGuard)\n            db.withTransaction {\n'
+              '                // Last safe point before ledger, fingerprint, tombstone or enrichment writes.\n'
+              '                ensureCommitCurrent(commitGuard)\n')
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalScanStore.kt',
+              '    override suspend fun abortScan(cause: Throwable?) {\n',
+              '    private fun ensureCommitCurrent(commitGuard: () -> Boolean) {\n'
+              '        if (!commitGuard()) {\n'
+              '            throw CancellationException("Incremental source commit lost current authority")\n'
+              '        }\n    }\n\n    override suspend fun abortScan(cause: Throwable?) {\n')
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/Musikr.kt',
+              '            val commit = if (plan != null) incremental?.commitScan() else null\n',
+              '            val commit =\n                if (plan != null) {\n'
+              '                    if (!config.sourceCommitAuthorised()) {\n'
+              '                        throw CancellationException(\n'
+              '                            "Source scan lost generation or attempt authority before commit"\n'
+              '                        )\n                    }\n'
+              '                    incremental?.commitScan(config.sourceCommitStillCurrent)\n'
+              '                } else {\n                    null\n                }\n')
 
-          scan = 'musikr/src/main/java/org/oxycblt/musikr/cache/IncrementalScan.kt'
-          replace_once(
-              scan,
-              '''    suspend fun commitScan(): IncrementalScanCommit
-          ''',
-              '''    /**
-           * Atomically publish staged rows only while [commitGuard] still owns the current scan.
-           * Implementations must evaluate the guard inside the durable transaction before mutation.
-           */
-          suspend fun commitScan(commitGuard: () -> Boolean = { true }): IncrementalScanCommit
-          ''',
-          )
+          repo = 'app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt'
+          replace_once(repo,
+              '                        scanPlan = plan,\n                    )\n',
+              '                        scanPlan = plan,\n'
+              '                        sessionId = sessionId,\n'
+              '                        request = request,\n'
+              '                        checkpointAuthority = checkpointAuthority,\n                    )\n')
+          replace_once(repo,
+              '        scanPlan: IncrementalScanPlan?,\n    ): Config {\n',
+              '        scanPlan: IncrementalScanPlan?,\n'
+              '        sessionId: Long,\n        request: IndexRequest,\n'
+              '        checkpointAuthority: SourceScanAttemptAuthority?,\n    ): Config {\n')
+          replace_once(repo,
+              '            cleanupCovers =\n                metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,\n        )\n    }\n\n    private fun createFileSystem',
+              '            cleanupCovers =\n                metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,\n'
+              '            sourceCommitAuthorised = {\n'
+              '                val current =\n                    sourceCommitStillCurrent(sessionId) &&\n'
+              '                        !IndexRequestPolicy.isSupersededByNewerConfiguration(\n'
+              '                            request, musicSettings.sourceConfigurationGeneration\n                        ) &&\n'
+              '                        (checkpointAuthority == null ||\n'
+              '                            musicSettings.ownsSourceConfigurationAttempt(\n'
+              '                                checkpointAuthority.generation, checkpointAuthority.attemptId,\n'
+              '                                checkpointAuthority.owner\n                            ))\n'
+              '                if (!current) markSourceCommitSuperseded(sessionId, request)\n'
+              '                current\n            },\n'
+              '            sourceCommitStillCurrent = { sourceCommitStillCurrent(sessionId) },\n'
+              '        )\n    }\n\n'
+              '    private fun sourceCommitStillCurrent(sessionId: Long): Boolean =\n'
+              '        synchronized(this) {\n            indexingSessionGate.isCurrent(sessionId) &&\n'
+              '                preparedInterruptionOutcome == null && !preparedReplacementHandoff\n        }\n\n'
+              '    private fun markSourceCommitSuperseded(sessionId: Long, request: IndexRequest) {\n'
+              '        synchronized(this) {\n            if (preparedInterruptionOutcome == null) {\n'
+              '                preparedInterruptionOutcome = IndexingTerminalOutcome.SUPERSEDED\n            }\n        }\n'
+              '        L.w("Rejecting stale source commit [session=$sessionId generation=" +\n'
+              '            "${request.configurationGeneration} attempt=${request.attemptId}]")\n    }\n\n'
+              '    private fun createFileSystem')
 
-          store = 'musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalScanStore.kt'
-          replace_once(
-              store,
-              '''    override suspend fun commitScan(): IncrementalScanCommit {
-          ''',
-              '''    override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {
-          ''',
-          )
-          replace_once(
-              store,
-              '''        var committedSuccessfully = false
-          try {
-              db.withTransaction {
-                  if (plan.enrichmentOnly) {
-          ''',
-              '''        var committedSuccessfully = false
-          try {
-              ensureCommitCurrent(commitGuard)
-              db.withTransaction {
-                  // This is the last safe point before any ledger, fingerprint, tombstone or
-                  // enrichment mutation. Keep it pure to avoid checkpoint/Room lock inversion.
-                  ensureCommitCurrent(commitGuard)
-                  if (plan.enrichmentOnly) {
-          ''',
-          )
-          replace_once(
-              store,
-              '''    override suspend fun abortScan(cause: Throwable?) {
-          ''',
-              '''    private fun ensureCommitCurrent(commitGuard: () -> Boolean) {
-              if (!commitGuard()) {
-                  throw CancellationException("Incremental source commit lost current authority")
-              }
-          }
+          # Exact configured-root identity, with legacy volume fallback for old files/rows.
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/fs/FS.kt',
+              '    val parent: Deferred<Directory>?,\n) : FSEntry\n',
+              '    val parent: Deferred<Directory>?,\n'
+              '    /** Backend-qualified exact configured-root identity for incremental attribution. */\n'
+              '    val sourceKey: String? = null,\n) : FSEntry\n')
+          snap = 'musikr/src/main/java/org/oxycblt/musikr/fs/SourceSnapshot.kt'
+          replace_once(snap,
+              '    fun forFile(file: File): String = forVolume(file.path.volume)\n',
+              '    fun forFile(file: File): String = file.sourceKey ?: forVolume(file.path.volume)\n')
+          replace_once(snap,
+              '    fun canonicalKeyForLocation(location: Location): String = canonicalKeyForUri(location.uri)\n',
+              '    fun canonicalKeyForLocation(location: Location): String = canonicalKeyForUri(location.uri)\n\n'
+              '    /** Stable ledger identity for one exact configured root and backend. */\n'
+              '    fun forConfiguredRoot(sourceType: String, uri: Uri): String =\n'
+              '        "${sourceType.lowercase()}:${canonicalKeyForUri(uri)}"\n\n'
+              '    fun forConfiguredRoot(sourceType: String, location: Location): String =\n'
+              '        forConfiguredRoot(sourceType, location.uri)\n')
+          replace_once('app/src/main/java/org/oxycblt/auxio/music/MusicSettings.kt',
+              '                    sourceKey = SourceIdentity.forLocation(location),\n',
+              '                    sourceKey = SourceIdentity.forConfiguredRoot(locationMode.name, location),\n')
+          replace_once('app/src/main/java/org/oxycblt/auxio/music/ConfiguredSourceSpec.kt',
+              '     * [sourceKey] is volume-scoped, so several folders on one volume share it. Deduplication,\n'
+              '     * counting and comparison must use this narrower identity instead.\n',
+              '     * [sourceKey] is backend-qualified and exact-root scoped. [canonicalKey] omits the backend\n'
+              '     * qualifier and remains the shared alias/deduplication identity.\n')
 
-          override suspend fun abortScan(cause: Throwable?) {
-          ''',
-          )
+          # DirectFS: one snapshot/ledger per canonical configured root.
+          direct = 'musikr/src/main/java/org/oxycblt/musikr/fs/direct/DirectFS.kt'
+          sub_once(direct,
+              r'    override suspend fun sourceSnapshots\(\): List<SourceSnapshot> =.*?\n    override fun selectSources',
+              '''    override suspend fun sourceSnapshots(): List<SourceSnapshot> =
+        withContext(Dispatchers.IO) {
+            val preparedBySourceKey = prepareRoots().associateBy { it.sourceKey }
+            roots.map { location ->
+                val sourceKey = SourceIdentity.forConfiguredRoot(SOURCE_TYPE, location)
+                val root = preparedBySourceKey[sourceKey]
+                    ?: return@map unavailableSnapshot(sourceKey, location)
+                val readable =
+                    DirectFsRootPolicy.isAllowedRoot(root.directory) &&
+                        listFilesSafe(root.directory) != null
+                SourceSnapshot(
+                    sourceKey = sourceKey,
+                    sourceType = SOURCE_TYPE,
+                    rootUri = root.normalizedUri,
+                    rootPath = root.displayPath,
+                    available = readable,
+                    fingerprint = if (readable) combineRootFingerprints(listOf(root)) else null,
+                    fingerprintStrength =
+                        if (readable) SourceFingerprintStrength.ADVISORY
+                        else SourceFingerprintStrength.NONE,
+                    canonicalKey = root.canonicalKey,
+                    sourceOrigin = root.origin,
+                    traversalScope = root.scope,
+                )
+            }
+        }
 
-          musikr = 'musikr/src/main/java/org/oxycblt/musikr/Musikr.kt'
-          replace_once(
-              musikr,
-              '''            val commit = if (plan != null) incremental?.commitScan() else null
-          ''',
-              '''            val commit =
-                  if (plan != null) {
-                      if (!config.sourceCommitAuthorised()) {
-                          throw CancellationException(
-                              "Source scan lost generation or attempt authority before commit"
-                          )
-                      }
-                      incremental?.commitScan(config.sourceCommitStillCurrent)
-                  } else {
-                      null
-                  }
-          ''',
-          )
+    override fun selectSources''')
+          replace_once(direct,
+              '                source = roots.filter { SourceIdentity.forLocation(it) in sourceKeys },\n',
+              '                source =\n'
+              '                    roots.filter { SourceIdentity.forConfiguredRoot(SOURCE_TYPE, it) in sourceKeys },\n')
+          replace_once(direct,
+              '                            SourceIdentity.forLocation(it) in sourceKeys &&\n',
+              '                            SourceIdentity.forConfiguredRoot(SOURCE_TYPE, it) in sourceKeys &&\n')
+          replace_once(direct,
+              '            val sourceKey = SourceIdentity.forLocation(location)\n',
+              '            val sourceKey = SourceIdentity.forConfiguredRoot(SOURCE_TYPE, location)\n')
+          replace_once('musikr/src/main/java/org/oxycblt/musikr/fs/direct/DirectFsTraversal.kt',
+              '                                directoryDeferred,\n                            )\n',
+              '                                directoryDeferred,\n'
+              '                                sourceKey = root.sourceKey,\n                            )\n')
 
-          repository = 'app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt'
-          replace_once(
-              repository,
-              '''                        metadataProfile = resolvedProfile,
-                          scanPlan = plan,
-                      )
-          ''',
-              '''                        metadataProfile = resolvedProfile,
-                          scanPlan = plan,
-                          sessionId = sessionId,
-                          request = request,
-                          checkpointAuthority = checkpointAuthority,
-                      )
-          ''',
-          )
-          replace_once(
-              repository,
-              '''        fs: FS,
-              metadataProfile: MetadataProfile,
-              scanPlan: IncrementalScanPlan?,
-          ): Config {
-          ''',
-              '''        fs: FS,
-              metadataProfile: MetadataProfile,
-              scanPlan: IncrementalScanPlan?,
-              sessionId: Long,
-              request: IndexRequest,
-              checkpointAuthority: SourceScanAttemptAuthority?,
-          ): Config {
-          ''',
-          )
-          replace_once(
-              repository,
-              '''            cleanupCovers =
-                  metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,
-          )
-          }
+          # SAF: one snapshot/ledger per tree and explicit file attribution.
+          saf = 'musikr/src/main/java/org/oxycblt/musikr/fs/saf/SAF.kt'
+          sub_once(saf,
+              r'    override suspend fun sourceSnapshots\(\): List<SourceSnapshot> =.*?\n    override fun selectSources',
+              '''    override suspend fun sourceSnapshots(): List<SourceSnapshot> =
+        withContext(Dispatchers.IO) {
+            query.source.map { location ->
+                val sourceKey = SourceIdentity.forConfiguredRoot(SOURCE_TYPE, location)
+                val canonicalKey = SourceIdentity.canonicalKeyForLocation(location)
+                var fingerprint: String? = null
+                var available = true
+                try {
+                    val documentId = DocumentsContract.getTreeDocumentId(location.uri)
+                    val documentUri = DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
+                    var modified = 0L
+                    var size = 0L
+                    var name = ""
+                    var found = false
+                    context.contentResolverSafe.useQuery(
+                        documentUri,
+                        arrayOf(
+                            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                            DocumentsContract.Document.COLUMN_SIZE,
+                        ),
+                    ) { cursor ->
+                        if (cursor.moveToFirst()) {
+                            found = true
+                            name = cursor.getString(0).orEmpty()
+                            modified = cursor.getLong(1)
+                            size = cursor.getLong(2)
+                        }
+                    }
+                    check(found) { "SAF root returned no document row" }
+                    fingerprint = combineRootFingerprints(
+                        listOf("${location.uri}|$documentId|$name|$modified|$size|${query.hashCode()}")
+                    )
+                } catch (_: Exception) {
+                    available = false
+                }
+                SourceSnapshot(
+                    sourceKey = sourceKey,
+                    sourceType = SOURCE_TYPE,
+                    rootUri = location.uri.toString(),
+                    rootPath = location.path.components.unixString,
+                    available = available,
+                    fingerprint = fingerprint,
+                    fingerprintStrength =
+                        if (available) SourceFingerprintStrength.ADVISORY
+                        else SourceFingerprintStrength.NONE,
+                    canonicalKey = canonicalKey,
+                    sourceOrigin = query.sourceOrigins[canonicalKey],
+                    traversalScope =
+                        CanonicalSourcePolicy.externalStorageTreePath(location.uri)
+                            ?.let(CanonicalSourcePolicy::scopeOf),
+                )
+            }
+        }
 
-          private fun createFileSystem(sessionId: Long, sourceKeys: Set<String>? = null): FS {
-          ''',
-              '''            cleanupCovers =
-                  metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,
-              sourceCommitAuthorised = {
-                  val stillCurrent =
-                      sourceCommitStillCurrent(sessionId) &&
-                          !IndexRequestPolicy.isSupersededByNewerConfiguration(
-                              request,
-                              musicSettings.sourceConfigurationGeneration,
-                          ) &&
-                          (checkpointAuthority == null ||
-                              musicSettings.ownsSourceConfigurationAttempt(
-                                  checkpointAuthority.generation,
-                                  checkpointAuthority.attemptId,
-                                  checkpointAuthority.owner,
-                              ))
-                  if (!stillCurrent) markSourceCommitSuperseded(sessionId, request)
-                  stillCurrent
-              },
-              sourceCommitStillCurrent = { sourceCommitStillCurrent(sessionId) },
-          )
-          }
+    override fun selectSources''')
+          replace_once(saf,
+              '                source = query.source.filter { SourceIdentity.forLocation(it) in sourceKeys }\n',
+              '                source =\n'
+              '                    query.source.filter {\n'
+              '                        SourceIdentity.forConfiguredRoot(SOURCE_TYPE, it) in sourceKeys\n'
+              '                    }\n')
+          replace_once(saf,
+              '                        val sourceKey = SourceIdentity.forLocation(location)\n',
+              '                        val sourceKey = SourceIdentity.forConfiguredRoot(SOURCE_TYPE, location)\n')
+          replace_once(saf,
+              '                                        location.uri,\n                                        DocumentsContract.getTreeDocumentId(location.uri),\n',
+              '                                        sourceKey,\n                                        location.uri,\n'
+              '                                        DocumentsContract.getTreeDocumentId(location.uri),\n')
+          replace_once(saf,
+              '    private fun CoroutineScope.exploreDirectoryImpl(\n        rootUri: Uri,\n',
+              '    private fun CoroutineScope.exploreDirectoryImpl(\n        sourceKey: String,\n        rootUri: Uri,\n')
+          replace_once(saf,
+              '                            exploreDirectoryImpl(\n                                rootUri,\n',
+              '                            exploreDirectoryImpl(\n                                sourceKey,\n                                rootUri,\n')
+          replace_once(saf,
+              '                                addedMs =\n                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {\n',
+              '                                sourceKey = sourceKey,\n'
+              '                                addedMs =\n                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {\n')
 
-          private fun sourceCommitStillCurrent(sessionId: Long): Boolean =
-              synchronized(this) {
-                  indexingSessionGate.isCurrent(sessionId) &&
-                      preparedInterruptionOutcome == null &&
-                      !preparedReplacementHandoff
-              }
+          # Fake implementation and deterministic regressions.
+          replace_once('app/src/test/java/org/oxycblt/auxio/music/IncrementalIndexPlannerTest.kt',
+              '        override suspend fun commitScan(): IncrementalScanCommit {\n',
+              '        override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {\n'
+              '            check(commitGuard())\n')
+          test = Path('musikr/src/test/java/org/oxycblt/musikr/fs/SourceIdentityTest.kt')
+          if test.exists(): raise SystemExit('STOP SourceIdentityTest exists')
+          test.write_text('''package org.oxycblt.musikr.fs
 
-          private fun markSourceCommitSuperseded(sessionId: Long, request: IndexRequest) {
-              synchronized(this) {
-                  if (preparedInterruptionOutcome == null) {
-                      preparedInterruptionOutcome = IndexingTerminalOutcome.SUPERSEDED
-                  }
-              }
-              L.w(
-                  "Rejecting stale source commit [session=$sessionId " +
-                      "generation=${request.configurationGeneration} attempt=${request.attemptId}]"
-              )
-          }
+import android.net.Uri
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Test
 
-          private fun createFileSystem(sessionId: Long, sourceKeys: Set<String>? = null): FS {
-          ''',
-          )
+class SourceIdentityTest {
+    @Test
+    fun `configured roots on one volume retain independent ledger keys`() {
+        val music = Uri.parse("file:///storage/emulated/0/Music")
+        val audio = Uri.parse("file:///storage/emulated/0/Audio")
 
-          planner_test = 'app/src/test/java/org/oxycblt/auxio/music/IncrementalIndexPlannerTest.kt'
-          replace_once(
-              planner_test,
-              '''        override suspend fun commitScan(): IncrementalScanCommit {
-          ''',
-              '''        override suspend fun commitScan(
-                  commitGuard: () -> Boolean
-              ): IncrementalScanCommit {
-                  check(commitGuard())
-          ''',
-          )
+        assertNotEquals(
+            SourceIdentity.forConfiguredRoot("DIRECT_FS", music),
+            SourceIdentity.forConfiguredRoot("DIRECT_FS", audio),
+        )
+        assertNotEquals(
+            SourceIdentity.forConfiguredRoot("SAF", music),
+            SourceIdentity.forConfiguredRoot("DIRECT_FS", music),
+        )
+        assertEquals(
+            "direct_fs:${SourceIdentity.canonicalKeyForUri(music)}",
+            SourceIdentity.forConfiguredRoot("DIRECT_FS", music),
+        )
+    }
+
+    @Test
+    fun `emitted file uses exact source key before legacy volume fallback`() {
+        val explicit = "direct_fs:path:/storage/emulated/0/Music"
+        val file =
+            File(
+                uri = Uri.parse("file:///storage/emulated/0/Music/a.mp3"),
+                path = Path(Volume.ThirdParty(Uri.parse("file:///storage/emulated/0")), Components.root()),
+                addedMs = object : AddedMs { override suspend fun resolve() = null },
+                modifiedMs = 0L,
+                mimeType = "audio/mpeg",
+                size = 1L,
+                parent = null,
+                sourceKey = explicit,
+            )
+        assertEquals(explicit, SourceIdentity.forFile(file))
+    }
+}
+''')
 
           store_test = 'musikr/src/test/java/org/oxycblt/musikr/cache/db/IncrementalScanStoreTest.kt'
-          replace_once(
-              store_test,
-              '''import org.junit.Assert.assertNull
-          import org.junit.Assert.assertTrue
-          ''',
-              '''import org.junit.Assert.assertNull
-          import org.junit.Assert.assertTrue
-          import org.junit.Assert.fail
-          ''',
-          )
-          marker = '''    @Test
-          fun `changed file that no longer validates is removed only after successful commit`() =
-          '''
-          test = '''    @Test
-          fun `authority loss at the Room commit boundary preserves the prior generation`() =
-              runBlocking {
-                  val original = snapshot("v1")
-                  val first = store.planScan(listOf(original), false, MetadataProfile.LEAN, 1L)
-                  store.beginScan(first)
-                  store.stage(cachedFile("alpha.mp3", modifiedMs = 1L))
-                  store.commitScan()
+          replace_once(store_test,
+              'import org.junit.Assert.assertTrue\n',
+              'import org.junit.Assert.assertTrue\nimport org.junit.Assert.fail\n')
+          marker = '    @Test\n    fun `changed file that no longer validates is removed only after successful commit`() =\n'
+          guard_test = '''    @Test
+    fun `authority loss at the Room commit boundary preserves the prior generation`() = runBlocking {
+        val original = snapshot("v1")
+        val first = store.planScan(listOf(original), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", modifiedMs = 1L))
+        store.commitScan()
 
-                  val replacement =
-                      store.planScan(
-                          listOf(original.copy(fingerprint = "v2")),
-                          false,
-                          MetadataProfile.FULL,
-                          2L,
-                      )
-                  store.beginScan(replacement)
-                  store.stage(cachedFile("alpha.mp3", modifiedMs = 2L))
-                  var guardChecks = 0
-                  val cancelled =
-                      try {
-                          store.commitScan { guardChecks++ == 0 }
-                          fail("Expected authority loss at the in-transaction guard")
-                          null
-                      } catch (expected: CancellationException) {
-                          expected
-                      }
-                  store.abortScan(cancelled)
+        val replacement = store.planScan(
+            listOf(original.copy(fingerprint = "v2")), false, MetadataProfile.FULL, 2L
+        )
+        store.beginScan(replacement)
+        store.stage(cachedFile("alpha.mp3", modifiedMs = 2L))
+        var checks = 0
+        val cancelled = try {
+            store.commitScan { checks++ == 0 }
+            fail("Expected authority loss inside Room transaction")
+            null
+        } catch (expected: CancellationException) {
+            expected
+        }
+        store.abortScan(cancelled)
 
-                  assertEquals(2, guardChecks)
-                  assertEquals("v1", db.incrementalDao().sourceLedger(original.sourceKey)?.fingerprint)
-                  assertEquals(
-                      1L,
-                      db.readDao()
-                          .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
-                          ?.modifiedMs,
-                  )
-                  assertEquals(1, db.incrementalLibraryDao().songCount())
-                  assertNull(store.activePlan())
-              }
+        assertEquals(2, checks)
+        assertEquals("v1", db.incrementalDao().sourceLedger(original.sourceKey)?.fingerprint)
+        assertEquals(1L, db.readDao().selectSongByUri(
+            Uri.parse("file:///storage/usbdisk0/alpha.mp3"))?.modifiedMs)
+        assertEquals(1, db.incrementalLibraryDao().songCount())
+        assertNull(store.activePlan())
+    }
 
-          '''
-          target = Path(store_test)
-          text = target.read_text(encoding='utf-8')
-          if text.count(marker) != 1:
-              raise SystemExit('STOP: commit-guard test insertion point changed')
-          target.write_text(text.replace(marker, test + marker, 1), encoding='utf-8')
+'''
+          p = Path(store_test); text = p.read_text()
+          if text.count(marker) != 1: raise SystemExit('STOP store test marker')
+          p.write_text(text.replace(marker, guard_test + marker, 1))
           PY
-
-      - name: Format and run focused validation
-        shell: bash
+      - name: Format and validate
         run: |
           bash ./scripts/ci-gradle.sh spotlessKotlinApply
-          bash ./scripts/ci-gradle.sh \
-            :app:testTopwayTwMediaDebugUnitTest \
-            :musikr:testDebugUnitTest
+          bash ./scripts/ci-gradle.sh :app:testTopwayTwMediaDebugUnitTest :musikr:testDebugUnitTest
           git diff --check
           git rm -f .github/workflows/temporary-pr232-commit-guard.yml
-
-      - name: Commit guarded source publication and remove runner
-        shell: bash
+      - name: Commit and remove runner
         env:
           BRANCH: copilot/reintroduce-incremental-performance
         run: |
           git config user.name "cbkii"
           git config user.email "150587541+cbkii@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet && { echo "::error::Commit guard produced no task-owned change."; exit 1; }
-          git commit -m "Guard incremental commit with current scan authority"
+          git commit -m "Complete exact-root source authority"
           git push origin "HEAD:${BRANCH}"
