@@ -34,6 +34,9 @@ Auxio-TS targets TS18, Topway and DoFun Variety head units. Choose the section t
 - [Startup profiles and benchmarks](architecture/STARTUP_PROFILES_BENCHMARKS.md)
 - [Exact TS18 startup validation](validation/EXACT_TS18_STARTUP_VALIDATION.md)
 
+The source-authority documents define one backend-qualified ledger identity per canonical configured
+root and require a current generation/session guard at the final durable commit boundary.
+
 ## 🔬 Evidence and reference
 
 - [TS18 APK reference](TS18_APK_REFERENCE.md)
