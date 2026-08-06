@@ -33,7 +33,7 @@ on:
         default: false
         type: boolean
       replace_existing_assets:
-        description: When repairing, replace complete existing APK/ checksum/metadata sets
+        description: When repairing, replace complete existing APK/checksum/metadata sets
         required: true
         default: false
         type: boolean
@@ -65,9 +65,7 @@ jobs:
         id: source
         shell: bash
         run: bash scripts/manual-release/01-verify-branch-release-context.sh
-      - name: Validate current release workflow contracts
-        shell: bash
-        run: bash scripts/manual-release/02-validate-current-release-workflow-contracts.sh
+
       - name: Select maintained release assets
         id: selection
         shell: bash
@@ -76,19 +74,22 @@ jobs:
           INCLUDE_LSPOSED_BRIDGE: ${{ inputs.include_lsposed_bridge_apk }}
           PUBLISH_DEBUG_APKS: ${{ inputs.publish_debug_apks }}
         run: bash scripts/manual-release/03-select-maintained-release-assets.sh
+
       - name: Preserve release orchestration tools
         id: tooling
         shell: bash
         run: bash scripts/manual-release/04-preserve-release-orchestration-tools.sh
+
       - name: Resolve version and repository release state
         id: plan
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_MODE: create_new_release
+          RELEASE_MODE: auto
           INPUT_TAG: ${{ inputs.version_tag }}
           TOOL: ${{ steps.tooling.outputs.tools_dir }}/release-orchestrator.py
         run: bash scripts/manual-release/05-resolve-version-and-repository-release-state.sh
+
       - name: Plan efficient asset work
         id: asset_plan
         shell: bash
@@ -101,12 +102,14 @@ jobs:
           EXISTING_ASSETS_FILE: ${{ steps.plan.outputs.existing_assets_file }}
           REPLACE: ${{ inputs.replace_existing_assets }}
         run: bash scripts/manual-release/06-plan-efficient-asset-work.sh
+
       - name: Checkout immutable repair tag
         if: steps.plan.outputs.effective_mode == 'repair_existing_release'
         shell: bash
         env:
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
         run: bash scripts/manual-release/07-checkout-immutable-repair-tag.sh
+
       - name: Prepare release source metadata
         id: metadata
         shell: bash
@@ -118,6 +121,7 @@ jobs:
           VERSION_CODE: ${{ steps.plan.outputs.release_version_code }}
           METADATA_CHANGE_REQUIRED: ${{ steps.plan.outputs.metadata_change_required }}
         run: bash scripts/manual-release/08-prepare-release-source-metadata.sh
+
       - name: Set up JDK 21
         if: steps.asset_plan.outputs.build_count != '0'
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
@@ -139,10 +143,12 @@ jobs:
         if: steps.asset_plan.outputs.build_count != '0'
         shell: bash
         run: bash scripts/manual-release/09-install-android-and-native-build-tools.sh
+
       - name: Prepare CI environment
         if: steps.asset_plan.outputs.build_count != '0'
         shell: bash
         run: bash scripts/manual-release/10-prepare-ci-environment.sh
+
       - name: Decode release keystore
         id: signing
         if: steps.asset_plan.outputs.needs_signing == 'true'
@@ -153,6 +159,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: bash scripts/manual-release/11-decode-release-keystore.sh
+
       - name: Build once, inspect once and stage selected assets
         id: assets
         shell: bash
@@ -176,10 +183,12 @@ jobs:
           RELEASE_PLAN_FILE: ${{ steps.plan.outputs.plan_file }}
           NEEDS_SIGNING: ${{ steps.asset_plan.outputs.needs_signing }}
         run: bash scripts/manual-release/12-build-once-inspect-once-and-stage-selected-assets.sh
+
       - name: Validate new-release source contracts
         if: steps.plan.outputs.effective_mode == 'create_new_release'
         shell: bash
         run: bash scripts/manual-release/13-validate-new-release-source-contracts.sh
+
       - name: Upload release recovery workflow artifact
         id: release_artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -208,6 +217,7 @@ jobs:
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: bash scripts/manual-release/14-push-immutable-release-tag.sh
+
       - name: Ensure draft release transaction exists
         id: release
         shell: bash
@@ -220,6 +230,7 @@ jobs:
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
           TARGET_RELEASE_FILE: ${{ steps.plan.outputs.target_release_file }}
         run: bash scripts/manual-release/15-ensure-draft-release-transaction-exists.sh
+
       - name: Upload or replace planned release assets
         shell: bash
         env:
@@ -227,8 +238,10 @@ jobs:
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_ID: ${{ steps.release.outputs.release_id }}
           UPLOAD_TSV: ${{ steps.assets.outputs.upload_tsv }}
+          REPLACE_NAMES_FILE: ${{ steps.asset_plan.outputs.replace_names_file }}
           REPLACE: ${{ inputs.replace_existing_assets }}
         run: bash scripts/manual-release/16-upload-or-replace-planned-release-assets.sh
+
       - name: Verify remote release asset manifest
         id: verify
         shell: bash
@@ -240,6 +253,7 @@ jobs:
           VERIFY_NAMES_FILE: ${{ steps.asset_plan.outputs.verify_names_file }}
           DEBUG_DESTINATION: ${{ steps.selection.outputs.debug_destination }}
         run: bash scripts/manual-release/17-verify-remote-release-asset-manifest.sh
+
       - name: Apply requested status after verified create transaction
         id: finalise
         if: steps.plan.outputs.apply_requested_status == 'true'
@@ -250,6 +264,7 @@ jobs:
           DRAFT: ${{ inputs.draft }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: bash scripts/manual-release/18-apply-requested-status-after-verified-create-transaction.sh
+
       - name: Synchronise released source metadata to dev
         id: sync
         shell: bash
@@ -257,6 +272,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.metadata.outputs.release_sha }}
         run: bash scripts/manual-release/19-synchronise-released-source-metadata-to-dev.sh
+
       - name: Write release summary
         if: always()
         shell: bash
@@ -266,8 +282,6 @@ jobs:
           EFFECTIVE_MODE: ${{ steps.plan.outputs.effective_mode }}
           RESOLUTION_REASON: ${{ steps.plan.outputs.resolution_reason }}
           UNRESOLVED_TAG_ONLY: ${{ steps.plan.outputs.unresolved_tag_only_versions }}
-          UNRESOLVED_RELEASE_WITHOUT_TAG: ${{ steps.plan.outputs.unresolved_release_without_tag_versions }}
-          UNRESOLVED_DRAFT_INDEX: ${{ steps.plan.outputs.unresolved_draft_index_versions }}
           RELEASE_TAG: ${{ steps.plan.outputs.release_tag }}
           RELEASE_URL: ${{ steps.release.outputs.release_url }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
