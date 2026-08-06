@@ -30,26 +30,25 @@ import timber.log.Timber as L
 class TopwayMusicEntryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        var removeTask = true
+        // FULL_PLAYER is the fail-safe task disposition until the requested route is resolved.
+        var entryRoute = TopwayMusicEntryPolicy.Route.FULL_PLAYER
         try {
-            removeTask = routeEntry()
+            entryRoute = resolveEntryRoute()
+            routeEntry(entryRoute)
         } finally {
-            // Keep full-player launches in Recents, but remove the transient floating-only task.
-            if (removeTask && isTaskRoot) {
-                finishAndRemoveTask()
-            } else {
-                finish()
-            }
+            finishEntry(entryRoute)
         }
     }
 
-    private fun routeEntry(): Boolean {
+    private fun resolveEntryRoute(): TopwayMusicEntryPolicy.Route {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val floatingOnly =
             prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
-        return when (
-            TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)
-        ) {
+        return TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)
+    }
+
+    private fun routeEntry(entryRoute: TopwayMusicEntryPolicy.Route) {
+        when (entryRoute) {
             TopwayMusicEntryPolicy.Route.FLOATING_CONTROLS_ONLY -> {
                 L.i("Topway music entry routed to persistent floating controls")
                 CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
@@ -64,7 +63,6 @@ class TopwayMusicEntryActivity : Activity() {
                 } else {
                     CarOverlaySettings.setEnabled(this, true)
                 }
-                true
             }
             TopwayMusicEntryPolicy.Route.FULL_PLAYER -> {
                 L.i("Topway music entry routed to full player action=${intent.action}")
@@ -80,8 +78,21 @@ class TopwayMusicEntryActivity : Activity() {
                         }
                     }
                 startActivity(fullPlayerIntent)
-                false
             }
+        }
+    }
+
+    private fun finishEntry(entryRoute: TopwayMusicEntryPolicy.Route) {
+        // Only floating-only launches own a transient task that should be removed from Recents.
+        when (entryRoute) {
+            TopwayMusicEntryPolicy.Route.FLOATING_CONTROLS_ONLY -> {
+                if (isTaskRoot) {
+                    finishAndRemoveTask()
+                } else {
+                    finish()
+                }
+            }
+            TopwayMusicEntryPolicy.Route.FULL_PLAYER -> finish()
         }
     }
 }
