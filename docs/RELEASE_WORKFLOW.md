@@ -99,3 +99,9 @@ Stop and inspect rather than mutating when:
 - the selected immutable tag source lacks required build or validation scripts.
 
 Do not delete or move an immutable release tag merely to make a rerun pass.
+
+## Implementation ownership
+
+The workflow YAML owns the operator form, permissions, concurrency, immutable action pins, environment wiring and the 90-minute job bound. Numbered `scripts/manual-release/*.sh` files own the shell implementation in exact execution order. Each script is small enough to syntax-check independently, and every external Git, GitHub, SDK, package-manager and Gradle wait is explicitly bounded.
+
+This keeps the operator surface close to the successful v4/v5 model without returning to a monolithic, one-shot publisher. Release-time execution does not grep or parse its own workflow source; source-shape and ordering checks remain PR/CI responsibilities.
