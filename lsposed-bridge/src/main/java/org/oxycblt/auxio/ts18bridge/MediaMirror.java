@@ -214,43 +214,7 @@ final class MediaMirror {
 
             long seekPosParam = (command == BridgeCommand.SEEK && seekPosition != null) ? Math.max(0L, seekPosition.longValue()) : -1L;
 
-            // Execute synchronous command on the dedicated single-thread executor with a very short timeout
-            Future<Boolean> commandResult = commandExecutor.submit(() -> {
-                try {
-                    int result = currentCommandService.dispatchCommand(
-                        BridgeContract.PROTOCOL_VERSION,
-                        0, // Use 0 for now as commandId
-                        command.name(),
-                        seekPosParam,
-                        "lsposed-bridge",
-                        0, // clientGeneration
-                        SystemClock.elapsedRealtime()
-                    );
-                    return result == BridgeContract.RESULT_ACCEPTED || result == BridgeContract.RESULT_DUPLICATE;
-                } catch (Exception e) {
-                    return false;
-                }
-            });
-
-            // Wait for up to 100ms
-            boolean result = false;
-            try {
-                result = commandResult.get(100, TimeUnit.MILLISECONDS);
-            } catch (TimeoutException e) {
-                // Time out circuit breaker, disconnect Service
-                log.log("Command dispatch timed out, tripping circuit breaker", e);
-                commandResult.cancel(true);
-                handler.post(() -> {
-                    clearController();
-                    scheduleReconnect();
-                });
-                return false;
-            } catch (ExecutionException | InterruptedException e) {
-                log.log("Command dispatch execution failed", e);
-                return false;
-            }
-
-            return result;
+            return dispatchCommandSynchronously(currentCommandService, command, seekPosParam);
 
         } catch (RuntimeException error) {
             log.log("MediaController command dispatch failed; stock path retained", error);
@@ -259,6 +223,43 @@ final class MediaMirror {
                         clearController();
                         scheduleReconnect();
                     });
+            return false;
+        }
+    }
+
+    private boolean dispatchCommandSynchronously(IAuxioBridgeCommand targetService, BridgeCommand command, long seekPosParam) {
+        // Execute synchronous command on the dedicated single-thread executor with a very short timeout
+        Future<Boolean> commandResult = commandExecutor.submit(() -> {
+            try {
+                int result = targetService.dispatchCommand(
+                    BridgeContract.PROTOCOL_VERSION,
+                    0, // Use 0 for now as commandId
+                    command.name(),
+                    seekPosParam,
+                    "lsposed-bridge",
+                    0, // clientGeneration
+                    SystemClock.elapsedRealtime()
+                );
+                return result == BridgeContract.RESULT_ACCEPTED || result == BridgeContract.RESULT_DUPLICATE;
+            } catch (Exception e) {
+                return false;
+            }
+        });
+
+        // Wait for up to 100ms
+        try {
+            return commandResult.get(100, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            // Time out circuit breaker, disconnect Service
+            log.log("Command dispatch timed out, tripping circuit breaker", e);
+            commandResult.cancel(true);
+            handler.post(() -> {
+                clearController();
+                scheduleReconnect();
+            });
+            return false;
+        } catch (ExecutionException | InterruptedException e) {
+            log.log("Command dispatch execution failed", e);
             return false;
         }
     }

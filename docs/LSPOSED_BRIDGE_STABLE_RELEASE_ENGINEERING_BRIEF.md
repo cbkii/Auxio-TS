@@ -1,164 +1,201 @@
-# Auxio-TS DoFun integration and optional LSPosed adapter engineering brief
+# Auxio-TS LSPosed bridge: stable-release engineering brief
 
-Repository: `cbkii/Auxio-TS`
+**Repository:** `cbkii/Auxio-TS`
+**Baseline reviewed:** `dev` at `d8fc91833601f54aacafcb01ec3a8acc57217126` (2026-08-04)
+**Module:** `lsposed-bridge` / package `org.oxycblt.auxio.ts18bridge`
+**Runtime target:** Topway TS18, Android 10/API 29, genuine stock `com.tw.music`, Auxio-TS `com.tw.media`
+**Purpose of this document:** provide a self-contained technical authority for an autonomous coding agent to mature the optional Auxio-TS LSPosed music-control bridge to the greatest defensible release readiness possible without depending on private chat attachments.
 
-Repository state observed while preparing this brief: `dev` at `09dec414e4a6a81af6b44af63f9efe87d4a7f5d9` on 2026-08-06.
+This document is an engineering brief, not proof that physical TS18 behaviour has passed. Claims are labelled **Observed**, **Inferred**, **Recommended**, **Requires physical validation**, or **Unsupported**.
 
-Primary exact-device target: Topway TS18, Android 10/API 29, DoFun Variety launcher `com.dofun.variety`, Auxio-TS player `com.tw.media`.
+---
 
-Purpose: provide a self-contained technical authority for an autonomous coding agent to finalise the DoFun/Topway music integration without relying on private chat history or the original APK attachments.
+## 1. Product boundary
 
-Evidence labels used here:
+The module is a **music-controls and launcher-state bridge**, not the proposed TS18 brightness/volume governor.
 
-- OBSERVED: directly supported by retained device, APK or repository evidence.
-- CURRENT USER REQUIREMENT: stated present operating intent.
-- INFERRED: reasoned from identified evidence but not directly executed.
-- RECOMMENDED: engineering decision to be implemented unless stronger current evidence contradicts it.
-- REQUIRES PHYSICAL VALIDATION: cannot be proven by repository work alone.
-- UNSUPPORTED: not established by the inspected material.
+It may:
 
-## 1. Correct product boundary
-
-CURRENT USER REQUIREMENT:
-
-```text
-Auxio-TS com.tw.media is the active music player.
-Genuine stock com.tw.music is not the user's intended player or normal control target.
-```
-
-The current repository contains a historical LSPosed module whose static scope is `com.tw.music`. That design assumes the genuine stock process remains a compatibility relay between DoFun and Auxio. It must not be treated as the permanent architecture merely because it exists.
-
-The intended normal authority chain is:
-
-```text
-DoFun fixed music UI and controls
-  -> supported Android or observed Topway-compatible surface
-  -> Auxio-TS com.tw.media
-  -> Auxio's existing playback service, queue, MediaSession and notification
-```
-
-The product is a music-control and launcher-state integration. It is not the separate TS18 volume/brightness governor.
+- execute inside the already-installed genuine stock `com.tw.music` process after strict identity verification;
+- redirect the stock music activity to Auxio-TS;
+- map observed stock/DoFun music commands to Auxio's one canonical MediaSession/playback authority;
+- mirror Auxio metadata, play state and progress using the captured Topway broadcast contract;
+- fail open to stock behaviour whenever trust, target readiness, hook compatibility or command acceptance is not proven.
 
 It must not:
 
+- broaden LSPosed scope beyond `com.tw.music`;
+- hook DoFun, `system_server`, SystemUI, Package Manager, `com.tw.service*`, MCU/CAN, radio, DSP, Bluetooth or unrelated apps;
+- assign, spoof or grant UID 1000/platform identity to Auxio;
+- replace, disable, delete, re-sign or mutate the stock APK;
 - add another playback service, queue, MediaSession, audio-focus or notification authority;
-- spoof `com.tw.music`, platform signing or UID 1000 for the Auxio APK;
-- hook `com.tw.media` merely to modify Auxio-owned code;
-- broaden into SystemUI, system_server, Topway volume, brightness, MCU, CAN, DSP, radio or Bluetooth governance;
-- replace, delete or re-sign protected stock packages;
-- copy private vendor smali as product code;
-- claim CI or emulator success proves physical DoFun or ACC behaviour.
+- implement screen-brightness or volume governance;
+- copy vendor smali/private implementations;
+- depend on platform signing for the normal `com.tw.media` APK;
+- claim emulator/CI success proves fixed-widget, ACC, USB, MCU, DSP or vehicle behaviour.
 
-## 2. Exact-device and firmware baseline
-
-OBSERVED retained exact-device profile:
+The supported release layout remains:
 
 ```text
-Model/product family: s9863a1h10_Natv / s9863a1h10
-Hardware family:      uis8581a2h10 / sp9863a
-System build:         TS18.2.2_20241210.165912_WINDOW-THEME1
-FOTA family:          WINDOW-THEME1_1000
-Android:              10
-SDK:                  29
-Kernel:               4.14.133
-Display:              1280x720 landscape
-Launcher:             com.dofun.variety
-Player target:        com.tw.media
+Genuine Topway stock package
+  com.tw.music
+  platform signed
+  UID 1000
+  kept installed and enabled
+        │
+        │ LSPosed static scope: com.tw.music only
+        ▼
+Auxio-TS LSPosed bridge addon
+  org.oxycblt.auxio.ts18bridge
+        │
+        │ public Android IPC
+        ▼
+Auxio-TS player
+  com.tw.media
+  normal non-system app UID
+  one playback service / one MediaSession / one queue authority
 ```
 
-The broader platform model is:
+---
+
+## 2. Exact TS18 baseline
+
+The primary target is not a generic phone/tablet or an interchangeable TS10-family unit.
+
+**Observed target baseline:**
+
+- platform/build family: `s9863a1h10_Natv`, `uis8581a2h10` / `sp9863a`;
+- system build: `TS18.2.2_20241210.165912_WINDOW-THEME1`;
+- FOTA family: `WINDOW-THEME1_1000`;
+- Android 10 / API 29;
+- Linux 4.14.133;
+- 4 GB RAM;
+- 1280×720 head-unit display;
+- DoFun Variety/TWTHEME launcher package `com.dofun.variety`;
+- Magisk 28.1 and LSPosed available on the physical unit.
+
+Authority separation remains mandatory:
 
 ```text
-vehicle, MCU, CAN, radio, reverse, amplifier, DSP, panel and keys
-  -> kernel, HALs and vendor daemons
-  -> privileged Topway services and applications
-  -> DoFun launcher and fixed widgets
-  -> ordinary Android applications such as Auxio
-  -> optional Magisk and LSPosed adaptation
+vehicle wiring / MCU / CAN / radio / reverse / amp / DSP / panel / keys
+    → kernel and vendor HALs
+    → Topway privileged services
+    → DoFun/TWTHEME launcher and fixed widgets
+    → ordinary Android apps and MediaSession
+    → optional Magisk/LSPosed adaptation
 ```
 
-This task operates only in the final three layers. Root and LSPosed do not provide platform signing, shared UID authority, MCU control or safe firmware writes.
+The bridge operates only at the final two layers. Root and LSPosed do not provide signing keys, package identity, shared UID records, MCU authority or safe firmware writes.
 
-## 3. Relevant current repository structure
+---
 
-At the reviewed baseline the repository contains:
+## 3. Current repository architecture
+
+At the reviewed baseline, the bridge uses modern libxposed API 100 packaging:
 
 ```text
-app/                         Auxio application
-lsposed-bridge/              optional API-100 module
-libxposed-api100-stubs/      compile-time stubs
-app/src/topwayTwMedia/       published com.tw.media variant
-app/src/topwayTwMusic/       internal exact-package fixture
+lsposed-bridge/src/main/resources/META-INF/xposed/java_init.list
+lsposed-bridge/src/main/resources/META-INF/xposed/module.prop
+lsposed-bridge/src/main/resources/META-INF/xposed/scope.list
 ```
 
-The published Topway player is intended to use:
+Expected metadata:
 
-```text
-application ID: com.tw.media
-activity class: com.tw.music.MusicActivity
-service class:  com.tw.music.MusicService
+```properties
+minApiVersion=100
+targetApiVersion=100
+staticScope=true
 ```
 
-The stock-compatible class names are inside the independently signed `com.tw.media` APK. A Java/Kotlin class package name does not change the APK application ID or grant the stock package identity.
-
-The existing LSPosed metadata uses modern API 100 files:
-
-```text
-META-INF/xposed/java_init.list
-META-INF/xposed/module.prop
-META-INF/xposed/scope.list
-```
-
-The current historical scope is:
+Static scope:
 
 ```text
 com.tw.music
 ```
 
-That scope is a repository observation, not a required future design.
-
-### Current source audit at 09dec414e
-
-REPOSITORY observation:
-
-- Track A is already substantial, not a from-scratch design. The app contains the launcher
-  coordinator, cold-command receiver, command-service client/contract, action mapper, seek and
-  progress policies, widget policy and playback-service call-sites.
-- Track B does not currently exist. There is no `com.dofun.variety`-scoped module or adapter.
-- Track C is the existing five-class-group Java `lsposed-bridge` scoped to `com.tw.music`.
-- `Ts18LauncherIntegrationMode` defaults Topway-compatible builds to `GenericDofunMedia`.
-  That profile uses Android-standard notification/media-button behaviour. The direct Topway
-  broadcast publisher and incoming command handler are present but separately mode-gated.
-- Root and nested agent instructions, release defaults and older compatibility prose previously
-  treated Track C as primary; those authorities must be corrected before judging architecture.
-
-This audit changes the work shape: first verify and mature existing Track A wiring, then determine
-whether any Track B or Track C artifact is actually required.
-
-## 4. Exact DoFun evidence
-
-OBSERVED exact launcher APK identity retained by the project:
+Entry class:
 
 ```text
-Package: com.dofun.variety
-Version family: V9.7.2.367.260312
+org.oxycblt.auxio.ts18bridge.Ts18LsposedBridgeModule
+```
+
+Current principal classes:
+
+```text
+BridgeCommand.java
+BridgeContract.java
+BridgeEnvironment.java
+MediaMirror.java
+Ts18LsposedBridgeModule.java
+```
+
+Current Auxio target components:
+
+```text
+release app package:      com.tw.media
+debug app package:        com.tw.media.debug
+activity alias class:     com.tw.music.MusicActivity
+MediaBrowser service:     com.tw.music.MusicService
+underlying service:       org.oxycblt.auxio.AuxioService
+MediaSession callback:    org.oxycblt.auxio.playback.service.MediaSessionInterface
+```
+
+`com.tw.music.MusicService` is a thin subclass of `AuxioService`; it does not introduce a second Auxio service implementation. The Topway-compatible manifest removes external browse intent filters from the underlying `AuxioService` and exposes the stock-name wrapper as the canonical cross-package MediaBrowser service.
+
+---
+
+## 4. Evidence inventory
+
+### 4.1 Stock TW Music build A
+
+**Observed:**
+
+```text
+File identity: com.tw.music_TW_THEME.20240715.apk
+SHA-256: 4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518
+Package: com.tw.music
+Version code: 118
+Version name: TW_THEME.20240715
+Shared UID: android.uid.system / runtime UID 1000
+Certificate SHA-256:
+AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3
+```
+
+This is the exact APK hash currently compiled into `KNOWN_TESTED_STOCK_APK_SHA256`.
+
+### 4.2 Stock TW Music build B
+
+**Observed:**
+
+```text
+File identity: com.tw.music_ac.apk
+SHA-256: 3a14ed3b330723a7f88ae3911804858d370ca673e17d67098cce6c9a543c6b49
+Package: com.tw.music
+Certificate SHA-256:
+AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3
+```
+
+**Observed:** the relevant inspected activity, service, receiver and presenter methods have equivalent signatures and control semantics to build A, despite the different whole-APK hash.
+
+**Recommended:** model private-hook compatibility as a registry of explicitly reviewed APK hashes and hook capabilities. Do not treat a matching signer alone as authority for obfuscated presenter methods. Do not require a single whole-file hash forever when more than one exact build has been reviewed.
+
+### 4.3 DoFun launcher build
+
+**Observed:**
+
+```text
+File identity: com.dofun.variety_V9.7.2.367.260312.apk
 SHA-256: 75e7ea9b46d68754253aa385e6ac750aae957a5b72196fec5449ccf2782c60b1
+Package: com.dofun.variety
 ```
 
-Its extracted `assets/apps_match_config.json` includes a fixed music entry that recognises both:
-
-```text
-com.tw.media / com.tw.music.MusicActivity
-com.tw.music / com.tw.music.MusicActivity
-```
-
-The relevant logical record is:
+Its `assets/apps_match_config.json` contains the fixed music entry:
 
 ```json
 {
   "soft_name": "hotseat_app_music",
   "icon_name": "link_icon_music",
-  "compare_soft_name": "Music",
+  "compare_soft_name": "音乐,音樂,Music",
   "more_packages": [
     {
       "package_name": "com.tw.media",
@@ -174,432 +211,22 @@ The relevant logical record is:
 }
 ```
 
-OBSERVED conclusion: DoFun has a direct package/component recognition path for the Auxio `com.tw.media` variant.
+This proves package/component recognition, not full runtime widget control authority. Prior physical evidence showed that the fixed widget could still open or control stock `com.tw.music` while Android MediaSession reported `com.tw.media` active. Component matching, widget binding, command broadcasts, MediaSession and Topway runtime routing must remain separate.
 
-Not proven by that file alone:
+### 4.4 Reviewed bridge CI artifact
 
-- which component is selected when both packages are installed;
-- whether fixed previous/next/play-pause controls use broadcasts, MediaSession, notification state, private Cardoor services or in-process launcher logic;
-- whether seek is external or private;
-- whether metadata/progress are accepted from ordinary broadcasts in all launcher states;
-- whether any current path silently starts genuine stock `com.tw.music`.
-
-Therefore component matching, command routing, state publishing and private launcher control must be analysed as separate lanes.
-
-## 5. Observed public and Topway-compatible contracts
-
-The following strings and behaviours were recovered from exact stock/launcher evidence and repository adapters.
-
-### 5.1 Incoming command actions
+The final debug artifact recorded by PR #213 was inspected:
 
 ```text
-com.tw.music.action.cmd
-com.tw.music.action.prev
-com.tw.music.action.next
-com.tw.music.action.pp
-com.android.launcher.widget_music_progress
-```
+Artifact APK SHA-256:
+9614571903ab7cd3eb3e4b7ef49e211f46e598761c59abbbc26b542dec1b0dcf
 
-Known extras:
-
-```text
-cmd = prev | next | pp | update
-music_progress = integer milliseconds
-appWidgetIds = optional widget IDs on some paths
-```
-
-### 5.2 Outgoing metadata
-
-```text
-action: com.tw.music.info
-extras:
-  musicTitle
-  musicaArtist
-  musicAlbum
-  musicPath
-```
-
-The misspelling `musicaArtist` is part of the observed compatibility contract and must be preserved.
-
-### 5.3 Outgoing progress and duration
-
-```text
-action: com.tw.launcher.music_progress_duration
-extras:
-  msg_music_progress
-  msg_music_duration
-```
-
-Values are treated as milliseconds unless current exact evidence proves otherwise.
-
-### 5.4 Legacy Android media broadcasts
-
-```text
-com.android.music.metachanged
-com.android.music.playstatechanged
-```
-
-These are compatibility surfaces, not substitutes for a correct MediaSession.
-
-### 5.5 Android-standard surfaces
-
-The player must retain:
-
-```text
-MediaSession
-MediaBrowserService
-media notification
-media-button handling
-playback metadata and state updates
-```
-
-A valid MediaSession does not by itself prove DoFun fixed-widget operation.
-
-## 6. Stock APK evidence and its correct role
-
-Two genuine Topway stock music APK builds were inspected.
-
-Build A:
-
-```text
-File: com.tw.music_TW_THEME.20240715.apk
-SHA-256: 4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518
-Package: com.tw.music
-Version code: 118
-Version name: TW_THEME.20240715
-Shared UID: android.uid.system / runtime UID 1000
-Certificate SHA-256:
-AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3
-```
-
-Build B:
-
-```text
-File: com.tw.music_ac.apk
-SHA-256: 3a14ed3b330723a7f88ae3911804858d370ca673e17d67098cce6c9a543c6b49
-Package: com.tw.music
-Certificate SHA-256:
-AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3
-```
-
-Relevant historical stock methods include:
-
-```text
-com.tw.music.MusicApplication.onCreate()
-com.tw.music.MusicActivity.onCreate(Bundle)
-com.tw.music.MusicActivity.onNewIntent(Intent)
-com.tw.music.MusicService.onCreate()
-com.tw.music.MusicService.onStartCommand(Intent, int, int)
-com.tw.music.k.onReceive(Context, Intent)
-com.tw.music.j.onReceive(Context, Intent)
-
-com.eckom.xtlibrary.b.f.e.a:
-  rb()        previous
-  pb()        next
-  ba()        pause
-  fa()        play
-  seekTo(int) seek
-```
-
-These methods explain the historical stock-shim implementation and command semantics. They do not prove the current user's direct `com.tw.media` path should execute inside `com.tw.music`.
-
-The stock fixtures remain useful for:
-
-- contract tests;
-- documenting action semantics;
-- an optional legacy compatibility variant for other exact configurations;
-- detecting unintended stock process activation.
-
-They should not control the primary architecture without current evidence.
-
-## 7. Required architecture decision tree
-
-### 7.1 Track A: direct integration, preferred
-
-Use when DoFun can reach Auxio through package/component recognition, broadcasts, MediaSession or MediaBrowser.
-
-```text
-com.dofun.variety
-  -> external/public integration
-  -> com.tw.media
-  -> canonical Auxio playback state
-```
-
-Expected LSPosed scope:
-
-```text
-none
-```
-
-The LSPosed artifact should be retired from the primary release if it has no required launcher-private function.
-
-### 7.2 Track B: DoFun-private LSPosed adapter
-
-Use only when exact APK and runtime evidence prove a required fixed-widget behaviour is private to the launcher process and cannot be provided by Track A.
-
-Expected scope:
-
-```text
-com.dofun.variety
-```
-
-This adapter must be optional, exact-version guarded, log-only first, fail-open and cross-process safe.
-
-### 7.3 Track C: legacy stock shim
-
-Use only when current evidence proves DoFun still requires genuine stock `com.tw.music` as a relay on a supported configuration.
-
-Expected scope:
-
-```text
-com.tw.music
-```
-
-This must be a separately named optional legacy artifact or variant, not the primary path for the current user.
-
-### 7.4 Scope that is not justified
-
-```text
-com.tw.media
-```
-
-Auxio owns this code. Required logic belongs in the app source unless a documented platform limitation makes ordinary app code impossible.
-
-## 8. Direct application integration design
-
-### 8.1 Canonical component design
-
-The published `com.tw.media` APK should expose only the required compatibility components.
-
-Recommended contract:
-
-```text
-com.tw.media/com.tw.music.MusicActivity
-  thin entry point into Auxio UI
-
-com.tw.media/com.tw.music.MusicService
-  canonical externally visible MediaBrowser-compatible wrapper
-  delegates to the existing Auxio service implementation
-```
-
-Do not permit two exported browse services to compete. The underlying Auxio service may remain available for internal explicit use, but external intent filters should resolve to one canonical component.
-
-### 8.2 One command ingress adapter
-
-All Topway actions must be parsed by one isolated adapter, for example under:
-
-```text
-app/src/main/java/org/oxycblt/auxio/headunit/topway/
-```
-
-The adapter should:
-
-1. allow only exact known actions;
-2. validate required extras and types;
-3. clamp or reject seek outside the valid current duration;
-4. convert to one internal command model;
-5. send the command once to the existing playback state manager;
-6. maintain a short bounded deduplication ledger;
-7. return or log a precise result;
-8. remain safe when no library, queue or current song exists.
-
-Suggested internal result model:
-
-```text
-ACCEPTED
-REJECTED_UNSUPPORTED
-REJECTED_NOT_READY
-REJECTED_DUPLICATE
-REJECTED_INVALID
-```
-
-The direct application path does not need to suppress another process. It must still prevent the same external action from entering through multiple receivers or services.
-
-### 8.3 Broadcast trust limitation
-
-An ordinary broadcast receiver often cannot strongly authenticate the original sender. Do not claim sender verification when Android does not provide it for the chosen route.
-
-Use:
-
-- exact action allowlisting;
-- explicit/package-targeted delivery where compatible;
-- bounded input validation;
-- non-exported components where external access is not required;
-- permissions only when DoFun can actually hold or satisfy them;
-- rate limits and deduplication.
-
-### 8.4 State publisher
-
-There must be one Topway state publisher.
-
-It should derive state from the canonical Auxio playback state and publish:
-
-- title;
-- artist;
-- album;
-- path or safe empty value;
-- playing/paused state;
-- position and duration in milliseconds.
-
-Rules:
-
-- publish a complete snapshot after process/service reconnect;
-- rate-limit periodic progress;
-- immediately publish meaningful track or play-state changes;
-- avoid stale stock metadata;
-- handle unknown duration and unavailable media safely;
-- avoid waking the launcher excessively when nothing changed.
-
-### 8.5 Exactly-once contract
-
-The implementation must make these identities explicit:
-
-```text
-command ID or deterministic command key
-source surface
-command type
-bounded value
-monotonic receive time
-process generation
-```
-
-A short ledger should reject duplicate commands generated by near-simultaneous broadcast, hook or MediaSession routes. Expiry must be bounded and tested. Do not use long-lived suppression that drops legitimate repeated button presses.
-
-### 8.6 Single playback authority
-
-The final repository should enforce:
-
-```text
-one playback service authority
-one queue authority
-one MediaSession
-one playback notification
-one command dispatcher
-one Topway state publisher
-```
-
-Static manifest and source checks should fail if another equivalent authority is introduced.
-
-## 9. Optional DoFun LSPosed adapter design
-
-Apply only if Track B is proven necessary.
-
-### 9.1 Trust and compatibility gate
-
-Functional hooks may activate only after all required checks succeed:
-
-```text
-package == com.dofun.variety
-expected signer or signing history
-approved APK hash/version or exact method fingerprints
-expected process name
-exact class and method signatures
-compatible adapter/Auxio protocol
-kill switch enabled state permits operation
-```
-
-A signer match alone is not enough to authorise guessed obfuscated methods.
-
-### 9.2 Process isolation
-
-DoFun and Auxio are separate processes. Java statics, singleton instances and in-memory ledgers are not shared.
-
-Use explicit bounded IPC. The adapter should send an Auxio-owned request containing:
-
-```text
-protocol version
-command ID
-command type
-optional bounded value
-source adapter
-monotonic timestamp
-```
-
-Auxio should reply with a bounded result such as:
-
-```text
-ACCEPTED
-REJECTED_UNSUPPORTED
-REJECTED_NOT_READY
-REJECTED_UNTRUSTED
-REJECTED_DUPLICATE
-REJECTED_INVALID
-TIMEOUT
-```
-
-The launcher action may be suppressed only after `ACCEPTED`.
-
-### 9.3 Main-thread safety
-
-Do not perform package hashing, disk I/O, blocking service binds or long Binder waits on the DoFun main thread.
-
-A hook callback may:
-
-- validate already cached state;
-- create a small command request;
-- use a strictly bounded asynchronous or synchronous path justified by tests;
-- fail open immediately on uncertainty.
-
-### 9.4 Circuit breaker and kill switch
-
-The adapter needs:
-
-- a user-accessible kill switch;
-- a fail-closed interpretation when kill-switch state cannot be read;
-- a bounded exception counter per process generation;
-- automatic functional disable after repeated failures;
-- rate-limited diagnostic logging;
-- ordinary DoFun behaviour preserved after disable.
-
-## 10. Optional legacy stock shim design
-
-Apply only if Track C is retained.
-
-The stock shim must verify:
-
-```text
-package com.tw.music
-UID 1000
-Topway certificate SHA-256
-approved APK or method fingerprint
-exact main process
-exact target Auxio package and signer
-compatible protocol
-```
-
-The old design's strongest properties should be retained:
-
-- fail-open hooks;
-- exact class capability probes;
-- no Package Manager or system_server hooks;
-- no shared UID mutation;
-- no stock APK replacement;
-- bounded logs.
-
-It must additionally prove:
-
-- stock playback does not start during normal Auxio operation;
-- activity redirection does not initialise a competing stock player;
-- each command executes exactly once;
-- target process death and reconnect fail open;
-- the legacy artifact is not implied to be required by the direct current-device path.
-
-## 11. Existing LSPosed artifact blockers
-
-If any LSPosed artifact remains, the following historical findings must be resolved.
-
-### 11.1 APK class pollution
-
-The inspected PR #213 debug artifact had:
-
-```text
-SHA-256: 9614571903ab7cd3eb3e4b7ef49e211f46e598761c59abbbc26b542dec1b0dcf
-size: 2,680,605 bytes
+APK size: 2,680,605 bytes
 DEX files: 4
-defined classes: 1,658
+Defined classes: 1,658
 ```
 
-Approximate defined-class groups included:
+Observed defined-class groups included approximately:
 
 ```text
 kotlin.*                       1,063
@@ -610,252 +237,819 @@ org.jetbrains.annotations.*        7
 com.android.tools.*                 5
 ```
 
-This is unacceptable for a narrow module injected into a protected launcher or stock process.
-
-The actual Gradle dependency graph must be inspected for debug and release. Do not guess the cause.
-
-Required module artifact:
+Examples of defined platform classes inside the APK included modern APIs such as:
 
 ```text
-one DEX
-no defined android.*
-no androidx.*
-no kotlin.* unless intentionally required
-no org.intellij.*
-no org.jetbrains.* implementation classes
-no com.android.tools.*
-no packaged io.github.libxposed.* API definitions
-only adapter-owned/generated classes and required resources
+android.adservices.*
+android.app.Notification$CallStyle
+android.app.appfunctions.*
+android.app.appsearch.*
 ```
 
-### 11.2 Debug target mismatch
+The APK also contained Kotlin built-ins and the Kotlin standard library even though the bridge source is Java.
 
-The historical bridge targeted `com.tw.media` in debug while the app debug ID was `com.tw.media.debug`.
+**Observed release blocker:** a narrow Java-only module injected into a protected UID-1000 process must not package hundreds of platform API definitions, a full Kotlin runtime or build-tool implementation classes. The root cause must be determined from the actual Gradle dependency graph; it must not be guessed.
 
-Any retained module must compile against the actual paired target application ID, not a hard-coded release ID.
+---
 
-### 11.3 Target signer verification
+## 5. Verified stock control surfaces
 
-The target Auxio APK must be signer-verified by a retained module.
+The following exact surfaces were observed in the reviewed stock package.
 
-Build order should be:
+### 5.1 Bootstrap and activity
 
 ```text
-build paired Auxio APK
-extract actual application ID and certificate SHA-256
-supply those values to the module build
-compile them into the module contract
-verify the final pair in CI
+com.tw.music.MusicApplication.onCreate()
+com.tw.music.MusicActivity.onCreate(android.os.Bundle)
+com.tw.music.MusicActivity.onNewIntent(android.content.Intent)
 ```
 
-Release must fail if signer input is missing or malformed.
+Current bridge behaviour:
 
-### 11.4 Submission is not acceptance
+- install a minimal bootstrap hook only after package/main-process/UID checks;
+- asynchronously verify stock signer and target readiness;
+- install functional hooks only after stock identity is trusted;
+- after stock activity creation, launch Auxio's `com.tw.music.MusicActivity` alias and finish the stock activity only if target launch succeeds.
 
-A void `MediaController.TransportControls` call returning without exception proves submission only.
+**Observed risk:** stock `MusicActivity.onCreate()` starts/binds stock music services and registers stock receivers before the current after-hook redirects. This may leave a second stock player stack alive. It does not by itself prove duplicate audible playback, but stable release requires evidence that only Auxio owns active playback, audio focus, notification and queue state after redirection.
 
-A retained adapter must use a positive acceptance protocol before suppressing DoFun or stock behaviour. Timeout, version mismatch, unavailable target or Binder death must fail open.
-
-## 12. Build and variant contracts
-
-### 12.1 Player variants
-
-Expected normal pairing:
+### 5.2 Stock service
 
 ```text
-release player: com.tw.media
-debug player:   actual configured debug application ID
+com.tw.music.MusicService.onCreate()
+com.tw.music.MusicService.onStartCommand(Intent, int, int)
 ```
 
-The build must inspect actual manifests rather than relying on source assumptions.
+The bridge must allow the stock service lifecycle method to execute. Skipping `onStartCommand()` can violate foreground-service obligations and destabilise the protected stock process.
 
-### 12.2 Internal exact-package fixture
+Current service hooks should therefore remain lifecycle observation/context capture only unless exact evidence justifies a narrower intervention.
 
-The `topwayTwMusic` variant may remain as an internal compile/test fixture for historical package contracts. It must not be installable or publishable as a replacement for the genuine platform-signed stock package.
-
-### 12.3 Module release decision
-
-Release automation should follow the selected architecture:
-
-Track A:
+### 5.3 Stock receivers
 
 ```text
-publish com.tw.media player
-no mandatory LSPosed artifact
+com.tw.music.k.onReceive(Context, Intent)   // command receiver
+com.tw.music.j.onReceive(Context, Intent)   // seek receiver
 ```
 
-Track B:
+Observed actions and extras:
 
 ```text
-publish com.tw.media player
-publish clearly named DoFun adapter scoped only to com.dofun.variety
+com.tw.music.action.cmd
+  cmd=prev
+  cmd=next
+  cmd=pp
+  cmd=update
+
+com.tw.music.action.prev
+com.tw.music.action.next
+com.tw.music.action.pp
+
+com.android.launcher.widget_music_progress
+  music_progress=<integer position>
 ```
 
-Track C:
+The current bridge maps these to previous, next, play/pause, update and seek.
+
+### 5.4 Obfuscated presenter
 
 ```text
-publish legacy stock shim only as a separately documented optional asset
+Class: com.eckom.xtlibrary.b.f.e.a
+
+rb()          previous
+pb()          next
+ba()          pause
+fa()          play
+seekTo(int)   seek
 ```
 
-Do not publish an LSPosed module solely because the workflow historically expected one.
+These private methods must remain fingerprint/allowlist gated. Missing or changed methods must not be guessed.
 
-## 13. CI and automated tests
+### 5.5 Mirrored output contract
 
-### 13.1 Pure unit tests
-
-Required coverage:
-
-- exact action mapping;
-- malformed and unsupported actions;
-- command deduplication and expiry;
-- seek bounds and milliseconds;
-- not-ready library/queue/current-item paths;
-- metadata and progress mapping;
-- state-publisher rate limits;
-- process generation reset;
-- protocol negotiation and result mapping;
-- signer and package mismatch;
-- timeout and Binder death for an optional adapter;
-- kill-switch read failure;
-- circuit-breaker behaviour.
-
-### 13.2 API 29 Android tests
-
-Where practical, cover:
-
-- final manifest component resolution;
-- direct `com.tw.media/com.tw.music.MusicActivity` launch;
-- canonical `com.tw.music.MusicService` wrapper behaviour inside `com.tw.media`;
-- no duplicate exported browse service;
-- command receiver routing to existing playback state;
-- process/service restart and full state re-publish;
-- optional adapter IPC and positive acceptance;
-- fail-open behaviour on target or protocol mismatch.
-
-### 13.3 Static and artifact tests
-
-Player APK checks:
+Observed output actions:
 
 ```text
-correct application ID
-correct compatibility component names
-variant-correct provider authorities
-one external MediaBrowser service
-one playback service/session path
-no accidental com.tw.music application ID in published player
+com.tw.music.info
+  musicTitle
+  musicaArtist       // spelling is part of the captured contract
+  musicAlbum
+  musicPath
+
+com.tw.launcher.music_progress_duration
+  msg_music_progress
+  msg_music_duration
+
+com.android.music.metachanged
+com.android.music.playstatechanged
 ```
 
-Module APK checks, when present:
+The implicit form and `musicPath` reproduce stock behaviour but expose metadata to any matching receiver. Preserve only fields required for stock parity; keep text and numeric values bounded. Physical validation must determine whether `musicPath` can be omitted or narrowed in a later release without breaking the fixed widget.
+
+---
+
+## 6. Current strengths to preserve
+
+The current module already implements important safety properties:
+
+1. API-100 modern module metadata and compile-only intent.
+2. Static scope restricted to `com.tw.music`.
+3. Main-process-only loading.
+4. Runtime UID 1000 verification.
+5. Captured Topway signer verification.
+6. Whole-APK fingerprint gating for private presenter hooks.
+7. Capability probing of exact classes and signatures.
+8. Unknown initial readiness state preserves the stock path.
+9. Filesystem and PackageManager probes run away from hot host callbacks.
+10. MediaBrowser state is confined to the main looper.
+11. Reconnect attempts are bounded.
+12. Hot-path logging is rate-limited.
+13. Stock service lifecycle is not skipped.
+14. Receiver/presenter suppression occurs only after the bridge believes target dispatch succeeded.
+15. The normal Auxio app remains a separate non-system package.
+16. The bridge does not import private Topway implementation APIs.
+17. The bridge manifest requests no Android permissions.
+18. Release packaging fails closed when signing properties are absent.
+19. CI verifies API metadata, static scope, package, SDK, signer and absence of packaged libxposed API definitions.
+20. A shared-storage kill switch and rollback procedure exist.
+
+Maturity work must build on these properties rather than replacing them with broad hooks or privileged shortcuts.
+
+---
+
+## 7. Stable-release blockers and major findings
+
+### 7.1 Packaged runtime/platform-class pollution — critical
+
+**Observed:** the inspected bridge artifact contains four DEX files, a full Kotlin runtime, hundreds of `android.*` class definitions and build-tool classes.
+
+Potential consequences inside `com.tw.music` include:
+
+- class-loader collisions or shadowing;
+- verifier/runtime failures on Android 10 for newer platform definitions;
+- unnecessary memory, I/O and startup cost;
+- a much larger injected attack/crash surface;
+- misleading CI that checks only for `io.github.libxposed.*` classes.
+
+**Required:**
+
+- inspect `debugRuntimeClasspath`, `releaseRuntimeClasspath`, dependency insight and packaged inputs;
+- identify the precise source of every unexpected class group;
+- use a true compile-only modern libxposed API input;
+- avoid an Android library dependency that leaks platform stubs into the APK;
+- ensure the bridge is Java-only unless a justified Kotlin source is deliberately introduced;
+- enforce a single-DEX, strict defined-class allowlist;
+- reject `android.*`, `androidx.*`, `kotlin.*`, `org.intellij.*`, `org.jetbrains.*`, `com.android.tools.*`, and packaged `io.github.libxposed.*` definitions;
+- inspect both debug and signed release outputs.
+
+Do not set an arbitrary size threshold as the sole proof. Validate class definitions and runtime dependencies directly. A reasonable mature result should be a small single-DEX APK containing only bridge-owned/generated classes and ordinary Android resources.
+
+### 7.2 Debug pairing mismatch — critical
+
+**Observed:** both bridge build types currently compile `TARGET_PACKAGE="com.tw.media"`.
+
+**Observed:** Auxio debug adds `.debug`, producing `com.tw.media.debug`.
+
+Therefore the CI bridge debug APK cannot connect to the CI Auxio debug APK unless a separate release-package Auxio is installed.
+
+**Required target matrix:**
 
 ```text
-API-100 metadata
-exact selected scope
-one DEX
-forbidden class-prefix rejection
-embedded target package and signer match final paired APK
-small inspectable artifact
+bridge debug   → com.tw.media.debug
+bridge release → com.tw.media
 ```
 
-### 13.4 Scope contract
+CI must verify the bridge's compiled target package against the actual paired Auxio APK application ID, not just source strings.
 
-CI must not hard-code `com.tw.music` as universally required.
+### 7.3 Auxio target signer not verified — critical
 
-It should validate the architecture declaration, for example:
+The stock host identity is strongly verified, but the target currently needs only the expected package/component names, exported state and non-system UID.
+
+A different APK occupying `com.tw.media` could receive stock-origin launches and control traffic.
+
+**Required:**
+
+- compile the expected paired Auxio certificate SHA-256 into each bridge variant;
+- validate current and signing-history certificates with `GET_SIGNING_CERTIFICATES`;
+- require target package, certificate, non-system UID, enabled state and exact exported components;
+- extract the signer from the actual app artifact in CI/release orchestration and inject it into the paired bridge build;
+- fail release packaging when the expected target signer is missing or malformed;
+- verify the value again from both final APKs in contract tests.
+
+Debug signing may vary by runner. Build the Auxio debug APK first, extract its actual signer, and then build the debug bridge with that signer rather than assuming a universal debug fingerprint.
+
+### 7.4 Transport submission is not command acceptance — critical/high
+
+Current `dispatchCommand()` returns true after:
+
+- a controller exists;
+- the current PlaybackState advertises an action;
+- a void `TransportControls` method returns without throwing.
+
+This proves a request was submitted, not that Auxio accepted or executed it. Suppressing stock immediately can drop a user action during process/session races.
+
+**Preferred public-API design to evaluate first:**
 
 ```text
-DIRECT_APP          -> no module required
-DOFUN_ADAPTER        -> scope exactly com.dofun.variety
-LEGACY_STOCK_SHIM    -> scope exactly com.tw.music
+MediaController.sendCommand(command, args, ResultReceiver)
+    ↔ MediaSessionCompat.Callback.onCommand(command, extras, ResultReceiver)
 ```
 
-If multiple optional artifacts exist, each artifact must have its own exact scope and name. Do not combine unrelated scopes into one broad module without a proven reason.
+Android API 29 can expose current controller information during a MediaSession callback. The Auxio callback should require the trusted stock controller package/UID/certificate before accepting bridge-only commands.
 
-## 14. Documentation corrections
-
-Update all documentation that currently states or implies:
+A mature command envelope should include:
 
 ```text
-keep genuine stock com.tw.music installed and enabled
-use a com.tw.music-only bridge as the normal supported path
-LSPosed is mandatory for com.tw.media integration
+protocol version
+command ID
+command type
+optional seek position
+sender elapsedRealtime timestamp
+stock package/version/fingerprint capability ID
 ```
 
-Those statements may remain only in a clearly labelled legacy compatibility section if current evidence still supports that optional mode.
-
-The primary documentation must say:
-
-- Auxio-TS `com.tw.media` is the intended player;
-- direct integration is preferred;
-- DoFun recognises the direct component;
-- LSPosed is needed only for a proven private launcher or legacy stock relay;
-- physical validation still controls claims about fixed-widget parity, cold boot and ACC wake.
-
-## 15. Physical validation matrix
-
-The post-change collector must validate the architecture that was actually selected.
-
-### 15.1 Baseline identity
-
-Capture:
+A mature result should distinguish:
 
 ```text
-build properties and boot ID
-package paths and versions for DoFun, Auxio and stock package if installed
-signing certificates where tools allow
-component resolution
-running processes
-MediaSessions
-AudioManager focus and player state
-services, activities and notifications
+REJECTED
+ACCEPTED
+DUPLICATE_ALREADY_ACCEPTED
+UNSUPPORTED
+MALFORMED
+UNTRUSTED_CONTROLLER
+NOT_READY
+TIMED_OUT
 ```
 
-### 15.2 Direct path tests
-
-Required manual tests:
-
-1. Tap fixed DoFun Music card. Auxio opens.
-2. Start Auxio playback.
-3. Test previous.
-4. Test next.
-5. Test play/pause twice.
-6. Test seek if the launcher exposes it.
-7. Confirm title, artist, album and progress.
-8. Confirm exactly one audible command result per action.
-9. Confirm one active playback MediaSession.
-10. Confirm one audio-focus owner.
-11. Confirm one playback notification.
-12. Confirm genuine stock `com.tw.music` does not unexpectedly become the playback authority.
-
-### 15.3 Lifecycle tests
-
-Required boundaries:
+Suppression rule:
 
 ```text
-Auxio process restart
-DoFun process restart
-Android reboot/cold boot
-real ACC sleep/wake
-USB removal/reinsert while relevant media is selected
+suppress stock callback only after a trusted, protocol-compatible Auxio authority
+has accepted the exact command ID into the canonical playback command path.
 ```
 
-Do not substitute a warm process restart for ACC or cold boot.
+If `sendCommand`/`ResultReceiver` cannot provide bounded acceptance without unacceptable host-main-thread blocking, implement the smallest explicit synchronous Binder endpoint through the existing exported `com.tw.music.MusicService` component and a distinct bind action. Do not create another Android service or playback authority. The agent must compare both designs using API 29 behaviour and choose the safer implementation.
 
-### 15.4 Optional adapter tests
+Requirements for either design:
 
-When a DoFun or legacy stock module exists:
+- bounded waiting; never indefinite;
+- fail open on timeout or interruption;
+- exactly-once command-ID ledger with bounded memory/expiry;
+- no duplicate execution when public receiver and private presenter paths both fire for one user action;
+- no lock held across Binder calls;
+- no blocking disk/PackageManager work on the callback path;
+- source-specific structured diagnostics in debug builds;
+- no command broadcast treated as acknowledgement.
 
-- kill switch before launch;
-- target unavailable;
-- target process death;
-- adapter process death;
-- protocol mismatch;
-- repeated command deduplication;
-- circuit-breaker activation;
-- ordinary launcher or stock fallback after disable.
+### 7.5 Stock service/player coexistence — high
 
-### 15.5 Evidence classification
+After stock activity `onCreate`, the stock service/player may already be initialised before redirect.
 
-Each test result must be recorded as:
+Stable qualification must establish:
+
+- exactly one active playback MediaSession;
+- exactly one audio-focus owner for music;
+- exactly one playback notification authority;
+- exactly one command effect for previous/next/play/pause/seek;
+- no stock audio resuming after Auxio pause, process restart or ACC wake;
+- no stock queue advancing in parallel.
+
+Do not skip stock service lifecycle or disable the package to force this result. Instrument first. If a conflict is proven, apply the narrowest fingerprint-gated suppression point after Auxio acceptance while preserving service lifecycle.
+
+### 7.6 Kill-switch read failure is permissive — high
+
+The current shared-storage marker check returns “not disabled” after a runtime read failure.
+
+**Required:**
+
+- preserve a previously observed disabled state on read failure;
+- if no successful state has ever been read, fail closed to bridge-disabled;
+- distinguish marker absent, marker present and marker unreadable;
+- expose the transition in bounded logs;
+- consider a modern LSPosed remote preference as a second control plane while preserving the documented shared-storage emergency marker;
+- avoid depending on Auxio app-private storage from the stock UID process.
+
+The kill switch must remain effective if media storage is late after boot/ACC wake.
+
+### 7.7 Whole-APK private-hook compatibility is too coarse — medium/high
+
+One known-compatible alternate stock APK has a different full hash.
+
+**Recommended stable model:**
+
+```text
+mandatory identity:
+  package com.tw.music
+  main process
+  UID 1000
+  trusted Topway certificate
+
+public hook capability:
+  exact class + method + parameter/return signature
+
+private presenter capability:
+  explicit reviewed APK hash registry
+  plus exact class + method signatures
+```
+
+Known reviewed APK hashes should be represented as data, not scattered conditionals. Each registry entry should declare which private capabilities are enabled. Unknown hashes retain public capability-probed paths and no private hooks.
+
+A method-level code fingerprint may be added only if it can be implemented and tested reliably without brittle runtime DEX parsing. A two-hash reviewed registry is already safer and more maintainable than one hard-coded hash.
+
+### 7.8 Target protocol/version compatibility — medium/high
+
+Package and signer matching do not prove the installed Auxio and bridge understand the same command protocol.
+
+Add a protocol handshake via MediaSession command or session extras:
+
+```text
+bridge protocol version
+minimum compatible Auxio protocol
+Auxio build/version/commit
+supported command bitset
+metadata-mirror capability version
+```
+
+The bridge must preserve stock behaviour when protocol compatibility is absent.
+
+### 7.9 Diagnostics currently prove too little — medium
+
+Current tests mainly cover pure command/action mapping. Stable maturation needs executable tests for:
+
+- identity state transitions;
+- target signer matching and signing history;
+- malformed package/component states;
+- build-type pairing;
+- kill-switch present/absent/unreadable;
+- reconnect and Binder/session death;
+- command acknowledgement, timeout and duplicates;
+- concurrent public receiver/private presenter arrivals;
+- exactly-once suppression decisions;
+- metadata/progress bounding and deduplication;
+- handler/looper confinement;
+- APK class inventory and signing;
+- release workflow pairing.
+
+Physical runtime evidence remains separate and must not be fabricated.
+
+---
+
+## 8. Recommended target architecture
+
+```text
+Stock activity / receiver / presenter event
+          │
+          ▼
+Exact capability hook
+          │
+          ├── identity snapshot not trusted ──► stock continues
+          ├── kill switch disabled/read error ─► stock continues
+          ├── target signer/protocol not ready ─► stock continues
+          │
+          ▼
+BridgeCommandEnvelope
+  protocolVersion
+  commandId
+  command
+  seekMs?
+  source
+  sentAtElapsedMs
+          │
+          ▼
+Trusted Auxio command acceptance channel
+  preferred: MediaController.sendCommand + ResultReceiver
+  fallback: narrow synchronous Binder on existing service
+          │
+          ├── rejected/timeout/error ──────────► stock continues
+          │
+          ▼
+Auxio canonical playback command enqueue
+  one PlaybackStateManager / queue / MediaSession authority
+          │
+          ▼
+ACCEPTED(commandId)
+          │
+          ▼
+Bridge suppresses only the matching stock callback
+
+Auxio MediaSession callbacks
+          │
+          ▼
+Metadata/play-state/progress mirror
+  bounded, deduplicated, rate-limited
+  emitted from trusted stock process identity
+```
+
+### 8.1 State snapshots
+
+Keep immutable/atomic snapshots for:
+
+```text
+StockIdentityState
+TargetIdentityState
+TargetProtocolState
+KillSwitchState
+ConnectionState
+CompatibilityCapabilities
+```
+
+Hot callbacks must read snapshots only. Package hashing, signer queries and filesystem checks stay off the hot path.
+
+### 8.2 Command ledger
+
+Use a bounded ledger keyed by command ID and a short source/time deduplication key. It should prevent:
+
+- the same intent being seen through receiver and presenter hooks;
+- late acknowledgements suppressing a later unrelated command;
+- process restart reusing stale IDs;
+- unbounded memory growth.
+
+A process-generation nonce plus monotonic sequence is adequate; random UUIDs are acceptable if allocation impact is bounded.
+
+### 8.3 Fail-open and circuit breaker
+
+Normal failures preserve stock behaviour. Repeated internal failures should trip a local circuit breaker that disables functional bridging for the process generation while leaving logs and stock behaviour available.
+
+Suggested triggers:
+
+- repeated hook callback exceptions;
+- repeated target protocol failures;
+- repeated acknowledgement timeouts;
+- unexpected thread/looper violations;
+- invalid state transitions.
+
+Do not attempt self-restart loops inside the stock process.
+
+---
+
+## 9. Build and packaging requirements
+
+### 9.1 API-100 dependency
+
+Use the official modern libxposed API or a provably exact pinned compile-only subset. Public reference:
+
+- `https://github.com/LSPosed/LSPosed/wiki/Develop-Xposed-Modules-Using-Modern-Xposed-API`
+- `https://github.com/libxposed/api`
+
+Do not package API classes. Do not silently migrate API packages or metadata unless the pinned API source and installed LSPosed runtime prove the change.
+
+### 9.2 Variant pairing
+
+The bridge build must derive target package and signer from the paired Auxio artifact:
+
+```text
+debug:
+  bridge app ID: org.oxycblt.auxio.ts18bridge.debug
+  target app ID: com.tw.media.debug
+  target signer: extracted from paired debug app APK
+
+release:
+  bridge app ID: org.oxycblt.auxio.ts18bridge
+  target app ID: com.tw.media
+  target signer: extracted from paired signed release app APK
+```
+
+The bridge release signer and Auxio target signer may be the same key today, but the implementation must compare the compiled target value to the actual target APK rather than assume they are identical.
+
+### 9.3 APK contract
+
+CI must prove for both bridge variants:
+
+- correct application ID;
+- min SDK 29;
+- expected target SDK;
+- no requested permissions unless a future permission is explicitly justified;
+- non-debuggable release;
+- valid expected release signer;
+- exact API-100 metadata;
+- exact scope `com.tw.music`;
+- one DEX file;
+- entry class is defined;
+- no packaged libxposed classes;
+- no `android.*`, AndroidX, Kotlin, IntelliJ, JetBrains or build-tool class definitions;
+- compiled target package and signer match the paired Auxio APK;
+- release output contains no diagnostics/test fixtures;
+- no raw exact-package Auxio APK or retired Magisk overlay is published.
+
+The check should parse DEX class definitions, not rely on ZIP filenames or source greps alone.
+
+### 9.4 Release workflow ordering
+
+A reliable sequence is:
+
+```text
+1. build/sign Auxio app artifact
+2. inspect and validate app package, SDK, ABI and signer
+3. pass validated app ID/signer/protocol version into bridge build
+4. build/sign bridge artifact
+5. validate bridge package, metadata, class inventory and embedded target contract
+6. stage both artifacts and sidecars
+7. publish only after all paired checks pass
+```
+
+Preserve the repository's transactional Manual Release design.
+
+---
+
+## 10. Auxio command acceptance design
+
+### 10.1 Preferred MediaSession command route
+
+Public Android references:
+
+- `https://developer.android.com/reference/android/media/session/MediaController#sendCommand(java.lang.String,android.os.Bundle,android.os.ResultReceiver)`
+- `https://developer.android.com/reference/android/support/v4/media/session/MediaSessionCompat.Callback#onCommand(java.lang.String,android.os.Bundle,android.os.ResultReceiver)`
+- `https://developer.android.com/reference/android/support/v4/media/session/MediaSessionCompat#getCurrentControllerInfo()`
+
+Add one isolated Auxio-owned contract, for example:
+
+```text
+org.oxycblt.auxio.ts18.bridge.COMMAND
+```
+
+Do not reuse arbitrary notification/custom-action strings.
+
+In `MediaSessionInterface.onCommand`:
+
+1. reject unknown command names;
+2. read controller info only during the callback;
+3. require `com.tw.music` and UID 1000 on API 29;
+4. resolve packages for the UID and verify the stock certificate using an isolated verifier;
+5. validate protocol, command ID, command enum, seek range and age;
+6. deduplicate command ID;
+7. enqueue through the same `PlaybackStateManager` methods used by normal MediaSession controls;
+8. return a small result code/bundle;
+9. never perform disk I/O or long PackageManager work repeatedly on the callback—cache verified controller identity with safe invalidation;
+10. fail closed for this private command while normal public MediaSession controls remain unaffected.
+
+Do not expose the command as a general exported broadcast.
+
+### 10.2 Suppression timing
+
+The stock hook must not wait indefinitely. Measure callback latency on API 29 and TS18. Use the shortest defensible bounded timeout; a timeout means stock continues.
+
+Avoid blocking the stock main thread where possible. If the public API route cannot return acceptance within a safe bound, use a direct Binder endpoint on the existing service rather than increasing the timeout.
+
+### 10.3 Commands
+
+Minimum protocol commands:
+
+```text
+PREVIOUS
+NEXT
+PLAY_PAUSE
+PLAY
+PAUSE
+SEEK_MS
+PUBLISH_NOW / UPDATE
+```
+
+`UPDATE` may be accepted only when it schedules a bounded metadata/state publication; it must not pretend to be a playback action.
+
+### 10.4 Exactly-once behaviour
+
+For each physical/widget input, acceptance criteria are:
+
+```text
+one observed source event
+→ one bridge command ID
+→ one Auxio acceptance
+→ one canonical playback state change
+→ one stock suppression decision
+→ no duplicate public/private path effect
+```
+
+---
+
+## 11. Metadata and progress maturity
+
+Retain the current mirror model but harden it:
+
+- all MediaBrowser and MediaController operations stay on their construction looper;
+- register/unregister callbacks exactly once per controller generation;
+- clear stale callbacks on session destruction;
+- bounded reconnect with user-action retry after exhaustion;
+- publish metadata only when target identity/protocol remains trusted;
+- bound each string and URI;
+- coalesce identical metadata/play-state updates;
+- one-second progress only while playing;
+- publish a final progress update on pause/seek/track change;
+- use elapsed realtime and playback speed to estimate position;
+- clamp position to `[0, duration]` where duration is known;
+- avoid negative speed/overflow surprises;
+- stop ticks promptly on disconnect, kill switch or circuit breaker;
+- keep implicit broadcast privacy documented;
+- keep release logs minimal.
+
+Do not create a second polling service.
+
+---
+
+## 12. Hook compatibility and lifecycle rules
+
+### 12.1 Public surfaces
+
+Each activity/service/receiver hook is an independent capability. Resolve exact methods before installing each hook and report accurate per-capability status. Partial availability is acceptable when the unavailable path remains stock-controlled.
+
+### 12.2 Private presenter surfaces
+
+Install only for a reviewed APK registry entry and exact signatures. Current reviewed hashes:
+
+```text
+4f5495e270a7c86bab232e2b7ee2ecd2d71f3450f6f20ed5f36feaa4229c1518
+3a14ed3b330723a7f88ae3911804858d370ca673e17d67098cce6c9a543c6b49
+```
+
+### 12.3 Activity redirect
+
+Keep redirect fail-open:
+
+- target identity/protocol trusted;
+- exact activity enabled/exported;
+- start succeeds;
+- finish stock activity only after successful target launch.
+
+Do not skip stock `Activity.onCreate()` until a safe lifecycle design is proven. Instrument the stock-service side effect and address only confirmed conflicts.
+
+### 12.4 Process restarts
+
+Validate independently:
+
+- bridge module load;
+- stock process death/reload;
+- Auxio process death/reconnect;
+- DoFun restart;
+- cold boot;
+- ACC sleep/wake.
+
+Static fields are process-local and reset on stock process death.
+
+---
+
+## 13. Kill switch and recovery
+
+Existing marker:
+
+```text
+/storage/emulated/0/Auxio-TS/disable-lsposed-bridge
+```
+
+Requirements:
+
+- marker present means disabled;
+- marker unreadable means disabled until a successful read proves absence;
+- marker state changes are detected within a bounded interval;
+- no hot-path filesystem I/O;
+- previously disabled state is never lost because of one read failure;
+- a second LSPosed-managed preference may be added if supported by the pinned API;
+- module disable + reboot remains the primary rollback;
+- genuine stock package and data remain untouched.
+
+**STOP installation/activation when:**
+
+- stock package is not UID 1000;
+- stock certificate differs;
+- static scope cannot remain exactly `com.tw.music`;
+- target Auxio package/signer/protocol differs;
+- boot-loop recovery is unavailable;
+- the bridge APK contains unexpected runtime/platform classes;
+- the physical unit lacks a verified rollback path.
+
+---
+
+## 14. Required automated verification
+
+### 14.1 Pure unit tests
+
+Cover:
+
+- action/extra mapping;
+- seek bounds;
+- protocol envelope validation;
+- result-code mapping;
+- command-ID deduplication and expiry;
+- suppression decision state machine;
+- kill-switch tri-state behaviour;
+- circuit breaker;
+- stock compatibility registry;
+- signer digest normalisation/history matching;
+- target package matrix;
+- metadata/progress bounds;
+- reconnect delay bounds;
+- log-rate limiter.
+
+### 14.2 Android/Robolectric tests
+
+Cover where practical:
+
+- PackageManager identity combinations;
+- exported/enabled component checks;
+- target signer mismatch;
+- controller identity validation;
+- ResultReceiver acceptance/rejection/timeout;
+- handler confinement;
+- process/session destruction simulation;
+- activity redirect success/failure;
+- no stock suppression for unknown state.
+
+### 14.3 API 29 integration tests
+
+Create a testable public-API harness that proves:
+
+- MediaBrowser connection to the stock-name Auxio wrapper;
+- custom command delivery and ResultReceiver response;
+- current controller information on API 29;
+- malformed/untrusted command rejection;
+- one command produces one canonical playback-manager call;
+- controller/session death reconnects cleanly.
+
+Do not weaken release trust checks merely to enable the harness. Use test-only dependency injection or fixtures excluded from release.
+
+### 14.4 Build/CI checks
+
+Run and retain evidence for:
+
+```bash
+bash ./scripts/bootstrap-dependencies.sh --profile full-build
+bash ./scripts/check-lsposed-bridge-contracts.sh --variant debug
+bash ./scripts/check-dofun-topway-compat.sh
+bash ./scripts/check-headunit-compat-safety.sh
+bash ./scripts/check-manual-release-workflow.sh
+bash ./scripts/ci-gradle.sh \
+  :lsposed-bridge:testDebugUnitTest \
+  :lsposed-bridge:lintDebug \
+  :lsposed-bridge:assembleDebug \
+  :app:testTopwayTwMediaDebugUnitTest \
+  :app:assembleTopwayTwMediaDebug
+```
+
+Add the relevant API 29 and paired-artifact tasks developed by the implementation. Release-equivalent proof must use the actual current head and explicit signing inputs; never claim a signed release check from an unsigned debug build.
+
+---
+
+## 15. Physical TS18 validation authority
+
+A comprehensive repo-owned collector is provided at:
+
+```text
+scripts/evidence/collect-ts18-lsposed-bridge-validation.sh
+```
+
+It is read-only by default, writes under `/storage/emulated/0/Download`, records manual observations and captures timestamped package/process/MediaSession/audio/activity/log evidence. Optional kill-switch management and force-stop tests require explicit environment flags.
+
+### 15.1 Core acceptance matrix
+
+1. **Identity and scope**
+   - bridge reports trusted stock UID/certificate;
+   - correct reviewed stock hash/capabilities;
+   - correct Auxio package/certificate/protocol;
+   - LSPosed scope contains only `com.tw.music`.
+
+2. **Kill switch enabled**
+   - stock music behaviour remains available;
+   - no redirect, forwarding or mirrored state from the bridge;
+   - no stock-process crash.
+
+3. **Widget launch**
+   - fixed DoFun music widget opens Auxio;
+   - stock activity closes;
+   - no duplicate foreground UI.
+
+4. **Exactly-once controls**
+   - previous, next, play, pause, play/pause and seek each affect Auxio once;
+   - no simultaneous stock queue change;
+   - no lost command when Auxio is ready;
+   - stock path remains when Auxio is unavailable/untrusted.
+
+5. **State mirror**
+   - title, artist, album, play state, duration and progress track Auxio;
+   - seek units are milliseconds;
+   - progress stops/settles on pause;
+   - track transitions do not retain stale metadata.
+
+6. **Single authority**
+   - one active playback MediaSession;
+   - one audio-focus owner;
+   - one playback notification;
+   - no stock audio resumes unexpectedly.
+
+7. **Recovery**
+   - Auxio process restart;
+   - stock process restart;
+   - DoFun restart;
+   - cold boot;
+   - ACC sleep/wake;
+   - USB removal/reinsert;
+   - live kill-switch activation.
+
+8. **Performance/stability**
+   - no ANR, fatal exception or boot loop;
+   - no unbounded reconnect/log loop;
+   - no persistent high CPU or storage writes;
+   - bridge APK startup does not materially delay stock process/launcher readiness.
+
+### 15.2 Evidence classification
+
+Physical results must be recorded as:
 
 ```text
 PASS
@@ -864,93 +1058,78 @@ SKIPPED
 UNCLEAR
 ```
 
-Do not convert missing evidence into PASS.
+A missing or unclear result is not a pass. CI/emulator results must not fill physical columns.
 
-## 16. Diagnostic script requirements
+---
 
-The committed script path remains:
+## 16. Release-readiness gates
 
-```text
-scripts/evidence/collect-ts18-lsposed-bridge-validation.sh
-```
+The agent should advance implementation as far as possible in one focused PR, but final status must be honest.
 
-The historical filename may remain to avoid path churn, but its content must validate direct Auxio integration first.
+### Software-complete gate
 
-Script properties:
+All must pass:
 
-- `/system/bin/sh` compatible;
-- root-aware;
-- read-only by default;
-- no package disable/uninstall or data clearing;
-- no automatic LSPosed scope changes;
-- no unbounded `logcat` or polling;
-- timestamped output under `/storage/emulated/0/Download/Auxio-TS/bridge-validation/`;
-- explicit command, exit code and execution identity in captures;
-- manual prompts for visual/audio results;
-- detects unexpected stock process/session activation;
-- compresses the completed evidence directory;
-- reports final archive path and checksum when available.
+- no unexpected packaged classes;
+- correct debug/release pairing;
+- stock and target signer verification;
+- protocol handshake;
+- accepted-command path with exactly-once tests;
+- fail-open suppression state machine;
+- kill-switch tri-state hardening;
+- reviewed stock compatibility registry;
+- comprehensive unit/API29/contract CI;
+- signed paired release workflow validation;
+- debug/release diagnostics separation;
+- docs and physical collector current.
 
-## 17. Rollback model
+### Stable physical gate
 
-Track A rollback:
+All applicable core acceptance matrix items must pass on the exact TS18 build, including cold boot and ACC sleep/wake.
 
-```text
-install previous Auxio-TS APK
-or disable the changed Topway adapter through app configuration if implemented
-```
-
-Track B rollback:
+Until physical evidence is supplied, the correct conclusion is:
 
 ```text
-disable DoFun adapter in LSPosed or uninstall its APK
-restart DoFun/reboot as required
-Auxio remains independently usable
+software implementation and CI hardened;
+physical stable-release qualification still pending.
 ```
 
-Track C rollback:
+Do not artificially preserve bugs to keep the module “experimental”. Implement mature safeguards and tests now. Do not remove physical-validation gates or claim they passed.
 
-```text
-disable legacy stock shim in LSPosed or uninstall its APK
-restart stock process/reboot as required
-stock behaviour remains available
-```
+---
 
-No rollback should require deleting a protected APK or writing system partitions.
+## 17. Public references
 
-## 18. Stop conditions
+Use primary sources for API decisions:
 
-Say STOP and request evidence or approval when:
+- Modern LSPosed module development: `https://github.com/LSPosed/LSPosed/wiki/Develop-Xposed-Modules-Using-Modern-Xposed-API`
+- libxposed API source: `https://github.com/libxposed/api`
+- `MediaController.sendCommand`: `https://developer.android.com/reference/android/media/session/MediaController#sendCommand(java.lang.String,android.os.Bundle,android.os.ResultReceiver)`
+- `MediaSessionCompat.Callback.onCommand`: `https://developer.android.com/reference/android/support/v4/media/session/MediaSessionCompat.Callback#onCommand(java.lang.String,android.os.Bundle,android.os.ResultReceiver)`
+- `MediaSessionCompat.getCurrentControllerInfo`: `https://developer.android.com/reference/android/support/v4/media/session/MediaSessionCompat#getCurrentControllerInfo()`
+- Platform MediaSession controller identity: `https://developer.android.com/reference/android/media/session/MediaSession#getCurrentControllerInfo()`
+- MediaBrowser threading: `https://developer.android.com/reference/android/support/v4/media/MediaBrowserCompat`
 
-- a required DoFun-private method cannot be identified exactly;
-- the current DoFun signer/APK identity cannot be established before functional hooks;
-- target Auxio signer pairing cannot be generated during the build;
-- a proposed path requires platform signing, shared UID changes or protected package replacement;
-- only broad guessed hooks or unbounded main-thread waits appear possible;
-- rollback is inadequate.
+The repository's own source, current CI logs/artifacts and exact-device evidence remain the implementation authority. Public API documentation does not prove DoFun or TS18 runtime behaviour.
 
-Do not stop merely because physical validation is pending. Complete all software, CI, documentation and collector work that can be completed honestly.
+---
 
-## 19. Expected mature outcome
+## 18. Final engineering position
 
-Preferred outcome:
+**Observed:** the current bridge has a sound narrow trust/scope concept and many fail-open safeguards.
 
-```text
-Auxio-TS com.tw.media directly satisfies DoFun package/component, command, state and media contracts.
-The historical com.tw.music LSPosed bridge is retired from the primary release.
-No LSPosed module is shipped unless exact evidence proves a launcher-private or legacy relay need.
-```
+**Observed:** its inspected debug APK packaging is unacceptable for injection into a UID-1000 stock process.
 
-Acceptable evidence-gated alternative:
+**Observed:** debug bridge/app packages are not paired.
 
-```text
-A small single-DEX DoFun adapter scoped only to com.dofun.variety forwards exact private controls to Auxio through a versioned acknowledged protocol and fails open.
-```
+**Observed:** the target Auxio signer and protocol are not verified.
 
-Optional compatibility alternative:
+**Observed:** void MediaController transport submission is not positive command acceptance.
 
-```text
-A separately named legacy stock shim remains for proven stock-relay configurations, but is not represented as required by the current com.tw.media path.
-```
+**Observed:** two reviewed stock APK hashes share the trusted signer and relevant control semantics.
 
-A stable-release claim requires both complete repository/software gates and retained physical TS18 evidence for fixed-widget controls, single playback authority, process restarts, cold boot and ACC wake.
+**Inferred:** stock service initialisation before redirect can create duplicate authority unless proven inert.
+
+**Requires physical validation:** fixed-widget consumption, exactly-once controls, single playback authority, restarts, cold boot and ACC sleep/wake.
+
+**Recommended implementation outcome:** a small, single-DEX, statically scoped, dual-signer-verified, protocol-paired API-100 bridge that suppresses only positively accepted commands, retains stock lifecycle and rollback, and ships with complete CI and a bounded physical validation collector.

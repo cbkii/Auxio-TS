@@ -109,19 +109,12 @@ def highest_below(versions: Iterable[SemVer], target: SemVer) -> SemVer | None:
     return max(eligible) if eligible else None
 
 
-@dataclass(frozen=True)
-class VersionResolution:
-    target: SemVer
-    effective_mode: str
-    reason: str
-
-
 def validate_version_authority(
     git_versions: set[SemVer],
     release_versions: set[SemVer],
-    draft_versions: set[SemVer],
+    mode: str,
 ) -> None:
-    """Reject only ambiguous or impossible external authority states."""
+    """Reject release/tag states that would make a new version skip repairable state."""
 
     release_without_tag = release_versions - git_versions
     if release_without_tag:
@@ -131,99 +124,32 @@ def validate_version_authority(
             "STOP for human repair."
         )
 
-    draft_without_release = draft_versions - release_versions
-    if draft_without_release:
-        orphan = max(draft_without_release)
+    if mode != "create_new_release":
+        return
+
+    tag_without_release = git_versions - release_versions
+    if not tag_without_release:
+        return
+    newest_tag_only = max(tag_without_release)
+    newest_release = max(release_versions) if release_versions else None
+    if newest_release is None or newest_tag_only > newest_release:
         fail(
-            f"Draft release index contains {orphan.tag} without a GitHub Release. "
-            "STOP for human repair."
+            f"Latest version authority {newest_tag_only.tag} is an immutable tag without "
+            "a GitHub Release. Use repair_existing_release with that explicit tag instead "
+            "of skipping to a new version."
         )
-
-
-def choose_version_resolution(
-    *,
-    source_version: SemVer,
-    git_versions: set[SemVer],
-    release_versions: set[SemVer],
-    draft_versions: set[SemVer],
-    requested_mode: str,
-    requested_version: SemVer | None,
-) -> VersionResolution:
-    """Choose an idempotent create or repair action from current release authority."""
-
-    validate_version_authority(git_versions, release_versions, draft_versions)
-    external_versions = git_versions | release_versions
-    highest_external = max(external_versions) if external_versions else None
-
-    if requested_mode == "repair_existing_release":
-        if requested_version is None:
-            fail("repair_existing_release requires an explicit version_tag.")
-        if requested_version not in git_versions:
-            fail(
-                f"Repair requires existing immutable tag {requested_version.tag}; "
-                "no matching Git tag was found."
-            )
-        return VersionResolution(
-            requested_version,
-            "repair_existing_release",
-            "explicit_repair",
-        )
-
-    if requested_mode not in {"auto", "create_new_release"}:
-        fail(f"Unsupported release mode: {requested_mode}")
-
-    if requested_version is not None:
-        if requested_version in git_versions:
-            return VersionResolution(
-                requested_version,
-                "repair_existing_release",
-                "explicit_existing_tag",
-            )
-        if highest_external is not None and requested_version <= highest_external:
-            fail(
-                f"Explicit new release {requested_version.tag} must be newer than existing "
-                f"release/tag authority {highest_external.tag}."
-            )
-        return VersionResolution(
-            requested_version,
-            "create_new_release",
-            "explicit_new_tag",
-        )
-
-    if highest_external is not None:
-        if highest_external in git_versions and highest_external not in release_versions:
-            return VersionResolution(
-                highest_external,
-                "repair_existing_release",
-                "resume_latest_tag_without_release",
-            )
-        if highest_external in draft_versions:
-            return VersionResolution(
-                highest_external,
-                "repair_existing_release",
-                "resume_latest_draft_release",
-            )
-
-    if highest_external is None or source_version > highest_external:
-        target = source_version
-        reason = "reuse_source_version"
-    else:
-        target = max(source_version, highest_external).next_patch()
-        reason = "increment_latest_complete_version"
-
-    return VersionResolution(target, "create_new_release", reason)
 
 
 def command_resolve(args: argparse.Namespace) -> None:
     source_version, source_code = read_gradle_metadata(Path(args.source_gradle))
-    git_versions = parse_versions(read_lines(Path(args.git_tags_file)))
-    release_versions = parse_versions(read_lines(Path(args.release_tags_file)))
-    draft_versions = (
-        parse_versions(read_lines(Path(args.draft_release_tags_file)))
-        if args.draft_release_tags_file
-        else set()
-    )
+    git_tag_values = read_lines(Path(args.git_tags_file))
+    release_tag_values = read_lines(Path(args.release_tags_file))
+    git_versions = parse_versions(git_tag_values)
+    release_versions = parse_versions(release_tag_values)
+    external_versions = git_versions | release_versions
     target_release = load_target_release(Path(args.target_release_json))
+
+    validate_version_authority(git_versions, release_versions, args.mode)
 
     requested = args.input_tag.strip()
     requested_version = SemVer.parse(requested) if requested else None
@@ -233,16 +159,37 @@ def command_resolve(args: argparse.Namespace) -> None:
             "vMAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH."
         )
 
-    resolution = choose_version_resolution(
-        source_version=source_version,
-        git_versions=git_versions,
-        release_versions=release_versions,
-        draft_versions=draft_versions,
-        requested_mode=args.mode,
-        requested_version=requested_version,
-    )
-    target = resolution.target
-    effective_mode = resolution.effective_mode
+    if args.mode == "repair_existing_release":
+        if requested_version is None:
+            fail("repair_existing_release requires an explicit version_tag.")
+        target = requested_version
+        if target not in git_versions:
+            fail(
+                f"Repair requires existing immutable tag {target.tag}; "
+                "no matching Git tag was found."
+            )
+    else:
+        if requested_version is not None:
+            target = requested_version
+        else:
+            highest_external = max(external_versions) if external_versions else None
+            # Recover a prior source-only metadata bump without skipping a version.
+            if highest_external is None or source_version > highest_external:
+                target = source_version
+            else:
+                target = max(source_version, highest_external).next_patch()
+
+        if target in git_versions or target in release_versions:
+            fail(
+                f"Target {target.tag} already has a tag or GitHub Release. "
+                "Use repair_existing_release with that explicit tag."
+            )
+        highest_external = max(external_versions) if external_versions else None
+        if highest_external is not None and target <= highest_external:
+            fail(
+                f"New release {target.tag} must be newer than existing release/tag "
+                f"authority {highest_external.tag}."
+            )
 
     tag_exists = target in git_versions
     release_exists = target in release_versions or bool(target_release.get("id"))
@@ -251,36 +198,17 @@ def command_resolve(args: argparse.Namespace) -> None:
             f"GitHub Release {target.tag} exists without a resolvable Git tag. "
             "STOP for human repair."
         )
-    if effective_mode == "create_new_release" and (tag_exists or release_exists):
-        fail(
-            f"New release target {target.tag} unexpectedly already exists. "
-            "Re-run so it can be resolved as an idempotent repair."
-        )
-    if effective_mode == "repair_existing_release" and not tag_exists:
-        fail(f"Repair target {target.tag} has no immutable Git tag.")
-
-    external_versions = git_versions | release_versions
-    highest_external = max(external_versions) if external_versions else None
-    if (
-        effective_mode == "create_new_release"
-        and highest_external is not None
-        and target <= highest_external
-    ):
-        fail(
-            f"New release {target.tag} must be newer than existing release/tag "
-            f"authority {highest_external.tag}."
-        )
 
     previous = highest_below(git_versions, target)
     target_code = target.version_code
     metadata_change_required = source_version != target or source_code != target_code
-    if effective_mode == "create_new_release" and target_code < source_code:
+    if args.mode == "create_new_release" and target_code < source_code:
         fail(
             f"Calculated versionCode {target_code} would regress below source "
             f"versionCode {source_code}."
         )
     if (
-        effective_mode == "create_new_release"
+        args.mode == "create_new_release"
         and target_code == source_code
         and source_version != target
     ):
@@ -289,16 +217,8 @@ def command_resolve(args: argparse.Namespace) -> None:
             f"{source_version.name}."
         )
 
-    unresolved_tag_only = sorted(git_versions - release_versions)
-    apply_requested_status = (
-        target not in release_versions or target in draft_versions
-    )
     result = {
-        "mode": effective_mode,
-        "requested_mode": args.mode,
-        "effective_mode": effective_mode,
-        "resolution_reason": resolution.reason,
-        "apply_requested_status": apply_requested_status,
+        "mode": args.mode,
         "release_tag": target.tag,
         "release_version_name": target.name,
         "release_version_code": target_code,
@@ -310,7 +230,6 @@ def command_resolve(args: argparse.Namespace) -> None:
         "previous_tag": previous.tag if previous else "",
         "highest_git_tag": max(git_versions).tag if git_versions else "",
         "highest_release_tag": max(release_versions).tag if release_versions else "",
-        "unresolved_tag_only_versions": [version.tag for version in unresolved_tag_only],
         "target_release_draft": bool(target_release.get("draft", False)),
         "target_release_prerelease": bool(target_release.get("prerelease", False)),
         "target_release_url": str(target_release.get("html_url", "")),
@@ -394,7 +313,6 @@ def command_plan_assets(args: argparse.Namespace) -> None:
 
     build_variants: list[str] = []
     upload_names: list[str] = []
-    replace_names: list[str] = []
     verify_names: list[str] = []
     debug_workflow_names: list[str] = []
 
@@ -417,16 +335,14 @@ def command_plan_assets(args: argparse.Namespace) -> None:
         elif replace:
             build_variants.append(variant)
             upload_names.extend(names)
-            replace_names.extend(name for name in names if name in existing)
         elif all(present):
             # Complete existing triplet: no rebuild or duplicate upload needed.
             continue
         elif any(present):
-            # Interrupted uploads are expected resumable state. Rebuild the
-            # complete triplet and replace only the pieces already present.
-            build_variants.append(variant)
-            upload_names.extend(names)
-            replace_names.extend(name for name in names if name in existing)
+            fail(
+                f"Partial existing asset triplet for {base}. "
+                "Enable replacement to rebuild it safely."
+            )
         else:
             build_variants.append(variant)
             upload_names.extend(names)
@@ -442,7 +358,6 @@ def command_plan_assets(args: argparse.Namespace) -> None:
             not variant.endswith("_debug") for variant in build_variants
         ),
         "upload_names": upload_names,
-        "replace_names": replace_names,
         "verify_names": verify_names,
         "debug_workflow_names": debug_workflow_names,
     }
@@ -538,88 +453,15 @@ def command_self_test(_: argparse.Namespace) -> None:
 
     v647 = SemVer(6, 4, 7)
     v648 = SemVer(6, 4, 8)
-    v650 = SemVer(6, 5, 0)
-    v655 = SemVer(6, 5, 5)
-
-    resumed_tag = choose_version_resolution(
-        source_version=v647,
-        git_versions={v647, v650},
-        release_versions={v647},
-        draft_versions=set(),
-        requested_mode="auto",
-        requested_version=None,
-    )
-    assert resumed_tag == VersionResolution(
-        v650,
-        "repair_existing_release",
-        "resume_latest_tag_without_release",
-    )
-
-    explicit_new = choose_version_resolution(
-        source_version=v647,
-        git_versions={v647, v650},
-        release_versions={v647},
-        draft_versions=set(),
-        requested_mode="auto",
-        requested_version=v655,
-    )
-    assert explicit_new == VersionResolution(
-        v655,
-        "create_new_release",
-        "explicit_new_tag",
-    )
-
-    explicit_existing = choose_version_resolution(
-        source_version=v647,
-        git_versions={v647, v650},
-        release_versions={v647},
-        draft_versions=set(),
-        requested_mode="auto",
-        requested_version=v650,
-    )
-    assert explicit_existing == VersionResolution(
-        v650,
-        "repair_existing_release",
-        "explicit_existing_tag",
-    )
-
-    resumed_draft = choose_version_resolution(
-        source_version=v647,
-        git_versions={v647, v650},
-        release_versions={v647, v650},
-        draft_versions={v650},
-        requested_mode="auto",
-        requested_version=None,
-    )
-    assert resumed_draft == VersionResolution(
-        v650,
-        "repair_existing_release",
-        "resume_latest_draft_release",
-    )
-
-    incremented = choose_version_resolution(
-        source_version=v647,
-        git_versions={v647, v650},
-        release_versions={v647, v650},
-        draft_versions=set(),
-        requested_mode="auto",
-        requested_version=None,
-    )
-    assert incremented.target == SemVer(6, 5, 1)
-    assert incremented.effective_mode == "create_new_release"
-
-    explicit_repair = choose_version_resolution(
-        source_version=v647,
-        git_versions={v647, v648},
-        release_versions={v647},
-        draft_versions=set(),
-        requested_mode="repair_existing_release",
-        requested_version=v648,
-    )
-    assert explicit_repair.effective_mode == "repair_existing_release"
-
+    validate_version_authority({v647, v648}, {v647}, "repair_existing_release")
     try:
-        validate_version_authority({v647}, {v647, v648}, set())
+        validate_version_authority({v647, v648}, {v647}, "create_new_release")
+    except ReleasePlanError:
+        pass
+    else:
+        raise AssertionError("create mode accepted the newest tag-only release state")
+    try:
+        validate_version_authority({v647}, {v647, v648}, "create_new_release")
     except ReleasePlanError:
         pass
     else:
@@ -635,14 +477,13 @@ def build_parser() -> argparse.ArgumentParser:
     resolve = subparsers.add_parser("resolve")
     resolve.add_argument(
         "--mode",
-        choices=["auto", "create_new_release", "repair_existing_release"],
+        choices=["create_new_release", "repair_existing_release"],
         required=True,
     )
     resolve.add_argument("--input-tag", default="")
     resolve.add_argument("--source-gradle", required=True)
     resolve.add_argument("--git-tags-file", required=True)
     resolve.add_argument("--release-tags-file", required=True)
-    resolve.add_argument("--draft-release-tags-file", default="")
     resolve.add_argument("--target-release-json", required=True)
     resolve.add_argument("--output", required=True)
     resolve.set_defaults(func=command_resolve)

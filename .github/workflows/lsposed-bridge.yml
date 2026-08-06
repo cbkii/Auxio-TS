@@ -79,7 +79,15 @@ jobs:
 
           # Extract debug APK signer
           apk_path="app/build/outputs/apk/topwayTwMedia/debug/app-topwayTwMedia-debug.apk"
-          expected_signer=$($ANDROID_HOME/build-tools/34.0.0/apksigner verify --print-certs $apk_path | grep -oP '(?<=Signer #1 certificate SHA-256 digest: ).*')
+
+          # locate the newest available build tools using the repository's existing pattern
+          apksigner=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n 1)
+
+          # use scripts/lib/apksigner-certificate.sh
+          source "scripts/lib/apksigner-certificate.sh"
+          signing_report=$("$apksigner" verify --verbose --print-certs "$apk_path" 2>&1)
+          expected_signer=$(extract_apksigner_certificate_sha256 "$signing_report")
+          expected_signer=$(printf '%s' "$expected_signer" | tr '[:lower:]' '[:upper:]')
 
           bash ./scripts/ci-gradle.sh \
             :lsposed-bridge:testDebugUnitTest \
@@ -88,7 +96,15 @@ jobs:
 
       - name: Validate packaged API 100 contracts
         shell: bash
-        run: bash ./scripts/check-lsposed-bridge-contracts.sh --variant debug
+        run: |
+          apk_path="app/build/outputs/apk/topwayTwMedia/debug/app-topwayTwMedia-debug.apk"
+          apksigner=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner -perm -u+x 2>/dev/null | sort -V | tail -n 1)
+          source "scripts/lib/apksigner-certificate.sh"
+          signing_report=$("$apksigner" verify --verbose --print-certs "$apk_path" 2>&1)
+          expected_signer=$(extract_apksigner_certificate_sha256 "$signing_report")
+          expected_signer=$(printf '%s' "$expected_signer" | tr '[:lower:]' '[:upper:]')
+          EXPECTED_SIGNER_SHA256="${expected_signer}" bash ./scripts/check-lsposed-bridge-contracts.sh --variant debug --apk lsposed-bridge/build/outputs/apk/debug/lsposed-bridge-debug.apk --target-apk "$apk_path"
+
 
       - name: Prepare bridge download
         id: prepare
