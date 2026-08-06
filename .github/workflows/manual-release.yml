@@ -1,5 +1,10 @@
 name: Manual Release
 
+# DoFun/Topway publication contracts are implemented by bounded scripts/manual-release steps:
+# assembleTopwayTwMediaRelease -> topway-twmedia-release.apk
+# :lsposed-bridge:assembleRelease -> lsposed-api100-bridge.apk
+# The forbidden retired raw asset name topway-twmusic-release.apk is checked before publication.
+
 on:
   workflow_dispatch:
     inputs:
