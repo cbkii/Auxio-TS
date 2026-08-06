@@ -64,18 +64,27 @@ interface SourceAwareFS : FS {
 
 /** Stable source-key policy shared by file-system adapters and the incremental cache. */
 object SourceIdentity {
-    fun forFile(file: File): String = forVolume(file.path.volume)
+    fun forFile(file: File): String = file.sourceKey ?: forVolume(file.path.volume)
 
+    /** Volume-scoped identity for genuinely volume-wide sources and legacy attribution only. */
     fun forLocation(location: Location): String = forVolume(location.path.volume)
 
     /**
-     * The canonical identity of one configured root.
+     * Canonical alias/deduplication identity of one configured root.
      *
-     * [forLocation] is volume-scoped because the incremental cache tracks availability per volume,
-     * so several distinct folders on one volume deliberately share a scan key. Deduplication needs
-     * the narrower identity of the exact configured root, which is what this returns.
+     * This value intentionally omits the backend namespace. SAF and DirectFS ledger authority must
+     * use [forConfiguredRoot] so two explicit folders on one volume remain independent and the same
+     * visible root reached through different backends cannot collide. [forLocation] remains only
+     * for genuinely volume-wide sources and legacy emitted rows that lack an explicit source key.
      */
     fun canonicalKeyForLocation(location: Location): String = canonicalKeyForUri(location.uri)
+
+    /** Stable ledger identity for one exact configured root and backend. */
+    fun forConfiguredRoot(sourceType: String, uri: Uri): String =
+        "${sourceType.lowercase()}:${canonicalKeyForUri(uri)}"
+
+    fun forConfiguredRoot(sourceType: String, location: Location): String =
+        forConfiguredRoot(sourceType, location.uri)
 
     /** The canonical identity of one configured source URI. */
     fun canonicalKeyForUri(uri: Uri): String =

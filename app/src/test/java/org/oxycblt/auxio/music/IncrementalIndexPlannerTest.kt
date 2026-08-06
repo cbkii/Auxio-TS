@@ -45,6 +45,77 @@ import org.oxycblt.musikr.library.MetadataProfile
 
 class IncrementalIndexPlannerTest {
     @Test
+    fun noCacheRequestUsesAForcedSourceLedgerPlan() = runBlocking {
+        val source =
+            SourceSnapshot(
+                sourceKey = "direct:a",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk0",
+                rootPath = "/storage/usbdisk0",
+                available = true,
+                fingerprint = "a",
+                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+            )
+        val original = FakeSourceAwareFs(snapshots = listOf(source))
+        val cache = FakeIncrementalCache()
+        var legacyFallbackUsed = false
+
+        val prepared =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = false,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 1L,
+                legacyWriteOnly = {
+                    legacyFallbackUsed = true
+                    it
+                },
+            )
+
+        assertTrue(prepared.plan?.force == true)
+        assertTrue(cache.plannedForce == true)
+        assertTrue(!legacyFallbackUsed)
+    }
+
+    @Test
+    fun explicitEmptyConfigurationMayProduceARemovalOnlyPlan() = runBlocking {
+        val removed = setOf("direct:removed")
+        val original = FakeSourceAwareFs()
+        val cache = FakeIncrementalCache(removedSourceKeys = removed)
+
+        val prepared =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = false,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 2L,
+                targetSourceKeys = emptySet(),
+                allowEmptySourceSet = true,
+                legacyWriteOnly = { it },
+            )
+        val withoutRemovalAuthority =
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = false,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 2L,
+                targetSourceKeys = emptySet(),
+                allowEmptySourceSet = true,
+                applyRemovedSources = false,
+                legacyWriteOnly = { it },
+            )
+
+        assertEquals(emptySet<String>(), cache.plannedSnapshotKeys)
+        assertEquals(removed, prepared.plan?.removedSourceKeys)
+        assertTrue(prepared.plan?.hasWork == true)
+        assertTrue(withoutRemovalAuthority.plan?.removedSourceKeys.orEmpty().isEmpty())
+        assertEquals(emptySet<String>(), original.selectedSourceKeys)
+    }
+
+    @Test
     fun unavailableAdvisorySnapshotStillAttemptsRealEnumeration() = runBlocking {
         val sourceKey = "third-party:file:///storage/emulated/0/Audio"
         val original =
@@ -151,6 +222,37 @@ class IncrementalIndexPlannerTest {
     }
 
     @Test
+    fun ledgerPlanningFailurePropagatesInsteadOfBecomingPreflightUnavailable() = runBlocking {
+        val source =
+            SourceSnapshot(
+                sourceKey = "direct:a",
+                sourceType = "DIRECT_FS",
+                rootUri = "file:///storage/usbdisk0",
+                rootPath = "/storage/usbdisk0",
+                available = true,
+                fingerprint = "a",
+                fingerprintStrength = SourceFingerprintStrength.AUTHORITATIVE,
+            )
+        val failure = IllegalStateException("Room ledger failure")
+        val original = FakeSourceAwareFs(snapshots = listOf(source))
+        val cache = FakeIncrementalCache(planningFailure = failure)
+
+        try {
+            IncrementalIndexPlanner.prepare(
+                fs = original,
+                cache = cache,
+                withCache = true,
+                profile = MetadataProfile.LEAN,
+                configurationRevision = 1L,
+                legacyWriteOnly = { it },
+            )
+            fail("Expected ledger planning failure")
+        } catch (actual: IllegalStateException) {
+            assertTrue(actual === failure)
+        }
+    }
+
+    @Test
     fun emptyPreflightFailsWithoutPublishingAnEmptyScan() = runBlocking {
         val original = FakeSourceAwareFs()
         val cache = FakeIncrementalCache()
@@ -203,8 +305,12 @@ class IncrementalIndexPlannerTest {
         override fun track(): Flow<FSUpdate> = emptyFlow()
     }
 
-    private class FakeIncrementalCache : MutableCache, IncrementalCache {
+    private class FakeIncrementalCache(
+        private val removedSourceKeys: Set<String> = emptySet(),
+        private val planningFailure: RuntimeException? = null,
+    ) : MutableCache, IncrementalCache {
         var plannedSnapshots: List<SourceSnapshot>? = null
+        var plannedForce: Boolean? = null
         val plannedSnapshotKeys: Set<String>?
             get() = plannedSnapshots?.mapTo(linkedSetOf()) { it.sourceKey }
 
@@ -216,7 +322,9 @@ class IncrementalIndexPlannerTest {
             metadataProfile: MetadataProfile,
             configurationRevision: Long,
         ): IncrementalScanPlan {
+            planningFailure?.let { throw it }
             plannedSnapshots = snapshots
+            plannedForce = force
             return IncrementalScanPlan(
                 scanId = "scan",
                 scanSources = snapshots.filter { it.available },
@@ -226,6 +334,7 @@ class IncrementalIndexPlannerTest {
                 metadataProfile = metadataProfile,
                 configurationRevision = configurationRevision,
                 force = force,
+                removedSourceKeys = removedSourceKeys,
             )
         }
 
@@ -241,7 +350,8 @@ class IncrementalIndexPlannerTest {
 
         override suspend fun markSourceFailed(sourceKey: String, detail: String) = Unit
 
-        override suspend fun commitScan(): IncrementalScanCommit {
+        override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {
+            check(commitGuard())
             val plan = requireNotNull(active)
             active = null
             return IncrementalScanCommit(

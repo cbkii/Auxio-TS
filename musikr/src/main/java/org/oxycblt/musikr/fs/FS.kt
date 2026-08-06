@@ -49,6 +49,8 @@ data class File(
     val mimeType: String,
     val size: Long,
     val parent: Deferred<Directory>?,
+    /** Backend-qualified exact configured-root identity for incremental attribution. */
+    val sourceKey: String? = null,
 ) : FSEntry
 
 sealed interface FSUpdate {

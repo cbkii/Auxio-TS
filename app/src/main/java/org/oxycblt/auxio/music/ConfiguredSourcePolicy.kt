@@ -23,7 +23,6 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.music.locations.LocationMode
-import org.oxycblt.auxio.music.locations.MusicSourceCanonicalizer
 import org.oxycblt.auxio.music.locations.MusicSourcePathNormalizer
 import org.oxycblt.musikr.fs.CanonicalSourcePolicy
 
@@ -82,7 +81,6 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
 
     fun snapshot(): Snapshot {
         val mode = settings.locationMode
-        val query = if (mode == LocationMode.MEDIA_STORE) null else settings.safQuery
         val configured = settings.configuredSourceSpecs.distinctBy { it.canonicalKey }
         val sources =
             configured.map { spec ->
@@ -117,32 +115,8 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
             }
         // The revision keys on canonical identity so semantically equivalent aliases such as
         // /sdcard/Music and /storage/emulated/0/Music never look like a configuration change.
-        return Snapshot(
-            mode,
-            sources,
-            configurationRevision(
-                mode,
-                if (mode == LocationMode.MEDIA_STORE) {
-                    emptyList()
-                } else {
-                    val sourceQuery = requireNotNull(query)
-                    buildList {
-                        sources.forEach {
-                            add(
-                                "source:${it.canonicalKey}|${it.origin.name}|" +
-                                    it.traversalScope?.name.orEmpty()
-                            )
-                        }
-                        sourceQuery.exclude
-                            .map(MusicSourceCanonicalizer::canonicalKeyOf)
-                            .distinct()
-                            .sorted()
-                            .forEach { add("exclude:$it") }
-                        add("withHidden:${sourceQuery.withHidden}")
-                    }
-                },
-            ),
-        )
+        // SourceConfigurationIdentity is the single definition shared with the indexing path.
+        return Snapshot(mode, sources, SourceConfigurationIdentity.revision(settings))
     }
 
     /** Compatibility view for DirectFS and raw Fast Resume callers. */
@@ -251,19 +225,6 @@ class ConfiguredSourcePolicy @Inject constructor(private val settings: MusicSett
             return USB_DISK_PATH.matches(path) ||
                 PREPARED_USB_PATH.matches(path) ||
                 UUID_STORAGE_PATH.matches(path)
-        }
-
-        private fun configurationRevision(mode: LocationMode, canonicalKeys: List<String>): Long {
-            var hash = 1125899906842597L
-            val text = buildString {
-                append(mode.name)
-                canonicalKeys.forEach {
-                    append('\u0000')
-                    append(it)
-                }
-            }
-            text.forEach { hash = hash * 31L + it.code }
-            return hash
         }
     }
 }

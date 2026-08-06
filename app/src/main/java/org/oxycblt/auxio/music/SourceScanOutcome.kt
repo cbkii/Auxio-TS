@@ -97,3 +97,13 @@ sealed interface SourceScanOutcome {
         }
     }
 }
+
+/** Session truthfulness is broader than durable source authority. */
+internal fun SourceScanOutcome.isPartialSessionResult(
+    unresolvedSourceKeys: Set<String>,
+    enrichmentComplete: Boolean,
+): Boolean =
+    this is SourceScanOutcome.Partial ||
+        this is SourceScanOutcome.Truncated ||
+        unresolvedSourceKeys.isNotEmpty() ||
+        !enrichmentComplete

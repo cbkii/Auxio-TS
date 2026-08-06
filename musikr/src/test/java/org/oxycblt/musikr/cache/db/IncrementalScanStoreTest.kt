@@ -30,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -158,6 +159,47 @@ class IncrementalScanStoreTest {
     }
 
     @Test
+    fun `authority loss at the Room commit boundary preserves the prior generation`() =
+        runBlocking {
+            val original = snapshot("v1")
+            val first = store.planScan(listOf(original), false, MetadataProfile.LEAN, 1L)
+            store.beginScan(first)
+            store.stage(cachedFile("alpha.mp3", modifiedMs = 1L))
+            store.commitScan()
+
+            val replacement =
+                store.planScan(
+                    listOf(original.copy(fingerprint = "v2")),
+                    false,
+                    MetadataProfile.FULL,
+                    2L,
+                )
+            store.beginScan(replacement)
+            store.stage(cachedFile("alpha.mp3", modifiedMs = 2L))
+            var checks = 0
+            val cancelled =
+                try {
+                    store.commitScan { checks++ == 0 }
+                    fail("Expected authority loss inside Room transaction")
+                    null
+                } catch (expected: CancellationException) {
+                    expected
+                }
+            store.abortScan(cancelled)
+
+            assertEquals(2, checks)
+            assertEquals("v1", db.incrementalDao().sourceLedger(original.sourceKey)?.fingerprint)
+            assertEquals(
+                1L,
+                db.readDao()
+                    .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+                    ?.modifiedMs,
+            )
+            assertEquals(1, db.incrementalLibraryDao().songCount())
+            assertNull(store.activePlan())
+        }
+
+    @Test
     fun `changed file that no longer validates is removed only after successful commit`() =
         runBlocking {
             val first = store.planScan(listOf(snapshot("v1")), false, MetadataProfile.LEAN, 1L)
@@ -189,19 +231,35 @@ class IncrementalScanStoreTest {
     }
 
     @Test
-    fun `removed configured source becomes unavailable without deleting its cache`() = runBlocking {
+    fun `removed source stays readable until the replacement commits`() = runBlocking {
         val usb0 = snapshot("usb0", "/storage/usbdisk0")
-        val usb1 = snapshot("usb1", "/storage/usbdisk1")
+        val usb1 = snapshot("usb1-v1", "/storage/usbdisk1")
         val first = store.planScan(listOf(usb0, usb1), false, MetadataProfile.LEAN, 1L)
         store.beginScan(first)
         store.stage(cachedFile("alpha.mp3", 1L, "/storage/usbdisk0"))
         store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
         store.commitScan()
 
-        val next = store.planScan(listOf(usb1), false, MetadataProfile.LEAN, 1L)
+        val replacementSource = usb1.copy(fingerprint = "usb1-v2")
+        val failedPlan = store.planScan(listOf(replacementSource), false, MetadataProfile.LEAN, 2L)
+        assertEquals(setOf(usb0.sourceKey), failedPlan.removedSourceKeys)
+        assertTrue(db.incrementalDao().sourceLedger(usb0.sourceKey)?.available == true)
+        assertEquals(2, store.compatibilityCachedFiles().toList().size)
 
-        assertEquals(setOf(usb0.sourceKey), next.unavailableSourceKeys)
-        assertEquals(setOf(usb1.sourceKey), next.reuseSourceKeys)
+        store.beginScan(failedPlan)
+        store.markSourceFailed(usb1.sourceKey, "replacement failed")
+        val failed = store.commitScan()
+        assertTrue(failed.removedSources.isEmpty())
+        assertTrue(db.incrementalDao().sourceLedger(usb0.sourceKey)?.available == true)
+        assertEquals(2, store.compatibilityCachedFiles().toList().size)
+
+        val successfulPlan =
+            store.planScan(listOf(replacementSource), false, MetadataProfile.LEAN, 2L)
+        store.beginScan(successfulPlan)
+        store.stage(cachedFile("beta.mp3", 2L, "/storage/usbdisk1"))
+        val successful = store.commitScan()
+
+        assertEquals(setOf(usb0.sourceKey), successful.removedSources)
         assertFalse(db.incrementalDao().sourceLedger(usb0.sourceKey)?.available ?: true)
         assertEquals(
             listOf("file:///storage/usbdisk1/beta.mp3"),
@@ -211,7 +269,91 @@ class IncrementalScanStoreTest {
     }
 
     @Test
-    fun `temporary unmount never becomes deletion`() = runBlocking {
+    fun `unavailable configured source blocks committed removal`() = runBlocking {
+        val omitted = snapshot("usb0", "/storage/usbdisk0")
+        val unavailable = snapshot("usb1", "/storage/usbdisk1")
+        val first = store.planScan(listOf(omitted, unavailable), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L, "/storage/usbdisk0"))
+        store.stage(cachedFile("beta.mp3", 1L, "/storage/usbdisk1"))
+        store.commitScan()
+
+        val replacement =
+            store.planScan(
+                listOf(unavailable.copy(available = false, fingerprint = null)),
+                false,
+                MetadataProfile.LEAN,
+                2L,
+            )
+        assertEquals(setOf(omitted.sourceKey), replacement.removedSourceKeys)
+        assertEquals(setOf(unavailable.sourceKey), replacement.unavailableSourceKeys)
+        store.beginScan(replacement)
+        val commit = store.commitScan()
+
+        assertTrue(commit.removedSources.isEmpty())
+        assertTrue(db.incrementalDao().sourceLedger(omitted.sourceKey)?.available == true)
+        assertEquals(2, store.compatibilityCachedFiles().toList().size)
+    }
+
+    @Test
+    fun `removal-only configuration commits deterministically`() = runBlocking {
+        val source = snapshot("v1")
+        val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        val removal = store.planScan(emptyList(), true, MetadataProfile.LEAN, 2L)
+        assertTrue(removal.hasWork)
+        assertEquals(setOf(source.sourceKey), removal.removedSourceKeys)
+        store.beginScan(removal)
+        val commit = store.commitScan()
+
+        assertEquals(setOf(source.sourceKey), commit.removedSources)
+        assertEquals(0, db.incrementalLibraryDao().songCount())
+        assertEquals(1, db.readDao().selectAllSongs().size)
+
+        val repeated = store.planScan(emptyList(), true, MetadataProfile.LEAN, 2L)
+        assertFalse(repeated.hasWork)
+        assertTrue(repeated.removedSourceKeys.isEmpty())
+    }
+
+    @Test
+    fun `failed re-add keeps a committed removal hidden until success`() = runBlocking {
+        val source = snapshot("v1")
+        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        val removal = store.planScan(emptyList(), true, MetadataProfile.LEAN, 2L)
+        store.beginScan(removal)
+        store.commitScan()
+        assertFalse(db.incrementalDao().sourceLedger(source.sourceKey)?.available ?: true)
+        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
+
+        val readded = source.copy(fingerprint = "v2")
+        val failedPlan = store.planScan(listOf(readded), false, MetadataProfile.LEAN, 3L)
+        assertFalse(db.incrementalDao().sourceLedger(source.sourceKey)?.available ?: true)
+        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
+        store.beginScan(failedPlan)
+        store.markSourceFailed(source.sourceKey, "re-add failed")
+        store.commitScan()
+
+        assertFalse(db.incrementalDao().sourceLedger(source.sourceKey)?.available ?: true)
+        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
+
+        val successfulPlan = store.planScan(listOf(readded), false, MetadataProfile.LEAN, 3L)
+        store.beginScan(successfulPlan)
+        store.stage(cachedFile("alpha.mp3", 2L))
+        store.commitScan()
+
+        assertTrue(db.incrementalDao().sourceLedger(source.sourceKey)?.available == true)
+        assertEquals(1, store.compatibilityCachedFiles().toList().size)
+    }
+
+    @Test
+    fun `temporary unmount preserves the committed generation as unresolved`() = runBlocking {
         val mounted = snapshot("v1")
         val first = store.planScan(listOf(mounted), false, MetadataProfile.LEAN, 1L)
         store.beginScan(first)
@@ -223,10 +365,123 @@ class IncrementalScanStoreTest {
 
         assertFalse(plan.hasWork)
         assertEquals(setOf(mounted.sourceKey), plan.unavailableSourceKeys)
-        assertEquals(1, db.readDao().selectAllSongs().size)
-        assertFalse(db.incrementalDao().sourceLedger(mounted.sourceKey)?.available ?: true)
-        assertTrue(store.compatibilityCachedFiles().toList().isEmpty())
-        assertEquals(1, db.readDao().selectAllSongs().size)
+        assertEquals(setOf(mounted.sourceKey), plan.reuseSourceKeys)
+        assertTrue(db.incrementalDao().sourceLedger(mounted.sourceKey)?.available == true)
+        assertEquals(1, store.compatibilityCachedFiles().toList().size)
+    }
+
+    @Test
+    fun `forced scan uses pending generation and abort preserves committed rows`() = runBlocking {
+        val source = snapshot("v1")
+        val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        val forced =
+            store.planScan(listOf(source.copy(fingerprint = "v2")), true, MetadataProfile.LEAN, 2L)
+        store.beginScan(forced)
+        val inFlight = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+        assertEquals(1L, inFlight.lastCommittedGeneration)
+        assertEquals(2L, inFlight.pendingGeneration)
+        assertTrue(inFlight.incomplete)
+        store.abortScan(IllegalStateException("failed first configuration"))
+
+        val retained = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+        assertEquals(1L, retained.lastCommittedGeneration)
+        assertNull(retained.pendingGeneration)
+        assertEquals(
+            1L,
+            db.readDao()
+                .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+                ?.modifiedMs,
+        )
+    }
+
+    @Test
+    fun `metadata enrichment updates profile without owning source generation`() = runBlocking {
+        val source = snapshot("v1")
+        val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+        val before = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+
+        val enrichment = store.planScan(listOf(source), false, MetadataProfile.FULL, 1L)
+        assertTrue(enrichment.enrichmentOnly)
+        store.beginScan(enrichment)
+        val during = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+        assertEquals(before.lastCommittedGeneration, during.lastCommittedGeneration)
+        assertEquals(before.pendingGeneration, during.pendingGeneration)
+        assertEquals(before.incomplete, during.incomplete)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        val commit = store.commitScan()
+        val after = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+
+        assertTrue(commit.enrichmentOnly)
+        assertTrue(commit.enrichmentComplete)
+        assertEquals(before.lastCommittedGeneration, after.lastCommittedGeneration)
+        assertEquals(before.fingerprint, after.fingerprint)
+        assertEquals(before.configurationRevision, after.configurationRevision)
+        assertEquals(MetadataProfile.FULL.name, after.committedProfile)
+        assertEquals(1, db.incrementalLibraryDao().songCount())
+    }
+
+    @Test
+    fun `enrichment abort and failure preserve base authority`() = runBlocking {
+        val source = snapshot("v1")
+        val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+        val before = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+
+        val cancelled = store.planScan(listOf(source), false, MetadataProfile.FULL, 1L)
+        store.beginScan(cancelled)
+        store.stage(cachedFile("alpha.mp3", 2L))
+        store.abortScan(CancellationException("optional work stopped"))
+        val afterCancel = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+        assertEquals(before.lastCommittedGeneration, afterCancel.lastCommittedGeneration)
+        assertEquals(before.pendingGeneration, afterCancel.pendingGeneration)
+        assertEquals(before.incomplete, afterCancel.incomplete)
+        assertEquals(before.fingerprint, afterCancel.fingerprint)
+
+        val failed = store.planScan(listOf(source), false, MetadataProfile.FULL, 1L)
+        store.beginScan(failed)
+        store.markSourceFailed(source.sourceKey, "rich metadata unavailable")
+        val failureCommit = store.commitScan()
+        val afterFailure = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+        assertFalse(failureCommit.enrichmentComplete)
+        assertEquals(before.lastCommittedGeneration, afterFailure.lastCommittedGeneration)
+        assertEquals(before.pendingGeneration, afterFailure.pendingGeneration)
+        assertEquals(before.incomplete, afterFailure.incomplete)
+        assertEquals(before.fingerprint, afterFailure.fingerprint)
+        assertEquals(1, db.incrementalLibraryDao().songCount())
+    }
+
+    @Test
+    fun `enrichment cannot add or remove committed membership`() = runBlocking {
+        val source = snapshot("v1")
+        val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(first)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        val enrichment = store.planScan(listOf(source), false, MetadataProfile.FULL, 1L)
+        store.beginScan(enrichment)
+        assertTrue(store.stage(cachedFile("beta.mp3", 1L)))
+        val commit = store.commitScan()
+
+        assertFalse(commit.enrichmentComplete)
+        assertEquals(
+            listOf("file:///storage/usbdisk0/alpha.mp3"),
+            store.compatibilityCachedFiles().toList().map { it.file.uri.toString() },
+        )
+        assertNull(db.readDao().selectSongByUri(Uri.parse("file:///storage/usbdisk0/beta.mp3")))
+        assertEquals(
+            MetadataProfile.LEAN.name,
+            db.incrementalDao().sourceLedger(source.sourceKey)?.committedProfile,
+        )
     }
 
     @Test
@@ -284,7 +539,9 @@ class IncrementalScanStoreTest {
                 1L,
             )
         assertEquals(setOf(usb0.sourceKey), next.unavailableSourceKeys)
-        assertEquals(setOf(usb1.sourceKey), next.reuseSourceKeys)
+        assertEquals(setOf(usb0.sourceKey, usb1.sourceKey), next.reuseSourceKeys)
+        assertTrue(db.incrementalDao().sourceLedger(usb0.sourceKey)?.available == true)
+        assertEquals(2, store.compatibilityCachedFiles().toList().size)
         assertEquals(2, db.readDao().selectAllSongs().size)
     }
 

@@ -30,6 +30,8 @@ import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.IncrementalScanCommit
 import org.oxycblt.musikr.cache.IncrementalScanPlan
+import org.oxycblt.musikr.cache.SourceFingerprintReusePolicy
+import org.oxycblt.musikr.cache.SourceScanReason
 import org.oxycblt.musikr.cache.incrementalRank
 import org.oxycblt.musikr.fs.AddedMs
 import org.oxycblt.musikr.fs.Components
@@ -63,52 +65,72 @@ internal class IncrementalScanStore(
     ): IncrementalScanPlan {
         check(currentPlan == null) { "Cannot plan a second scan while one is active" }
         val scanSources = mutableListOf<SourceSnapshot>()
+        val scanReasons = linkedMapOf<String, SourceScanReason>()
         val reuse = linkedSetOf<String>()
         val unavailable = linkedSetOf<String>()
-        val now = System.currentTimeMillis()
+        val removed = linkedSetOf<String>()
         val distinctSnapshots = snapshots.distinctBy { it.sourceKey }
         val currentSourceKeys = distinctSnapshots.mapTo(linkedSetOf()) { it.sourceKey }
+        val nowMs = System.currentTimeMillis()
 
         db.withTransaction {
-            // A source omitted from the complete configured snapshot set is no longer active.
-            // Retain its last-known-good rows for rollback/re-add, but hide them immediately.
             for (ledger in dao.sourceLedgers()) {
-                if (ledger.sourceKey !in currentSourceKeys && ledger.available) {
-                    dao.upsertSourceLedger(ledger.copy(available = false, lastSeenMs = now))
-                    unavailable += ledger.sourceKey
+                if (
+                    ledger.available &&
+                        ledger.sourceKey !in currentSourceKeys &&
+                        ledger.lastCommittedGeneration != null
+                ) {
+                    // Omission is a candidate removal only. Keep the old generation visible until
+                    // the replacement source configuration commits successfully.
+                    removed += ledger.sourceKey
                 }
             }
             for (snapshot in distinctSnapshots) {
                 val previous = dao.sourceLedger(snapshot.sourceKey)
                 val observed =
-                    (previous
-                            ?: SourceLedgerData(
-                                sourceKey = snapshot.sourceKey,
-                                sourceType = snapshot.sourceType,
-                                rootUri = snapshot.rootUri,
-                                rootPath = snapshot.rootPath,
-                                fingerprint = null,
-                                fingerprintStrength = SourceFingerprintStrength.NONE.name,
-                                available = snapshot.available,
-                                lastSeenMs = snapshot.observedAtMs,
-                                lastCommittedGeneration = null,
-                                pendingGeneration = null,
-                                lastSuccessfulScanMs = null,
-                                configurationRevision = configurationRevision,
-                                invalidationVersion = 0L,
-                                committedInvalidationVersion = 0L,
-                                committedProfile = null,
-                                enrichmentRevision = 0L,
-                                incomplete = false,
-                            ))
-                        .observed(snapshot)
+                    if (previous == null) {
+                        SourceLedgerData(
+                            sourceKey = snapshot.sourceKey,
+                            sourceType = snapshot.sourceType,
+                            rootUri = snapshot.rootUri,
+                            rootPath = snapshot.rootPath,
+                            fingerprint = null,
+                            fingerprintStrength = SourceFingerprintStrength.NONE.name,
+                            available = snapshot.available,
+                            lastSeenMs = snapshot.observedAtMs,
+                            lastCommittedGeneration = null,
+                            pendingGeneration = null,
+                            lastSuccessfulScanMs = null,
+                            configurationRevision = configurationRevision,
+                            invalidationVersion = 0L,
+                            committedInvalidationVersion = 0L,
+                            committedProfile = null,
+                            enrichmentRevision = 0L,
+                            incomplete = false,
+                        )
+                    } else {
+                        previous
+                            .observed(snapshot)
+                            .copy(
+                                // Planning may observe physical availability, but only a successful
+                                // source-generation commit may change committed visibility. This
+                                // keeps an active source readable through a transient unmount and
+                                // keeps a user-removed source hidden until a re-add succeeds.
+                                available =
+                                    if (previous.lastCommittedGeneration != null) {
+                                        previous.available
+                                    } else {
+                                        snapshot.available
+                                    }
+                            )
+                    }
                 dao.upsertSourceLedger(observed)
 
                 if (!snapshot.available) {
                     unavailable += snapshot.sourceKey
+                    if (previous?.lastCommittedGeneration != null) reuse += snapshot.sourceKey
                     continue
                 }
-
                 val previousProfile =
                     previous?.committedProfile?.let {
                         runCatching { MetadataProfile.valueOf(it) }.getOrNull()
@@ -116,33 +138,31 @@ internal class IncrementalScanStore(
                 val profileUpgrade =
                     previousProfile == null ||
                         metadataProfile.incrementalRank > previousProfile.incrementalRank
-                val fingerprintChanged =
-                    previous == null ||
-                        previous.fingerprint != snapshot.fingerprint ||
-                        previous.fingerprintStrength != snapshot.fingerprintStrength.name
-                val invalidated =
-                    previous != null &&
-                        previous.invalidationVersion > previous.committedInvalidationVersion
-                val advisoryExpired =
-                    snapshot.fingerprintStrength == SourceFingerprintStrength.ADVISORY &&
-                        (previous?.lastSuccessfulScanMs == null ||
-                            now - previous.lastSuccessfulScanMs >= ADVISORY_REFRESH_MS)
-                val mustScan =
-                    force ||
-                        previous == null ||
-                        previous.lastCommittedGeneration == null ||
-                        previous.incomplete ||
-                        previous.configurationRevision != configurationRevision ||
-                        profileUpgrade ||
-                        invalidated ||
-                        fingerprintChanged ||
-                        advisoryExpired ||
-                        snapshot.fingerprintStrength == SourceFingerprintStrength.NONE
-
-                if (mustScan) scanSources += snapshot else reuse += snapshot.sourceKey
+                val reason =
+                    SourceFingerprintReusePolicy.scanReason(
+                        strength = snapshot.fingerprintStrength,
+                        fingerprint = snapshot.fingerprint,
+                        previous = previous?.reuseState(),
+                        force = force,
+                        profileUpgrade = profileUpgrade,
+                        configurationRevision = configurationRevision,
+                        nowMs = nowMs,
+                    )
+                if (reason == null) {
+                    reuse += snapshot.sourceKey
+                } else {
+                    scanSources += snapshot
+                    scanReasons[snapshot.sourceKey] = reason
+                }
             }
         }
 
+        val enrichmentOnly =
+            IncrementalScanPlan.isEnrichmentOnly(
+                scanSources = scanSources,
+                removedSourceKeys = removed,
+                scanReasons = scanReasons,
+            )
         return IncrementalScanPlan(
             scanId = UUID.randomUUID().toString(),
             scanSources = scanSources,
@@ -151,6 +171,9 @@ internal class IncrementalScanStore(
             metadataProfile = metadataProfile,
             configurationRevision = configurationRevision,
             force = force,
+            scanReasons = scanReasons,
+            removedSourceKeys = removed,
+            enrichmentOnly = enrichmentOnly,
         )
     }
 
@@ -163,6 +186,12 @@ internal class IncrementalScanStore(
                 val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
                 dao.deletePendingForSource(snapshot.sourceKey)
                 dao.deleteSeenForSource(snapshot.sourceKey)
+                if (plan.enrichmentOnly) {
+                    check(ledger.lastCommittedGeneration != null) {
+                        "Enrichment requires a committed source generation"
+                    }
+                    continue
+                }
                 val generation = (ledger.lastCommittedGeneration ?: 0L) + 1L
                 dao.upsertSourceLedger(
                     ledger.copy(
@@ -191,9 +220,9 @@ internal class IncrementalScanStore(
         val plan = currentPlan ?: return
         val sourceKey = SourceIdentity.forFile(file)
         if (sourceKey !in plan.scanSourceKeys) return
-        val profile =
-            dao.uriState(sourceKey, file.uri.toString())?.metadataProfile
-                ?: plan.metadataProfile.name
+        val state = dao.uriState(sourceKey, file.uri.toString())
+        if (plan.enrichmentOnly && state?.available != true) return
+        val profile = state?.metadataProfile ?: plan.metadataProfile.name
         upsertSeen(plan, sourceKey, file, cachedFile, profile)
     }
 
@@ -253,6 +282,13 @@ internal class IncrementalScanStore(
         val plan = currentPlan ?: return false
         val sourceKey = SourceIdentity.forFile(cachedFile.file)
         if (sourceKey !in plan.scanSourceKeys) return false
+        if (
+            plan.enrichmentOnly &&
+                dao.uriState(sourceKey, cachedFile.file.uri.toString())?.available != true
+        ) {
+            // Consume a newly observed file without leaking it through the legacy write path.
+            return true
+        }
         val audio = cachedFile.audio
         val tags = audio?.tags
         val durableCoverId = audio?.coverId ?: readDao.selectSongByUri(cachedFile.file.uri)?.coverId
@@ -331,118 +367,180 @@ internal class IncrementalScanStore(
         }
     }
 
-    override suspend fun commitScan(): IncrementalScanCommit {
+    override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {
         val plan = requireNotNull(currentPlan) { "No incremental scan is active" }
         var changedRows = 0
         var removedRows = 0
+        var enrichmentComplete = true
         val committed = linkedSetOf<String>()
+        val removed = linkedSetOf<String>()
         var committedSuccessfully = false
         try {
+            ensureCommitCurrent(commitGuard)
             db.withTransaction {
-                for (snapshot in plan.scanSources) {
-                    val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
-                    val generation = requireNotNull(ledger.pendingGeneration)
-                    val sourceFailure = sourceFailures[snapshot.sourceKey]
-                    if (sourceFailure != null) {
-                        dao.deletePendingForSource(snapshot.sourceKey)
-                        dao.deleteSeenForSource(snapshot.sourceKey)
+                // Last safe point before ledger, fingerprint, tombstone or enrichment writes.
+                ensureCommitCurrent(commitGuard)
+                if (plan.enrichmentOnly) {
+                    for (snapshot in plan.scanSources) {
+                        val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
+                        val generation = requireNotNull(ledger.lastCommittedGeneration)
+                        if (sourceFailures[snapshot.sourceKey] != null) {
+                            enrichmentComplete = false
+                            dao.deletePendingForSource(snapshot.sourceKey)
+                            dao.deleteSeenForSource(snapshot.sourceKey)
+                            continue
+                        }
+                        var offset = 0
+                        while (true) {
+                            val page =
+                                dao.pendingPage(plan.scanId, snapshot.sourceKey, PAGE_SIZE, offset)
+                            if (page.isEmpty()) break
+                            writeDao.updateSongs(page.map { it.toCachedFileData() })
+                            changedRows += page.size
+                            if (page.size < PAGE_SIZE) break
+                            offset += page.size
+                        }
+                        val committedCount = dao.committedSongCount(snapshot.sourceKey, generation)
+                        val seenCount = dao.seenCount(plan.scanId, snapshot.sourceKey)
+                        dao.publishSeenSongs(
+                            plan.scanId,
+                            snapshot.sourceKey,
+                            generation,
+                            FULL_ENRICHMENT_REVISION,
+                        )
+                        dao.publishSeenUriStates(plan.scanId, snapshot.sourceKey, generation)
+                        if (seenCount == committedCount) {
+                            dao.upsertSourceLedger(
+                                ledger.copy(
+                                    committedProfile = MetadataProfile.FULL.name,
+                                    enrichmentRevision = FULL_ENRICHMENT_REVISION,
+                                )
+                            )
+                        } else {
+                            enrichmentComplete = false
+                        }
+                        committed += snapshot.sourceKey
+                    }
+                } else {
+                    for (snapshot in plan.scanSources) {
+                        val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
+                        val generation = requireNotNull(ledger.pendingGeneration)
+                        val sourceFailure = sourceFailures[snapshot.sourceKey]
+                        if (sourceFailure != null) {
+                            dao.deletePendingForSource(snapshot.sourceKey)
+                            dao.deleteSeenForSource(snapshot.sourceKey)
+                            dao.upsertSourceLedger(
+                                ledger.copy(pendingGeneration = null, incomplete = true)
+                            )
+                            dao.completeGeneration(
+                                plan.scanId,
+                                snapshot.sourceKey,
+                                STATE_FAILED,
+                                System.currentTimeMillis(),
+                                sourceFailure,
+                            )
+                            continue
+                        }
+                        val sourceChangedRows = dao.pendingCount(plan.scanId, snapshot.sourceKey)
+                        var offset = 0
+                        while (true) {
+                            val page =
+                                dao.pendingPage(plan.scanId, snapshot.sourceKey, PAGE_SIZE, offset)
+                            if (page.isEmpty()) break
+                            writeDao.updateSongs(page.map { it.toCachedFileData() })
+                            changedRows += page.size
+                            if (page.size < PAGE_SIZE) break
+                            offset += page.size
+                        }
+                        dao.publishSeenSongs(
+                            plan.scanId,
+                            snapshot.sourceKey,
+                            generation,
+                            if (plan.metadataProfile == MetadataProfile.FULL) {
+                                FULL_ENRICHMENT_REVISION
+                            } else {
+                                ledger.enrichmentRevision
+                            },
+                        )
+                        dao.publishSeenUriStates(plan.scanId, snapshot.sourceKey, generation)
+                        ledger.lastCommittedGeneration?.let { oldGeneration ->
+                            dao.tombstoneMissingUris(
+                                plan.scanId,
+                                snapshot.sourceKey,
+                                oldGeneration,
+                                generation,
+                            )
+                            removedRows +=
+                                dao.deleteMissingCachedRows(
+                                    plan.scanId,
+                                    snapshot.sourceKey,
+                                    oldGeneration,
+                                )
+                        }
+                        val completedAt = System.currentTimeMillis()
                         dao.upsertSourceLedger(
-                            ledger.copy(pendingGeneration = null, incomplete = true)
+                            ledger.copy(
+                                sourceType = snapshot.sourceType,
+                                rootUri = snapshot.rootUri,
+                                rootPath = snapshot.rootPath,
+                                fingerprint = snapshot.fingerprint,
+                                fingerprintStrength = snapshot.fingerprintStrength.name,
+                                available = true,
+                                lastSeenMs = snapshot.observedAtMs,
+                                lastCommittedGeneration = generation,
+                                pendingGeneration = null,
+                                lastSuccessfulScanMs = completedAt,
+                                configurationRevision = plan.configurationRevision,
+                                committedInvalidationVersion = ledger.invalidationVersion,
+                                committedProfile =
+                                    if (
+                                        sourceChangedRows == 0 &&
+                                            ledger.committedProfile == MetadataProfile.FULL.name
+                                    ) {
+                                        MetadataProfile.FULL.name
+                                    } else {
+                                        plan.metadataProfile.name
+                                    },
+                                enrichmentRevision =
+                                    if (plan.metadataProfile == MetadataProfile.FULL) {
+                                        FULL_ENRICHMENT_REVISION
+                                    } else {
+                                        ledger.enrichmentRevision
+                                    },
+                                incomplete = false,
+                            )
                         )
                         dao.completeGeneration(
                             plan.scanId,
                             snapshot.sourceKey,
-                            STATE_FAILED,
-                            System.currentTimeMillis(),
-                            sourceFailure,
+                            STATE_COMMITTED,
+                            completedAt,
+                            null,
                         )
-                        continue
+                        dao.deleteOlderIndexedRows(snapshot.sourceKey, generation)
+                        committed += snapshot.sourceKey
                     }
-                    val sourceChangedRows = dao.pendingCount(plan.scanId, snapshot.sourceKey)
-                    var offset = 0
-                    while (true) {
-                        val page =
-                            dao.pendingPage(plan.scanId, snapshot.sourceKey, PAGE_SIZE, offset)
-                        if (page.isEmpty()) break
-                        writeDao.updateSongs(page.map { it.toCachedFileData() })
-                        changedRows += page.size
-                        if (page.size < PAGE_SIZE) break
-                        offset += page.size
-                    }
-
-                    dao.publishSeenSongs(
-                        plan.scanId,
-                        snapshot.sourceKey,
-                        generation,
-                        if (plan.metadataProfile == MetadataProfile.FULL) FULL_ENRICHMENT_REVISION
-                        else ledger.enrichmentRevision,
-                    )
-                    dao.publishSeenUriStates(plan.scanId, snapshot.sourceKey, generation)
-                    ledger.lastCommittedGeneration?.let { oldGeneration ->
-                        dao.tombstoneMissingUris(
-                            plan.scanId,
-                            snapshot.sourceKey,
-                            oldGeneration,
-                            generation,
-                        )
-                        removedRows +=
-                            dao.deleteMissingCachedRows(
-                                plan.scanId,
-                                snapshot.sourceKey,
-                                oldGeneration,
+                    val replacementComplete =
+                        sourceFailures.isEmpty() &&
+                            plan.unavailableSourceKeys.isEmpty() &&
+                            committed.containsAll(plan.scanSourceKeys)
+                    if (replacementComplete) {
+                        val removedAt = System.currentTimeMillis()
+                        for (sourceKey in plan.removedSourceKeys) {
+                            val ledger = dao.sourceLedger(sourceKey) ?: continue
+                            dao.upsertSourceLedger(
+                                ledger.copy(available = false, lastSeenMs = removedAt)
                             )
+                            removed += sourceKey
+                        }
                     }
-                    val completedAt = System.currentTimeMillis()
-                    dao.upsertSourceLedger(
-                        ledger.copy(
-                            sourceType = snapshot.sourceType,
-                            rootUri = snapshot.rootUri,
-                            rootPath = snapshot.rootPath,
-                            fingerprint = snapshot.fingerprint,
-                            fingerprintStrength = snapshot.fingerprintStrength.name,
-                            available = true,
-                            lastSeenMs = snapshot.observedAtMs,
-                            lastCommittedGeneration = generation,
-                            pendingGeneration = null,
-                            lastSuccessfulScanMs = completedAt,
-                            configurationRevision = plan.configurationRevision,
-                            committedInvalidationVersion = ledger.invalidationVersion,
-                            committedProfile =
-                                if (
-                                    sourceChangedRows == 0 &&
-                                        ledger.committedProfile == MetadataProfile.FULL.name
-                                ) {
-                                    MetadataProfile.FULL.name
-                                } else {
-                                    plan.metadataProfile.name
-                                },
-                            enrichmentRevision =
-                                if (plan.metadataProfile == MetadataProfile.FULL) {
-                                    FULL_ENRICHMENT_REVISION
-                                } else {
-                                    ledger.enrichmentRevision
-                                },
-                            incomplete = false,
-                        )
-                    )
-                    dao.completeGeneration(
-                        plan.scanId,
-                        snapshot.sourceKey,
-                        STATE_COMMITTED,
-                        completedAt,
-                        null,
-                    )
-                    dao.deleteOlderIndexedRows(snapshot.sourceKey, generation)
-                    committed += snapshot.sourceKey
                 }
                 dao.deletePending(plan.scanId)
                 dao.deleteSeen(plan.scanId)
             }
             committedSuccessfully = true
         } finally {
-            if (committedSuccessfully) {
-                currentPlan = null
-            }
+            if (committedSuccessfully) currentPlan = null
         }
         val failed = sourceFailures.toMap()
         sourceFailures.clear()
@@ -455,23 +553,36 @@ internal class IncrementalScanStore(
             changedRows = changedRows,
             removedRows = removedRows,
             metadataProfile = plan.metadataProfile,
+            removedSources = removed,
+            enrichmentOnly = plan.enrichmentOnly,
+            enrichmentComplete = enrichmentComplete,
         )
+    }
+
+    private fun ensureCommitCurrent(commitGuard: () -> Boolean) {
+        if (!commitGuard()) {
+            throw CancellationException("Incremental source commit lost current authority")
+        }
     }
 
     override suspend fun abortScan(cause: Throwable?) {
         val plan = currentPlan ?: return
         try {
             db.withTransaction {
-                for (snapshot in plan.scanSources) {
-                    val ledger = dao.sourceLedger(snapshot.sourceKey) ?: continue
-                    dao.upsertSourceLedger(ledger.copy(pendingGeneration = null, incomplete = true))
-                    dao.completeGeneration(
-                        plan.scanId,
-                        snapshot.sourceKey,
-                        if (cause is CancellationException) STATE_CANCELLED else STATE_FAILED,
-                        System.currentTimeMillis(),
-                        cause?.message?.take(MAX_ERROR_LENGTH),
-                    )
+                if (!plan.enrichmentOnly) {
+                    for (snapshot in plan.scanSources) {
+                        val ledger = dao.sourceLedger(snapshot.sourceKey) ?: continue
+                        dao.upsertSourceLedger(
+                            ledger.copy(pendingGeneration = null, incomplete = true)
+                        )
+                        dao.completeGeneration(
+                            plan.scanId,
+                            snapshot.sourceKey,
+                            if (cause is CancellationException) STATE_CANCELLED else STATE_FAILED,
+                            System.currentTimeMillis(),
+                            cause?.message?.take(MAX_ERROR_LENGTH),
+                        )
+                    }
                 }
                 dao.deletePending(plan.scanId)
                 dao.deleteSeen(plan.scanId)
@@ -581,9 +692,20 @@ internal class IncrementalScanStore(
         override suspend fun resolve(): Long = value
     }
 
+    /** Projects only the durable fields the pure reuse policy is allowed to consult. */
+    private fun SourceLedgerData.reuseState() =
+        SourceFingerprintReusePolicy.LedgerState(
+            hasCommittedGeneration = lastCommittedGeneration != null,
+            incomplete = incomplete,
+            configurationRevision = configurationRevision,
+            invalidated = invalidationVersion > committedInvalidationVersion,
+            fingerprint = fingerprint,
+            fingerprintStrength = fingerprintStrength,
+            lastSuccessfulScanMs = lastSuccessfulScanMs,
+        )
+
     companion object {
         private const val PAGE_SIZE = 256
-        private const val ADVISORY_REFRESH_MS = 6 * 60 * 60 * 1000L
         private const val FULL_ENRICHMENT_REVISION = 1L
         private const val MAX_ERROR_LENGTH = 512
         private const val STATE_PENDING = "PENDING"

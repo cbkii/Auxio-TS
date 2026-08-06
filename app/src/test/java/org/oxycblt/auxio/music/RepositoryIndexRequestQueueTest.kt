@@ -110,6 +110,44 @@ class RepositoryIndexRequestQueueTest {
     }
 
     @Test
+    fun staleEnrichmentIsDiscardedAfterANewerSourceGeneration() {
+        val enrichment =
+            IndexRequest(
+                IndexReason.METADATA_ENRICHMENT,
+                withCache = true,
+                metadataProfile = MetadataProfile.FULL,
+                configurationGeneration = 9L,
+            )
+
+        // Optional lanes hold no attempt lease, so this is the only thing stopping a long
+        // enrichment started under an older configuration from overwriting the library a newer
+        // authoritative scan already committed.
+        assertTrue(IndexRequestPolicy.isSupersededByNewerConfiguration(enrichment, 10L))
+        assertFalse(IndexRequestPolicy.isSupersededByNewerConfiguration(enrichment, 9L))
+        // A scan that somehow outran the persisted generation is not stale.
+        assertFalse(IndexRequestPolicy.isSupersededByNewerConfiguration(enrichment, 8L))
+        // Requests predating the durable checkpoint carry no generation and are left alone.
+        assertFalse(
+            IndexRequestPolicy.isSupersededByNewerConfiguration(
+                enrichment.copy(configurationGeneration = null),
+                10L,
+            )
+        )
+        assertTrue(
+            IndexRequestPolicy.isSupersededByNewerConfiguration(
+                enrichment.copy(reason = IndexReason.USER_REFRESH),
+                10L,
+            )
+        )
+        assertTrue(
+            IndexRequestPolicy.isSupersededByNewerConfiguration(
+                enrichment.copy(reason = IndexReason.SOURCE_OBSERVER),
+                10L,
+            )
+        )
+    }
+
+    @Test
     fun metadataEnrichmentDoesNotOwnTheCommittedSourceCheckpoint() {
         val owner = SourceScanAttemptOwner("process", "service")
         val enrichment =

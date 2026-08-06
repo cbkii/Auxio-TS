@@ -62,6 +62,19 @@ internal object IndexRequestPolicy {
     fun recordsSourceOutcome(request: IndexRequest): Boolean =
         request.reason != IndexReason.METADATA_ENRICHMENT
 
+    /**
+     * Whether a result computed for [request] has been overtaken by a newer source configuration.
+     *
+     * Optional lanes — enrichment above all — run without a checkpoint lease, so nothing else stops
+     * a long enrichment started under an older configuration from overwriting the library a newer
+     * authoritative scan has already committed. A request that carries no generation predates the
+     * durable checkpoint and is left alone.
+     */
+    fun isSupersededByNewerConfiguration(request: IndexRequest, currentGeneration: Long): Boolean {
+        val requestGeneration = request.configurationGeneration ?: return false
+        return requestGeneration < currentGeneration
+    }
+
     fun checkpointAuthority(request: IndexRequest): SourceScanAttemptAuthority? {
         if (!requiresAttemptClaim(request)) return null
         return SourceScanAttemptAuthority(

@@ -30,8 +30,15 @@ Auxio-TS targets TS18, Topway and DoFun Variety head units. Choose the section t
 - [Incremental library pipeline](architecture/INCREMENTAL_LIBRARY_PIPELINE.md)
 - [Canonical music sources and DirectFS traversal](architecture/CANONICAL_SOURCES_AND_DIRECTFS.md)
 - [Source-scan attempt leases and watchdog](architecture/SOURCE_SCAN_ATTEMPT_LEASES.md)
+- [Cached presentation versus source authority](architecture/CACHED_PRESENTATION_VS_SOURCE_AUTHORITY.md)
 - [Startup profiles and benchmarks](architecture/STARTUP_PROFILES_BENCHMARKS.md)
 - [Exact TS18 startup validation](validation/EXACT_TS18_STARTUP_VALIDATION.md)
+
+The source-authority documents define one backend-qualified ledger identity per canonical configured
+root. Durable publication uses a full generation/attempt check immediately before Room, followed by
+a pure in-memory current-session guard as the transaction's first operation. Existing volume-derived
+file attribution remains a legacy read fallback only; new SAF and DirectFS work carries the exact
+configured-root key end to end.
 
 ## 🔬 Evidence and reference
 

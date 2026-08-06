@@ -968,7 +968,7 @@ constructor(
                         isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                         availableProcessors = Runtime.getRuntime().availableProcessors(),
                     )
-                val requestedSourceKeys = request.sourceKeys?.takeIf { it.isNotEmpty() }
+                val requestedSourceKeys = request.sourceKeys
                 val allConfiguredSourceKeys =
                     musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
                 val attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
@@ -978,66 +978,61 @@ constructor(
                         sourceKeys = requestedSourceKeys.takeIf { !request.withCache },
                     )
                 val prepared =
-                    if (!request.withCache) {
-                        L.i(
-                            "Using simple source-authoritative scan; incremental preflight bypassed"
-                        )
-                        IncrementalIndexPlanner.Prepared(
+                    try {
+                        IncrementalIndexPlanner.prepare(
                             fs = rawFs,
-                            cache = WriteOnlyMutableCache(cache),
-                            plan = null,
+                            cache = cache,
+                            withCache = request.withCache,
+                            profile = resolvedProfile,
+                            configurationRevision = sourceConfigurationRevision(),
+                            targetSourceKeys = requestedSourceKeys,
+                            allowEmptySourceSet =
+                                checkpointAuthority != null &&
+                                    requestedSourceKeys?.isEmpty() == true &&
+                                    allConfiguredSourceKeys.isEmpty(),
+                            applyRemovedSources = checkpointAuthority != null,
+                            legacyWriteOnly = ::WriteOnlyMutableCache,
                         )
-                    } else {
-                        try {
-                            IncrementalIndexPlanner.prepare(
-                                fs = rawFs,
-                                cache = cache,
-                                withCache = true,
-                                profile = resolvedProfile,
-                                configurationRevision = sourceConfigurationRevision(),
-                                targetSourceKeys = requestedSourceKeys,
-                                legacyWriteOnly = ::WriteOnlyMutableCache,
-                            )
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            recordSourceScanOutcome(
-                                request,
-                                SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
-                            )
-                            completeSourceAttempt(
-                                request = request,
-                                outcome = SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
-                                unresolvedSourceKeys = attemptedSourceKeys,
-                                reason = "Music-source preflight unavailable",
-                                failure = e,
-                                lastScanFailed = true,
-                            )
-                            if (
-                                checkpointAuthority == null &&
-                                    IndexRequestPolicy.recordsSourceOutcome(request)
-                            ) {
-                                musicSettings.lastScanFailed = true
-                            }
-                            emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
-                            L.w(
-                                e,
-                                "Music-source preflight failed; preserving the last readable library",
-                            )
-                            emitIndexingCompletion(
-                                sessionId,
-                                e,
-                                IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
-                            )
-                            return@traceSuspend
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: SourcePreflightException) {
+                        recordSourceScanOutcome(
+                            request,
+                            SourceScanOutcome.TemporarilyUnavailable(attemptedSourceKeys),
+                        )
+                        completeSourceAttempt(
+                            request = request,
+                            outcome = SourceScanAttemptOutcome.TEMPORARILY_UNAVAILABLE,
+                            unresolvedSourceKeys = attemptedSourceKeys,
+                            reason = "Music-source preflight unavailable",
+                            failure = e,
+                            lastScanFailed = true,
+                        )
+                        if (
+                            checkpointAuthority == null &&
+                                IndexRequestPolicy.recordsSourceOutcome(request)
+                        ) {
+                            musicSettings.lastScanFailed = true
                         }
+                        emitStartupLibraryStatus(StartupLibraryStatus.SourceUnavailable)
+                        L.w(
+                            e,
+                            "Music-source preflight failed; preserving the last readable library",
+                        )
+                        emitIndexingCompletion(
+                            sessionId,
+                            e,
+                            IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                        )
+                        return@traceSuspend
                     }
                 val plan = prepared.plan
                 L.i(
                     "Resolved scan policy [workers=$workerCount profile=$resolvedProfile " +
                         "reason=${request.reason} generation=${request.configurationGeneration} " +
                         "scan=${plan?.scanSourceKeys} reuse=${plan?.reuseSourceKeys} " +
-                        "unavailable=${plan?.unavailableSourceKeys}]"
+                        "unavailable=${plan?.unavailableSourceKeys} " +
+                        "removed=${plan?.removedSourceKeys} enrichmentOnly=${plan?.enrichmentOnly}]"
                 )
 
                 if (
@@ -1111,6 +1106,9 @@ constructor(
                         fs = prepared.fs,
                         metadataProfile = resolvedProfile,
                         scanPlan = plan,
+                        sessionId = sessionId,
+                        request = request,
+                        checkpointAuthority = checkpointAuthority,
                     )
 
                 val locations =
@@ -1178,6 +1176,31 @@ constructor(
                     IndexingProgress.Stage(IndexingPhase.FINALISING),
                 )
                 L.d("Index finished in ${System.currentTimeMillis() - start}ms")
+                val currentConfigurationGeneration = musicSettings.sourceConfigurationGeneration
+                if (
+                    checkpointAuthority == null &&
+                        IndexRequestPolicy.isSupersededByNewerConfiguration(
+                            request,
+                            currentConfigurationGeneration,
+                        )
+                ) {
+                    // Optional lanes hold no checkpoint lease, so this is the only thing stopping a
+                    // result computed for an older source configuration from replacing the library
+                    // a newer authoritative scan already committed. The newer generation owns the
+                    // reported source outcome, so this one is discarded without recording anything.
+                    L.w(
+                        "Discarding non-authoritative result superseded by a newer source " +
+                            "configuration [reason=${request.reason} " +
+                            "request=${request.configurationGeneration} " +
+                            "current=$currentConfigurationGeneration]"
+                    )
+                    emitIndexingCompletion(
+                        sessionId,
+                        error = null,
+                        outcome = IndexingTerminalOutcome.SUPERSEDED,
+                    )
+                    return@traceSuspend
+                }
                 val scopedFailures =
                     if (requestedSourceKeys == null) {
                         result.failedSources
@@ -1308,7 +1331,8 @@ constructor(
                 val publishedState = if (isEmpty) LibraryState.EMPTY else LibraryState.USABLE
                 val priorUnresolved =
                     musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
-                val retainedUnresolved = priorUnresolved - attemptedSourceKeys
+                val retainedUnresolved =
+                    priorUnresolved - attemptedSourceKeys - plan?.removedSourceKeys.orEmpty()
                 val unresolved = retainedUnresolved + sourceOutcome.unresolvedSourceKeys
                 val effectiveSourceOutcome =
                     when {
@@ -1321,9 +1345,10 @@ constructor(
                     }
                 recordSourceScanOutcome(request, effectiveSourceOutcome)
                 val partial =
-                    effectiveSourceOutcome is SourceScanOutcome.Partial ||
-                        effectiveSourceOutcome is SourceScanOutcome.Truncated ||
-                        unresolved.isNotEmpty()
+                    effectiveSourceOutcome.isPartialSessionResult(
+                        unresolvedSourceKeys = unresolved,
+                        enrichmentComplete = result.enrichmentComplete,
+                    )
                 val attemptOutcome =
                     when (effectiveSourceOutcome) {
                         is SourceScanOutcome.Success -> SourceScanAttemptOutcome.SUCCESS
@@ -1375,7 +1400,20 @@ constructor(
                     }
                 }
                 try {
-                    result.cleanup()
+                    val cleanup =
+                        CoverCleanupPolicy.evaluate(
+                            published = true,
+                            outcome = effectiveSourceOutcome,
+                            unresolvedSourceKeys = unresolved,
+                            unavailableSourceKeys = plan?.unavailableSourceKeys.orEmpty(),
+                            completeMetadata = resolvedProfile == MetadataProfile.FULL,
+                            enrichmentOnly = plan?.enrichmentOnly == true,
+                        )
+                    if (cleanup.allowed) {
+                        result.cleanup()
+                    } else {
+                        L.d("Skipping cover cleanup [reason=${cleanup.reason}]")
+                    }
                 } catch (cleanupFailure: Exception) {
                     L.w(cleanupFailure, "Post-publication cover cleanup failed")
                 }
@@ -1386,7 +1424,7 @@ constructor(
                     emitStartupReadinessState(StartupReadinessState.FullLibraryReady)
                     requestGeneratedPlaylistRefresh()
                 }
-                if (resolvedProfile == MetadataProfile.FULL) {
+                if (resolvedProfile == MetadataProfile.FULL && result.enrichmentComplete) {
                     emitStartupReadinessState(StartupReadinessState.EnrichmentComplete)
                 }
                 emitIndexingCompletion(
@@ -1711,6 +1749,9 @@ constructor(
         fs: FS,
         metadataProfile: MetadataProfile,
         scanPlan: IncrementalScanPlan?,
+        sessionId: Long,
+        request: IndexRequest,
+        checkpointAuthority: SourceScanAttemptAuthority?,
     ): Config {
         val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
@@ -1727,7 +1768,47 @@ constructor(
             dimensionPolicy = DrivingStartupPolicy.dimensions(metadataProfile),
             artworkPolicy = DrivingStartupPolicy.artworkPolicy(metadataProfile),
             scanPlan = scanPlan,
-            cleanupCovers = scanPlan == null && metadataProfile == MetadataProfile.FULL,
+            // The retained set is only complete once rich extraction has run, and the invocation
+            // itself is additionally gated on a complete authoritative outcome by
+            // CoverCleanupPolicy.
+            cleanupCovers =
+                metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,
+            sourceCommitAuthorised = {
+                val current =
+                    sourceCommitStillCurrent(sessionId) &&
+                        !IndexRequestPolicy.isSupersededByNewerConfiguration(
+                            request,
+                            musicSettings.sourceConfigurationGeneration,
+                        ) &&
+                        (checkpointAuthority == null ||
+                            musicSettings.ownsSourceConfigurationAttempt(
+                                checkpointAuthority.generation,
+                                checkpointAuthority.attemptId,
+                                checkpointAuthority.owner,
+                            ))
+                if (!current) markSourceCommitSuperseded(sessionId, request)
+                current
+            },
+            sourceCommitStillCurrent = { sourceCommitStillCurrent(sessionId) },
+        )
+    }
+
+    private fun sourceCommitStillCurrent(sessionId: Long): Boolean =
+        synchronized(this) {
+            indexingSessionGate.isCurrent(sessionId) &&
+                preparedInterruptionOutcome == null &&
+                !preparedReplacementHandoff
+        }
+
+    private fun markSourceCommitSuperseded(sessionId: Long, request: IndexRequest) {
+        synchronized(this) {
+            if (preparedInterruptionOutcome == null) {
+                preparedInterruptionOutcome = IndexingTerminalOutcome.SUPERSEDED
+            }
+        }
+        L.w(
+            "Rejecting stale source commit [session=$sessionId generation=" +
+                "${request.configurationGeneration} attempt=${request.attemptId}]"
         )
     }
 
@@ -1765,18 +1846,11 @@ constructor(
         }
     }
 
-    private fun sourceConfigurationRevision(): Long {
-        val material = buildString {
-            append(musicSettings.locationMode)
-            append('|').append(musicSettings.safQuery)
-            append('|').append(musicSettings.mediaStoreQuery)
-            append('|').append(musicSettings.rootAccessPolicy)
-            append('|').append(musicSettings.ts18SystemSourceFilter)
-            append('|').append(musicSettings.separators)
-            append('|').append(musicSettings.intelligentSorting)
-        }
-        return material.hashCode().toLong() and 0xffffffffL
-    }
+    private fun sourceConfigurationRevision(): Long =
+        // One shared definition with ConfiguredSourcePolicy. Interpretation and resource settings
+        // are deliberately excluded so a separator or sort-order change refreshes the library
+        // without invalidating every committed source generation.
+        SourceConfigurationIdentity.revision(musicSettings)
 
     private fun emitStartupReadinessState(state: StartupReadinessState) {
         startupReadinessController.publishCapability(state)

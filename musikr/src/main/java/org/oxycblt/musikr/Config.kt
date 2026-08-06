@@ -43,6 +43,10 @@ data class Config(
     val scanPlan: IncrementalScanPlan? = null,
     /** Cover garbage collection is maintenance work, not part of ordinary incremental scans. */
     val cleanupCovers: Boolean = scanPlan == null,
+    /** Full generation/attempt check immediately before durable source commit. */
+    val sourceCommitAuthorised: () -> Boolean = { true },
+    /** Pure in-memory guard rechecked inside Room before its first mutation. */
+    val sourceCommitStillCurrent: () -> Boolean = { true },
 )
 
 /** Side-effect laden [Config] for use during music loading and [MutableLibrary] operation. */

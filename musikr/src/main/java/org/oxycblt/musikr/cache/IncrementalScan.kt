@@ -32,11 +32,28 @@ data class IncrementalScanPlan(
     val metadataProfile: MetadataProfile,
     val configurationRevision: Long,
     val force: Boolean,
+    val scanReasons: Map<String, SourceScanReason> = emptyMap(),
+    val removedSourceKeys: Set<String> = emptySet(),
+    val enrichmentOnly: Boolean = false,
 ) {
     val scanSourceKeys: Set<String> = scanSources.mapTo(linkedSetOf()) { it.sourceKey }
 
     val hasWork: Boolean
-        get() = scanSources.isNotEmpty()
+        get() = scanSources.isNotEmpty() || removedSourceKeys.isNotEmpty()
+
+    companion object {
+        /** Single definition of the optional metadata-only lane. */
+        fun isEnrichmentOnly(
+            scanSources: List<SourceSnapshot>,
+            removedSourceKeys: Set<String>,
+            scanReasons: Map<String, SourceScanReason>,
+        ): Boolean =
+            scanSources.isNotEmpty() &&
+                removedSourceKeys.isEmpty() &&
+                scanSources.all {
+                    scanReasons[it.sourceKey] == SourceScanReason.METADATA_PROFILE_UPGRADE
+                }
+    }
 }
 
 /** Result of atomically publishing all successful source generations in a scan. */
@@ -49,6 +66,9 @@ data class IncrementalScanCommit(
     val changedRows: Int,
     val removedRows: Int,
     val metadataProfile: MetadataProfile,
+    val removedSources: Set<String> = emptySet(),
+    val enrichmentOnly: Boolean = false,
+    val enrichmentComplete: Boolean = true,
 )
 
 /**
@@ -79,7 +99,8 @@ interface IncrementalCache {
     /** Mark one source failed while allowing sibling source generations to commit. */
     suspend fun markSourceFailed(sourceKey: String, detail: String)
 
-    suspend fun commitScan(): IncrementalScanCommit
+    /** Commit staged rows only while [commitGuard] owns the current scan. */
+    suspend fun commitScan(commitGuard: () -> Boolean = { true }): IncrementalScanCommit
 
     suspend fun abortScan(cause: Throwable? = null)
 
