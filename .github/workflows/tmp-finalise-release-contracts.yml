@@ -36,6 +36,20 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          for script in sorted(Path('scripts/manual-release').glob('*.sh')):
+              body = script.read_text(encoding='utf-8')
+              if not body.startswith('#!'):
+                  body = '#!/usr/bin/env bash\n' + body
+              if script.name == '12-build-once-inspect-once-and-stage-selected-assets.sh':
+                  directive = '# shellcheck disable=SC2154,SC2129 # GitHub supplies signing env; staged records append intentionally.\n'
+                  if directive not in body:
+                      body = body.replace('#!/usr/bin/env bash\n', '#!/usr/bin/env bash\n' + directive, 1)
+              if script.name == '15-ensure-draft-release-transaction-exists.sh':
+                  directive = '# shellcheck disable=SC2016 # Backticks in generated release notes are literal Markdown.\n'
+                  if directive not in body:
+                      body = body.replace('#!/usr/bin/env bash\n', '#!/usr/bin/env bash\n' + directive, 1)
+              script.write_text(body, encoding='utf-8')
+
           path = Path('scripts/check-ci-variant-contracts.sh')
           text = path.read_text(encoding='utf-8')
 
@@ -131,6 +145,6 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scripts/check-ci-variant-contracts.sh docs/RELEASE_WORKFLOW.md
+          git add scripts/manual-release scripts/check-ci-variant-contracts.sh docs/RELEASE_WORKFLOW.md
           git commit -m 'test: align CI with bounded Manual Release scripts'
           timeout 60s git push origin HEAD:fix/manual-release-idempotent-resume
