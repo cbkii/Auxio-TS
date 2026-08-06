@@ -100,7 +100,6 @@
         <activity
             android:name="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
             android:exported="false"
-            android:excludeFromRecents="true"
             android:theme="@android:style/Theme.NoDisplay" />
 
         <activity-alias

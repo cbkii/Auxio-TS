@@ -30,19 +30,25 @@ import timber.log.Timber as L
 class TopwayMusicEntryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // FULL_PLAYER is the fail-safe task disposition until the requested route is resolved.
+        var entryRoute = TopwayMusicEntryPolicy.Route.FULL_PLAYER
         try {
-            routeEntry()
+            entryRoute = resolveEntryRoute()
+            routeEntry(entryRoute)
         } finally {
-            // Theme.NoDisplay activities must finish before onResume completes, including failures.
-            finish()
+            finishEntry(entryRoute)
         }
     }
 
-    private fun routeEntry() {
+    private fun resolveEntryRoute(): TopwayMusicEntryPolicy.Route {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val floatingOnly =
             prefs.getBoolean(getString(R.string.set_key_autostart_floating_only), false)
-        when (TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)) {
+        return TopwayMusicEntryPolicy.route(intent.action, intent.data != null, floatingOnly)
+    }
+
+    private fun routeEntry(entryRoute: TopwayMusicEntryPolicy.Route) {
+        when (entryRoute) {
             TopwayMusicEntryPolicy.Route.FLOATING_CONTROLS_ONLY -> {
                 L.i("Topway music entry routed to persistent floating controls")
                 CarOverlayVisibilityHooks.isSuppressedByAuxioForeground = false
@@ -73,6 +79,20 @@ class TopwayMusicEntryActivity : Activity() {
                     }
                 startActivity(fullPlayerIntent)
             }
+        }
+    }
+
+    private fun finishEntry(entryRoute: TopwayMusicEntryPolicy.Route) {
+        // Only floating-only launches own a transient task that should be removed from Recents.
+        when (entryRoute) {
+            TopwayMusicEntryPolicy.Route.FLOATING_CONTROLS_ONLY -> {
+                if (isTaskRoot) {
+                    finishAndRemoveTask()
+                } else {
+                    finish()
+                }
+            }
+            TopwayMusicEntryPolicy.Route.FULL_PLAYER -> finish()
         }
     }
 }
