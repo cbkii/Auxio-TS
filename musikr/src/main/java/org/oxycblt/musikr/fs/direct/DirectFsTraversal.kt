@@ -324,6 +324,7 @@ internal class DirectFsTraversal(
                                 mimeTypeOf(entry.javaFile),
                                 entry.size,
                                 directoryDeferred,
+                                sourceKey = root.sourceKey,
                             )
                         children.add(file)
                         emitted++

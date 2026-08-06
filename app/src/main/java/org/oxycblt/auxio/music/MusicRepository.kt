@@ -1106,6 +1106,9 @@ constructor(
                         fs = prepared.fs,
                         metadataProfile = resolvedProfile,
                         scanPlan = plan,
+                        sessionId = sessionId,
+                        request = request,
+                        checkpointAuthority = checkpointAuthority,
                     )
 
                 val locations =
@@ -1746,6 +1749,9 @@ constructor(
         fs: FS,
         metadataProfile: MetadataProfile,
         scanPlan: IncrementalScanPlan?,
+        sessionId: Long,
+        request: IndexRequest,
+        checkpointAuthority: SourceScanAttemptAuthority?,
     ): Config {
         val configStart = System.currentTimeMillis()
         val separators = Separators.from(musicSettings.separators)
@@ -1767,6 +1773,42 @@ constructor(
             // CoverCleanupPolicy.
             cleanupCovers =
                 metadataProfile == MetadataProfile.FULL && scanPlan?.enrichmentOnly != true,
+            sourceCommitAuthorised = {
+                val current =
+                    sourceCommitStillCurrent(sessionId) &&
+                        !IndexRequestPolicy.isSupersededByNewerConfiguration(
+                            request,
+                            musicSettings.sourceConfigurationGeneration,
+                        ) &&
+                        (checkpointAuthority == null ||
+                            musicSettings.ownsSourceConfigurationAttempt(
+                                checkpointAuthority.generation,
+                                checkpointAuthority.attemptId,
+                                checkpointAuthority.owner,
+                            ))
+                if (!current) markSourceCommitSuperseded(sessionId, request)
+                current
+            },
+            sourceCommitStillCurrent = { sourceCommitStillCurrent(sessionId) },
+        )
+    }
+
+    private fun sourceCommitStillCurrent(sessionId: Long): Boolean =
+        synchronized(this) {
+            indexingSessionGate.isCurrent(sessionId) &&
+                preparedInterruptionOutcome == null &&
+                !preparedReplacementHandoff
+        }
+
+    private fun markSourceCommitSuperseded(sessionId: Long, request: IndexRequest) {
+        synchronized(this) {
+            if (preparedInterruptionOutcome == null) {
+                preparedInterruptionOutcome = IndexingTerminalOutcome.SUPERSEDED
+            }
+        }
+        L.w(
+            "Rejecting stale source commit [session=$sessionId generation=" +
+                "${request.configurationGeneration} attempt=${request.attemptId}]"
         )
     }
 

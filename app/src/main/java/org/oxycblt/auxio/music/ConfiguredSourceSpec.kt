@@ -29,8 +29,8 @@ data class ConfiguredSourceSpec(
     /**
      * Canonical identity of this exact root.
      *
-     * [sourceKey] is volume-scoped, so several folders on one volume share it. Deduplication,
-     * counting and comparison must use this narrower identity instead.
+     * [sourceKey] is backend-qualified and exact-root scoped. [canonicalKey] omits the backend
+     * qualifier and remains the shared alias/deduplication identity.
      */
     val canonicalKey: String,
     val mode: LocationMode,

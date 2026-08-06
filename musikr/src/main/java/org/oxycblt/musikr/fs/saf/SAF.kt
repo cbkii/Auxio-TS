@@ -66,60 +66,58 @@ private constructor(
 
     override suspend fun sourceSnapshots(): List<SourceSnapshot> =
         withContext(Dispatchers.IO) {
-            query.source.groupBy(SourceIdentity::forLocation).map { (sourceKey, locations) ->
-                val fingerprints = mutableListOf<String>()
-                var available = locations.isNotEmpty()
-                for (location in locations) {
-                    try {
-                        val documentId = DocumentsContract.getTreeDocumentId(location.uri)
-                        val documentUri =
-                            DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
-                        var modified = 0L
-                        var size = 0L
-                        var name = ""
-                        var found = false
-                        context.contentResolverSafe.useQuery(
-                            documentUri,
-                            arrayOf(
-                                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                                DocumentsContract.Document.COLUMN_LAST_MODIFIED,
-                                DocumentsContract.Document.COLUMN_SIZE,
-                            ),
-                        ) { cursor ->
-                            if (cursor.moveToFirst()) {
-                                found = true
-                                name = cursor.getString(0).orEmpty()
-                                modified = cursor.getLong(1)
-                                size = cursor.getLong(2)
-                            }
+            query.source.map { location ->
+                val sourceKey = SourceIdentity.forConfiguredRoot(SOURCE_TYPE, location)
+                val canonicalKey = SourceIdentity.canonicalKeyForLocation(location)
+                var fingerprint: String? = null
+                var available = true
+                try {
+                    val documentId = DocumentsContract.getTreeDocumentId(location.uri)
+                    val documentUri =
+                        DocumentsContract.buildDocumentUriUsingTree(location.uri, documentId)
+                    var modified = 0L
+                    var size = 0L
+                    var name = ""
+                    var found = false
+                    context.contentResolverSafe.useQuery(
+                        documentUri,
+                        arrayOf(
+                            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                            DocumentsContract.Document.COLUMN_SIZE,
+                        ),
+                    ) { cursor ->
+                        if (cursor.moveToFirst()) {
+                            found = true
+                            name = cursor.getString(0).orEmpty()
+                            modified = cursor.getLong(1)
+                            size = cursor.getLong(2)
                         }
-                        check(found) { "SAF root returned no document row" }
-                        fingerprints +=
-                            "${location.uri}|$documentId|$name|$modified|$size|${query.hashCode()}"
-                    } catch (_: Exception) {
-                        available = false
                     }
+                    check(found) { "SAF root returned no document row" }
+                    fingerprint =
+                        combineRootFingerprints(
+                            listOf(
+                                "${location.uri}|$documentId|$name|$modified|$size|${query.hashCode()}"
+                            )
+                        )
+                } catch (_: Exception) {
+                    available = false
                 }
-                val first = locations.firstOrNull()
-                val canonicalKey = first?.let(SourceIdentity::canonicalKeyForLocation)
                 SourceSnapshot(
                     sourceKey = sourceKey,
                     sourceType = SOURCE_TYPE,
-                    // A volume-scoped source may include several selected SAF roots. The
-                    // first root is display metadata; every root contributes to the token.
-                    rootUri = first?.uri?.toString(),
-                    rootPath = first?.path?.components?.unixString,
+                    rootUri = location.uri.toString(),
+                    rootPath = location.path.components.unixString,
                     available = available,
-                    fingerprint = if (available) combineRootFingerprints(fingerprints) else null,
+                    fingerprint = fingerprint,
                     fingerprintStrength =
                         if (available) SourceFingerprintStrength.ADVISORY
                         else SourceFingerprintStrength.NONE,
                     canonicalKey = canonicalKey,
-                    sourceOrigin = canonicalKey?.let(query.sourceOrigins::get),
+                    sourceOrigin = query.sourceOrigins[canonicalKey],
                     traversalScope =
-                        first
-                            ?.uri
-                            ?.let(CanonicalSourcePolicy::externalStorageTreePath)
+                        CanonicalSourcePolicy.externalStorageTreePath(location.uri)
                             ?.let(CanonicalSourcePolicy::scopeOf),
                 )
             }
@@ -130,7 +128,10 @@ private constructor(
             context,
             contentResolver,
             query.copy(
-                source = query.source.filter { SourceIdentity.forLocation(it) in sourceKeys }
+                source =
+                    query.source.filter {
+                        SourceIdentity.forConfiguredRoot(SOURCE_TYPE, it) in sourceKeys
+                    }
             ),
         )
 
@@ -142,10 +143,11 @@ private constructor(
             coroutineScope {
                 query.source
                     .map { location ->
-                        val sourceKey = SourceIdentity.forLocation(location)
+                        val sourceKey = SourceIdentity.forConfiguredRoot(SOURCE_TYPE, location)
                         tryAsync(Dispatchers.IO) {
                             val result =
                                 exploreDirectoryImpl(
+                                        sourceKey,
                                         location.uri,
                                         DocumentsContract.getTreeDocumentId(location.uri),
                                         location.path,
@@ -192,6 +194,7 @@ private constructor(
     }
 
     private fun CoroutineScope.exploreDirectoryImpl(
+        sourceKey: String,
         rootUri: Uri,
         treeDocumentId: String,
         relativePath: Path,
@@ -226,6 +229,7 @@ private constructor(
                     if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                         val subtask =
                             exploreDirectoryImpl(
+                                sourceKey,
                                 rootUri,
                                 childId,
                                 newPath,
@@ -243,6 +247,7 @@ private constructor(
                                 size = cursor.getLong(sizeIndex),
                                 modifiedMs = lastModified,
                                 parent = directoryDeferred,
+                                sourceKey = sourceKey,
                                 addedMs =
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                         JoinAddedMs(context, childUri)

@@ -99,7 +99,8 @@ interface IncrementalCache {
     /** Mark one source failed while allowing sibling source generations to commit. */
     suspend fun markSourceFailed(sourceKey: String, detail: String)
 
-    suspend fun commitScan(): IncrementalScanCommit
+    /** Commit staged rows only while [commitGuard] owns the current scan. */
+    suspend fun commitScan(commitGuard: () -> Boolean = { true }): IncrementalScanCommit
 
     suspend fun abortScan(cause: Throwable? = null)
 

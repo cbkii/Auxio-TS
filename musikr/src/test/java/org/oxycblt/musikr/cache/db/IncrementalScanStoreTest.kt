@@ -30,6 +30,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -156,6 +157,47 @@ class IncrementalScanStoreTest {
         )
         assertTrue(db.incrementalDao().sourceLedger(snapshot("v1").sourceKey)?.incomplete == true)
     }
+
+    @Test
+    fun `authority loss at the Room commit boundary preserves the prior generation`() =
+        runBlocking {
+            val original = snapshot("v1")
+            val first = store.planScan(listOf(original), false, MetadataProfile.LEAN, 1L)
+            store.beginScan(first)
+            store.stage(cachedFile("alpha.mp3", modifiedMs = 1L))
+            store.commitScan()
+
+            val replacement =
+                store.planScan(
+                    listOf(original.copy(fingerprint = "v2")),
+                    false,
+                    MetadataProfile.FULL,
+                    2L,
+                )
+            store.beginScan(replacement)
+            store.stage(cachedFile("alpha.mp3", modifiedMs = 2L))
+            var checks = 0
+            val cancelled =
+                try {
+                    store.commitScan { checks++ == 0 }
+                    fail("Expected authority loss inside Room transaction")
+                    null
+                } catch (expected: CancellationException) {
+                    expected
+                }
+            store.abortScan(cancelled)
+
+            assertEquals(2, checks)
+            assertEquals("v1", db.incrementalDao().sourceLedger(original.sourceKey)?.fingerprint)
+            assertEquals(
+                1L,
+                db.readDao()
+                    .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+                    ?.modifiedMs,
+            )
+            assertEquals(1, db.incrementalLibraryDao().songCount())
+            assertNull(store.activePlan())
+        }
 
     @Test
     fun `changed file that no longer validates is removed only after successful commit`() =

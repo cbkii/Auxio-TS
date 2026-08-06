@@ -367,7 +367,7 @@ internal class IncrementalScanStore(
         }
     }
 
-    override suspend fun commitScan(): IncrementalScanCommit {
+    override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {
         val plan = requireNotNull(currentPlan) { "No incremental scan is active" }
         var changedRows = 0
         var removedRows = 0
@@ -376,7 +376,10 @@ internal class IncrementalScanStore(
         val removed = linkedSetOf<String>()
         var committedSuccessfully = false
         try {
+            ensureCommitCurrent(commitGuard)
             db.withTransaction {
+                // Last safe point before ledger, fingerprint, tombstone or enrichment writes.
+                ensureCommitCurrent(commitGuard)
                 if (plan.enrichmentOnly) {
                     for (snapshot in plan.scanSources) {
                         val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
@@ -554,6 +557,12 @@ internal class IncrementalScanStore(
             enrichmentOnly = plan.enrichmentOnly,
             enrichmentComplete = enrichmentComplete,
         )
+    }
+
+    private fun ensureCommitCurrent(commitGuard: () -> Boolean) {
+        if (!commitGuard()) {
+            throw CancellationException("Incremental source commit lost current authority")
+        }
     }
 
     override suspend fun abortScan(cause: Throwable?) {

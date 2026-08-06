@@ -694,7 +694,7 @@ class DirectFsTraversalTest {
                     Location.Unopened.from(context, Uri.fromFile(JavaFile("/system"))).open(context)
                 )
             val directFs = DirectFS(listOf(location))
-            val sourceKey = SourceIdentity.forLocation(location)
+            val sourceKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", location)
 
             val snapshot = directFs.sourceSnapshots().single()
 
@@ -730,12 +730,19 @@ class DirectFsTraversalTest {
                 options().copy(isAllowedCanonicalPath = { it == accepted.canonicalPath }),
             )
 
-        val snapshot = directFs.sourceSnapshots().single()
+        val acceptedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", acceptedLocation)
+        val rejectedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", rejectedLocation)
+        val snapshots = directFs.sourceSnapshots().associateBy { it.sourceKey }
 
-        assertFalse(snapshot.available)
-        assertEquals(null, snapshot.fingerprint)
-        assertEquals(SourceFingerprintStrength.NONE, snapshot.fingerprintStrength)
-        assertTrue(directFs.drainSourceFailures().containsKey(snapshot.sourceKey))
+        assertEquals(2, snapshots.size)
+        requireNotNull(snapshots[acceptedKey])
+        val rejectedSnapshot = requireNotNull(snapshots[rejectedKey])
+        assertFalse(rejectedSnapshot.available)
+        assertEquals(null, rejectedSnapshot.fingerprint)
+        assertEquals(SourceFingerprintStrength.NONE, rejectedSnapshot.fingerprintStrength)
+        val failures = directFs.drainSourceFailures()
+        assertFalse(failures.containsKey(acceptedKey))
+        assertTrue(failures.containsKey(rejectedKey))
     }
 
     @Test

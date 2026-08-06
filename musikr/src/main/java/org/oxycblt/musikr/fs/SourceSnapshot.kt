@@ -64,7 +64,7 @@ interface SourceAwareFS : FS {
 
 /** Stable source-key policy shared by file-system adapters and the incremental cache. */
 object SourceIdentity {
-    fun forFile(file: File): String = forVolume(file.path.volume)
+    fun forFile(file: File): String = file.sourceKey ?: forVolume(file.path.volume)
 
     fun forLocation(location: Location): String = forVolume(location.path.volume)
 
@@ -76,6 +76,13 @@ object SourceIdentity {
      * the narrower identity of the exact configured root, which is what this returns.
      */
     fun canonicalKeyForLocation(location: Location): String = canonicalKeyForUri(location.uri)
+
+    /** Stable ledger identity for one exact configured root and backend. */
+    fun forConfiguredRoot(sourceType: String, uri: Uri): String =
+        "${sourceType.lowercase()}:${canonicalKeyForUri(uri)}"
+
+    fun forConfiguredRoot(sourceType: String, location: Location): String =
+        forConfiguredRoot(sourceType, location.uri)
 
     /** The canonical identity of one configured source URI. */
     fun canonicalKeyForUri(uri: Uri): String =

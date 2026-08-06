@@ -1,130 +1,357 @@
 name: Android Quality
 
 on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
   pull_request:
     branches:
       - dev
+      - "cx/**"
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: read
 
 concurrency:
-  group: pr232-final-authority-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  final-authority:
-    name: PR 232 final authority
-    if: github.event.pull_request.number == 232 && github.event.pull_request.head.ref == 'copilot/reintroduce-incremental-performance'
+  scope:
+    name: CI scope
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
+    outputs:
+      static_checks: ${{ steps.scope.outputs.static_checks }}
+      gradle_quality: ${{ steps.scope.outputs.gradle_quality }}
+      formatting: ${{ steps.scope.outputs.formatting }}
+      format_cpp: ${{ steps.scope.outputs.format_cpp }}
+      app_tests: ${{ steps.scope.outputs.app_tests }}
+      musikr_tests: ${{ steps.scope.outputs.musikr_tests }}
+      unit_tests: ${{ steps.scope.outputs.unit_tests }}
+      android_lint: ${{ steps.scope.outputs.android_lint }}
+      changed_count: ${{ steps.scope.outputs.changed_count }}
+      comparison: ${{ steps.scope.outputs.comparison }}
     steps:
-      - name: Checkout exact PR branch
+      - name: Checkout comparison head
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: copilot/reintroduce-incremental-performance
-          fetch-depth: 0
-          persist-credentials: true
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+          submodules: false
+          persist-credentials: false
+
+      - name: Fetch comparison boundary
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          target=""
+          case "${EVENT_NAME}" in
+            pull_request) target="${PR_BASE_SHA}" ;;
+            push) target="${PUSH_BEFORE_SHA}" ;;
+          esac
+          if [[ -n "${target}" && ! "${target}" =~ ^0+$ ]] && ! git cat-file -e "${target}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "${target}" ||
+              echo "::warning::Could not fetch comparison boundary ${target}; classifier will fail open to full CI."
+          fi
+
+      - name: Classify changed files
+        id: scope
+        shell: bash
+        env:
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_BEFORE_SHA: ${{ github.event.before }}
+          CI_REF_NAME: ${{ github.ref_name }}
+          CI_FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: bash ./scripts/ci-scope.sh
+
+      - name: Write scope summary
+        shell: bash
+        run: |
+          {
+            echo "## Android Quality scope"
+            echo
+            echo "- Comparison: \`${{ steps.scope.outputs.comparison }}\`"
+            echo "- Changed files: \`${{ steps.scope.outputs.changed_count }}\`"
+            echo "- Kotlin formatting: \`${{ steps.scope.outputs.formatting }}\`"
+            echo "- C/C++ formatting: \`${{ steps.scope.outputs.format_cpp }}\`"
+            echo "- App tests: \`${{ steps.scope.outputs.app_tests }}\`"
+            echo "- Musikr tests: \`${{ steps.scope.outputs.musikr_tests }}\`"
+            echo "- Android lint: \`${{ steps.scope.outputs.android_lint }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  workflow-syntax:
+    name: Workflow/script syntax
+    needs: scope
+    if: needs.scope.outputs.static_checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
+      - name: Validate workflow YAML
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |f| Psych.safe_load(File.read(f), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{f}" }' .github/workflows/*.yml
+
+      - name: Validate shell and Python script syntax
+        shell: bash
+        run: |
+          status=0
+          while IFS= read -r -d '' script; do
+            printf 'Checking %s\n' "${script}"
+            if ! bash -n "${script}"; then status=1; fi
+          done < <(find scripts -type f -name '*.sh' -print0)
+          while IFS= read -r -d '' script; do
+            printf 'Compiling %s\n' "${script}"
+            if ! python3 -m py_compile "${script}"; then status=1; fi
+          done < <(find scripts -type f -name '*.py' -print0)
+          exit "${status}"
+
+      - name: Self-test CI scope classifier
+        shell: bash
+        run: bash ./scripts/ci-scope.sh --self-test
+
+      - name: Check final maintained-variant contract
+        shell: bash
+        run: bash ./scripts/check-ci-variant-contracts.sh
+
+      - name: Check manual release workflow
+        shell: bash
+        run: bash ./scripts/check-manual-release-workflow.sh
+
+      - name: Validate Dependabot YAML
+        shell: bash
+        run: |
+          ruby -e 'require "yaml"; Psych.safe_load(File.read(ARGV.fetch(0)), permitted_classes: [], permitted_symbols: [], aliases: false); puts "OK #{ARGV.fetch(0)}"' .github/dependabot.yml
+
+      - name: Check version catalogue sync
+        shell: bash
+        run: bash ./scripts/check-version-catalog-sync.sh
+
+  gradle-quality:
+    name: Gradle quality (consolidated)
+    needs: scope
+    if: needs.scope.outputs.gradle_quality == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
       - name: Set up JDK 21
         uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           distribution: temurin
-          java-version: '21'
-      - name: Configure Android SDK
+          java-version: "21"
+
+      - name: Write local.properties for Android SDK
         shell: bash
-        run: printf 'sdk.dir=%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT}}" > local.properties
+        run: |
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [[ -n "${sdk_dir}" ]] || { echo "::error::ANDROID_HOME/ANDROID_SDK_ROOT is not set."; exit 1; }
+          printf 'sdk.dir=%s\n' "${sdk_dir}" > local.properties
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
-      - name: Prepare dependencies
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Ensure native build tools are present
+        shell: bash
+        run: |
+          if ! command -v ninja >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ninja-build
+          fi
+
+      - name: Prepare CI environment
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
-      - name: Apply reviewed Prompt 4 authority payload
+
+      - name: Run selected formatting, unit tests and Android lint
         shell: bash
+        env:
+          FORMAT_KOTLIN: ${{ needs.scope.outputs.formatting }}
+          FORMAT_CPP: ${{ needs.scope.outputs.format_cpp }}
+          APP_TESTS: ${{ needs.scope.outputs.app_tests }}
+          MUSIKR_TESTS: ${{ needs.scope.outputs.musikr_tests }}
+          ANDROID_LINT: ${{ needs.scope.outputs.android_lint }}
         run: |
-          python3 <<'PY'
-          from pathlib import Path
-          source = Path('.github/workflows/temporary-pr232-commit-guard.yml').read_text()
-          marker = "          python3 <<'PY'\n"
-          end_marker = "          PY\n"
-          start = source.index(marker) + len(marker)
-          end = source.index(end_marker, start)
-          lines = source[start:end].splitlines()
-          payload = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines)
-          Path('/tmp/pr232-final-authority.py').write_text(payload + '\n')
-          PY
-          python3 /tmp/pr232-final-authority.py
-      - name: Correct exact-root regression expectations
-        shell: bash
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-          identity = Path('musikr/src/test/java/org/oxycblt/musikr/fs/SourceIdentityTest.kt')
-          text = identity.read_text()
-          old = 'import org.junit.Test\n\nclass SourceIdentityTest {'
-          new = 'import org.junit.Test\nimport org.junit.runner.RunWith\nimport org.robolectric.RobolectricTestRunner\nimport org.robolectric.annotation.Config\n\n@RunWith(RobolectricTestRunner::class)\n@Config(sdk = [29])\nclass SourceIdentityTest {'
-          if text.count(old) != 1:
-              raise SystemExit(f'STOP identity runner anchor: {text.count(old)}')
-          identity.write_text(text.replace(old, new, 1))
-          direct = Path('musikr/src/test/java/org/oxycblt/musikr/fs/direct/DirectFsTraversalTest.kt')
-          text = direct.read_text()
-          old = '            val sourceKey = SourceIdentity.forLocation(location)\n\n            val snapshot = directFs.sourceSnapshots().single()\n'
-          new = '            val sourceKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", location)\n\n            val snapshot = directFs.sourceSnapshots().single()\n'
-          if text.count(old) != 1:
-              raise SystemExit(f'STOP rejected-root identity anchor: {text.count(old)}')
-          text = text.replace(old, new, 1)
-          old = '        val snapshot = directFs.sourceSnapshots().single()\n\n        assertFalse(snapshot.available)\n        assertEquals(null, snapshot.fingerprint)\n        assertEquals(SourceFingerprintStrength.NONE, snapshot.fingerprintStrength)\n        assertTrue(directFs.drainSourceFailures().containsKey(snapshot.sourceKey))\n'
-          new = '        val acceptedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", acceptedLocation)\n        val rejectedKey = SourceIdentity.forConfiguredRoot("DIRECT_FS", rejectedLocation)\n        val snapshots = directFs.sourceSnapshots().associateBy { it.sourceKey }\n\n        assertEquals(2, snapshots.size)\n        requireNotNull(snapshots[acceptedKey])\n        val rejectedSnapshot = requireNotNull(snapshots[rejectedKey])\n        assertFalse(rejectedSnapshot.available)\n        assertEquals(null, rejectedSnapshot.fingerprint)\n        assertEquals(SourceFingerprintStrength.NONE, rejectedSnapshot.fingerprintStrength)\n        val failures = directFs.drainSourceFailures()\n        assertFalse(failures.containsKey(acceptedKey))\n        assertTrue(failures.containsKey(rejectedKey))\n'
-          if text.count(old) != 1:
-              raise SystemExit(f'STOP independent-root expectation anchor: {text.count(old)}')
-          direct.write_text(text.replace(old, new, 1))
-          PY
-      - name: Format Kotlin
-        shell: bash
-        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
-      - name: Run focused app and Musikr suites
-        id: focused
-        shell: bash
-        run: |
-          set +e
-          bash ./scripts/ci-gradle.sh :app:testTopwayTwMediaDebugUnitTest :musikr:testDebugUnitTest 2>&1 | tee "${RUNNER_TEMP}/pr232-focused.log"
-          status=${PIPESTATUS[0]}
-          echo "status=${status}" >> "${GITHUB_OUTPUT}"
-          exit "${status}"
-      - name: Upload focused failure evidence
-        if: failure() && steps.focused.outcome == 'failure'
+          tasks=()
+          [[ "${FORMAT_KOTLIN}" == "true" ]] && tasks+=(spotlessKotlinCheck)
+          [[ "${APP_TESTS}" == "true" ]] && tasks+=(:app:testTopwayTwMediaDebugUnitTest)
+          [[ "${MUSIKR_TESTS}" == "true" ]] && tasks+=(:musikr:testDebugUnitTest)
+          [[ "${ANDROID_LINT}" == "true" ]] && tasks+=(:app:lintTopwayTwMediaDebug)
+
+          if ((${#tasks[@]} > 0)); then
+            printf 'Selected consolidated Gradle quality tasks:\n'
+            printf ' - %s\n' "${tasks[@]}"
+            AUXIO_TS_CI_GRADLE_LOG="${RUNNER_TEMP}/android-quality-gradle.log" \
+              bash ./scripts/ci-gradle.sh --continue "${tasks[@]}"
+          elif [[ "${FORMAT_CPP}" != "true" ]]; then
+            echo "::error::Gradle quality selected without any task."
+            exit 1
+          fi
+
+          # Eclipse CDT formatting provisions P2 repositories outside Gradle's normal dependency
+          # cache. Retry this isolated formatter once for a transient repository timeout, while
+          # preserving a deterministic formatting violation as a final failure.
+          if [[ "${FORMAT_CPP}" == "true" ]]; then
+            cpp_status=1
+            for attempt in 1 2; do
+              echo "C/C++ formatting attempt ${attempt}/2"
+              if AUXIO_TS_CI_GRADLE_LOG="${RUNNER_TEMP}/android-quality-cpp-gradle-${attempt}.log" \
+                bash ./scripts/ci-gradle.sh spotlessCppCheck; then
+                cpp_status=0
+                break
+              else
+                cpp_status=$?
+              fi
+              if ((attempt < 2)); then
+                echo "::warning::C/C++ formatter failed with status ${cpp_status}; retrying once after 15 seconds."
+                sleep 15
+              fi
+            done
+            ((cpp_status == 0)) || exit "${cpp_status}"
+          fi
+
+      - name: Upload consolidated quality reports
+        if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: pr232-final-authority-failure
+          name: android-quality-gradle-reports
           path: |
-            ${{ runner.temp }}/pr232-focused.log
             app/build/reports/**
             app/build/test-results/**
             musikr/build/reports/**
             musikr/build/test-results/**
             build/reports/problems/**
-          if-no-files-found: warn
+            ${{ runner.temp }}/android-quality-gradle.log
+            ${{ runner.temp }}/android-quality-cpp-gradle-*.log
+          if-no-files-found: ignore
           retention-days: 7
-      - name: Verify diff and remove orchestration
-        if: success()
-        shell: bash
-        run: |
-          git diff --check
-          git fetch --no-tags --depth=1 origin dev
-          git show FETCH_HEAD:.github/workflows/lint.yml > .github/workflows/lint.yml
-          git rm -f .github/workflows/temporary-pr232-commit-guard.yml
-          git rm -f .github/workflows/temporary-pr232-run-final-authority.yml
-          test ! -e .github/workflows/temporary-pr232-commit-guard.yml
-          test ! -e .github/workflows/temporary-pr232-run-final-authority.yml
-      - name: Commit clean authority model
-        if: success()
+
+  formatting:
+    name: Formatting
+    needs: [scope, gradle-quality]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Preserve required formatting check
         shell: bash
         env:
-          BRANCH: copilot/reintroduce-incremental-performance
+          REQUIRED_KOTLIN: ${{ needs.scope.outputs.formatting }}
+          REQUIRED_CPP: ${{ needs.scope.outputs.format_cpp }}
+          RESULT: ${{ needs.gradle-quality.result }}
         run: |
-          git config user.name 'cbkii'
-          git config user.email '150587541+cbkii@users.noreply.github.com'
-          git add -A
-          git diff --cached --check
-          git commit -m 'Complete exact-root source authority'
-          git push origin "HEAD:${BRANCH}"
+          if [[ "${REQUIRED_KOTLIN}" != "true" && "${REQUIRED_CPP}" != "true" ]]; then
+            echo "Formatting was not required for this change set."
+            exit 0
+          fi
+          [[ "${RESULT}" == "success" ]] || { echo "::error::Consolidated Gradle quality result: ${RESULT}"; exit 1; }
+
+  unit-tests:
+    name: Unit tests
+    needs: [scope, gradle-quality]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Preserve required unit-test check
+        shell: bash
+        env:
+          REQUIRED: ${{ needs.scope.outputs.unit_tests }}
+          RESULT: ${{ needs.gradle-quality.result }}
+        run: |
+          if [[ "${REQUIRED}" != "true" ]]; then
+            echo "Unit tests were not required for this change set."
+            exit 0
+          fi
+          [[ "${RESULT}" == "success" ]] || { echo "::error::Consolidated Gradle quality result: ${RESULT}"; exit 1; }
+
+  android-lint:
+    name: Android lint
+    needs: [scope, gradle-quality]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Preserve required Android lint check
+        shell: bash
+        env:
+          REQUIRED: ${{ needs.scope.outputs.android_lint }}
+          RESULT: ${{ needs.gradle-quality.result }}
+        run: |
+          if [[ "${REQUIRED}" != "true" ]]; then
+            echo "Android lint was not required for this change set."
+            exit 0
+          fi
+          [[ "${RESULT}" == "success" ]] || { echo "::error::Consolidated Gradle quality result: ${RESULT}"; exit 1; }
+
+  headunit-safety:
+    name: Head-unit safety
+    needs: scope
+    if: needs.scope.outputs.static_checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
+      - name: Run head-unit compatibility safety checks
+        id: headunit_safety
+        shell: bash
+        run: |
+          set -o pipefail
+          log="${RUNNER_TEMP}/headunit-safety.log"
+          (
+            for script in \
+              scripts/check-ci-variant-contracts.sh \
+              scripts/check-ts18-apk-reference-contracts.sh \
+              scripts/check-headunit-compat-safety.sh \
+              scripts/check-dofun-topway-compat.sh \
+              scripts/check-native-keep-rules.sh; do
+              printf '\n===== BEGIN %s =====\n' "${script}"
+              if bash "${script}"; then
+                printf '===== END %s status=0 =====\n' "${script}"
+              else
+                status=$?
+                printf '===== END %s status=%s =====\n' "${script}" "${status}"
+                exit "${status}"
+              fi
+            done
+          ) 2>&1 | tee "${log}"
+
+      - name: Upload head-unit safety failure log
+        if: failure() && steps.headunit_safety.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-quality-headunit-safety-log
+          path: ${{ runner.temp }}/headunit-safety.log
+          if-no-files-found: error
+          retention-days: 7

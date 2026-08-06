@@ -350,7 +350,8 @@ class IncrementalIndexPlannerTest {
 
         override suspend fun markSourceFailed(sourceKey: String, detail: String) = Unit
 
-        override suspend fun commitScan(): IncrementalScanCommit {
+        override suspend fun commitScan(commitGuard: () -> Boolean): IncrementalScanCommit {
+            check(commitGuard())
             val plan = requireNotNull(active)
             active = null
             return IncrementalScanCommit(

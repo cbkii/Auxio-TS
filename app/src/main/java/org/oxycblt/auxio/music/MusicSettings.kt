@@ -335,7 +335,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
                     }
                 ConfiguredSourceSpec(
                     normalizedUri = uri,
-                    sourceKey = SourceIdentity.forLocation(location),
+                    sourceKey = SourceIdentity.forConfiguredRoot(locationMode.name, location),
                     canonicalKey = canonicalKey,
                     mode = locationMode,
                     displayPath =

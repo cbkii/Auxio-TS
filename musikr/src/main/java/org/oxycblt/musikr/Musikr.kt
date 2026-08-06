@@ -327,7 +327,17 @@ private class MusikrImpl(
                 .getOrThrow()
             emitProgress(IndexingProgress.Stage(IndexingPhase.FINALISING))
 
-            val commit = if (plan != null) incremental?.commitScan() else null
+            val commit =
+                if (plan != null) {
+                    if (!config.sourceCommitAuthorised()) {
+                        throw CancellationException(
+                            "Source scan lost generation or attempt authority before commit"
+                        )
+                    }
+                    incremental?.commitScan(config.sourceCommitStillCurrent)
+                } else {
+                    null
+                }
             if (commit != null) {
                 Log.d(
                     "Musikr",
