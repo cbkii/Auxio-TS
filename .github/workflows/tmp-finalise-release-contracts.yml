@@ -1,0 +1,136 @@
+name: Temporary finalise Manual Release contracts
+
+on:
+  pull_request:
+    branches:
+      - dev
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-finalise-manual-release-contracts
+  cancel-in-progress: false
+
+jobs:
+  finalise:
+    if: ${{ github.head_ref == 'fix/manual-release-idempotent-resume' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact repair branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: fix/manual-release-idempotent-resume
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Align CI contracts and documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/check-ci-variant-contracts.sh')
+          text = path.read_text(encoding='utf-8')
+
+          variable_anchor = 'release_workflow=.github/workflows/manual-release.yml\n'
+          variable_replacement = '''release_workflow=.github/workflows/manual-release.yml
+          release_script_dir=scripts/manual-release
+          release_surface=$(mktemp)
+          cleanup_release_surface() { rm -f -- "$release_surface"; }
+          trap cleanup_release_surface EXIT
+          mapfile -t release_scripts < <(find "$release_script_dir" -maxdepth 1 -type f -name '*.sh' -print | sort)
+          if ((${#release_scripts[@]} != 19)); then
+            fail "Manual Release implementation script count is ${#release_scripts[@]}, expected 19"
+          fi
+          cat "$release_workflow" "${release_scripts[@]}" > "$release_surface"
+          '''
+          if text.count(variable_anchor) != 1:
+              raise SystemExit('::error::Unable to locate Manual Release variable anchor.')
+          text = text.replace(variable_anchor, variable_replacement, 1)
+
+          old_block = '''require_absent "$release_workflow" 'include_standard_apk' 'manual release has no standard selection'
+          require_absent "$release_workflow" 'include_debug_apks' 'manual release has no retired debug boolean'
+          require_contains "$release_workflow" 'debug_variant_destination:' 'manual release exposes the debug destination choice'
+          require_contains "$release_workflow" '- workflow_artifacts' 'manual release exposes workflow-only debug publication'
+          require_contains "$release_workflow" '- release_assets' 'manual release exposes GitHub Release debug publication'
+          require_contains "$release_workflow" 'topway-twmedia-debug.apk' 'manual release labels the debug app separately'
+          require_contains "$release_workflow" 'lsposed-api100-bridge-debug.apk' 'manual release labels the debug addon separately'
+          require_contains "$release_workflow" 'debug_artifact_dir' 'manual release isolates built debug companions'
+          require_contains "$release_workflow" 'upload_tsv' 'manual release isolates and maps selected GitHub Release assets'
+          require_contains "$release_workflow" "if: inputs.debug_variant_destination == 'workflow_artifacts'" 'workflow-only mode uploads short-lived debug artifacts'
+          require_contains "$release_workflow" '[[ "${DEBUG_DESTINATION}" == release_assets ]]' 'release-assets mode adds debug companions to the published asset set'
+          require_contains "$release_workflow" 'Debug APKs are forbidden unless debug_variant_destination=release_assets.' 'manual release rejects accidental debug publication'
+          require_contains "$release_workflow" 'check-app-release-contracts.sh' 'manual release validates the staged primary APK identity'
+          require_contains "$release_workflow" 'check-release-diagnostics-boundary.sh "${asset_path}"' 'manual release verifies diagnostics are absent from the release APK'
+          '''
+          new_block = '''require_absent "$release_surface" 'include_standard_apk' 'manual release has no standard selection'
+          require_absent "$release_surface" 'include_debug_apks' 'manual release has no retired debug boolean'
+          require_absent "$release_workflow" 'debug_variant_destination:' 'manual release hides internal debug destination terminology'
+          require_contains "$release_workflow" 'publish_debug_apks:' 'manual release exposes one user-friendly debug publication switch'
+          require_contains "$release_workflow" 'run: bash scripts/manual-release/' 'manual release delegates implementation to bounded syntax-checked scripts'
+          require_contains "$release_surface" 'true) DEBUG_DESTINATION=release_assets ;;' 'enabled debug publication maps to Release assets'
+          require_contains "$release_surface" 'false) DEBUG_DESTINATION=workflow_artifacts ;;' 'disabled debug publication maps to workflow-only artifacts'
+          require_contains "$release_surface" 'topway-twmedia-debug.apk' 'manual release labels the debug app separately'
+          require_contains "$release_surface" 'lsposed-api100-bridge-debug.apk' 'manual release labels the debug addon separately'
+          require_contains "$release_surface" 'debug_artifact_dir' 'manual release isolates built debug companions'
+          require_contains "$release_surface" 'upload_tsv' 'manual release isolates and maps selected GitHub Release assets'
+          require_contains "$release_surface" 'replace_names_file' 'manual release carries the automatic interrupted-triplet replacement plan'
+          require_contains "$release_workflow" "if: steps.selection.outputs.debug_destination == 'workflow_artifacts'" 'workflow-only mode uploads short-lived debug artifacts'
+          require_contains "$release_surface" '[[ "${DEBUG_DESTINATION}" == release_assets ]]' 'release-assets mode adds debug companions to the published asset set'
+          require_contains "$release_surface" 'Debug APKs are forbidden unless the resolved debug destination is release_assets.' 'manual release rejects accidental debug publication'
+          require_contains "$release_surface" 'check-app-release-contracts.sh' 'manual release validates the staged primary APK identity'
+          require_contains "$release_surface" 'check-release-diagnostics-boundary.sh "${asset_path}"' 'manual release verifies diagnostics are absent from the release APK'
+          '''
+          if text.count(old_block) != 1:
+              raise SystemExit('::error::Unable to locate stale Manual Release variant contract block.')
+          text = text.replace(old_block, new_block, 1)
+
+          old_guard = 'if git fetch --quiet origin dev && remote_dev=$(git rev-parse origin/dev 2>/dev/null); then'
+          new_guard = 'if timeout 60s git fetch --quiet origin dev && remote_dev=$(git rev-parse origin/dev 2>/dev/null); then'
+          if text.count(old_guard) != 1:
+              raise SystemExit('::error::Unable to locate pre-tag dev authority guard.')
+          text = text.replace(old_guard, new_guard, 1)
+
+          old_comment = '''# Manual Release calls this contract both before planning and again after building the local release
+          # commit. The second call is the last read-only branch-authority guard before a tag is pushed.
+          '''
+          new_comment = '''# New-release publication calls this contract after preparing the local metadata commit.
+          # This is the final read-only branch-authority guard before an immutable tag is pushed.
+          '''
+          if text.count(old_comment) != 1:
+              raise SystemExit('::error::Unable to locate stale Manual Release guard comment.')
+          text = text.replace(old_comment, new_comment, 1)
+          path.write_text(text, encoding='utf-8')
+
+          docs = Path('docs/RELEASE_WORKFLOW.md')
+          docs_text = docs.read_text(encoding='utf-8')
+          section = '''
+
+          ## Implementation ownership
+
+          The workflow YAML owns the operator form, permissions, concurrency, immutable action pins, environment wiring and the 90-minute job bound. Numbered `scripts/manual-release/*.sh` files own the shell implementation in exact execution order. Each script is small enough to syntax-check independently, and every external Git, GitHub, SDK, package-manager and Gradle wait is explicitly bounded.
+
+          This keeps the operator surface close to the successful v4/v5 model without returning to a monolithic, one-shot publisher. Release-time execution does not grep or parse its own workflow source; source-shape and ordering checks remain PR/CI responsibilities.
+          '''
+          if '## Implementation ownership' not in docs_text:
+              docs.write_text(docs_text.rstrip() + section + '\n', encoding='utf-8')
+          PY
+
+          bash -n scripts/check-ci-variant-contracts.sh
+          bash -n scripts/check-manual-release-workflow.sh
+          timeout 180s bash scripts/check-manual-release-workflow.sh
+          timeout 180s bash scripts/check-ci-variant-contracts.sh
+          git diff --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/check-ci-variant-contracts.sh docs/RELEASE_WORKFLOW.md
+          git commit -m 'test: align CI with bounded Manual Release scripts'
+          timeout 60s git push origin HEAD:fix/manual-release-idempotent-resume
