@@ -12,6 +12,7 @@ def releaseStoreFile = providers.gradleProperty("releaseStoreFile").orNull
 def releaseStorePassword = providers.gradleProperty("releaseStorePassword").orNull
 def releaseKeyAlias = providers.gradleProperty("releaseKeyAlias").orNull
 def releaseKeyPassword = providers.gradleProperty("releaseKeyPassword").orNull
+def targetExpectedSigner = providers.gradleProperty("expectedTargetSigner").orNull ?: ""
 def hasReleaseSigning = [
     releaseStoreFile,
     releaseStorePassword,
@@ -39,6 +40,7 @@ android {
         buildConfigField "long", "KNOWN_TESTED_STOCK_VERSION_CODE", "118L"
         buildConfigField "String", "STOCK_CERT_SHA256", '"AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3"'
         buildConfigField "String", "KNOWN_TESTED_STOCK_APK_SHA256", '"4F5495E270A7C86BAB232E2B7EE2ECD2D71F3450F6F20ED5F36FEAA4229C1518"'
+        buildConfigField "String", "TARGET_EXPECTED_SIGNER", "\"${targetExpectedSigner}\""
     }
 
     if (hasReleaseSigning) {
@@ -56,9 +58,14 @@ android {
         debug {
             applicationIdSuffix ".debug"
             versionNameSuffix "-DEBUG"
+            // Debug bridge target should match debug auxio package
+            buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media.debug"'
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         release {
-            minifyEnabled false
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
@@ -69,13 +76,14 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig true
+        aidl true
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
-    }
-
-    buildFeatures {
-        buildConfig true
     }
 
     lint {
@@ -88,7 +96,23 @@ dependencies {
     // API 100 is provided by LSPosed at runtime and must not be packaged in the module APK.
     compileOnly project(":libxposed-api100-stubs")
 
-    testImplementation "junit:junit:4.13.2"
+    // Explicitly exclude stdlib and other unused transitive deps from test deps
+    testImplementation("junit:junit:4.13.2")
+
+    // Test environments require android framework classes to run on JVM
+    testImplementation "org.robolectric:robolectric:4.12.2"
+}
+
+// Remove org.jetbrains.kotlin.stdlib from packaging
+configurations {
+    debugRuntimeClasspath {
+        exclude group: "org.jetbrains.kotlin"
+        exclude group: "org.jetbrains"
+    }
+    releaseRuntimeClasspath {
+        exclude group: "org.jetbrains.kotlin"
+        exclude group: "org.jetbrains"
+    }
 }
 
 gradle.taskGraph.whenReady { graph ->

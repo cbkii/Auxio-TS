@@ -73,12 +73,18 @@ jobs:
         env:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/lsposed-bridge-gradle.log
         run: |
+                    bash ./scripts/ci-gradle.sh \
+            :app:testTopwayTwMediaDebugUnitTest \
+            :app:assembleTopwayTwMediaDebug
+
+          # Extract debug APK signer
+          apk_path="app/build/outputs/apk/topwayTwMedia/debug/app-topwayTwMedia-debug.apk"
+          expected_signer=$($ANDROID_HOME/build-tools/34.0.0/apksigner verify --print-certs $apk_path | grep -oP '(?<=Signer #1 certificate SHA-256 digest: ).*')
+
           bash ./scripts/ci-gradle.sh \
             :lsposed-bridge:testDebugUnitTest \
             :lsposed-bridge:lintDebug \
-            :lsposed-bridge:assembleDebug \
-            :app:testTopwayTwMediaDebugUnitTest \
-            :app:assembleTopwayTwMediaDebug
+            :lsposed-bridge:assembleDebug -PexpectedTargetSigner="${expected_signer}"
 
       - name: Validate packaged API 100 contracts
         shell: bash

@@ -509,14 +509,14 @@ jobs:
                   destination="${DEBUG_DESTINATION}"
                   ;;
                 lsposed_bridge)
-                  bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease
+                                    bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleRelease -PexpectedTargetSigner="${expected_release_signer}"
                   apk_path="$(find_apk lsposed-bridge/build/outputs/apk/release)"
                   asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge.apk"
                   asset_kind='signed-lsposed-api100-addon'
                   destination='release'
                   ;;
                 lsposed_bridge_debug)
-                  bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleDebug
+                                    bash ./scripts/ci-gradle.sh :lsposed-bridge:assembleDebug -PexpectedTargetSigner="${expected_release_signer}"
                   apk_path="$(find_apk lsposed-bridge/build/outputs/apk/debug)"
                   asset_name="Auxio-TS-${RELEASE_TAG}-lsposed-api100-bridge-debug.apk"
                   asset_kind='debug-lsposed-api100-addon'

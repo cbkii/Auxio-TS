@@ -266,7 +266,7 @@ if ((ERRORS == 0)); then
     'environment.canUseObservedPrivateHooks()'
   require_source_contains \
     'lsposed-bridge/build.gradle' \
-    'KNOWN_TESTED_STOCK_APK_SHA256'
+    'TARGET_EXPECTED_SIGNER'
   require_source_absent \
     'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/Ts18LsposedBridgeModule.java' \
     'callback.returnAndSkip(Service.START_NOT_STICKY)'
@@ -329,7 +329,22 @@ if ((ERRORS == 0)); then
     fi
   fi
 
+
+  # Ensure the target target signer string was actually compiled in
+  require_source_contains     'lsposed-bridge/src/main/java/org/oxycblt/auxio/ts18bridge/BridgeEnvironment.java'     'BuildConfig.TARGET_EXPECTED_SIGNER'
+
+  apksigner_bin=$(find_apksigner || true)
+  if [[ -z $apksigner_bin || ! -x $apksigner_bin ]]; then
+    error 'apksigner is required to prove the signing contract'
+  else
+    signing_report=$("$apksigner_bin" verify --verbose --print-certs "$APK_PATH" 2>&1) || {
+      error 'Release bridge APK is not validly signed'
+      signing_report=''
+    }
+  fi
+
   if [[ $VARIANT == release ]]; then
+
     apksigner_bin=$(find_apksigner || true)
     if [[ -z $apksigner_bin || ! -x $apksigner_bin ]]; then
       error 'apksigner is required to prove the release signing contract'

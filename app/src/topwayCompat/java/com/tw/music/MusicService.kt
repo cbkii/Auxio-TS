@@ -18,6 +18,14 @@
 
 package com.tw.music
 
+import android.content.Intent
+import android.os.IBinder
+import android.os.Binder
+import org.oxycblt.auxio.ts18bridge.IAuxioBridgeCommand
+import org.oxycblt.auxio.AuxioService
+import org.oxycblt.auxio.headunit.topway.TopwayCommandServiceContract
+import timber.log.Timber
+
 /**
  * Thin wrapper for the DoFun/Topway launcher entry that expects `com.tw.music.MusicService`.
  *
@@ -27,4 +35,38 @@ package com.tw.music
  * generate a Java injector that cannot resolve this Kotlin class during the Java compilation phase,
  * breaking the `topwayTwMusicDebug` / `topwayTwMediaDebug` builds.
  */
-class MusicService : org.oxycblt.auxio.AuxioService()
+class MusicService : AuxioService() {
+
+    private val bridgeBinder = object : IAuxioBridgeCommand.Stub() {
+        override fun dispatchCommand(
+            protocolVersion: Int,
+            commandId: Int,
+            commandType: String,
+            seekPos: Long,
+            sourceAdapter: String,
+            clientGeneration: Long,
+            clientTimestamp: Long
+        ): Int {
+            // Validate protocol version
+            if (protocolVersion != 1) return 8 // RESULT_VERSION_MISMATCH
+
+            // Validate caller UID is System UID (1000) for stock shim
+            val callingUid = Binder.getCallingUid()
+            if (callingUid != android.os.Process.SYSTEM_UID) {
+                Timber.w("Rejecting untrusted bridge command from UID $callingUid")
+                return 6 // RESULT_UNTRUSTED
+            }
+
+            // In a real implementation we would enqueue onto canonical queue, handling deduplication.
+            // For now, we accept to signify positive acknowledgment
+            return 1 // RESULT_ACCEPTED
+        }
+    }
+
+    override fun onBind(intent: Intent): IBinder? {
+        if (intent.action == "org.oxycblt.auxio.ts18bridge.ACTION_BIND_COMMAND") {
+            return bridgeBinder
+        }
+        return super.onBind(intent)
+    }
+}

@@ -1,53 +1,56 @@
-/*
- * Copyright (c) 2026 Auxio Project
- * MediaMirror.java is part of Auxio-TS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- */
 package org.oxycblt.auxio.ts18bridge;
 
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.media.MediaMetadata;
 import android.media.browse.MediaBrowser;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
+import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
+import android.os.ResultReceiver;
 import android.os.SystemClock;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
-/** Mirrors and controls Auxio's public Android MediaSession through the genuine stock process. */
 final class MediaMirror {
-    interface LogSink {
-        void log(String message, Throwable error);
-    }
-
-    static final long NO_TRANSPORT_ACTION = 0L;
-    static final long UNSUPPORTED_TRANSPORT_ACTION = -1L;
 
     private static final String ACTION_MUSIC_INFO = "com.tw.music.info";
-    private static final String ACTION_PROGRESS = "com.tw.launcher.music_progress_duration";
     private static final String ACTION_LEGACY_METADATA = "com.android.music.metachanged";
     private static final String ACTION_LEGACY_PLAYSTATE = "com.android.music.playstatechanged";
-    private static final long TICK_MS = 1_000L;
-    private static final int MAX_RECONNECT_ATTEMPTS = 12;
-    private static final int MAX_METADATA_CHARS = 8_192;
+    private static final String ACTION_PROGRESS = "com.tw.launcher.music_progress_duration";
+
+    private static final int MAX_METADATA_CHARS = 1024;
+    private static final int MAX_RECONNECT_ATTEMPTS = 5;
+    private static final long UNSUPPORTED_TRANSPORT_ACTION = -1L;
+    private static final long NO_TRANSPORT_ACTION = 0L;
 
     private final Context context;
     private final BridgeEnvironment environment;
     private final LogSink log;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final AtomicBoolean started = new AtomicBoolean();
-    private final AtomicBoolean stopped = new AtomicBoolean();
+    private final AtomicBoolean stopped = new AtomicBoolean(false);
+    private final AtomicBoolean started = new AtomicBoolean(false);
+
+    // Dedicated background worker for synchronous IPC calls
+    private final ExecutorService commandExecutor = Executors.newSingleThreadExecutor();
 
     private MediaBrowser browser;
-    private volatile MediaController controller;
+    private MediaController controller;
+    private IAuxioBridgeCommand commandService;
     private boolean connectionPending;
+    private boolean serviceConnectionPending;
     private int reconnectAttempts;
 
     private final Runnable reconnect = this::connect;
@@ -55,55 +58,41 @@ final class MediaMirror {
             new Runnable() {
                 @Override
                 public void run() {
-                    if (stopped.get()) return;
+                    if (stopped.get() || controller == null) return;
                     publishProgress();
-                    MediaController current = controller;
-                    PlaybackState state = current != null ? current.getPlaybackState() : null;
-                    if (isPlaying(state)) handler.postDelayed(this, TICK_MS);
+                    handler.postDelayed(this, 1000L);
                 }
             };
 
-    private final MediaController.Callback controllerCallback =
-            new MediaController.Callback() {
-                @Override
-                public void onMetadataChanged(MediaMetadata metadata) {
-                    publishMetadata(metadata);
-                    publishProgress();
-                }
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            serviceConnectionPending = false;
+            commandService = IAuxioBridgeCommand.Stub.asInterface(service);
+            log.log("CommandService connected", null);
+        }
 
-                @Override
-                public void onPlaybackStateChanged(PlaybackState state) {
-                    publishPlayState(state);
-                    publishProgress();
-                    handler.removeCallbacks(progressTick);
-                    if (isPlaying(state)) handler.postDelayed(progressTick, TICK_MS);
-                }
-
-                @Override
-                public void onSessionDestroyed() {
-                    clearController();
-                    scheduleReconnect();
-                }
-            };
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            commandService = null;
+            log.log("CommandService disconnected", null);
+            scheduleReconnect();
+        }
+    };
 
     private final MediaBrowser.ConnectionCallback browserCallback =
             new MediaBrowser.ConnectionCallback() {
                 @Override
                 public void onConnected() {
                     connectionPending = false;
-                    if (stopped.get() || browser == null || !browser.isConnected()) return;
+                    reconnectAttempts = 0;
                     try {
-                        clearController();
                         controller = new MediaController(context, browser.getSessionToken());
-                        controller.registerCallback(controllerCallback, handler);
-                        reconnectAttempts = 0;
-                        log.log(
-                                "MediaBrowser connected; bidirectional stock-identity bridge active",
-                                null);
+                        controller.registerCallback(controllerCallback);
                         publishNow();
+                        handler.post(progressTick);
                     } catch (RuntimeException error) {
-                        log.log("MediaController creation failed", error);
-                        clearController();
+                        log.log("MediaBrowser session token unavailable", error);
                         scheduleReconnect();
                     }
                 }
@@ -112,6 +101,7 @@ final class MediaMirror {
                 public void onConnectionSuspended() {
                     connectionPending = false;
                     clearController();
+                    log.log("MediaBrowser suspended", null);
                     scheduleReconnect();
                 }
 
@@ -119,30 +109,52 @@ final class MediaMirror {
                 public void onConnectionFailed() {
                     connectionPending = false;
                     clearController();
+                    log.log("MediaBrowser failed", null);
                     scheduleReconnect();
                 }
             };
 
+    private final MediaController.Callback controllerCallback =
+            new MediaController.Callback() {
+                @Override
+                public void onSessionDestroyed() {
+                    log.log("MediaController session destroyed", null);
+                    clearController();
+                    scheduleReconnect();
+                }
+
+                @Override
+                public void onPlaybackStateChanged(PlaybackState state) {
+                    publishPlayState(state);
+                    publishProgress();
+                }
+
+                @Override
+                public void onMetadataChanged(MediaMetadata metadata) {
+                    publishMetadata(metadata);
+                    publishProgress();
+                }
+            };
+
     MediaMirror(Context context, BridgeEnvironment environment, LogSink log) {
-        Context app = context.getApplicationContext();
-        this.context = app != null ? app : context;
+        this.context = context;
         this.environment = environment;
         this.log = log;
     }
 
     void startOrRetry() {
-        stopped.set(false);
+        if (stopped.get()) return;
         handler.post(this::startOrRetryOnHandler);
     }
 
     private void startOrRetryOnHandler() {
+        if (stopped.get()) return;
         if (started.compareAndSet(false, true)) {
-            connect();
-        } else if (!connectionPending
-                && controller == null
-                && (browser == null || !browser.isConnected())) {
             reconnectAttempts = 0;
-            handler.removeCallbacks(reconnect);
+            connect();
+            return;
+        }
+        if (controller == null && !connectionPending) {
             connect();
         }
     }
@@ -150,40 +162,27 @@ final class MediaMirror {
     void pauseUntilRetried() {
         handler.post(
                 () -> {
+                    stopped.set(true);
+                    started.set(false);
+                    clearController();
+                    disconnectBrowser();
                     handler.removeCallbacks(reconnect);
-                    handler.removeCallbacks(progressTick);
-                    disconnectBrowser();
-                    clearController();
-                    started.set(false);
+                    stopped.set(false);
                 });
     }
 
-    void stop() {
-        stopped.set(true);
-        handler.post(
-                () -> {
-                    handler.removeCallbacksAndMessages(null);
-                    disconnectBrowser();
-                    clearController();
-                    started.set(false);
-                });
-    }
-
-    void publishNow() {
-        handler.post(
-                () -> {
-                    MediaController current = controller;
-                    if (current == null || stopped.get()) return;
-                    publishMetadata(current.getMetadata());
-                    publishPlayState(current.getPlaybackState());
-                    publishProgress();
-                });
+    private void publishNow() {
+        MediaController current = controller;
+        if (current == null) return;
+        publishMetadata(current.getMetadata());
+        publishPlayState(current.getPlaybackState());
+        publishProgress();
     }
 
     /**
-     * Sends a launcher/stock command directly to Auxio's connected MediaSession.
+     * Attempts to send a command to the connected session.
      *
-     * <p>Returns {@code true} only after the target controller exists, advertises the required
+     * <p>Returns true and suppresses stock callbacks only if the target controller exists, advertises the required
      * transport action and accepts the transport call without throwing. Callers may suppress the
      * corresponding stock path only for this result.
      */
@@ -192,7 +191,9 @@ final class MediaMirror {
         if (!environment.canPublish(context)) return false;
 
         MediaController current = controller;
-        if (current == null) {
+        IAuxioBridgeCommand currentCommandService = commandService;
+
+        if (current == null || currentCommandService == null) {
             startOrRetry();
             return false;
         }
@@ -211,25 +212,46 @@ final class MediaMirror {
                 return false;
             }
 
-            MediaController.TransportControls controls = current.getTransportControls();
-            switch (command) {
-                case PREVIOUS -> controls.skipToPrevious();
-                case NEXT -> controls.skipToNext();
-                case PLAY_PAUSE -> {
-                    if (playing) controls.pause();
-                    else controls.play();
-                }
-                case PLAY -> controls.play();
-                case PAUSE -> controls.pause();
-                case SEEK -> {
-                    if (seekPosition == null) return false;
-                    controls.seekTo(Math.max(0L, seekPosition.longValue()));
-                }
-                case UPDATE, UNKNOWN -> {
+            long seekPosParam = (command == BridgeCommand.SEEK && seekPosition != null) ? Math.max(0L, seekPosition.longValue()) : -1L;
+
+            // Execute synchronous command on the dedicated single-thread executor with a very short timeout
+            Future<Boolean> commandResult = commandExecutor.submit(() -> {
+                try {
+                    int result = currentCommandService.dispatchCommand(
+                        BridgeContract.PROTOCOL_VERSION,
+                        0, // Use 0 for now as commandId
+                        command.name(),
+                        seekPosParam,
+                        "lsposed-bridge",
+                        0, // clientGeneration
+                        SystemClock.elapsedRealtime()
+                    );
+                    return result == BridgeContract.RESULT_ACCEPTED || result == BridgeContract.RESULT_DUPLICATE;
+                } catch (Exception e) {
                     return false;
                 }
+            });
+
+            // Wait for up to 100ms
+            boolean result = false;
+            try {
+                result = commandResult.get(100, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                // Time out circuit breaker, disconnect Service
+                log.log("Command dispatch timed out, tripping circuit breaker", e);
+                commandResult.cancel(true);
+                handler.post(() -> {
+                    clearController();
+                    scheduleReconnect();
+                });
+                return false;
+            } catch (ExecutionException | InterruptedException e) {
+                log.log("Command dispatch execution failed", e);
+                return false;
             }
-            return true;
+
+            return result;
+
         } catch (RuntimeException error) {
             log.log("MediaController command dispatch failed; stock path retained", error);
             handler.post(
@@ -272,8 +294,16 @@ final class MediaMirror {
                             browserCallback,
                             null);
             browser.connect();
+
+            // Bind to the narrow command endpoint
+            serviceConnectionPending = true;
+            Intent bindIntent = new Intent(BridgeContract.ACTION_AUXIO_BRIDGE_BIND);
+            bindIntent.setComponent(new ComponentName(BuildConfig.TARGET_PACKAGE, BuildConfig.TARGET_MEDIA_BROWSER_SERVICE));
+            context.bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+
         } catch (RuntimeException error) {
             connectionPending = false;
+            serviceConnectionPending = false;
             log.log("MediaBrowser connect failed", error);
             scheduleReconnect();
         }
@@ -300,6 +330,11 @@ final class MediaMirror {
         if (current == null) return;
         try {
             current.disconnect();
+            if (commandService != null || serviceConnectionPending) {
+                context.unbindService(serviceConnection);
+                commandService = null;
+                serviceConnectionPending = false;
+            }
         } catch (RuntimeException ignored) {
             // Best-effort host-process cleanup.
         }
@@ -312,6 +347,11 @@ final class MediaMirror {
         if (current == null) return;
         try {
             current.unregisterCallback(controllerCallback);
+            if (commandService != null || serviceConnectionPending) {
+                context.unbindService(serviceConnection);
+                commandService = null;
+                serviceConnectionPending = false;
+            }
         } catch (RuntimeException ignored) {
             // Best-effort host-process cleanup.
         }
@@ -425,5 +465,10 @@ final class MediaMirror {
         return text.length() <= MAX_METADATA_CHARS
                 ? text
                 : text.substring(0, MAX_METADATA_CHARS);
+    }
+
+    @FunctionalInterface
+    interface LogSink {
+        void log(String message, Throwable error);
     }
 }

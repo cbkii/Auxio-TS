@@ -1,14 +1,6 @@
-/*
- * Copyright (c) 2026 Auxio Project
- * BridgeEnvironment.java is part of Auxio-TS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- */
 package org.oxycblt.auxio.ts18bridge;
 
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
@@ -21,44 +13,43 @@ import android.content.pm.SigningInfo;
 import android.os.Environment;
 import android.os.Process;
 import android.os.SystemClock;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.lang.ref.WeakReference;
 import java.security.MessageDigest;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-/** Runtime identity, target-readiness and kill-switch authority for the bridge. */
 final class BridgeEnvironment {
-    interface LogSink {
-        void log(String message, Throwable error);
-    }
 
-    private static final long READINESS_CACHE_MS = 3_000L;
+    private static final long READINESS_CACHE_MS = 2_000L;
 
+    private final Executor probeExecutor;
     private final LogSink log;
-    private final ExecutorService probeExecutor =
-            Executors.newSingleThreadExecutor(
-                    task -> {
-                        Thread thread = new Thread(task, "AuxioTsBridgeProbe");
-                        thread.setDaemon(true);
-                        return thread;
-                    });
-    private final AtomicBoolean refreshPending = new AtomicBoolean();
-    private final AtomicReference<RuntimeState> state =
-            new AtomicReference<>(RuntimeState.unknown());
+
     private final AtomicReference<WeakReference<Context>> context =
             new AtomicReference<>(new WeakReference<>(null));
-    // Accessed only by the single probe executor. The loaded stock APK cannot change in-place
-    // without a process restart, but file metadata is retained in the key as a fail-safe.
+    private final AtomicReference<RuntimeState> state =
+            new AtomicReference<>(RuntimeState.unknown());
+    private final AtomicBoolean refreshPending = new AtomicBoolean(false);
+
     private String cachedApkDigestKey = "";
     private String cachedApkDigest = "";
 
+    // Store tri-state explicitly
+    enum KillSwitchState {
+        DISABLED, ENABLED, UNKNOWN
+    }
+
+    private KillSwitchState cachedKillSwitchState = KillSwitchState.UNKNOWN;
+
     BridgeEnvironment(LogSink log) {
+        this.probeExecutor = Executors.newSingleThreadExecutor();
         this.log = log;
     }
 
@@ -90,13 +81,6 @@ final class BridgeEnvironment {
         return current.known && current.identityTrusted && current.privateSurfaceTrusted;
     }
 
-    /**
-     * Probes the kill switch, stock identity and Auxio target away from host callbacks.
-     *
-     * <p>The initial unknown state always preserves the stock path. The completion callback reports
-     * only the signer/UID decision so callers can install functional hooks even when Auxio is not
-     * installed yet.
-     */
     void refreshAsync(Context value, Consumer<Boolean> completion) {
         remember(value);
         Context app = currentContext();
@@ -144,7 +128,24 @@ final class BridgeEnvironment {
 
     private RuntimeState probe(Context value) {
         long checkedAtMs = SystemClock.elapsedRealtime();
-        boolean disabled = isDisabled();
+        KillSwitchState killSwitch = readKillSwitch();
+
+        // Use the explicitly defined state machine rules for kill switch transitions
+        if (killSwitch == KillSwitchState.UNKNOWN) {
+            if (cachedKillSwitchState == KillSwitchState.DISABLED) {
+                // If it was explicitly disabled, retain it on read errors
+                killSwitch = KillSwitchState.DISABLED;
+            } else if (cachedKillSwitchState == KillSwitchState.ENABLED) {
+                // If it was explicitly enabled, but is now unknown, do not retain ENABLED
+                // This correctly falls back to stock behaviour on read errors.
+                killSwitch = KillSwitchState.UNKNOWN;
+                cachedKillSwitchState = KillSwitchState.UNKNOWN;
+            }
+        } else {
+            cachedKillSwitchState = killSwitch;
+        }
+
+        boolean disabled = killSwitch != KillSwitchState.ENABLED; // disabled unless explicitly enabled
         IdentityResult identity = queryStockIdentity(value);
         boolean targetReady = identity.trusted && queryTargetReady(value.getPackageManager());
         return new RuntimeState(
@@ -184,11 +185,9 @@ final class BridgeEnvironment {
                 String actualCertificate = sha256(signature.toByteArray());
                 if (!actualCertificate.isEmpty()
                         && expectedCertificate.equals(actualCertificate)) {
-                    String expectedApk =
-                            normalisedDigest(BuildConfig.KNOWN_TESTED_STOCK_APK_SHA256);
                     String actualApk = cachedApkDigest(info.applicationInfo.sourceDir);
                     boolean privateSurfaceTrusted =
-                            !expectedApk.isEmpty() && expectedApk.equals(actualApk);
+                            BridgeContract.isReviewedStockApkForPrivateHooks(actualApk);
                     return new IdentityResult(true, privateSurfaceTrusted, versionCode);
                 }
             }
@@ -224,8 +223,32 @@ final class BridgeEnvironment {
             ActivityInfo activity = manager.getActivityInfo(component(BuildConfig.TARGET_ACTIVITY), 0);
             ServiceInfo mediaBrowser =
                     manager.getServiceInfo(component(BuildConfig.TARGET_MEDIA_BROWSER_SERVICE), 0);
+            if (!isCrossPackageCallable(activity) || !isCrossPackageCallable(mediaBrowser)) return false;
 
-            return isCrossPackageCallable(activity) && isCrossPackageCallable(mediaBrowser);
+            // Expected target signer verification
+            PackageInfo info = manager.getPackageInfo(BuildConfig.TARGET_PACKAGE, PackageManager.GET_SIGNING_CERTIFICATES);
+            SigningInfo signingInfo = info.signingInfo;
+            Signature[] signatures =
+                    signingInfo == null
+                            ? new Signature[0]
+                            : (signingInfo.hasMultipleSigners()
+                                    ? signingInfo.getApkContentsSigners()
+                                    : signingInfo.getSigningCertificateHistory());
+            String expectedCertificate = normalisedDigest(BuildConfig.TARGET_EXPECTED_SIGNER);
+            if (expectedCertificate.isEmpty()) {
+                log.log("Target expected signer is missing.", null);
+                return false;
+            }
+
+            for (Signature signature : signatures) {
+                String actualCertificate = sha256(signature.toByteArray());
+                if (!actualCertificate.isEmpty() && expectedCertificate.equals(actualCertificate)) {
+                    return true;
+                }
+            }
+
+            log.log("Target signer verification failed.", null);
+            return false;
         } catch (PackageManager.NameNotFoundException | RuntimeException error) {
             return false;
         }
@@ -239,14 +262,24 @@ final class BridgeEnvironment {
         return new ComponentName(BuildConfig.TARGET_PACKAGE, className);
     }
 
-    private static boolean isDisabled() {
+    private static KillSwitchState readKillSwitch() {
         try {
             // Intentional on API 29: the UID-1000 host must read the documented shared-storage
             // kill switch without depending on app-scoped storage owned by either APK.
             File shared = Environment.getExternalStorageDirectory();
-            return new File(shared, "Auxio-TS/disable-lsposed-bridge").isFile();
+            if (shared == null) return KillSwitchState.UNKNOWN;
+
+            File killSwitchFile = new File(shared, "Auxio-TS/disable-lsposed-bridge");
+
+            if (killSwitchFile.exists()) {
+                return killSwitchFile.isFile() ? KillSwitchState.DISABLED : KillSwitchState.UNKNOWN;
+            } else {
+                return KillSwitchState.ENABLED;
+            }
+        } catch (SecurityException error) {
+            return KillSwitchState.UNKNOWN;
         } catch (RuntimeException error) {
-            return false;
+            return KillSwitchState.UNKNOWN;
         }
     }
 
@@ -341,7 +374,7 @@ final class BridgeEnvironment {
         }
     }
 
-    private static final class IdentityResult {
+    static final class IdentityResult {
         final boolean trusted;
         final boolean privateSurfaceTrusted;
         final long versionCode;
@@ -353,7 +386,7 @@ final class BridgeEnvironment {
         }
     }
 
-    private static final class RuntimeState {
+    static final class RuntimeState {
         final boolean known;
         final boolean disabled;
         final boolean identityTrusted;
@@ -386,5 +419,10 @@ final class BridgeEnvironment {
         boolean canBridge() {
             return known && identityTrusted && !disabled && targetReady;
         }
+    }
+
+    @FunctionalInterface
+    interface LogSink {
+        void log(String message, Throwable error);
     }
 }
