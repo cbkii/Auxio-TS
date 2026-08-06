@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 case "${RELEASE_MODE}" in
   auto|create_new_release|repair_existing_release) ;;

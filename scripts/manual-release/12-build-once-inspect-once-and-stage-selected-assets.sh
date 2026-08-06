@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2154,SC2129 # GitHub supplies signing env; staged records append intentionally.
 set -euo pipefail
 release_dir="${RUNNER_TEMP}/selected-release-assets"
 debug_dir="${RUNNER_TEMP}/selected-debug-artifacts"

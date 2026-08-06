@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 tools_dir="${RUNNER_TEMP}/release-tools"
 mkdir -p "${tools_dir}/lib"

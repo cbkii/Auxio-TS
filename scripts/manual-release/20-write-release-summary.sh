@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 {
   echo '# Manual release summary'
   echo

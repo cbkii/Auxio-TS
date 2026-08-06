@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 case "${PUBLISH_DEBUG_APKS}" in
   true) DEBUG_DESTINATION=release_assets ;;

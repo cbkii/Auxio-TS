@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 timeout 120s git fetch origin dev
 remote_dev="$(git rev-parse origin/dev)"

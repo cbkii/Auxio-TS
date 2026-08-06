@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 tag_sha="$(git rev-list -n1 "${RELEASE_TAG}")"
 [[ -n "${tag_sha}" ]] || {

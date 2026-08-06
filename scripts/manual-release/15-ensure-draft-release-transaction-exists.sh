@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016 # Backticks in generated release notes are literal Markdown.
 set -euo pipefail
 created=false
 release_json="${RUNNER_TEMP}/active-release.json"

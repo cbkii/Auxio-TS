@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Publish one operator-approved immutable release tag, then verify its exact remote SHA.
 # This never deletes, rewrites or force-updates an existing tag.
 set -euo pipefail

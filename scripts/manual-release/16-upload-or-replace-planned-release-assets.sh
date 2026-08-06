@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 api_read() {
   local output=$1

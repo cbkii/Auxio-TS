@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 plan_file="${RUNNER_TEMP}/asset-plan.json"
 python3 "${TOOL}" plan-assets \

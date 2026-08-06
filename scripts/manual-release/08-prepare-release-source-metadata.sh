@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${RELEASE_MODE}" == create_new_release ]]; then
   if [[ "${METADATA_CHANGE_REQUIRED}" == true ]]; then

@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 final_json="${RUNNER_TEMP}/final-release.json"
 patch_status() {

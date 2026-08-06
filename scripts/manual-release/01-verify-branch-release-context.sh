@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${GITHUB_REF_TYPE}" != branch || "${GITHUB_REF_NAME}" != dev ]]; then
   echo "::error::Manual releases must run from the current dev branch."

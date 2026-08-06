@@ -30,6 +30,13 @@ startup_validation=.github/workflows/startup-performance.yml
 android_workflow=.github/workflows/android.yml
 quality_workflow=.github/workflows/lint.yml
 release_workflow=.github/workflows/manual-release.yml
+release_script_dir=scripts/manual-release
+release_surface=$(mktemp)
+cleanup_release_surface() { rm -f -- "$release_surface"; }
+trap cleanup_release_surface EXIT
+mapfile -t release_scripts < <(find "$release_script_dir" -maxdepth 1 -type f -name '*.sh' -print | sort)
+((${#release_scripts[@]} == 19)) || fail "expected 19 Manual Release implementation scripts"
+cat "$release_workflow" "${release_scripts[@]}" > "$release_surface"
 benchmark_workflow=.github/workflows/startup-benchmarks.yml
 
 for path in \
@@ -121,10 +128,10 @@ require_contains "$android_workflow" ':app:connectedTopwayTwMediaDebugAndroidTes
 require_contains "$quality_workflow" ':app:testTopwayTwMediaDebugUnitTest'
 require_contains "$quality_workflow" ':app:lintTopwayTwMediaDebug'
 require_contains "$release_workflow" 'persist-credentials: false'
-require_contains "$release_workflow" 'bash ./scripts/check-startup-performance-contracts.sh "${asset_path}"'
-require_contains "$release_workflow" '.sha256'
-require_contains "$release_workflow" '.metadata.txt'
-require_absent "$release_workflow" 'include_standard_apk'
+require_contains "$release_surface" 'bash ./scripts/check-startup-performance-contracts.sh "${asset_path}"'
+require_contains "$release_surface" '.sha256'
+require_contains "$release_surface" '.metadata.txt'
+require_absent "$release_surface" 'include_standard_apk'
 require_contains "$benchmark_workflow" 'default: topwayTwMedia'
 require_contains "$benchmark_workflow" 'Measurement iterations (15-30)'
 require_contains "$benchmark_workflow" '        default: 15'

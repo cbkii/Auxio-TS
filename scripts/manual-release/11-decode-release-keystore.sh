@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
   [[ -n "${!name:-}" ]] || {

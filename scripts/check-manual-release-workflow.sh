@@ -81,7 +81,8 @@ script_dir = Path(sys.argv[2])
 text = workflow_path.read_text(encoding='utf-8')
 script_paths = sorted(script_dir.glob('*.sh'))
 script_text = {str(path): path.read_text(encoding='utf-8') for path in script_paths}
-surface = text + '\n' + '\n'.join(script_text.values())
+orchestrator_text = Path('scripts/release-orchestrator.py').read_text(encoding='utf-8')
+surface = text + '\n' + orchestrator_text + '\n' + '\n'.join(script_text.values())
 
 try:
     import yaml
@@ -217,6 +218,8 @@ for pin in (
 
 print('OK Manual Release workflow, form, bounded scripts and transaction ordering')
 PY
+python_validation_status=$?
+((python_validation_status == 0)) || fail 'Manual Release static contract validation failed.'
 
 tmp="$(mktemp -d)" || fail 'Unable to create temporary test directory.'
 trap 'rm -rf -- "${tmp}"' EXIT
