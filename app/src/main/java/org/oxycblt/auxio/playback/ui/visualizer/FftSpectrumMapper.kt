@@ -81,6 +81,7 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
     private var cachedFftSamplingRate = -1
     private var cachedWaveformSize = -1
     private var cachedWaveformSamplingRate = -1
+    private var waveformMappingValid = false
     private var mappingGeneration = 0
 
     private var adaptivePeak = MIN_ADAPTIVE_PEAK
@@ -174,6 +175,10 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
         if (cachedWaveformSize != waveform.size || cachedWaveformSamplingRate != samplingRate) {
             recalculateWaveformMapping(waveform.size, samplingRate)
         }
+        if (!waveformMappingValid) {
+            decayToSilence()
+            return
+        }
 
         var frameSumSquares = 0f
         for (sample in waveform) {
@@ -237,8 +242,19 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
     internal fun mappingGenerationForTest() = mappingGeneration
 
     private fun prepareSource(source: InputSource) {
-        if (activeSource != null && activeSource != source) resetDynamics()
+        if (activeSource != source) {
+            if (activeSource != null) resetDynamics()
+            invalidateMappingCaches()
+        }
         activeSource = source
+    }
+
+    private fun invalidateMappingCaches() {
+        cachedFftSize = -1
+        cachedFftSamplingRate = -1
+        cachedWaveformSize = -1
+        cachedWaveformSamplingRate = -1
+        waveformMappingValid = false
     }
 
     private fun recalculateFftMapping(fftSize: Int, samplingRate: Int) {
@@ -304,6 +320,7 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
     private fun recalculateWaveformMapping(waveformSize: Int, samplingRate: Int) {
         cachedWaveformSize = waveformSize
         cachedWaveformSamplingRate = samplingRate
+        waveformMappingValid = false
         mappingGeneration++
 
         val sampleRateHz = samplingRate / 1000f
@@ -334,6 +351,7 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             bandLogFrequencies[band] = ln(fromMel(mel))
         }
         centerLogFrequencyCoordinates()
+        waveformMappingValid = true
     }
 
     private fun centerLogFrequencyCoordinates() {
