@@ -2,7 +2,7 @@
 
 Repository: `cbkii/Auxio-TS`
 
-Repository state observed while preparing this brief: `dev` at `1b7d10665c1d296e227ad34320991749c4cea539` on 2026-08-06.
+Repository state observed while preparing this brief: `dev` at `09dec414e4a6a81af6b44af63f9efe87d4a7f5d9` on 2026-08-06.
 
 Primary exact-device target: Topway TS18, Android 10/API 29, DoFun Variety launcher `com.dofun.variety`, Auxio-TS player `com.tw.media`.
 
@@ -116,6 +116,24 @@ com.tw.music
 ```
 
 That scope is a repository observation, not a required future design.
+
+### Current source audit at 09dec414e
+
+REPOSITORY observation:
+
+- Track A is already substantial, not a from-scratch design. The app contains the launcher
+  coordinator, cold-command receiver, command-service client/contract, action mapper, seek and
+  progress policies, widget policy and playback-service call-sites.
+- Track B does not currently exist. There is no `com.dofun.variety`-scoped module or adapter.
+- Track C is the existing five-class-group Java `lsposed-bridge` scoped to `com.tw.music`.
+- `Ts18LauncherIntegrationMode` defaults Topway-compatible builds to `GenericDofunMedia`.
+  That profile uses Android-standard notification/media-button behaviour. The direct Topway
+  broadcast publisher and incoming command handler are present but separately mode-gated.
+- Root and nested agent instructions, release defaults and older compatibility prose previously
+  treated Track C as primary; those authorities must be corrected before judging architecture.
+
+This audit changes the work shape: first verify and mature existing Track A wiring, then determine
+whether any Track B or Track C artifact is actually required.
 
 ## 4. Exact DoFun evidence
 

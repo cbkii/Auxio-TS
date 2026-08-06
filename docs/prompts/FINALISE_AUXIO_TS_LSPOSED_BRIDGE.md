@@ -15,7 +15,7 @@ dev
 Current repository head observed when this prompt was prepared:
 
 ```text
-1b7d10665c1d296e227ad34320991749c4cea539
+09dec414e4a6a81af6b44af63f9efe87d4a7f5d9
 ```
 
 Refresh from current `dev` before changing anything. Work on one focused branch and one pull request targeting `dev`. Do not create a second PR for cleanup or review fixes. Do not merge or publish a release unless the user explicitly instructs you to do so.
@@ -37,6 +37,24 @@ The user no longer uses genuine stock `com.tw.music` as the music player or norm
 This is an implementation task, not a report-only task. Audit current code and evidence, choose the smallest correct architecture, implement it, add tests and CI contracts, update documentation, inspect complete review and CI output, and leave one review-ready PR.
 
 Physical TS18 checks remain a separate evidence boundary. Do not defer implementable software fixes merely because physical validation is pending. Never claim an unrun physical check passed.
+
+## Current source audit that must shape the work
+
+At `09dec414e`, Track A is already substantially implemented under
+`app/src/main/java/org/oxycblt/auxio/headunit/topway/`. Do not rebuild it from scratch.
+
+Current shape:
+
+- Track A: coordinator, receiver, command-service client/contract, mapper, seek/progress/widget
+  policies and playback-service wiring already exist.
+- Track B: no `com.dofun.variety`-scoped adapter exists.
+- Track C: the existing `lsposed-bridge` is a `com.tw.music` legacy stock shim.
+- The Topway-compatible default is `GenericDofunMedia`; direct Topway broadcast and command lanes
+  exist but are separately mode-gated.
+- Repository instructions and release defaults that still describe Track C as primary are stale
+  and must be aligned.
+
+Treat this as a maturity, integration and architecture-selection task, not a greenfield bridge task.
 
 ## Mandatory authority document
 

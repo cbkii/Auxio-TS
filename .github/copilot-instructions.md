@@ -2,6 +2,22 @@
 
 ## Core stance
 
+## Current DoFun architecture authority
+
+This section overrides older stock-first wording elsewhere in this file.
+
+- The primary supported player and release path is `topwayTwMedia` / `com.tw.media`.
+- Track A direct integration is already substantially implemented in
+  `org.oxycblt.auxio.headunit.topway`; audit and complete it rather than rebuilding it.
+- The existing `lsposed-bridge` is Track C, an optional legacy `com.tw.music` stock shim. Its
+  internal scope remains exact while retained, but it is not the default architecture or release
+  asset.
+- No Track B `com.dofun.variety` module currently exists. Create one only as a separate,
+  evidence-gated artifact when exact launcher-private behaviour is proven necessary.
+- Do not scope `com.tw.media` in LSPosed.
+- Retained diagnostics prove the earlier stock-selected failure mode, not current direct behaviour
+  with stock unavailable or not selected.
+
 - Start documentation navigation from `docs/README.md`.
 - Prefer consolidation/removal of stale docs over keeping historical wrappers.
 - **Auxio-TS is a TS18/TW/TWTHEME variant app.** TS18/TW/TWTHEME parity is the product target.
@@ -26,17 +42,22 @@ Primary references:
 
 Priority order for music-widget/package-identity work:
 
-1. DoFun Variety Theme (`com.dofun.variety`) recognition and widget/control behaviour.
-2. Stock `twmusic` / `com.tw.music` replacement contract.
-3. Android-standard MediaSession/MediaBrowser/notification correctness.
-4. Isolated Topway broadcast/action bridge.
-5. Private/native investigation only through explicit evidence-gated approval.
+1. Audit and complete the existing direct `com.tw.media` integration and its actual mode/call-site
+   wiring.
+2. Resolve DoFun candidate selection and fixed-widget launch/control/state lanes separately.
+3. Preserve Android-standard MediaSession/MediaBrowser/notification correctness and the isolated
+   Topway broadcast/action adapter.
+4. Retain the `com.tw.music` stock shim only when current evidence proves Track C is required.
+5. Investigate a separate DoFun-private Track B adapter only through explicit evidence-gated
+   approval.
 
 Observed directly reusable requirements:
 
 - DoFun music hotseat matching expects `com.tw.media` / `com.tw.music.MusicActivity` or `com.tw.music` / `com.tw.music.MusicActivity`.
-- Dedicated Topway/DoFun release variants may intentionally install as exact package `com.tw.music` or alternate fixed-entry package `com.tw.media` and expose `com.tw.music.MusicActivity`.
-- The standard Auxio/Auxio-TS variant must keep its normal `org.oxycblt.auxio` identity.
+- `topwayTwMedia` / `com.tw.media` is the primary distributable player and exposes the
+  stock-compatible `com.tw.music.MusicActivity` component name.
+- `topwayTwMusic` / `com.tw.music` is an internal exact-package contract fixture only and must
+  never be published or installed as the normal product.
 - Topway bridge strings are allowed only inside the isolated bridge package/tests/docs.
 
 Observed but not approved for product implementation:

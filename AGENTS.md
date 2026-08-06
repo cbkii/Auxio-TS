@@ -128,10 +128,23 @@ Observed reusable requirements:
 
 Observed private Cardoor services, `android.uid.system`, shared UID, `TWUtil` and `com.tw.service.xt` AIDL are evidence only. Do not fake services, copy smali, require platform signing or claim a normal rooted APK has UID 1000 authority.
 
-The optional LSPosed addon is the narrow exception for execution context, not an identity
-exception for Auxio: it may run inside the already-installed, signer-verified stock
-`com.tw.music` UID-1000 process. It must never assign, spoof or grant that identity to Auxio,
-replace the stock APK, or broaden its static scope.
+Current DoFun integration authority is dependency-ordered:
+
+1. Prefer direct integration in the published `com.tw.media` app through its existing
+   `TopwayLauncherIntegrationCoordinator`, command receiver/service adapters, Android
+   MediaSession/MediaBrowser surfaces, and observed Topway broadcasts.
+2. Add a separate, narrowly scoped `com.dofun.variety` LSPosed adapter only when exact launcher
+   APK and runtime evidence prove that a required fixed-widget behaviour is private to DoFun and
+   cannot be implemented through the direct app path.
+3. Retain the existing `lsposed-bridge` module only as an optional legacy stock shim when current
+   evidence proves that a supported configuration still requires genuine `com.tw.music` as a
+   relay.
+
+The existing `lsposed-bridge` code is Track C. While that module exists, its static scope remains
+exactly `com.tw.music` because it hooks stock classes. Do not repurpose it into a DoFun adapter and
+do not infer that stock is the user's active player. A proven Track B adapter must be a separate
+module/artifact with its own exact scope, trust gates, kill switch and process-safe IPC. Neither
+track may assign, spoof or grant UID 1000/platform identity to Auxio.
 
 ## TS18 evidence and architecture
 
@@ -185,11 +198,13 @@ Startup benchmark/profile work supports only maintained variants. API 29 macrobe
 ## Release and signing safety
 
 - Manual releases run only from current `dev` with full history/tags.
-- Published install assets are the signed `com.tw.media` APK and the separately signed, optional
-  LSPosed API 100 bridge addon.
+- The primary published install asset is the signed `com.tw.media` APK.
+- The existing `com.tw.music`-scoped LSPosed API 100 bridge is an opt-in legacy compatibility
+  asset only while Track C remains justified. Manual Release must not select it by default.
+- A future evidence-approved DoFun adapter must be a separate artifact; do not broaden or
+  repurpose the stock-shim module.
 - The former exact-package `topwayTwMusic` Magisk overlay is retired. Never publish its raw APK or
   reconstruct the overlay release lane.
-- Keep the LSPosed bridge static-scoped exactly to the genuine stock `com.tw.music` process.
 - Never print secrets or commit keystores; use runner temporary storage.
 - Stage and validate rebuilt assets before replacing existing release assets.
 - Preserve package, version, SDK, ABI, signing-certificate and SHA-256 sidecars.
