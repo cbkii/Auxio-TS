@@ -462,10 +462,8 @@ internal class IncrementalScanStore(
                         ) {
                             sourceFailures.putIfAbsent(
                                 snapshot.sourceKey,
-                                (
-                                        "TEMPORARILY_UNAVAILABLE|No enumerated candidate item " +
-                                            "could be resolved ($unresolvedItemCount unavailable)"
-                                    )
+                                ("TEMPORARILY_UNAVAILABLE|No enumerated candidate item " +
+                                        "could be resolved ($unresolvedItemCount unavailable)")
                                     .take(MAX_ERROR_LENGTH),
                             )
                         }
@@ -550,7 +548,8 @@ internal class IncrementalScanStore(
                                             }
                                         val prior =
                                             ledger.committedProfile?.let {
-                                                runCatching { MetadataProfile.valueOf(it) }.getOrNull()
+                                                runCatching { MetadataProfile.valueOf(it) }
+                                                    .getOrNull()
                                             }
                                         if (
                                             retainedItemCount > 0 &&

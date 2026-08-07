@@ -651,12 +651,7 @@ class IncrementalScanStoreTest {
         store.commitScan()
 
         val next =
-            store.planScan(
-                listOf(source.copy(fingerprint = "v2")),
-                true,
-                MetadataProfile.LEAN,
-                2L,
-            )
+            store.planScan(listOf(source.copy(fingerprint = "v2")), true, MetadataProfile.LEAN, 2L)
         store.beginScan(next)
         store.stage(cachedFile("alpha.mp3", 2L))
         assertTrue(store.markItemUnavailable(cachedFile("beta.mp3", 2L).file))
@@ -667,9 +662,7 @@ class IncrementalScanStoreTest {
         assertEquals(2, db.incrementalLibraryDao().songCount())
         assertEquals(
             1L,
-            db.readDao()
-                .selectSongByUri(Uri.parse("file:///storage/usbdisk0/beta.mp3"))
-                ?.modifiedMs,
+            db.readDao().selectSongByUri(Uri.parse("file:///storage/usbdisk0/beta.mp3"))?.modifiedMs,
         )
         assertEquals(
             2L,
@@ -680,35 +673,36 @@ class IncrementalScanStoreTest {
     }
 
     @Test
-    fun `all unresolved items fail source instead of committing authoritative empty`() = runBlocking {
-        val source = snapshot("v1")
-        val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
-        store.beginScan(first)
-        store.stage(cachedFile("alpha.mp3", 1L))
-        store.commitScan()
+    fun `all unresolved items fail source instead of committing authoritative empty`() =
+        runBlocking {
+            val source = snapshot("v1")
+            val first = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+            store.beginScan(first)
+            store.stage(cachedFile("alpha.mp3", 1L))
+            store.commitScan()
 
-        val next =
-            store.planScan(
-                listOf(source.copy(fingerprint = "v2")),
-                true,
-                MetadataProfile.LEAN,
-                2L,
+            val next =
+                store.planScan(
+                    listOf(source.copy(fingerprint = "v2")),
+                    true,
+                    MetadataProfile.LEAN,
+                    2L,
+                )
+            store.beginScan(next)
+            assertTrue(store.markItemUnavailable(cachedFile("alpha.mp3", 2L).file))
+            val commit = store.commitScan()
+
+            assertEquals(setOf(source.sourceKey), commit.failedSources.keys)
+            assertTrue(commit.committedSources.isEmpty())
+            assertEquals(1, commit.unresolvedItems)
+            assertEquals(1, db.incrementalLibraryDao().songCount())
+            assertEquals(
+                1L,
+                db.readDao()
+                    .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
+                    ?.modifiedMs,
             )
-        store.beginScan(next)
-        assertTrue(store.markItemUnavailable(cachedFile("alpha.mp3", 2L).file))
-        val commit = store.commitScan()
-
-        assertEquals(setOf(source.sourceKey), commit.failedSources.keys)
-        assertTrue(commit.committedSources.isEmpty())
-        assertEquals(1, commit.unresolvedItems)
-        assertEquals(1, db.incrementalLibraryDao().songCount())
-        assertEquals(
-            1L,
-            db.readDao()
-                .selectSongByUri(Uri.parse("file:///storage/usbdisk0/alpha.mp3"))
-                ?.modifiedMs,
-        )
-    }
+        }
 
     @Test
     fun `provider reconciliation removes a previously retained unresolved item`() = runBlocking {
@@ -720,12 +714,7 @@ class IncrementalScanStoreTest {
         store.commitScan()
 
         val partial =
-            store.planScan(
-                listOf(source.copy(fingerprint = "v2")),
-                true,
-                MetadataProfile.LEAN,
-                2L,
-            )
+            store.planScan(listOf(source.copy(fingerprint = "v2")), true, MetadataProfile.LEAN, 2L)
         store.beginScan(partial)
         store.stage(cachedFile("alpha.mp3", 2L))
         store.markItemUnavailable(cachedFile("beta.mp3", 2L).file)
@@ -733,12 +722,7 @@ class IncrementalScanStoreTest {
         assertEquals(2, db.incrementalLibraryDao().songCount())
 
         val reconciled =
-            store.planScan(
-                listOf(source.copy(fingerprint = "v3")),
-                true,
-                MetadataProfile.LEAN,
-                3L,
-            )
+            store.planScan(listOf(source.copy(fingerprint = "v3")), true, MetadataProfile.LEAN, 3L)
         store.beginScan(reconciled)
         store.stage(cachedFile("alpha.mp3", 3L))
         store.commitScan()
@@ -757,12 +741,7 @@ class IncrementalScanStoreTest {
         store.commitScan()
 
         val full =
-            store.planScan(
-                listOf(source.copy(fingerprint = "v2")),
-                true,
-                MetadataProfile.FULL,
-                2L,
-            )
+            store.planScan(listOf(source.copy(fingerprint = "v2")), true, MetadataProfile.FULL, 2L)
         store.beginScan(full)
         store.stage(cachedFile("alpha.mp3", 2L))
         store.markItemUnavailable(cachedFile("beta.mp3", 2L).file)

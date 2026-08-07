@@ -100,8 +100,8 @@ interface IncrementalCache {
     /**
      * Record one enumerated item that became unavailable before metadata extraction.
      *
-     * Implementations may carry a previously committed row forward into the pending generation;
-     * a newly stale row with no committed predecessor is simply omitted. This uncertainty is
+     * Implementations may carry a previously committed row forward into the pending generation; a
+     * newly stale row with no committed predecessor is simply omitted. This uncertainty is
      * item-scoped and must not by itself fail the whole source.
      */
     suspend fun markItemUnavailable(file: File): Boolean = false
