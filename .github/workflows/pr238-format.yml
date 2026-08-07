@@ -1,0 +1,53 @@
+name: PR 238 focused formatting
+
+on:
+  push:
+    branches:
+      - fix/mediastore-source-authority-stale-rows
+    paths:
+      - .github/workflows/pr238-format.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr238-focused-formatting
+  cancel-in-progress: false
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/mediastore-source-authority-stale-rows
+          fetch-depth: 0
+
+      - name: Prepare repository dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
+
+      - name: Apply repository Kotlin formatting
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
+
+      - name: Remove temporary workflow and validate diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -- .github/workflows/pr238-format.yml
+          git diff --check
+          test ! -e .github/workflows/pr238-format.yml
+
+      - name: Commit formatting only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo 'STOP: formatter produced no staged changes' >&2; exit 1; }
+          git commit -m "style: apply Kotlin formatting for MediaStore hardening"
+          git push origin HEAD:fix/mediastore-source-authority-stale-rows
