@@ -59,9 +59,14 @@ class MusicService : AuxioService() {
                 if (code != BridgeWireContract.TRANSACTION_DISPATCH) {
                     return super.onTransact(code, data, reply, flags)
                 }
+                // Track C is explicitly an acknowledged protocol. Ignore one-way or reply-less
+                // transactions rather than executing a command that cannot positively acknowledge
+                // admission to the caller before stock behaviour is suppressed.
+                if ((flags and IBinder.FLAG_ONEWAY) != 0 || reply == null) return true
+
                 val response = dispatchBridgeTransaction(data)
-                reply?.writeNoException()
-                reply?.writeInt(response)
+                reply.writeNoException()
+                reply.writeInt(response)
                 return true
             }
         }
@@ -145,6 +150,8 @@ class MusicService : AuxioService() {
         val uid = Binder.getCallingUid()
         if (uid != Process.SYSTEM_UID) return false
         return try {
+            // UID 1000 is shared, so this is only a supporting posture check. The callable surface
+            // remains deliberately narrow and non-destructive even for another system-UID caller.
             packageManager.getPackagesForUid(uid)?.contains(STOCK_PACKAGE) == true
         } catch (error: RuntimeException) {
             Timber.w(error, "Unable to verify Track-C caller package posture")
