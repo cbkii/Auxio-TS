@@ -63,7 +63,10 @@ internal object TagLibJNI {
      */
     fun open(deviceFile: File, fis: FileInputStream): MetadataResult {
         if (!isAvailable) {
-            return MetadataResult.ProviderFailed
+            return MetadataResult.ProviderFailed(
+                UnsatisfiedLinkError::class.java.name,
+                "Native tagJNI library is unavailable for this process",
+            )
         }
         val inputStream = NativeInputStream(deviceFile, fis)
         return try {
@@ -76,7 +79,7 @@ internal object TagLibJNI {
             if (nativeCallFailureLogged.compareAndSet(false, true)) {
                 Log.e("TagLibJNI", "Native metadata extraction failed to bind; skipping files", e)
             }
-            MetadataResult.ProviderFailed
+            MetadataResult.ProviderFailed(e.javaClass.name, e.message)
         } finally {
             inputStream.close()
         }
