@@ -116,11 +116,6 @@ internal class TopwayBridgePlaybackIngress
 constructor(private val playbackManager: PlaybackStateManager) {
     private val handler = Handler(Looper.getMainLooper())
 
-    /** Transitional wrapper kept until the Binder caller is moved to the explicit result contract. */
-    fun admit(commandType: Int, seekPositionMs: Long, deadlineElapsedMs: Long): Boolean =
-        admitResult(commandType, seekPositionMs, deadlineElapsedMs) ==
-            TopwayBridgeAdmissionResult.ACCEPTED
-
     fun admitResult(
         commandType: Int,
         seekPositionMs: Long,
