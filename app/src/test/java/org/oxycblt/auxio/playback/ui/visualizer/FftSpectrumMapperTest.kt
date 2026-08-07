@@ -77,9 +77,12 @@ class FftSpectrumMapperTest {
     @Test
     fun captureConfigurationChangeResetsTransientActivity() {
         val mapper = FftSpectrumMapper()
+        val fft = ByteArray(512).apply { this[24] = 100 }
 
-        mapper.update(createSineWaveFft(1000f), SAMPLE_RATE_MILLIHZ)
-        mapper.update(createSineWaveFft(3000f), SAMPLE_RATE_MILLIHZ)
+        mapper.update(fft, SAMPLE_RATE_MILLIHZ)
+        fft[24] = 0
+        fft[80] = 100
+        mapper.update(fft, SAMPLE_RATE_MILLIHZ)
         assertTrue(mapper.lastActivity > 0f)
 
         mapper.update(createSineWaveFft(3000f, sampleRateHz = 48_000f), 48_000_000)
