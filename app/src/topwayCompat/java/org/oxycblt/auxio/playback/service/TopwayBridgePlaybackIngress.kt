@@ -23,13 +23,92 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.ts18bridge.BridgeWireContract
 import timber.log.Timber
 
+internal enum class TopwayBridgeAdmissionResult {
+    ACCEPTED,
+    NOT_READY,
+    INVALID,
+    EXPIRED,
+    INTERRUPTED,
+    ERROR,
+}
+
+/**
+ * Small lock-free admission state machine kept separate from Android scheduling so timeout and
+ * interruption races are deterministic and directly unit-testable.
+ */
+internal class TopwayBridgeAdmissionState {
+    private val phase = AtomicReference(Phase.PENDING)
+
+    fun start(): Boolean = phase.compareAndSet(Phase.PENDING, Phase.RUNNING)
+
+    fun complete(result: TopwayBridgeAdmissionResult) {
+        phase.compareAndSet(Phase.RUNNING, result.toTerminalPhase())
+    }
+
+    fun expire(): TopwayBridgeAdmissionResult = terminateUnfinished(TopwayBridgeAdmissionResult.EXPIRED)
+
+    fun interrupt(): TopwayBridgeAdmissionResult =
+        terminateUnfinished(TopwayBridgeAdmissionResult.INTERRUPTED)
+
+    fun result(): TopwayBridgeAdmissionResult = phase.get().toResult()
+
+    private fun terminateUnfinished(
+        result: TopwayBridgeAdmissionResult
+    ): TopwayBridgeAdmissionResult {
+        val terminal = result.toTerminalPhase()
+        while (true) {
+            when (val current = phase.get()) {
+                Phase.ACCEPTED -> return TopwayBridgeAdmissionResult.ACCEPTED
+                Phase.PENDING,
+                Phase.RUNNING -> {
+                    if (phase.compareAndSet(current, terminal)) return result
+                }
+                else -> return current.toResult()
+            }
+        }
+    }
+
+    private fun TopwayBridgeAdmissionResult.toTerminalPhase(): Phase =
+        when (this) {
+            TopwayBridgeAdmissionResult.ACCEPTED -> Phase.ACCEPTED
+            TopwayBridgeAdmissionResult.NOT_READY -> Phase.NOT_READY
+            TopwayBridgeAdmissionResult.INVALID -> Phase.INVALID
+            TopwayBridgeAdmissionResult.EXPIRED -> Phase.EXPIRED
+            TopwayBridgeAdmissionResult.INTERRUPTED -> Phase.INTERRUPTED
+            TopwayBridgeAdmissionResult.ERROR -> Phase.ERROR
+        }
+
+    private fun Phase.toResult(): TopwayBridgeAdmissionResult =
+        when (this) {
+            Phase.ACCEPTED -> TopwayBridgeAdmissionResult.ACCEPTED
+            Phase.NOT_READY -> TopwayBridgeAdmissionResult.NOT_READY
+            Phase.INVALID -> TopwayBridgeAdmissionResult.INVALID
+            Phase.EXPIRED -> TopwayBridgeAdmissionResult.EXPIRED
+            Phase.INTERRUPTED -> TopwayBridgeAdmissionResult.INTERRUPTED
+            Phase.ERROR -> TopwayBridgeAdmissionResult.ERROR
+            Phase.PENDING,
+            Phase.RUNNING -> TopwayBridgeAdmissionResult.NOT_READY
+        }
+
+    private enum class Phase {
+        PENDING,
+        RUNNING,
+        ACCEPTED,
+        NOT_READY,
+        INVALID,
+        EXPIRED,
+        INTERRUPTED,
+        ERROR,
+    }
+}
+
 /**
  * Variant-local ingress from the narrow Track-C Binder into Auxio's one playback authority.
  *
  * <p>The Binder thread never owns playback state. It asks the main looper to perform the same
  * singleton [PlaybackStateManager] operations used by the normal MediaSession and Topway adapter,
- * and waits only until the request deadline. A request that is still pending at its deadline is
- * cancelled before it can execute later.
+ * and waits only until the request deadline. A request that is pending or running at its deadline
+ * becomes terminally expired, so late completion can never be promoted to accepted.
  */
 @Singleton
 internal class TopwayBridgePlaybackIngress
@@ -37,30 +116,48 @@ internal class TopwayBridgePlaybackIngress
 constructor(private val playbackManager: PlaybackStateManager) {
     private val handler = Handler(Looper.getMainLooper())
 
-    fun admit(commandType: Int, seekPositionMs: Long, deadlineElapsedMs: Long): Boolean {
-        if (!BridgeWireContract.isSupportedCommand(commandType)) return false
-        if (commandType == BridgeWireContract.COMMAND_SEEK && seekPositionMs < 0L) return false
-        if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) return false
+    /** Transitional wrapper kept until the Binder caller is moved to the explicit result contract. */
+    fun admit(commandType: Int, seekPositionMs: Long, deadlineElapsedMs: Long): Boolean =
+        admitResult(commandType, seekPositionMs, deadlineElapsedMs) ==
+            TopwayBridgeAdmissionResult.ACCEPTED
 
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            return execute(commandType, seekPositionMs)
+    fun admitResult(
+        commandType: Int,
+        seekPositionMs: Long,
+        deadlineElapsedMs: Long,
+    ): TopwayBridgeAdmissionResult {
+        if (!BridgeWireContract.isSupportedCommand(commandType)) {
+            return TopwayBridgeAdmissionResult.INVALID
+        }
+        if (commandType == BridgeWireContract.COMMAND_SEEK && seekPositionMs < 0L) {
+            return TopwayBridgeAdmissionResult.INVALID
+        }
+        if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
+            return TopwayBridgeAdmissionResult.EXPIRED
         }
 
-        val admission = Admission(commandType, seekPositionMs)
-        if (!handler.post(admission)) return false
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            val result = execute(commandType, seekPositionMs)
+            return if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
+                TopwayBridgeAdmissionResult.EXPIRED
+            } else {
+                result
+            }
+        }
+
+        val admission = Admission(commandType, seekPositionMs, deadlineElapsedMs)
+        if (!handler.post(admission)) return TopwayBridgeAdmissionResult.NOT_READY
 
         while (true) {
             val remainingMs = deadlineElapsedMs - SystemClock.elapsedRealtime()
-            if (remainingMs <= 0L) {
-                return admission.cancelPendingOrAccepted()
-            }
+            if (remainingMs <= 0L) return admission.state.expire()
             try {
                 if (admission.done.await(remainingMs, TimeUnit.MILLISECONDS)) {
-                    return admission.accepted()
+                    return admission.state.result()
                 }
             } catch (error: InterruptedException) {
                 Thread.currentThread().interrupt()
-                return admission.cancelPendingOrAccepted()
+                return admission.state.interrupt()
             }
         }
     }
@@ -68,80 +165,84 @@ constructor(private val playbackManager: PlaybackStateManager) {
     private inner class Admission(
         private val commandType: Int,
         private val seekPositionMs: Long,
+        private val deadlineElapsedMs: Long,
     ) : Runnable {
         val done = CountDownLatch(1)
-        private val state = AtomicReference(State.PENDING)
+        val state = TopwayBridgeAdmissionState()
 
         override fun run() {
-            if (!state.compareAndSet(State.PENDING, State.RUNNING)) {
+            if (!state.start()) {
                 done.countDown()
                 return
             }
             try {
-                state.set(if (execute(commandType, seekPositionMs)) State.ACCEPTED else State.FAILED)
+                val result = execute(commandType, seekPositionMs)
+                if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
+                    state.expire()
+                } else {
+                    state.complete(result)
+                }
             } finally {
                 done.countDown()
             }
         }
-
-        fun accepted(): Boolean = state.get() == State.ACCEPTED
-
-        fun cancelPendingOrAccepted(): Boolean {
-            if (state.compareAndSet(State.PENDING, State.CANCELLED)) return false
-            return when (state.get()) {
-                State.RUNNING, State.ACCEPTED -> true
-                State.PENDING, State.FAILED, State.CANCELLED -> false
-            }
-        }
     }
 
-    private fun execute(commandType: Int, seekPositionMs: Long): Boolean =
+    private fun execute(
+        commandType: Int,
+        seekPositionMs: Long,
+    ): TopwayBridgeAdmissionResult =
         try {
-            when (commandType) {
-                BridgeWireContract.COMMAND_PREVIOUS -> playbackManager.prev()
-                BridgeWireContract.COMMAND_NEXT -> playbackManager.next()
-                BridgeWireContract.COMMAND_PLAY_PAUSE -> playPause()
-                BridgeWireContract.COMMAND_PLAY -> play()
-                BridgeWireContract.COMMAND_PAUSE -> playbackManager.playing(false)
-                BridgeWireContract.COMMAND_SEEK -> playbackManager.seekTo(seekPositionMs)
-                else -> return false
+            synchronized(playbackManager) {
+                when (commandType) {
+                    BridgeWireContract.COMMAND_PREVIOUS ->
+                        withLivePlayback { playbackManager.prev() }
+                    BridgeWireContract.COMMAND_NEXT -> withLivePlayback { playbackManager.next() }
+                    BridgeWireContract.COMMAND_PLAY_PAUSE -> playPause()
+                    BridgeWireContract.COMMAND_PLAY -> play()
+                    BridgeWireContract.COMMAND_PAUSE ->
+                        withLivePlayback { playbackManager.playing(false) }
+                    BridgeWireContract.COMMAND_SEEK ->
+                        withLivePlayback { playbackManager.seekTo(seekPositionMs) }
+                    else -> TopwayBridgeAdmissionResult.INVALID
+                }
             }
-            true
         } catch (error: RuntimeException) {
             Timber.w(error, "Track-C command admission failed")
-            false
+            TopwayBridgeAdmissionResult.ERROR
         }
 
-    private fun playPause() {
-        if (hasRestorablePlayback()) {
-            playbackManager.playing(!playbackManager.progression.isPlaying)
-        } else {
-            restorePlaying()
+    private inline fun withLivePlayback(command: () -> Unit): TopwayBridgeAdmissionResult {
+        if (playbackManager.currentAudioSessionId == null) {
+            return TopwayBridgeAdmissionResult.NOT_READY
         }
+        command()
+        return TopwayBridgeAdmissionResult.ACCEPTED
     }
 
-    private fun play() {
-        if (hasRestorablePlayback()) {
+    private fun playPause(): TopwayBridgeAdmissionResult {
+        if (playbackManager.currentAudioSessionId != null) {
+            playbackManager.playing(!playbackManager.progression.isPlaying)
+        } else {
+            // Deferred playback is itself a canonical accepted action: PlaybackStateManager stores
+            // it until its one PlaybackStateHolder can consume it.
+            restorePlaying()
+        }
+        return TopwayBridgeAdmissionResult.ACCEPTED
+    }
+
+    private fun play(): TopwayBridgeAdmissionResult {
+        if (playbackManager.currentAudioSessionId != null) {
             playbackManager.playing(true)
         } else {
             restorePlaying()
         }
+        return TopwayBridgeAdmissionResult.ACCEPTED
     }
-
-    private fun hasRestorablePlayback(): Boolean =
-        playbackManager.currentSong != null || playbackManager.rawPlaybackMetadata != null
 
     private fun restorePlaying() {
         playbackManager.playDeferred(
             DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
         )
-    }
-
-    private enum class State {
-        PENDING,
-        RUNNING,
-        ACCEPTED,
-        FAILED,
-        CANCELLED,
     }
 }
