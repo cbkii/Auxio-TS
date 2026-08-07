@@ -82,10 +82,7 @@ class FftSpectrumMapperTest {
         mapper.update(createSineWaveFft(3000f), SAMPLE_RATE_MILLIHZ)
         assertTrue(mapper.lastActivity > 0f)
 
-        mapper.update(
-            createSineWaveFft(3000f, sampleRateHz = 48_000f),
-            48_000_000,
-        )
+        mapper.update(createSineWaveFft(3000f, sampleRateHz = 48_000f), 48_000_000)
 
         assertEquals(0f, mapper.lastActivity, 0.0001f)
     }
@@ -105,10 +102,7 @@ class FftSpectrumMapperTest {
     fun realImaginaryPairProducesBoundedSignedMovement() {
         val mapper = FftSpectrumMapper()
 
-        mapper.update(
-            createSineWaveFft(1000f, imaginaryAmplitude = 60),
-            SAMPLE_RATE_MILLIHZ,
-        )
+        mapper.update(createSineWaveFft(1000f, imaginaryAmplitude = 60), SAMPLE_RATE_MILLIHZ)
 
         assertTrue(mapper.bands.any { abs(it) > 0.001f })
         assertTrue(mapper.bands.all { it in -1f..1f })
