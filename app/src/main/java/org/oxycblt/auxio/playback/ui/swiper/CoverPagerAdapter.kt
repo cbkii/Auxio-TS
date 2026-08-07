@@ -58,7 +58,7 @@ class CoverPagerAdapter(
         lifecycleOwner.lifecycleScope.launch {
             visualizerStateFlow.collect { state ->
                 latestState = sanitize(state)
-                dispatchActiveVisualizerState()
+                dispatchActiveVisualizerState(latestState)
             }
         }
     }
@@ -102,10 +102,10 @@ class CoverPagerAdapter(
         dispatchAllVisualizerState()
     }
 
-    private fun dispatchActiveVisualizerState() {
+    private fun dispatchActiveVisualizerState(state: VisualizerState) {
         for (holder in attachedHolders) {
             if (holder.bindingAdapterPosition == activePosition) {
-                holder.updateVisualizerState(latestState, visualizerMode)
+                holder.updateVisualizerState(state, visualizerMode)
             }
         }
     }
@@ -116,7 +116,7 @@ class CoverPagerAdapter(
 
     private fun updateHolder(holder: CoverViewHolder) {
         val state =
-            if (holder.bindingAdapterPosition == activePosition) latestState
+            if (holder.bindingAdapterPosition == activePosition) sanitize(latestState)
             else VisualizerState.Disabled
         holder.updateVisualizerState(state, visualizerMode)
     }
