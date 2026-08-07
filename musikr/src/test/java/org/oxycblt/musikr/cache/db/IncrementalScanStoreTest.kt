@@ -754,6 +754,46 @@ class IncrementalScanStoreTest {
     }
 
     @Test
+    fun `enrichment item unavailability does not count as unresolved source data`() = runBlocking {
+        val source = snapshot("v1")
+        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3", 1L))
+        store.commitScan()
+
+        val enrichment = store.planScan(listOf(source), false, MetadataProfile.FULL, 1L)
+        assertTrue(enrichment.enrichmentOnly)
+        store.beginScan(enrichment)
+        assertFalse(store.markItemUnavailable(cachedFile("alpha.mp3", 1L).file))
+        val commit = store.commitScan()
+
+        assertEquals(0, commit.unresolvedItems)
+        assertFalse(commit.enrichmentComplete)
+        assertEquals(1, db.incrementalLibraryDao().songCount())
+    }
+
+    @Test
+    fun `unavailable item carry-forward is batched beyond one sqlite bind window`() = runBlocking {
+        val source = snapshot("v1")
+        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        repeat(205) { index -> store.stage(cachedFile("track-$index.mp3", 1L)) }
+        store.commitScan()
+
+        val replacement =
+            store.planScan(listOf(source.copy(fingerprint = "v2")), true, MetadataProfile.LEAN, 2L)
+        store.beginScan(replacement)
+        repeat(205) { index ->
+            assertTrue(store.markItemUnavailable(cachedFile("track-$index.mp3", 2L).file))
+        }
+        val commit = store.commitScan()
+
+        assertEquals(205, commit.unresolvedItems)
+        assertEquals(setOf(source.sourceKey), commit.failedSources.keys)
+        assertEquals(205, db.incrementalLibraryDao().songCount())
+    }
+
+    @Test
     fun `large committed library keeps startup query bounded`() = runBlocking {
         val source = snapshot("large")
         val plan = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)

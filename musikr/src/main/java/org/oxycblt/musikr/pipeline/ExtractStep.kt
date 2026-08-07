@@ -103,14 +103,19 @@ private class ExtractStepImpl(
                                     (cache as? IncrementalCache)?.markItemUnavailable(item.file)
                                     Finalized(InvalidSong)
                                 }
-                                MetadataResult.ProviderFailed -> {
+                                is MetadataResult.ProviderFailed -> {
                                     // A transient provider/open failure is not evidence that a
                                     // previously committed song was deleted. Fail only this source
                                     // generation so its last-known-good rows remain visible after
                                     // the provider recovers.
                                     (cache as? IncrementalCache)?.markSourceFailed(
                                         SourceIdentity.forFile(item.file),
-                                        "Metadata provider failed for ${item.file.uri}",
+                                        buildString {
+                                            append("Metadata provider failed for ${item.file.uri}")
+                                            append(" [${metadataResult.failureClass}")
+                                            metadataResult.failureMessage?.let { append(": $it") }
+                                            append("]")
+                                        },
                                     )
                                     Finalized(InvalidSong)
                                 }

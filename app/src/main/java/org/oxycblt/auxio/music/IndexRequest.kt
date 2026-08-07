@@ -125,7 +125,13 @@ internal object IndexRequestPolicy {
         ) {
             return null
         }
-        val retrySourceKeys = checkpoint.unresolvedSourceKeys.ifEmpty { configuredSourceKeys }
+        val unresolvedSourceKeys =
+            if (allowUnscopedSources) {
+                checkpoint.unresolvedSourceKeys
+            } else {
+                checkpoint.unresolvedSourceKeys.intersect(configuredSourceKeys)
+            }
+        val retrySourceKeys = unresolvedSourceKeys.ifEmpty { configuredSourceKeys }
         if (retrySourceKeys.isEmpty() && !allowUnscopedSources) return null
         return IndexRequest(
             reason = IndexReason.USER_RETRY,

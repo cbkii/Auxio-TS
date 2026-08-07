@@ -54,8 +54,7 @@ internal class IncrementalScanStore(
 ) : IncrementalCache {
     @Volatile private var currentPlan: IncrementalScanPlan? = null
     private val sourceFailures = ConcurrentHashMap<String, String>()
-    private val itemFailureCounts = ConcurrentHashMap<String, Int>()
-    private val retainedItemCounts = ConcurrentHashMap<String, Int>()
+    private val unavailableItemUris = ConcurrentHashMap<String, MutableSet<String>>()
 
     override fun activePlan(): IncrementalScanPlan? = currentPlan
 
@@ -182,8 +181,7 @@ internal class IncrementalScanStore(
     override suspend fun beginScan(plan: IncrementalScanPlan) {
         check(currentPlan == null) { "An incremental scan is already active" }
         sourceFailures.clear()
-        itemFailureCounts.clear()
-        retainedItemCounts.clear()
+        unavailableItemUris.clear()
         val now = System.currentTimeMillis()
         db.withTransaction {
             for (snapshot in plan.scanSources) {
@@ -366,27 +364,12 @@ internal class IncrementalScanStore(
 
     override suspend fun markItemUnavailable(file: File): Boolean {
         val plan = currentPlan ?: return false
+        if (plan.enrichmentOnly) return false
         val sourceKey = SourceIdentity.forFile(file)
         if (sourceKey !in plan.scanSourceKeys) return false
-        synchronized(itemFailureCounts) {
-            itemFailureCounts[sourceKey] = (itemFailureCounts[sourceKey] ?: 0) + 1
-        }
-        if (plan.enrichmentOnly) return false
-
-        val ledger = dao.sourceLedger(sourceKey) ?: return false
-        val generation = ledger.lastCommittedGeneration ?: return false
-        val uri = file.uri.toString()
-        if (dao.committedUriCount(sourceKey, generation, uri) == 0) return false
-        dao.carryForwardCommittedUri(
-            scanId = plan.scanId,
-            sourceKey = sourceKey,
-            generation = generation,
-            uri = uri,
-        )
-        synchronized(retainedItemCounts) {
-            retainedItemCounts[sourceKey] = (retainedItemCounts[sourceKey] ?: 0) + 1
-        }
-        return true
+        return unavailableItemUris
+            .computeIfAbsent(sourceKey) { ConcurrentHashMap.newKeySet() }
+            .add(file.uri.toString())
     }
 
     override suspend fun markSourceFailed(sourceKey: String, detail: String) {
@@ -454,8 +437,29 @@ internal class IncrementalScanStore(
                     for (snapshot in plan.scanSources) {
                         val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
                         val generation = requireNotNull(ledger.pendingGeneration)
-                        val unresolvedItemCount = itemFailureCounts[snapshot.sourceKey] ?: 0
-                        val retainedItemCount = retainedItemCounts[snapshot.sourceKey] ?: 0
+                        val unresolvedUris = unavailableItemUris[snapshot.sourceKey].orEmpty()
+                        val unresolvedItemCount = unresolvedUris.size
+                        var retainedItemCount = 0
+                        ledger.lastCommittedGeneration?.let { committedGeneration ->
+                            for (uriBatch in unresolvedUris.chunked(UNAVAILABLE_URI_BATCH_SIZE)) {
+                                val uris = uriBatch.toSet()
+                                val retainedInBatch =
+                                    dao.committedUriCount(
+                                        snapshot.sourceKey,
+                                        committedGeneration,
+                                        uris,
+                                    )
+                                if (retainedInBatch > 0) {
+                                    dao.carryForwardCommittedUris(
+                                        scanId = plan.scanId,
+                                        sourceKey = snapshot.sourceKey,
+                                        generation = committedGeneration,
+                                        uris = uris,
+                                    )
+                                    retainedItemCount += retainedInBatch
+                                }
+                            }
+                        }
                         if (
                             unresolvedItemCount > 0 &&
                                 dao.seenCount(plan.scanId, snapshot.sourceKey) <= retainedItemCount
@@ -603,10 +607,9 @@ internal class IncrementalScanStore(
             if (committedSuccessfully) currentPlan = null
         }
         val failed = sourceFailures.toMap()
-        val unresolvedItems = itemFailureCounts.values.sum()
+        val unresolvedItems = unavailableItemUris.values.sumOf { it.size }
         sourceFailures.clear()
-        itemFailureCounts.clear()
-        retainedItemCounts.clear()
+        unavailableItemUris.clear()
         return IncrementalScanCommit(
             scanId = plan.scanId,
             committedSources = committed,
@@ -654,8 +657,7 @@ internal class IncrementalScanStore(
         } finally {
             currentPlan = null
             sourceFailures.clear()
-            itemFailureCounts.clear()
-            retainedItemCounts.clear()
+            unavailableItemUris.clear()
         }
     }
 
@@ -772,6 +774,7 @@ internal class IncrementalScanStore(
 
     companion object {
         private const val PAGE_SIZE = 256
+        private const val UNAVAILABLE_URI_BATCH_SIZE = 200
         private const val FULL_ENRICHMENT_REVISION = 1L
         private const val MAX_ERROR_LENGTH = 512
         private const val STATE_PENDING = "PENDING"

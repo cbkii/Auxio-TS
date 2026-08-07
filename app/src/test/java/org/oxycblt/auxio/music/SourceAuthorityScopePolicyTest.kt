@@ -106,7 +106,8 @@ class SourceAuthorityScopePolicyTest {
             )
 
         assertEquals(setOf(external.sourceKey), attempted)
-        assertTrue((setOf(external.sourceKey) - attempted).isEmpty())
+        val unresolvedBefore = setOf(external.sourceKey, "internal:usb")
+        assertEquals(setOf("internal:usb"), unresolvedBefore - attempted)
     }
 
     private fun externalPrimarySnapshot() =

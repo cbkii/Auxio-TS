@@ -50,4 +50,66 @@ class IndexRequestPolicySourceRetryTest {
             )
         )
     }
+
+    @Test
+    fun `explicit-root retry drops stale checkpoint keys when roots are empty`() {
+        val checkpoint =
+            SourceConfigurationCheckpoint(
+                generation = 7L,
+                state = SourceConfigurationCheckpoint.State.FAILED_RETRYABLE,
+                unresolvedSourceKeys = setOf("direct:stale"),
+            )
+
+        assertNull(
+            IndexRequestPolicy.sourceRetryRequest(
+                checkpoint = checkpoint,
+                currentGeneration = 7L,
+                configuredSourceKeys = emptySet(),
+                hasRevision = true,
+            )
+        )
+    }
+
+    @Test
+    fun `explicit-root retry intersects unresolved checkpoint keys with current roots`() {
+        val checkpoint =
+            SourceConfigurationCheckpoint(
+                generation = 7L,
+                state = SourceConfigurationCheckpoint.State.FAILED_RETRYABLE,
+                unresolvedSourceKeys = setOf("direct:current", "direct:stale"),
+            )
+
+        val request =
+            IndexRequestPolicy.sourceRetryRequest(
+                checkpoint = checkpoint,
+                currentGeneration = 7L,
+                configuredSourceKeys = setOf("direct:current"),
+                hasRevision = true,
+            )
+
+        requireNotNull(request)
+        assertEquals(setOf("direct:current"), request.sourceKeys)
+    }
+
+    @Test
+    fun `provider retry retains discovered unresolved keys without configured roots`() {
+        val checkpoint =
+            SourceConfigurationCheckpoint(
+                generation = 7L,
+                state = SourceConfigurationCheckpoint.State.FAILED_RETRYABLE,
+                unresolvedSourceKeys = setOf("internal:external_primary"),
+            )
+
+        val request =
+            IndexRequestPolicy.sourceRetryRequest(
+                checkpoint = checkpoint,
+                currentGeneration = 7L,
+                configuredSourceKeys = emptySet(),
+                hasRevision = true,
+                allowUnscopedSources = true,
+            )
+
+        requireNotNull(request)
+        assertEquals(setOf("internal:external_primary"), request.sourceKeys)
+    }
 }
