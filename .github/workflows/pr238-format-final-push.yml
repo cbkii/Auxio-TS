@@ -1,5 +1,6 @@
 name: PR 238 format final push
 
+# One-shot trigger for canonical formatter finalisation.
 on:
   push:
     branches:
