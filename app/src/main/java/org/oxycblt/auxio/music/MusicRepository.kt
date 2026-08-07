@@ -2301,10 +2301,7 @@ constructor(
         }
     }
 
-    private fun currentAttemptedSourceKeys(
-        sessionId: Long,
-        request: IndexRequest,
-    ): Set<String> =
+    private fun currentAttemptedSourceKeys(sessionId: Long, request: IndexRequest): Set<String> =
         synchronized(this) {
             (currentIndexingState as? IndexingState.Indexing)
                 ?.takeIf { it.sessionId == sessionId }
