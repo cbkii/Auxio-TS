@@ -75,6 +75,22 @@ class FftSpectrumMapperTest {
     }
 
     @Test
+    fun captureConfigurationChangeResetsTransientActivity() {
+        val mapper = FftSpectrumMapper()
+
+        mapper.update(createSineWaveFft(1000f), SAMPLE_RATE_MILLIHZ)
+        mapper.update(createSineWaveFft(3000f), SAMPLE_RATE_MILLIHZ)
+        assertTrue(mapper.lastActivity > 0f)
+
+        mapper.update(
+            createSineWaveFft(3000f, sampleRateHz = 48_000f),
+            48_000_000,
+        )
+
+        assertEquals(0f, mapper.lastActivity, 0.0001f)
+    }
+
+    @Test
     fun smallCaptureReusesNearestBinsInsteadOfLeavingEmptyRanges() {
         val mapper = FftSpectrumMapper()
         mapper.update(createBroadbandFft(size = 32), SAMPLE_RATE_MILLIHZ)
@@ -89,7 +105,10 @@ class FftSpectrumMapperTest {
     fun realImaginaryPairProducesBoundedSignedMovement() {
         val mapper = FftSpectrumMapper()
 
-        mapper.update(createSineWaveFft(1000f), SAMPLE_RATE_MILLIHZ)
+        mapper.update(
+            createSineWaveFft(1000f, imaginaryAmplitude = 60),
+            SAMPLE_RATE_MILLIHZ,
+        )
 
         assertTrue(mapper.bands.any { abs(it) > 0.001f })
         assertTrue(mapper.bands.all { it in -1f..1f })
@@ -135,12 +154,18 @@ class FftSpectrumMapperTest {
 
     @Test
     fun frequenciesOutsideSupportedRangeDoNotCreateMovement() {
-        val mapper = FftSpectrumMapper()
+        val lowMapper = FftSpectrumMapper()
+        lowMapper.update(
+            createSineWaveFft(50f, sampleRateHz = LOW_SAMPLE_RATE_HZ),
+            LOW_SAMPLE_RATE_MILLIHZ,
+        )
+        assertTrue(lowMapper.bands.all { it == 0f })
+        assertEquals(0f, lowMapper.globalEnvelope, 0.0001f)
 
-        mapper.update(createSineWaveFft(20_000f), SAMPLE_RATE_MILLIHZ)
-
-        assertTrue(mapper.bands.all { it == 0f })
-        assertEquals(0f, mapper.globalEnvelope, 0.0001f)
+        val highMapper = FftSpectrumMapper()
+        highMapper.update(createSineWaveFft(20_000f), SAMPLE_RATE_MILLIHZ)
+        assertTrue(highMapper.bands.all { it == 0f })
+        assertEquals(0f, highMapper.globalEnvelope, 0.0001f)
     }
 
     private fun assertCompleteMapping(samplingRate: Int) {
@@ -189,15 +214,21 @@ class FftSpectrumMapperTest {
         return fft
     }
 
-    private fun createSineWaveFft(freq: Float, amplitude: Byte = 100): ByteArray {
+    private fun createSineWaveFft(
+        freq: Float,
+        amplitude: Byte = 100,
+        imaginaryAmplitude: Byte = 0,
+        sampleRateHz: Float = SAMPLE_RATE_HZ,
+    ): ByteArray {
         val size = 512
         val fft = ByteArray(size)
-        val resolution = SAMPLE_RATE_HZ / size
+        val resolution = sampleRateHz / size
         val targetBin = (freq / resolution).toInt()
 
         if (targetBin > 0 && targetBin * 2 + 1 < size) {
             val realIndex = targetBin * 2
             fft[realIndex] = amplitude
+            fft[realIndex + 1] = imaginaryAmplitude
         }
         return fft
     }
@@ -205,5 +236,7 @@ class FftSpectrumMapperTest {
     private companion object {
         const val SAMPLE_RATE_HZ = 44_100f
         const val SAMPLE_RATE_MILLIHZ = 44_100_000
+        const val LOW_SAMPLE_RATE_HZ = 8_000f
+        const val LOW_SAMPLE_RATE_MILLIHZ = 8_000_000
     }
 }
