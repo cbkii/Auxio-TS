@@ -21,6 +21,7 @@ package org.oxycblt.musikr.metadata
 import io.mockk.mockk
 import java.io.FileInputStream
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.musikr.fs.File
@@ -55,6 +56,11 @@ class TagLibJNIAvailabilityTest {
         // propagate a Throwable to the extraction pipeline.
         val deviceFile = mockk<File>(relaxed = true)
         val fis = mockk<FileInputStream>(relaxed = true)
-        assertEquals(MetadataResult.ProviderFailed, TagLibJNI.open(deviceFile, fis))
+
+        val result = TagLibJNI.open(deviceFile, fis)
+
+        assertTrue(result is MetadataResult.ProviderFailed)
+        result as MetadataResult.ProviderFailed
+        assertEquals(UnsatisfiedLinkError::class.java.name, result.failureClass)
     }
 }
