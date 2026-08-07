@@ -98,7 +98,6 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
 
     override fun track(): Flow<FSUpdate> = emptyFlow()
 
-
     private suspend fun exploreBounded(files: Channel<File>) = coroutineScope {
         val queue = Channel<DirectoryTask>(Channel.UNLIMITED)
         val activeTasks = AtomicInteger(0)
@@ -188,8 +187,6 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
         }
         workers.awaitAll()
     }
-
-
 
     private suspend fun processDirectory(
         task: DirectoryTask,
@@ -308,7 +305,6 @@ class DirectFS(private val roots: List<Location.Opened>) : SourceAwareFS {
             enqueueDirectory(queue, activeTasks, discoveredDirectories, childTask)
         }
     }
-
 
     private fun enqueueDirectory(
         queue: Channel<DirectoryTask>,

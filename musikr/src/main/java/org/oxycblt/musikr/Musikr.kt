@@ -259,13 +259,13 @@ private class MusikrImpl(
                     trace.mark(PipelineStage.ENUMERATION_COMPLETED)
                 }
             val extractedChannel = Channel<Extracted>(PipelinePolicy.BUFFER_CAPACITY)
-            trace.mark(PipelineStage.EXTRACTION_STARTED)
             val extractedTask =
                 extractStep.extract(
                     this,
                     trackedExploredChannel,
                     extractedChannel,
                     onItemStarted = { item ->
+                        trace.mark(PipelineStage.EXTRACTION_STARTED)
                         advancePhase(IndexingPhase.EXTRACTING)
                         val now = System.currentTimeMillis()
                         val prior = lastExtractionEmitMs.get()
@@ -303,11 +303,11 @@ private class MusikrImpl(
                     trace.mark(PipelineStage.EXTRACTION_COMPLETED)
                 }
             var lastEvaluationEmitMs = 0L
-            trace.mark(PipelineStage.EVALUATION_STARTED)
             var resultLibrary =
                 evaluateStep.evaluate(
                     trackedExtractedChannel,
                     onItemStarted = { item ->
+                        trace.mark(PipelineStage.EVALUATION_STARTED)
                         advancePhase(IndexingPhase.EVALUATING)
                         val now = System.currentTimeMillis()
                         if (now - lastEvaluationEmitMs >= PipelinePolicy.PROGRESS_INTERVAL_MS) {

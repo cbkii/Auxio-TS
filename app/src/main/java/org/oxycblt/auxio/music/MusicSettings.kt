@@ -537,11 +537,23 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
 
     @Synchronized
     override fun claimPendingConfiguration(): SourceConfigurationCheckpoint? {
-        val checkpoint = sourceConfigurationCheckpoint ?: return null
+        var checkpoint = sourceConfigurationCheckpoint ?: return null
+
+        if (checkpoint.state == SourceConfigurationCheckpoint.State.RUNNING) {
+            // A stale RUNNING attempt must first be terminally recorded as interrupted before a new
+            // attempt is created.
+            markAttemptInterrupted(
+                checkpoint.generation,
+                checkpoint.attemptId ?: "",
+                "ProcessInterrupted",
+            )
+            checkpoint = sourceConfigurationCheckpoint ?: return null
+        }
+
         if (
             checkpoint.state != SourceConfigurationCheckpoint.State.PENDING &&
-                checkpoint.state != SourceConfigurationCheckpoint.State.RUNNING &&
-                checkpoint.state != SourceConfigurationCheckpoint.State.FAILED_RETRYABLE
+                checkpoint.state != SourceConfigurationCheckpoint.State.FAILED_RETRYABLE &&
+                checkpoint.state != SourceConfigurationCheckpoint.State.INTERRUPTED
         ) {
             return null
         }
@@ -571,6 +583,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         if (generation != sourceConfigurationGeneration) return
         val currentCheckpoint = sourceConfigurationCheckpoint
         if (currentCheckpoint?.attemptId != attemptId) return
+        if (currentCheckpoint.state != SourceConfigurationCheckpoint.State.RUNNING) return
         val state =
             if (unresolvedSourceKeys.isEmpty()) {
                 SourceConfigurationCheckpoint.State.COMMITTED
@@ -595,11 +608,15 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         if (generation != sourceConfigurationGeneration) return
         val currentCheckpoint = sourceConfigurationCheckpoint
         if (currentCheckpoint?.attemptId != attemptId) return
+        if (currentCheckpoint.state != SourceConfigurationCheckpoint.State.RUNNING) return
+
         val state =
-            if (retryable) SourceConfigurationCheckpoint.State.FAILED_RETRYABLE
-            else SourceConfigurationCheckpoint.State.FAILED_FINAL
+            if (retryable) {
+                SourceConfigurationCheckpoint.State.FAILED_RETRYABLE
+            } else {
+                SourceConfigurationCheckpoint.State.FAILED_FINAL
+            }
         sharedPreferences.edit(commit = true) {
-            putBoolean(KEY_PENDING_INITIAL_SCAN, retryable)
             putString(KEY_CHECKPOINT_STATE, state.name)
             putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
         }
@@ -610,8 +627,9 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         if (generation != sourceConfigurationGeneration) return
         val currentCheckpoint = sourceConfigurationCheckpoint
         if (currentCheckpoint?.attemptId != attemptId) return
+        if (currentCheckpoint.state != SourceConfigurationCheckpoint.State.RUNNING) return
+
         sharedPreferences.edit(commit = true) {
-            putBoolean(KEY_PENDING_INITIAL_SCAN, true)
             putString(KEY_CHECKPOINT_STATE, SourceConfigurationCheckpoint.State.INTERRUPTED.name)
             putString(KEY_CHECKPOINT_LAST_OUTCOME, outcome)
         }

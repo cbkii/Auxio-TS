@@ -227,6 +227,7 @@ private constructor(
                                     reason = IndexReason.INITIAL_CONFIGURATION,
                                     withCache = false,
                                     configurationGeneration = pendingConfiguration.generation,
+                                    attemptId = pendingConfiguration.attemptId,
                                     sourceKeys =
                                         musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) {
                                             it.sourceKey
