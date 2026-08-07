@@ -23,9 +23,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.database.MatrixCursor
 import android.net.Uri
-import io.mockk.eq
 import io.mockk.every
-import io.mockk.isNull
 import io.mockk.mockk
 import java.io.FileNotFoundException
 import kotlinx.coroutines.runBlocking
@@ -81,15 +79,7 @@ class MetadataExtractorFailureClassificationTest {
         val cursor = MatrixCursor(arrayOf("_id"))
         every { resolver.openAssetFileDescriptor(uri, "r") } throws FileNotFoundException(uri.toString())
         every { resolver.acquireUnstableContentProviderClient(uri) } returns client
-        every {
-            client.query(
-                eq(uri),
-                isNull<Array<String>>(),
-                isNull<String>(),
-                isNull<Array<String>>(),
-                isNull<String>(),
-            )
-        } returns cursor
+        every { client.query(uri, null, null, null, null) } returns cursor
 
         val result = MetadataExtractor.from(context, MetadataProfile.LEAN).extract(mediaFile())
 
@@ -104,15 +94,7 @@ class MetadataExtractorFailureClassificationTest {
             every { resolver.openAssetFileDescriptor(uri, "r") } throws
                 FileNotFoundException(uri.toString())
             every { resolver.acquireUnstableContentProviderClient(uri) } returns client
-            every {
-                client.query(
-                    eq(uri),
-                    isNull<Array<String>>(),
-                    isNull<String>(),
-                    isNull<Array<String>>(),
-                    isNull<String>(),
-                )
-            } returns cursor
+            every { client.query(uri, null, null, null, null) } returns cursor
 
             val result = MetadataExtractor.from(context, MetadataProfile.LEAN).extract(mediaFile())
 
