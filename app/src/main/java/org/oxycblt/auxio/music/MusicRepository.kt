@@ -1074,7 +1074,7 @@ constructor(
                     val unresolved =
                         musicSettings.sourceConfigurationCheckpoint
                             ?.unresolvedSourceKeys
-                            .orEmpty() - (request.sourceKeys ?: emptySet())
+                            .orEmpty() - attemptedSourceKeys
                     val empty = synchronized(this) { library?.songs?.isEmpty() == true }
                     recordSourceScanOutcome(
                         request,
