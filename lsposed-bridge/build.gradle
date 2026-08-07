@@ -12,6 +12,10 @@ def releaseStoreFile = providers.gradleProperty("releaseStoreFile").orNull
 def releaseStorePassword = providers.gradleProperty("releaseStorePassword").orNull
 def releaseKeyAlias = providers.gradleProperty("releaseKeyAlias").orNull
 def releaseKeyPassword = providers.gradleProperty("releaseKeyPassword").orNull
+def normaliseSigner = { value ->
+    value == null ? "" : value.toString().replace(":", "").trim().toUpperCase(Locale.ROOT)
+}
+def targetExpectedSigner = normaliseSigner(providers.gradleProperty("expectedTargetSigner").orNull)
 def hasReleaseSigning = [
     releaseStoreFile,
     releaseStorePassword,
@@ -38,7 +42,7 @@ android {
         buildConfigField "String", "TARGET_MEDIA_BROWSER_SERVICE", '"com.tw.music.MusicService"'
         buildConfigField "long", "KNOWN_TESTED_STOCK_VERSION_CODE", "118L"
         buildConfigField "String", "STOCK_CERT_SHA256", '"AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3"'
-        buildConfigField "String", "KNOWN_TESTED_STOCK_APK_SHA256", '"4F5495E270A7C86BAB232E2B7EE2ECD2D71F3450F6F20ED5F36FEAA4229C1518"'
+        buildConfigField "String", "TARGET_EXPECTED_SIGNER", "\"${targetExpectedSigner}\""
     }
 
     if (hasReleaseSigning) {
@@ -56,16 +60,27 @@ android {
         debug {
             applicationIdSuffix ".debug"
             versionNameSuffix "-DEBUG"
+            buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media.debug"'
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
         release {
-            minifyEnabled false
+            minifyEnabled true
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             dependenciesInfo {
                 includeInApk = false
                 includeInBundle = false
             }
+        }
+    }
+
+    // Compile the exact same primitive Binder constants into the app and the LSPosed module.
+    sourceSets {
+        main {
+            java.srcDir "${rootDir}/app/src/topwayCompat/java/org/oxycblt/auxio/ts18bridge"
         }
     }
 
@@ -85,24 +100,29 @@ android {
 }
 
 dependencies {
-    // API 100 is provided by LSPosed at runtime and must not be packaged in the module APK.
-    compileOnly project(":libxposed-api100-stubs")
-
+    // API 100 is supplied by LSPosed. It must never enter the runtime dependency graph or APK.
+    compileOnly(project(":libxposed-api100-stubs")) {
+        transitive = false
+    }
     testImplementation "junit:junit:4.13.2"
 }
 
 gradle.taskGraph.whenReady { graph ->
-    def releasePackagingTasks = [
-        "assemblerelease",
-        "bundlerelease",
-        "packagerelease",
-        "signreleasebundle",
-    ] as Set
-    def releaseTasks = graph.allTasks.findAll { task ->
+    def packagingTasks = graph.allTasks.findAll { task ->
         task.project == project &&
-                releasePackagingTasks.contains(task.name.toLowerCase(Locale.ROOT))
+                (task.name.toLowerCase(Locale.ROOT).startsWith("assemble") ||
+                 task.name.toLowerCase(Locale.ROOT).startsWith("package") ||
+                 task.name.toLowerCase(Locale.ROOT).startsWith("bundle"))
     }
-    if (!releaseTasks.isEmpty() && !hasReleaseSigning) {
+    if (!packagingTasks.isEmpty() && !(targetExpectedSigner ==~ /[0-9A-F]{64}/)) {
+        throw new GradleException(
+                "LSPosed packaging requires -PexpectedTargetSigner=<64-hex SHA-256 of the paired target APK signer>.")
+    }
+
+    def releasePackagingTasks = packagingTasks.findAll { task ->
+        task.name.toLowerCase(Locale.ROOT).contains("release")
+    }
+    if (!releasePackagingTasks.isEmpty() && !hasReleaseSigning) {
         throw new GradleException(
                 "LSPosed release tasks require all releaseStoreFile/releaseStorePassword/" +
                         "releaseKeyAlias/releaseKeyPassword properties.")
