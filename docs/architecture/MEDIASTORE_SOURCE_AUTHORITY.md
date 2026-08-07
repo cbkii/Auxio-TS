@@ -2,7 +2,8 @@
 
 MediaStore is a provider-discovered backend. Unlike SAF and DirectFS, its authoritative source
 identities are Android MediaStore volumes discovered during source preflight, not explicit folder
-entries persisted in `configuredSourceSpecs`.
+entries persisted in `configuredSourceSpecs`. Provider source keys therefore come from the observed
+volume snapshots and are never synthesized from an empty folder configuration.
 
 ## Invariants
 
