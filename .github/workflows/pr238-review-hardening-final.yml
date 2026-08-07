@@ -1,0 +1,88 @@
+name: PR 238 corrected hardening patch
+
+on:
+  push:
+    branches:
+      - fix/mediastore-source-authority-stale-rows
+    paths:
+      - .github/workflows/pr238-review-hardening-final.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr238-corrected-hardening-final
+  cancel-in-progress: false
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/mediastore-source-authority-stale-rows
+          fetch-depth: 0
+
+      - name: Apply guarded source hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          source = Path('.github/workflows/pr238-review-hardening.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY", start)
+          script = textwrap.dedent(source[start:end])
+
+          # The two descriptor-open blocks deliberately share the same pre-fix catch sequence.
+          # Consume them sequentially, while still stopping if a required anchor is absent.
+          script = script.replace(
+              "if count != 1:\n        raise SystemExit(f\"STOP: {path}: expected anchor once, found {count}\")",
+              "if count < 1:\n        raise SystemExit(f\"STOP: {path}: required anchor missing\")",
+              1,
+          )
+
+          # Correct the one anchor that was authored against an older companion-object style.
+          script = script.replace(
+              '"    private companion object {\\n        const val PAGE_SIZE = 256"',
+              '"    companion object {\\n        private const val PAGE_SIZE = 256"',
+          )
+          script = script.replace(
+              '"    private companion object {\\n        const val PAGE_SIZE = 256\\n        const val UNAVAILABLE_URI_BATCH_SIZE = 200"',
+              '"    companion object {\\n        private const val PAGE_SIZE = 256\\n        private const val UNAVAILABLE_URI_BATCH_SIZE = 200"',
+          )
+
+          Path('/tmp/pr238-review-hardening.py').write_text(script)
+          PY
+          python3 /tmp/pr238-review-hardening.py
+
+      - name: Prepare formatter dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
+
+      - name: Apply canonical Kotlin formatting
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
+
+      - name: Clean temporary machinery and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f -- \
+            .github/pr238-hardening-error.txt \
+            .github/workflows/pr238-review-hardening.yml \
+            .github/workflows/pr238-review-hardening-runner.yml \
+            .github/workflows/pr238-review-hardening-apply.yml \
+            .github/workflows/pr238-review-hardening-final.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo 'STOP: hardening produced no staged changes' >&2; exit 1; }
+          git commit -m "fix: harden MediaStore failure authority and item retention"
+          git push origin HEAD:fix/mediastore-source-authority-stale-rows
