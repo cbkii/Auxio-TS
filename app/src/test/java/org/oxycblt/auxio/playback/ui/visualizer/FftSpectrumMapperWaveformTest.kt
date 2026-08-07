@@ -61,6 +61,22 @@ class FftSpectrumMapperWaveformTest {
     }
 
     @Test
+    fun waveformConfigurationChangeResetsTransientActivity() {
+        val mapper = FftSpectrumMapper()
+
+        mapper.updateWaveform(createToneWaveform(1000f), SAMPLE_RATE_MILLIHZ)
+        mapper.updateWaveform(createToneWaveform(6000f), SAMPLE_RATE_MILLIHZ)
+        assertTrue(mapper.lastActivity > 0f)
+
+        mapper.updateWaveform(
+            createToneWaveform(6000f, sampleRateHz = 48_000f),
+            48_000_000,
+        )
+
+        assertEquals(0f, mapper.lastActivity, 0.0001f)
+    }
+
+    @Test
     fun changingFrameSourceResetsTransientActivity() {
         val mapper = FftSpectrumMapper()
         val fft = createToneFft()
@@ -123,9 +139,12 @@ class FftSpectrumMapperWaveformTest {
 
     private fun createToneFft(): ByteArray = ByteArray(512).apply { this[24] = 100 }
 
-    private fun createToneWaveform(frequencyHz: Float): ByteArray =
+    private fun createToneWaveform(
+        frequencyHz: Float,
+        sampleRateHz: Float = SAMPLE_RATE_HZ,
+    ): ByteArray =
         ByteArray(512) { index ->
-            val angle = 2.0 * PI * frequencyHz * index / SAMPLE_RATE_HZ
+            val angle = 2.0 * PI * frequencyHz * index / sampleRateHz
             val sample = 128 + (60.0 * sin(angle)).roundToInt()
             sample.coerceIn(0, 255).toByte()
         }
