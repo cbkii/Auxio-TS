@@ -1,5 +1,6 @@
 name: PR 238 final format and focused tests
 
+# Temporary self-cleaning workflow; remove after successful formatting and focused tests.
 on:
   push:
     branches:
