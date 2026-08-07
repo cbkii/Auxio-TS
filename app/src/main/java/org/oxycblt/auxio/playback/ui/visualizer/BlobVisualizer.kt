@@ -52,7 +52,8 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private var pointsY = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
     private val cosLookup = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
     private val sinLookup = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
-    private var configuredTrackSeed: Int? = null
+    private var configuredTrackUid: String? = null
+    private var configuredTrackDurationMs = Long.MIN_VALUE
     private var statusText: String? = null
 
     private val outlinePaint =
@@ -84,10 +85,11 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
      * boundaries. The expensive trigonometry runs only when a different track is bound.
      */
     fun configureTrack(uid: String, durationMs: Long) {
-        val seed = mix32(uid.hashCode() xor durationMs.hashCode())
-        if (configuredTrackSeed == seed) return
+        if (configuredTrackUid == uid && configuredTrackDurationMs == durationMs) return
 
-        configuredTrackSeed = seed
+        configuredTrackUid = uid
+        configuredTrackDurationMs = durationMs
+        val seed = mix32(uid.hashCode() xor durationMs.hashCode())
         val clockwise = seed and 1 == 0
         val phaseUnit = ((seed ushr 8) and 0xFFFF) / 65_536f
         recalculateAngles(phaseUnit * TWO_PI, clockwise)
