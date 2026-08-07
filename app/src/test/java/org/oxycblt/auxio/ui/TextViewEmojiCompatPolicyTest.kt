@@ -21,9 +21,9 @@ package org.oxycblt.auxio.ui
 import android.content.Context
 import android.util.Xml
 import android.view.ContextThemeWrapper
+import android.view.View
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.test.core.app.ApplicationProvider
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,14 +48,21 @@ class TextViewEmojiCompatPolicyTest {
     }
 
     @Test
-    fun playbackMetadataPreservesUnicodeAndEmojiText() {
+    fun playbackMetadataWithUnicodeAndEmojiLaysOutWithEmojiCompatDisabled() {
         val view = playbackSongTextView()
         val metadata = "Björk — Jóga 🎵 ❤️"
 
         assertFalse(view.isEmojiCompatEnabled)
         view.text = metadata
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
 
-        assertEquals(metadata, view.text.toString())
+        val textLayout = requireNotNull(view.layout)
+        assertTrue(textLayout.lineCount > 0)
+        assertTrue(textLayout.getLineEnd(textLayout.lineCount - 1) == metadata.length)
     }
 
     private fun assertEmojiCompatDisabled(styleRes: Int) {
