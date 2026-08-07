@@ -54,6 +54,7 @@ internal class IncrementalScanStore(
 ) : IncrementalCache {
     @Volatile private var currentPlan: IncrementalScanPlan? = null
     private val sourceFailures = ConcurrentHashMap<String, String>()
+    private val unavailableItemUris = ConcurrentHashMap<String, MutableSet<String>>()
 
     override fun activePlan(): IncrementalScanPlan? = currentPlan
 
@@ -180,6 +181,7 @@ internal class IncrementalScanStore(
     override suspend fun beginScan(plan: IncrementalScanPlan) {
         check(currentPlan == null) { "An incremental scan is already active" }
         sourceFailures.clear()
+        unavailableItemUris.clear()
         val now = System.currentTimeMillis()
         db.withTransaction {
             for (snapshot in plan.scanSources) {
@@ -360,6 +362,16 @@ internal class IncrementalScanStore(
         }
     }
 
+    override suspend fun markItemUnavailable(file: File): Boolean {
+        val plan = currentPlan ?: return false
+        if (plan.enrichmentOnly) return false
+        val sourceKey = SourceIdentity.forFile(file)
+        if (sourceKey !in plan.scanSourceKeys) return false
+        return unavailableItemUris
+            .computeIfAbsent(sourceKey) { ConcurrentHashMap.newKeySet() }
+            .add(file.uri.toString())
+    }
+
     override suspend fun markSourceFailed(sourceKey: String, detail: String) {
         val plan = currentPlan ?: return
         if (sourceKey in plan.scanSourceKeys) {
@@ -425,6 +437,40 @@ internal class IncrementalScanStore(
                     for (snapshot in plan.scanSources) {
                         val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
                         val generation = requireNotNull(ledger.pendingGeneration)
+                        val unresolvedUris = unavailableItemUris[snapshot.sourceKey].orEmpty()
+                        val unresolvedItemCount = unresolvedUris.size
+                        var retainedItemCount = 0
+                        ledger.lastCommittedGeneration?.let { committedGeneration ->
+                            for (uriBatch in unresolvedUris.chunked(UNAVAILABLE_URI_BATCH_SIZE)) {
+                                val uris = uriBatch.toSet()
+                                val retainedInBatch =
+                                    dao.committedUriCount(
+                                        snapshot.sourceKey,
+                                        committedGeneration,
+                                        uris,
+                                    )
+                                if (retainedInBatch > 0) {
+                                    dao.carryForwardCommittedUris(
+                                        scanId = plan.scanId,
+                                        sourceKey = snapshot.sourceKey,
+                                        generation = committedGeneration,
+                                        uris = uris,
+                                    )
+                                    retainedItemCount += retainedInBatch
+                                }
+                            }
+                        }
+                        if (
+                            unresolvedItemCount > 0 &&
+                                dao.seenCount(plan.scanId, snapshot.sourceKey) <= retainedItemCount
+                        ) {
+                            sourceFailures.putIfAbsent(
+                                snapshot.sourceKey,
+                                ("TEMPORARILY_UNAVAILABLE|No enumerated candidate item " +
+                                        "could be resolved ($unresolvedItemCount unavailable)")
+                                    .take(MAX_ERROR_LENGTH),
+                            )
+                        }
                         val sourceFailure = sourceFailures[snapshot.sourceKey]
                         if (sourceFailure != null) {
                             dao.deletePendingForSource(snapshot.sourceKey)
@@ -493,13 +539,31 @@ internal class IncrementalScanStore(
                                 configurationRevision = plan.configurationRevision,
                                 committedInvalidationVersion = ledger.invalidationVersion,
                                 committedProfile =
-                                    if (
-                                        sourceChangedRows == 0 &&
-                                            ledger.committedProfile == MetadataProfile.FULL.name
-                                    ) {
-                                        MetadataProfile.FULL.name
-                                    } else {
-                                        plan.metadataProfile.name
+                                    run {
+                                        val proposed =
+                                            if (
+                                                sourceChangedRows == 0 &&
+                                                    ledger.committedProfile ==
+                                                        MetadataProfile.FULL.name
+                                            ) {
+                                                MetadataProfile.FULL
+                                            } else {
+                                                plan.metadataProfile
+                                            }
+                                        val prior =
+                                            ledger.committedProfile?.let {
+                                                runCatching { MetadataProfile.valueOf(it) }
+                                                    .getOrNull()
+                                            }
+                                        if (
+                                            retainedItemCount > 0 &&
+                                                prior != null &&
+                                                prior.incrementalRank < proposed.incrementalRank
+                                        ) {
+                                            prior.name
+                                        } else {
+                                            proposed.name
+                                        }
                                     },
                                 enrichmentRevision =
                                     if (plan.metadataProfile == MetadataProfile.FULL) {
@@ -543,7 +607,9 @@ internal class IncrementalScanStore(
             if (committedSuccessfully) currentPlan = null
         }
         val failed = sourceFailures.toMap()
+        val unresolvedItems = unavailableItemUris.values.sumOf { it.size }
         sourceFailures.clear()
+        unavailableItemUris.clear()
         return IncrementalScanCommit(
             scanId = plan.scanId,
             committedSources = committed,
@@ -556,6 +622,7 @@ internal class IncrementalScanStore(
             removedSources = removed,
             enrichmentOnly = plan.enrichmentOnly,
             enrichmentComplete = enrichmentComplete,
+            unresolvedItems = unresolvedItems,
         )
     }
 
@@ -590,6 +657,7 @@ internal class IncrementalScanStore(
         } finally {
             currentPlan = null
             sourceFailures.clear()
+            unavailableItemUris.clear()
         }
     }
 
@@ -706,6 +774,7 @@ internal class IncrementalScanStore(
 
     companion object {
         private const val PAGE_SIZE = 256
+        private const val UNAVAILABLE_URI_BATCH_SIZE = 200
         private const val FULL_ENRICHMENT_REVISION = 1L
         private const val MAX_ERROR_LENGTH = 512
         private const val STATE_PENDING = "PENDING"

@@ -220,6 +220,23 @@ internal interface IncrementalScanDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertSeen(row: ScanSeenData)
 
+    @Query(
+        "SELECT COUNT(*) FROM IndexedSongData WHERE sourceKey = :sourceKey AND generation = :generation AND uri IN (:uris)"
+    )
+    suspend fun committedUriCount(sourceKey: String, generation: Long, uris: Set<String>): Int
+
+    @Query(
+        "INSERT OR REPLACE INTO ScanSeenData (scanId, sourceKey, uri, displayPath, fileName, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, artworkRef, metadataProfile) " +
+            "SELECT :scanId, sourceKey, uri, displayPath, fileName, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, artworkRef, metadataProfile FROM IndexedSongData " +
+            "WHERE sourceKey = :sourceKey AND generation = :generation AND uri IN (:uris)"
+    )
+    suspend fun carryForwardCommittedUris(
+        scanId: String,
+        sourceKey: String,
+        generation: Long,
+        uris: Set<String>,
+    )
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertPending(row: PendingCachedFileData)
 

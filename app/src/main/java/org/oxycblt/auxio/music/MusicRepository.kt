@@ -358,6 +358,7 @@ sealed interface IndexingState {
         val request: IndexRequest? = null,
         val locationMode: LocationMode? = null,
         val sourceLabels: List<String> = emptyList(),
+        val attemptedSourceKeys: Set<String> = emptySet(),
         val startedAtElapsedMs: Long = 0L,
         val lastProgressAtElapsedMs: Long = startedAtElapsedMs,
         val pendingReplacement: Boolean = false,
@@ -653,6 +654,7 @@ constructor(
                     currentGeneration = musicSettings.sourceConfigurationGeneration,
                     configuredSourceKeys = configuredSourceKeys,
                     hasRevision = musicSettings.revision != null,
+                    allowUnscopedSources = musicSettings.locationMode == LocationMode.MEDIA_STORE,
                 )
             if (request == null) {
                 val checkpoint = musicSettings.sourceConfigurationCheckpoint
@@ -968,10 +970,14 @@ constructor(
                         isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                         availableProcessors = Runtime.getRuntime().availableProcessors(),
                     )
-                val requestedSourceKeys = request.sourceKeys
+                val originalRequestedSourceKeys = request.sourceKeys
+                val requestedSourceKeys =
+                    SourceAuthorityScopePolicy.normalizeRequestedSourceKeys(
+                        originalRequestedSourceKeys
+                    )
                 val allConfiguredSourceKeys =
                     musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
-                val attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
+                var attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
                 val rawFs =
                     createFileSystem(
                         sessionId = sessionId,
@@ -987,9 +993,12 @@ constructor(
                             configurationRevision = sourceConfigurationRevision(),
                             targetSourceKeys = requestedSourceKeys,
                             allowEmptySourceSet =
-                                checkpointAuthority != null &&
-                                    requestedSourceKeys?.isEmpty() == true &&
-                                    allConfiguredSourceKeys.isEmpty(),
+                                SourceAuthorityScopePolicy.allowExplicitEmptySourceSet(
+                                    locationMode = musicSettings.locationMode,
+                                    hasCheckpointAuthority = checkpointAuthority != null,
+                                    originalRequestedSourceKeys = originalRequestedSourceKeys,
+                                    configuredSourceKeys = allConfiguredSourceKeys,
+                                ),
                             applyRemovedSources = checkpointAuthority != null,
                             legacyWriteOnly = ::WriteOnlyMutableCache,
                         )
@@ -1027,6 +1036,20 @@ constructor(
                         return@traceSuspend
                     }
                 val plan = prepared.plan
+                attemptedSourceKeys =
+                    SourceAuthorityScopePolicy.effectiveAttemptedSourceKeys(
+                        locationMode = musicSettings.locationMode,
+                        requestedSourceKeys = requestedSourceKeys,
+                        configuredSourceKeys = allConfiguredSourceKeys,
+                        plan = plan,
+                    )
+                synchronized(this) {
+                    val active = currentIndexingState as? IndexingState.Indexing
+                    if (active?.sessionId == sessionId) {
+                        currentIndexingState =
+                            active.copy(attemptedSourceKeys = attemptedSourceKeys)
+                    }
+                }
                 L.i(
                     "Resolved scan policy [workers=$workerCount profile=$resolvedProfile " +
                         "reason=${request.reason} generation=${request.configurationGeneration} " +
@@ -1059,7 +1082,7 @@ constructor(
                     val unresolved =
                         musicSettings.sourceConfigurationCheckpoint
                             ?.unresolvedSourceKeys
-                            .orEmpty() - (request.sourceKeys ?: emptySet())
+                            .orEmpty() - attemptedSourceKeys
                     val empty = synchronized(this) { library?.songs?.isEmpty() == true }
                     recordSourceScanOutcome(
                         request,
@@ -1482,7 +1505,7 @@ constructor(
                 }
                 throw e
             } catch (e: Exception) {
-                val attemptedKeys = attemptedSourceKeys(request)
+                val attemptedKeys = currentAttemptedSourceKeys(sessionId, request)
                 recordSourceScanOutcome(
                     request,
                     SourceScanOutcome.Failed(
@@ -1889,6 +1912,7 @@ constructor(
                     request = request,
                     locationMode = musicSettings.locationMode,
                     sourceLabels = labels,
+                    attemptedSourceKeys = attemptedKeys,
                     startedAtElapsedMs = now,
                     lastProgressAtElapsedMs = now,
                     sourceScope = sourceScope,
@@ -2186,7 +2210,8 @@ constructor(
         failure: Throwable?,
     ): Boolean {
         val state = synchronized(this) { currentIndexingState as? IndexingState.Indexing }
-        val attemptedSources = attemptedSourceKeys(request)
+        val attemptedSources =
+            state?.attemptedSourceKeys?.takeIf { it.isNotEmpty() } ?: attemptedSourceKeys(request)
         val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
         val unresolved =
             when (outcome) {
@@ -2233,7 +2258,9 @@ constructor(
         request: IndexRequest? = state?.request,
     ): SourceScanOutcome {
         val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()
-        val attempted = request?.let(::attemptedSourceKeys).orEmpty()
+        val attempted =
+            state?.attemptedSourceKeys?.takeIf { it.isNotEmpty() }
+                ?: request?.let(::attemptedSourceKeys).orEmpty()
         val unresolved = retained + attempted
         return when (outcome) {
             IndexingTerminalOutcome.CANCELLED -> SourceScanOutcome.Cancelled(retained)
@@ -2273,6 +2300,14 @@ constructor(
             else -> IndexingSourceScope.MIXED
         }
     }
+
+    private fun currentAttemptedSourceKeys(sessionId: Long, request: IndexRequest): Set<String> =
+        synchronized(this) {
+            (currentIndexingState as? IndexingState.Indexing)
+                ?.takeIf { it.sessionId == sessionId }
+                ?.attemptedSourceKeys
+                ?.takeIf { it.isNotEmpty() }
+        } ?: attemptedSourceKeys(request)
 
     private fun attemptedSourceKeys(request: IndexRequest): Set<String> =
         request.sourceKeys?.takeIf { it.isNotEmpty() }

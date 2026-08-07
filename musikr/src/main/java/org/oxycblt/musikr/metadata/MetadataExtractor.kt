@@ -21,11 +21,14 @@ package org.oxycblt.musikr.metadata
 import android.content.ContentResolver
 import android.content.Context
 import android.media.MediaMetadataRetriever
+import android.util.Log
 import java.io.FileInputStream
+import java.io.FileNotFoundException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oxycblt.musikr.fs.File
+import org.oxycblt.musikr.fs.SourceIdentity
 import org.oxycblt.musikr.library.MetadataProfile
 
 internal interface MetadataExtractor {
@@ -50,7 +53,61 @@ sealed interface MetadataResult {
 
     data object NotAudio : MetadataResult
 
-    data object ProviderFailed : MetadataResult
+    /** One provider row disappeared or became unreadable after enumeration. */
+    data object ItemUnavailable : MetadataResult
+
+    /** The provider/metadata backend itself is unavailable for authoritative extraction. */
+    data class ProviderFailed(val failureClass: String, val failureMessage: String?) :
+        MetadataResult
+}
+
+private const val TAG = "MetadataExtractor"
+
+private fun providerFailed(deviceFile: File, failure: Throwable): MetadataResult.ProviderFailed {
+    Log.w(
+        TAG,
+        "Metadata provider failure [source=${SourceIdentity.forFile(deviceFile)} uri=${deviceFile.uri}]",
+        failure,
+    )
+    return MetadataResult.ProviderFailed(failure.javaClass.name, failure.message)
+}
+
+private fun classifyDescriptorNotFound(
+    contentResolver: ContentResolver,
+    deviceFile: File,
+    failure: FileNotFoundException,
+): MetadataResult {
+    if (deviceFile.uri.scheme != ContentResolver.SCHEME_CONTENT) {
+        return MetadataResult.ItemUnavailable
+    }
+
+    val client =
+        try {
+            contentResolver.acquireUnstableContentProviderClient(deviceFile.uri)
+        } catch (providerFailure: Exception) {
+            providerFailure.addSuppressed(failure)
+            return providerFailed(deviceFile, providerFailure)
+        } ?: return providerFailed(deviceFile, failure)
+
+    return try {
+        val cursor = client.query(deviceFile.uri, null, null, null, null)
+        if (cursor == null) {
+            providerFailed(deviceFile, failure)
+        } else {
+            cursor.use {
+                if (it.count == 0) {
+                    MetadataResult.ItemUnavailable
+                } else {
+                    providerFailed(deviceFile, failure)
+                }
+            }
+        }
+    } catch (providerFailure: Exception) {
+        providerFailure.addSuppressed(failure)
+        providerFailed(deviceFile, providerFailure)
+    } finally {
+        client.close()
+    }
 }
 
 /** Full TagLib path used only by restart-safe enrichment. */
@@ -58,10 +115,29 @@ private class TagLibMetadataExtractor(private val contentResolver: ContentResolv
     MetadataExtractor {
     override suspend fun extract(deviceFile: File): MetadataResult =
         withContext(Dispatchers.IO) {
-            contentResolver.openFileDescriptor(deviceFile.uri, "r")?.use { fd ->
+            val descriptor =
+                try {
+                    contentResolver.openFileDescriptor(deviceFile.uri, "r")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: FileNotFoundException) {
+                    return@withContext classifyDescriptorNotFound(contentResolver, deviceFile, e)
+                } catch (e: SecurityException) {
+                    return@withContext providerFailed(deviceFile, e)
+                } catch (e: Exception) {
+                    return@withContext providerFailed(deviceFile, e)
+                }
+            if (descriptor == null) {
+                return@withContext classifyDescriptorNotFound(
+                    contentResolver,
+                    deviceFile,
+                    FileNotFoundException("Provider returned a null file descriptor"),
+                )
+            }
+            descriptor.use { fd ->
                 val fis = FileInputStream(fd.fileDescriptor)
                 TagLibJNI.open(deviceFile, fis).also { fis.close() }
-            } ?: MetadataResult.ProviderFailed
+            }
         }
 }
 
@@ -80,9 +156,20 @@ private class LeanMetadataExtractor(private val contentResolver: ContentResolver
                     contentResolver.openAssetFileDescriptor(deviceFile.uri, "r")
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
-                    null
-                } ?: return@withContext MetadataResult.ProviderFailed
+                } catch (e: FileNotFoundException) {
+                    return@withContext classifyDescriptorNotFound(contentResolver, deviceFile, e)
+                } catch (e: SecurityException) {
+                    return@withContext providerFailed(deviceFile, e)
+                } catch (e: Exception) {
+                    return@withContext providerFailed(deviceFile, e)
+                }
+            if (descriptor == null) {
+                return@withContext classifyDescriptorNotFound(
+                    contentResolver,
+                    deviceFile,
+                    FileNotFoundException("Provider returned a null asset descriptor"),
+                )
+            }
 
             descriptor.use { afd ->
                 val retriever = MediaMetadataRetriever()
@@ -95,7 +182,7 @@ private class LeanMetadataExtractor(private val contentResolver: ContentResolver
                     val hasAudio =
                         retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
                     if (hasAudio != null && !hasAudio.equals("yes", ignoreCase = true)) {
-                        return@withContext MetadataResult.NotAudio
+                        return@use MetadataResult.NotAudio
                     }
 
                     val tags = linkedMapOf<String, List<String>>()

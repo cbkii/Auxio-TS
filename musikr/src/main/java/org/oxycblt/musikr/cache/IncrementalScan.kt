@@ -69,6 +69,7 @@ data class IncrementalScanCommit(
     val removedSources: Set<String> = emptySet(),
     val enrichmentOnly: Boolean = false,
     val enrichmentComplete: Boolean = true,
+    val unresolvedItems: Int = 0,
 )
 
 /**
@@ -95,6 +96,15 @@ interface IncrementalCache {
 
     /** Stage changed metadata; returns false when no incremental scan is active. */
     suspend fun stage(cachedFile: CachedFile): Boolean
+
+    /**
+     * Record one enumerated item that became unavailable before metadata extraction.
+     *
+     * Implementations may carry a previously committed row forward into the pending generation; a
+     * newly stale row with no committed predecessor is simply omitted. This uncertainty is
+     * item-scoped and must not by itself fail the whole source.
+     */
+    suspend fun markItemUnavailable(file: File): Boolean = false
 
     /** Mark one source failed while allowing sibling source generations to commit. */
     suspend fun markSourceFailed(sourceKey: String, detail: String)
