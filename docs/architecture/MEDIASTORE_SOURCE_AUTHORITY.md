@@ -24,3 +24,9 @@ entries persisted in `configuredSourceSpecs`.
 
 These rules preserve the transactional source-generation and last-known-good library guarantees
 described in `CACHED_PRESENTATION_VS_SOURCE_AUTHORITY.md`.
+
+## Validation boundary
+
+JVM, API 29 and ordinary Android-device tests can prove source identity, failure classification and
+transactional cache semantics. They do not prove the exact TS18 MediaProvider, removable-media,
+boot or ACC lifecycle behaviour; those remain physical-device acceptance checks.
