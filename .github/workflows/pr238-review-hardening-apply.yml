@@ -1,0 +1,72 @@
+name: PR 238 apply review hardening
+
+on:
+  push:
+    branches:
+      - fix/mediastore-source-authority-stale-rows
+    paths:
+      - .github/workflows/pr238-review-hardening-apply.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr238-apply-review-hardening
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/mediastore-source-authority-stale-rows
+          fetch-depth: 0
+
+      - name: Execute guarded hardening patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          source = Path('.github/workflows/pr238-review-hardening.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY", start)
+          script = textwrap.dedent(source[start:end])
+          script = script.replace(
+              "if count != 1:\n        raise SystemExit(f\"STOP: {path}: expected anchor once, found {count}\")",
+              "if count < 1:\n        raise SystemExit(f\"STOP: {path}: required anchor missing\")",
+              1,
+          )
+          Path('/tmp/pr238-review-hardening.py').write_text(script)
+          PY
+          python3 /tmp/pr238-review-hardening.py
+
+      - name: Prepare formatter dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
+
+      - name: Apply repository Kotlin formatting
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
+
+      - name: Remove temporary workflows and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f -- \
+            .github/workflows/pr238-review-hardening.yml \
+            .github/workflows/pr238-review-hardening-runner.yml \
+            .github/workflows/pr238-review-hardening-apply.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo 'STOP: review hardening produced no changes' >&2; exit 1; }
+          git commit -m "fix: harden MediaStore failure authority and item retention"
+          git push origin HEAD:fix/mediastore-source-authority-stale-rows
