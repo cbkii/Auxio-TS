@@ -38,9 +38,9 @@ import org.oxycblt.musikr.Song
 /**
  * Hosts cover pages while keeping visualizer collection at adapter scope.
  *
- * Only the current page receives visualizer state. Attached off-screen holders are reset to
- * artwork, and replayed stale frames are rejected before they can briefly replace artwork after
- * recreation.
+ * Frequent live frames are delivered only to the current page. Attached off-screen holders are
+ * reset only when attachment, position, or mode state changes, and replayed stale frames are
+ * rejected before they can briefly replace artwork after recreation.
  */
 class CoverPagerAdapter(
     private val listener: StepperOverlay.Listener,
@@ -52,12 +52,13 @@ class CoverPagerAdapter(
     private val attachedHolders = linkedSetOf<CoverViewHolder>()
     private var activePosition = RecyclerView.NO_POSITION
     private var latestState: VisualizerState = VisualizerState.Disabled
+    private var visualizerMode = uiSettings.visualizerMode
 
     init {
         lifecycleOwner.lifecycleScope.launch {
             visualizerStateFlow.collect { state ->
                 latestState = sanitize(state)
-                dispatchVisualizerState()
+                dispatchActiveVisualizerState()
             }
         }
     }
@@ -77,7 +78,7 @@ class CoverPagerAdapter(
     }
 
     override fun onViewDetachedFromWindow(holder: CoverViewHolder) {
-        holder.updateVisualizerState(VisualizerState.Disabled, uiSettings.visualizerMode)
+        holder.updateVisualizerState(VisualizerState.Disabled, visualizerMode)
         attachedHolders -= holder
         super.onViewDetachedFromWindow(holder)
     }
@@ -91,22 +92,33 @@ class CoverPagerAdapter(
     fun setActivePosition(position: Int) {
         if (activePosition == position) return
         activePosition = position
-        dispatchVisualizerState()
+        dispatchAllVisualizerState()
     }
 
     fun refreshVisualizerMode() {
-        dispatchVisualizerState()
+        val newMode = uiSettings.visualizerMode
+        if (visualizerMode == newMode) return
+        visualizerMode = newMode
+        dispatchAllVisualizerState()
     }
 
-    private fun dispatchVisualizerState() {
-        attachedHolders.toList().forEach(::updateHolder)
+    private fun dispatchActiveVisualizerState() {
+        for (holder in attachedHolders) {
+            if (holder.bindingAdapterPosition == activePosition) {
+                holder.updateVisualizerState(latestState, visualizerMode)
+            }
+        }
+    }
+
+    private fun dispatchAllVisualizerState() {
+        for (holder in attachedHolders) updateHolder(holder)
     }
 
     private fun updateHolder(holder: CoverViewHolder) {
         val state =
             if (holder.bindingAdapterPosition == activePosition) latestState
             else VisualizerState.Disabled
-        holder.updateVisualizerState(state, uiSettings.visualizerMode)
+        holder.updateVisualizerState(state, visualizerMode)
     }
 
     private fun sanitize(state: VisualizerState): VisualizerState {
@@ -129,10 +141,12 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
     RecyclerView.ViewHolder(binding.root) {
 
     private var song: Song? = null
+    private var visualizerShown = false
 
     fun onViewRecycled() {
         song = null
         binding.coverVisualizer.updateState(VisualizerState.Disabled)
+        visualizerShown = false
         binding.coverVisualizer.visibility = View.GONE
         binding.cover.visibility = View.VISIBLE
     }
@@ -146,13 +160,22 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
     }
 
     fun updateVisualizerState(state: VisualizerState, mode: UISettings.VisualizerMode) {
-        binding.coverVisualizer.updateState(state)
         val shouldShow =
             VisualizerDisplayPolicy.shouldShowVisualizer(
                 state = state,
                 mode = mode,
                 hasArtwork = song?.cover != null,
             )
+
+        if (shouldShow) {
+            binding.coverVisualizer.updateState(state)
+        } else if (visualizerShown) {
+            // Reset once when leaving the visible state; hidden live frames need no mapper work.
+            binding.coverVisualizer.updateState(VisualizerState.Disabled)
+        }
+
+        if (visualizerShown == shouldShow) return
+        visualizerShown = shouldShow
         binding.coverVisualizer.visibility = if (shouldShow) View.VISIBLE else View.GONE
         binding.cover.visibility = if (shouldShow) View.INVISIBLE else View.VISIBLE
     }
