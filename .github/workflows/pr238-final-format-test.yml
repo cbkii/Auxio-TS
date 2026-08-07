@@ -2,9 +2,11 @@ name: PR 238 final format and focused tests
 
 # Temporary self-cleaning workflow; remove after successful formatting and focused tests.
 on:
-  push:
+  pull_request:
     branches:
-      - fix/mediastore-source-authority-stale-rows
+      - dev
+    types:
+      - synchronize
     paths:
       - .github/workflows/pr238-final-format-test.yml
 
@@ -17,6 +19,7 @@ concurrency:
 
 jobs:
   finalise:
+    if: github.event.pull_request.head.ref == 'fix/mediastore-source-authority-stale-rows'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
