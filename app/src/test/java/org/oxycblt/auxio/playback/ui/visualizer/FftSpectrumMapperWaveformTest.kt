@@ -68,10 +68,7 @@ class FftSpectrumMapperWaveformTest {
         mapper.updateWaveform(createToneWaveform(6000f), SAMPLE_RATE_MILLIHZ)
         assertTrue(mapper.lastActivity > 0f)
 
-        mapper.updateWaveform(
-            createToneWaveform(6000f, sampleRateHz = 48_000f),
-            48_000_000,
-        )
+        mapper.updateWaveform(createToneWaveform(6000f, sampleRateHz = 48_000f), 48_000_000)
 
         assertEquals(0f, mapper.lastActivity, 0.0001f)
     }
