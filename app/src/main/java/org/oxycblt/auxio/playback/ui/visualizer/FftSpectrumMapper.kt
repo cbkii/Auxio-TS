@@ -108,8 +108,9 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             return
         }
 
-        prepareSource(InputSource.FFT)
+        val sourceChanged = prepareSource(InputSource.FFT)
         if (cachedFftSize != fft.size || cachedFftSamplingRate != samplingRate) {
+            if (!sourceChanged) resetDynamics()
             recalculateFftMapping(fft.size, samplingRate)
         }
 
@@ -171,8 +172,9 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
             return
         }
 
-        prepareSource(InputSource.WAVEFORM)
+        val sourceChanged = prepareSource(InputSource.WAVEFORM)
         if (cachedWaveformSize != waveform.size || cachedWaveformSamplingRate != samplingRate) {
+            if (!sourceChanged) resetDynamics()
             recalculateWaveformMapping(waveform.size, samplingRate)
         }
         if (!waveformMappingValid) {
@@ -232,6 +234,7 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
     fun reset() {
         resetDynamics()
+        invalidateMappingCaches()
         activeSource = null
     }
 
@@ -241,12 +244,14 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
 
     internal fun mappingGenerationForTest() = mappingGeneration
 
-    private fun prepareSource(source: InputSource) {
-        if (activeSource != source) {
+    private fun prepareSource(source: InputSource): Boolean {
+        val sourceChanged = activeSource != source
+        if (sourceChanged) {
             if (activeSource != null) resetDynamics()
             invalidateMappingCaches()
         }
         activeSource = source
+        return sourceChanged
     }
 
     private fun invalidateMappingCaches() {
