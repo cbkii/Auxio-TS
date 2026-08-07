@@ -49,7 +49,10 @@ class TextViewEmojiCompatPolicyTest {
                 intArrayOf(androidx.appcompat.R.attr.emojiCompatEnabled),
             )
         try {
-            assertTrue("emojiCompatEnabled must remain explicit in the resolved style", attributes.hasValue(0))
+            assertTrue(
+                "emojiCompatEnabled must remain explicit in the resolved style",
+                attributes.hasValue(0),
+            )
             assertFalse(attributes.getBoolean(0, true))
         } finally {
             attributes.recycle()
