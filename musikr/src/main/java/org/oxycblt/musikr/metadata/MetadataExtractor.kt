@@ -57,7 +57,8 @@ sealed interface MetadataResult {
     data object ItemUnavailable : MetadataResult
 
     /** The provider/metadata backend itself is unavailable for authoritative extraction. */
-    data class ProviderFailed(val failureClass: String, val failureMessage: String?) : MetadataResult
+    data class ProviderFailed(val failureClass: String, val failureMessage: String?) :
+        MetadataResult
 }
 
 private const val TAG = "MetadataExtractor"
@@ -126,12 +127,13 @@ private class TagLibMetadataExtractor(private val contentResolver: ContentResolv
                 } catch (e: Exception) {
                     return@withContext providerFailed(deviceFile, e)
                 }
-                    ?: return@withContext
-                        classifyDescriptorNotFound(
-                            contentResolver,
-                            deviceFile,
-                            FileNotFoundException("Provider returned a null file descriptor"),
-                        )
+            if (descriptor == null) {
+                return@withContext classifyDescriptorNotFound(
+                    contentResolver,
+                    deviceFile,
+                    FileNotFoundException("Provider returned a null file descriptor"),
+                )
+            }
             descriptor.use { fd ->
                 val fis = FileInputStream(fd.fileDescriptor)
                 TagLibJNI.open(deviceFile, fis).also { fis.close() }
@@ -161,12 +163,13 @@ private class LeanMetadataExtractor(private val contentResolver: ContentResolver
                 } catch (e: Exception) {
                     return@withContext providerFailed(deviceFile, e)
                 }
-                    ?: return@withContext
-                        classifyDescriptorNotFound(
-                            contentResolver,
-                            deviceFile,
-                            FileNotFoundException("Provider returned a null asset descriptor"),
-                        )
+            if (descriptor == null) {
+                return@withContext classifyDescriptorNotFound(
+                    contentResolver,
+                    deviceFile,
+                    FileNotFoundException("Provider returned a null asset descriptor"),
+                )
+            }
 
             descriptor.use { afd ->
                 val retriever = MediaMetadataRetriever()
@@ -179,7 +182,7 @@ private class LeanMetadataExtractor(private val contentResolver: ContentResolver
                     val hasAudio =
                         retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
                     if (hasAudio != null && !hasAudio.equals("yes", ignoreCase = true)) {
-                        return@withContext MetadataResult.NotAudio
+                        return@use MetadataResult.NotAudio
                     }
 
                     val tags = linkedMapOf<String, List<String>>()
