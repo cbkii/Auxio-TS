@@ -11,6 +11,7 @@
 package com.tw.music
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Binder
 import android.os.IBinder
 import android.os.Parcel
@@ -20,6 +21,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import java.security.MessageDigest
+import java.util.Locale
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.playback.service.TopwayBridgePlaybackIngress
 import org.oxycblt.auxio.ts18bridge.BridgeWireContract
@@ -42,6 +45,14 @@ class MusicService : AuxioService() {
                 BridgeEntryPoint::class.java,
             )
             .playbackIngress()
+    }
+
+    // Binder exposes UID rather than package identity. Cache the strongest app-side posture we can
+    // prove once: the caller must be UID 1000 and the installed genuine stock package sharing that
+    // UID must still have the exact reviewed current signer. This does not pretend UID 1000 uniquely
+    // identifies one package; the wire surface therefore remains deliberately narrow/non-destructive.
+    private val stockCallerPostureTrusted: Boolean by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        verifyStockPackageIdentity()
     }
 
     private val bridgeBinder =
@@ -146,16 +157,32 @@ class MusicService : AuxioService() {
         }
     }
 
-    private fun isTrustedCaller(): Boolean {
-        val uid = Binder.getCallingUid()
-        if (uid != Process.SYSTEM_UID) return false
-        return try {
-            // UID 1000 is shared, so this is only a supporting posture check. The callable surface
-            // remains deliberately narrow and non-destructive even for another system-UID caller.
-            packageManager.getPackagesForUid(uid)?.contains(STOCK_PACKAGE) == true
-        } catch (error: RuntimeException) {
-            Timber.w(error, "Unable to verify Track-C caller package posture")
+    private fun isTrustedCaller(): Boolean =
+        Binder.getCallingUid() == Process.SYSTEM_UID && stockCallerPostureTrusted
+
+    private fun verifyStockPackageIdentity(): Boolean =
+        try {
+            val info =
+                packageManager.getPackageInfo(
+                    STOCK_PACKAGE,
+                    PackageManager.GET_SIGNING_CERTIFICATES,
+                )
+            if (info.applicationInfo?.uid != Process.SYSTEM_UID) return false
+            val signers = info.signingInfo?.apkContentsSigners ?: return false
+            signers.any { signer ->
+                sha256(signer.toByteArray()) == BridgeWireContract.STOCK_CERT_SHA256
+            }
+        } catch (error: PackageManager.NameNotFoundException) {
             false
+        } catch (error: RuntimeException) {
+            Timber.w(error, "Unable to verify Track-C stock package posture")
+            false
+        }
+
+    private fun sha256(value: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value)
+        return buildString(digest.size * 2) {
+            digest.forEach { byte -> append(String.format(Locale.ROOT, "%02X", byte.toInt() and 0xff)) }
         }
     }
 

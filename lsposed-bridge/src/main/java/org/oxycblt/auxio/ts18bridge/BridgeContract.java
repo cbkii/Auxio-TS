@@ -1,11 +1,6 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * BridgeContract.java is part of Auxio-TS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
  */
 package org.oxycblt.auxio.ts18bridge;
 
@@ -34,18 +29,19 @@ final class BridgeContract {
                     | CAP_STATE_MIRROR;
 
     private static final RegistryEntry[] REGISTRY = {
+        // Captured TW_THEME stock build; rb/pb/ba/fa/seekTo presenter methods were reviewed.
         new RegistryEntry(
                 "4F5495E270A7C86BAB232E2B7EE2ECD2D71F3450F6F20ED5F36FEAA4229C1518",
-                "AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3",
+                BridgeWireContract.STOCK_CERT_SHA256,
                 118L,
-                REVIEWED_CAPABILITIES,
-                "Captured TW_THEME stock build; presenter rb/pb/ba/fa/seekTo reviewed."),
+                REVIEWED_CAPABILITIES),
+        // Second reviewed stock capture. Its exact APK hash is authoritative; no reliable runtime
+        // versionCode was retained, so 0 means the registry does not impose a redundant version gate.
         new RegistryEntry(
                 "3A14ED3B330723A7F88AE3911804858D370CA673E17D67098CCE6C9A543C6B49",
-                "AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3",
+                BridgeWireContract.STOCK_CERT_SHA256,
                 0L,
-                REVIEWED_CAPABILITIES,
-                "Second reviewed stock capture; exact runtime version code remains device-qualified evidence.")
+                REVIEWED_CAPABILITIES)
     };
 
     private BridgeContract() {}
@@ -75,19 +71,16 @@ final class BridgeContract {
         final String signerSha256;
         final long versionCode;
         final int capabilities;
-        final String limitations;
 
-        RegistryEntry(
-                String apkSha256,
-                String signerSha256,
-                long versionCode,
-                int capabilities,
-                String limitations) {
+        RegistryEntry(String apkSha256, String signerSha256, long versionCode, int capabilities) {
             this.apkSha256 = apkSha256;
             this.signerSha256 = signerSha256;
             this.versionCode = versionCode;
             this.capabilities = capabilities;
-            this.limitations = limitations;
+        }
+
+        boolean acceptsVersion(long actualVersionCode) {
+            return versionCode == 0L || versionCode == actualVersionCode;
         }
 
         boolean has(int capability) {

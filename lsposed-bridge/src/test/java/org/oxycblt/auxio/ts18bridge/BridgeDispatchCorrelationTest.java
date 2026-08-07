@@ -36,6 +36,18 @@ public final class BridgeDispatchCorrelationTest {
     }
 
     @Test
+    public void inFlightObservationDoesNotSuppressLaterPath() {
+        BridgeDispatchCorrelation correlation = new BridgeDispatchCorrelation();
+        BridgeDispatchCorrelation.Decision first = correlation.begin(2, -1L, 100L);
+        assertTrue(first.shouldDispatch);
+
+        BridgeDispatchCorrelation.Decision concurrent = correlation.begin(2, -1L, 110L);
+        assertTrue(concurrent.shouldDispatch);
+        assertFalse(concurrent.alreadyAccepted);
+        assertNotEquals(first.commandId, concurrent.commandId);
+    }
+
+    @Test
     public void sameCommandOutsideWindowGetsNewId() {
         BridgeDispatchCorrelation correlation = new BridgeDispatchCorrelation();
         BridgeDispatchCorrelation.Decision first = correlation.begin(3, -1L, 100L);

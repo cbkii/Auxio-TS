@@ -23,6 +23,10 @@ public final class BridgeWireContract {
     public static final String BINDER_DESCRIPTOR = "org.oxycblt.auxio.ts18bridge.Command";
     public static final int TRANSACTION_DISPATCH = 1;
 
+    /** Current signer of the two exact reviewed genuine stock {@code com.tw.music} APKs. */
+    public static final String STOCK_CERT_SHA256 =
+            "AA6F9FB3070512AC962425797CD65AA585CF6202937EE3CEEFB14B5802EABDF3";
+
     public static final int COMMAND_PREVIOUS = 1;
     public static final int COMMAND_NEXT = 2;
     public static final int COMMAND_PLAY_PAUSE = 3;

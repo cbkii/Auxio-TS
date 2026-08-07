@@ -12,10 +12,25 @@ BRIDGE_APK=''
 TARGET_APK=''
 while (($#)); do
   case "$1" in
-    --variant) VARIANT=${2:-}; shift 2 ;;
-    --apk) BRIDGE_APK=${2:-}; shift 2 ;;
-    --target-apk) TARGET_APK=${2:-}; shift 2 ;;
-    *) printf '[ERROR] Unknown argument: %s\n' "$1" >&2; exit 2 ;;
+    --variant)
+      (($# >= 2)) || { printf '[ERROR] --variant requires a value.\n' >&2; exit 2; }
+      VARIANT=$2
+      shift 2
+      ;;
+    --apk)
+      (($# >= 2)) || { printf '[ERROR] --apk requires a value.\n' >&2; exit 2; }
+      BRIDGE_APK=$2
+      shift 2
+      ;;
+    --target-apk)
+      (($# >= 2)) || { printf '[ERROR] --target-apk requires a value.\n' >&2; exit 2; }
+      TARGET_APK=$2
+      shift 2
+      ;;
+    *)
+      printf '[ERROR] Unknown argument: %s\n' "$1" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -30,7 +45,10 @@ case "$VARIANT" in
     EXPECTED_TARGET_ID='com.tw.media'
     : "${BRIDGE_APK:=${ROOT}/lsposed-bridge/build/outputs/apk/release/lsposed-bridge-release.apk}"
     ;;
-  *) printf '[ERROR] Unsupported variant: %s\n' "$VARIANT" >&2; exit 2 ;;
+  *)
+    printf '[ERROR] Unsupported variant: %s\n' "$VARIANT" >&2
+    exit 2
+    ;;
 esac
 
 [[ -n $TARGET_APK ]] || { printf '[ERROR] --target-apk is required.\n' >&2; exit 2; }
