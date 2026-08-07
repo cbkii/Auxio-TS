@@ -24,6 +24,7 @@ import dagger.hilt.components.SingletonComponent
 import java.security.MessageDigest
 import java.util.Locale
 import org.oxycblt.auxio.AuxioService
+import org.oxycblt.auxio.playback.service.TopwayBridgeAdmissionResult
 import org.oxycblt.auxio.playback.service.TopwayBridgePlaybackIngress
 import org.oxycblt.auxio.ts18bridge.BridgeWireContract
 import org.oxycblt.auxio.ts18bridge.TopwayBridgeCommandLedger
@@ -135,20 +136,34 @@ class MusicService : AuxioService() {
         }
 
         return try {
-            if (!playbackIngress.admit(commandType, seekPositionMs, deadlineElapsedMs)) {
-                commandLedger.release(clientGeneration, commandId)
-                if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
-                    BridgeWireContract.RESULT_EXPIRED
-                } else {
+            when (
+                playbackIngress.admitResult(commandType, seekPositionMs, deadlineElapsedMs)
+            ) {
+                TopwayBridgeAdmissionResult.ACCEPTED -> {
+                    commandLedger.markAccepted(
+                        clientGeneration,
+                        commandId,
+                        SystemClock.elapsedRealtime(),
+                    )
+                    BridgeWireContract.RESULT_ACCEPTED
+                }
+                TopwayBridgeAdmissionResult.NOT_READY -> {
+                    commandLedger.release(clientGeneration, commandId)
                     BridgeWireContract.RESULT_NOT_READY
                 }
-            } else {
-                commandLedger.markAccepted(
-                    clientGeneration,
-                    commandId,
-                    SystemClock.elapsedRealtime(),
-                )
-                BridgeWireContract.RESULT_ACCEPTED
+                TopwayBridgeAdmissionResult.INVALID -> {
+                    commandLedger.release(clientGeneration, commandId)
+                    BridgeWireContract.RESULT_INVALID
+                }
+                TopwayBridgeAdmissionResult.EXPIRED -> {
+                    commandLedger.release(clientGeneration, commandId)
+                    BridgeWireContract.RESULT_EXPIRED
+                }
+                TopwayBridgeAdmissionResult.INTERRUPTED,
+                TopwayBridgeAdmissionResult.ERROR -> {
+                    commandLedger.release(clientGeneration, commandId)
+                    BridgeWireContract.RESULT_ERROR
+                }
             }
         } catch (error: RuntimeException) {
             commandLedger.release(clientGeneration, commandId)
