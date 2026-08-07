@@ -21,6 +21,7 @@ package org.oxycblt.auxio.ui
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.auxio.R
@@ -48,6 +49,7 @@ class TextViewEmojiCompatPolicyTest {
                 intArrayOf(androidx.appcompat.R.attr.emojiCompatEnabled),
             )
         try {
+            assertTrue("emojiCompatEnabled must remain explicit in the resolved style", attributes.hasValue(0))
             assertFalse(attributes.getBoolean(0, true))
         } finally {
             attributes.recycle()
