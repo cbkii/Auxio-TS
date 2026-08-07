@@ -1,0 +1,67 @@
+name: PR 238 bounded implementation
+
+on:
+  push:
+    branches:
+      - fix/mediastore-source-authority-stale-rows
+    paths:
+      - .github/pr238_patch.b64
+      - .github/workflows/pr238-apply.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr238-bounded-implementation
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/mediastore-source-authority-stale-rows
+          fetch-depth: 0
+
+      - name: Decode and verify bounded patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .github/pr238_patch.b64 | gzip -d > .github/pr238-apply.py
+          actual="$(sha256sum .github/pr238-apply.py | awk '{print $1}')"
+          expected="342b472fbe651bb0e33158daae83f2a8a019fba0805d774800ada33daaeec390"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "STOP: patch payload hash mismatch: expected=$expected actual=$actual" >&2
+            exit 1
+          fi
+          python3 -m py_compile .github/pr238-apply.py
+
+      - name: Apply implementation patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/pr238-apply.py
+          git diff --check
+          test ! -e .github/pr238_patch.b64
+          test ! -e .github/pr238-apply.py
+          test ! -e .github/workflows/pr238-apply.yml
+          test ! -e .github/agent-task-237.md
+
+      - name: Commit implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "STOP: patch produced no staged implementation changes" >&2
+            exit 1
+          fi
+          git commit -m "fix: harden MediaStore source authority and stale item handling"
+          git push origin HEAD:fix/mediastore-source-authority-stale-rows
