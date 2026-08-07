@@ -48,16 +48,7 @@ class SourceAuthorityScopePolicyTest {
 
     @Test
     fun `mediastore attempted keys come from observed provider plan`() {
-        val external =
-            SourceSnapshot(
-                sourceKey = "internal:external_primary",
-                sourceType = "MEDIA_STORE",
-                rootUri = "content://media/external_primary/audio/media",
-                rootPath = "/storage/emulated/0",
-                available = true,
-                fingerprint = "v1",
-                fingerprintStrength = SourceFingerprintStrength.ADVISORY,
-            )
+        val external = externalPrimarySnapshot()
         val plan =
             IncrementalScanPlan(
                 scanId = "scan",
@@ -79,4 +70,40 @@ class SourceAuthorityScopePolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `unscoped mediastore retry clears a reused provider source from unresolved scope`() {
+        val external = externalPrimarySnapshot()
+        val plan =
+            IncrementalScanPlan(
+                scanId = "retry",
+                scanSources = emptyList(),
+                reuseSourceKeys = setOf(external.sourceKey),
+                unavailableSourceKeys = emptySet(),
+                metadataProfile = MetadataProfile.LEAN,
+                configurationRevision = 2L,
+                force = false,
+            )
+        val attempted =
+            SourceAuthorityScopePolicy.effectiveAttemptedSourceKeys(
+                LocationMode.MEDIA_STORE,
+                requestedSourceKeys = null,
+                configuredSourceKeys = emptySet(),
+                plan = plan,
+            )
+
+        assertEquals(setOf(external.sourceKey), attempted)
+        assertTrue((setOf(external.sourceKey) - attempted).isEmpty())
+    }
+
+    private fun externalPrimarySnapshot() =
+        SourceSnapshot(
+            sourceKey = "internal:external_primary",
+            sourceType = "MEDIA_STORE",
+            rootUri = "content://media/external_primary/audio/media",
+            rootPath = "/storage/emulated/0",
+            available = true,
+            fingerprint = "v1",
+            fingerprintStrength = SourceFingerprintStrength.ADVISORY,
+        )
 }
