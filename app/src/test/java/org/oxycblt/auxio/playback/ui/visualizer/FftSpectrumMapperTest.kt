@@ -18,12 +18,19 @@
 
 package org.oxycblt.auxio.playback.ui.visualizer
 
+import kotlin.math.abs
+import kotlin.math.pow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FftSpectrumMapperTest {
+    @Test
+    fun defaultMapperUsesTwentyFourPoints() {
+        assertEquals(24, FftSpectrumMapper().bands.size)
+    }
+
     @Test
     fun nullEmptyAndShortFramesReturnSafeZeros() {
         val mapper = FftSpectrumMapper(8)
@@ -38,115 +45,195 @@ class FftSpectrumMapperTest {
 
     @Test
     fun updateReusesInternalBandBuffer() {
-        val mapper = FftSpectrumMapper(8)
+        val mapper = FftSpectrumMapper()
         val firstBands = mapper.bands
 
-        mapper.update(createSineWaveFft(1000f), 44100000)
-        mapper.update(createSineWaveFft(2000f), 44100000)
+        mapper.update(createSineWaveFft(1000f), SAMPLE_RATE_MILLIHZ)
+        mapper.update(createSineWaveFft(2000f), SAMPLE_RATE_MILLIHZ)
 
         assertSame(firstBands, mapper.bands)
     }
 
     @Test
-    fun realImaginaryPairProducesNonZeroBand() {
-        val mapper = FftSpectrumMapper(48)
-        val fft = createSineWaveFft(1000f) // 1 kHz, should fall in the 40-12000 range
-
-        mapper.update(fft, 44100000)
-
-        assertTrue(mapper.bands.any { it > 0f })
+    fun commonCaptureMappingsPopulateEveryBandWithoutOverlap() {
+        assertCompleteMapping(SAMPLE_RATE_MILLIHZ)
+        assertCompleteMapping(48_000_000)
     }
 
     @Test
-    fun highEnergyFrameProducesStrongerBandsThanLowEnergyFrame() {
-        val lowMapper = FftSpectrumMapper(48)
-        val lowFft = createSineWaveFft(1000f, amplitude = 10)
-        lowMapper.update(lowFft, 44100000)
-        val low = lowMapper.bands.maxOrNull() ?: 0f
+    fun mappingIsCachedUntilCaptureConfigurationChanges() {
+        val mapper = FftSpectrumMapper()
+        val frame = createBroadbandFft()
 
-        val highMapper = FftSpectrumMapper(48)
-        val highFft = createSineWaveFft(1000f, amplitude = 100)
-        highMapper.update(highFft, 44100000)
-        val high = highMapper.bands.maxOrNull() ?: 0f
+        mapper.update(frame, SAMPLE_RATE_MILLIHZ)
+        val firstGeneration = mapper.mappingGenerationForTest()
+        mapper.update(frame, SAMPLE_RATE_MILLIHZ)
+        assertEquals(firstGeneration, mapper.mappingGenerationForTest())
 
-        assertTrue(high > low)
+        mapper.update(frame, 48_000_000)
+        assertEquals(firstGeneration + 1, mapper.mappingGenerationForTest())
     }
 
     @Test
-    fun smoothingAndDecayAreDeterministicAndClamped() {
-        val mapper = FftSpectrumMapper(48)
-        mapper.update(createSineWaveFft(1000f, amplitude = 100), 44100000)
-        val first = mapper.bands.copyOf().maxOrNull() ?: 0f
-        mapper.update(byteArrayOf(0, 0, 0, 0, 0, 0), 44100000)
-        val decayed = mapper.bands.copyOf().maxOrNull() ?: 0f
+    fun captureConfigurationChangeResetsTransientActivity() {
+        val mapper = FftSpectrumMapper()
+        val fft = ByteArray(512).apply { this[24] = 100 }
 
-        assertTrue(first in 0f..1f)
-        assertTrue(decayed in 0f..1f)
-        assertTrue(decayed < first)
+        mapper.update(fft, SAMPLE_RATE_MILLIHZ)
+        fft[24] = 0
+        fft[80] = 100
+        mapper.update(fft, SAMPLE_RATE_MILLIHZ)
+        assertTrue(mapper.lastActivity > 0f)
+
+        mapper.update(createSineWaveFft(3000f, sampleRateHz = 48_000f), 48_000_000)
+
+        assertEquals(0f, mapper.lastActivity, 0.0001f)
     }
 
     @Test
-    fun malformedOddLengthFrameDoesNotCrashAndClamps() {
-        val mapper = FftSpectrumMapper(48)
-        mapper.update(byteArrayOf(0, 0, 127, 127, 64), 44100000)
+    fun smallCaptureReusesNearestBinsInsteadOfLeavingEmptyRanges() {
+        val mapper = FftSpectrumMapper()
+        mapper.update(createBroadbandFft(size = 32), SAMPLE_RATE_MILLIHZ)
 
-        assertEquals(48, mapper.bands.size)
-        assertTrue(mapper.bands.all { it in 0f..1f })
+        val starts = mapper.bandStartBinsForTest()
+        val ends = mapper.bandEndBinsExclusiveForTest()
+        assertEquals(24, starts.size)
+        assertTrue(starts.indices.all { ends[it] > starts[it] })
     }
 
     @Test
-    fun framesStoppingDecaysEnvelope() {
-        val mapper = FftSpectrumMapper(48)
-        val fft = createSineWaveFft(1000f, amplitude = 120)
+    fun realImaginaryPairProducesBoundedSignedMovement() {
+        val mapper = FftSpectrumMapper()
 
-        mapper.update(fft, 44100000)
-        val initialEnvelope = mapper.globalEnvelope
-        assertTrue("Envelope should be > 0", initialEnvelope > 0f)
+        mapper.update(createSineWaveFft(1000f, imaginaryAmplitude = 60), SAMPLE_RATE_MILLIHZ)
 
-        mapper.update(byteArrayOf(0, 0, 0, 0), 44100000) // "silence" or frame stopping
-        val decayedEnvelope = mapper.globalEnvelope
-        assertTrue("Envelope should decay", decayedEnvelope < initialEnvelope)
+        assertTrue(mapper.bands.any { abs(it) > 0.001f })
+        assertTrue(mapper.bands.all { it in -1f..1f })
     }
 
     @Test
-    fun frequencyRangeExclusion() {
-        val mapper = FftSpectrumMapper(48)
+    fun higherEnergyFrameProducesStrongerGlobalEnvelope() {
+        val lowMapper = FftSpectrumMapper()
+        lowMapper.update(createSineWaveFft(1000f, amplitude = 10), SAMPLE_RATE_MILLIHZ)
 
-        // Very low frequency (e.g. 10Hz) should be excluded
-        mapper.update(createSineWaveFft(10f), 44100000)
-        val lowFreqMax = mapper.bands.maxOrNull() ?: 0f
+        val highMapper = FftSpectrumMapper()
+        highMapper.update(createSineWaveFft(1000f, amplitude = 100), SAMPLE_RATE_MILLIHZ)
 
-        mapper.reset()
-
-        // Very high frequency (e.g. 20000Hz) should be excluded
-        mapper.update(createSineWaveFft(20000f), 44100000)
-        val highFreqMax = mapper.bands.maxOrNull() ?: 0f
-
-        mapper.reset()
-
-        // Valid frequency (e.g. 1000Hz)
-        mapper.update(createSineWaveFft(1000f), 44100000)
-        val validFreqMax = mapper.bands.maxOrNull() ?: 0f
-
-        assertTrue(lowFreqMax == 0f)
-        assertTrue(highFreqMax == 0f)
-        assertTrue(validFreqMax > 0f)
+        assertTrue(highMapper.globalEnvelope > lowMapper.globalEnvelope)
     }
 
-    private fun createSineWaveFft(freq: Float, amplitude: Byte = 100): ByteArray {
-        val size = 512
+    @Test
+    fun linearSpectralTiltIsFlatterThanLocalizedFrequencyBump() {
+        val tiltedMapper = FftSpectrumMapper()
+        tiltedMapper.update(createTiltedSpectrumFft(addBump = false), SAMPLE_RATE_MILLIHZ)
+        val tiltedRange = tiltedMapper.bands.maxOf { abs(it) }
+
+        val bumpedMapper = FftSpectrumMapper()
+        bumpedMapper.update(createTiltedSpectrumFft(addBump = true), SAMPLE_RATE_MILLIHZ)
+        val bumpedRange = bumpedMapper.bands.maxOf { abs(it) }
+
+        assertTrue("Linear tilt should settle close to a circle", tiltedRange < 0.16f)
+        assertTrue("A local spectral feature should survive detrending", bumpedRange > tiltedRange)
+    }
+
+    @Test
+    fun invalidFramesDecaySignedContourAndEnvelope() {
+        val mapper = FftSpectrumMapper()
+        mapper.update(createSineWaveFft(1000f, amplitude = 120), SAMPLE_RATE_MILLIHZ)
+        val firstContour = mapper.bands.maxOf { abs(it) }
+        val firstEnvelope = mapper.globalEnvelope
+
+        mapper.update(byteArrayOf(0, 0, 0), SAMPLE_RATE_MILLIHZ)
+
+        assertTrue(mapper.bands.maxOf { abs(it) } < firstContour)
+        assertTrue(mapper.globalEnvelope < firstEnvelope)
+    }
+
+    @Test
+    fun frequenciesOutsideSupportedRangeDoNotCreateMovement() {
+        val lowMapper = FftSpectrumMapper()
+        lowMapper.update(
+            createSineWaveFft(50f, sampleRateHz = LOW_SAMPLE_RATE_HZ),
+            LOW_SAMPLE_RATE_MILLIHZ,
+        )
+        assertTrue(lowMapper.bands.all { it == 0f })
+        assertEquals(0f, lowMapper.globalEnvelope, 0.0001f)
+
+        val highMapper = FftSpectrumMapper()
+        highMapper.update(createSineWaveFft(20_000f), SAMPLE_RATE_MILLIHZ)
+        assertTrue(highMapper.bands.all { it == 0f })
+        assertEquals(0f, highMapper.globalEnvelope, 0.0001f)
+    }
+
+    private fun assertCompleteMapping(samplingRate: Int) {
+        val mapper = FftSpectrumMapper()
+        mapper.update(createBroadbandFft(), samplingRate)
+
+        val starts = mapper.bandStartBinsForTest()
+        val ends = mapper.bandEndBinsExclusiveForTest()
+        assertEquals(24, starts.size)
+        assertEquals(24, ends.size)
+        for (index in starts.indices) {
+            assertTrue("Band $index must contain at least one bin", ends[index] > starts[index])
+            if (index > 0) {
+                assertEquals(
+                    "Band ranges must not overlap or leave holes",
+                    ends[index - 1],
+                    starts[index],
+                )
+            }
+        }
+    }
+
+    private fun createBroadbandFft(size: Int = 512): ByteArray {
         val fft = ByteArray(size)
-        val sampleRate = 44100f
-        val resolution = sampleRate / size
-        val targetBin = (freq / resolution).toInt()
-
-        // DC & Nyquist are ignored (indices 0, 1)
-        if (targetBin > 0 && targetBin * 2 + 1 < size) {
-            val realIndex = targetBin * 2
-            val imagIndex = targetBin * 2 + 1
-            fft[realIndex] = amplitude
-            fft[imagIndex] = 0
+        for (bin in 1 until size / 2) {
+            val pairIndex = bin * 2
+            if (pairIndex + 1 >= size) break
+            fft[pairIndex] = (24 + bin % 80).toByte()
         }
         return fft
+    }
+
+    private fun createTiltedSpectrumFft(addBump: Boolean): ByteArray {
+        val size = 512
+        val fft = ByteArray(size)
+        val resolution = SAMPLE_RATE_HZ / size
+        for (bin in 1 until size / 2) {
+            val frequency = bin * resolution
+            if (frequency !in 80f..12_000f) continue
+            val tiltedAmplitude = (121f * (frequency / 86.1328125f).pow(-0.25f) - 1f).toInt()
+            val bump = if (addBump && frequency in 850f..1150f) 55 else 0
+            val amplitude = (tiltedAmplitude + bump).coerceIn(1, 127)
+            val pairIndex = bin * 2
+            fft[pairIndex] = amplitude.toByte()
+        }
+        return fft
+    }
+
+    private fun createSineWaveFft(
+        freq: Float,
+        amplitude: Byte = 100,
+        imaginaryAmplitude: Byte = 0,
+        sampleRateHz: Float = SAMPLE_RATE_HZ,
+    ): ByteArray {
+        val size = 512
+        val fft = ByteArray(size)
+        val resolution = sampleRateHz / size
+        val targetBin = (freq / resolution).toInt()
+
+        if (targetBin > 0 && targetBin * 2 + 1 < size) {
+            val realIndex = targetBin * 2
+            fft[realIndex] = amplitude
+            fft[realIndex + 1] = imaginaryAmplitude
+        }
+        return fft
+    }
+
+    private companion object {
+        const val SAMPLE_RATE_HZ = 44_100f
+        const val SAMPLE_RATE_MILLIHZ = 44_100_000
+        const val LOW_SAMPLE_RATE_HZ = 8_000f
+        const val LOW_SAMPLE_RATE_MILLIHZ = 8_000_000
     }
 }

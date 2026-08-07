@@ -27,7 +27,6 @@ import android.view.View
 import androidx.appcompat.R as AR
 import androidx.core.graphics.ColorUtils
 import com.google.android.material.R as MR
-import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -35,11 +34,11 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.util.getAttrColorCompat
 
 /**
- * Smooth filled radial FFT visualizer for the Now Playing cover slot.
+ * Smooth filled 24-point radial visualizer for the Now Playing cover slot.
  *
  * The contour approach is adapted from `gauravk95/audio-visualizer-android`, Copyright 2018 Gaurav
- * Kumar, licensed under the Apache License 2.0. This implementation keeps Auxio's GPL header and
- * uses a single filled path without synthetic idle animation or view-owned freshness polling.
+ * Kumar, licensed under the Apache License 2.0. This implementation keeps one filled quadratic
+ * path, one outline, no synthetic idle animation, and no per-frame trigonometry or allocation.
  */
 class BlobVisualizer
 @JvmOverloads
@@ -49,8 +48,12 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val bands: FloatArray
         get() = spectrumMapper.bands
 
-    private var pointsX = FloatArray(0)
-    private var pointsY = FloatArray(0)
+    private var pointsX = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
+    private var pointsY = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
+    private val cosLookup = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
+    private val sinLookup = FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT)
+    private var configuredTrackUid: String? = null
+    private var configuredTrackDurationMs = Long.MIN_VALUE
     private var statusText: String? = null
 
     private val outlinePaint =
@@ -68,12 +71,30 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
     private val path = Path()
 
     init {
+        recalculateAngles(phaseRadians = 0f, clockwise = true)
         refreshThemeColors()
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         refreshThemeColors()
+    }
+
+    /**
+     * Gives each track a stable visual orientation without changing the underlying frequency-band
+     * boundaries. The expensive trigonometry runs only when a different track is bound.
+     */
+    fun configureTrack(uid: String, durationMs: Long) {
+        if (configuredTrackUid == uid && configuredTrackDurationMs == durationMs) return
+
+        configuredTrackUid = uid
+        configuredTrackDurationMs = durationMs
+        val seed = mix32(uid.hashCode() xor durationMs.hashCode())
+        val clockwise = seed and 1 == 0
+        val phaseUnit = ((seed ushr 8) and 0xFFFF) / 65_536f
+        recalculateAngles(phaseUnit * TWO_PI, clockwise)
+        spectrumMapper.reset()
+        invalidate()
     }
 
     fun updateState(state: VisualizerState) {
@@ -105,11 +126,21 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
                     VisualizerState.FrameSource.FFT ->
                         spectrumMapper.update(state.frame, state.samplingRate)
                     VisualizerState.FrameSource.WAVEFORM ->
-                        spectrumMapper.updateWaveform(state.frame)
+                        spectrumMapper.updateWaveform(state.frame, state.samplingRate)
                 }
             }
         }
         invalidate()
+    }
+
+    private fun recalculateAngles(phaseRadians: Float, clockwise: Boolean) {
+        val direction = if (clockwise) 1f else -1f
+        for (index in cosLookup.indices) {
+            val angularPosition = index.toFloat() / cosLookup.size.toFloat()
+            val angle = phaseRadians + direction * angularPosition * TWO_PI - HALF_PI
+            cosLookup[index] = cos(angle).toFloat()
+            sinLookup[index] = sin(angle).toFloat()
+        }
     }
 
     private fun refreshThemeColors() {
@@ -127,11 +158,9 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 
         val cx = width / 2f
         val cy = height / 2f
-        val baseRadius = size * 0.35f
-        val globalEnv = spectrumMapper.globalEnvelope
-        val baseRadiusWithEnv = baseRadius * (1f + 0.10f * globalEnv)
-        val maxPeakExcursion = baseRadius * 0.18f
-        outlinePaint.strokeWidth = max(2f, size * 0.008f)
+        val baseRadius = size * BASE_RADIUS_RATIO
+        val globalScale = GLOBAL_RADIUS_SCALE * spectrumMapper.globalEnvelope
+        outlinePaint.strokeWidth = max(2f, size * OUTLINE_WIDTH_RATIO)
 
         path.reset()
         val count = bands.size
@@ -141,9 +170,16 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
 
         for (index in 0 until count) {
-            val radius = baseRadiusWithEnv + maxPeakExcursion * bands[index]
-            pointsX[index] = cx + radius * COS_LOOKUP[index]
-            pointsY[index] = cy + radius * SIN_LOOKUP[index]
+            val level = bands[index]
+            val localScale =
+                if (level >= 0f) {
+                    OUTWARD_RADIUS_SCALE * level
+                } else {
+                    INWARD_RADIUS_SCALE * level
+                }
+            val radius = baseRadius * (1f + globalScale + localScale)
+            pointsX[index] = cx + radius * cosLookup[index]
+            pointsY[index] = cy + radius * sinLookup[index]
         }
 
         if (count > 0) {
@@ -172,20 +208,26 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
         }
     }
 
+    private fun mix32(input: Int): Int {
+        var value = input
+        value = value xor (value ushr 16)
+        value *= -0x7A143595
+        value = value xor (value ushr 13)
+        value *= -0x3D4D51CB
+        return value xor (value ushr 16)
+    }
+
     companion object {
         private const val STATUS_TEXT_SIZE_RATIO = 0.055f
         private const val STATUS_MAX_WIDTH_RATIO = 0.82f
-        private val COS_LOOKUP =
-            FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT) { index ->
-                cos(angleForBand(index)).toFloat()
-            }
-        private val SIN_LOOKUP =
-            FloatArray(FftSpectrumMapper.DEFAULT_BAND_COUNT) { index ->
-                sin(angleForBand(index)).toFloat()
-            }
 
-        private fun angleForBand(index: Int) =
-            (index.toDouble() / FftSpectrumMapper.DEFAULT_BAND_COUNT.toDouble()) * 2.0 * PI -
-                PI / 2.0
+        private const val BASE_RADIUS_RATIO = 0.355f
+        private const val GLOBAL_RADIUS_SCALE = 0.055f
+        private const val OUTWARD_RADIUS_SCALE = 0.26f
+        private const val INWARD_RADIUS_SCALE = 0.11f
+        private const val OUTLINE_WIDTH_RATIO = 0.008f
+
+        private const val TWO_PI = 6.2831855f
+        private const val HALF_PI = 1.5707964f
     }
 }
