@@ -77,7 +77,8 @@ class MetadataExtractorFailureClassificationTest {
     fun `reachable provider with absent exact row confirms item disappearance`() = runBlocking {
         val client = mockk<ContentProviderClient>(relaxed = true)
         val cursor = MatrixCursor(arrayOf("_id"))
-        every { resolver.openAssetFileDescriptor(uri, "r") } throws FileNotFoundException(uri.toString())
+        every { resolver.openAssetFileDescriptor(uri, "r") } throws
+            FileNotFoundException(uri.toString())
         every { resolver.acquireUnstableContentProviderClient(uri) } returns client
         every { client.query(uri, null, null, null, null) } returns cursor
 
