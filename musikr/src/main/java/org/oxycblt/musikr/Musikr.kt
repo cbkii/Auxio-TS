@@ -342,7 +342,8 @@ private class MusikrImpl(
                 Log.d(
                     "Musikr",
                     "Committed ${commit.committedSources.size} source generation(s), " +
-                        "${commit.changedRows} changed and ${commit.removedRows} removed rows",
+                        "${commit.changedRows} changed, ${commit.removedRows} removed, " +
+                        "${commit.unresolvedItems} unresolved item(s)",
                 )
                 if (SourceScanCommitPolicy.allAttemptedSourcesFailed(commit)) {
                     val hasPreservedRows = config.storage.cache.snapshot().any { it.audio != null }
@@ -354,6 +355,7 @@ private class MusikrImpl(
                 }
                 if (
                     commit.enrichmentOnly ||
+                        commit.unresolvedItems > 0 ||
                         commit.removedSources.isNotEmpty() ||
                         commit.failedSources.isNotEmpty() ||
                         commit.unavailableSources.isNotEmpty()

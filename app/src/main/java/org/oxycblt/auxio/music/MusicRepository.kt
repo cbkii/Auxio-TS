@@ -653,6 +653,7 @@ constructor(
                     currentGeneration = musicSettings.sourceConfigurationGeneration,
                     configuredSourceKeys = configuredSourceKeys,
                     hasRevision = musicSettings.revision != null,
+                    allowUnscopedSources = musicSettings.locationMode == LocationMode.MEDIA_STORE,
                 )
             if (request == null) {
                 val checkpoint = musicSettings.sourceConfigurationCheckpoint
@@ -968,10 +969,14 @@ constructor(
                         isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
                         availableProcessors = Runtime.getRuntime().availableProcessors(),
                     )
-                val requestedSourceKeys = request.sourceKeys
+                val originalRequestedSourceKeys = request.sourceKeys
+                val requestedSourceKeys =
+                    SourceAuthorityScopePolicy.normalizeRequestedSourceKeys(
+                        originalRequestedSourceKeys
+                    )
                 val allConfiguredSourceKeys =
                     musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }
-                val attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
+                var attemptedSourceKeys = requestedSourceKeys ?: allConfiguredSourceKeys
                 val rawFs =
                     createFileSystem(
                         sessionId = sessionId,
@@ -987,9 +992,12 @@ constructor(
                             configurationRevision = sourceConfigurationRevision(),
                             targetSourceKeys = requestedSourceKeys,
                             allowEmptySourceSet =
-                                checkpointAuthority != null &&
-                                    requestedSourceKeys?.isEmpty() == true &&
-                                    allConfiguredSourceKeys.isEmpty(),
+                                SourceAuthorityScopePolicy.allowExplicitEmptySourceSet(
+                                    locationMode = musicSettings.locationMode,
+                                    hasCheckpointAuthority = checkpointAuthority != null,
+                                    originalRequestedSourceKeys = originalRequestedSourceKeys,
+                                    configuredSourceKeys = allConfiguredSourceKeys,
+                                ),
                             applyRemovedSources = checkpointAuthority != null,
                             legacyWriteOnly = ::WriteOnlyMutableCache,
                         )
@@ -1027,6 +1035,13 @@ constructor(
                         return@traceSuspend
                     }
                 val plan = prepared.plan
+                attemptedSourceKeys =
+                    SourceAuthorityScopePolicy.effectiveAttemptedSourceKeys(
+                        locationMode = musicSettings.locationMode,
+                        requestedSourceKeys = requestedSourceKeys,
+                        configuredSourceKeys = allConfiguredSourceKeys,
+                        plan = plan,
+                    )
                 L.i(
                     "Resolved scan policy [workers=$workerCount profile=$resolvedProfile " +
                         "reason=${request.reason} generation=${request.configurationGeneration} " +

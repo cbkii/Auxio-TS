@@ -99,6 +99,10 @@ private class ExtractStepImpl(
                                     } ?: Finalized(InvalidSong)
                                 MetadataResult.NoMetadata -> Finalized(InvalidSong)
                                 MetadataResult.NotAudio -> Finalized(NotAudio)
+                                MetadataResult.ItemUnavailable -> {
+                                    (cache as? IncrementalCache)?.markItemUnavailable(item.file)
+                                    Finalized(InvalidSong)
+                                }
                                 MetadataResult.ProviderFailed -> {
                                     // A transient provider/open failure is not evidence that a
                                     // previously committed song was deleted. Fail only this source

@@ -22,6 +22,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import java.io.FileInputStream
+import java.io.FileNotFoundException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -50,6 +51,10 @@ sealed interface MetadataResult {
 
     data object NotAudio : MetadataResult
 
+    /** One provider row disappeared or became unreadable after enumeration. */
+    data object ItemUnavailable : MetadataResult
+
+    /** The provider/metadata backend itself is unavailable for authoritative extraction. */
     data object ProviderFailed : MetadataResult
 }
 
@@ -58,10 +63,22 @@ private class TagLibMetadataExtractor(private val contentResolver: ContentResolv
     MetadataExtractor {
     override suspend fun extract(deviceFile: File): MetadataResult =
         withContext(Dispatchers.IO) {
-            contentResolver.openFileDescriptor(deviceFile.uri, "r")?.use { fd ->
+            val descriptor =
+                try {
+                    contentResolver.openFileDescriptor(deviceFile.uri, "r")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: FileNotFoundException) {
+                    null
+                } catch (_: SecurityException) {
+                    return@withContext MetadataResult.ProviderFailed
+                } catch (_: Exception) {
+                    return@withContext MetadataResult.ProviderFailed
+                } ?: return@withContext MetadataResult.ItemUnavailable
+            descriptor.use { fd ->
                 val fis = FileInputStream(fd.fileDescriptor)
                 TagLibJNI.open(deviceFile, fis).also { fis.close() }
-            } ?: MetadataResult.ProviderFailed
+            }
         }
 }
 
@@ -80,9 +97,13 @@ private class LeanMetadataExtractor(private val contentResolver: ContentResolver
                     contentResolver.openAssetFileDescriptor(deviceFile.uri, "r")
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
+                } catch (_: FileNotFoundException) {
                     null
-                } ?: return@withContext MetadataResult.ProviderFailed
+                } catch (_: SecurityException) {
+                    return@withContext MetadataResult.ProviderFailed
+                } catch (_: Exception) {
+                    return@withContext MetadataResult.ProviderFailed
+                } ?: return@withContext MetadataResult.ItemUnavailable
 
             descriptor.use { afd ->
                 val retriever = MediaMetadataRetriever()

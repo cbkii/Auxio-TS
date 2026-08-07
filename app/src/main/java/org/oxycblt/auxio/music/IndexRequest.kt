@@ -106,16 +106,17 @@ internal object IndexRequestPolicy {
         currentGeneration: Long,
         configuredSourceKeys: Set<String>,
         hasRevision: Boolean,
+        allowUnscopedSources: Boolean = false,
     ): IndexRequest? {
-        if (configuredSourceKeys.isEmpty()) return null
         if (
             checkpoint == null || checkpoint.state == SourceConfigurationCheckpoint.State.COMMITTED
         ) {
+            if (configuredSourceKeys.isEmpty() && !allowUnscopedSources) return null
             return IndexRequest(
                 reason = IndexReason.USER_REFRESH,
                 withCache = true,
                 configurationGeneration = currentGeneration,
-                sourceKeys = configuredSourceKeys,
+                sourceKeys = configuredSourceKeys.takeIf { it.isNotEmpty() },
             )
         }
         if (
@@ -124,13 +125,15 @@ internal object IndexRequestPolicy {
         ) {
             return null
         }
+        val retrySourceKeys = checkpoint.unresolvedSourceKeys.ifEmpty { configuredSourceKeys }
+        if (retrySourceKeys.isEmpty() && !allowUnscopedSources) return null
         return IndexRequest(
             reason = IndexReason.USER_RETRY,
             withCache =
                 checkpoint.state == SourceConfigurationCheckpoint.State.PARTIALLY_COMMITTED &&
                     hasRevision,
             configurationGeneration = checkpoint.generation,
-            sourceKeys = checkpoint.unresolvedSourceKeys.ifEmpty { configuredSourceKeys },
+            sourceKeys = retrySourceKeys.takeIf { it.isNotEmpty() },
         )
     }
 

@@ -54,6 +54,8 @@ internal class IncrementalScanStore(
 ) : IncrementalCache {
     @Volatile private var currentPlan: IncrementalScanPlan? = null
     private val sourceFailures = ConcurrentHashMap<String, String>()
+    private val itemFailureCounts = ConcurrentHashMap<String, Int>()
+    private val retainedItemCounts = ConcurrentHashMap<String, Int>()
 
     override fun activePlan(): IncrementalScanPlan? = currentPlan
 
@@ -180,6 +182,8 @@ internal class IncrementalScanStore(
     override suspend fun beginScan(plan: IncrementalScanPlan) {
         check(currentPlan == null) { "An incremental scan is already active" }
         sourceFailures.clear()
+        itemFailureCounts.clear()
+        retainedItemCounts.clear()
         val now = System.currentTimeMillis()
         db.withTransaction {
             for (snapshot in plan.scanSources) {
@@ -360,6 +364,31 @@ internal class IncrementalScanStore(
         }
     }
 
+    override suspend fun markItemUnavailable(file: File): Boolean {
+        val plan = currentPlan ?: return false
+        val sourceKey = SourceIdentity.forFile(file)
+        if (sourceKey !in plan.scanSourceKeys) return false
+        synchronized(itemFailureCounts) {
+            itemFailureCounts[sourceKey] = (itemFailureCounts[sourceKey] ?: 0) + 1
+        }
+        if (plan.enrichmentOnly) return false
+
+        val ledger = dao.sourceLedger(sourceKey) ?: return false
+        val generation = ledger.lastCommittedGeneration ?: return false
+        val uri = file.uri.toString()
+        if (dao.committedUriCount(sourceKey, generation, uri) == 0) return false
+        dao.carryForwardCommittedUri(
+            scanId = plan.scanId,
+            sourceKey = sourceKey,
+            generation = generation,
+            uri = uri,
+        )
+        synchronized(retainedItemCounts) {
+            retainedItemCounts[sourceKey] = (retainedItemCounts[sourceKey] ?: 0) + 1
+        }
+        return true
+    }
+
     override suspend fun markSourceFailed(sourceKey: String, detail: String) {
         val plan = currentPlan ?: return
         if (sourceKey in plan.scanSourceKeys) {
@@ -425,6 +454,21 @@ internal class IncrementalScanStore(
                     for (snapshot in plan.scanSources) {
                         val ledger = requireNotNull(dao.sourceLedger(snapshot.sourceKey))
                         val generation = requireNotNull(ledger.pendingGeneration)
+                        val unresolvedItemCount = itemFailureCounts[snapshot.sourceKey] ?: 0
+                        val retainedItemCount = retainedItemCounts[snapshot.sourceKey] ?: 0
+                        if (
+                            unresolvedItemCount > 0 &&
+                                dao.seenCount(plan.scanId, snapshot.sourceKey) <= retainedItemCount
+                        ) {
+                            sourceFailures.putIfAbsent(
+                                snapshot.sourceKey,
+                                (
+                                        "TEMPORARILY_UNAVAILABLE|No enumerated candidate item " +
+                                            "could be resolved ($unresolvedItemCount unavailable)"
+                                    )
+                                    .take(MAX_ERROR_LENGTH),
+                            )
+                        }
                         val sourceFailure = sourceFailures[snapshot.sourceKey]
                         if (sourceFailure != null) {
                             dao.deletePendingForSource(snapshot.sourceKey)
@@ -493,13 +537,30 @@ internal class IncrementalScanStore(
                                 configurationRevision = plan.configurationRevision,
                                 committedInvalidationVersion = ledger.invalidationVersion,
                                 committedProfile =
-                                    if (
-                                        sourceChangedRows == 0 &&
-                                            ledger.committedProfile == MetadataProfile.FULL.name
-                                    ) {
-                                        MetadataProfile.FULL.name
-                                    } else {
-                                        plan.metadataProfile.name
+                                    run {
+                                        val proposed =
+                                            if (
+                                                sourceChangedRows == 0 &&
+                                                    ledger.committedProfile ==
+                                                        MetadataProfile.FULL.name
+                                            ) {
+                                                MetadataProfile.FULL
+                                            } else {
+                                                plan.metadataProfile
+                                            }
+                                        val prior =
+                                            ledger.committedProfile?.let {
+                                                runCatching { MetadataProfile.valueOf(it) }.getOrNull()
+                                            }
+                                        if (
+                                            retainedItemCount > 0 &&
+                                                prior != null &&
+                                                prior.incrementalRank < proposed.incrementalRank
+                                        ) {
+                                            prior.name
+                                        } else {
+                                            proposed.name
+                                        }
                                     },
                                 enrichmentRevision =
                                     if (plan.metadataProfile == MetadataProfile.FULL) {
@@ -543,7 +604,10 @@ internal class IncrementalScanStore(
             if (committedSuccessfully) currentPlan = null
         }
         val failed = sourceFailures.toMap()
+        val unresolvedItems = itemFailureCounts.values.sum()
         sourceFailures.clear()
+        itemFailureCounts.clear()
+        retainedItemCounts.clear()
         return IncrementalScanCommit(
             scanId = plan.scanId,
             committedSources = committed,
@@ -556,6 +620,7 @@ internal class IncrementalScanStore(
             removedSources = removed,
             enrichmentOnly = plan.enrichmentOnly,
             enrichmentComplete = enrichmentComplete,
+            unresolvedItems = unresolvedItems,
         )
     }
 
@@ -590,6 +655,8 @@ internal class IncrementalScanStore(
         } finally {
             currentPlan = null
             sourceFailures.clear()
+            itemFailureCounts.clear()
+            retainedItemCounts.clear()
         }
     }
 
