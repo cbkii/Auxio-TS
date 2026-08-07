@@ -1,0 +1,232 @@
+name: PR 238 review hardening
+
+on:
+  push:
+    branches:
+      - fix/mediastore-source-authority-stale-rows
+    paths:
+      - .github/workflows/pr238-review-hardening.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pr238-review-hardening
+  cancel-in-progress: false
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/mediastore-source-authority-stale-rows
+          fetch-depth: 0
+
+      - name: Apply verified review fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"STOP: {path}: expected anchor once, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          def replace_last(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              idx = text.rfind(old)
+              if idx < 0:
+                  raise SystemExit(f"STOP: {path}: last anchor not found")
+              p.write_text(text[:idx] + new + text[idx + len(old):])
+
+          # MusicRepository: persist provider-discovered effective source keys in the active
+          # session so fatal failures, watchdog interruptions and cancellation use the same
+          # authority scope that planning resolved.
+          path = "app/src/main/java/org/oxycblt/auxio/music/MusicRepository.kt"
+          replace_once(
+              path,
+              "        val sourceLabels: List<String> = emptyList(),\n        val startedAtElapsedMs: Long = 0L,",
+              "        val sourceLabels: List<String> = emptyList(),\n        val attemptedSourceKeys: Set<String> = emptySet(),\n        val startedAtElapsedMs: Long = 0L,",
+          )
+          replace_once(
+              path,
+              "                    sourceLabels = labels,\n                    startedAtElapsedMs = now,",
+              "                    sourceLabels = labels,\n                    attemptedSourceKeys = attemptedKeys,\n                    startedAtElapsedMs = now,",
+          )
+          replace_once(
+              path,
+              "                attemptedSourceKeys =\n                    SourceAuthorityScopePolicy.effectiveAttemptedSourceKeys(\n                        locationMode = musicSettings.locationMode,\n                        requestedSourceKeys = requestedSourceKeys,\n                        configuredSourceKeys = allConfiguredSourceKeys,\n                        plan = plan,\n                    )\n                L.i(",
+              "                attemptedSourceKeys =\n                    SourceAuthorityScopePolicy.effectiveAttemptedSourceKeys(\n                        locationMode = musicSettings.locationMode,\n                        requestedSourceKeys = requestedSourceKeys,\n                        configuredSourceKeys = allConfiguredSourceKeys,\n                        plan = plan,\n                    )\n                synchronized(this) {\n                    val active = currentIndexingState as? IndexingState.Indexing\n                    if (active?.sessionId == sessionId) {\n                        currentIndexingState =\n                            active.copy(attemptedSourceKeys = attemptedSourceKeys)\n                    }\n                }\n                L.i(",
+          )
+          replace_last(
+              path,
+              "            } catch (e: Exception) {\n                val attemptedKeys = attemptedSourceKeys(request)\n                recordSourceScanOutcome(",
+              "            } catch (e: Exception) {\n                val attemptedKeys = currentAttemptedSourceKeys(sessionId, request)\n                recordSourceScanOutcome(",
+          )
+          replace_once(
+              path,
+              "        val attemptedSources = attemptedSourceKeys(request)\n        val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()",
+              "        val attemptedSources =\n            state?.attemptedSourceKeys?.takeIf { it.isNotEmpty() } ?: attemptedSourceKeys(request)\n        val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()",
+          )
+          replace_once(
+              path,
+              "        val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()\n        val attempted = request?.let(::attemptedSourceKeys).orEmpty()\n        val unresolved = retained + attempted",
+              "        val retained = musicSettings.sourceConfigurationCheckpoint?.unresolvedSourceKeys.orEmpty()\n        val attempted =\n            state?.attemptedSourceKeys?.takeIf { it.isNotEmpty() }\n                ?: request?.let(::attemptedSourceKeys).orEmpty()\n        val unresolved = retained + attempted",
+          )
+          replace_once(
+              path,
+              "    private fun attemptedSourceKeys(request: IndexRequest): Set<String> =\n        request.sourceKeys?.takeIf { it.isNotEmpty() }\n            ?: musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }\n\n    private fun IndexingProgress.isMeaningfulAfter(previous: IndexingProgress): Boolean {",
+              "    private fun currentAttemptedSourceKeys(\n        sessionId: Long,\n        request: IndexRequest,\n    ): Set<String> =\n        synchronized(this) {\n            (currentIndexingState as? IndexingState.Indexing)\n                ?.takeIf { it.sessionId == sessionId }\n                ?.attemptedSourceKeys\n                ?.takeIf { it.isNotEmpty() }\n        } ?: attemptedSourceKeys(request)\n\n    private fun attemptedSourceKeys(request: IndexRequest): Set<String> =\n        request.sourceKeys?.takeIf { it.isNotEmpty() }\n            ?: musicSettings.configuredSourceSpecs.mapTo(linkedSetOf()) { it.sourceKey }\n\n    private fun IndexingProgress.isMeaningfulAfter(previous: IndexingProgress): Boolean {",
+          )
+
+          # Explicit-root retries may only retry roots still configured. MediaStore keeps the
+          # provider-discovered unresolved keys because it has no explicit root authority.
+          path = "app/src/main/java/org/oxycblt/auxio/music/IndexRequest.kt"
+          replace_once(
+              path,
+              "        val retrySourceKeys = checkpoint.unresolvedSourceKeys.ifEmpty { configuredSourceKeys }\n        if (retrySourceKeys.isEmpty() && !allowUnscopedSources) return null",
+              "        val unresolvedSourceKeys =\n            if (allowUnscopedSources) {\n                checkpoint.unresolvedSourceKeys\n            } else {\n                checkpoint.unresolvedSourceKeys.intersect(configuredSourceKeys)\n            }\n        val retrySourceKeys = unresolvedSourceKeys.ifEmpty { configuredSourceKeys }\n        if (retrySourceKeys.isEmpty() && !allowUnscopedSources) return null",
+          )
+
+          # Retry policy regression matrix.
+          path = "app/src/test/java/org/oxycblt/auxio/music/IndexRequestPolicySourceRetryTest.kt"
+          replace_once(
+              path,
+              "    @Test\n    fun `explicit-root refresh still rejects empty configured keys`() {\n        assertNull(\n            IndexRequestPolicy.sourceRetryRequest(\n                checkpoint = null,\n                currentGeneration = 7L,\n                configuredSourceKeys = emptySet(),\n                hasRevision = true,\n            )\n        )\n    }\n}",
+              "    @Test\n    fun `explicit-root refresh still rejects empty configured keys`() {\n        assertNull(\n            IndexRequestPolicy.sourceRetryRequest(\n                checkpoint = null,\n                currentGeneration = 7L,\n                configuredSourceKeys = emptySet(),\n                hasRevision = true,\n            )\n        )\n    }\n\n    @Test\n    fun `explicit-root retry drops stale checkpoint keys when roots are empty`() {\n        val checkpoint =\n            SourceConfigurationCheckpoint(\n                generation = 7L,\n                state = SourceConfigurationCheckpoint.State.FAILED_RETRYABLE,\n                unresolvedSourceKeys = setOf(\"direct:stale\"),\n            )\n\n        assertNull(\n            IndexRequestPolicy.sourceRetryRequest(\n                checkpoint = checkpoint,\n                currentGeneration = 7L,\n                configuredSourceKeys = emptySet(),\n                hasRevision = true,\n            )\n        )\n    }\n\n    @Test\n    fun `explicit-root retry intersects unresolved checkpoint keys with current roots`() {\n        val checkpoint =\n            SourceConfigurationCheckpoint(\n                generation = 7L,\n                state = SourceConfigurationCheckpoint.State.FAILED_RETRYABLE,\n                unresolvedSourceKeys = setOf(\"direct:current\", \"direct:stale\"),\n            )\n\n        val request =\n            IndexRequestPolicy.sourceRetryRequest(\n                checkpoint = checkpoint,\n                currentGeneration = 7L,\n                configuredSourceKeys = setOf(\"direct:current\"),\n                hasRevision = true,\n            )\n\n        requireNotNull(request)\n        assertEquals(setOf(\"direct:current\"), request.sourceKeys)\n    }\n\n    @Test\n    fun `provider retry retains discovered unresolved keys without configured roots`() {\n        val checkpoint =\n            SourceConfigurationCheckpoint(\n                generation = 7L,\n                state = SourceConfigurationCheckpoint.State.FAILED_RETRYABLE,\n                unresolvedSourceKeys = setOf(\"internal:external_primary\"),\n            )\n\n        val request =\n            IndexRequestPolicy.sourceRetryRequest(\n                checkpoint = checkpoint,\n                currentGeneration = 7L,\n                configuredSourceKeys = emptySet(),\n                hasRevision = true,\n                allowUnscopedSources = true,\n            )\n\n        requireNotNull(request)\n        assertEquals(setOf(\"internal:external_primary\"), request.sourceKeys)\n    }\n}",
+          )
+
+          # Make the reused-provider regression actually model an unresolved checkpoint set.
+          path = "app/src/test/java/org/oxycblt/auxio/music/SourceAuthorityScopePolicyTest.kt"
+          replace_once(
+              path,
+              "        assertEquals(setOf(external.sourceKey), attempted)\n        assertTrue((setOf(external.sourceKey) - attempted).isEmpty())",
+              "        assertEquals(setOf(external.sourceKey), attempted)\n        val unresolvedBefore = setOf(external.sourceKey, \"internal:usb\")\n        assertEquals(setOf(\"internal:usb\"), unresolvedBefore - attempted)",
+          )
+
+          # Metadata extraction: distinguish a confirmed vanished URI from provider failure, and
+          # preserve/log provider exceptions for durable diagnostics.
+          path = "musikr/src/main/java/org/oxycblt/musikr/metadata/MetadataExtractor.kt"
+          replace_once(
+              path,
+              "import android.media.MediaMetadataRetriever\nimport java.io.FileInputStream",
+              "import android.media.MediaMetadataRetriever\nimport android.util.Log\nimport java.io.FileInputStream",
+          )
+          replace_once(
+              path,
+              "import org.oxycblt.musikr.fs.File\nimport org.oxycblt.musikr.library.MetadataProfile",
+              "import org.oxycblt.musikr.fs.File\nimport org.oxycblt.musikr.fs.SourceIdentity\nimport org.oxycblt.musikr.library.MetadataProfile",
+          )
+          replace_once(
+              path,
+              "    /** The provider/metadata backend itself is unavailable for authoritative extraction. */\n    data object ProviderFailed : MetadataResult\n}\n\n/** Full TagLib path used only by restart-safe enrichment. */",
+              "    /** The provider/metadata backend itself is unavailable for authoritative extraction. */\n    data class ProviderFailed(val failureClass: String, val failureMessage: String?) : MetadataResult\n}\n\nprivate const val TAG = \"MetadataExtractor\"\n\nprivate fun providerFailed(deviceFile: File, failure: Throwable): MetadataResult.ProviderFailed {\n    Log.w(\n        TAG,\n        \"Metadata provider failure [source=${SourceIdentity.forFile(deviceFile)} uri=${deviceFile.uri}]\",\n        failure,\n    )\n    return MetadataResult.ProviderFailed(failure.javaClass.name, failure.message)\n}\n\nprivate fun classifyDescriptorNotFound(\n    contentResolver: ContentResolver,\n    deviceFile: File,\n    failure: FileNotFoundException,\n): MetadataResult {\n    if (deviceFile.uri.scheme != ContentResolver.SCHEME_CONTENT) {\n        return MetadataResult.ItemUnavailable\n    }\n\n    val client =\n        try {\n            contentResolver.acquireUnstableContentProviderClient(deviceFile.uri)\n        } catch (providerFailure: Exception) {\n            providerFailure.addSuppressed(failure)\n            return providerFailed(deviceFile, providerFailure)\n        } ?: return providerFailed(deviceFile, failure)\n\n    return try {\n        val cursor = client.query(deviceFile.uri, null, null, null, null)\n        if (cursor == null) {\n            providerFailed(deviceFile, failure)\n        } else {\n            cursor.use {\n                if (it.count == 0) {\n                    MetadataResult.ItemUnavailable\n                } else {\n                    providerFailed(deviceFile, failure)\n                }\n            }\n        }\n    } catch (providerFailure: Exception) {\n        providerFailure.addSuppressed(failure)\n        providerFailed(deviceFile, providerFailure)\n    } finally {\n        client.close()\n    }\n}\n\n/** Full TagLib path used only by restart-safe enrichment. */",
+          )
+          replace_once(
+              path,
+              "                } catch (_: FileNotFoundException) {\n                    null\n                } catch (_: SecurityException) {\n                    return@withContext MetadataResult.ProviderFailed\n                } catch (_: Exception) {\n                    return@withContext MetadataResult.ProviderFailed\n                } ?: return@withContext MetadataResult.ItemUnavailable",
+              "                } catch (e: FileNotFoundException) {\n                    return@withContext classifyDescriptorNotFound(contentResolver, deviceFile, e)\n                } catch (e: SecurityException) {\n                    return@withContext providerFailed(deviceFile, e)\n                } catch (e: Exception) {\n                    return@withContext providerFailed(deviceFile, e)\n                }\n                    ?: return@withContext\n                        classifyDescriptorNotFound(\n                            contentResolver,\n                            deviceFile,\n                            FileNotFoundException(\"Provider returned a null file descriptor\"),\n                        )",
+          )
+          replace_once(
+              path,
+              "                } catch (_: FileNotFoundException) {\n                    null\n                } catch (_: SecurityException) {\n                    return@withContext MetadataResult.ProviderFailed\n                } catch (_: Exception) {\n                    return@withContext MetadataResult.ProviderFailed\n                } ?: return@withContext MetadataResult.ItemUnavailable",
+              "                } catch (e: FileNotFoundException) {\n                    return@withContext classifyDescriptorNotFound(contentResolver, deviceFile, e)\n                } catch (e: SecurityException) {\n                    return@withContext providerFailed(deviceFile, e)\n                } catch (e: Exception) {\n                    return@withContext providerFailed(deviceFile, e)\n                }\n                    ?: return@withContext\n                        classifyDescriptorNotFound(\n                            contentResolver,\n                            deviceFile,\n                            FileNotFoundException(\"Provider returned a null asset descriptor\"),\n                        )",
+          )
+
+          path = "musikr/src/main/java/org/oxycblt/musikr/pipeline/ExtractStep.kt"
+          replace_once(
+              path,
+              "                                MetadataResult.ProviderFailed -> {\n                                    // A transient provider/open failure is not evidence that a\n                                    // previously committed song was deleted. Fail only this source\n                                    // generation so its last-known-good rows remain visible after\n                                    // the provider recovers.\n                                    (cache as? IncrementalCache)?.markSourceFailed(\n                                        SourceIdentity.forFile(item.file),\n                                        \"Metadata provider failed for ${item.file.uri}\",\n                                    )\n                                    Finalized(InvalidSong)\n                                }",
+              "                                is MetadataResult.ProviderFailed -> {\n                                    // A transient provider/open failure is not evidence that a\n                                    // previously committed song was deleted. Fail only this source\n                                    // generation so its last-known-good rows remain visible after\n                                    // the provider recovers.\n                                    (cache as? IncrementalCache)?.markSourceFailed(\n                                        SourceIdentity.forFile(item.file),\n                                        buildString {\n                                            append(\"Metadata provider failed for ${item.file.uri}\")\n                                            append(\" [${metadataResult.failureClass}\")\n                                            metadataResult.failureMessage?.let { append(\": $it\") }\n                                            append(\"]\")\n                                        },\n                                    )\n                                    Finalized(InvalidSong)\n                                }",
+          )
+
+          # Batch vanished-item carry-forward at commit time. Extraction workers only record URI
+          # identity in memory, so item uncertainty cannot fail the whole scan through Room I/O.
+          path = "musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalDatabase.kt"
+          replace_once(
+              path,
+              "    @Query(\n        \"SELECT COUNT(*) FROM IndexedSongData WHERE sourceKey = :sourceKey AND generation = :generation AND uri = :uri\"\n    )\n    suspend fun committedUriCount(sourceKey: String, generation: Long, uri: String): Int\n\n    @Query(\n        \"INSERT OR REPLACE INTO ScanSeenData (scanId, sourceKey, uri, displayPath, fileName, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, artworkRef, metadataProfile) \" +\n            \"SELECT :scanId, sourceKey, uri, displayPath, fileName, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, artworkRef, metadataProfile FROM IndexedSongData \" +\n            \"WHERE sourceKey = :sourceKey AND generation = :generation AND uri = :uri\"\n    )\n    suspend fun carryForwardCommittedUri(\n        scanId: String,\n        sourceKey: String,\n        generation: Long,\n        uri: String,\n    )",
+              "    @Query(\n        \"SELECT COUNT(*) FROM IndexedSongData WHERE sourceKey = :sourceKey AND generation = :generation AND uri IN (:uris)\"\n    )\n    suspend fun committedUriCount(sourceKey: String, generation: Long, uris: Set<String>): Int\n\n    @Query(\n        \"INSERT OR REPLACE INTO ScanSeenData (scanId, sourceKey, uri, displayPath, fileName, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, artworkRef, metadataProfile) \" +\n            \"SELECT :scanId, sourceKey, uri, displayPath, fileName, sizeBytes, modifiedTimeMs, dateAddedMs, mimeType, title, titleSort, primaryArtistName, primaryArtistSort, albumName, albumSort, trackNumber, discNumber, durationMs, artworkRef, metadataProfile FROM IndexedSongData \" +\n            \"WHERE sourceKey = :sourceKey AND generation = :generation AND uri IN (:uris)\"\n    )\n    suspend fun carryForwardCommittedUris(\n        scanId: String,\n        sourceKey: String,\n        generation: Long,\n        uris: Set<String>,\n    )",
+          )
+
+          path = "musikr/src/main/java/org/oxycblt/musikr/cache/db/IncrementalScanStore.kt"
+          replace_once(
+              path,
+              "    private val sourceFailures = ConcurrentHashMap<String, String>()\n    private val itemFailureCounts = ConcurrentHashMap<String, Int>()\n    private val retainedItemCounts = ConcurrentHashMap<String, Int>()",
+              "    private val sourceFailures = ConcurrentHashMap<String, String>()\n    private val unavailableItemUris = ConcurrentHashMap<String, MutableSet<String>>()",
+          )
+          replace_once(
+              path,
+              "        sourceFailures.clear()\n        itemFailureCounts.clear()\n        retainedItemCounts.clear()\n        val now = System.currentTimeMillis()",
+              "        sourceFailures.clear()\n        unavailableItemUris.clear()\n        val now = System.currentTimeMillis()",
+          )
+          replace_once(
+              path,
+              "    override suspend fun markItemUnavailable(file: File): Boolean {\n        val plan = currentPlan ?: return false\n        val sourceKey = SourceIdentity.forFile(file)\n        if (sourceKey !in plan.scanSourceKeys) return false\n        synchronized(itemFailureCounts) {\n            itemFailureCounts[sourceKey] = (itemFailureCounts[sourceKey] ?: 0) + 1\n        }\n        if (plan.enrichmentOnly) return false\n\n        val ledger = dao.sourceLedger(sourceKey) ?: return false\n        val generation = ledger.lastCommittedGeneration ?: return false\n        val uri = file.uri.toString()\n        if (dao.committedUriCount(sourceKey, generation, uri) == 0) return false\n        dao.carryForwardCommittedUri(\n            scanId = plan.scanId,\n            sourceKey = sourceKey,\n            generation = generation,\n            uri = uri,\n        )\n        synchronized(retainedItemCounts) {\n            retainedItemCounts[sourceKey] = (retainedItemCounts[sourceKey] ?: 0) + 1\n        }\n        return true\n    }",
+              "    override suspend fun markItemUnavailable(file: File): Boolean {\n        val plan = currentPlan ?: return false\n        if (plan.enrichmentOnly) return false\n        val sourceKey = SourceIdentity.forFile(file)\n        if (sourceKey !in plan.scanSourceKeys) return false\n        return unavailableItemUris\n            .computeIfAbsent(sourceKey) { ConcurrentHashMap.newKeySet() }\n            .add(file.uri.toString())\n    }",
+          )
+          replace_once(
+              path,
+              "                        val generation = requireNotNull(ledger.pendingGeneration)\n                        val unresolvedItemCount = itemFailureCounts[snapshot.sourceKey] ?: 0\n                        val retainedItemCount = retainedItemCounts[snapshot.sourceKey] ?: 0\n                        if (\n                            unresolvedItemCount > 0 &&",
+              "                        val generation = requireNotNull(ledger.pendingGeneration)\n                        val unresolvedUris = unavailableItemUris[snapshot.sourceKey].orEmpty()\n                        val unresolvedItemCount = unresolvedUris.size\n                        var retainedItemCount = 0\n                        ledger.lastCommittedGeneration?.let { committedGeneration ->\n                            for (uriBatch in unresolvedUris.chunked(UNAVAILABLE_URI_BATCH_SIZE)) {\n                                val uris = uriBatch.toSet()\n                                val retainedInBatch =\n                                    dao.committedUriCount(\n                                        snapshot.sourceKey,\n                                        committedGeneration,\n                                        uris,\n                                    )\n                                if (retainedInBatch > 0) {\n                                    dao.carryForwardCommittedUris(\n                                        scanId = plan.scanId,\n                                        sourceKey = snapshot.sourceKey,\n                                        generation = committedGeneration,\n                                        uris = uris,\n                                    )\n                                    retainedItemCount += retainedInBatch\n                                }\n                            }\n                        }\n                        if (\n                            unresolvedItemCount > 0 &&",
+          )
+          replace_once(
+              path,
+              "        val failed = sourceFailures.toMap()\n        val unresolvedItems = itemFailureCounts.values.sum()\n        sourceFailures.clear()\n        itemFailureCounts.clear()\n        retainedItemCounts.clear()",
+              "        val failed = sourceFailures.toMap()\n        val unresolvedItems = unavailableItemUris.values.sumOf { it.size }\n        sourceFailures.clear()\n        unavailableItemUris.clear()",
+          )
+          replace_once(
+              path,
+              "            currentPlan = null\n            sourceFailures.clear()\n            itemFailureCounts.clear()\n            retainedItemCounts.clear()",
+              "            currentPlan = null\n            sourceFailures.clear()\n            unavailableItemUris.clear()",
+          )
+          replace_once(
+              path,
+              "    private companion object {\n        const val PAGE_SIZE = 256",
+              "    private companion object {\n        const val PAGE_SIZE = 256\n        const val UNAVAILABLE_URI_BATCH_SIZE = 200",
+          )
+
+          path = "musikr/src/test/java/org/oxycblt/musikr/cache/db/IncrementalScanStoreTest.kt"
+          replace_once(
+              path,
+              "    @Test\n    fun `large committed library keeps startup query bounded`() = runBlocking {",
+              "    @Test\n    fun `enrichment item unavailability does not count as unresolved source data`() = runBlocking {\n        val source = snapshot(\"v1\")\n        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)\n        store.beginScan(initial)\n        store.stage(cachedFile(\"alpha.mp3\", 1L))\n        store.commitScan()\n\n        val enrichment = store.planScan(listOf(source), false, MetadataProfile.FULL, 1L)\n        assertTrue(enrichment.enrichmentOnly)\n        store.beginScan(enrichment)\n        assertFalse(store.markItemUnavailable(cachedFile(\"alpha.mp3\", 1L).file))\n        val commit = store.commitScan()\n\n        assertEquals(0, commit.unresolvedItems)\n        assertFalse(commit.enrichmentComplete)\n        assertEquals(1, db.incrementalLibraryDao().songCount())\n    }\n\n    @Test\n    fun `unavailable item carry-forward is batched beyond one sqlite bind window`() = runBlocking {\n        val source = snapshot(\"v1\")\n        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)\n        store.beginScan(initial)\n        repeat(205) { index -> store.stage(cachedFile(\"track-$index.mp3\", 1L)) }\n        store.commitScan()\n\n        val replacement =\n            store.planScan(listOf(source.copy(fingerprint = \"v2\")), true, MetadataProfile.LEAN, 2L)\n        store.beginScan(replacement)\n        repeat(205) { index ->\n            assertTrue(store.markItemUnavailable(cachedFile(\"track-$index.mp3\", 2L).file))\n        }\n        val commit = store.commitScan()\n\n        assertEquals(205, commit.unresolvedItems)\n        assertEquals(setOf(source.sourceKey), commit.failedSources.keys)\n        assertEquals(205, db.incrementalLibraryDao().songCount())\n    }\n\n    @Test\n    fun `large committed library keeps startup query bounded`() = runBlocking {",
+          )
+          PY
+
+      - name: Prepare repository dependencies
+        shell: bash
+        run: bash ./scripts/bootstrap-dependencies.sh --profile jvm-tests
+
+      - name: Apply repository Kotlin formatting
+        shell: bash
+        run: bash ./scripts/ci-gradle.sh spotlessKotlinApply
+
+      - name: Validate focused unit tests and diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/ci-gradle.sh :app:testTopwayTwMediaDebugUnitTest :musikr:testDebugUnitTest
+          rm -- .github/workflows/pr238-review-hardening.yml
+          git diff --check
+          test ! -e .github/workflows/pr238-review-hardening.yml
+
+      - name: Commit review hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo 'STOP: review hardening produced no changes' >&2; exit 1; }
+          git commit -m "fix: harden MediaStore failure authority and item retention"
+          git push origin HEAD:fix/mediastore-source-authority-stale-rows
