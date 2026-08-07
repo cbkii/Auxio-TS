@@ -112,29 +112,27 @@ class FftSpectrumMapperWaveformTest {
     }
 
     @Test
-    fun unusableWaveformMappingDecaysWithoutReusingStaleCoordinates() {
+    fun unusableWaveformMappingClearsWithoutReusingStaleCoordinates() {
         val mapper = FftSpectrumMapper()
         val waveform = createToneWaveform(1000f)
 
         mapper.updateWaveform(waveform, SAMPLE_RATE_MILLIHZ)
-        val initialContour = mapper.bands.maxOf { abs(it) }
-        val initialEnvelope = mapper.globalEnvelope
+        assertTrue(mapper.bands.any { abs(it) > 0.001f })
+        assertTrue(mapper.globalEnvelope > 0f)
         val validGeneration = mapper.mappingGenerationForTest()
 
         mapper.updateWaveform(waveform, 0)
         val invalidGeneration = mapper.mappingGenerationForTest()
 
         assertEquals(validGeneration + 1, invalidGeneration)
-        assertTrue(mapper.bands.maxOf { abs(it) } < initialContour)
-        assertTrue(mapper.globalEnvelope < initialEnvelope)
+        assertTrue(mapper.bands.all { it == 0f })
+        assertEquals(0f, mapper.globalEnvelope, 0.0001f)
 
-        val firstDecayContour = mapper.bands.maxOf { abs(it) }
-        val firstDecayEnvelope = mapper.globalEnvelope
         mapper.updateWaveform(waveform, 0)
 
         assertEquals(invalidGeneration, mapper.mappingGenerationForTest())
-        assertTrue(mapper.bands.maxOf { abs(it) } < firstDecayContour)
-        assertTrue(mapper.globalEnvelope < firstDecayEnvelope)
+        assertTrue(mapper.bands.all { it == 0f })
+        assertEquals(0f, mapper.globalEnvelope, 0.0001f)
     }
 
     private fun createToneFft(): ByteArray = ByteArray(512).apply { this[24] = 100 }
