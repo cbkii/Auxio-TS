@@ -93,6 +93,17 @@ open class AuxioService :
         return binder
     }
 
+    /**
+     * Starts only background library/indexing work for a private subclass Binder endpoint.
+     *
+     * The normal [onBind] path also asks [PlaybackServiceFragment] to interpret the bind Intent as
+     * an external playback start. Private compat protocols must not acquire that playback side
+     * effect merely by connecting, while still needing library readiness for a later command.
+     */
+    protected fun startBackgroundLibraryForPrivateBind() {
+        musicFragment.start(StartupScanOrigin.BACKGROUND)
+    }
+
     private fun onHandleForeground(intent: Intent?, allowTrustedUserVisible: Boolean) {
         // Playback/session restoration remains first and never waits for library-source validation.
         playbackFragment.start(intent)
@@ -259,35 +270,20 @@ interface ForegroundListener {
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
-abstract class ForegroundServiceNotification(context: Context, info: ChannelInfo) :
-    NotificationCompat.Builder(context, info.id) {
-    private val notificationManager = NotificationManagerCompat.from(context)
+class ForegroundServiceNotification(
+    val code: Int,
+    @StringRes val channelName: Int,
+    private val builder: NotificationCompat.Builder,
+) {
+    fun build(): android.app.Notification = builder.build()
 
-    init {
-        // Set up the notification channel. Foreground notifications are non-substantial, and
-        // thus make no sense to have lights, vibration, or lead to a notification badge.
-        val channel =
-            NotificationChannelCompat.Builder(info.id, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName(context.getString(info.nameRes))
-                .setLightsEnabled(false)
-                .setVibrationEnabled(false)
-                .setShowBadge(false)
-                .build()
-        notificationManager.createNotificationChannel(channel)
+    fun createChannel(context: Context) {
+        NotificationManagerCompat.from(context)
+            .createNotificationChannel(
+                NotificationChannelCompat.Builder(code.toString(), NotificationManagerCompat.IMPORTANCE_LOW)
+                    .setName(context.getString(channelName))
+                    .setShowBadge(false)
+                    .build()
+            )
     }
-
-    /**
-     * The code used to identify this notification.
-     *
-     * @see NotificationManagerCompat.notify
-     */
-    abstract val code: Int
-
-    /**
-     * Reduced representation of a [NotificationChannelCompat].
-     *
-     * @param id The ID of the channel.
-     * @param nameRes A string resource ID corresponding to the human-readable name.
-     */
-    data class ChannelInfo(val id: String, @StringRes val nameRes: Int)
 }
