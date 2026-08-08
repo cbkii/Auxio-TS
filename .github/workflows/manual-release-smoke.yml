@@ -74,6 +74,10 @@ jobs:
         shell: bash
         run: python3 ./scripts/ci/test_manual_release_ambiguous_dev_push.py
 
+      - name: Prove ambiguous asset deletion recovery
+        shell: bash
+        run: python3 ./scripts/ci/test_manual_release_ambiguous_asset_delete.py
+
   signed-packaging:
     name: exact signed packaging
     runs-on: ubuntu-24.04
