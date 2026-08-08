@@ -15,9 +15,7 @@ import android.app.Service;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
-import android.os.Process;
 import android.os.SystemClock;
 import io.github.libxposed.XposedContext;
 import io.github.libxposed.XposedInterface;
@@ -30,10 +28,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Narrow API-100 LSPosed bridge for the genuine Topway {@code com.tw.music} process.
+ * Narrow API-100 LSPosed bridge for the Topway {@code com.tw.music} main process.
  *
- * <p>The module preserves the stock platform signer and UID 1000. It does not hook Package Manager
- * or system_server, edit shared-UID state, replace the stock APK, or grant Auxio privileged identity.
+ * <p>LSPosed static scope selects the package. This module then routes only the stock default process
+ * and probes each exact hook surface independently. It does not hook Package Manager or
+ * {@code system_server}, edit shared-UID state, replace the stock APK, or grant Auxio privileged
+ * identity.
  */
 public final class Ts18LsposedBridgeModule extends XposedModule {
     private static final String STOCK_APPLICATION = "com.tw.music.MusicApplication";
@@ -47,7 +47,6 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
     private static final long LOG_WINDOW_MS = 10_000L;
     private static final int MAX_LOGS_PER_WINDOW = 4;
 
-    private final AtomicBoolean bootstrapInstalled = new AtomicBoolean();
     private final AtomicBoolean hooksInstalled = new AtomicBoolean();
     private final AtomicReference<MediaMirror> mediaMirror = new AtomicReference<>();
     private final Map<String, LogWindow> logWindows = new ConcurrentHashMap<>();
@@ -73,61 +72,38 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
     @Override
     public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         try {
-            if (!BridgeContract.STOCK_PACKAGE.equals(param.getPackageName())) return;
-            if (!param.isFirstApplication()) return;
-            if (!BridgeContract.STOCK_PACKAGE.equals(param.getProcessName())) {
-                safeLog("skip non-main process " + param.getProcessName());
+            if (!BridgeContract.isScopedProcess(param.getPackageName(), param.getProcessName())) {
+                if (BridgeContract.STOCK_PACKAGE.equals(param.getPackageName())) {
+                    safeLog("skip non-main process " + param.getProcessName());
+                }
                 return;
             }
-            ApplicationInfo appInfo = param.getAppInfo();
-            if (appInfo.uid != Process.SYSTEM_UID) {
-                safeLog("STOP: com.tw.music is not UID 1000; no hooks installed");
-                return;
-            }
-            ClassLoader loader = param.getClassLoader();
-            if (!bootstrapInstalled.compareAndSet(false, true)) return;
-            installBootstrapHook(loader);
-            safeLog("installed stock-identity bootstrap hook; functional hooks remain inactive");
+            if (!hooksInstalled.compareAndSet(false, true)) return;
+            installHooks(param.getClassLoader());
         } catch (Throwable error) {
-            safeLog("identity bootstrap hook failed closed", error);
+            safeLog("hook installation failed open", error);
         }
     }
 
-    private void activateVerifiedHooks(Application application, ClassLoader loader) {
-        if (!hooksInstalled.compareAndSet(false, true)) return;
-        try {
-            installSafely("activity onCreate", () -> installActivityOnCreateHook(loader));
-            installSafely("activity onNewIntent", () -> installActivityOnNewIntentHook(loader));
-            installSafely("service onCreate", () -> installServiceOnCreateHook(loader));
-            installSafely("service onStartCommand", () -> installServiceOnStartCommandHook(loader));
-            installSafely(
-                    "command receiver",
-                    () ->
-                            hookReceiver(
-                                    loader,
-                                    STOCK_COMMAND_RECEIVER,
-                                    "stock-command-receiver"));
-            installSafely(
-                    "seek receiver",
-                    () -> hookReceiver(loader, STOCK_SEEK_RECEIVER, "stock-seek-receiver"));
-            if (environment.canUseObservedPrivateHooks()) {
-                installSafely("presenter previous", () -> installPresenterMethod(loader, "rb"));
-                installSafely("presenter next", () -> installPresenterMethod(loader, "pb"));
-                installSafely("presenter pause", () -> installPresenterMethod(loader, "ba"));
-                installSafely("presenter play", () -> installPresenterMethod(loader, "fa"));
-                installSafely(
-                        "presenter seek",
-                        () -> installPresenterMethod(loader, "seekTo", int.class));
-            } else {
-                safeLog(
-                        "private presenter hooks skipped because the stock APK fingerprint is not the captured build");
-            }
-            captureAndStart(application);
-            safeLog(
-                    "hook capability-probe pass complete; unmatched stock-version surfaces remain stock-controlled");
-        } catch (Throwable error) {
-            safeLog("hook installation failed closed", error);
-        }
+    private void installHooks(ClassLoader loader) {
+        installSafely("application onCreate", () -> installApplicationOnCreateHook(loader));
+        installSafely("activity onCreate", () -> installActivityOnCreateHook(loader));
+        installSafely("activity onNewIntent", () -> installActivityOnNewIntentHook(loader));
+        installSafely("service onCreate", () -> installServiceOnCreateHook(loader));
+        installSafely("service onStartCommand", () -> installServiceOnStartCommandHook(loader));
+        installSafely(
+                "command receiver",
+                () -> hookReceiver(loader, STOCK_COMMAND_RECEIVER, "stock-command-receiver"));
+        installSafely(
+                "seek receiver",
+                () -> hookReceiver(loader, STOCK_SEEK_RECEIVER, "stock-seek-receiver"));
+        installSafely("presenter previous", () -> installPresenterMethod(loader, "rb"));
+        installSafely("presenter next", () -> installPresenterMethod(loader, "pb"));
+        installSafely("presenter pause", () -> installPresenterMethod(loader, "ba"));
+        installSafely("presenter play", () -> installPresenterMethod(loader, "fa"));
+        installSafely("presenter seek", () -> installPresenterMethod(loader, "seekTo", int.class));
+        safeLog(
+                "exact hook probe pass complete; unavailable surfaces remain stock-controlled");
     }
 
     private void installSafely(String group, ThrowingInstall install) {
@@ -139,29 +115,17 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
         }
     }
 
-    private void installBootstrapHook(ClassLoader loader) throws ReflectiveOperationException {
+    private void installApplicationOnCreateHook(ClassLoader loader)
+            throws ReflectiveOperationException {
         Method onCreate = requiredMethod(loader, STOCK_APPLICATION, "onCreate");
         hookAfter(
                 onCreate,
                 callback -> {
                     try {
                         Object target = callback.getThis();
-                        if (target instanceof Application application) {
-                            environment.refreshAsync(
-                                    application,
-                                    trusted ->
-                                            application
-                                                    .getMainExecutor()
-                                                    .execute(
-                                                            () -> {
-                                                                if (trusted) {
-                                                                    activateVerifiedHooks(
-                                                                            application, loader);
-                                                                }
-                                                            }));
-                        }
+                        if (target instanceof Application application) captureAndStart(application);
                     } catch (Throwable error) {
-                        safeLog("identity bootstrap hook failed open", error);
+                        safeLog("application context capture failed open", error);
                     }
                 });
     }
@@ -232,10 +196,9 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                         Intent intent = argument(callback, 0, Intent.class);
                         if (target instanceof Service service && intent != null) {
                             // Keep service lifecycle observation separate from transport interception.
-                            // The stock implementation must run (including startForeground), and the
-                            // fingerprint-gated presenter hook suppresses its transport call only
-                            // after Auxio acknowledges it. Receiver-origin commands are intercepted
-                            // independently before their stock delegate runs.
+                            // Stock onStartCommand must run, including startForeground. Transport is
+                            // suppressed only at the exact receiver/presenter surface after Auxio
+                            // positively acknowledges the command.
                             captureAndStart(service);
                         }
                     } catch (Throwable error) {
@@ -285,8 +248,7 @@ public final class Ts18LsposedBridgeModule extends XposedModule {
                                 command == BridgeCommand.SEEK
                                         ? safeIntArgument(callback, 0)
                                         : null;
-                        if (forwardCommand(
-                                context, command, seek, "presenter-" + methodName)) {
+                        if (forwardCommand(context, command, seek, "presenter-" + methodName)) {
                             callback.returnAndSkip(null);
                         }
                     } catch (Throwable error) {
