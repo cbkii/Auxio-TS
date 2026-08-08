@@ -58,7 +58,7 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-DEBUG"
             buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media.debug"'
-            minifyEnabled true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
         release {
