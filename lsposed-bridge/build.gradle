@@ -40,7 +40,6 @@ android {
         buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media"'
         buildConfigField "String", "TARGET_ACTIVITY", '"com.tw.music.MusicActivity"'
         buildConfigField "String", "TARGET_MEDIA_BROWSER_SERVICE", '"com.tw.music.MusicService"'
-        buildConfigField "String", "TARGET_EXPECTED_SIGNER", "\"${targetExpectedSigner}\""
     }
 
     if (hasReleaseSigning) {
@@ -113,6 +112,8 @@ gradle.taskGraph.whenReady { graph ->
                  task.name.toLowerCase(Locale.ROOT).startsWith("package") ||
                  task.name.toLowerCase(Locale.ROOT).startsWith("bundle"))
     }
+    // Keep paired-target signer validation as a CI/release integrity check only. The signer is not
+    // compiled into the bridge and is not a runtime hook-activation condition.
     if (!packagingTasks.isEmpty() && !(targetExpectedSigner ==~ /[0-9A-F]{64}/)) {
         throw new GradleException(
                 "LSPosed packaging requires -PexpectedTargetSigner=<64-hex SHA-256 of the paired target APK signer>.")
