@@ -107,9 +107,10 @@ release_sha=${GITHUB_SHA:-}
 [[ "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]] || release_sha=$(git rev-parse HEAD 2>/dev/null) || fail 'cannot resolve smoke source commit'
 [[ "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]] || fail 'smoke source commit is malformed'
 
-# Build both maintained release paths. The bridge-only selection still builds its paired target
-# internally, so this also proves the optional addon path without changing publication state.
-printf '%s\n' topway_twmedia lsposed_bridge > "${work}/selected-release-variants.txt"
+# Exercise the highest-risk operator selection: primary Topway plus optional LSPosed addon.
+# Manual Release deliberately builds debug companions even when they remain workflow artifacts, so
+# include all four variants here. This catches both release-only and debug-only packaging regressions.
+printf '%s\n' topway_twmedia topway_twmedia_debug lsposed_bridge lsposed_bridge_debug > "${work}/selected-release-variants.txt"
 : > "${work}/existing-assets.txt"
 asset_plan="${work}/asset-plan.json"
 if ! python3 "$tools_dir/release-orchestrator.py" plan-assets \
@@ -125,7 +126,7 @@ fi
 jq -r '.build_variants[]' "$asset_plan" > "${work}/build-variants.txt" || fail 'cannot materialise build variant plan'
 jq -r '.build_apk_names[]' "$asset_plan" > "${work}/build-apk-names.txt" || fail 'cannot materialise APK name plan'
 jq -r '.upload_names[]' "$asset_plan" > "${work}/upload-names.txt" || fail 'cannot materialise upload name plan'
-[[ "$(wc -l < "${work}/build-variants.txt" | tr -d ' ')" == 2 ]] || fail 'smoke plan must build exactly the primary and LSPosed release APKs'
+[[ "$(wc -l < "${work}/build-variants.txt" | tr -d ' ')" == 4 ]] || fail 'smoke plan must build primary/bridge release APKs and both debug companions'
 
 build_output="${work}/build.out"
 : > "$build_output"
@@ -160,13 +161,15 @@ fi
 manifest=$(sed -n 's/^manifest_file=//p' "$build_output" | tail -n1)
 upload_tsv=$(sed -n 's/^upload_tsv=//p' "$build_output" | tail -n1)
 [[ -f "$manifest" && -f "$upload_tsv" ]] || fail 'build step did not publish manifest/upload outputs'
-[[ "$(jq 'length' "$manifest")" == 2 ]] || fail 'smoke manifest does not contain exactly two release APK entries'
-if jq -e 'any(.[]; (.variant | endswith("_debug")) or .destination != "release")' "$manifest" >/dev/null; then
-  fail 'release-only smoke staged a debug or non-release APK'
+[[ "$(jq 'length' "$manifest")" == 4 ]] || fail 'smoke manifest does not contain exactly four selected APK entries'
+[[ "$(jq '[.[] | select(.destination == "release")] | length' "$manifest")" == 2 ]] || fail 'release destination must contain exactly the primary and bridge release APKs'
+[[ "$(jq '[.[] | select(.destination == "workflow_artifacts" and (.variant | endswith("_debug")))] | length' "$manifest")" == 2 ]] || fail 'debug companions must remain workflow artifacts when debug publication is off'
+if jq -e 'any(.[]; ((.variant | endswith("_debug")) and .destination != "workflow_artifacts") or ((.variant | endswith("_debug") | not) and .destination != "release"))' "$manifest" >/dev/null; then
+  fail 'selected APK destination mapping is inconsistent with the Manual Release default'
 fi
 while IFS=$'\t' read -r name path; do
   [[ -n "$name" ]] || continue
   [[ -f "$path" ]] || fail "planned staged file is missing: $name"
 done < "$upload_tsv"
 
-printf 'SUCCESS: Manual Release exact signed Topway + LSPosed release packaging smoke passed for %s\n' "$release_tag"
+printf 'SUCCESS: Manual Release exact signed Topway + LSPosed release/debug packaging smoke passed for %s\n' "$release_tag"
