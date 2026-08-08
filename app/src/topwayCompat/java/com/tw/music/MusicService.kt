@@ -19,9 +19,7 @@
 package com.tw.music
 
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Binder
-import android.os.Build
 import android.os.IBinder
 import android.os.Parcel
 import android.os.Process
@@ -30,8 +28,6 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import java.security.MessageDigest
-import java.util.Locale
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.playback.service.TopwayBridgeAdmissionResult
 import org.oxycblt.auxio.playback.service.TopwayBridgePlaybackIngress
@@ -176,44 +172,13 @@ class MusicService : AuxioService() {
         }
     }
 
-    private fun isTrustedCaller(): Boolean =
-        Binder.getCallingUid() == Process.SYSTEM_UID && verifyStockPackageIdentity()
-
-    @Suppress("DEPRECATION")
-    private fun verifyStockPackageIdentity(): Boolean =
-        try {
-            val flags =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    PackageManager.GET_SIGNING_CERTIFICATES
-                } else {
-                    PackageManager.GET_SIGNATURES
-                }
-            val info = packageManager.getPackageInfo(STOCK_PACKAGE, flags)
-            if (info.applicationInfo?.uid != Process.SYSTEM_UID) return false
-            val signers =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    info.signingInfo?.apkContentsSigners
-                } else {
-                    info.signatures
-                }
-            signers != null &&
-                signers.size == 1 &&
-                sha256(signers[0].toByteArray()) == BridgeWireContract.STOCK_CERT_SHA256
-        } catch (error: PackageManager.NameNotFoundException) {
-            false
-        } catch (error: RuntimeException) {
-            Timber.w(error, "Unable to verify Track-C stock package posture")
-            false
-        }
-
-    private fun sha256(value: ByteArray): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(value)
-        return buildString(digest.size * 2) {
-            digest.forEach { byte ->
-                append(String.format(Locale.ROOT, "%02X", byte.toInt() and 0xff))
-            }
-        }
-    }
+    /**
+     * The compatibility service is exported for MediaBrowser clients, so keep a cheap Binder caller
+     * boundary on the private command transaction. Looking up the installed com.tw.music signer
+     * does not authenticate this Binder caller (especially for shared UID 1000), so UID is the
+     * meaningful boundary here and LSPosed package scope remains a separate concern.
+     */
+    private fun isTrustedCaller(): Boolean = Binder.getCallingUid() == Process.SYSTEM_UID
 
     @EntryPoint
     @InstallIn(SingletonComponent::class)
@@ -222,7 +187,6 @@ class MusicService : AuxioService() {
     }
 
     private companion object {
-        const val STOCK_PACKAGE = "com.tw.music"
         const val MAX_REQUEST_LIFETIME_MS = 250L
         const val MAX_CLOCK_SKEW_MS = 1_000L
     }
