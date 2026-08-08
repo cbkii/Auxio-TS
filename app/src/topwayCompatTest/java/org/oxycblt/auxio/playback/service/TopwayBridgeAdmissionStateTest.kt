@@ -25,42 +25,64 @@ import org.junit.Test
 
 class TopwayBridgeAdmissionStateTest {
     @Test
-    fun `running timeout wins over late acceptance`() {
+    fun `running timeout prevents later playback mutation`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
-
         assertEquals(TopwayBridgeAdmissionResult.EXPIRED, state.expire())
-        state.complete(TopwayBridgeAdmissionResult.ACCEPTED)
 
+        var invoked = false
+        val result =
+            state.executeWhileRunning {
+                invoked = true
+                TopwayBridgeAdmissionResult.ACCEPTED
+            }
+
+        assertFalse(invoked)
+        assertEquals(TopwayBridgeAdmissionResult.EXPIRED, result)
         assertEquals(TopwayBridgeAdmissionResult.EXPIRED, state.result())
     }
 
     @Test
-    fun `running interruption wins over late acceptance`() {
+    fun `running interruption prevents later playback mutation`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
-
         assertEquals(TopwayBridgeAdmissionResult.INTERRUPTED, state.interrupt())
-        state.complete(TopwayBridgeAdmissionResult.ACCEPTED)
 
+        var invoked = false
+        val result =
+            state.executeWhileRunning {
+                invoked = true
+                TopwayBridgeAdmissionResult.ACCEPTED
+            }
+
+        assertFalse(invoked)
+        assertEquals(TopwayBridgeAdmissionResult.INTERRUPTED, result)
         assertEquals(TopwayBridgeAdmissionResult.INTERRUPTED, state.result())
     }
 
     @Test
-    fun `accepted completion remains accepted at timeout boundary`() {
+    fun `accepted mutation remains accepted at timeout boundary`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
-        state.complete(TopwayBridgeAdmissionResult.ACCEPTED)
+        var invoked = false
 
+        val result =
+            state.executeWhileRunning {
+                invoked = true
+                TopwayBridgeAdmissionResult.ACCEPTED
+            }
+
+        assertTrue(invoked)
+        assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, result)
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.expire())
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.result())
     }
 
     @Test
-    fun `accepted completion remains accepted if waiter is interrupted later`() {
+    fun `accepted mutation remains accepted if waiter is interrupted later`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
-        state.complete(TopwayBridgeAdmissionResult.ACCEPTED)
+        state.executeWhileRunning { TopwayBridgeAdmissionResult.ACCEPTED }
 
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.interrupt())
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.result())
@@ -79,9 +101,20 @@ class TopwayBridgeAdmissionStateTest {
     fun `not ready completion can never become accepted`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
-        state.complete(TopwayBridgeAdmissionResult.NOT_READY)
-        state.complete(TopwayBridgeAdmissionResult.ACCEPTED)
+        assertEquals(
+            TopwayBridgeAdmissionResult.NOT_READY,
+            state.executeWhileRunning { TopwayBridgeAdmissionResult.NOT_READY },
+        )
 
+        var invoked = false
+        val result =
+            state.executeWhileRunning {
+                invoked = true
+                TopwayBridgeAdmissionResult.ACCEPTED
+            }
+
+        assertFalse(invoked)
+        assertEquals(TopwayBridgeAdmissionResult.NOT_READY, result)
         assertEquals(TopwayBridgeAdmissionResult.NOT_READY, state.result())
     }
 }
