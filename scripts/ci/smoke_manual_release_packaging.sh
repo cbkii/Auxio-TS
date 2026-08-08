@@ -127,11 +127,20 @@ if ! RUNNER_TEMP="$work" GITHUB_OUTPUT="$metadata_output" \
   fail 'Manual Release source metadata preparation failed'
 fi
 release_sha=$(sed -n 's/^release_sha=//p' "$metadata_output" | tail -n1)
-resolved_name=$(sed -n 's/^version_name=//p' "$metadata_output" | tail -n1)
-resolved_code=$(sed -n 's/^version_code=//p' "$metadata_output" | tail -n1)
 [[ "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]] || fail 'prepared release commit SHA is malformed'
-[[ "$resolved_name" == "$version_name" && "$resolved_code" == "$version_code" ]] || fail 'prepared source metadata does not match the release plan'
+[[ "$(git rev-parse HEAD)" == "$release_sha" ]] || fail 'prepared release SHA does not identify the checkout HEAD'
 [[ -z "$(git status --porcelain)" ]] || fail 'source metadata preparation left an uncommitted working tree'
+
+prepared_metadata="${work}/prepared-gradle-metadata.json"
+if ! python3 "$tools_dir/release-orchestrator.py" inspect-gradle \
+  --gradle app/build.gradle \
+  --output "$prepared_metadata"; then
+  fail 'prepared source metadata inspection failed'
+fi
+prepared_name=$(jq -r .version_name "$prepared_metadata")
+prepared_code=$(jq -r .version_code "$prepared_metadata")
+[[ "$prepared_name" == "$version_name" ]] || fail "prepared source versionName mismatch: ${prepared_name} != ${version_name}"
+[[ "$prepared_code" == "$version_code" ]] || fail "prepared source versionCode mismatch: ${prepared_code} != ${version_code}"
 
 # Exercise the highest-risk operator selection: primary Topway plus optional LSPosed addon.
 # Manual Release deliberately builds debug companions even when they remain workflow artifacts, so
