@@ -51,6 +51,33 @@ upload_base="${upload_template%%{*}"
   exit 1
 }
 
+ensure_asset_absent() {
+  local name=$1 asset_id=$2 encoded=$3
+  local attempt after_delete matches
+  after_delete="${RUNNER_TEMP}/post-delete-${encoded}.json"
+  for attempt in 1 2; do
+    if ! timeout 60s gh api --method DELETE \
+      "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}"; then
+      echo "::warning::Asset delete did not return success; checking the remote postcondition for ${name}."
+    fi
+    api_read "${after_delete}" "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}"
+    matches="$(jq --arg name "${name}" --arg id "${asset_id}" \
+      '[.assets[] | select(.name == $name and (.id | tostring) == $id)] | length' \
+      "${after_delete}")"
+    if [[ "${matches}" == 0 ]]; then
+      cp "${after_delete}" "${remote_json}"
+      return 0
+    fi
+    [[ "${matches}" == 1 ]] || {
+      echo "::error::Asset deletion postcondition is ambiguous for ${name}."
+      return 1
+    }
+    ((attempt < 2)) && sleep 5
+  done
+  echo "::error::Asset ${name} still exists after bounded deletion attempts."
+  return 1
+}
+
 while IFS=$'\t' read -r name path; do
   [[ -n "${name}" ]] || continue
   [[ -f "${path}" ]] || {
@@ -75,8 +102,8 @@ while IFS=$'\t' read -r name path; do
       echo "::error::Asset ${name} exists but the validated repair plan did not authorise replacement."
       exit 1
     fi
-    timeout 60s gh api --method DELETE \
-      "repos/${GITHUB_REPOSITORY}/releases/assets/${existing_id}"
+    encoded_delete_name="$(jq -rn --arg value "${name}" '$value | @uri')"
+    ensure_asset_absent "${name}" "${existing_id}" "${encoded_delete_name}"
   fi
 
   encoded_name="$(jq -rn --arg value "${name}" '$value | @uri')"
