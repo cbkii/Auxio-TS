@@ -49,6 +49,11 @@ def uleb128(data: bytes, offset: int) -> tuple[int, int]:
     raise ValueError("invalid ULEB128")
 
 
+def decode_mutf8(value: bytes) -> str:
+    """Decode DEX modified UTF-8 while preserving surrogate code units."""
+    return value.replace(b"\xc0\x80", b"\x00").decode("utf-8", errors="surrogatepass")
+
+
 def inspect_dex(data: bytes) -> tuple[list[str], set[str]]:
     if len(data) < 112 or data[:4] != b"dex\n":
         raise ValueError("invalid DEX header")
@@ -69,7 +74,7 @@ def inspect_dex(data: bytes) -> tuple[list[str], set[str]]:
         end = data.find(b"\x00", cursor)
         if end < 0:
             raise ValueError("unterminated DEX string")
-        strings.append(data[cursor:end].decode("utf-8", errors="strict"))
+        strings.append(decode_mutf8(data[cursor:end]))
 
     classes: set[str] = set()
     for index in range(class_count):
@@ -94,14 +99,14 @@ try:
 
     if entry_descriptor not in classes:
         raise ValueError(f"missing LSPosed entry class {entry_descriptor}")
-    unexpected = sorted(item for item in classes if not item.startswith(approved_prefix))
-    if unexpected:
-        raise ValueError("classes outside bridge package: " + ", ".join(unexpected[:20]))
     packaged_forbidden = sorted(
         item for item in classes if item.startswith(forbidden_prefixes)
     )
     if packaged_forbidden:
         raise ValueError("forbidden packaged classes: " + ", ".join(packaged_forbidden[:20]))
+    unexpected = sorted(item for item in classes if not item.startswith(approved_prefix))
+    if unexpected:
+        raise ValueError("classes outside bridge package: " + ", ".join(unexpected[:20]))
     if target_signer not in strings:
         raise ValueError("paired target signer is not compiled into bridge DEX")
     if target_package not in strings:
