@@ -1,11 +1,19 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * MusicService.kt is part of Auxio-TS.
+ * MusicService.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package com.tw.music
@@ -13,6 +21,7 @@ package com.tw.music
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.os.Parcel
 import android.os.Process
@@ -40,21 +49,14 @@ import timber.log.Timber
 class MusicService : AuxioService() {
     private val commandLedger = TopwayBridgeCommandLedger()
 
-    private val playbackIngress: TopwayBridgePlaybackIngress by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        EntryPointAccessors.fromApplication(
-                applicationContext,
-                BridgeEntryPoint::class.java,
-            )
-            .playbackIngress()
-    }
+    private val playbackIngress: TopwayBridgePlaybackIngress by
+        lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+            EntryPointAccessors.fromApplication(applicationContext, BridgeEntryPoint::class.java)
+                .playbackIngress()
+        }
 
-    // Binder exposes UID rather than package identity. Cache the strongest app-side posture we can
-    // prove once: the caller must be UID 1000 and the installed genuine stock package sharing that
-    // UID must still have the exact reviewed current signer. This does not pretend UID 1000 uniquely
-    // identifies one package; the wire surface therefore remains deliberately narrow/non-destructive.
-    private val stockCallerPostureTrusted: Boolean by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        verifyStockPackageIdentity()
-    }
+    private var stockCallerPostureCheckedAtMs = Long.MIN_VALUE
+    private var stockCallerPostureTrusted = false
 
     private val bridgeBinder =
         object : Binder() {
@@ -76,7 +78,13 @@ class MusicService : AuxioService() {
                 // admission to the caller before stock behaviour is suppressed.
                 if ((flags and IBinder.FLAG_ONEWAY) != 0 || reply == null) return true
 
-                val response = dispatchBridgeTransaction(data)
+                val response =
+                    try {
+                        dispatchBridgeTransaction(data)
+                    } catch (error: RuntimeException) {
+                        Timber.w(error, "Rejecting malformed Track-C Binder transaction")
+                        BridgeWireContract.RESULT_INVALID
+                    }
                 reply.writeNoException()
                 reply.writeInt(response)
                 return true
@@ -84,7 +92,12 @@ class MusicService : AuxioService() {
         }
 
     override fun onBind(intent: Intent): IBinder? {
-        if (intent.action == BridgeWireContract.ACTION_BIND_COMMAND) return bridgeBinder
+        if (intent.action == BridgeWireContract.ACTION_BIND_COMMAND) {
+            // Preserve AuxioService's normal playback/library startup path even when the first
+            // contact is the private Track-C command endpoint.
+            super.onBind(intent)
+            return bridgeBinder
+        }
         return super.onBind(intent)
     }
 
@@ -136,9 +149,7 @@ class MusicService : AuxioService() {
         }
 
         return try {
-            when (
-                playbackIngress.admitResult(commandType, seekPositionMs, deadlineElapsedMs)
-            ) {
+            when (playbackIngress.admitResult(commandType, seekPositionMs, deadlineElapsedMs)) {
                 TopwayBridgeAdmissionResult.ACCEPTED -> {
                     commandLedger.markAccepted(
                         clientGeneration,
@@ -173,20 +184,42 @@ class MusicService : AuxioService() {
     }
 
     private fun isTrustedCaller(): Boolean =
-        Binder.getCallingUid() == Process.SYSTEM_UID && stockCallerPostureTrusted
+        Binder.getCallingUid() == Process.SYSTEM_UID && isStockCallerPostureTrusted()
 
+    @Synchronized
+    private fun isStockCallerPostureTrusted(): Boolean {
+        val nowMs = SystemClock.elapsedRealtime()
+        if (
+            stockCallerPostureCheckedAtMs == Long.MIN_VALUE ||
+                nowMs < stockCallerPostureCheckedAtMs ||
+                nowMs - stockCallerPostureCheckedAtMs >= STOCK_POSTURE_CACHE_MS
+        ) {
+            stockCallerPostureTrusted = verifyStockPackageIdentity()
+            stockCallerPostureCheckedAtMs = nowMs
+        }
+        return stockCallerPostureTrusted
+    }
+
+    @Suppress("DEPRECATION")
     private fun verifyStockPackageIdentity(): Boolean =
         try {
-            val info =
-                packageManager.getPackageInfo(
-                    STOCK_PACKAGE,
-                    PackageManager.GET_SIGNING_CERTIFICATES,
-                )
+            val flags =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    PackageManager.GET_SIGNING_CERTIFICATES
+                } else {
+                    PackageManager.GET_SIGNATURES
+                }
+            val info = packageManager.getPackageInfo(STOCK_PACKAGE, flags)
             if (info.applicationInfo?.uid != Process.SYSTEM_UID) return false
-            val signers = info.signingInfo?.apkContentsSigners ?: return false
-            signers.any { signer ->
-                sha256(signer.toByteArray()) == BridgeWireContract.STOCK_CERT_SHA256
-            }
+            val signers =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    info.signingInfo?.apkContentsSigners
+                } else {
+                    info.signatures
+                }
+            signers != null &&
+                signers.size == 1 &&
+                sha256(signers[0].toByteArray()) == BridgeWireContract.STOCK_CERT_SHA256
         } catch (error: PackageManager.NameNotFoundException) {
             false
         } catch (error: RuntimeException) {
@@ -197,7 +230,9 @@ class MusicService : AuxioService() {
     private fun sha256(value: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(value)
         return buildString(digest.size * 2) {
-            digest.forEach { byte -> append(String.format(Locale.ROOT, "%02X", byte.toInt() and 0xff)) }
+            digest.forEach { byte ->
+                append(String.format(Locale.ROOT, "%02X", byte.toInt() and 0xff))
+            }
         }
     }
 
@@ -211,5 +246,6 @@ class MusicService : AuxioService() {
         const val STOCK_PACKAGE = "com.tw.music"
         const val MAX_REQUEST_LIFETIME_MS = 250L
         const val MAX_CLOCK_SKEW_MS = 1_000L
+        const val STOCK_POSTURE_CACHE_MS = 3_000L
     }
 }
