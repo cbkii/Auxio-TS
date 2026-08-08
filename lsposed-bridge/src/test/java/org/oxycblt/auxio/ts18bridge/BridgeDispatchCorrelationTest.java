@@ -48,6 +48,35 @@ public final class BridgeDispatchCorrelationTest {
     }
 
     @Test
+    public void staleFailureCannotOverwriteNewerAcceptance() {
+        BridgeDispatchCorrelation correlation = new BridgeDispatchCorrelation();
+        BridgeDispatchCorrelation.Decision older = correlation.begin(2, -1L, 100L);
+        BridgeDispatchCorrelation.Decision newer = correlation.begin(2, -1L, 105L);
+
+        correlation.complete(newer, true, 110L);
+        correlation.complete(older, false, 115L);
+
+        BridgeDispatchCorrelation.Decision duplicate = correlation.begin(2, -1L, 120L);
+        assertFalse(duplicate.shouldDispatch);
+        assertTrue(duplicate.alreadyAccepted);
+    }
+
+    @Test
+    public void staleAcceptanceCannotOverwriteNewerFailure() {
+        BridgeDispatchCorrelation correlation = new BridgeDispatchCorrelation();
+        BridgeDispatchCorrelation.Decision older = correlation.begin(2, -1L, 100L);
+        BridgeDispatchCorrelation.Decision newer = correlation.begin(2, -1L, 105L);
+
+        correlation.complete(newer, false, 110L);
+        correlation.complete(older, true, 115L);
+
+        BridgeDispatchCorrelation.Decision retry = correlation.begin(2, -1L, 120L);
+        assertTrue(retry.shouldDispatch);
+        assertFalse(retry.alreadyAccepted);
+        assertNotEquals(newer.commandId, retry.commandId);
+    }
+
+    @Test
     public void sameCommandOutsideWindowGetsNewId() {
         BridgeDispatchCorrelation correlation = new BridgeDispatchCorrelation();
         BridgeDispatchCorrelation.Decision first = correlation.begin(3, -1L, 100L);
