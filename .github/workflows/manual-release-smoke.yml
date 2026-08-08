@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      manual_release_smoke: ${{ steps.scope.outputs.manual_release_smoke }}
+      manual_release_smoke: ${{ steps.release_scope.outputs.manual_release_smoke }}
       changed_count: ${{ steps.scope.outputs.changed_count }}
       comparison: ${{ steps.scope.outputs.comparison }}
 
@@ -65,6 +65,32 @@ jobs:
           CI_FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
         run: bash ./scripts/ci-scope.sh
 
+      - name: Classify Manual Release Smoke relevance
+        id: release_scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FULL_CI: ${{ steps.scope.outputs.full }}
+          COMPARISON: ${{ steps.scope.outputs.comparison }}
+        run: |
+          relevant=false
+          if [[ "${EVENT_NAME}" == workflow_dispatch || "${FULL_CI}" == true ]]; then
+            relevant=true
+          elif git diff --name-only "${COMPARISON}" >/dev/null 2>&1; then
+            while IFS= read -r path; do
+              case "${path}" in
+                app/*|musikr/*|media|media/*|startup-benchmark/*|lsposed-bridge/*|libxposed-api100-stubs/*|scripts/*|.github/workflows/*|.gitmodules|build.gradle|settings.gradle|gradle.properties|gradle/*|gradlew|ci/*)
+                  relevant=true
+                  break
+                  ;;
+              esac
+            done < <(git diff --name-only "${COMPARISON}")
+          else
+            echo "::warning::Manual Release Smoke relevance could not inspect ${COMPARISON}; failing open."
+            relevant=true
+          fi
+          printf 'manual_release_smoke=%s\n' "${relevant}" >> "${GITHUB_OUTPUT}"
+
       - name: Write scope summary
         shell: bash
         run: |
@@ -73,7 +99,7 @@ jobs:
             echo
             echo "- Comparison: \`${{ steps.scope.outputs.comparison }}\`"
             echo "- Changed files: \`${{ steps.scope.outputs.changed_count }}\`"
-            echo "- Release smoke relevant: \`${{ steps.scope.outputs.manual_release_smoke }}\`"
+            echo "- Release smoke relevant: \`${{ steps.release_scope.outputs.manual_release_smoke }}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   transaction-contracts:
