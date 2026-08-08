@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict defined-class and paired-constant inspection for the Track-C bridge APK."""
+"""Strict defined-class and paired-target inspection for the Track-C bridge APK."""
 
 from __future__ import annotations
 
@@ -89,6 +89,9 @@ def inspect_dex(data: bytes) -> tuple[list[str], set[str]]:
 
 
 try:
+    if not re.fullmatch(r"[0-9A-F]{64}", target_signer):
+        raise ValueError("paired target signer is malformed")
+
     with zipfile.ZipFile(apk_path) as apk:
         dex_names = sorted(
             name for name in apk.namelist() if re.fullmatch(r"classes(?:\d+)?\.dex", name)
@@ -107,8 +110,8 @@ try:
     unexpected = sorted(item for item in classes if not item.startswith(approved_prefix))
     if unexpected:
         raise ValueError("classes outside bridge package: " + ", ".join(unexpected[:20]))
-    if target_signer not in strings:
-        raise ValueError("paired target signer is not compiled into bridge DEX")
+    # The paired target signer is intentionally a build/release validation input only. It must not
+    # be embedded into the bridge DEX or used as a runtime activation gate.
     if target_package not in strings:
         raise ValueError("paired target package is not compiled into bridge DEX")
 
