@@ -5,7 +5,6 @@ import android.content.Context;
 import android.os.Environment;
 import java.io.File;
 import java.lang.ref.WeakReference;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Lightweight runtime state for the LSPosed-scoped Track-C shim. */
@@ -14,12 +13,18 @@ final class BridgeEnvironment {
         void log(String message, Throwable error);
     }
 
+    private enum KillSwitchState {
+        ENABLED,
+        DISABLED,
+        UNKNOWN
+    }
+
     private static final String KILL_SWITCH_DIRECTORY = "Auxio-TS";
     private static final String KILL_SWITCH_MARKER = "disable-lsposed-bridge";
 
     private final LogSink log;
-    private final AtomicBoolean killSwitchChecked = new AtomicBoolean();
-    private final AtomicBoolean disabled = new AtomicBoolean();
+    private final AtomicReference<KillSwitchState> killSwitch =
+            new AtomicReference<>(KillSwitchState.UNKNOWN);
     private final AtomicReference<WeakReference<Context>> context =
             new AtomicReference<>(new WeakReference<>(null));
 
@@ -40,7 +45,7 @@ final class BridgeEnvironment {
 
     boolean canBridge(Context value, String reason) {
         remember(value);
-        return !disabled.get();
+        return killSwitch.get() == KillSwitchState.ENABLED;
     }
 
     boolean canPublish(Context value) {
@@ -50,17 +55,21 @@ final class BridgeEnvironment {
     /**
      * The marker is an optional emergency convenience, not an LSPosed scope or identity gate.
      *
-     * <p>It is inspected once per stock-process lifetime. If storage is unavailable or unreadable,
-     * normal LSPosed-scoped operation continues. Creating or removing the marker therefore takes
-     * effect after restarting {@code com.tw.music}; LSPosed Manager remains the primary disable path.
+     * <p>A confirmed marker disables bridge actions for the rest of the stock-process lifetime. A
+     * confirmed readable/mounted state with no marker enables them. UNKNOWN is fail-safe: bridge
+     * actions remain disabled and later calls retry the read so transient storage failures can
+     * recover without restarting {@code com.tw.music}. LSPosed Manager remains the primary disable
+     * path.
      */
-    private void checkKillSwitchOnce() {
-        if (!killSwitchChecked.compareAndSet(false, true)) return;
+    private synchronized void checkKillSwitchOnce() {
+        KillSwitchState current = killSwitch.get();
+        if (current == KillSwitchState.ENABLED || current == KillSwitchState.DISABLED) return;
+
         try {
             File shared = Environment.getExternalStorageDirectory();
             if (shared == null || !shared.isDirectory() || !shared.canRead()) {
                 log.log(
-                        "optional bridge kill switch is unavailable; continuing with LSPosed scope",
+                        "optional bridge kill switch is unavailable; bridge remains disabled until a confirmed read",
                         null);
                 return;
             }
@@ -68,7 +77,7 @@ final class BridgeEnvironment {
             if (!Environment.MEDIA_MOUNTED.equals(storageState)
                     && !Environment.MEDIA_MOUNTED_READ_ONLY.equals(storageState)) {
                 log.log(
-                        "optional bridge kill switch storage is not mounted; continuing with LSPosed scope",
+                        "optional bridge kill switch storage is not mounted; bridge remains disabled until a confirmed read",
                         null);
                 return;
             }
@@ -76,12 +85,19 @@ final class BridgeEnvironment {
             File marker =
                     new File(new File(shared, KILL_SWITCH_DIRECTORY), KILL_SWITCH_MARKER);
             if (marker.isFile()) {
-                disabled.set(true);
+                killSwitch.set(KillSwitchState.DISABLED);
                 log.log("bridge disabled by optional kill switch; stock path retained", null);
+            } else {
+                killSwitch.set(KillSwitchState.ENABLED);
             }
         } catch (RuntimeException error) {
+            // Preserve a previously confirmed DISABLED state if this method is ever extended to
+            // re-check confirmed states; UNKNOWN remains fail-safe and retryable today.
+            if (killSwitch.get() != KillSwitchState.DISABLED) {
+                killSwitch.set(KillSwitchState.UNKNOWN);
+            }
             log.log(
-                    "optional bridge kill switch is unreadable; continuing with LSPosed scope",
+                    "optional bridge kill switch is unreadable; bridge remains disabled until a confirmed read",
                     error);
         }
     }
