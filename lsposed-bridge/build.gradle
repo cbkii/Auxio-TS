@@ -76,7 +76,7 @@ android {
     }
 
     // Share the primitive Java Binder wire contract with the app. Adjacent Kotlin sources remain
-    // app-only; the LSPosed module intentionally keeps its own small Java-only runtime ledger.
+    // app-only and are intentionally not compiled by this Java-only bridge module.
     sourceSets {
         main {
             java.srcDir "${rootDir}/app/src/topwayCompat/java/org/oxycblt/auxio/ts18bridge"
