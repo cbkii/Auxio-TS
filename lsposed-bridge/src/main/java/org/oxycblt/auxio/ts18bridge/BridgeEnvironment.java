@@ -193,7 +193,7 @@ final class BridgeEnvironment {
             return new Identity(true, functional, entry, version);
         } catch (PackageManager.NameNotFoundException | RuntimeException error) {
             logBounded(
-                    "stock-identity-unavailable",
+                    "stock-identity-untrusted",
                     "stock identity unavailable; bridge remains inactive",
                     error);
             return Identity.untrusted(0L);
