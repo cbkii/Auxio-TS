@@ -58,11 +58,13 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-DEBUG"
             buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media.debug"'
-            minifyEnabled true
+            minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
         release {
-            minifyEnabled true
+            // The release validator proves that every defined class belongs to the bridge package.
+            // Keep release classes unminified so R8 cannot repackage them into the root namespace.
+            minifyEnabled false
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
