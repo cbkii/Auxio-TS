@@ -269,6 +269,17 @@ def test_asset_planning(module: ModuleType, root: Path) -> None:
     )
 
 
+def required_output(values: str, key: str) -> str:
+    prefix = f"{key}="
+    value = next(
+        (line.split("=", 1)[1] for line in values.splitlines() if line.startswith(prefix)),
+        "",
+    )
+    if not value:
+        raise TestFailure(f"selection output omitted required key: {key}")
+    return value
+
+
 def run_selection(root: Path, *, topway: str, bridge: str, debug: str, should_pass: bool) -> tuple[str, list[str]]:
     output = root / f"selection-{topway}-{bridge}-{debug}.out"
     output.write_text("", encoding="utf-8")
@@ -299,9 +310,12 @@ def run_selection(root: Path, *, topway: str, bridge: str, debug: str, should_pa
     if not should_pass:
         return "", []
     values = output.read_text(encoding="utf-8")
-    destination = next(line.split("=", 1)[1] for line in values.splitlines() if line.startswith("debug_destination="))
-    selected_path = next(line.split("=", 1)[1] for line in values.splitlines() if line.startswith("selected_file="))
-    selected = Path(selected_path).read_text(encoding="utf-8").splitlines()
+    destination = required_output(values, "debug_destination")
+    selected_path = required_output(values, "selected_file")
+    selected_file = Path(selected_path)
+    if not selected_file.is_file():
+        raise TestFailure(f"selection output points to a missing selected_file: {selected_path}")
+    selected = selected_file.read_text(encoding="utf-8").splitlines()
     return destination, selected
 
 
@@ -372,8 +386,16 @@ def test_manifest_validation(module: ModuleType, root: Path) -> None:
     version = "6.6.0"
     code = 6060000
     source = "1" * 40
-    variants = ["topway_twmedia", "lsposed_bridge"]
-    entries = [build_manifest_entry(module, variant, tag, version, code, source, "release") for variant in variants]
+    variants = [
+        ("topway_twmedia", "release"),
+        ("topway_twmedia_debug", "workflow_artifacts"),
+        ("lsposed_bridge", "release"),
+        ("lsposed_bridge_debug", "workflow_artifacts"),
+    ]
+    entries = [
+        build_manifest_entry(module, variant, tag, version, code, source, destination)
+        for variant, destination in variants
+    ]
     names = [entry["filename"] for entry in entries]
     validate_manifest(module, root, entries, names, tag=tag, version_name=version, version_code=code, source=source)
 
@@ -383,13 +405,27 @@ def test_manifest_validation(module: ModuleType, root: Path) -> None:
         ("wrong versionCode", "version_code", 1),
         ("wrong source", "source_commit", "2" * 40),
         ("wrong tag", "release_tag", "v9.9.9"),
-        ("wrong destination", "destination", "workflow_artifacts"),
+        ("wrong release destination", "destination", "workflow_artifacts"),
         ("bad APK digest", "sha256", "bad"),
         ("bad signer digest", "signer_sha256", "bad"),
     ]
     for description, field, value in mutations:
         broken = [dict(entry) for entry in entries]
         broken[0][field] = value
+        try:
+            validate_manifest(module, root, broken, names, tag=tag, version_name=version, version_code=code, source=source)
+        except module.ReleasePlanError:
+            continue
+        raise TestFailure(f"manifest validator accepted {description}")
+
+    debug_index = next(index for index, entry in enumerate(entries) if entry["variant"] == "topway_twmedia_debug")
+    debug_mutations = [
+        ("debug APK without -DEBUG version suffix", "version_name", version),
+        ("debug APK outside configured debug destination", "destination", "release"),
+    ]
+    for description, field, value in debug_mutations:
+        broken = [dict(entry) for entry in entries]
+        broken[debug_index][field] = value
         try:
             validate_manifest(module, root, broken, names, tag=tag, version_name=version, version_code=code, source=source)
         except module.ReleasePlanError:
