@@ -39,53 +39,26 @@ class TopwayBridgeCommandLedgerTest {
     @Test
     fun `pending id is busy and release allows a retry`() {
         val ledger = TopwayBridgeCommandLedger(maxEntries = 4, ttlMs = 100L)
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.RESERVED,
-            ledger.reserve(7L, 1L, 10L),
-        )
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.BUSY,
-            ledger.reserve(7L, 1L, 11L),
-        )
+        assertEquals(TopwayBridgeCommandLedger.Reservation.RESERVED, ledger.reserve(7L, 1L, 10L))
+        assertEquals(TopwayBridgeCommandLedger.Reservation.BUSY, ledger.reserve(7L, 1L, 11L))
         ledger.release(7L, 1L)
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.RESERVED,
-            ledger.reserve(7L, 1L, 12L),
-        )
+        assertEquals(TopwayBridgeCommandLedger.Reservation.RESERVED, ledger.reserve(7L, 1L, 12L))
     }
 
     @Test
     fun `generation separates identical command ids`() {
         val ledger = TopwayBridgeCommandLedger(maxEntries = 4, ttlMs = 100L)
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.RESERVED,
-            ledger.reserve(7L, 1L, 10L),
-        )
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.RESERVED,
-            ledger.reserve(8L, 1L, 11L),
-        )
+        assertEquals(TopwayBridgeCommandLedger.Reservation.RESERVED, ledger.reserve(7L, 1L, 10L))
+        assertEquals(TopwayBridgeCommandLedger.Reservation.RESERVED, ledger.reserve(8L, 1L, 11L))
     }
 
     @Test
     fun `ledger is bounded and expired entries are pruned`() {
         val ledger = TopwayBridgeCommandLedger(maxEntries = 2, ttlMs = 20L)
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.RESERVED,
-            ledger.reserve(7L, 1L, 10L),
-        )
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.RESERVED,
-            ledger.reserve(7L, 2L, 11L),
-        )
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.BUSY,
-            ledger.reserve(7L, 3L, 12L),
-        )
-        assertEquals(
-            TopwayBridgeCommandLedger.Reservation.RESERVED,
-            ledger.reserve(7L, 3L, 40L),
-        )
+        assertEquals(TopwayBridgeCommandLedger.Reservation.RESERVED, ledger.reserve(7L, 1L, 10L))
+        assertEquals(TopwayBridgeCommandLedger.Reservation.RESERVED, ledger.reserve(7L, 2L, 11L))
+        assertEquals(TopwayBridgeCommandLedger.Reservation.BUSY, ledger.reserve(7L, 3L, 12L))
+        assertEquals(TopwayBridgeCommandLedger.Reservation.RESERVED, ledger.reserve(7L, 3L, 40L))
         assertEquals(1, ledger.size(40L))
     }
 }
