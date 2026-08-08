@@ -64,12 +64,7 @@ class MusicService : AuxioService() {
                 attachInterface(null, BridgeWireContract.BINDER_DESCRIPTOR)
             }
 
-            override fun onTransact(
-                code: Int,
-                data: Parcel,
-                reply: Parcel?,
-                flags: Int,
-            ): Boolean {
+            override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
                 if (code != BridgeWireContract.TRANSACTION_DISPATCH) {
                     return super.onTransact(code, data, reply, flags)
                 }
