@@ -25,64 +25,52 @@ import org.junit.Test
 
 class TopwayBridgeAdmissionStateTest {
     @Test
-    fun `running timeout prevents later playback mutation`() {
+    fun `running timeout wins over later acceptance`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
         assertEquals(TopwayBridgeAdmissionResult.EXPIRED, state.expire())
 
-        var invoked = false
-        val result =
-            state.executeWhileRunning {
-                invoked = true
-                TopwayBridgeAdmissionResult.ACCEPTED
-            }
-
-        assertFalse(invoked)
-        assertEquals(TopwayBridgeAdmissionResult.EXPIRED, result)
+        assertEquals(
+            TopwayBridgeAdmissionResult.EXPIRED,
+            state.complete(TopwayBridgeAdmissionResult.ACCEPTED),
+        )
         assertEquals(TopwayBridgeAdmissionResult.EXPIRED, state.result())
     }
 
     @Test
-    fun `running interruption prevents later playback mutation`() {
+    fun `running interruption wins over later acceptance`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
         assertEquals(TopwayBridgeAdmissionResult.INTERRUPTED, state.interrupt())
 
-        var invoked = false
-        val result =
-            state.executeWhileRunning {
-                invoked = true
-                TopwayBridgeAdmissionResult.ACCEPTED
-            }
-
-        assertFalse(invoked)
-        assertEquals(TopwayBridgeAdmissionResult.INTERRUPTED, result)
+        assertEquals(
+            TopwayBridgeAdmissionResult.INTERRUPTED,
+            state.complete(TopwayBridgeAdmissionResult.ACCEPTED),
+        )
         assertEquals(TopwayBridgeAdmissionResult.INTERRUPTED, state.result())
     }
 
     @Test
-    fun `accepted mutation remains accepted at timeout boundary`() {
+    fun `accepted commit remains accepted at timeout boundary`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
-        var invoked = false
+        assertEquals(
+            TopwayBridgeAdmissionResult.ACCEPTED,
+            state.complete(TopwayBridgeAdmissionResult.ACCEPTED),
+        )
 
-        val result =
-            state.executeWhileRunning {
-                invoked = true
-                TopwayBridgeAdmissionResult.ACCEPTED
-            }
-
-        assertTrue(invoked)
-        assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, result)
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.expire())
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.result())
     }
 
     @Test
-    fun `accepted mutation remains accepted if waiter is interrupted later`() {
+    fun `accepted commit remains accepted if waiter is interrupted later`() {
         val state = TopwayBridgeAdmissionState()
         assertTrue(state.start())
-        state.executeWhileRunning { TopwayBridgeAdmissionResult.ACCEPTED }
+        assertEquals(
+            TopwayBridgeAdmissionResult.ACCEPTED,
+            state.complete(TopwayBridgeAdmissionResult.ACCEPTED),
+        )
 
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.interrupt())
         assertEquals(TopwayBridgeAdmissionResult.ACCEPTED, state.result())
@@ -103,18 +91,13 @@ class TopwayBridgeAdmissionStateTest {
         assertTrue(state.start())
         assertEquals(
             TopwayBridgeAdmissionResult.NOT_READY,
-            state.executeWhileRunning { TopwayBridgeAdmissionResult.NOT_READY },
+            state.complete(TopwayBridgeAdmissionResult.NOT_READY),
         )
 
-        var invoked = false
-        val result =
-            state.executeWhileRunning {
-                invoked = true
-                TopwayBridgeAdmissionResult.ACCEPTED
-            }
-
-        assertFalse(invoked)
-        assertEquals(TopwayBridgeAdmissionResult.NOT_READY, result)
+        assertEquals(
+            TopwayBridgeAdmissionResult.NOT_READY,
+            state.complete(TopwayBridgeAdmissionResult.ACCEPTED),
+        )
         assertEquals(TopwayBridgeAdmissionResult.NOT_READY, state.result())
     }
 }
