@@ -3,6 +3,7 @@ package org.oxycblt.auxio.ts18bridge;
 
 import android.content.Context;
 import android.os.Environment;
+import android.os.SystemClock;
 import java.io.File;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,12 +22,14 @@ final class BridgeEnvironment {
 
     private static final String KILL_SWITCH_DIRECTORY = "Auxio-TS";
     private static final String KILL_SWITCH_MARKER = "disable-lsposed-bridge";
+    private static final long KILL_SWITCH_RETRY_MS = 3_000L;
 
     private final LogSink log;
     private final AtomicReference<KillSwitchState> killSwitch =
             new AtomicReference<>(KillSwitchState.UNKNOWN);
     private final AtomicReference<WeakReference<Context>> context =
             new AtomicReference<>(new WeakReference<>(null));
+    private long nextKillSwitchRetryElapsedMs;
 
     BridgeEnvironment(LogSink log) {
         this.log = log;
@@ -57,17 +60,21 @@ final class BridgeEnvironment {
      *
      * <p>A confirmed marker disables bridge actions for the rest of the stock-process lifetime. A
      * confirmed readable/mounted state with no marker enables them. UNKNOWN is fail-safe: bridge
-     * actions remain disabled and later calls retry the read so transient storage failures can
-     * recover without restarting {@code com.tw.music}. LSPosed Manager remains the primary disable
-     * path.
+     * actions remain disabled and later calls retry the read on a bounded cadence so transient
+     * storage failures can recover without restarting {@code com.tw.music}. LSPosed Manager remains
+     * the primary disable path.
      */
     private synchronized void checkKillSwitchOnce() {
         KillSwitchState current = killSwitch.get();
         if (current == KillSwitchState.ENABLED || current == KillSwitchState.DISABLED) return;
 
+        long now = SystemClock.elapsedRealtime();
+        if (now < nextKillSwitchRetryElapsedMs) return;
+
         try {
             File shared = Environment.getExternalStorageDirectory();
             if (shared == null || !shared.isDirectory() || !shared.canRead()) {
+                deferUnknownRetry(now);
                 log.log(
                         "optional bridge kill switch is unavailable; bridge remains disabled until a confirmed read",
                         null);
@@ -76,6 +83,7 @@ final class BridgeEnvironment {
             String storageState = Environment.getExternalStorageState(shared);
             if (!Environment.MEDIA_MOUNTED.equals(storageState)
                     && !Environment.MEDIA_MOUNTED_READ_ONLY.equals(storageState)) {
+                deferUnknownRetry(now);
                 log.log(
                         "optional bridge kill switch storage is not mounted; bridge remains disabled until a confirmed read",
                         null);
@@ -95,10 +103,15 @@ final class BridgeEnvironment {
             // re-check confirmed states; UNKNOWN remains fail-safe and retryable today.
             if (killSwitch.get() != KillSwitchState.DISABLED) {
                 killSwitch.set(KillSwitchState.UNKNOWN);
+                deferUnknownRetry(now);
             }
             log.log(
                     "optional bridge kill switch is unreadable; bridge remains disabled until a confirmed read",
                     error);
         }
+    }
+
+    private void deferUnknownRetry(long nowElapsedMs) {
+        nextKillSwitchRetryElapsedMs = nowElapsedMs + KILL_SWITCH_RETRY_MS;
     }
 }
