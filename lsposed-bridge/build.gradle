@@ -112,15 +112,16 @@ gradle.taskGraph.whenReady { graph ->
                  task.name.toLowerCase(Locale.ROOT).startsWith("package") ||
                  task.name.toLowerCase(Locale.ROOT).startsWith("bundle"))
     }
-    // Keep paired-target signer validation as a CI/release integrity check only. The signer is not
-    // compiled into the bridge and is not a runtime hook-activation condition.
-    if (!packagingTasks.isEmpty() && !(targetExpectedSigner ==~ /[0-9A-F]{64}/)) {
-        throw new GradleException(
-                "LSPosed packaging requires -PexpectedTargetSigner=<64-hex SHA-256 of the paired target APK signer>.")
-    }
-
     def releasePackagingTasks = packagingTasks.findAll { task ->
         task.name.toLowerCase(Locale.ROOT).contains("release")
+    }
+
+    // Release pairing remains a build/release integrity check only. Debug pairing is verified by
+    // the CI/release contract checker against the actual target APK, while ordinary local debug
+    // packaging stays friction-free. The signer is never compiled into the bridge or used at runtime.
+    if (!releasePackagingTasks.isEmpty() && !(targetExpectedSigner ==~ /[0-9A-F]{64}/)) {
+        throw new GradleException(
+                "LSPosed release packaging requires -PexpectedTargetSigner=<64-hex SHA-256 of the paired target APK signer>.")
     }
     if (!releasePackagingTasks.isEmpty() && !hasReleaseSigning) {
         throw new GradleException(
