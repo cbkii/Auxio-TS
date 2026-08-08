@@ -21,9 +21,15 @@ done
 runner_temp=${RUNNER_TEMP:-}
 [[ -n "$runner_temp" && -d "$runner_temp" ]] || fail 'RUNNER_TEMP must identify an existing private runner directory'
 work=$(mktemp -d "${runner_temp}/manual-release-packaging-smoke.XXXXXX") || fail 'cannot create temporary work directory'
+start_head=$(git rev-parse HEAD) || fail 'cannot capture initial checkout HEAD'
 cleanup() {
   rc=$?
+  trap - EXIT INT TERM
   rm -rf -- "$work"
+  if ! git reset --hard "$start_head" >/dev/null 2>&1; then
+    printf 'FAILED: Manual Release packaging smoke: cannot restore initial checkout HEAD %s\n' "$start_head" >&2
+    (( rc == 0 )) && rc=1
+  fi
   exit "$rc"
 }
 trap cleanup EXIT INT TERM
