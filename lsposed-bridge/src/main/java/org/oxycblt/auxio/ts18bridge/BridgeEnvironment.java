@@ -83,8 +83,15 @@ final class BridgeEnvironment {
         return canBridge(value, "publish");
     }
 
-    boolean canUseObservedPrivateHooks() {
-        return canUseCapability(BridgeContract.CAP_PRIVATE_PRESENTER);
+    boolean canInstallHooks() {
+        return state.get().canInstallHooks();
+    }
+
+    boolean canInstallObservedPrivateHooks() {
+        State current = state.get();
+        return current.canInstallHooks()
+                && current.entry != null
+                && current.entry.has(BridgeContract.CAP_PRIVATE_PRESENTER);
     }
 
     boolean canUseCapability(int capability) {
@@ -455,11 +462,14 @@ final class BridgeEnvironment {
                     checkedAtMs);
         }
 
-        boolean canBridge() {
+        boolean canInstallHooks() {
             return known
                     && functionalIdentityTrusted
-                    && killSwitch == KillSwitchState.ENABLED
-                    && targetReady;
+                    && killSwitch == KillSwitchState.ENABLED;
+        }
+
+        boolean canBridge() {
+            return canInstallHooks() && targetReady;
         }
     }
 }
