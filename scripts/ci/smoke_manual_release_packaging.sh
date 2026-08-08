@@ -83,9 +83,18 @@ fi
 tools_dir=$(sed -n 's/^tools_dir=//p' "$tooling_output" | tail -n1)
 [[ -n "$tools_dir" && -x "$tools_dir/release-orchestrator.py" ]] || fail 'preserved release orchestrator is unavailable'
 
-# Resolve a clean create transaction directly from current source metadata with no external state.
-: > "${work}/git-tags.txt"
-: > "${work}/release-tags.txt"
+# Exercise an ordinary new-release metadata transaction. Model the current source version as the
+# latest completed external release so automatic mode must create the next patch and commit the
+# updated app metadata exactly as the real workflow does.
+current_metadata="${work}/current-gradle-metadata.json"
+if ! python3 "$tools_dir/release-orchestrator.py" inspect-gradle \
+  --gradle app/build.gradle \
+  --output "$current_metadata"; then
+  fail 'current source metadata inspection failed'
+fi
+current_version=$(jq -r .version_name "$current_metadata")
+printf 'v%s\n' "$current_version" > "${work}/git-tags.txt"
+printf 'v%s\n' "$current_version" > "${work}/release-tags.txt"
 : > "${work}/draft-tags.txt"
 printf '{}\n' > "${work}/target-release.json"
 release_plan="${work}/release-plan.json"
@@ -97,15 +106,32 @@ if ! python3 "$tools_dir/release-orchestrator.py" resolve \
   --draft-release-tags-file "${work}/draft-tags.txt" \
   --target-release-json "${work}/target-release.json" \
   --output "$release_plan"; then
-  fail 'clean create transaction planning failed'
+  fail 'next-patch create transaction planning failed'
 fi
 release_tag=$(jq -r .release_tag "$release_plan")
 version_name=$(jq -r .release_version_name "$release_plan")
 version_code=$(jq -r .release_version_code "$release_plan")
+metadata_change_required=$(jq -r .metadata_change_required "$release_plan")
+[[ "$(jq -r .effective_mode "$release_plan")" == create_new_release ]] || fail 'smoke planner did not select a new-release transaction'
 [[ "$release_tag" == "v${version_name}" && "$version_code" =~ ^[0-9]+$ ]] || fail 'release plan returned malformed version metadata'
-release_sha=${GITHUB_SHA:-}
-[[ "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]] || release_sha=$(git rev-parse HEAD 2>/dev/null) || fail 'cannot resolve smoke source commit'
-[[ "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]] || fail 'smoke source commit is malformed'
+
+metadata_output="${work}/metadata.out"
+: > "$metadata_output"
+log "preparing local release metadata commit for ${release_tag}"
+if ! RUNNER_TEMP="$work" GITHUB_OUTPUT="$metadata_output" \
+  TOOL="$tools_dir/release-orchestrator.py" \
+  RELEASE_MODE=create_new_release RELEASE_TAG="$release_tag" \
+  VERSION_NAME="$version_name" VERSION_CODE="$version_code" \
+  METADATA_CHANGE_REQUIRED="$metadata_change_required" \
+  bash scripts/manual-release/08-prepare-release-source-metadata.sh; then
+  fail 'Manual Release source metadata preparation failed'
+fi
+release_sha=$(sed -n 's/^release_sha=//p' "$metadata_output" | tail -n1)
+resolved_name=$(sed -n 's/^version_name=//p' "$metadata_output" | tail -n1)
+resolved_code=$(sed -n 's/^version_code=//p' "$metadata_output" | tail -n1)
+[[ "$release_sha" =~ ^[0-9a-fA-F]{40}$ ]] || fail 'prepared release commit SHA is malformed'
+[[ "$resolved_name" == "$version_name" && "$resolved_code" == "$version_code" ]] || fail 'prepared source metadata does not match the release plan'
+[[ -z "$(git status --porcelain)" ]] || fail 'source metadata preparation left an uncommitted working tree'
 
 # Exercise the highest-risk operator selection: primary Topway plus optional LSPosed addon.
 # Manual Release deliberately builds debug companions even when they remain workflow artifacts, so
@@ -171,5 +197,10 @@ while IFS=$'\t' read -r name path; do
   [[ -n "$name" ]] || continue
   [[ -f "$path" ]] || fail "planned staged file is missing: $name"
 done < "$upload_tsv"
+
+log 'running final new-release source contracts before any publication boundary'
+if ! bash scripts/manual-release/13-validate-new-release-source-contracts.sh; then
+  fail 'new-release source contract validation failed after exact packaging'
+fi
 
 printf 'SUCCESS: Manual Release exact signed Topway + LSPosed release/debug packaging smoke passed for %s\n' "$release_tag"
