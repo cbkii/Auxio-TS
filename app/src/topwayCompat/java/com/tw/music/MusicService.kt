@@ -55,9 +55,6 @@ class MusicService : AuxioService() {
                 .playbackIngress()
         }
 
-    private var stockCallerPostureCheckedAtMs = Long.MIN_VALUE
-    private var stockCallerPostureTrusted = false
-
     private val bridgeBinder =
         object : Binder() {
             init {
@@ -88,9 +85,10 @@ class MusicService : AuxioService() {
 
     override fun onBind(intent: Intent): IBinder? {
         if (intent.action == BridgeWireContract.ACTION_BIND_COMMAND) {
-            // Preserve AuxioService's normal playback/library startup path even when the first
-            // contact is the private Track-C command endpoint.
-            super.onBind(intent)
+            // onCreate() already attached the playback authority. Start only background library
+            // readiness here: AuxioService.onBind would interpret this private protocol Intent as
+            // a non-native playback start and enqueue RestoreState(play = false).
+            startBackgroundLibraryForPrivateBind()
             return bridgeBinder
         }
         return super.onBind(intent)
@@ -179,21 +177,7 @@ class MusicService : AuxioService() {
     }
 
     private fun isTrustedCaller(): Boolean =
-        Binder.getCallingUid() == Process.SYSTEM_UID && isStockCallerPostureTrusted()
-
-    @Synchronized
-    private fun isStockCallerPostureTrusted(): Boolean {
-        val nowMs = SystemClock.elapsedRealtime()
-        if (
-            stockCallerPostureCheckedAtMs == Long.MIN_VALUE ||
-                nowMs < stockCallerPostureCheckedAtMs ||
-                nowMs - stockCallerPostureCheckedAtMs >= STOCK_POSTURE_CACHE_MS
-        ) {
-            stockCallerPostureTrusted = verifyStockPackageIdentity()
-            stockCallerPostureCheckedAtMs = nowMs
-        }
-        return stockCallerPostureTrusted
-    }
+        Binder.getCallingUid() == Process.SYSTEM_UID && verifyStockPackageIdentity()
 
     @Suppress("DEPRECATION")
     private fun verifyStockPackageIdentity(): Boolean =
@@ -241,6 +225,5 @@ class MusicService : AuxioService() {
         const val STOCK_PACKAGE = "com.tw.music"
         const val MAX_REQUEST_LIFETIME_MS = 250L
         const val MAX_CLOCK_SKEW_MS = 1_000L
-        const val STOCK_POSTURE_CACHE_MS = 3_000L
     }
 }
