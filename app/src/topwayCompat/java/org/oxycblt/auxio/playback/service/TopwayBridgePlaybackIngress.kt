@@ -43,8 +43,8 @@ internal enum class TopwayBridgeAdmissionResult {
 /**
  * Admission state kept separate from Android scheduling so timeout and interruption ordering is
  * directly unit-testable. ACCEPTED means the validated command has been atomically committed to
- * this Auxio-owned ingress while holding the playback authority's monitor; it deliberately does
- * not mean the synchronous playback mutation has already returned.
+ * this Auxio-owned ingress while holding the playback authority's monitor; it deliberately does not
+ * mean the synchronous playback mutation has already returned.
  */
 internal class TopwayBridgeAdmissionState {
     private val phase = AtomicReference(Phase.PENDING)
@@ -257,7 +257,8 @@ constructor(private val playbackManager: PlaybackStateManager) {
             BridgeWireContract.COMMAND_PLAY_PAUSE -> preparePlayPause()
             BridgeWireContract.COMMAND_PLAY -> preparePlay()
             BridgeWireContract.COMMAND_PAUSE -> prepareLive { playbackManager.playing(false) }
-            BridgeWireContract.COMMAND_SEEK -> prepareLive { playbackManager.seekTo(seekPositionMs) }
+            BridgeWireContract.COMMAND_SEEK ->
+                prepareLive { playbackManager.seekTo(seekPositionMs) }
             else -> PreparedCommand(TopwayBridgeAdmissionResult.INVALID)
         }
 
@@ -278,9 +279,7 @@ constructor(private val playbackManager: PlaybackStateManager) {
 
     private fun preparePlay(): PreparedCommand =
         if (hasLivePlayback()) {
-            PreparedCommand(TopwayBridgeAdmissionResult.ACCEPTED) {
-                playbackManager.playing(true)
-            }
+            PreparedCommand(TopwayBridgeAdmissionResult.ACCEPTED) { playbackManager.playing(true) }
         } else {
             // Deferred playback is a canonical Auxio-owned action. The ingress commits ownership
             // before invoking PlaybackStateManager so the stock caller is never held open by the
