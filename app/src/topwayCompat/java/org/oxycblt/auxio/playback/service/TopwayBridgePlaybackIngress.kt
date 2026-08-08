@@ -41,23 +41,35 @@ internal enum class TopwayBridgeAdmissionResult {
 }
 
 /**
- * Small lock-free admission state machine kept separate from Android scheduling so timeout and
- * interruption races are deterministic and directly unit-testable.
+ * Admission state kept separate from Android scheduling so timeout and interruption ordering is
+ * directly unit-testable. Terminal timeout/interruption transitions are serialised with the final
+ * canonical playback-manager invocation, so the caller cannot be told a request expired and then
+ * have that same request mutate playback afterwards.
  */
 internal class TopwayBridgeAdmissionState {
     private val phase = AtomicReference(Phase.PENDING)
 
     fun start(): Boolean = phase.compareAndSet(Phase.PENDING, Phase.RUNNING)
 
-    fun isRunning(): Boolean = phase.get() == Phase.RUNNING
-
-    fun complete(result: TopwayBridgeAdmissionResult) {
-        phase.compareAndSet(Phase.RUNNING, result.toTerminalPhase())
+    @Synchronized
+    fun executeWhileRunning(
+        command: () -> TopwayBridgeAdmissionResult
+    ): TopwayBridgeAdmissionResult {
+        val current = phase.get()
+        if (current != Phase.RUNNING) return current.toResult()
+        return try {
+            command().also { phase.set(it.toTerminalPhase()) }
+        } catch (error: RuntimeException) {
+            phase.set(Phase.ERROR)
+            throw error
+        }
     }
 
+    @Synchronized
     fun expire(): TopwayBridgeAdmissionResult =
         terminateUnfinished(TopwayBridgeAdmissionResult.EXPIRED)
 
+    @Synchronized
     fun interrupt(): TopwayBridgeAdmissionResult =
         terminateUnfinished(TopwayBridgeAdmissionResult.INTERRUPTED)
 
@@ -118,8 +130,9 @@ internal class TopwayBridgeAdmissionState {
  *
  * <p>The Binder thread never owns playback state. It asks the main looper to perform the same
  * singleton [PlaybackStateManager] operations used by the normal MediaSession and Topway adapter,
- * and waits only until the request deadline. A request that is pending or running at its deadline
- * becomes terminally expired, so late completion can never be promoted to accepted.
+ * and waits only until the request deadline. A request that expires before its canonical mutation
+ * becomes terminally expired and cannot execute later; once a mutation begins, its terminal result
+ * is committed under the same admission monitor before timeout/interruption can return.
  */
 @Singleton
 internal class TopwayBridgePlaybackIngress
@@ -143,12 +156,9 @@ constructor(private val playbackManager: PlaybackStateManager) {
         }
 
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            val result = execute(commandType, seekPositionMs, deadlineElapsedMs, null)
-            return if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
-                TopwayBridgeAdmissionResult.EXPIRED
-            } else {
-                result
-            }
+            val state = TopwayBridgeAdmissionState()
+            if (!state.start()) return TopwayBridgeAdmissionResult.NOT_READY
+            return execute(commandType, seekPositionMs, deadlineElapsedMs, state)
         }
 
         val admission = Admission(commandType, seekPositionMs, deadlineElapsedMs)
@@ -182,15 +192,7 @@ constructor(private val playbackManager: PlaybackStateManager) {
                 return
             }
             try {
-                val result = execute(commandType, seekPositionMs, deadlineElapsedMs, state)
-                if (
-                    result == TopwayBridgeAdmissionResult.EXPIRED ||
-                        SystemClock.elapsedRealtime() >= deadlineElapsedMs
-                ) {
-                    state.expire()
-                } else {
-                    state.complete(result)
-                }
+                execute(commandType, seekPositionMs, deadlineElapsedMs, state)
             } finally {
                 done.countDown()
             }
@@ -201,29 +203,31 @@ constructor(private val playbackManager: PlaybackStateManager) {
         commandType: Int,
         seekPositionMs: Long,
         deadlineElapsedMs: Long,
-        state: TopwayBridgeAdmissionState?,
+        state: TopwayBridgeAdmissionState,
     ): TopwayBridgeAdmissionResult =
         try {
             synchronized(playbackManager) {
-                // Re-check both terminal admission state and the wall-clock deadline while holding
-                // the playback-manager monitor, immediately before invoking its mutating command.
-                if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
-                    return@synchronized TopwayBridgeAdmissionResult.EXPIRED
-                }
-                if (state != null && !state.isRunning()) {
-                    return@synchronized state.result()
-                }
-                when (commandType) {
-                    BridgeWireContract.COMMAND_PREVIOUS ->
-                        withLivePlayback { playbackManager.prev() }
-                    BridgeWireContract.COMMAND_NEXT -> withLivePlayback { playbackManager.next() }
-                    BridgeWireContract.COMMAND_PLAY_PAUSE -> playPause()
-                    BridgeWireContract.COMMAND_PLAY -> play()
-                    BridgeWireContract.COMMAND_PAUSE ->
-                        withLivePlayback { playbackManager.playing(false) }
-                    BridgeWireContract.COMMAND_SEEK ->
-                        withLivePlayback { playbackManager.seekTo(seekPositionMs) }
-                    else -> TopwayBridgeAdmissionResult.INVALID
+                state.executeWhileRunning {
+                    // This check and the mutating call are serialised against expire()/interrupt().
+                    // If the waiter wins first the block is never entered; if this block wins, its
+                    // canonical result becomes terminal before the waiter can return.
+                    if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
+                        TopwayBridgeAdmissionResult.EXPIRED
+                    } else {
+                        when (commandType) {
+                            BridgeWireContract.COMMAND_PREVIOUS ->
+                                withLivePlayback { playbackManager.prev() }
+                            BridgeWireContract.COMMAND_NEXT ->
+                                withLivePlayback { playbackManager.next() }
+                            BridgeWireContract.COMMAND_PLAY_PAUSE -> playPause()
+                            BridgeWireContract.COMMAND_PLAY -> play()
+                            BridgeWireContract.COMMAND_PAUSE ->
+                                withLivePlayback { playbackManager.playing(false) }
+                            BridgeWireContract.COMMAND_SEEK ->
+                                withLivePlayback { playbackManager.seekTo(seekPositionMs) }
+                            else -> TopwayBridgeAdmissionResult.INVALID
+                        }
+                    }
                 }
             }
         } catch (error: RuntimeException) {
