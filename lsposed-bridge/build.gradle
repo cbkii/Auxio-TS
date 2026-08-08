@@ -58,7 +58,9 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-DEBUG"
             buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media.debug"'
-            minifyEnabled false
+            // Keep the PR #239 debug configuration that passed the paired bridge CI contract.
+            // AGP may suppress debug optimisation internally; this setting is not release authority.
+            minifyEnabled true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
         release {
