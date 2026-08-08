@@ -70,6 +70,10 @@ jobs:
         shell: bash
         run: python3 ./scripts/ci/test_manual_release_transactions.py
 
+      - name: Prove ambiguous dev metadata push recovery
+        shell: bash
+        run: python3 ./scripts/ci/test_manual_release_ambiguous_dev_push.py
+
   signed-packaging:
     name: exact signed packaging
     runs-on: ubuntu-24.04
