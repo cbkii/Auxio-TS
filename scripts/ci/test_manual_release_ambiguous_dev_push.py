@@ -95,6 +95,9 @@ def main() -> int:
             )
             run(["bash", str(SCRIPT)], work, env)
 
+            if not marker.is_file():
+                raise RuntimeError("simulated push-failure wrapper did not intercept the dev push")
+
             remote_sha = run([real_git, "ls-remote", "origin", "refs/heads/dev"], work).split()[0]
             status = next(
                 (line.split("=", 1)[1] for line in output.read_text(encoding="utf-8").splitlines() if line.startswith("status=")),
