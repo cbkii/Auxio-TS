@@ -42,9 +42,9 @@ internal enum class TopwayBridgeAdmissionResult {
 
 /**
  * Admission state kept separate from Android scheduling so timeout and interruption ordering is
- * directly unit-testable. Terminal timeout/interruption transitions are serialised with the final
- * canonical playback-manager invocation, so the caller cannot be told a request expired and then
- * have that same request mutate playback afterwards.
+ * directly unit-testable. ACCEPTED means the validated command has been atomically committed to
+ * this Auxio-owned ingress while holding the playback authority's monitor; it deliberately does
+ * not mean the synchronous playback mutation has already returned.
  */
 internal class TopwayBridgeAdmissionState {
     private val phase = AtomicReference(Phase.PENDING)
@@ -52,17 +52,11 @@ internal class TopwayBridgeAdmissionState {
     fun start(): Boolean = phase.compareAndSet(Phase.PENDING, Phase.RUNNING)
 
     @Synchronized
-    fun executeWhileRunning(
-        command: () -> TopwayBridgeAdmissionResult
-    ): TopwayBridgeAdmissionResult {
+    fun complete(result: TopwayBridgeAdmissionResult): TopwayBridgeAdmissionResult {
         val current = phase.get()
         if (current != Phase.RUNNING) return current.toResult()
-        return try {
-            command().also { phase.set(it.toTerminalPhase()) }
-        } catch (error: RuntimeException) {
-            phase.set(Phase.ERROR)
-            throw error
-        }
+        phase.set(result.toTerminalPhase())
+        return result
     }
 
     @Synchronized
@@ -128,11 +122,11 @@ internal class TopwayBridgeAdmissionState {
 /**
  * Variant-local ingress from the narrow Track-C Binder into Auxio's one playback authority.
  *
- * <p>The Binder thread never owns playback state. It asks the main looper to perform the same
- * singleton [PlaybackStateManager] operations used by the normal MediaSession and Topway adapter,
- * and waits only until the request deadline. A request that expires before its canonical mutation
- * becomes terminally expired and cannot execute later; once a mutation begins, its terminal result
- * is committed under the same admission monitor before timeout/interruption can return.
+ * <p>The Binder thread never owns playback state. It asks the main looper to validate and commit a
+ * command while holding the singleton [PlaybackStateManager] monitor, and waits only until that
+ * bounded commit. Timeout/interruption can win before commit and prevent execution. Once ACCEPTED
+ * is committed, the waiter is released before the synchronous playback mutation runs, so a slow
+ * mutation cannot outlive the stock shim's acknowledgement timeout and also trigger stock fallback.
  */
 @Singleton
 internal class TopwayBridgePlaybackIngress
@@ -158,7 +152,7 @@ constructor(private val playbackManager: PlaybackStateManager) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             val state = TopwayBridgeAdmissionState()
             if (!state.start()) return TopwayBridgeAdmissionResult.NOT_READY
-            return execute(commandType, seekPositionMs, deadlineElapsedMs, state)
+            return execute(commandType, seekPositionMs, deadlineElapsedMs, state) {}
         }
 
         val admission = Admission(commandType, seekPositionMs, deadlineElapsedMs)
@@ -192,8 +186,10 @@ constructor(private val playbackManager: PlaybackStateManager) {
                 return
             }
             try {
-                execute(commandType, seekPositionMs, deadlineElapsedMs, state)
+                execute(commandType, seekPositionMs, deadlineElapsedMs, state, done::countDown)
             } finally {
+                // Idempotent fallback for an unexpected failure before execute() reaches a
+                // terminal admission result. Normal accepted/non-accepted paths signal earlier.
                 done.countDown()
             }
         }
@@ -204,62 +200,93 @@ constructor(private val playbackManager: PlaybackStateManager) {
         seekPositionMs: Long,
         deadlineElapsedMs: Long,
         state: TopwayBridgeAdmissionState,
+        onCommitted: () -> Unit,
     ): TopwayBridgeAdmissionResult =
         try {
             synchronized(playbackManager) {
-                state.executeWhileRunning {
-                    // This check and the mutating call are serialised against expire()/interrupt().
-                    // If the waiter wins first the block is never entered; if this block wins, its
-                    // canonical result becomes terminal before the waiter can return.
-                    if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
-                        TopwayBridgeAdmissionResult.EXPIRED
-                    } else {
-                        when (commandType) {
-                            BridgeWireContract.COMMAND_PREVIOUS ->
-                                withLivePlayback { playbackManager.prev() }
-                            BridgeWireContract.COMMAND_NEXT ->
-                                withLivePlayback { playbackManager.next() }
-                            BridgeWireContract.COMMAND_PLAY_PAUSE -> playPause()
-                            BridgeWireContract.COMMAND_PLAY -> play()
-                            BridgeWireContract.COMMAND_PAUSE ->
-                                withLivePlayback { playbackManager.playing(false) }
-                            BridgeWireContract.COMMAND_SEEK ->
-                                withLivePlayback { playbackManager.seekTo(seekPositionMs) }
-                            else -> TopwayBridgeAdmissionResult.INVALID
-                        }
-                    }
+                if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
+                    return@synchronized commit(
+                        state,
+                        PreparedCommand(TopwayBridgeAdmissionResult.EXPIRED),
+                        onCommitted,
+                    )
                 }
+
+                val prepared = prepare(commandType, seekPositionMs)
+                commit(state, prepared, onCommitted)
             }
         } catch (error: RuntimeException) {
+            val result = state.complete(TopwayBridgeAdmissionResult.ERROR)
+            onCommitted()
             Timber.w(error, "Track-C command admission failed")
-            TopwayBridgeAdmissionResult.ERROR
+            result
         }
 
-    private inline fun withLivePlayback(command: () -> Unit): TopwayBridgeAdmissionResult {
-        if (!hasLivePlayback()) return TopwayBridgeAdmissionResult.NOT_READY
-        command()
-        return TopwayBridgeAdmissionResult.ACCEPTED
+    /**
+     * Atomically terminalise admission before invoking an accepted mutation.
+     *
+     * The acknowledgement callback runs immediately after the terminal state is committed and
+     * before the synchronous playback call. This is the key boundedness guarantee: a command that
+     * reaches ACCEPTED cannot later fall back to stock merely because the playback call is slow.
+     */
+    private fun commit(
+        state: TopwayBridgeAdmissionState,
+        prepared: PreparedCommand,
+        onCommitted: () -> Unit,
+    ): TopwayBridgeAdmissionResult {
+        val result = state.complete(prepared.result)
+        onCommitted()
+        if (result != TopwayBridgeAdmissionResult.ACCEPTED) return result
+        if (prepared.result != TopwayBridgeAdmissionResult.ACCEPTED) return result
+
+        try {
+            checkNotNull(prepared.action).invoke()
+        } catch (error: RuntimeException) {
+            // ACCEPTED is a canonical admission acknowledgement, not a completion result. Once
+            // committed we must not rewrite it to failure and invite the stock path to duplicate a
+            // command that Auxio already owns. Preserve the failure as bounded diagnostics.
+            Timber.w(error, "Accepted Track-C playback mutation failed")
+        }
+        return result
     }
 
-    private fun playPause(): TopwayBridgeAdmissionResult {
+    private fun prepare(commandType: Int, seekPositionMs: Long): PreparedCommand =
+        when (commandType) {
+            BridgeWireContract.COMMAND_PREVIOUS -> prepareLive { playbackManager.prev() }
+            BridgeWireContract.COMMAND_NEXT -> prepareLive { playbackManager.next() }
+            BridgeWireContract.COMMAND_PLAY_PAUSE -> preparePlayPause()
+            BridgeWireContract.COMMAND_PLAY -> preparePlay()
+            BridgeWireContract.COMMAND_PAUSE -> prepareLive { playbackManager.playing(false) }
+            BridgeWireContract.COMMAND_SEEK -> prepareLive { playbackManager.seekTo(seekPositionMs) }
+            else -> PreparedCommand(TopwayBridgeAdmissionResult.INVALID)
+        }
+
+    private fun prepareLive(action: () -> Unit): PreparedCommand {
+        if (!hasLivePlayback()) return PreparedCommand(TopwayBridgeAdmissionResult.NOT_READY)
+        return PreparedCommand(TopwayBridgeAdmissionResult.ACCEPTED, action)
+    }
+
+    private fun preparePlayPause(): PreparedCommand {
         if (hasLivePlayback()) {
-            playbackManager.playing(!playbackManager.progression.isPlaying)
-        } else {
-            // Deferred playback is itself a canonical accepted action: PlaybackStateManager stores
-            // it until its one PlaybackStateHolder can consume it.
-            restorePlaying()
+            val shouldPlay = !playbackManager.progression.isPlaying
+            return PreparedCommand(TopwayBridgeAdmissionResult.ACCEPTED) {
+                playbackManager.playing(shouldPlay)
+            }
         }
-        return TopwayBridgeAdmissionResult.ACCEPTED
+        return PreparedCommand(TopwayBridgeAdmissionResult.ACCEPTED, ::restorePlaying)
     }
 
-    private fun play(): TopwayBridgeAdmissionResult {
+    private fun preparePlay(): PreparedCommand =
         if (hasLivePlayback()) {
-            playbackManager.playing(true)
+            PreparedCommand(TopwayBridgeAdmissionResult.ACCEPTED) {
+                playbackManager.playing(true)
+            }
         } else {
-            restorePlaying()
+            // Deferred playback is a canonical Auxio-owned action. The ingress commits ownership
+            // before invoking PlaybackStateManager so the stock caller is never held open by the
+            // synchronous manager call.
+            PreparedCommand(TopwayBridgeAdmissionResult.ACCEPTED, ::restorePlaying)
         }
-        return TopwayBridgeAdmissionResult.ACCEPTED
-    }
 
     private fun hasLivePlayback(): Boolean =
         playbackManager.currentAudioSessionId != null &&
@@ -273,4 +300,9 @@ constructor(private val playbackManager: PlaybackStateManager) {
             DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
         )
     }
+
+    private data class PreparedCommand(
+        val result: TopwayBridgeAdmissionResult,
+        val action: (() -> Unit)? = null,
+    )
 }
