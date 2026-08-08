@@ -83,11 +83,11 @@ final class BridgeEnvironment {
         return canBridge(value, "publish");
     }
 
-    boolean canInstallHooks() {
-        return state.get().canInstallHooks();
-    }
-
-    boolean canInstallObservedPrivateHooks() {
+    /**
+     * Install-time capability gate. Hooks may be present while the paired target is temporarily
+     * unavailable, but every runtime action still passes through canBridge()/canUseCapability().
+     */
+    boolean canUseObservedPrivateHooks() {
         State current = state.get();
         return current.canInstallHooks()
                 && current.entry != null
@@ -107,7 +107,7 @@ final class BridgeEnvironment {
             return;
         }
         if (!pending.compareAndSet(false, true)) {
-            complete(completion, state.get().canBridge());
+            complete(completion, state.get().canInstallHooks());
             return;
         }
         try {
@@ -117,7 +117,7 @@ final class BridgeEnvironment {
                         try {
                             State updated = inspect(app);
                             state.set(updated);
-                            trusted = updated.canBridge();
+                            trusted = updated.canInstallHooks();
                             logState(updated);
                         } catch (Throwable error) {
                             state.set(State.unknown(SystemClock.elapsedRealtime()));
