@@ -37,6 +37,7 @@ final class BridgeEnvironment {
     }
 
     private static final long CACHE_MS = 3_000L;
+    private static final long LOG_REPEAT_MS = 30_000L;
     private static final String KILL_SWITCH_DIRECTORY = "Auxio-TS";
     private static final String KILL_SWITCH_MARKER = "disable-lsposed-bridge";
 
@@ -55,6 +56,8 @@ final class BridgeEnvironment {
     private String digestKey = "";
     private String digestValue = "";
     private KillSwitchState cachedKillSwitch = KillSwitchState.UNKNOWN;
+    private String lastLogKey = "";
+    private long lastLogAtMs = Long.MIN_VALUE;
 
     BridgeEnvironment(LogSink log) {
         this.log = log;
@@ -86,10 +89,7 @@ final class BridgeEnvironment {
 
     boolean canUseCapability(int capability) {
         State current = state.get();
-        return current.known
-                && current.functionalIdentityTrusted
-                && current.entry != null
-                && current.entry.has(capability);
+        return current.canBridge() && current.entry != null && current.entry.has(capability);
     }
 
     void refreshAsync(Context value, Consumer<Boolean> completion) {
@@ -100,7 +100,7 @@ final class BridgeEnvironment {
             return;
         }
         if (!pending.compareAndSet(false, true)) {
-            complete(completion, state.get().functionalIdentityTrusted);
+            complete(completion, state.get().canBridge());
             return;
         }
         try {
@@ -110,27 +110,37 @@ final class BridgeEnvironment {
                         try {
                             State updated = inspect(app);
                             state.set(updated);
-                            trusted = updated.functionalIdentityTrusted;
+                            trusted = updated.canBridge();
                             logState(updated);
                         } catch (Throwable error) {
-                            state.set(State.unknown());
-                            log.log("bridge readiness probe failed; stock path retained", error);
+                            state.set(State.unknown(SystemClock.elapsedRealtime()));
+                            logBounded(
+                                    "readiness-probe-failed",
+                                    "bridge readiness probe failed; stock path retained",
+                                    error);
                         } finally {
                             pending.set(false);
                             complete(completion, trusted);
                         }
                     });
         } catch (RuntimeException error) {
-            state.set(State.unknown());
+            state.set(State.unknown(SystemClock.elapsedRealtime()));
             pending.set(false);
-            log.log("bridge readiness probe could not be scheduled; stock path retained", error);
+            logBounded(
+                    "readiness-probe-unscheduled",
+                    "bridge readiness probe could not be scheduled; stock path retained",
+                    error);
             complete(completion, false);
         }
     }
 
     private void refreshIfNeeded(Context value, State current) {
         long now = SystemClock.elapsedRealtime();
-        if (!current.known || now - current.checkedAtMs >= CACHE_MS) refreshAsync(value, null);
+        if (current.checkedAtMs == 0L
+                || now < current.checkedAtMs
+                || now - current.checkedAtMs >= CACHE_MS) {
+            refreshAsync(value, null);
+        }
     }
 
     private State inspect(Context value) {
@@ -182,7 +192,10 @@ final class BridgeEnvironment {
                             && entry.acceptsVersion(version);
             return new Identity(true, functional, entry, version);
         } catch (PackageManager.NameNotFoundException | RuntimeException error) {
-            log.log("stock identity unavailable; bridge remains inactive", error);
+            logBounded(
+                    "stock-identity-unavailable",
+                    "stock identity unavailable; bridge remains inactive",
+                    error);
             return Identity.untrusted(0L);
         }
     }
@@ -214,11 +227,9 @@ final class BridgeEnvironment {
     private static boolean matchesCurrentSigner(SigningInfo info, String expected) {
         if (info == null || !isDigest(expected)) return false;
         Signature[] signers = info.getApkContentsSigners();
-        if (signers == null || signers.length == 0) return false;
-        for (Signature signer : signers) {
-            if (expected.equals(sha256(signer.toByteArray()))) return true;
-        }
-        return false;
+        return signers != null
+                && signers.length == 1
+                && expected.equals(sha256(signers[0].toByteArray()));
     }
 
     private static ComponentName component(String className) {
@@ -283,16 +294,50 @@ final class BridgeEnvironment {
 
     private void logState(State value) {
         if (!value.identityTrusted) {
-            log.log("STOP: com.tw.music UID or current signer differs from stock identity", null);
+            logBounded(
+                    "stock-identity-untrusted",
+                    "STOP: com.tw.music UID or current signer differs from stock identity",
+                    null);
         } else if (!value.functionalIdentityTrusted) {
-            log.log(
+            logBounded(
+                    "stock-build-unreviewed",
                     "stock identity verified but APK hash/version is not reviewed; functional hooks inactive",
                     null);
-        } else if (value.killSwitch != KillSwitchState.ENABLED) {
-            log.log("bridge kill switch is disabled or unreadable; stock path retained", null);
+        } else if (value.killSwitch == KillSwitchState.DISABLED) {
+            logBounded(
+                    "kill-switch-disabled",
+                    "bridge disabled by kill switch; stock path retained",
+                    null);
+        } else if (value.killSwitch == KillSwitchState.UNKNOWN) {
+            logBounded(
+                    "kill-switch-unreadable",
+                    "bridge kill switch is unreadable; stock path retained",
+                    null);
         } else if (!value.targetReady) {
-            log.log("paired Auxio target unavailable or signer mismatch; stock path retained", null);
+            logBounded(
+                    "target-not-ready",
+                    "paired Auxio target unavailable or signer mismatch; stock path retained",
+                    null);
+        } else {
+            clearLogState();
         }
+    }
+
+    private synchronized void logBounded(String key, String message, Throwable error) {
+        long now = SystemClock.elapsedRealtime();
+        if (!key.equals(lastLogKey)
+                || lastLogAtMs == Long.MIN_VALUE
+                || now < lastLogAtMs
+                || now - lastLogAtMs >= LOG_REPEAT_MS) {
+            lastLogKey = key;
+            lastLogAtMs = now;
+            log.log(message, error);
+        }
+    }
+
+    private synchronized void clearLogState() {
+        lastLogKey = "";
+        lastLogAtMs = Long.MIN_VALUE;
     }
 
     private static String sha256(byte[] value) {
@@ -336,7 +381,10 @@ final class BridgeEnvironment {
         try {
             completion.accept(value);
         } catch (RuntimeException error) {
-            log.log("bridge readiness completion failed safely", error);
+            logBounded(
+                    "readiness-completion-failed",
+                    "bridge readiness completion failed safely",
+                    error);
         }
     }
 
@@ -392,6 +440,10 @@ final class BridgeEnvironment {
         }
 
         static State unknown() {
+            return unknown(0L);
+        }
+
+        static State unknown(long checkedAtMs) {
             return new State(
                     false,
                     KillSwitchState.UNKNOWN,
@@ -400,7 +452,7 @@ final class BridgeEnvironment {
                     null,
                     false,
                     0L,
-                    0L);
+                    checkedAtMs);
         }
 
         boolean canBridge() {
