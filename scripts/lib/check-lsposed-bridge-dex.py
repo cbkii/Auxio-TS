@@ -112,6 +112,8 @@ try:
         raise ValueError("classes outside bridge package: " + ", ".join(unexpected[:20]))
     # The paired target signer is intentionally a build/release validation input only. It must not
     # be embedded into the bridge DEX or used as a runtime activation gate.
+    if target_signer in strings:
+        raise ValueError("paired target signer must not be embedded into bridge DEX")
     if target_package not in strings:
         raise ValueError("paired target package is not compiled into bridge DEX")
 
