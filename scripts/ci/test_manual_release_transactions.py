@@ -510,14 +510,16 @@ def init_git_pair(root: Path) -> tuple[Path, Path, str]:
     bare = root / "origin.git"
     work = root / "work"
     git(["init", "--bare", str(bare)], root)
-    git(["init", "-b", "dev", str(work)], root)
+    git(["init", str(work)], root)
+    git(["switch", "-c", "dev"], work)
     git(["config", "user.name", "CI Smoke"], work)
     git(["config", "user.email", "ci-smoke@example.invalid"], work)
     (work / "file.txt").write_text("base\n", encoding="utf-8")
     git(["add", "file.txt"], work)
     git(["commit", "-m", "base"], work)
     git(["remote", "add", "origin", str(bare)], work)
-    git(["push", "-u", "origin", "dev"], work)
+    git(["push", "-u", "origin", "HEAD:refs/heads/dev"], work)
+    git(["symbolic-ref", "HEAD", "refs/heads/dev"], bare)
     base = git(["rev-parse", "HEAD"], work)
     return bare, work, base
 
@@ -564,7 +566,7 @@ def test_tag_and_sync(root: Path, fakebin: Path) -> None:
     (other / "other.txt").write_text("moved\n", encoding="utf-8")
     git(["add", "other.txt"], other)
     git(["commit", "-m", "dev moved"], other)
-    git(["push", "origin", "dev"], other)
+    git(["push", "origin", "HEAD:refs/heads/dev"], other)
 
     env4, sync_output3 = env_for(root, fakebin, state_path, "sync-moved.out")
     env4.update({"RELEASE_SHA": candidate})
