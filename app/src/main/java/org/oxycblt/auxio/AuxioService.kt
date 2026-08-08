@@ -270,20 +270,35 @@ interface ForegroundListener {
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
-class ForegroundServiceNotification(
-    val code: Int,
-    @StringRes val channelName: Int,
-    private val builder: NotificationCompat.Builder,
-) {
-    fun build(): android.app.Notification = builder.build()
+abstract class ForegroundServiceNotification(context: Context, info: ChannelInfo) :
+    NotificationCompat.Builder(context, info.id) {
+    private val notificationManager = NotificationManagerCompat.from(context)
 
-    fun createChannel(context: Context) {
-        NotificationManagerCompat.from(context)
-            .createNotificationChannel(
-                NotificationChannelCompat.Builder(code.toString(), NotificationManagerCompat.IMPORTANCE_LOW)
-                    .setName(context.getString(channelName))
-                    .setShowBadge(false)
-                    .build()
-            )
+    init {
+        // Set up the notification channel. Foreground notifications are non-substantial, and
+        // thus make no sense to have lights, vibration, or lead to a notification badge.
+        val channel =
+            NotificationChannelCompat.Builder(info.id, NotificationManagerCompat.IMPORTANCE_LOW)
+                .setName(context.getString(info.nameRes))
+                .setLightsEnabled(false)
+                .setVibrationEnabled(false)
+                .setShowBadge(false)
+                .build()
+        notificationManager.createNotificationChannel(channel)
     }
+
+    /**
+     * The code used to identify this notification.
+     *
+     * @see NotificationManagerCompat.notify
+     */
+    abstract val code: Int
+
+    /**
+     * Reduced representation of a [NotificationChannelCompat].
+     *
+     * @param id The ID of the channel.
+     * @param nameRes A string resource ID corresponding to the human-readable name.
+     */
+    data class ChannelInfo(val id: String, @StringRes val nameRes: Int)
 }
