@@ -100,7 +100,13 @@ jobs:
 
       - name: Run exact signed release packaging smoke
         shell: bash
-        run: bash ./scripts/ci/smoke_manual_release_packaging.sh
+        run: |
+          set +e
+          bash ./scripts/ci/smoke_manual_release_packaging.sh 2>&1 |
+            tee "${RUNNER_TEMP}/manual-release-packaging-smoke.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          exit "${rc}"
 
       - name: Upload packaging failure evidence
         if: failure()
@@ -114,4 +120,5 @@ jobs:
             lsposed-bridge/build/reports/**
             lsposed-bridge/build/test-results/**
             build/reports/problems/**
+            ${{ runner.temp }}/manual-release-packaging-smoke.log
             ${{ runner.temp }}/manual-release-packaging-smoke-gradle.log
