@@ -1,11 +1,19 @@
 /*
  * Copyright (c) 2026 Auxio Project
- * TopwayBridgePlaybackIngress.kt is part of Auxio-TS.
+ * TopwayBridgePlaybackIngress.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.playback.service
@@ -41,11 +49,14 @@ internal class TopwayBridgeAdmissionState {
 
     fun start(): Boolean = phase.compareAndSet(Phase.PENDING, Phase.RUNNING)
 
+    fun isRunning(): Boolean = phase.get() == Phase.RUNNING
+
     fun complete(result: TopwayBridgeAdmissionResult) {
         phase.compareAndSet(Phase.RUNNING, result.toTerminalPhase())
     }
 
-    fun expire(): TopwayBridgeAdmissionResult = terminateUnfinished(TopwayBridgeAdmissionResult.EXPIRED)
+    fun expire(): TopwayBridgeAdmissionResult =
+        terminateUnfinished(TopwayBridgeAdmissionResult.EXPIRED)
 
     fun interrupt(): TopwayBridgeAdmissionResult =
         terminateUnfinished(TopwayBridgeAdmissionResult.INTERRUPTED)
@@ -132,7 +143,7 @@ constructor(private val playbackManager: PlaybackStateManager) {
         }
 
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            val result = execute(commandType, seekPositionMs)
+            val result = execute(commandType, seekPositionMs, deadlineElapsedMs, null)
             return if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
                 TopwayBridgeAdmissionResult.EXPIRED
             } else {
@@ -171,8 +182,11 @@ constructor(private val playbackManager: PlaybackStateManager) {
                 return
             }
             try {
-                val result = execute(commandType, seekPositionMs)
-                if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
+                val result = execute(commandType, seekPositionMs, deadlineElapsedMs, state)
+                if (
+                    result == TopwayBridgeAdmissionResult.EXPIRED ||
+                        SystemClock.elapsedRealtime() >= deadlineElapsedMs
+                ) {
                     state.expire()
                 } else {
                     state.complete(result)
@@ -186,9 +200,19 @@ constructor(private val playbackManager: PlaybackStateManager) {
     private fun execute(
         commandType: Int,
         seekPositionMs: Long,
+        deadlineElapsedMs: Long,
+        state: TopwayBridgeAdmissionState?,
     ): TopwayBridgeAdmissionResult =
         try {
             synchronized(playbackManager) {
+                // Re-check both terminal admission state and the wall-clock deadline while holding
+                // the playback-manager monitor, immediately before invoking its mutating command.
+                if (SystemClock.elapsedRealtime() >= deadlineElapsedMs) {
+                    return@synchronized TopwayBridgeAdmissionResult.EXPIRED
+                }
+                if (state != null && !state.isRunning()) {
+                    return@synchronized state.result()
+                }
                 when (commandType) {
                     BridgeWireContract.COMMAND_PREVIOUS ->
                         withLivePlayback { playbackManager.prev() }
@@ -208,15 +232,13 @@ constructor(private val playbackManager: PlaybackStateManager) {
         }
 
     private inline fun withLivePlayback(command: () -> Unit): TopwayBridgeAdmissionResult {
-        if (playbackManager.currentAudioSessionId == null) {
-            return TopwayBridgeAdmissionResult.NOT_READY
-        }
+        if (!hasLivePlayback()) return TopwayBridgeAdmissionResult.NOT_READY
         command()
         return TopwayBridgeAdmissionResult.ACCEPTED
     }
 
     private fun playPause(): TopwayBridgeAdmissionResult {
-        if (playbackManager.currentAudioSessionId != null) {
+        if (hasLivePlayback()) {
             playbackManager.playing(!playbackManager.progression.isPlaying)
         } else {
             // Deferred playback is itself a canonical accepted action: PlaybackStateManager stores
@@ -227,13 +249,20 @@ constructor(private val playbackManager: PlaybackStateManager) {
     }
 
     private fun play(): TopwayBridgeAdmissionResult {
-        if (playbackManager.currentAudioSessionId != null) {
+        if (hasLivePlayback()) {
             playbackManager.playing(true)
         } else {
             restorePlaying()
         }
         return TopwayBridgeAdmissionResult.ACCEPTED
     }
+
+    private fun hasLivePlayback(): Boolean =
+        playbackManager.currentAudioSessionId != null &&
+            MediaSessionInterface.shouldResumeExistingPlayback(
+                hasCurrentSong = playbackManager.currentSong != null,
+                hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null,
+            )
 
     private fun restorePlaying() {
         playbackManager.playDeferred(
