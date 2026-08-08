@@ -58,13 +58,16 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-DEBUG"
             buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media.debug"'
-            minifyEnabled false
+            // Keep the PR #239 debug configuration that passed the paired bridge CI contract.
+            // AGP may suppress debug optimisation internally; this setting is not release authority.
+            minifyEnabled true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
         release {
-            // The release validator proves that every defined class belongs to the bridge package.
-            // Keep release classes unminified so R8 cannot repackage them into the root namespace.
-            minifyEnabled false
+            // Shrinking is required here: AGP's built-in Kotlin runtime otherwise remains in this
+            // Java-only bridge APK. proguard-rules.pro preserves the bridge package namespace so
+            // the strict defined-class provenance check remains meaningful after R8 optimisation.
+            minifyEnabled true
             if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
