@@ -74,33 +74,48 @@ final class BridgeEnvironment {
         try {
             File shared = Environment.getExternalStorageDirectory();
             if (shared == null || !shared.isDirectory() || !shared.canRead()) {
-                deferUnknownRetry(now);
-                log.log(
-                        "optional bridge kill switch is unavailable; bridge remains disabled until a confirmed read",
+                unknownUntilRetry(
+                        now,
+                        "optional bridge kill switch storage is unavailable; bridge remains disabled until a confirmed read",
                         null);
                 return;
             }
             String storageState = Environment.getExternalStorageState(shared);
             if (!Environment.MEDIA_MOUNTED.equals(storageState)
                     && !Environment.MEDIA_MOUNTED_READ_ONLY.equals(storageState)) {
-                deferUnknownRetry(now);
-                log.log(
+                unknownUntilRetry(
+                        now,
                         "optional bridge kill switch storage is not mounted; bridge remains disabled until a confirmed read",
                         null);
                 return;
             }
 
-            File marker =
-                    new File(new File(shared, KILL_SWITCH_DIRECTORY), KILL_SWITCH_MARKER);
-            if (marker.isFile()) {
+            File directory = new File(shared, KILL_SWITCH_DIRECTORY);
+            if (directory.exists() && (!directory.isDirectory() || !directory.canRead())) {
+                unknownUntilRetry(
+                        now,
+                        "optional bridge kill switch directory is unreadable or malformed; bridge remains disabled until a confirmed read",
+                        null);
+                return;
+            }
+
+            File marker = new File(directory, KILL_SWITCH_MARKER);
+            if (marker.exists()) {
+                if (!marker.isFile()) {
+                    unknownUntilRetry(
+                            now,
+                            "optional bridge kill switch marker is malformed; bridge remains disabled until a confirmed read",
+                            null);
+                    return;
+                }
                 killSwitch.set(KillSwitchState.DISABLED);
                 log.log("bridge disabled by optional kill switch; stock path retained", null);
             } else {
                 killSwitch.set(KillSwitchState.ENABLED);
             }
         } catch (RuntimeException error) {
-            // Preserve a previously confirmed DISABLED state if this method is ever extended to
-            // re-check confirmed states; UNKNOWN remains fail-safe and retryable today.
+            // A confirmed DISABLED state is terminal for this process; UNKNOWN remains fail-safe and
+            // retryable. The early return above means a later read failure cannot erase DISABLED.
             if (killSwitch.get() != KillSwitchState.DISABLED) {
                 killSwitch.set(KillSwitchState.UNKNOWN);
                 deferUnknownRetry(now);
@@ -109,6 +124,12 @@ final class BridgeEnvironment {
                     "optional bridge kill switch is unreadable; bridge remains disabled until a confirmed read",
                     error);
         }
+    }
+
+    private void unknownUntilRetry(long nowElapsedMs, String message, Throwable error) {
+        killSwitch.set(KillSwitchState.UNKNOWN);
+        deferUnknownRetry(nowElapsedMs);
+        log.log(message, error);
     }
 
     private void deferUnknownRetry(long nowElapsedMs) {
