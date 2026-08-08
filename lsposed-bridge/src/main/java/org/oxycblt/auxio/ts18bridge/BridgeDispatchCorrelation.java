@@ -22,6 +22,7 @@ final class BridgeDispatchCorrelation {
     static final long CORRELATION_WINDOW_MS = 50L;
 
     private final AtomicLong sequence = new AtomicLong();
+    private long latestDispatchedCommandId;
     private long lastCommandId;
     private int lastCommandCode;
     private long lastSeekPosition;
@@ -39,11 +40,12 @@ final class BridgeDispatchCorrelation {
         }
         long id = sequence.incrementAndGet();
         if (id == 0L) id = sequence.incrementAndGet();
+        latestDispatchedCommandId = id;
         return Decision.dispatch(id, commandCode, seekPosition);
     }
 
     synchronized void complete(Decision decision, boolean accepted, long nowMs) {
-        if (!decision.shouldDispatch) return;
+        if (!decision.shouldDispatch || decision.commandId != latestDispatchedCommandId) return;
         lastCommandId = decision.commandId;
         lastCommandCode = decision.commandCode;
         lastSeekPosition = decision.seekPosition;
