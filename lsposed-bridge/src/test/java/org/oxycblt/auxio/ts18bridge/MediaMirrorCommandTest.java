@@ -1,56 +1,24 @@
-/*
- * Copyright (c) 2026 Auxio Project
- * MediaMirrorCommandTest.java is part of Auxio-TS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- */
+/* Copyright (c) 2026 Auxio Project */
 package org.oxycblt.auxio.ts18bridge;
 
 import static org.junit.Assert.assertEquals;
 
-import android.media.session.PlaybackState;
 import org.junit.Test;
 
 public class MediaMirrorCommandTest {
     @Test
-    public void mapsCommandsToAdvertisedMediaSessionActions() {
-        assertEquals(
-                PlaybackState.ACTION_SKIP_TO_PREVIOUS,
-                MediaMirror.requiredActionFor(BridgeCommand.PREVIOUS, false));
-        assertEquals(
-                PlaybackState.ACTION_SKIP_TO_NEXT,
-                MediaMirror.requiredActionFor(BridgeCommand.NEXT, false));
-        assertEquals(
-                PlaybackState.ACTION_PLAY,
-                MediaMirror.requiredActionFor(BridgeCommand.PLAY, false));
-        assertEquals(
-                PlaybackState.ACTION_PAUSE,
-                MediaMirror.requiredActionFor(BridgeCommand.PAUSE, true));
-        assertEquals(
-                PlaybackState.ACTION_SEEK_TO,
-                MediaMirror.requiredActionFor(BridgeCommand.SEEK, false));
+    public void mapsBridgeCommandsToVersionedWireCodes() {
+        assertEquals(BridgeWireContract.COMMAND_PREVIOUS, BridgeContract.commandCode(BridgeCommand.PREVIOUS));
+        assertEquals(BridgeWireContract.COMMAND_NEXT, BridgeContract.commandCode(BridgeCommand.NEXT));
+        assertEquals(BridgeWireContract.COMMAND_PLAY_PAUSE, BridgeContract.commandCode(BridgeCommand.PLAY_PAUSE));
+        assertEquals(BridgeWireContract.COMMAND_PLAY, BridgeContract.commandCode(BridgeCommand.PLAY));
+        assertEquals(BridgeWireContract.COMMAND_PAUSE, BridgeContract.commandCode(BridgeCommand.PAUSE));
+        assertEquals(BridgeWireContract.COMMAND_SEEK, BridgeContract.commandCode(BridgeCommand.SEEK));
     }
 
     @Test
-    public void playPauseResolvesAgainstCurrentAuxioState() {
-        assertEquals(
-                PlaybackState.ACTION_PLAY,
-                MediaMirror.requiredActionFor(BridgeCommand.PLAY_PAUSE, false));
-        assertEquals(
-                PlaybackState.ACTION_PAUSE,
-                MediaMirror.requiredActionFor(BridgeCommand.PLAY_PAUSE, true));
-    }
-
-    @Test
-    public void updateAndUnknownDoNotPretendToBeTransportActions() {
-        assertEquals(
-                MediaMirror.NO_TRANSPORT_ACTION,
-                MediaMirror.requiredActionFor(BridgeCommand.UPDATE, false));
-        assertEquals(
-                MediaMirror.UNSUPPORTED_TRANSPORT_ACTION,
-                MediaMirror.requiredActionFor(BridgeCommand.UNKNOWN, false));
+    public void nonTransportCommandsAreNotSentAcrossCommandBinder() {
+        assertEquals(0, BridgeContract.commandCode(BridgeCommand.UPDATE));
+        assertEquals(0, BridgeContract.commandCode(BridgeCommand.UNKNOWN));
     }
 }

@@ -93,6 +93,17 @@ open class AuxioService :
         return binder
     }
 
+    /**
+     * Starts only background library/indexing work for a private subclass Binder endpoint.
+     *
+     * The normal [onBind] path also asks [PlaybackServiceFragment] to interpret the bind Intent as
+     * an external playback start. Private compat protocols must not acquire that playback side
+     * effect merely by connecting, while still needing library readiness for a later command.
+     */
+    protected fun startBackgroundLibraryForPrivateBind() {
+        musicFragment.start(StartupScanOrigin.BACKGROUND)
+    }
+
     private fun onHandleForeground(intent: Intent?, allowTrustedUserVisible: Boolean) {
         // Playback/session restoration remains first and never waits for library-source validation.
         playbackFragment.start(intent)

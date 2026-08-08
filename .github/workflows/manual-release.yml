@@ -28,9 +28,9 @@ on:
         default: true
         type: boolean
       include_lsposed_bridge_apk:
-        description: Include the LSPosed bridge for the genuine stock com.tw.music app
+        description: Opt in to the optional legacy com.tw.music LSPosed Track-C bridge
         required: true
-        default: true
+        default: false
         type: boolean
       publish_debug_apks:
         description: Also publish diagnostic debug APKs on the GitHub Release (normally leave off)

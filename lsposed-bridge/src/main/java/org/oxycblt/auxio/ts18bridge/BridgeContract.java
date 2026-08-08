@@ -1,15 +1,10 @@
 /*
  * Copyright (c) 2026 Auxio Project
  * BridgeContract.java is part of Auxio-TS.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
  */
 package org.oxycblt.auxio.ts18bridge;
 
-/** Stable strings observed in the exact stock and Auxio-TS compatibility surfaces. */
+/** Stock package routing and primitive command mapping for the Track-C shim. */
 final class BridgeContract {
     static final String STOCK_PACKAGE = "com.tw.music";
 
@@ -20,4 +15,25 @@ final class BridgeContract {
     static final String ACTION_WIDGET_SEEK = "com.android.launcher.widget_music_progress";
 
     private BridgeContract() {}
+
+    /**
+     * LSPosed's static package scope is the application-selection authority. The captured stock
+     * manifest does not assign the hooked application/activity/service to a secondary process, so
+     * Track C handles only the package's default process.
+     */
+    static boolean isScopedProcess(String packageName, String processName) {
+        return STOCK_PACKAGE.equals(packageName) && STOCK_PACKAGE.equals(processName);
+    }
+
+    static int commandCode(BridgeCommand command) {
+        return switch (command) {
+            case PREVIOUS -> BridgeWireContract.COMMAND_PREVIOUS;
+            case NEXT -> BridgeWireContract.COMMAND_NEXT;
+            case PLAY_PAUSE -> BridgeWireContract.COMMAND_PLAY_PAUSE;
+            case PLAY -> BridgeWireContract.COMMAND_PLAY;
+            case PAUSE -> BridgeWireContract.COMMAND_PAUSE;
+            case SEEK -> BridgeWireContract.COMMAND_SEEK;
+            case UPDATE, UNKNOWN -> 0;
+        };
+    }
 }
