@@ -75,23 +75,26 @@ APKANALYZER_BIN=${APKANALYZER_BIN:-$(find_tool apkanalyzer || true)}
 
 TARGET_SIGNER=''
 if ((ERRORS == 0)); then
-  bridge_id=$($APKANALYZER_BIN manifest application-id "$BRIDGE_APK" 2>/dev/null) || bridge_id=''
-  target_id=$($APKANALYZER_BIN manifest application-id "$TARGET_APK" 2>/dev/null) || target_id=''
+  bridge_id=$("$APKANALYZER_BIN" manifest application-id "$BRIDGE_APK" 2>/dev/null) || bridge_id=''
+  target_id=$("$APKANALYZER_BIN" manifest application-id "$TARGET_APK" 2>/dev/null) || target_id=''
   [[ $bridge_id == "$EXPECTED_BRIDGE_ID" ]] || error "Bridge app id mismatch: ${bridge_id:-<empty>}"
   [[ $target_id == "$EXPECTED_TARGET_ID" ]] || error "Target app id mismatch: ${target_id:-<empty>}"
 
-  min_sdk=$($APKANALYZER_BIN manifest min-sdk "$BRIDGE_APK" 2>/dev/null) || min_sdk=''
-  target_sdk=$($APKANALYZER_BIN manifest target-sdk "$BRIDGE_APK" 2>/dev/null) || target_sdk=''
+  min_sdk=$("$APKANALYZER_BIN" manifest min-sdk "$BRIDGE_APK" 2>/dev/null) || min_sdk=''
+  target_sdk=$("$APKANALYZER_BIN" manifest target-sdk "$BRIDGE_APK" 2>/dev/null) || target_sdk=''
   [[ $min_sdk == 29 ]] || error "Bridge minSdk must be 29, got ${min_sdk:-<empty>}"
   [[ $target_sdk == 36 ]] || error "Bridge targetSdk must be 36, got ${target_sdk:-<empty>}"
 
-  manifest=$($APKANALYZER_BIN manifest print "$BRIDGE_APK" 2>/dev/null) || manifest=''
+  manifest=$("$APKANALYZER_BIN" manifest print "$BRIDGE_APK" 2>/dev/null) || {
+    error 'Unable to decode AndroidManifest.xml'
+    manifest=''
+  }
   grep -q '<uses-permission' <<<"$manifest" && error 'Bridge must not request Android permissions'
   if [[ $VARIANT == release ]] && grep -Eq 'android:debuggable=(true|"true")' <<<"$manifest"; then
     error 'Release bridge must not be debuggable'
   fi
 
-  target_report=$($APKSIGNER_BIN verify --verbose --print-certs "$TARGET_APK" 2>&1) || {
+  target_report=$("$APKSIGNER_BIN" verify --verbose --print-certs "$TARGET_APK" 2>&1) || {
     error 'Target APK signature verification failed'; target_report='';
   }
   if [[ -n $target_report ]]; then
@@ -101,7 +104,7 @@ if ((ERRORS == 0)); then
   fi
   [[ $TARGET_SIGNER =~ ^[0-9A-F]{64}$ ]] || error 'Target signer is malformed'
 
-  bridge_report=$($APKSIGNER_BIN verify --verbose --print-certs "$BRIDGE_APK" 2>&1) || {
+  bridge_report=$("$APKSIGNER_BIN" verify --verbose --print-certs "$BRIDGE_APK" 2>&1) || {
     error 'Bridge APK signature verification failed'; bridge_report='';
   }
   if [[ $VARIANT == release && -n $bridge_report ]]; then
