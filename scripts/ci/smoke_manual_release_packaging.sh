@@ -14,7 +14,7 @@ repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd -
   fail 'cannot resolve repository root'
 cd -- "$repo_root" || fail "cannot enter repository root: $repo_root"
 
-for command in bash base64 git jq keytool python3 sha256sum; do
+for command in bash base64 git jq keytool python3 sha256sum timeout; do
   command -v "$command" >/dev/null 2>&1 || fail "required command is unavailable: $command"
 done
 
