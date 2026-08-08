@@ -2,32 +2,22 @@
 package org.oxycblt.auxio.ts18bridge;
 
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
+/** Regression tests for the deliberately small Track-C routing boundary. */
 public final class BridgeCompatibilityRegistryTest {
     @Test
-    public void reviewedBuildsCarryExplicitPresenterCapability() {
-        BridgeContract.RegistryEntry first = BridgeContract.reviewedStockApk(
-                "4F5495E270A7C86BAB232E2B7EE2ECD2D71F3450F6F20ED5F36FEAA4229C1518");
-        BridgeContract.RegistryEntry second = BridgeContract.reviewedStockApk(
-                "3A14ED3B330723A7F88AE3911804858D370CA673E17D67098CCE6C9A543C6B49");
-        assertNotNull(first);
-        assertNotNull(second);
-        assertTrue(first.has(BridgeContract.CAP_COMMAND_RECEIVER));
-        assertTrue(first.has(BridgeContract.CAP_PRIVATE_PRESENTER));
-        assertTrue(second.has(BridgeContract.CAP_COMMAND_RECEIVER));
-        assertTrue(second.has(BridgeContract.CAP_PRIVATE_PRESENTER));
+    public void stockMainProcessIsInScope() {
+        assertTrue(BridgeContract.isScopedProcess("com.tw.music", "com.tw.music"));
     }
 
     @Test
-    public void unknownApkNeverGetsFunctionalCapabilities() {
-        BridgeContract.RegistryEntry unknown = BridgeContract.reviewedStockApk(
-                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-        assertNull(unknown);
+    public void otherPackagesAndSecondaryProcessesAreOutOfScope() {
+        assertFalse(BridgeContract.isScopedProcess("com.tw.media", "com.tw.media"));
+        assertFalse(BridgeContract.isScopedProcess("com.dofun.variety", "com.dofun.variety"));
+        assertFalse(BridgeContract.isScopedProcess("com.tw.music", "com.tw.music:remote"));
     }
 
     @Test
