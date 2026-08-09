@@ -18,13 +18,19 @@
 
 package org.oxycblt.auxio.playback.service
 
+import android.content.Context
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.BuildConfig
 
-/** Explicit contract for starts issued through ContextCompat.startForegroundService(). */
+/** Explicit contract for playback starts issued through ContextCompat.startForegroundService(). */
 internal object ForegroundServiceStartContract {
     const val EXTRA_REQUIRE_IMMEDIATE_PROMOTION =
         BuildConfig.APPLICATION_ID + ".service.REQUIRE_IMMEDIATE_FOREGROUND"
+
+    fun start(context: Context, intent: Intent) {
+        ContextCompat.startForegroundService(context, markRequired(intent))
+    }
 
     fun markRequired(intent: Intent): Intent =
         intent.putExtra(EXTRA_REQUIRE_IMMEDIATE_PROMOTION, true)
