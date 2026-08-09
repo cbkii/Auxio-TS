@@ -20,7 +20,9 @@ package org.oxycblt.auxio.playback.service
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.support.v4.media.session.MediaSessionCompat
+import androidx.preference.PreferenceManager
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +38,7 @@ import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
 import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayStartCallbacks
+import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.StartupReadinessController
 import org.oxycblt.auxio.music.StartupReadinessState
@@ -95,11 +98,17 @@ private constructor(
 
     private val waitJob = Job()
     private val scope = CoroutineScope(Dispatchers.Main + waitJob)
+    private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
     private var autoStopJob: Job? = null
     private var restoreWatchdogJob: Job? = null
     private val restoreWatchdogGeneration = RestoreWatchdogGeneration()
     private var lastTopwayIsPlaying: Boolean? = null
     private var topwayProgressTickerJob: Job? = null
+    private val launcherModePreferenceListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key != Ts18LauncherIntegrationMode.PREF_KEY) return@OnSharedPreferenceChangeListener
+            scope.launch { reconcileTopwayProgressTicker() }
+        }
     private val exoHolder = exoHolderFactory.create()
     private val sessionHolder = sessionHolderFactory.create(context, foregroundListener)
     private val widgetComponent = widgetComponentFactory.create(context)
@@ -188,8 +197,9 @@ private constructor(
         widgetComponent.attach()
         systemReceiver.attach()
         playbackManager.addListener(this)
+        prefs.registerOnSharedPreferenceChangeListener(launcherModePreferenceListener)
         publishTopwayState("service-attach", force = true)
-        startTopwayProgressTicker()
+        reconcileTopwayProgressTicker()
         startupReadinessController.publishCapability(StartupReadinessState.PlaybackServiceReady)
         restoreCachedPlaybackStateIfIdle()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
@@ -325,6 +335,7 @@ private constructor(
     fun release() {
         autoStopJob?.cancel()
         cancelRestoreWatchdog()
+        prefs.unregisterOnSharedPreferenceChangeListener(launcherModePreferenceListener)
         topwayProgressTickerJob?.cancel()
         topwayProgressTickerJob = null
         waitJob.cancel()
@@ -371,6 +382,9 @@ private constructor(
         ) {
             cancelRestoreWatchdog()
             startupReadinessController.publishCapability(StartupReadinessState.QueueReady)
+            // A foreground-service start may still own the lightweight restoring placeholder.
+            // Reconcile it immediately with the real media/indexing/idle terminal state.
+            foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
         }
     }
 
@@ -383,17 +397,26 @@ private constructor(
         foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
     }
 
-    private fun startTopwayProgressTicker() {
-        topwayProgressTickerJob?.cancel()
-        topwayProgressTickerJob =
-            scope.launch {
-                while (true) {
-                    if (playbackManager.progression.isPlaying) {
-                        publishTopwayProgress("periodic", force = false)
+    private fun reconcileTopwayProgressTicker() {
+        val running = topwayProgressTickerJob?.isActive == true
+        when (TopwayProgressTickerPolicy.directive(topwayCoordinator.mode, running)) {
+            TopwayProgressTickerDirective.START -> {
+                topwayProgressTickerJob =
+                    scope.launch {
+                        while (true) {
+                            if (playbackManager.progression.isPlaying) {
+                                publishTopwayProgress("periodic", force = false)
+                            }
+                            delay(TOPWAY_PROGRESS_TICK_MS)
+                        }
                     }
-                    delay(TOPWAY_PROGRESS_TICK_MS)
-                }
             }
+            TopwayProgressTickerDirective.STOP -> {
+                topwayProgressTickerJob?.cancel()
+                topwayProgressTickerJob = null
+            }
+            TopwayProgressTickerDirective.KEEP -> Unit
+        }
     }
 
     private fun publishTopwayState(reason: String, force: Boolean) {
@@ -464,6 +487,25 @@ private constructor(
         private const val RESTORE_STARTUP_TIMEOUT_MS = 8_000L
         private const val TOPWAY_PROGRESS_TICK_MS = 1000L
     }
+}
+
+internal enum class TopwayProgressTickerDirective {
+    START,
+    STOP,
+    KEEP,
+}
+
+/** Pure lifecycle policy for the optional periodic Topway progress publisher. */
+internal object TopwayProgressTickerPolicy {
+    fun directive(
+        mode: Ts18LauncherIntegrationMode,
+        running: Boolean,
+    ): TopwayProgressTickerDirective =
+        when {
+            mode.sendsTopwayBroadcasts && !running -> TopwayProgressTickerDirective.START
+            !mode.sendsTopwayBroadcasts && running -> TopwayProgressTickerDirective.STOP
+            else -> TopwayProgressTickerDirective.KEEP
+        }
 }
 
 internal class RestoreWatchdogGeneration {
