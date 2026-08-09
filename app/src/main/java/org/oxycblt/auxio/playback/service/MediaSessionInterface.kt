@@ -147,7 +147,8 @@ constructor(
             logTransport(
                 command = "PLAY",
                 result = "ADMITTED",
-                detail = "path=resume-existing currentSong=$hasCurrentSong raw=$hasRawPlaybackMetadata",
+                detail =
+                    "path=resume-existing currentSong=$hasCurrentSong raw=$hasRawPlaybackMetadata",
             )
             playbackManager.playing(true)
             return
