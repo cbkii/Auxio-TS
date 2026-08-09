@@ -39,6 +39,9 @@ require_count 2 '^[[:space:]]*abiFilters "arm64-v8a", "x86_64"[[:space:]]*$' \
 require_count 1 '^[[:space:]]*abiFilters "arm64-v8a", "x86_64"[[:space:]]*$' \
   "$MUSIKR_GRADLE" 'Musikr native ABI contract'
 
+if ! grep -Fq 'commandLine "bash", "$jniDir/build_taglib.sh"' "$MUSIKR_GRADLE"; then
+  fail 'ABI-aware TagLib builder must run under Bash'
+fi
 if ! grep -Fq 'REQUESTED_ABIS=${3:-arm64-v8a,x86_64}' "$TAGLIB_SCRIPT"; then
   fail 'TagLib preparation default must be arm64-v8a,x86_64'
 fi
