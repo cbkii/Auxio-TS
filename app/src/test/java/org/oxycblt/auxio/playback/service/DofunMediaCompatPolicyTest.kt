@@ -82,6 +82,39 @@ class DofunMediaCompatPolicyTest {
                 Ts18LauncherIntegrationMode.TopwayCommandOnly
             )
         )
+        assertFalse(
+            DofunMediaCompatPolicy.usesCanonicalWidgetControls(
+                Ts18LauncherIntegrationMode.TopwayBroadcastOnly
+            )
+        )
+    }
+
+    @Test
+    fun `legacy Android state republishes only when mode enables the capability`() {
+        assertTrue(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.AndroidMediaSessionOnly,
+                Ts18LauncherIntegrationMode.GenericDofunMedia,
+            )
+        )
+        assertTrue(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.TopwayBroadcastOnly,
+                Ts18LauncherIntegrationMode.AutoAllSafePaths,
+            )
+        )
+        assertFalse(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.GenericDofunMedia,
+                Ts18LauncherIntegrationMode.AutoAllSafePaths,
+            )
+        )
+        assertFalse(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.GenericDofunMedia,
+                Ts18LauncherIntegrationMode.Disabled,
+            )
+        )
     }
 
     @Test
