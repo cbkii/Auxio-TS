@@ -1,0 +1,57 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * TopwayProgressTickerPolicyTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.playback.service
+
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
+
+class TopwayProgressTickerPolicyTest {
+    @Test
+    fun tickerStartsOnlyForBroadcastModes() {
+        for (mode in Ts18LauncherIntegrationMode.entries) {
+            val expected =
+                if (mode.sendsTopwayBroadcasts) {
+                    TopwayProgressTickerDirective.START
+                } else {
+                    TopwayProgressTickerDirective.KEEP
+                }
+            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, false))
+        }
+    }
+
+    @Test
+    fun runningTickerStopsAsSoonAsModeNoLongerBroadcasts() {
+        for (mode in Ts18LauncherIntegrationMode.entries) {
+            val expected =
+                if (mode.sendsTopwayBroadcasts) {
+                    TopwayProgressTickerDirective.KEEP
+                } else {
+                    TopwayProgressTickerDirective.STOP
+                }
+            assertEquals(mode.name, expected, TopwayProgressTickerPolicy.directive(mode, true))
+        }
+    }
+
+    @Test
+    fun explicitModeMatrix_matchesHeadUnitContract() {
+        val broadcastModes =
+            setOf(
+                Ts18LauncherIntegrationMode.TopwayBroadcastOnly,
+                Ts18LauncherIntegrationMode.TopwayBroadcastAndCommand,
+                Ts18LauncherIntegrationMode.AutoAllSafePaths,
+            )
+        assertEquals(
+            broadcastModes,
+            Ts18LauncherIntegrationMode.entries.filter { it.sendsTopwayBroadcasts }.toSet(),
+        )
+    }
+}
