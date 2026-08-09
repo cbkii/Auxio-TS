@@ -48,6 +48,12 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
+        // Malformed exported input must not consume the admission budget used by legitimate TS18
+        // controls. Rejected telemetry has its own narrow limiter below.
+        if (intent.clipData != null) {
+            logRejectedIngress(action, "REJECTED", "clipData-present")
+            return
+        }
         if (
             !ExportedCommandRateLimiter.allow(
                 key = "topway",
@@ -56,10 +62,6 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             )
         ) {
             logRejectedIngress(action, "RATE_LIMITED", null)
-            return
-        }
-        if (intent.clipData != null) {
-            logRejectedIngress(action, "REJECTED", "clipData-present")
             return
         }
 
