@@ -38,6 +38,7 @@ enum class PlaybackChannelState {
 data class PlaybackChannelSnapshot(
     val state: PlaybackChannelState,
     val packageNotificationsEnabled: Boolean,
+    val channelExists: Boolean,
     val importance: Int?,
     val publicationRequestedThisProcess: Boolean,
 )
@@ -63,6 +64,7 @@ object PlaybackNotificationChannel {
             return PlaybackChannelSnapshot(
                 state = classify(packageEnabled, channelExists = true, importance = 1),
                 packageNotificationsEnabled = packageEnabled,
+                channelExists = true,
                 importance = null,
                 publicationRequestedThisProcess = publicationRequested.get(),
             )
@@ -78,6 +80,7 @@ object PlaybackNotificationChannel {
                     importance = channel?.importance,
                 ),
             packageNotificationsEnabled = packageEnabled,
+            channelExists = channel != null,
             importance = channel?.importance,
             publicationRequestedThisProcess = publicationRequested.get(),
         )
