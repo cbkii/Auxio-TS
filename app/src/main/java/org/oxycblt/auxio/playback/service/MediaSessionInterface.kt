@@ -155,7 +155,11 @@ constructor(
 
         val nowMs = SystemClock.elapsedRealtime()
         if (!shouldRequestColdRestore(lastColdRestoreRequestAtMs, nowMs)) {
-            logTransport(command = "PLAY", result = "SUPPRESSED", detail = "path=cold-restore-rate-limit")
+            logTransport(
+                command = "PLAY",
+                result = "SUPPRESSED",
+                detail = "path=cold-restore-rate-limit",
+            )
             return
         }
         lastColdRestoreRequestAtMs = nowMs
