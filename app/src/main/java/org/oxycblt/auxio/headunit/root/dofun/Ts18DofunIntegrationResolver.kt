@@ -22,6 +22,10 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
+import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
+import android.os.OperationCanceledException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.headunit.root.RootStateHolder
@@ -78,6 +82,8 @@ class Ts18DofunIntegrationResolver(
     private val context: Context,
     private val rootStateHolder: RootStateHolder,
 ) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     suspend fun runIntegrationCheck(): DofunIntegrationReport =
         withContext(Dispatchers.IO) {
             val installedPackages = mutableListOf<String>()
@@ -142,8 +148,11 @@ class Ts18DofunIntegrationResolver(
             )
         }
 
-    private fun readDofunSelectionFromAppUid(): String =
-        try {
+    private fun readDofunSelectionFromAppUid(): String {
+        val cancellationSignal = CancellationSignal()
+        val cancelQuery = Runnable { cancellationSignal.cancel() }
+        mainHandler.postDelayed(cancelQuery, APP_PROVIDER_TIMEOUT_MS)
+        return try {
             val cursor =
                 context.contentResolver.query(
                     DOFUN_SELECTION_URI,
@@ -151,15 +160,21 @@ class Ts18DofunIntegrationResolver(
                     null,
                     null,
                     null,
+                    cancellationSignal,
                 ) ?: return "Provider returned null cursor"
             cursor.use { serializeSelectionCursor(it) }
+        } catch (_: OperationCanceledException) {
+            "Timed out after ${APP_PROVIDER_TIMEOUT_MS}ms"
         } catch (e: SecurityException) {
             "SecurityException: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
         } catch (e: IllegalArgumentException) {
             "IllegalArgumentException: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
         } catch (e: RuntimeException) {
             "${e.javaClass.simpleName}: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
+        } finally {
+            mainHandler.removeCallbacks(cancelQuery)
         }
+    }
 
     private fun serializeSelectionCursor(cursor: Cursor): String {
         if (!cursor.moveToFirst()) return "No result found."
@@ -189,6 +204,7 @@ class Ts18DofunIntegrationResolver(
     private companion object {
         val DOFUN_SELECTION_URI: Uri =
             Uri.parse("content://com.dofun.variety.ExportedProvider/hotseat_app_music")
+        const val APP_PROVIDER_TIMEOUT_MS = 3_000L
         const val MAX_PROBE_RESULT_CHARS = 5_000
         const val MAX_PROVIDER_ERROR_CHARS = 240
         const val MAX_SELECTION_COLUMNS = 16
