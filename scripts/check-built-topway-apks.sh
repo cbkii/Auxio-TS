@@ -16,7 +16,7 @@ fail() {
 # Source/package safety remains owned by the canonical product-code guardrail. This script only adds
 # binary-output assertions that cannot run until the selected APKs have been assembled.
 bash ./scripts/check-headunit-compat-safety.sh
-bash ./scripts/check-native-abi-contracts.sh
+bash ./scripts/check-runtime-hardening-contracts.sh
 
 sdk_root=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
 apkanalyzer=${sdk_root:+${sdk_root}/cmdline-tools/latest/bin/apkanalyzer}
