@@ -98,7 +98,8 @@ class Ts18DofunIntegrationResolver(
             val topology = DofunIntegrationClassifier.topology(installedPackages)
 
             // Query the launcher-owned exported selection surface under Auxio's real app UID first.
-            // A later root read can improve observability but must never substitute for app authority.
+            // A later root read can improve observability but must never substitute for app
+            // authority.
             val appSelectionEvidence =
                 if (topology.dofunPresent) readDofunSelectionFromAppUid() else null
 
