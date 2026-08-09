@@ -46,6 +46,10 @@ class Ts18DofunIntegrationResolverTest {
                 Ts18RootProbe.PackageDumpMusic to "dumpsys package com.tw.music",
                 Ts18RootProbe.AppWidgetSummary to "dumpsys appwidget",
                 Ts18RootProbe.MediaSessionSummary to "dumpsys media_session",
+                Ts18RootProbe.NotificationSummary to
+                    "dumpsys notification --noredact 2>&1 | grep -i -E 'com.tw.media|channel.PLAYBACK|NotifyService|notification listener' | head -n 320",
+                Ts18RootProbe.DofunServiceSummary to
+                    "dumpsys activity services com.dofun.variety 2>&1 | grep -i -E 'NotifyService|Media|music|listener' | head -n 240",
                 Ts18RootProbe.ActivityBroadcastSummary to "dumpsys activity broadcasts",
                 Ts18RootProbe.DofunDataHintsReadOnly to
                     "content query --uri content://com.dofun.variety.ExportedProvider/hotseat_app_music",
