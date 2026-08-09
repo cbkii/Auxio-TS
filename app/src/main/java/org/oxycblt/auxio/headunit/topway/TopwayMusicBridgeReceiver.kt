@@ -21,7 +21,6 @@ package org.oxycblt.auxio.headunit.topway
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.AuxioService
@@ -100,9 +99,8 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             serviceIntent.putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, it)
         }
         serviceIntent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TOPWAY)
-        ForegroundServiceStartContract.markRequired(serviceIntent)
         try {
-            ContextCompat.startForegroundService(context, serviceIntent)
+            ForegroundServiceStartContract.start(context, serviceIntent)
         } catch (e: IllegalStateException) {
             L.w(e, "Unable to start Auxio for Topway action due to service state")
         } catch (e: SecurityException) {
