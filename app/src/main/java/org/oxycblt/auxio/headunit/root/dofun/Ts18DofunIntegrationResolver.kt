@@ -48,30 +48,26 @@ enum class Ts18RootProbe(val command: String) {
     PackageDumpMusic("dumpsys package com.tw.music"),
     AppWidgetSummary("dumpsys appwidget"),
     MediaSessionSummary("dumpsys media_session"),
+    NotificationSummary(
+        "dumpsys notification --noredact 2>&1 | grep -i -E 'com.tw.media|channel.PLAYBACK|NotifyService|notification listener' | head -n 320"
+    ),
+    DofunServiceSummary(
+        "dumpsys activity services com.dofun.variety 2>&1 | grep -i -E 'NotifyService|Media|music|listener' | head -n 240"
+    ),
     ActivityBroadcastSummary("dumpsys activity broadcasts"),
     DofunDataHintsReadOnly(
         "content query --uri content://com.dofun.variety.ExportedProvider/hotseat_app_music"
     ),
 }
 
-enum class Ts18DofunDetectedPath {
-    StockTwMusicSelected,
-    AuxioTwMediaSelected,
-    AuxioTwMediaWithStockCoexisting,
-    AuxioInstalledButDebugPackage,
-    AuxioMissingStockAlias,
-    WidgetProviderBound,
-    AndroidMediaSessionOnly,
-    RootChecksSkipped,
-    Unknown,
-}
-
 data class DofunIntegrationReport(
     val rootState: RootStateHolder.State,
     val installedPackages: List<String>,
+    val packageTopology: DofunPackageTopology,
+    val selectedMusicTarget: DofunSelectedMusicTarget,
+    val selectionEvidence: String?,
     val probeResults: Map<Ts18RootProbe, String>,
     val bootClassification: String,
-    val detectedPath: Ts18DofunDetectedPath,
     val recommendedStep: String,
 )
 
@@ -97,11 +93,16 @@ class Ts18DofunIntegrationResolver(
             if (rootState == RootStateHolder.State.Available) {
                 Ts18RootProbe.entries.forEach { probe ->
                     val result = rootStateHolder.runTs18ProbeSync(probe) ?: "null"
-                    probeResults[probe] = result.take(5000)
+                    probeResults[probe] = result.take(MAX_PROBE_RESULT_CHARS)
                 }
             } else {
                 probeResults[Ts18RootProbe.Id] = "Root checks skipped"
             }
+
+            val topology = DofunIntegrationClassifier.topology(installedPackages)
+            val selectionEvidence = probeResults[Ts18RootProbe.DofunDataHintsReadOnly]
+            val selectedMusicTarget =
+                DofunIntegrationClassifier.selectedMusicTarget(selectionEvidence)
 
             val classification =
                 """
@@ -111,46 +112,25 @@ class Ts18DofunIntegrationResolver(
                 - Launcher 'pp' command: can restore playback with play=true
                 - cmd=update, seek, prev, next: should not start playback from nothing
                 - Floating-only routing applies to MAIN/MUSIC_PLAYER; ACTION_VIEW still opens the player
+                - Installed package topology is not evidence that DoFun selected that package
+                - DoFun selected target remains UNKNOWN unless a launcher-owned selection surface proves it
                 """
                     .trimIndent()
 
-            val hasStock = installedPackages.contains("com.tw.music")
-            val hasMedia = installedPackages.contains("com.tw.media")
-            val hasDebugMedia = installedPackages.contains("com.tw.media.debug")
-
-            val detectedPath =
-                when {
-                    hasDebugMedia -> Ts18DofunDetectedPath.AuxioInstalledButDebugPackage
-                    hasStock && hasMedia -> Ts18DofunDetectedPath.AuxioTwMediaWithStockCoexisting
-                    hasStock -> Ts18DofunDetectedPath.StockTwMusicSelected
-                    hasMedia -> Ts18DofunDetectedPath.AuxioTwMediaSelected
-                    else -> Ts18DofunDetectedPath.Unknown
-                }
-
-            val recommendedStep =
-                when (detectedPath) {
-                    Ts18DofunDetectedPath.StockTwMusicSelected ->
-                        "Install topwayTwMediaRelease or the systemless topwayTwMusic module; do not mutate stock solely from this check."
-                    Ts18DofunDetectedPath.AuxioTwMediaSelected ->
-                        "Exact com.tw.media identity is present. Verify the fixed alias, overlay runtime, widget and media-session probes."
-                    Ts18DofunDetectedPath.AuxioTwMediaWithStockCoexisting ->
-                        "Stock com.tw.music and Auxio com.tw.media can safely coexist. Package presence alone does not prove DoFun preference; do not disable stock unless a bounded reversible component-selection test requires it."
-                    Ts18DofunDetectedPath.AuxioInstalledButDebugPackage ->
-                        "Uninstall com.tw.media.debug and install topwayTwMediaRelease. DoFun requires exact match."
-                    Ts18DofunDetectedPath.AndroidMediaSessionOnly ->
-                        "Open Auxio once and rerun widget update because aliases exist but no widget binding is visible."
-                    Ts18DofunDetectedPath.RootChecksSkipped ->
-                        "Enable the existing root/directFS toggle if root-assisted checks are wanted."
-                    else -> "Install the topwayTwMediaRelease variant to integrate with DoFun."
-                }
-
             DofunIntegrationReport(
-                rootState,
-                installedPackages,
-                probeResults,
-                classification,
-                detectedPath,
-                recommendedStep,
+                rootState = rootState,
+                installedPackages = installedPackages,
+                packageTopology = topology,
+                selectedMusicTarget = selectedMusicTarget,
+                selectionEvidence = selectionEvidence,
+                probeResults = probeResults,
+                bootClassification = classification,
+                recommendedStep =
+                    DofunIntegrationClassifier.recommendation(topology, selectedMusicTarget),
             )
         }
+
+    private companion object {
+        const val MAX_PROBE_RESULT_CHARS = 5_000
+    }
 }
