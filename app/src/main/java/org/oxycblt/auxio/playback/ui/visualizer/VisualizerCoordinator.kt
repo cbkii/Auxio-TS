@@ -287,6 +287,8 @@ class VisualizerCoordinator(
             val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
             candidate.captureSize = targetSize
             val targetRate = minOf(Visualizer.getMaxCaptureRate(), 30_000).coerceAtLeast(1)
+            val captureMode =
+                VisualizerRecoveryPolicy.captureModeForAttempt(recoveryTracker.consecutiveRetries)
             val scalingMode =
                 if (recoveryTracker.consecutiveRetries == 0) Visualizer.SCALING_MODE_AS_PLAYED
                 else Visualizer.SCALING_MODE_NORMALIZED
@@ -296,7 +298,6 @@ class VisualizerCoordinator(
                 L.d(error, "Requested visualizer scaling mode unavailable")
             }
 
-            var lastFftMs = 0L
             val listenerStatus =
                 candidate.setDataCaptureListener(
                     object : Visualizer.OnDataCaptureListener {
@@ -307,12 +308,8 @@ class VisualizerCoordinator(
                         ) {
                             if (!VisualizerRecoveryPolicy.hasUsableSamplingRate(samplingRate))
                                 return
-                            val now = SystemClock.uptimeMillis()
-                            if (now - lastFftMs < FFT_PREFERENCE_WINDOW_MS) {
-                                runtimeMetrics.recordSuppressedWaveform()
-                                return
-                            }
                             if (!hasUsableWaveform(waveform)) return
+                            val now = SystemClock.uptimeMillis()
                             if (generation != currentGeneration || currentSessionId != sessionId)
                                 return
                             recoveryTracker.noteUsableFrame(now)
@@ -349,7 +346,6 @@ class VisualizerCoordinator(
                             val now = SystemClock.uptimeMillis()
                             if (generation != currentGeneration || currentSessionId != sessionId)
                                 return
-                            lastFftMs = now
                             recoveryTracker.noteUsableFrame(now)
                             val frame =
                                 if (runtimeMetrics.isActive) {
@@ -374,11 +370,24 @@ class VisualizerCoordinator(
                         }
                     },
                     targetRate,
-                    true,
-                    true,
+                    captureMode.captureWaveform,
+                    captureMode.captureFft,
                 )
 
             if (listenerStatus != Visualizer.SUCCESS) {
+                if (
+                    captureMode == VisualizerCaptureMode.FFT &&
+                        recoveryTracker.consumeRetry(MAX_VISUALIZER_RETRIES)
+                ) {
+                    L.w(
+                        "FFT capture registration failed with status=$listenerStatus; " +
+                            "retrying waveform-only session=$sessionId"
+                    )
+                    releaseCandidate(candidate)
+                    candidateToRelease = null
+                    startVisualizer(sessionId)
+                    return
+                }
                 _state.value =
                     VisualizerState.Unavailable("Listener registration failed: $listenerStatus")
                 return
@@ -391,12 +400,23 @@ class VisualizerCoordinator(
             } catch (error: RuntimeException) {
                 visualizer = null
                 currentSessionId = null
+                if (
+                    captureMode == VisualizerCaptureMode.FFT &&
+                        recoveryTracker.consumeRetry(MAX_VISUALIZER_RETRIES)
+                ) {
+                    L.w(error, "FFT capture enable failed; retrying waveform-only session=$sessionId")
+                    releaseCandidate(candidate)
+                    candidateToRelease = null
+                    startVisualizer(sessionId)
+                    return
+                }
                 throw error
             }
             candidateToRelease = null
             L.i(
                 "Visualizer started session=$sessionId captureSize=$targetSize " +
-                    "rate=$targetRate attempt=${recoveryTracker.consecutiveRetries}"
+                    "rate=$targetRate capture=$captureMode " +
+                    "attempt=${recoveryTracker.consecutiveRetries}"
             )
             scheduleWatchdog(sessionId, currentGeneration)
         } catch (error: RuntimeException) {
@@ -454,8 +474,7 @@ class VisualizerCoordinator(
                         updateState()
                     } else {
                         releaseVisualizer(resetRecovery = false)
-                        _state.value =
-                            VisualizerState.Unavailable("No usable FFT or waveform frames")
+                        _state.value = VisualizerState.Unavailable("No usable visualizer frames")
                     }
                     return@launch
                 }
@@ -518,7 +537,6 @@ class VisualizerCoordinator(
     }
 
     private companion object {
-        const val FFT_PREFERENCE_WINDOW_MS = 300L
         const val MAX_VISUALIZER_RETRIES = 1
         const val MIN_WAVEFORM_RANGE = 4
     }
