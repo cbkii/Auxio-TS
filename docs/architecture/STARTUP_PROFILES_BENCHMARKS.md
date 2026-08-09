@@ -1,14 +1,14 @@
 # Startup profiles, benchmarks and integrated performance gates
 
-Status: implemented PR 3 architecture for the Auxio-TS 0–60 second startup programme. Repository validation is automated; managed-emulator measurements and exact-device TS18 validation remain separate evidence classes.
+Status: implemented startup/profile architecture for the Auxio-TS 0–60 second startup programme. Repository validation is automated where appropriate; managed-emulator measurements and exact-device TS18 validation remain separate evidence classes.
 
-Base: merged PR #183 on the default `dev` branch.
+Base architecture: merged PR #183 on the default `dev` branch.
 
 Tracking issues: #179 and #181.
 
 ## Goal
 
-Measure, optimise and prevent regressions in the startup and first-minute experience without weakening the corrected PR 1/PR 2 architecture. Profiles accelerate the bounded immediate lane; they must not disguise complete-library construction, eager enrichment, unbounded queries or main-thread I/O.
+Measure, optimise and prevent regressions in the startup and first-minute experience without weakening the corrected startup architecture. Profiles accelerate the bounded immediate lane; they must not disguise complete-library construction, eager enrichment, unbounded queries or main-thread I/O.
 
 No percentage or latency improvement is claimed without captured with-profile and without-profile results for the same commit, variant, fixture, device, iterations and compilation mode.
 
@@ -23,7 +23,7 @@ No percentage or latency improvement is claimed without captured with-profile an
 
 ### Dedicated module and production separation
 
-`startup-benchmark` is a dedicated `com.android.test` module using AndroidX Macrobenchmark 1.4.1 and the AndroidX Baseline Profile plugin. It mirrors the maintained `standard`, `topwayTwMusic` and `topwayTwMedia` identities without adding benchmark dependencies or exported benchmark authority to normal debug/release variants.
+`startup-benchmark` is a dedicated `com.android.test` module using AndroidX Macrobenchmark 1.5.0-beta01 and the AndroidX Baseline Profile plugin. It mirrors only the two maintained Topway identities: primary `topwayTwMedia` (`com.tw.media`) and internal compatibility `topwayTwMusic` (`com.tw.music`). The former `standard` flavour is retired and must not be recreated as a benchmark or release target.
 
 The app keeps a separate, unminified `benchmark` target for profile collection. Release remains minified and consumes the checked-in human-readable Baseline and Startup Profile rules. The app also applies the Baseline Profile plugin with automatic build-time generation disabled, so profile regeneration is an explicit, reproducible operation rather than a hidden release side effect.
 
@@ -40,7 +40,7 @@ The module provides:
 Profile generation and runtime compatibility use different managed devices intentionally:
 
 - **Pixel 6 API 35 AOSP:** Baseline/Startup Profile generation. `BaselineProfileRule` requires API 33+ unless the device is rooted.
-- **Pixel 2 API 29 AOSP:** Macrobenchmark runtime compatibility matching the TS18 Android API level.
+- **Pixel 2 API 29 AOSP:** Macrobenchmark/runtime compatibility matching the TS18 Android API level.
 
 Neither managed device proves the exact TS18 hardware, DoFun launcher, USB mount or ACC lifecycle behaviour.
 
@@ -50,7 +50,7 @@ The benchmark-only `BenchmarkFixtureReceiver` is present only in the benchmark m
 
 Fixture contract:
 
-- schema version: `2`;
+- schema version: `3`;
 - seed: `18022026`;
 - supported song counts: 500, 5,000 and 20,000;
 - independent source identities: `direct:usb0` and `direct:usb1`;
@@ -88,7 +88,7 @@ The music and primitive-queue fixtures are seeded once outside measured iteratio
 
 The generator filters captured rules to `org.oxycblt.auxio` and `org.oxycblt.musikr` production code and excludes benchmark/test packages. Startup-only and broader Baseline rules are therefore not conflated.
 
-`app/src/main/startup-prof.txt` deliberately excludes `DBCache.snapshot()`, complete Musikr graph construction, `LibraryFactory`, `EvaluateStep`, metadata extraction, TagLib parsing and artwork enrichment. `scripts/check-startup-performance-contracts.sh` enforces this boundary and verifies generated profile outputs contain no benchmark packages.
+`app/src/main/generated/baselineProfiles/startup-prof.txt` deliberately excludes `DBCache.snapshot()`, complete Musikr graph construction, `LibraryFactory`, `EvaluateStep`, metadata extraction, TagLib parsing and artwork enrichment. `scripts/check-startup-performance-contracts.sh` enforces this boundary and verifies generated profile outputs contain no benchmark packages. The obsolete `app/src/main/startup-prof.txt` path is explicitly rejected.
 
 ## Macrobenchmark journeys
 
@@ -110,11 +110,11 @@ The maintained class includes:
 
 Every required UI and playback step fails the test when absent. Journeys do not silently return when search, USB, Songs, Albums or result rows are missing. Playback journeys require the target media session to enter the expected `PLAYING` or `PAUSED` state and media identity to change for skip operations.
 
-The manual workflow selects:
+The manual benchmark workflow selects:
 
-- target flavour;
+- target maintained flavour;
 - 500, 5,000 or 20,000 songs across two sources;
-- 3–30 iterations;
+- 15–30 measurement iterations;
 - macrobenchmark or profile-generation suite.
 
 AndroidX JSON is retained as machine evidence. `scripts/summarize-startup-benchmarks.py` creates a human-readable table containing median, P90, P95, variance and sample count where supplied by the result schema. Context records commit, variant, suite, fixture schema/seed/size, source count, device/API, compilation modes, configured iterations, warm-up policy, retries and exclusions.
@@ -128,6 +128,17 @@ AndroidX JSON is retained as machine evidence. `scripts/summarize-startup-benchm
 Named Macrobenchmark trace sections measure Quick Find to first result, result selection to first audio, saved-session launch to first audio, Next command to changed audio, both USB folder playback paths, first Songs/Albums pages and the first MediaBrowser page. Application events separately retain service, queue, Fast Start, full-library and enrichment milestones.
 
 Full-library-ready and enrichment-complete remain separate non-blocking milestones. They are never used as proxies for first frame, queue readiness, first rows or first audio.
+
+## Native ABI boundary
+
+The production TS18 target and hosted benchmark/test runtime are intentionally separate:
+
+- published `topwayTwMedia` release APK: `arm64-v8a` only;
+- debug/benchmark app lanes: `arm64-v8a` plus hosted-emulator `x86_64`;
+- TagLib preparation: those same two maintained ABIs by default;
+- legacy x86 and armeabi-v7a are not built merely because the firmware can host 32-bit software.
+
+`scripts/check-native-abi-contracts.sh` owns the static contract and, when given a release APK, verifies that only `lib/arm64-v8a/` is packaged and that `libtagJNI.so` is present. This is a build/package contract; physical TS18 native loading and metadata extraction remain device validation.
 
 ## Structural and artefact gates
 
@@ -144,7 +155,8 @@ Repository checks fail when:
 - startup rules include complete graph, extraction or artwork classes;
 - benchmark-only packages leak into production source sets;
 - release APKs lack `assets/dexopt/baseline.prof`/`.profm`;
-- the standard release AAB lacks R8 metadata marking at least one startup DEX;
+- a `Standard` Gradle/benchmark target reappears;
+- maintained ABI/package contracts drift;
 - normal CI, TS18 APK-reference or DoFun/Topway contracts fail.
 
 Shared runners use structural/semantic gates, not flaky hosted-runner wall-clock thresholds.
@@ -153,22 +165,22 @@ Shared runners use structural/semantic gates, not flaky hosted-runner wall-clock
 
 ### `startup-performance.yml`
 
-Runs automatically for the PR 3 branch and relevant stacked changes. It includes:
+`Startup Release Validation (manual)` is deliberately manual; routine pull requests use Android Build and Android Quality. The manual validation includes:
 
 - workflow, shell and Python syntax;
-- static startup contracts and summarizer self-test;
+- static startup and maintained-variant contracts;
 - formatting;
 - app and Musikr unit tests;
 - Android lint;
 - head-unit safety;
-- benchmark/profile instrumentation compilation;
-- all maintained debug variants;
-- all maintained release variants;
-- standard release AAB generation;
-- compiled Baseline Profile verification in all three release APKs;
-- R8 startup DEX metadata verification in the release AAB;
+- both maintained benchmark/profile instrumentation configurations;
+- both maintained debug variants;
+- both maintained release variants;
+- compiled Baseline Profile verification in the two maintained release APKs;
 - TS18 APK-reference contracts;
-- DoFun/Topway source compatibility checks.
+- DoFun/Topway source and output compatibility checks.
+
+No retired `standard` APK/AAB lane is part of this workflow.
 
 Third-party actions are pinned to immutable commits and repository permission is read-only.
 
@@ -178,9 +190,9 @@ Manual, bounded managed-emulator workflow. API 35 is selected for profile genera
 
 ## Optional-component and complete-stack audit
 
-The complete PR 1 → PR 2 → PR 3 path preserves these boundaries:
+The integrated startup path preserves these boundaries:
 
-- one player, one MediaSession, one foreground playback service and one notification;
+- one player, one MediaSession, one foreground playback service and one notification authority;
 - MediaCodec remains the normal renderer and FFmpeg the compatibility fallback;
 - ReplayGain extraction follows metadata profile/settings policy and runtime processing remains a no-op while disabled;
 - artwork stays visible/current/widget/detail driven and bounded;
@@ -201,6 +213,7 @@ Review readiness requires:
 - maintained debug and release variants build;
 - unit tests, lint, formatting and workflow syntax pass;
 - compiled release artefacts contain Baseline and Startup Profile evidence;
+- maintained ABI/package checks pass;
 - TS18 APK-reference and DoFun/Topway checks pass;
 - no temporary workflow, generated APK, report or benchmark result remains in source;
 - every actionable review thread is resolved;
@@ -232,20 +245,20 @@ STOP and preserve evidence when build identity, playback authority, source ident
 - Remove the two startup workflows independently of application code.
 - Remove the benchmark build type/source set to remove fixture seeding and app-private USB mapping; maintained production variants are unaffected.
 - Revert report export independently; `PerfTimer` remains bounded.
+- Revert ABI filters/ABI contract together if an evidenced runtime dependency later proves another ABI is genuinely required.
 - Any production optimisation discovered by measurements requires a focused commit, executable regression test and documented rollback.
-
 
 ## Integrated completion audit
 
 - **Evidence confidence:** Observed for repository source and each explicitly recorded CI or managed-emulator run; exact-device behaviour remains **Requires TS18 validation**.
-- **Porting decision:** Directly reusable for the maintained Auxio-TS standard and Topway variants; no exact TS18 latency claim is portable without the device runbook.
+- **Porting decision:** Directly reusable for the maintained primary `topwayTwMedia` and internal `topwayTwMusic` compatibility lanes; no exact TS18 latency claim is portable without the device runbook.
 
-The final integrated audit corrected production startup before profiles were accepted:
+The integrated audit corrected production startup before profiles were accepted:
 
-1. the real repository startup path now preserves persisted `USABLE`/`EMPTY` state and explicitly defers complete cached-graph loading;
+1. the real repository startup path preserves persisted `USABLE`/`EMPTY` state and explicitly defers complete cached-graph loading;
 2. asynchronous compatibility hydration is revision/generation guarded and may request a bounded recovery scan only when the policy and variant permit it;
 3. release performance-capture opt-in is restored after process recreation;
-4. benchmark source, library, primitive queue and startup preferences are all deterministic;
+4. benchmark source, library, primitive queue and startup preferences are deterministic;
 5. the direct Topway property process probe was removed from core repository orchestration;
 6. release publication verifies compiled profile data and emits per-asset SHA-256 plus package/signing metadata sidecars.
 

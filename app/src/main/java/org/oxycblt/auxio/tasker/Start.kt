@@ -23,7 +23,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
-import androidx.core.content.ContextCompat
 import com.joaomgcd.taskerpluginlibrary.action.TaskerPluginRunnerActionNoOutputOrInput
 import com.joaomgcd.taskerpluginlibrary.config.TaskerPluginConfig
 import com.joaomgcd.taskerpluginlibrary.config.TaskerPluginConfigHelperNoOutputOrInput
@@ -35,6 +34,7 @@ import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
+import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 import timber.log.Timber as L
 
 class StartActionHelper(config: TaskerPluginConfig<Unit>) :
@@ -62,12 +62,11 @@ class ActivityConfigStartAction : Activity(), TaskerPluginConfigNoInput {
 class StartActionRunner : TaskerPluginRunnerActionNoOutputOrInput() {
     override fun run(context: Context, input: TaskerInput<Unit>): TaskerPluginResult<Unit> {
         val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
-        ContextCompat.startForegroundService(
-            context,
+        val serviceIntent =
             Intent(context, serviceClass)
                 .setAction(AuxioService.ACTION_START)
-                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TASKER),
-        )
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TASKER)
+        ForegroundServiceStartContract.start(context, serviceIntent)
 
         // Wait for the service to become foreground, but never block Tasker indefinitely.
         val startTime = SystemClock.elapsedRealtime()

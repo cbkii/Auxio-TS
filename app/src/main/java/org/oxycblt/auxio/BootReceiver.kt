@@ -21,13 +21,13 @@ package org.oxycblt.auxio
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.overlay.TopwayOverlayRestoreBridge
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.PlaybackSettings
+import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 import timber.log.Timber as L
 
 /**
@@ -65,11 +65,11 @@ class BootReceiver : BroadcastReceiver() {
         )
 
         // When autoplay is enabled, start the playback service first so that music can begin
-        // even if the background activity start is blocked. The service start is only performed
-        // for autoplay because a foreground service that does not promptly begin playback (and
-        // therefore never posts a media notification) would be killed by the system. On Android
-        // 14+ a mediaPlayback foreground service started from BOOT_COMPLETED is rejected, so the
-        // start is wrapped to degrade gracefully instead of crashing the receiver.
+        // even if the background activity start is blocked. ForegroundServiceStartContract marks
+        // the request so AuxioService publishes its lightweight startup notification before
+        // playback restoration can wait on the player/library. On Android 14+ a mediaPlayback
+        // foreground service started from BOOT_COMPLETED is rejected, so the start is wrapped to
+        // degrade gracefully instead of crashing the receiver.
         val shouldStartPlaybackService = playbackSettings.autoplayOnLaunch
         journal.log(
             DiagnosticJournal.CAT_BOOT,
@@ -91,7 +91,7 @@ class BootReceiver : BroadcastReceiver() {
                     Intent(context, serviceClass)
                         .setAction(AuxioService.ACTION_START)
                         .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
-                ContextCompat.startForegroundService(context, serviceIntent)
+                ForegroundServiceStartContract.start(context, serviceIntent)
                 L.d(
                     "Started AuxioService from boot [autoplay=${playbackSettings.autoplayOnLaunch}, floatingOnly=${playbackSettings.autostartFloatingOnly}]"
                 )

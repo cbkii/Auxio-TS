@@ -22,7 +22,9 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.os.Environment
+import android.os.SystemClock
 import android.support.v4.media.MediaBrowserCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -39,6 +41,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 
 @RunWith(AndroidJUnit4::class)
 @SdkSuppress(minSdkVersion = 29, maxSdkVersion = 29)
@@ -69,6 +72,31 @@ class Android10CompatibilitySmokeTest {
             context.packageManager.resolveService(Intent(context, MusicService::class.java), 0)
         assertNotNull(canonicalService)
         assertTrue(requireNotNull(canonicalService).serviceInfo.exported)
+    }
+
+    @Test
+    fun markedForegroundStartPromotesCanonicalServiceOnApi29() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val serviceIntent =
+            ForegroundServiceStartContract.markRequired(
+                Intent(context, MusicService::class.java)
+                    .setAction(AuxioService.ACTION_START)
+                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BOOT)
+            )
+
+        try {
+            ContextCompat.startForegroundService(context, serviceIntent)
+            val deadline = SystemClock.elapsedRealtime() + FOREGROUND_PROMOTION_WAIT_MS
+            while (!AuxioService.isForeground && SystemClock.elapsedRealtime() < deadline) {
+                SystemClock.sleep(FOREGROUND_PROMOTION_POLL_MS)
+            }
+            assertTrue(
+                "Canonical playback service did not acquire foreground state on Android 10",
+                AuxioService.isForeground,
+            )
+        } finally {
+            context.stopService(serviceIntent)
+        }
     }
 
     @Test
@@ -114,5 +142,10 @@ class Android10CompatibilitySmokeTest {
         assertTrue("MediaBrowser callback timed out", completed.await(30, TimeUnit.SECONDS))
         instrumentation.runOnMainSync { browser.disconnect() }
         assertNull(failure.get(), failure.get())
+    }
+
+    private companion object {
+        const val FOREGROUND_PROMOTION_WAIT_MS = 4_000L
+        const val FOREGROUND_PROMOTION_POLL_MS = 20L
     }
 }

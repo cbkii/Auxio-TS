@@ -40,8 +40,10 @@ import org.oxycblt.auxio.headunit.ts18.Ts18FirstAudioLatency
 import org.oxycblt.auxio.music.service.MusicServiceFragment
 import org.oxycblt.auxio.music.service.StartupScanAuthorityPolicy
 import org.oxycblt.auxio.music.service.StartupScanOrigin
+import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
 import org.oxycblt.auxio.playback.service.PlaybackServiceFragment
+import org.oxycblt.auxio.playback.service.PlaybackStartupNotification
 import org.oxycblt.auxio.util.PerfTimer
 import timber.log.Timber
 
@@ -57,12 +59,17 @@ open class AuxioService :
     @Inject lateinit var journal: DiagnosticJournal
     @Inject lateinit var topwayCommandServiceClient: TopwayCommandServiceClient
 
+    private val startupForegroundNotification by
+        lazy(LazyThreadSafetyMode.NONE) { PlaybackStartupNotification(this) }
+    private var startupForegroundActive = false
+
     @SuppressLint("WrongConstant")
     override fun onCreate() {
         PerfTimer.trace("AuxioService.onCreate") {
             Ts18FirstAudioLatency.mark("service_on_create")
             super.onCreate()
             isForeground = false
+            startupForegroundActive = false
             playbackFragment = playbackFragmentFactory.create(this, this)
             musicFragment = musicFragmentFactory.create(this, this, this)
             sessionToken = playbackFragment.attach()
@@ -77,6 +84,7 @@ open class AuxioService :
         PerfTimer.trace("AuxioService.onStartCommand") {
             Ts18FirstAudioLatency.mark("service_on_start_command")
             super.onStartCommand(intent, flags, startId)
+            ensureImmediateForegroundIfRequired(intent)
             onHandleForeground(intent, allowTrustedUserVisible = true)
             journal.log(
                 DiagnosticJournal.CAT_LIFECYCLE,
@@ -104,6 +112,22 @@ open class AuxioService :
         musicFragment.start(StartupScanOrigin.BACKGROUND)
     }
 
+    private fun ensureImmediateForegroundIfRequired(intent: Intent?) {
+        if (!ForegroundServiceStartContract.requiresImmediatePromotion(intent) || isForeground) {
+            return
+        }
+        val notification = startupForegroundNotification
+        PlaybackNotificationChannel.markPublicationRequested()
+        startForeground(notification.code, notification.build())
+        startupForegroundActive = true
+        isForeground = true
+        journal.log(
+            DiagnosticJournal.CAT_LIFECYCLE,
+            "AuxioService startup foreground",
+            "temporary playback restore notification",
+        )
+    }
+
     private fun onHandleForeground(intent: Intent?, allowTrustedUserVisible: Boolean) {
         // Playback/session restoration remains first and never waits for library-source validation.
         playbackFragment.start(intent)
@@ -125,6 +149,7 @@ open class AuxioService :
     }
 
     override fun onDestroy() {
+        startupForegroundActive = false
         isForeground = false
         topwayCommandServiceClient.release()
         super.onDestroy()
@@ -211,21 +236,40 @@ open class AuxioService :
     override fun updateForeground(change: ForegroundListener.Change) {
         val mediaNotification = playbackFragment.notification
         if (mediaNotification != null) {
-            if (change == ForegroundListener.Change.MEDIA_SESSION) {
+            if (change == ForegroundListener.Change.MEDIA_SESSION || startupForegroundActive) {
                 PlaybackNotificationChannel.markPublicationRequested()
                 startForeground(mediaNotification.code, mediaNotification.build())
+                startupForegroundActive = false
             }
             // Nothing changed, but don't show anything music related since we can always
             // index during playback.
             isForeground = true
         } else {
-            musicFragment.createNotification {
-                if (it != null) {
-                    startForeground(it.code, it.build())
-                    isForeground = true
-                } else {
-                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                    isForeground = false
+            musicFragment.createNotification { indexNotification ->
+                // Notification creation is asynchronous. Re-check playback authority before
+                // applying the result so a late indexing callback cannot remove or replace a
+                // media notification that became authoritative in the meantime.
+                val currentMediaNotification = playbackFragment.notification
+                when {
+                    currentMediaNotification != null -> {
+                        PlaybackNotificationChannel.markPublicationRequested()
+                        startForeground(
+                            currentMediaNotification.code,
+                            currentMediaNotification.build(),
+                        )
+                        startupForegroundActive = false
+                        isForeground = true
+                    }
+                    indexNotification != null -> {
+                        startForeground(indexNotification.code, indexNotification.build())
+                        startupForegroundActive = false
+                        isForeground = true
+                    }
+                    else -> {
+                        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                        startupForegroundActive = false
+                        isForeground = false
+                    }
                 }
             }
         }
