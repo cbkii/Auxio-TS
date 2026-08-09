@@ -305,14 +305,16 @@ class VisualizerCoordinator(
                             waveform: ByteArray,
                             samplingRate: Int,
                         ) {
-                            if (!VisualizerRecoveryPolicy.hasUsableSamplingRate(samplingRate)) return
+                            if (!VisualizerRecoveryPolicy.hasUsableSamplingRate(samplingRate))
+                                return
                             val now = SystemClock.uptimeMillis()
                             if (now - lastFftMs < FFT_PREFERENCE_WINDOW_MS) {
                                 runtimeMetrics.recordSuppressedWaveform()
                                 return
                             }
                             if (!hasUsableWaveform(waveform)) return
-                            if (generation != currentGeneration || currentSessionId != sessionId) return
+                            if (generation != currentGeneration || currentSessionId != sessionId)
+                                return
                             recoveryTracker.noteUsableFrame(now)
                             val frame =
                                 if (runtimeMetrics.isActive) {
@@ -341,10 +343,12 @@ class VisualizerCoordinator(
                             fft: ByteArray,
                             samplingRate: Int,
                         ) {
-                            if (!VisualizerRecoveryPolicy.hasUsableSamplingRate(samplingRate)) return
+                            if (!VisualizerRecoveryPolicy.hasUsableSamplingRate(samplingRate))
+                                return
                             if (!hasUsableFft(fft)) return
                             val now = SystemClock.uptimeMillis()
-                            if (generation != currentGeneration || currentSessionId != sessionId) return
+                            if (generation != currentGeneration || currentSessionId != sessionId)
+                                return
                             lastFftMs = now
                             recoveryTracker.noteUsableFrame(now)
                             val frame =
