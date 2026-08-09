@@ -44,20 +44,29 @@ object DofunMediaCompatPolicy {
         mode: Ts18LauncherIntegrationMode,
         topwayCompatFlavor: Boolean,
     ): PlaybackNotificationProfile =
-        if (topwayCompatFlavor && mode.usesGenericDofunProfile) {
+        if (topwayCompatFlavor && mode.usesGenericDofunNotificationProfile) {
             PlaybackNotificationProfile.GenericDofun
         } else {
             PlaybackNotificationProfile.RichAuxio
         }
 
     /**
-     * Stock-name wrapper controls must remain live whenever private Topway command handling is not
-     * selected. Generic and Android-only profiles therefore route through the canonical
-     * media-button service path; explicit legacy modes retain their stock-compatible Topway
-     * actions.
+     * Stock-name wrapper controls must remain live for the explicit Topway transport modes,
+     * including broadcast-only mode. Generic and Android-only profiles route their wrapper controls
+     * through the canonical media-button service path. `AutoAllSafePaths` keeps Topway wrapper
+     * controls while its canonical playback notification independently uses the generic
+     * three-action DoFun profile.
      */
     fun usesCanonicalWidgetControls(mode: Ts18LauncherIntegrationMode): Boolean =
         mode.usesGenericDofunProfile || mode == Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
+
+    /** Republish current public legacy state only on a disabled -> enabled mode transition. */
+    fun shouldRepublishLegacyAndroidMediaBroadcasts(
+        previousMode: Ts18LauncherIntegrationMode,
+        newMode: Ts18LauncherIntegrationMode,
+    ): Boolean =
+        !previousMode.publishesLegacyAndroidMediaBroadcasts &&
+            newMode.publishesLegacyAndroidMediaBroadcasts
 
     fun genericNotificationState(isPlaying: Boolean): GenericPlaybackNotificationState =
         GenericPlaybackNotificationState(

@@ -29,11 +29,18 @@ import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 
 class DofunMediaCompatPolicyTest {
     @Test
-    fun `generic profile is isolated to topway generic mode`() {
+    fun `generic notification profile is retained by all safe paths`() {
         assertEquals(
             PlaybackNotificationProfile.GenericDofun,
             DofunMediaCompatPolicy.notificationProfile(
                 Ts18LauncherIntegrationMode.GenericDofunMedia,
+                topwayCompatFlavor = true,
+            ),
+        )
+        assertEquals(
+            PlaybackNotificationProfile.GenericDofun,
+            DofunMediaCompatPolicy.notificationProfile(
+                Ts18LauncherIntegrationMode.AutoAllSafePaths,
                 topwayCompatFlavor = true,
             ),
         )
@@ -47,7 +54,7 @@ class DofunMediaCompatPolicyTest {
         assertEquals(
             PlaybackNotificationProfile.RichAuxio,
             DofunMediaCompatPolicy.notificationProfile(
-                Ts18LauncherIntegrationMode.AutoAllSafePaths,
+                Ts18LauncherIntegrationMode.TopwayBroadcastAndCommand,
                 topwayCompatFlavor = true,
             ),
         )
@@ -73,6 +80,39 @@ class DofunMediaCompatPolicyTest {
         assertFalse(
             DofunMediaCompatPolicy.usesCanonicalWidgetControls(
                 Ts18LauncherIntegrationMode.TopwayCommandOnly
+            )
+        )
+        assertFalse(
+            DofunMediaCompatPolicy.usesCanonicalWidgetControls(
+                Ts18LauncherIntegrationMode.TopwayBroadcastOnly
+            )
+        )
+    }
+
+    @Test
+    fun `legacy Android state republishes only when mode enables the capability`() {
+        assertTrue(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.AndroidMediaSessionOnly,
+                Ts18LauncherIntegrationMode.GenericDofunMedia,
+            )
+        )
+        assertTrue(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.TopwayBroadcastOnly,
+                Ts18LauncherIntegrationMode.AutoAllSafePaths,
+            )
+        )
+        assertFalse(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.GenericDofunMedia,
+                Ts18LauncherIntegrationMode.AutoAllSafePaths,
+            )
+        )
+        assertFalse(
+            DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                Ts18LauncherIntegrationMode.GenericDofunMedia,
+                Ts18LauncherIntegrationMode.Disabled,
             )
         )
     }

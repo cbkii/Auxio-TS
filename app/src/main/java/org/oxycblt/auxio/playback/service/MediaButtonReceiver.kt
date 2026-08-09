@@ -29,7 +29,9 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.topway.ExportedCommandRateLimiter
+import org.oxycblt.auxio.headunit.topway.LauncherIntegrationTelemetry
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import timber.log.Timber as L
@@ -43,6 +45,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class MediaButtonReceiver : BroadcastReceiver() {
     @Inject lateinit var playbackManager: PlaybackStateManager
+    @Inject lateinit var launcherTelemetry: LauncherIntegrationTelemetry
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MEDIA_BUTTON) return
@@ -85,6 +88,15 @@ class MediaButtonReceiver : BroadcastReceiver() {
             return
         }
 
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_PLAYBACK,
+            event = "Media button ingress",
+            origin = "MediaButtonReceiver",
+            command = KeyEvent.keyCodeToString(keyCode),
+            result = "ADMITTED",
+            detail = "currentSong=$hasCurrentSong focusHeld=$isFocusHeld",
+        )
+
         val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
         val serviceIntent =
             Intent(Intent.ACTION_MEDIA_BUTTON)
@@ -95,11 +107,25 @@ class MediaButtonReceiver : BroadcastReceiver() {
             ForegroundServiceStartContract.start(context, serviceIntent)
         } catch (e: IllegalStateException) {
             L.w(e, "Unable to start Auxio for media-button event")
+            logDispatchFailure(keyCode, e)
         } catch (e: SecurityException) {
             L.w(e, "Media-button service start rejected")
+            logDispatchFailure(keyCode, e)
         } catch (e: RuntimeException) {
             L.w(e, "Media-button service start failed")
+            logDispatchFailure(keyCode, e)
         }
+    }
+
+    private fun logDispatchFailure(keyCode: Int, error: RuntimeException) {
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_PLAYBACK,
+            event = "Media button dispatch",
+            origin = "MediaButtonReceiver",
+            command = KeyEvent.keyCodeToString(keyCode),
+            result = "FAILED",
+            detail = error.javaClass.simpleName,
+        )
     }
 
     private companion object {

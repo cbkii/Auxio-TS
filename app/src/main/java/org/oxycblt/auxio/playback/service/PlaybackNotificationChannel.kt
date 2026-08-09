@@ -23,9 +23,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import org.oxycblt.auxio.BuildConfig
 
 /** User-controlled playback notification channel state. */
@@ -38,8 +40,11 @@ enum class PlaybackChannelState {
 data class PlaybackChannelSnapshot(
     val state: PlaybackChannelState,
     val packageNotificationsEnabled: Boolean,
+    /** `null` on pre-O Android where notification channels do not exist as a platform concept. */
+    val channelExists: Boolean?,
     val importance: Int?,
     val publicationRequestedThisProcess: Boolean,
+    val firstPublicationRequestedElapsedMs: Long?,
 )
 
 /**
@@ -52,19 +57,25 @@ object PlaybackNotificationChannel {
     val id: String = BuildConfig.APPLICATION_ID + ".channel.PLAYBACK"
 
     private val publicationRequested = AtomicBoolean(false)
+    private val firstPublicationElapsedMs = AtomicLong(UNSET_ELAPSED_MS)
 
     fun markPublicationRequested() {
         publicationRequested.set(true)
+        firstPublicationElapsedMs.compareAndSet(UNSET_ELAPSED_MS, SystemClock.elapsedRealtime())
     }
 
     fun inspect(context: Context): PlaybackChannelSnapshot {
         val packageEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return PlaybackChannelSnapshot(
+                // Channels are unsupported before O, but package-level notification enablement is
+                // still the effective publication prerequisite for this compatibility branch.
                 state = classify(packageEnabled, channelExists = true, importance = 1),
                 packageNotificationsEnabled = packageEnabled,
+                channelExists = null,
                 importance = null,
                 publicationRequestedThisProcess = publicationRequested.get(),
+                firstPublicationRequestedElapsedMs = publicationElapsedMsOrNull(),
             )
         }
 
@@ -78,8 +89,10 @@ object PlaybackNotificationChannel {
                     importance = channel?.importance,
                 ),
             packageNotificationsEnabled = packageEnabled,
+            channelExists = channel != null,
             importance = channel?.importance,
             publicationRequestedThisProcess = publicationRequested.get(),
+            firstPublicationRequestedElapsedMs = publicationElapsedMsOrNull(),
         )
     }
 
@@ -116,4 +129,9 @@ object PlaybackNotificationChannel {
             importance == NotificationManager.IMPORTANCE_NONE -> PlaybackChannelState.Blocked
             else -> PlaybackChannelState.Usable
         }
+
+    private fun publicationElapsedMsOrNull(): Long? =
+        firstPublicationElapsedMs.get().takeUnless { it == UNSET_ELAPSED_MS }
+
+    private const val UNSET_ELAPSED_MS = Long.MIN_VALUE
 }

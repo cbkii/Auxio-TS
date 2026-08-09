@@ -25,6 +25,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
+import androidx.preference.PreferenceManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +39,10 @@ import org.oxycblt.auxio.headunit.compat.HeadUnitCompatManager
 import org.oxycblt.auxio.headunit.compat.NativePrivateIntegrationStatus
 import org.oxycblt.auxio.headunit.root.RootStateHolder
 import org.oxycblt.auxio.headunit.root.dofun.Ts18DofunIntegrationResolver
+import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.auxio.playback.service.PlaybackNotificationChannel
+import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.settings.BasePreferenceFragment
 import org.oxycblt.auxio.settings.RootDiagnosticsHelper
 import org.oxycblt.auxio.ui.UISettings
@@ -51,6 +55,7 @@ class DiagnosticsRecoveryPreferenceFragment :
     @javax.inject.Inject lateinit var uiSettings: UISettings
     @javax.inject.Inject lateinit var journal: DiagnosticJournal
     @javax.inject.Inject lateinit var musicSettings: MusicSettings
+    @javax.inject.Inject lateinit var playbackManager: PlaybackStateManager
 
     private lateinit var resolver: Ts18DofunIntegrationResolver
     private var lastReportStr: String? = null
@@ -158,11 +163,61 @@ class DiagnosticsRecoveryPreferenceFragment :
             try {
                 val report = withContext(Dispatchers.IO) { resolver.runIntegrationCheck() }
                 val ctx = context ?: return@launch
+                val prefs = PreferenceManager.getDefaultSharedPreferences(ctx)
+                val launcherMode =
+                    Ts18LauncherIntegrationMode.fromPreference(
+                        prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
+                    )
+                val channel = PlaybackNotificationChannel.inspect(ctx)
+                val hasCurrentSong = playbackManager.currentSong != null
+                val hasRawPlaybackState = playbackManager.rawPlaybackMetadata != null
+                val hasPlayableSessionState =
+                    hasCurrentSong ||
+                        hasRawPlaybackState ||
+                        playbackManager.queue.isNotEmpty() ||
+                        playbackManager.queueWindow != null
 
                 val sb = StringBuilder()
                 sb.appendLine("Root state: ${report.rootState}")
                 sb.appendLine("\nInstalled packages:")
                 report.installedPackages.forEach { sb.appendLine("- $it") }
+                sb.appendLine("Package topology: ${report.packageTopology}")
+                sb.appendLine("DoFun selected music target: ${report.selectedMusicTarget}")
+                sb.appendLine("Selection evidence source: ${report.selectionEvidenceSource}")
+                sb.appendLine(
+                    "Selection evidence: " +
+                        (report.selectionEvidence?.takeIf { it.isNotBlank() }
+                            ?: "not found in the inspected scope")
+                )
+
+                sb.appendLine("\nLauncher integration runtime:")
+                sb.appendLine("package=${BuildConfig.APPLICATION_ID}")
+                sb.appendLine("mode=${launcherMode.name}")
+                sb.appendLine("playbackChannelId=${PlaybackNotificationChannel.id}")
+                sb.appendLine("packageNotificationsEnabled=${channel.packageNotificationsEnabled}")
+                sb.appendLine("playbackChannelExists=${channel.channelExists}")
+                sb.appendLine("playbackChannelImportance=${channel.importance ?: "unknown"}")
+                sb.appendLine("playbackChannelState=${channel.state}")
+                sb.appendLine(
+                    "playbackNotificationRequestedThisProcess=${channel.publicationRequestedThisProcess}"
+                )
+                sb.appendLine(
+                    "playbackNotificationFirstRequestElapsedMs=" +
+                        (channel.firstPublicationRequestedElapsedMs ?: "not-requested")
+                )
+                sb.appendLine("hasCurrentSong=$hasCurrentSong")
+                sb.appendLine("hasRawPlaybackState=$hasRawPlaybackState")
+                sb.appendLine("hasPlayableSessionState=$hasPlayableSessionState")
+                sb.appendLine("topwayBroadcasts=${launcherMode.sendsTopwayBroadcasts}")
+                sb.appendLine(
+                    "legacyAndroidMediaBroadcasts=${launcherMode.publishesLegacyAndroidMediaBroadcasts}"
+                )
+                sb.appendLine("topwayCommands=${launcherMode.handlesTopwayCommands}")
+                sb.appendLine("commandServiceBind=${launcherMode.bindsTopwayCommandService}")
+                sb.appendLine(
+                    "mediaSessionActualState=see successful MediaSessionSummary probe; " +
+                        "app state above is not substituted for dumpsys evidence"
+                )
 
                 sb.appendLine("\nProbes:")
                 report.probeResults.forEach { (probe, result) ->
@@ -171,7 +226,6 @@ class DiagnosticsRecoveryPreferenceFragment :
                     sb.appendLine()
                 }
 
-                sb.appendLine("\nDetected Path: ${report.detectedPath}")
                 sb.appendLine("Recommended Step: ${report.recommendedStep}")
                 sb.appendLine("\n${report.bootClassification}")
 
@@ -180,7 +234,7 @@ class DiagnosticsRecoveryPreferenceFragment :
                 pref?.summary =
                     ctx.getString(
                         R.string.set_diagnostics_check_complete_summary,
-                        report.detectedPath,
+                        report.selectedMusicTarget,
                         report.rootState.toString(),
                         report.installedPackages.joinToString(),
                     )

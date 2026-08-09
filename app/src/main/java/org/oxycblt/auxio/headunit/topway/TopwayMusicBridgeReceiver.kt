@@ -40,6 +40,7 @@ import timber.log.Timber as L
 class TopwayMusicBridgeReceiver : BroadcastReceiver() {
     @Inject lateinit var journal: DiagnosticJournal
     @Inject lateinit var coordinator: TopwayLauncherIntegrationCoordinator
+    @Inject lateinit var launcherTelemetry: LauncherIntegrationTelemetry
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
@@ -47,8 +48,10 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
+        // Malformed exported input must not consume the admission budget used by legitimate TS18
+        // controls. Rejected telemetry has its own narrow limiter below.
         if (intent.clipData != null) {
-            L.w("Ignoring Topway bridge action carrying ClipData: $action")
+            logRejectedIngress(action, "REJECTED", "clipData-present")
             return
         }
         if (
@@ -58,7 +61,7 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
                 windowMs = TOPWAY_RATE_WINDOW_MS,
             )
         ) {
-            L.w("Dropping excessive Topway bridge action: $action")
+            logRejectedIngress(action, "RATE_LIMITED", null)
             return
         }
 
@@ -70,9 +73,25 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
                 action,
                 coordinator.mode.name,
             )
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_TOPWAY_CMD,
+                event = "Topway broadcast ingress",
+                origin = "TopwayMusicBridgeReceiver",
+                command = action,
+                result = "SUPPRESSED",
+                detail = "mode-does-not-handle-topway-commands",
+            )
             L.d("Ignoring Topway bridge action in ${coordinator.mode.name}: $action")
             return
         }
+
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_TOPWAY_CMD,
+            event = "Topway broadcast ingress",
+            origin = "TopwayMusicBridgeReceiver",
+            command = action,
+            result = "ADMITTED",
+        )
 
         val serviceClass =
             if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
@@ -103,15 +122,51 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             ForegroundServiceStartContract.start(context, serviceIntent)
         } catch (e: IllegalStateException) {
             L.w(e, "Unable to start Auxio for Topway action due to service state")
+            logDispatchFailure(action, e)
         } catch (e: SecurityException) {
             L.w(e, "Unable to start Auxio for Topway action due to security policy")
+            logDispatchFailure(action, e)
         } catch (e: RuntimeException) {
             L.w(e, "Unable to start Auxio for malformed Topway action")
+            logDispatchFailure(action, e)
         }
+    }
+
+    private fun logRejectedIngress(action: String, result: String, detail: String?) {
+        if (
+            !ExportedCommandRateLimiter.allow(
+                key = "topway-rejected-log",
+                maxEvents = MAX_REJECTED_LOGS_PER_WINDOW,
+                windowMs = TOPWAY_RATE_WINDOW_MS,
+            )
+        ) {
+            return
+        }
+        L.w("Rejecting Topway bridge action result=$result action=$action detail=$detail")
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_TOPWAY_CMD,
+            event = "Topway broadcast ingress",
+            origin = "TopwayMusicBridgeReceiver",
+            command = action,
+            result = result,
+            detail = detail,
+        )
+    }
+
+    private fun logDispatchFailure(action: String, error: RuntimeException) {
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_TOPWAY_CMD,
+            event = "Topway broadcast dispatch",
+            origin = "TopwayMusicBridgeReceiver",
+            command = action,
+            result = "FAILED",
+            detail = error.javaClass.simpleName,
+        )
     }
 
     private companion object {
         const val MAX_TOPWAY_EVENTS_PER_WINDOW = 24
+        const val MAX_REJECTED_LOGS_PER_WINDOW = 2
         const val TOPWAY_RATE_WINDOW_MS = 1_000L
     }
 }

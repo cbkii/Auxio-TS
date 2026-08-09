@@ -38,20 +38,42 @@ class Ts18LauncherIntegrationModeTest {
     }
 
     @Test
-    fun `mode gating matches launcher plan`() {
-        assertTrue(Ts18LauncherIntegrationMode.GenericDofunMedia.usesGenericDofunProfile)
-        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.sendsTopwayBroadcasts)
-        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.handlesTopwayCommands)
-        assertFalse(Ts18LauncherIntegrationMode.GenericDofunMedia.bindsTopwayCommandService)
+    fun `mode gating keeps generic and Topway transports independent`() {
+        with(Ts18LauncherIntegrationMode.GenericDofunMedia) {
+            assertTrue(usesGenericDofunProfile)
+            assertTrue(usesGenericDofunNotificationProfile)
+            assertTrue(publishesLegacyAndroidMediaBroadcasts)
+            assertFalse(sendsTopwayBroadcasts)
+            assertFalse(handlesTopwayCommands)
+            assertFalse(bindsTopwayCommandService)
+        }
+
+        with(Ts18LauncherIntegrationMode.TopwayBroadcastOnly) {
+            assertFalse(usesGenericDofunNotificationProfile)
+            assertFalse(publishesLegacyAndroidMediaBroadcasts)
+            assertTrue(sendsTopwayBroadcasts)
+            assertFalse(handlesTopwayCommands)
+        }
+
+        with(Ts18LauncherIntegrationMode.TopwayCommandOnly) {
+            assertFalse(publishesLegacyAndroidMediaBroadcasts)
+            assertTrue(handlesTopwayCommands)
+            assertFalse(sendsTopwayBroadcasts)
+            assertTrue(bindsTopwayCommandService)
+        }
+
+        with(Ts18LauncherIntegrationMode.AutoAllSafePaths) {
+            assertFalse(usesGenericDofunProfile)
+            assertTrue(usesGenericDofunNotificationProfile)
+            assertTrue(publishesLegacyAndroidMediaBroadcasts)
+            assertTrue(sendsTopwayBroadcasts)
+            assertTrue(handlesTopwayCommands)
+            assertTrue(bindsTopwayCommandService)
+        }
+
         assertFalse(Ts18LauncherIntegrationMode.Disabled.sendsTopwayBroadcasts)
+        assertFalse(Ts18LauncherIntegrationMode.Disabled.publishesLegacyAndroidMediaBroadcasts)
         assertFalse(Ts18LauncherIntegrationMode.DiagnosticsOnly.handlesTopwayCommands)
-        assertTrue(Ts18LauncherIntegrationMode.TopwayBroadcastOnly.sendsTopwayBroadcasts)
-        assertFalse(Ts18LauncherIntegrationMode.TopwayBroadcastOnly.handlesTopwayCommands)
-        assertTrue(Ts18LauncherIntegrationMode.TopwayCommandOnly.handlesTopwayCommands)
-        assertFalse(Ts18LauncherIntegrationMode.TopwayCommandOnly.sendsTopwayBroadcasts)
-        assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.sendsTopwayBroadcasts)
-        assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.handlesTopwayCommands)
-        assertTrue(Ts18LauncherIntegrationMode.AutoAllSafePaths.bindsTopwayCommandService)
         assertTrue(Ts18LauncherIntegrationMode.DiagnosticsOnly.bindsTopwayCommandService)
     }
 

@@ -1,107 +1,237 @@
 # TS18 Launcher Media Integration Validation Matrix
 
-> **Current profile:** validate the standards-first `GenericDofunMedia` path described in [`DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md`](DOFUN_GENERIC_MEDIA_COMPAT_IMPLEMENTATION.md) first. Run legacy Topway broadcast/command rows only when that fallback mode is explicitly selected. Passing Android `MediaSession` and notification checks does not by itself prove acceptance by the fixed DoFun player panel.
+> **Current authority:** validate the public/direct Track-A path first. A healthy Android
+> `MediaSession`, `MediaBrowserService` or notification is a prerequisite, not proof that DoFun's
+> fixed homepage media surface selected Auxio.
 
-Use this matrix after installing a build that includes the comprehensive in-app integration layer.
+The primary product is `topwayTwMedia` / `com.tw.media`. `topwayTwMusic` remains an internal
+exact-package compatibility fixture only. Do not restore a third distributable flavour.
 
-## Test apps / sources
+## Current capability model
 
-- Stock `com.tw.music` if available.
-- Current Auxio-TS topway/twmedia build.
-- Spotify, YouTube Music, VLC, or another known standards media app if installed.
-- Bluetooth music only if relevant to the test scenario.
+| Mode | Generic 3-action MediaStyle | `com.android.music.*` legacy broadcasts | Topway metadata/progress TX | Topway command RX | CommandService query/callback |
+|---|---:|---:|---:|---:|---:|
+| `GenericDofunMedia` | yes | yes | no | no | no |
+| `AutoAllSafePaths` | yes | yes | yes | yes | yes |
+| `AndroidMediaSessionOnly` | no (normal rich Auxio notification) | no | no | no | no |
+| `TopwayBroadcastOnly` | no | no | yes | no | no |
+| `TopwayCommandOnly` | no | no | no | yes | yes |
+| `TopwayBroadcastAndCommand` | no | no | yes | yes | yes |
+| `DiagnosticsOnly` | no | no | no | no | query/diagnostic bind only |
+| `Disabled` | no | no | no | no | no |
 
-## Required scenarios
+`com.android.music.metachanged` and `com.android.music.playstatechanged` are public/VLC-compatible
+legacy Android signals and are deliberately independent from the observed Topway `com.tw.*`
+broadcasts. `AutoAllSafePaths` is additive: its canonical notification remains the conventional
+previous / play-pause / next DoFun profile while the separately gated Topway paths are also enabled.
 
-For each source:
+Fresh Topway-compatible installs still default conservatively to `GenericDofunMedia`. Existing
+persisted valid choices are not rewritten merely because the hybrid mode gained the missing public
+capabilities.
 
-| Scenario | Expected Auxio behaviour | Expected launcher behaviour | Evidence to capture |
-|---|---|---|---|
-| Idle | no stale metadata | widget blank/default or previous source not attributed to Auxio | logcat, media_session |
-| Start playback | session active, notification posted, metadata broadcast sent | title/art/progress/play state update | logcat, dumpsys notification/media_session, screenshot if possible |
-| Pause | playstate broadcast sent; session state paused | play/pause icon changes; progress stable | logcat |
-| Resume | playstate broadcast sent; progress resumes | widget state follows | logcat |
-| Next | Auxio advances once | title/progress update once | logcat + widget state |
-| Previous | Auxio previous once | title/progress update once | logcat + widget state |
-| Seek from launcher | Auxio seeks once using selected unit policy | progress snaps correctly | logcat with raw/interpreted seek value |
-| `cmd=update` | Auxio republishes metadata/progress/playstate | widget refreshes without playback disruption | logcat |
-| Stop/clear | Auxio clears session/widget-compatible metadata | widget does not show stale Auxio track | logcat |
-| ACC sleep/wake | restored state is republished after service/session attach | widget does not remain stale/blank when Auxio resumes | boot/ACC logs |
+## Read-only baseline collector
 
-## Minimum shell captures
+Use the current collector before interpreting homepage failure:
 
-Use root where normal shell reports `dumpsys: inaccessible or not found`.
-
-```bash
-su -c 'settings get secure enabled_notification_listeners' > enabled_notification_listeners.txt
-su -c 'cmd notification listeners 2>/dev/null || true' > notification_listeners_cmd.txt
-su -c 'dumpsys media_session' > media_session.txt
-su -c 'dumpsys notification --noredact' > notification.txt
-su -c 'dumpsys package com.dofun.variety' > package_dofun.txt
-su -c 'dumpsys package com.tw.media' > package_twmedia.txt
-su -c 'dumpsys package com.tw.music' > package_twmusic.txt
-su -c 'logcat -d -b all -v threadtime' > logcat_all.txt
+```sh
+sh scripts/evidence/collect-ts18-dofun-homepage-media-v1.sh
 ```
 
-## Pass criteria
+It exports to:
 
-The in-app implementation passes its own responsibility if:
+```text
+/storage/emulated/0/Download/AuxioTS/dofun-homepage-media-<timestamp>/
+```
 
-- Auxio publishes Android session metadata/state correctly.
-- Auxio posts a valid TS18-safe `MediaStyle` notification.
-- Auxio sends Topway metadata/progress/playstate events in all required transitions.
-- Auxio receives and handles all observed Topway commands.
-- Auxio logs every incoming/outgoing bridge event.
-- Auxio can disable the Topway bridge through settings for rollback.
-- No TS18/DoFun/SystemUI notification bitmap crash is reintroduced.
+The default collector is read-only. It records identity, package/component state, full bounded
+`dumpsys notification --noredact`, relevant playback-channel context, notification-listener/DoFun
+listener state, full bounded `dumpsys media_session`, audio focus, relevant services/processes,
+DoFun's exported `hotseat_app_music` provider result when readable, and focused logcat. When root is
+already available it performs only a narrow read of Auxio's launcher-mode preference; failure is
+reported rather than treated as absence.
 
-The full device integration passes only if the DoFun widget display and controls visibly follow Auxio across the matrix.
+Do not put stock-package mutation in this collector.
+
+## Required physical sequence
+
+### A. Notification prerequisite
+
+With the exact `com.tw.media` release playing:
+
+1. Confirm `com.tw.media.channel.PLAYBACK` exists and is not importance `0`.
+2. Confirm a live transport `NotificationRecord` for `com.tw.media` exists.
+3. Confirm DoFun's notification listener / `NotifyService` is enabled and connected.
+4. Confirm the Auxio `MediaSession` is visible and active with current metadata/actions.
+5. Save the baseline before changing launcher mode or stock-package state.
+
+If the channel is blocked, use Auxio's exact playback-channel settings row to re-enable it, restart
+playback and capture a new baseline. Do not interpret generic-path failure while this prerequisite is
+false. Auxio must not silently raise importance or rotate the channel ID to bypass user/system state.
+
+### B. VLC positive control
+
+Record independently while VLC is the only intended active comparator:
+
+- title and artist;
+- artwork;
+- progress/play state;
+- one press of previous;
+- one play/pause press;
+- one press of next;
+- source/icon tap and opened activity.
+
+Do not reduce this to the historical phrase "VLC partially works".
+
+### C. `GenericDofunMedia`
+
+With stock unchanged and Auxio's channel healthy:
+
+1. select `GenericDofunMedia`;
+2. start Auxio playback;
+3. re-enter/restart DoFun only as needed for the observation;
+4. record displayed metadata/progress;
+5. press previous once, play/pause once, next once;
+6. tap the source;
+7. export the Auxio diagnostics report/journal and external collector evidence.
+
+Expected public Auxio surfaces are the canonical MediaSession/MediaBrowser path, three-action
+MediaStyle notification and VLC-compatible `com.android.music.*` broadcasts. Topway-private TX/RX
+and CommandService binding remain off.
+
+### D. `AutoAllSafePaths`
+
+Repeat the same one-button-at-a-time sequence.
+
+This is the key hybrid discriminator. It must retain the same three-action generic notification and
+legacy Android broadcasts while additionally enabling the observed Topway TX/RX and read/query
+CommandService callback lane.
+
+Use the ingress telemetry to classify each physical button. Do not add a speculative global debounce:
+first determine whether one press actually reaches more than one external ingress path.
+
+### E. Identity comparator
+
+Only if C/D still do not explain the result, use a maintained debug/application-ID-suffixed build as
+a controlled **non-fixed identity comparator**. It is not a release product and is not proof of
+fixed `com.tw.media` behaviour.
+
+If the otherwise equivalent generic path works under the non-fixed identity but not under
+`com.tw.media`, classify the package/source classification hypothesis as strongly supported and keep
+investigating the fixed DoFun source-selection boundary.
+
+### F. Reversible stock-selection comparator
+
+This touches the protected stock package and is **not** part of the normal collector. Run only after
+a saved baseline and explicit approval, using the existing guarded tool:
+
+```sh
+sh tools/ts18-root-storage-fastpath/tier3/stock-music-selection-test.sh --disable-after-baseline
+```
+
+After the bounded observation, restore immediately:
+
+```sh
+sh tools/ts18-root-storage-fastpath/tier3/stock-music-selection-test.sh --restore
+```
+
+The tool uses `pm disable-user --user 0`; do not delete/uninstall the APK. STOP if the baseline,
+rollback marker, user identity or recovery path is uncertain.
+
+Interpretation:
+
+- Auxio works only with stock disabled → fixed-slot/source-election conflict supported;
+- Auxio still fails but the non-fixed comparator works → identity/package classification supported;
+- neither Auxio identity works while VLC does → hidden generic source-selection difference remains;
+- CommandService callbacks work but homepage metadata remains stock → command and display/source
+  selection are separate paths.
+
+## Per-source behavioural matrix
+
+| Scenario | Auxio-side expectation | DoFun observation | Evidence |
+|---|---|---|---|
+| Idle | no stale Auxio metadata | no false Auxio attribution | diagnostics + media_session |
+| Start playback | session active; notification requested; metadata published | title/artist/art/progress may adopt Auxio | notification + media_session + screenshot |
+| Pause | one MediaSession/Topway ingress according to selected path | icon/progress follows once | ingress journal + logcat |
+| Resume | one corresponding action | state follows once | ingress journal + logcat |
+| Next | queue advances exactly once | title/progress update once | before/after queue + journal |
+| Previous | queue changes exactly once | title/progress update once | before/after queue + journal |
+| Source tap | session activity resolves to Auxio's fixed component | Auxio opens, not stock | window/activity state |
+| Process death + PLAY | bounded saved-state restoration may start playback | command is not lost/duplicated | service/session timing |
+| Launcher restart | public state remains/reappears | source selection is re-evaluated correctly | before/after collector |
+| ACC sleep/wake | no duplicate service/session/queue owner | no stale or duplicate homepage action | exact-device ACC evidence |
 
 ## Failure classification
 
-If widget still fails after Auxio proves all outgoing/incoming paths:
+Use these classifications only from successful inspection in the correct user/process context:
 
-- **Source selection failure**: DoFun ignores Auxio package/source despite valid session/broadcasts.
-- **Display mapping failure**: DoFun receives event/session but maps metadata/art/progress incorrectly.
-- **Control routing failure**: DoFun clicks do not emit public/observed commands or target only stock package.
-- **Permission/listener failure**: DoFun notification listener is disabled/unconnected.
-- **Layout failure**: active DoFun theme/page does not render `soft_type=medias` media module.
+- **Notification prerequisite failure** — package/channel blocked or no live transport notification.
+- **Source-selection failure** — DoFun does not select Auxio despite a healthy public media surface.
+- **Identity trap** — equivalent public surface works under a non-fixed identity but not `com.tw.media`.
+- **Stock source conflict** — fixed panel adopts Auxio only while genuine stock `com.tw.music` is
+  reversibly disabled for user 0.
+- **Display mapping failure** — DoFun selects/receives Auxio but maps metadata/art/progress incorrectly.
+- **Control routing failure** — homepage controls do not reach any supported Auxio ingress.
+- **Duplicate ingress** — one physical press reaches two distinct external Auxio ingress paths and
+  causes duplicate semantic action.
+- **Permission/listener failure** — DoFun notification listener or normal-app vendor callback access
+  is unavailable.
+- **Physical evidence incomplete** — required probe failed, was truncated, used the wrong identity,
+  or the relevant physical observation was not made.
 
-Only after classifying failure should LSposed diagnostics or compatibility hooks be considered.
+Do not claim absence from a failed/permission-denied/truncated probe; say "not found in the inspected
+scope" and identify the better probe.
 
-## Auxio-TS implementation note (2026-07-06)
+## Exactly-once rule
 
-The in-app implementation is wired through `TopwayLauncherIntegrationCoordinator` in the isolated Topway bridge package. It keeps the Android MediaSession/MediaBrowser/MediaStyle path intact, publishes the stock Topway metadata/progress broadcasts when the selected mode allows outgoing bridge traffic, routes the observed Topway command/update/seek broadcasts when the selected mode allows incoming command traffic, and retains the existing `topwayCompat` / `com.tw.media` wrapper path where that build variant is selected.
+The direct implementation intentionally does **not** add a broad cross-path debounce before physical
+evidence demonstrates duplicate delivery. Current telemetry distinguishes MediaSession callback,
+media-button receiver, Topway broadcast/action and Topway CommandService callback origins. If one
+physical press is later proven to produce equivalent semantic commands through two distinct external
+origins, add a short monotonic correlation policy narrowly at that external boundary. Ordinary
+in-app UI commands must remain outside such a policy.
 
-Implemented settings keys for rollback/device validation:
+## Inactive-session timing
 
-- `auxio_ts18_launcher_integration_mode` stores `Ts18LauncherIntegrationMode` by enum name. Fresh Topway-compatible installs default to `GenericDofunMedia`; standard builds default to `AndroidMediaSessionOnly`. Persisted valid selections, including legacy fallback modes, are preserved because older releases did not record preference provenance.
-- `auxio_ts18_launcher_seek_unit_policy` stores `TopwaySeekUnitPolicy` by enum name and defaults to `Auto`.
+Do not keep the MediaSession permanently active as a speculative workaround. Current policy makes it
+inactive only when there is no current song, raw restored metadata, hydrated queue or primitive queue
+window. The branch logs activation transitions. Change this policy only if exact-device timing proves
+that DoFun scans during a recoverable inactive restoration window and never re-attaches.
 
-TS18 runtime validation is still required against the matrix above. This implementation does not include LSposed hooks, package replacement, root requirements, UID 1000 assumptions, platform signing, `/system` writes, or vendor-service changes.
+## Topway source lane
 
-### PR #142 hardening note
+`TopwayCommandServiceClient` remains read/query/callback-only. It may bind to the verified descriptor,
+register the observed callback subset and request the current source state. It must not set source
+`3`, invent Binder transactions or assume root/platform authority.
 
-Launcher publishing is now driven from playback service state, not from Auxio's Android AppWidget path. The service publishes immediate metadata/progress on attach, new playback, queue/index changes, raw restored metadata changes, play/pause progression changes, launcher seek handling, session end, and service release. Periodic progress is emitted from the service while playback is active and remains rate-limited by the coordinator.
+Classify runtime results separately:
 
-Mode selection is user-visible in the Topway-compatible UI settings screen:
+- no bind/registration → access/authority blocker;
+- callback registered but reported source is not local music → source-selection blocker;
+- local-music source but no music callbacks → routing/ownership blocker;
+- callback arrives while DoFun UI remains stock → command and display/source adapters are separate.
 
-- `GenericDofunMedia` (fresh-install default for Topway-compatible builds): conventional Android MediaSession/MediaBrowser/MediaStyle controls with legacy Topway TX/RX disabled. Exact fixed-panel recognition still requires TS18 validation.
-- `AutoAllSafePaths` (explicit legacy fallback): Android media session path plus Topway metadata/progress broadcasts, incoming Topway commands, incoming widget seek, diagnostics, and existing `topwayCompat` identity wrappers where that build variant provides them.
-- `AndroidMediaSessionOnly`: standards path only.
-- `TopwayBroadcastOnly`: outgoing Topway broadcasts only; incoming Topway commands are logged and ignored.
-- `TopwayCommandOnly`: incoming Topway commands/seek only; periodic/outgoing broadcasts are suppressed except normal Android standards surfaces.
-- `TopwayBroadcastAndCommand`: outgoing Topway broadcasts plus incoming commands.
-- `DiagnosticsOnly`: logs opportunities without sending Topway broadcasts or executing commands.
-- `Disabled`: suppresses Topway bridge TX/RX behaviour for rollback.
+## Track-B gate
 
-Auto seek policy is deterministic but still requires TS18 validation. It treats values `0..100` as percent, `101..1000` as permille, larger values as seconds only when seconds fit within the known duration, and otherwise clamps as milliseconds. Negative values and unknown durations are ignored. If device validation proves the launcher uses another seekbar unit, switch the visible **Topway widget seek unit** setting to `Milliseconds`, `Seconds`, `Percent 0–100`, or `Permille 0–1000`.
+A separate `com.dofun.variety` LSPosed research adapter becomes eligible only after the healthy
+notification baseline, corrected hybrid mode, identity comparator and reversible stock-selection
+experiment still leave the fixed-panel selection path unexplained. The existing `com.tw.music`
+Track-C module must not be repurposed.
 
-The DoFun targeted broadcast is always attempted with `setPackage("com.dofun.variety")` when outgoing Topway broadcasts are enabled. This avoids per-progress PackageManager IPC and avoids Android 11+ package-visibility false negatives; sending a package-targeted broadcast is safe even when the package is absent.
+First Track-B build, if justified, is logging-only, exact-version scoped, bounded, kill-switchable and
+fail-open. No return-value/source mutation is permitted until the exact private seam is recovered and
+validated.
 
+## Acceptance boundary
 
-### Head-unit safety guardrail note
+Static/JVM/API-29/CI success proves only software contracts. Full acceptance requires the exact TS18
+to show:
 
-`PR #142` supersedes older WidgetComponent-only Topway broadcast assertions. Head-unit safety checks should now verify `TopwayLauncherIntegrationCoordinator`, `PlaybackServiceFragment` service-driven publishing, mode gates, unconditional DoFun-targeted broadcast sending without PackageManager gating, seek policy conversion, and forced update/clear paths. `WidgetComponent` is not the canonical launcher media publisher.
+- current-track identification on the DoFun homepage;
+- previous / play-pause / next each causing exactly one Auxio action;
+- source tap opening Auxio;
+- no stock Music, Radio, Bluetooth, notification, audio-focus or duplicate-owner regression;
+- process restart and launcher restart safety;
+- ACC sleep/wake when practical.
 
-Future LSposed/runtime DoFun discovery remains outside this in-app PR. If the matrix still fails after these safe paths are proven in logs/dumpsys/screenshots, classify the failure first (source selection, display mapping, control routing, notification listener, or layout) before proposing any later diagnostics-only hook work.
+Until those observations are supplied, classify the result as
+`TRACK_A_SOFTWARE_READY_NEEDS_DEVICE_TEST` or `PHYSICAL_EVIDENCE_INCOMPLETE`, not `TRACK_A_CONFIRMED`.

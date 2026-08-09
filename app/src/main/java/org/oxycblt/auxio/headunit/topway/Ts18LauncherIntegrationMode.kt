@@ -32,11 +32,21 @@ enum class Ts18LauncherIntegrationMode {
     AutoAllSafePaths,
     DiagnosticsOnly;
 
+    /** Publishes only the observed Topway/TW metadata and progress broadcasts. */
     val sendsTopwayBroadcasts: Boolean
         get() =
             this == TopwayBroadcastOnly ||
                 this == TopwayBroadcastAndCommand ||
                 this == AutoAllSafePaths
+
+    /**
+     * Publishes the public legacy Android media broadcasts used by VLC-compatible consumers.
+     *
+     * These are deliberately independent from [sendsTopwayBroadcasts]: the generic DoFun lane
+     * should not acquire `com.tw.*` traffic merely to expose `com.android.music.*` compatibility.
+     */
+    val publishesLegacyAndroidMediaBroadcasts: Boolean
+        get() = this == GenericDofunMedia || this == AutoAllSafePaths
 
     val handlesTopwayCommands: Boolean
         get() =
@@ -47,9 +57,18 @@ enum class Ts18LauncherIntegrationMode {
     val diagnosticsOnly: Boolean
         get() = this == DiagnosticsOnly
 
-    /** Whether the complete standards-first DoFun profile is selected. */
+    /** Whether the standards-first generic DoFun lane is the sole selected integration mode. */
     val usesGenericDofunProfile: Boolean
         get() = this == GenericDofunMedia
+
+    /**
+     * Whether the canonical playback notification should use the three-action DoFun/VLC profile.
+     *
+     * `AutoAllSafePaths` is additive: it keeps this public Android presentation while also enabling
+     * the separately gated Topway transports.
+     */
+    val usesGenericDofunNotificationProfile: Boolean
+        get() = this == GenericDofunMedia || this == AutoAllSafePaths
 
     val bindsTopwayCommandService: Boolean
         get() = handlesTopwayCommands || diagnosticsOnly

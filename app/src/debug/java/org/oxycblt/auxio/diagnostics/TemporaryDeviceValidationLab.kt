@@ -179,8 +179,8 @@ object TemporaryDeviceValidationLab {
                         DiagnosticJournal.CAT_SYSTEM,
                         "Root SAF DoFun health probe",
                         "root=${report.rootState} packages=${report.installedPackages} " +
-                            "path=${report.detectedPath} recommendation=${report.recommendedStep} " +
-                            "probes=${report.probeResults}",
+                            "topology=${report.packageTopology} selected=${report.selectedMusicTarget} " +
+                            "recommendation=${report.recommendedStep} probes=${report.probeResults}",
                         result = "COMPLETED",
                     )
                     if (!fragment.isAdded) return@launch

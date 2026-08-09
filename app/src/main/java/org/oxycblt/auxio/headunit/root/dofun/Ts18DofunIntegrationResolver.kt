@@ -20,6 +20,12 @@ package org.oxycblt.auxio.headunit.root.dofun
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.Cursor
+import android.net.Uri
+import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
+import android.os.OperationCanceledException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.headunit.root.RootStateHolder
@@ -48,30 +54,27 @@ enum class Ts18RootProbe(val command: String) {
     PackageDumpMusic("dumpsys package com.tw.music"),
     AppWidgetSummary("dumpsys appwidget"),
     MediaSessionSummary("dumpsys media_session"),
+    NotificationSummary(
+        "dumpsys notification --noredact 2>&1 | grep -i -E 'com.tw.media|channel.PLAYBACK|NotifyService|notification listener' | head -n 320"
+    ),
+    DofunServiceSummary(
+        "dumpsys activity services com.dofun.variety 2>&1 | grep -i -E 'NotifyService|Media|music|listener' | head -n 240"
+    ),
     ActivityBroadcastSummary("dumpsys activity broadcasts"),
     DofunDataHintsReadOnly(
         "content query --uri content://com.dofun.variety.ExportedProvider/hotseat_app_music"
     ),
 }
 
-enum class Ts18DofunDetectedPath {
-    StockTwMusicSelected,
-    AuxioTwMediaSelected,
-    AuxioTwMediaWithStockCoexisting,
-    AuxioInstalledButDebugPackage,
-    AuxioMissingStockAlias,
-    WidgetProviderBound,
-    AndroidMediaSessionOnly,
-    RootChecksSkipped,
-    Unknown,
-}
-
 data class DofunIntegrationReport(
     val rootState: RootStateHolder.State,
     val installedPackages: List<String>,
+    val packageTopology: DofunPackageTopology,
+    val selectedMusicTarget: DofunSelectedMusicTarget,
+    val selectionEvidence: String?,
+    val selectionEvidenceSource: String,
     val probeResults: Map<Ts18RootProbe, String>,
     val bootClassification: String,
-    val detectedPath: Ts18DofunDetectedPath,
     val recommendedStep: String,
 )
 
@@ -79,11 +82,11 @@ class Ts18DofunIntegrationResolver(
     private val context: Context,
     private val rootStateHolder: RootStateHolder,
 ) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     suspend fun runIntegrationCheck(): DofunIntegrationReport =
         withContext(Dispatchers.IO) {
-            val rootState = rootStateHolder.probeSync()
             val installedPackages = mutableListOf<String>()
-
             val pm = context.packageManager
             listOf("com.tw.media", "com.tw.media.debug", "com.tw.music", "com.dofun.variety")
                 .forEach {
@@ -92,16 +95,30 @@ class Ts18DofunIntegrationResolver(
                         installedPackages.add(it)
                     } catch (_: PackageManager.NameNotFoundException) {}
                 }
+            val topology = DofunIntegrationClassifier.topology(installedPackages)
 
+            // Query the launcher-owned exported selection surface under Auxio's real app UID first.
+            // A later root read can improve observability but must never substitute for app
+            // authority.
+            val appSelectionEvidence =
+                if (topology.dofunPresent) readDofunSelectionFromAppUid() else null
+
+            val rootState = rootStateHolder.probeSync()
             val probeResults = mutableMapOf<Ts18RootProbe, String>()
             if (rootState == RootStateHolder.State.Available) {
                 Ts18RootProbe.entries.forEach { probe ->
                     val result = rootStateHolder.runTs18ProbeSync(probe) ?: "null"
-                    probeResults[probe] = result.take(5000)
+                    probeResults[probe] = result.take(MAX_PROBE_RESULT_CHARS)
                 }
             } else {
                 probeResults[Ts18RootProbe.Id] = "Root checks skipped"
             }
+
+            val selection =
+                DofunIntegrationClassifier.authoritativeSelection(
+                    appProviderOutput = appSelectionEvidence,
+                    rootProviderOutput = probeResults[Ts18RootProbe.DofunDataHintsReadOnly],
+                )
 
             val classification =
                 """
@@ -111,46 +128,89 @@ class Ts18DofunIntegrationResolver(
                 - Launcher 'pp' command: can restore playback with play=true
                 - cmd=update, seek, prev, next: should not start playback from nothing
                 - Floating-only routing applies to MAIN/MUSIC_PLAYER; ACTION_VIEW still opens the player
+                - Installed package topology is not evidence that DoFun selected that package
+                - Only app-UID provider evidence may establish the selected DoFun target
+                - Root provider output is retained as observation and cannot replace failed app authority
+                - DoFun selected target remains UNKNOWN unless the app-authority surface proves it
                 """
                     .trimIndent()
 
-            val hasStock = installedPackages.contains("com.tw.music")
-            val hasMedia = installedPackages.contains("com.tw.media")
-            val hasDebugMedia = installedPackages.contains("com.tw.media.debug")
-
-            val detectedPath =
-                when {
-                    hasDebugMedia -> Ts18DofunDetectedPath.AuxioInstalledButDebugPackage
-                    hasStock && hasMedia -> Ts18DofunDetectedPath.AuxioTwMediaWithStockCoexisting
-                    hasStock -> Ts18DofunDetectedPath.StockTwMusicSelected
-                    hasMedia -> Ts18DofunDetectedPath.AuxioTwMediaSelected
-                    else -> Ts18DofunDetectedPath.Unknown
-                }
-
-            val recommendedStep =
-                when (detectedPath) {
-                    Ts18DofunDetectedPath.StockTwMusicSelected ->
-                        "Install topwayTwMediaRelease or the systemless topwayTwMusic module; do not mutate stock solely from this check."
-                    Ts18DofunDetectedPath.AuxioTwMediaSelected ->
-                        "Exact com.tw.media identity is present. Verify the fixed alias, overlay runtime, widget and media-session probes."
-                    Ts18DofunDetectedPath.AuxioTwMediaWithStockCoexisting ->
-                        "Stock com.tw.music and Auxio com.tw.media can safely coexist. Package presence alone does not prove DoFun preference; do not disable stock unless a bounded reversible component-selection test requires it."
-                    Ts18DofunDetectedPath.AuxioInstalledButDebugPackage ->
-                        "Uninstall com.tw.media.debug and install topwayTwMediaRelease. DoFun requires exact match."
-                    Ts18DofunDetectedPath.AndroidMediaSessionOnly ->
-                        "Open Auxio once and rerun widget update because aliases exist but no widget binding is visible."
-                    Ts18DofunDetectedPath.RootChecksSkipped ->
-                        "Enable the existing root/directFS toggle if root-assisted checks are wanted."
-                    else -> "Install the topwayTwMediaRelease variant to integrate with DoFun."
-                }
-
             DofunIntegrationReport(
-                rootState,
-                installedPackages,
-                probeResults,
-                classification,
-                detectedPath,
-                recommendedStep,
+                rootState = rootState,
+                installedPackages = installedPackages,
+                packageTopology = topology,
+                selectedMusicTarget = selection.target,
+                selectionEvidence = selection.evidence,
+                selectionEvidenceSource = selection.source,
+                probeResults = probeResults,
+                bootClassification = classification,
+                recommendedStep =
+                    DofunIntegrationClassifier.recommendation(topology, selection.target),
             )
         }
+
+    private fun readDofunSelectionFromAppUid(): String {
+        val cancellationSignal = CancellationSignal()
+        val cancelQuery = Runnable { cancellationSignal.cancel() }
+        mainHandler.postDelayed(cancelQuery, APP_PROVIDER_TIMEOUT_MS)
+        return try {
+            val cursor =
+                context.contentResolver.query(
+                    DOFUN_SELECTION_URI,
+                    null,
+                    null,
+                    null,
+                    null,
+                    cancellationSignal,
+                ) ?: return "Provider returned null cursor"
+            cursor.use { serializeSelectionCursor(it) }
+        } catch (_: OperationCanceledException) {
+            "Timed out after ${APP_PROVIDER_TIMEOUT_MS}ms"
+        } catch (e: SecurityException) {
+            "SecurityException: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
+        } catch (e: IllegalArgumentException) {
+            "IllegalArgumentException: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
+        } catch (e: RuntimeException) {
+            "${e.javaClass.simpleName}: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
+        } finally {
+            mainHandler.removeCallbacks(cancelQuery)
+        }
+    }
+
+    private fun serializeSelectionCursor(cursor: Cursor): String {
+        if (!cursor.moveToFirst()) return "No result found."
+        val columnNames = cursor.columnNames.take(MAX_SELECTION_COLUMNS)
+        val rows = mutableListOf<String>()
+        do {
+            val row =
+                columnNames
+                    .mapIndexed { index, column -> "$column=${readCursorValue(cursor, index)}" }
+                    .joinToString(prefix = "Row: ", separator = ", ")
+            rows.add(row.take(MAX_SELECTION_ROW_CHARS))
+        } while (rows.size < MAX_SELECTION_ROWS && cursor.moveToNext())
+        return rows.joinToString("\n").take(MAX_PROBE_RESULT_CHARS)
+    }
+
+    private fun readCursorValue(cursor: Cursor, index: Int): String =
+        try {
+            when (cursor.getType(index)) {
+                Cursor.FIELD_TYPE_NULL -> "null"
+                Cursor.FIELD_TYPE_BLOB -> "<blob>"
+                else -> cursor.getString(index)?.take(MAX_SELECTION_VALUE_CHARS) ?: "null"
+            }
+        } catch (_: RuntimeException) {
+            "<unreadable>"
+        }
+
+    private companion object {
+        val DOFUN_SELECTION_URI: Uri =
+            Uri.parse("content://com.dofun.variety.ExportedProvider/hotseat_app_music")
+        const val APP_PROVIDER_TIMEOUT_MS = 3_000L
+        const val MAX_PROBE_RESULT_CHARS = 5_000
+        const val MAX_PROVIDER_ERROR_CHARS = 240
+        const val MAX_SELECTION_COLUMNS = 16
+        const val MAX_SELECTION_ROWS = 8
+        const val MAX_SELECTION_ROW_CHARS = 1_024
+        const val MAX_SELECTION_VALUE_CHARS = 512
+    }
 }
