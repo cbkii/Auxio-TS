@@ -61,6 +61,12 @@ class DofunIntegrationClassifierTest {
         )
         assertEquals(
             DofunSelectedMusicTarget.UNKNOWN,
+            DofunIntegrationClassifier.selectedMusicTarget(
+                "Row: 0 component=com.tw.media/com.tw.music.MusicActivity, package=org.videolan.vlc"
+            ),
+        )
+        assertEquals(
+            DofunSelectedMusicTarget.UNKNOWN,
             DofunIntegrationClassifier.selectedMusicTarget("No result found."),
         )
         assertEquals(
@@ -107,5 +113,22 @@ class DofunIntegrationClassifierTest {
         assertEquals(DofunSelectedMusicTarget.UNKNOWN, selection.target)
         assertEquals("ROOT_OBSERVATION_ONLY", selection.source)
         assertEquals("Row: 0 package=com.tw.music", selection.evidence)
+    }
+
+    @Test
+    fun `proven stock selection outranks missing Auxio package recommendation`() {
+        val recommendation =
+            DofunIntegrationClassifier.recommendation(
+                topology =
+                    DofunPackageTopology(
+                        releaseAuxioPresent = false,
+                        debugAuxioPresent = false,
+                        stockMusicPresent = true,
+                        dofunPresent = true,
+                    ),
+                selectedTarget = DofunSelectedMusicTarget.COM_TW_MUSIC,
+            )
+
+        assertTrue(recommendation.contains("Preserve stock"))
     }
 }
