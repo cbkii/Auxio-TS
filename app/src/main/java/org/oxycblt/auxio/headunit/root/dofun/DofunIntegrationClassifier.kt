@@ -61,7 +61,7 @@ object DofunIntegrationClassifier {
 
         val explicitValues =
             Regex(
-                    "(?:component|package|pkg|value|app|activity)\\s*=\\s*([^,}\\s]+)",
+                    "(?:component|package|pkg|value|app|activity|hotseat_app_music)\\s*=\\s*([^,}\\s]+)",
                     RegexOption.IGNORE_CASE,
                 )
                 .findAll(output)
