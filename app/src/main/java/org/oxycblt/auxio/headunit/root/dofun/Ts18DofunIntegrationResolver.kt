@@ -95,8 +95,6 @@ class Ts18DofunIntegrationResolver(
             // A later root read can improve observability but must never substitute for app authority.
             val appSelectionEvidence =
                 if (topology.dofunPresent) readDofunSelectionFromAppUid() else null
-            val appSelectedTarget =
-                DofunIntegrationClassifier.selectedMusicTarget(appSelectionEvidence)
 
             val rootState = rootStateHolder.probeSync()
             val probeResults = mutableMapOf<Ts18RootProbe, String>()
@@ -109,12 +107,10 @@ class Ts18DofunIntegrationResolver(
                 probeResults[Ts18RootProbe.Id] = "Root checks skipped"
             }
 
-            val rootSelectionEvidence = probeResults[Ts18RootProbe.DofunDataHintsReadOnly]
             val selection =
-                chooseSelectionEvidence(
-                    appSelectionEvidence,
-                    appSelectedTarget,
-                    rootSelectionEvidence,
+                DofunIntegrationClassifier.authoritativeSelection(
+                    appProviderOutput = appSelectionEvidence,
+                    rootProviderOutput = probeResults[Ts18RootProbe.DofunDataHintsReadOnly],
                 )
 
             val classification =
@@ -171,9 +167,9 @@ class Ts18DofunIntegrationResolver(
         val rows = mutableListOf<String>()
         do {
             val row =
-                columnNames.mapIndexed { index, column ->
-                    "$column=${readCursorValue(cursor, index)}"
-                }.joinToString(prefix = "Row: ", separator = ", ")
+                columnNames
+                    .mapIndexed { index, column -> "$column=${readCursorValue(cursor, index)}" }
+                    .joinToString(prefix = "Row: ", separator = ", ")
             rows.add(row.take(MAX_SELECTION_ROW_CHARS))
         } while (rows.size < MAX_SELECTION_ROWS && cursor.moveToNext())
         return rows.joinToString("\n").take(MAX_PROBE_RESULT_CHARS)
@@ -189,31 +185,6 @@ class Ts18DofunIntegrationResolver(
         } catch (_: RuntimeException) {
             "<unreadable>"
         }
-
-    private fun chooseSelectionEvidence(
-        appEvidence: String?,
-        appTarget: DofunSelectedMusicTarget,
-        rootEvidence: String?,
-    ): SelectionEvidence =
-        when {
-            appTarget != DofunSelectedMusicTarget.UNKNOWN ->
-                SelectionEvidence(appTarget, appEvidence, "APP_UID_EXPORTED_PROVIDER")
-            appEvidence != null ->
-                SelectionEvidence(DofunSelectedMusicTarget.UNKNOWN, appEvidence, "APP_UID_EXPORTED_PROVIDER")
-            rootEvidence != null ->
-                SelectionEvidence(
-                    DofunSelectedMusicTarget.UNKNOWN,
-                    rootEvidence,
-                    "ROOT_OBSERVATION_ONLY",
-                )
-            else -> SelectionEvidence(DofunSelectedMusicTarget.UNKNOWN, null, "NONE")
-        }
-
-    private data class SelectionEvidence(
-        val target: DofunSelectedMusicTarget,
-        val evidence: String?,
-        val source: String,
-    )
 
     private companion object {
         val DOFUN_SELECTION_URI: Uri =
