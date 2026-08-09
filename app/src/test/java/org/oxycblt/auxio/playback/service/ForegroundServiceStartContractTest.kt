@@ -25,23 +25,33 @@ import org.robolectric.annotation.Config
 @Config(sdk = [29])
 class ForegroundServiceStartContractTest {
     @Test
-    fun unmarkedStart_doesNotRequireImmediatePromotion() {
+    fun unrelatedUnmarkedStart_doesNotRequireImmediatePromotion() {
         assertFalse(ForegroundServiceStartContract.requiresImmediatePromotion(Intent()))
         assertFalse(ForegroundServiceStartContract.requiresImmediatePromotion(null))
+        assertFalse(
+            ForegroundServiceStartContract.requiresImmediatePromotion(
+                Intent().putExtra(
+                    AuxioService.INTENT_KEY_START_ID,
+                    IntegerTable.START_ID_ACTIVITY,
+                )
+            )
+        )
+    }
+
+    @Test
+    fun knownExternalStartIdentities_failSafeToImmediatePromotion() {
+        for (startId in externalStartIds) {
+            val intent = Intent().putExtra(AuxioService.INTENT_KEY_START_ID, startId)
+            assertTrue(
+                "startId=$startId",
+                ForegroundServiceStartContract.requiresImmediatePromotion(intent),
+            )
+        }
     }
 
     @Test
     fun foregroundStartMarker_preservesEveryColdPlaybackStartIdentity() {
-        val startIds =
-            listOf(
-                IntegerTable.START_ID_BOOT,
-                IntegerTable.START_ID_BLUETOOTH,
-                IntegerTable.START_ID_MEDIA_BUTTON,
-                IntegerTable.START_ID_TOPWAY,
-                IntegerTable.START_ID_TASKER,
-            )
-
-        for (startId in startIds) {
+        for (startId in externalStartIds) {
             val intent =
                 Intent()
                     .putExtra(AuxioService.INTENT_KEY_START_ID, startId)
@@ -50,5 +60,16 @@ class ForegroundServiceStartContractTest {
             assertTrue(ForegroundServiceStartContract.requiresImmediatePromotion(intent))
             assertEquals(startId, intent.getIntExtra(AuxioService.INTENT_KEY_START_ID, -1))
         }
+    }
+
+    private companion object {
+        val externalStartIds =
+            listOf(
+                IntegerTable.START_ID_BOOT,
+                IntegerTable.START_ID_BLUETOOTH,
+                IntegerTable.START_ID_MEDIA_BUTTON,
+                IntegerTable.START_ID_TOPWAY,
+                IntegerTable.START_ID_TASKER,
+            )
     }
 }
