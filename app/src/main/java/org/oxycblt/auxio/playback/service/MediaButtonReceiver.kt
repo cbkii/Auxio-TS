@@ -88,10 +88,12 @@ class MediaButtonReceiver : BroadcastReceiver() {
 
         val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
         val serviceIntent =
-            Intent(Intent.ACTION_MEDIA_BUTTON)
-                .setComponent(ComponentName(context, serviceClass))
-                .putExtra(Intent.EXTRA_KEY_EVENT, event)
-                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
+            ForegroundServiceStartContract.markRequired(
+                Intent(Intent.ACTION_MEDIA_BUTTON)
+                    .setComponent(ComponentName(context, serviceClass))
+                    .putExtra(Intent.EXTRA_KEY_EVENT, event)
+                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
+            )
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
         } catch (e: IllegalStateException) {
