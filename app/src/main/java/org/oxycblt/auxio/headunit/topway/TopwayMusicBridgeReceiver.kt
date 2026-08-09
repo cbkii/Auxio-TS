@@ -48,18 +48,6 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             L.w("Ignoring unsupported Topway bridge action: $action")
             return
         }
-        if (intent.clipData != null) {
-            L.w("Ignoring Topway bridge action carrying ClipData: $action")
-            launcherTelemetry.log(
-                category = DiagnosticJournal.CAT_TOPWAY_CMD,
-                event = "Topway broadcast ingress",
-                origin = "TopwayMusicBridgeReceiver",
-                command = action,
-                result = "REJECTED",
-                detail = "clipData-present",
-            )
-            return
-        }
         if (
             !ExportedCommandRateLimiter.allow(
                 key = "topway",
@@ -67,14 +55,11 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
                 windowMs = TOPWAY_RATE_WINDOW_MS,
             )
         ) {
-            L.w("Dropping excessive Topway bridge action: $action")
-            launcherTelemetry.log(
-                category = DiagnosticJournal.CAT_TOPWAY_CMD,
-                event = "Topway broadcast ingress",
-                origin = "TopwayMusicBridgeReceiver",
-                command = action,
-                result = "RATE_LIMITED",
-            )
+            logRejectedIngress(action, "RATE_LIMITED", null)
+            return
+        }
+        if (intent.clipData != null) {
+            logRejectedIngress(action, "REJECTED", "clipData-present")
             return
         }
 
@@ -145,6 +130,27 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun logRejectedIngress(action: String, result: String, detail: String?) {
+        if (
+            !ExportedCommandRateLimiter.allow(
+                key = "topway-rejected-log",
+                maxEvents = MAX_REJECTED_LOGS_PER_WINDOW,
+                windowMs = TOPWAY_RATE_WINDOW_MS,
+            )
+        ) {
+            return
+        }
+        L.w("Rejecting Topway bridge action result=$result action=$action detail=$detail")
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_TOPWAY_CMD,
+            event = "Topway broadcast ingress",
+            origin = "TopwayMusicBridgeReceiver",
+            command = action,
+            result = result,
+            detail = detail,
+        )
+    }
+
     private fun logDispatchFailure(action: String, error: RuntimeException) {
         launcherTelemetry.log(
             category = DiagnosticJournal.CAT_TOPWAY_CMD,
@@ -158,6 +164,7 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
 
     private companion object {
         const val MAX_TOPWAY_EVENTS_PER_WINDOW = 24
+        const val MAX_REJECTED_LOGS_PER_WINDOW = 2
         const val TOPWAY_RATE_WINDOW_MS = 1_000L
     }
 }
