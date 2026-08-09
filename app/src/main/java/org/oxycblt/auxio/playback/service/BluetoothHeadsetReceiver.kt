@@ -73,9 +73,11 @@ class BluetoothHeadsetReceiver : BroadcastReceiver() {
         L.d("Bluetooth headset connected, initializing service")
         val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
         val serviceIntent =
-            Intent(context, serviceClass)
-                .setAction(AuxioService.ACTION_START)
-                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BLUETOOTH)
+            ForegroundServiceStartContract.markRequired(
+                Intent(context, serviceClass)
+                    .setAction(AuxioService.ACTION_START)
+                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BLUETOOTH)
+            )
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
         } catch (e: IllegalStateException) {
