@@ -66,26 +66,26 @@ constructor(
         val mode =
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 Ts18LauncherIntegrationMode.fromPreference(
-                    prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
-                ).name
+                        prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
+                    )
+                    .name
             } else {
                 Ts18LauncherIntegrationMode.AndroidMediaSessionOnly.name
             }
-        val payload =
-            buildString {
-                append("elapsedMs=")
-                append(SystemClock.elapsedRealtime())
-                append(" origin=")
-                append(origin)
-                append(" command=")
-                append(command)
-                append(" mode=")
-                append(mode)
-                if (!detail.isNullOrBlank()) {
-                    append(" detail=")
-                    append(detail.take(MAX_DETAIL_CHARS))
-                }
+        val payload = buildString {
+            append("elapsedMs=")
+            append(SystemClock.elapsedRealtime())
+            append(" origin=")
+            append(origin)
+            append(" command=")
+            append(command)
+            append(" mode=")
+            append(mode)
+            if (!detail.isNullOrBlank()) {
+                append(" detail=")
+                append(detail.take(MAX_DETAIL_CHARS))
             }
+        }
         journal.log(category, event, payload, result)
         L.d("Launcher integration telemetry: $event $payload result=$result")
     }
