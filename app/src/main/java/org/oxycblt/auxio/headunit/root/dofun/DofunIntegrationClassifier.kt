@@ -65,14 +65,13 @@ object DofunIntegrationClassifier {
             return DofunSelectedMusicTarget.UNKNOWN
         }
 
-        val explicitValues =
+        val explicitValueRegex =
             Regex(
-                    "(?:component|package|pkg|value|hotseat_app_music)\\s*=\\s*([^,}\\s]+)",
-                    RegexOption.IGNORE_CASE,
-                )
-                .findAll(output)
-                .map { it.groupValues[1] }
-                .toList()
+                "(?:component|package|pkg|value|hotseat_app_music)\\s*=\\s*([^,}\\s]+)",
+                RegexOption.IGNORE_CASE,
+            )
+        val explicitValues =
+            explicitValueRegex.findAll(output).map { it.groupValues[1] }.toList()
         val componentValues =
             Regex("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+/[A-Za-z0-9_.$]+")
                 .findAll(output)
