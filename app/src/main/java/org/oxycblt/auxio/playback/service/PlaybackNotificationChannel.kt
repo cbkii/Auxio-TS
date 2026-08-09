@@ -23,9 +23,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import org.oxycblt.auxio.BuildConfig
 
 /** User-controlled playback notification channel state. */
@@ -41,6 +43,7 @@ data class PlaybackChannelSnapshot(
     val channelExists: Boolean,
     val importance: Int?,
     val publicationRequestedThisProcess: Boolean,
+    val firstPublicationRequestedElapsedMs: Long?,
 )
 
 /**
@@ -53,9 +56,11 @@ object PlaybackNotificationChannel {
     val id: String = BuildConfig.APPLICATION_ID + ".channel.PLAYBACK"
 
     private val publicationRequested = AtomicBoolean(false)
+    private val firstPublicationElapsedMs = AtomicLong(UNSET_ELAPSED_MS)
 
     fun markPublicationRequested() {
         publicationRequested.set(true)
+        firstPublicationElapsedMs.compareAndSet(UNSET_ELAPSED_MS, SystemClock.elapsedRealtime())
     }
 
     fun inspect(context: Context): PlaybackChannelSnapshot {
@@ -67,6 +72,7 @@ object PlaybackNotificationChannel {
                 channelExists = true,
                 importance = null,
                 publicationRequestedThisProcess = publicationRequested.get(),
+                firstPublicationRequestedElapsedMs = publicationElapsedMsOrNull(),
             )
         }
 
@@ -83,6 +89,7 @@ object PlaybackNotificationChannel {
             channelExists = channel != null,
             importance = channel?.importance,
             publicationRequestedThisProcess = publicationRequested.get(),
+            firstPublicationRequestedElapsedMs = publicationElapsedMsOrNull(),
         )
     }
 
@@ -119,4 +126,9 @@ object PlaybackNotificationChannel {
             importance == NotificationManager.IMPORTANCE_NONE -> PlaybackChannelState.Blocked
             else -> PlaybackChannelState.Usable
         }
+
+    private fun publicationElapsedMsOrNull(): Long? =
+        firstPublicationElapsedMs.get().takeUnless { it == UNSET_ELAPSED_MS }
+
+    private const val UNSET_ELAPSED_MS = Long.MIN_VALUE
 }
