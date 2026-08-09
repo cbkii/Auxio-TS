@@ -46,7 +46,9 @@ import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
 import org.oxycblt.auxio.headunit.compat.HeadUnitMetadataPolicy
+import org.oxycblt.auxio.headunit.topway.LauncherIntegrationTelemetry
 import org.oxycblt.auxio.headunit.topway.TopwayLauncherIntegrationCoordinator
 import org.oxycblt.auxio.headunit.topway.TopwayServiceBridge
 import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
@@ -85,6 +87,7 @@ private constructor(
     private val imageSettings: ImageSettings,
     private val mediaSessionInterface: MediaSessionInterface,
     private val launcherCoordinator: TopwayLauncherIntegrationCoordinator,
+    private val launcherTelemetry: LauncherIntegrationTelemetry,
 ) : PlaybackStateManager.Listener, ImageSettings.Listener {
 
     class Factory
@@ -95,6 +98,7 @@ private constructor(
         private val imageSettings: ImageSettings,
         private val mediaSessionInterface: MediaSessionInterface,
         private val launcherCoordinator: TopwayLauncherIntegrationCoordinator,
+        private val launcherTelemetry: LauncherIntegrationTelemetry,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             MediaSessionHolder(
@@ -105,6 +109,7 @@ private constructor(
                 imageSettings,
                 mediaSessionInterface,
                 launcherCoordinator,
+                launcherTelemetry,
             )
     }
 
@@ -143,6 +148,7 @@ private constructor(
         get() = _notification
 
     private var attached = false
+    private var lastReportedSessionActive: Boolean? = null
     private val modePreferenceListener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key != Ts18LauncherIntegrationMode.PREF_KEY) return@OnSharedPreferenceChangeListener
@@ -210,10 +216,8 @@ private constructor(
         bitmapProvider.release()
         playbackManager.removeListener(this)
         imageSettings.unregisterListener(this)
-        mediaSession.apply {
-            isActive = false
-            release()
-        }
+        setSessionActive(false, "release")
+        mediaSession.release()
     }
 
     // --- PLAYBACKSTATEMANAGER OVERRIDES ---
@@ -578,10 +582,10 @@ private constructor(
 
         if (!hasPlayableSessionState()) {
             mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState())
-            mediaSession.isActive = false
+            setSessionActive(false, "state-empty")
             return
         }
-        mediaSession.isActive = true
+        setSessionActive(true, "state-playable")
 
         val state =
             // InternalPlayer.State handles position/state information.
@@ -625,7 +629,7 @@ private constructor(
             invalidateSessionState()
         } else {
             mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState())
-            mediaSession.isActive = false
+            setSessionActive(false, "attach-empty")
         }
     }
 
@@ -635,14 +639,34 @@ private constructor(
             playbackManager.queue.isNotEmpty() ||
             playbackManager.queueWindow != null
 
-    /** Invalidate both repeat and shuffle notification actions. */
+    private fun setSessionActive(active: Boolean, reason: String) {
+        mediaSession.isActive = active
+        if (lastReportedSessionActive == active) return
+        lastReportedSessionActive = active
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_PLAYBACK,
+            event = "MediaSession activation",
+            origin = "MediaSessionHolder",
+            command = if (active) "ACTIVATE" else "DEACTIVATE",
+            result = "APPLIED",
+            detail =
+                "reason=$reason currentSong=${playbackManager.currentSong != null} " +
+                    "raw=${playbackManager.rawPlaybackMetadata != null} queue=${playbackManager.queue.size} " +
+                    "queueWindow=${playbackManager.queueWindow != null}",
+        )
+    }
+
+    /** Publish VLC-compatible Android legacy metadata independently from Topway private traffic. */
     private fun broadcastLegacyMetadataChanged(
         title: CharSequence?,
         artist: CharSequence?,
         album: CharSequence?,
         durationMs: Long,
     ) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !launcherCoordinator.mode.sendsTopwayBroadcasts) {
+        if (
+            !BuildConfig.TOPWAY_COMPAT_FLAVOR ||
+                !launcherCoordinator.mode.publishesLegacyAndroidMediaBroadcasts
+        ) {
             return
         }
         try {
@@ -655,13 +679,32 @@ private constructor(
                     .putExtra("playing", playbackManager.progression.isPlaying)
                     .putExtra("package", context.packageName)
             )
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_PLAYBACK,
+                event = "Legacy Android media broadcast",
+                origin = "MediaSessionHolder",
+                command = ACTION_LEGACY_META_CHANGED,
+                result = "PUBLISHED",
+                detail = "titleLen=${title?.length ?: 0} durationMs=$durationMs",
+            )
         } catch (e: RuntimeException) {
             L.w(e, "Unable to broadcast legacy metadata change")
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_PLAYBACK,
+                event = "Legacy Android media broadcast",
+                origin = "MediaSessionHolder",
+                command = ACTION_LEGACY_META_CHANGED,
+                result = "FAILED",
+                detail = e.javaClass.simpleName,
+            )
         }
     }
 
     private fun broadcastLegacyPlaybackChanged() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR || !launcherCoordinator.mode.sendsTopwayBroadcasts) {
+        if (
+            !BuildConfig.TOPWAY_COMPAT_FLAVOR ||
+                !launcherCoordinator.mode.publishesLegacyAndroidMediaBroadcasts
+        ) {
             return
         }
         try {
@@ -670,8 +713,24 @@ private constructor(
                     .putExtra("playing", playbackManager.progression.isPlaying)
                     .putExtra("package", context.packageName)
             )
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_PLAYBACK,
+                event = "Legacy Android media broadcast",
+                origin = "MediaSessionHolder",
+                command = ACTION_LEGACY_PLAYSTATE_CHANGED,
+                result = "PUBLISHED",
+                detail = "playing=${playbackManager.progression.isPlaying}",
+            )
         } catch (e: RuntimeException) {
             L.w(e, "Unable to broadcast legacy playback state change")
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_PLAYBACK,
+                event = "Legacy Android media broadcast",
+                origin = "MediaSessionHolder",
+                command = ACTION_LEGACY_PLAYSTATE_CHANGED,
+                result = "FAILED",
+                detail = e.javaClass.simpleName,
+            )
         }
     }
 
