@@ -426,8 +426,6 @@ private constructor(
                         MetadataExtras.KEY_DESCRIPTION_LINK_MEDIA_ID,
                         MediaSessionUID.SingleItem(song.album.uid).toString(),
                     )
-            // These fields are nullable and so we must check first before adding them to the
-            // fields.
             song.track?.let {
                 L.d("Adding track information")
                 builder.putLong(MediaMetadataCompat.METADATA_KEY_TRACK_NUMBER, it.toLong())
@@ -442,7 +440,6 @@ private constructor(
                 builder.putLong(MediaMetadataCompat.METADATA_KEY_YEAR, it.year.toLong())
             }
 
-            // First publish text-only metadata for immediate responsiveness.
             val initialMetadata = builder.build()
             mediaSession.setMetadata(initialMetadata)
             _notification.updateMetadata(initialMetadata)
@@ -454,10 +451,6 @@ private constructor(
             )
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
 
-            // We are normally supposed to use URIs for album art, but that removes some of the
-            // nice things we can do like square cropping or high quality covers. Instead,
-            // we load a full-size bitmap into the media session and take the performance hit.
-            // On TS18/head-units, we bound this to 512px to reduce memory pressure.
             bitmapProvider.load(
                 song,
                 object : BitmapProvider.Target {
@@ -566,11 +559,6 @@ private constructor(
         }
     }
 
-    /**
-     * Upload a new queue to the [MediaSessionCompat].
-     *
-     * @param queue The current queue to upload.
-     */
     private fun updateQueue(queue: List<Song>) {
         PerfTimer.trace("MediaSessionHolder.updateQueue(${queue.size})") {
             val queueItems =
@@ -580,8 +568,6 @@ private constructor(
                             context,
                             { putInt(MediaSessionInterface.KEY_QUEUE_POS, i) },
                         )
-                    // Store the item index so we can then use the analogous index in the
-                    // playback state.
                     MediaSessionCompat.QueueItem(description, i.toLong())
                 }
             L.d("Uploading ${queueItems.size} songs to MediaSession queue")
@@ -589,28 +575,19 @@ private constructor(
         }
     }
 
-    /** Invalidate the current [MediaSessionCompat]'s [PlaybackStateCompat]. */
     private fun invalidateSessionState() {
         L.d("Updating media session playback state")
-
         if (!hasPlayableSessionState()) {
             mediaSession.setPlaybackState(MediaSessionInitializationPolicy.emptyPlaybackState())
             setSessionActive(false, "state-empty")
             return
         }
         setSessionActive(true, "state-playable")
-
         val state =
-            // InternalPlayer.State handles position/state information.
             playbackManager.progression
                 .intoPlaybackState(PlaybackStateCompat.Builder())
                 .setActions(MediaSessionInterface.ACTIONS)
-                // Active queue ID corresponds to the indices we populated prior, use them here.
                 .setActiveQueueItemId(playbackManager.index.toLong())
-
-        // Android 13+ relies on custom actions in the notification.
-
-        // Add repeat action
         val repeatAction =
             PlaybackStateCompat.CustomAction.Builder(
                     PlaybackActions.ACTION_INC_REPEAT_MODE,
@@ -619,8 +596,6 @@ private constructor(
                 )
                 .build()
         state.addCustomAction(repeatAction)
-
-        // Add shuffle action
         val shuffleAction =
             PlaybackStateCompat.CustomAction.Builder(
                     PlaybackActions.ACTION_INVERT_SHUFFLE,
@@ -633,7 +608,6 @@ private constructor(
                 )
                 .build()
         state.addCustomAction(shuffleAction)
-
         mediaSession.setPlaybackState(state.build())
     }
 
@@ -673,26 +647,45 @@ private constructor(
         if (!hasPlayableSessionState()) return
         val song = playbackManager.currentSong
         val rawMetadata = playbackManager.rawPlaybackMetadata
-        when {
-            song != null ->
-                broadcastLegacyMetadataChanged(
-                    title = song.name.resolve(context),
-                    artist = song.artists.resolveNames(context),
-                    album = song.album.name.resolve(context),
-                    durationMs = song.durationMs,
-                )
-            rawMetadata != null ->
-                broadcastLegacyMetadataChanged(
-                    title = rawMetadata.displayTitle,
-                    artist = rawMetadata.displayArtist,
-                    album = rawMetadata.album,
-                    durationMs = rawMetadata.durationMs,
-                )
+        val metadataSnapshot =
+            when {
+                song != null ->
+                    HeadUnitMetadataPolicy.fromRaw(
+                        title = song.name.resolve(context),
+                        artist = song.artists.resolveNames(context),
+                        albumArtist = song.album.artists.resolveNames(context),
+                        albumTitle = song.album.name.resolve(context),
+                        durationMs = song.durationMs,
+                        mediaId = song.uid.toString(),
+                        mediaUri = song.uri.toString(),
+                        artworkUri = null,
+                        hasArtwork = false,
+                    )
+                rawMetadata != null ->
+                    HeadUnitMetadataPolicy.fromRaw(
+                        title = rawMetadata.displayTitle,
+                        artist = rawMetadata.displayArtist,
+                        albumArtist = rawMetadata.displayArtist,
+                        albumTitle = rawMetadata.album,
+                        durationMs = rawMetadata.durationMs,
+                        mediaId = rawMetadata.uriString,
+                        mediaUri = rawMetadata.uriString,
+                        artworkUri = null,
+                        hasArtwork = false,
+                    )
+                else -> null
+            }
+        if (metadataSnapshot != null) {
+            broadcastLegacyMetadataChanged(
+                title = metadataSnapshot.displayTitle,
+                artist = metadataSnapshot.artist,
+                album = metadataSnapshot.albumTitle,
+                durationMs = metadataSnapshot.durationMs,
+            )
         }
         broadcastLegacyPlaybackChanged()
     }
 
-    /** Publish VLC-compatible Android legacy metadata independently from Topway private traffic. */
     private fun broadcastLegacyMetadataChanged(
         title: CharSequence?,
         artist: CharSequence?,
@@ -773,10 +766,8 @@ private constructor(
     private fun invalidateNotificationActions() {
         L.d("Invalidating notification actions")
         invalidateSessionState()
-
         _notification.updateRepeatMode(playbackManager.repeatMode)
         _notification.updateShuffled(playbackManager.isShuffled)
-
         if (!bitmapProvider.isBusy) {
             L.d("Not loading a bitmap, post the notification")
             foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
@@ -786,8 +777,6 @@ private constructor(
     companion object {
         private const val ACTION_LEGACY_META_CHANGED = "com.android.music.metachanged"
         private const val ACTION_LEGACY_PLAYSTATE_CHANGED = "com.android.music.playstatechanged"
-        // Some vendor consumers dereference cleared fields without null checks. Publish a
-        // canonical non-null empty snapshot at every clearing boundary.
         internal val emptyMetadata =
             MediaMetadataCompat.Builder()
                 .putText(MediaMetadataCompat.METADATA_KEY_TITLE, "")
@@ -818,12 +807,6 @@ private constructor(
     }
 }
 
-/**
- * The playback notification component. Due to race conditions regarding notification updates, this
- * component is not self-sufficient. [MediaSessionHolder] should be used instead of manage it.
- *
- * @author Alexander Capehart (OxygenCobalt)
- */
 @SuppressLint("RestrictedApi")
 private class PlaybackNotification(
     private val context: Context,
@@ -860,7 +843,6 @@ private class PlaybackNotification(
         if (albumArt != null) {
             setLargeIcon(albumArt)
         } else {
-            // TS18/DoFun SystemUI crashes when it crops a 1x1 transparent placeholder.
             setLargeIcon(NotificationBitmapSafety.fallbackBitmap())
         }
         setContentTitle(
