@@ -38,6 +38,14 @@ if [ "$ANDROID_USER_ID" != "0" ]; then
     stop_safety "This exact TS18 validation expects Android user 0; set ANDROID_USER_ID=0 unless current device evidence proves otherwise."
 fi
 
+# TARGET_PKG is interpolated into bounded shell probe strings below. Keep it on the two maintained
+# non-stock identities used by this validation so it can never become shell or regex input supplied
+# by an arbitrary environment value.
+case "$TARGET_PKG" in
+    com.tw.media|com.tw.media.debug) ;;
+    *) stop_safety "TARGET_PKG must be com.tw.media or com.tw.media.debug" ;;
+esac
+
 case "$MAX_CAPTURE_BYTES" in
     ''|*[!0-9]*) stop_safety "MAX_CAPTURE_BYTES must be an integer" ;;
 esac
