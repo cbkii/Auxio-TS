@@ -101,8 +101,7 @@ class DofunIntegrationClassifierTest {
             DofunIntegrationClassifier.authoritativeSelection(
                 appProviderOutput =
                     "SecurityException: Permission Denial opening com.dofun.variety.ExportedProvider",
-                rootProviderOutput =
-                    "Row: 0 component=com.tw.media/com.tw.music.MusicActivity",
+                rootProviderOutput = "Row: 0 component=com.tw.media/com.tw.music.MusicActivity",
             )
 
         assertEquals(DofunSelectedMusicTarget.UNKNOWN, selection.target)
