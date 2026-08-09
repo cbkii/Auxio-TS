@@ -46,6 +46,18 @@ class VisualizerRecoveryPolicyTest {
     }
 
     @Test
+    fun beginAttemptPreservesConsecutiveRetryBudget() {
+        val tracker = VisualizerRecoveryTracker()
+        tracker.beginAttempt(1_000L)
+        assertTrue(tracker.consumeRetry(maxRetries = 1))
+
+        tracker.beginAttempt(2_000L)
+
+        assertEquals(1, tracker.consecutiveRetries)
+        assertFalse(tracker.consumeRetry(maxRetries = 1))
+    }
+
+    @Test
     fun usableFrameResetsConsecutiveRetryBudget() {
         val tracker = VisualizerRecoveryTracker()
         tracker.beginAttempt(1_000L)
@@ -107,6 +119,14 @@ class VisualizerRecoveryPolicyTest {
                 nowUptimeMs = pausedAt + VisualizerRecoveryPolicy.PAUSE_RETAIN_MS,
             )
         )
+        assertFalse(
+            VisualizerRecoveryPolicy.canReusePausedSession(
+                retainedSessionId = null,
+                requestedSessionId = 42,
+                pausedAtUptimeMs = pausedAt,
+                nowUptimeMs = pausedAt + 100,
+            )
+        )
     }
 
     @Test
@@ -133,7 +153,6 @@ class VisualizerRecoveryPolicyTest {
         val sanitized = VisualizerRecoveryPolicy.sanitizeCachedState(live, 11_501L)
 
         assertIs<VisualizerState.Starting>(sanitized)
-        assertFalse(sanitized is VisualizerState.Unavailable)
     }
 
     @Test
