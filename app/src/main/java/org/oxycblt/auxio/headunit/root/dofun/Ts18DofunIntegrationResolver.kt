@@ -92,7 +92,7 @@ class Ts18DofunIntegrationResolver(
             val topology = DofunIntegrationClassifier.topology(installedPackages)
 
             // Query the launcher-owned exported selection surface under Auxio's real app UID first.
-            // A later root read can improve observability but must not be confused with app authority.
+            // A later root read can improve observability but must never substitute for app authority.
             val appSelectionEvidence =
                 if (topology.dofunPresent) readDofunSelectionFromAppUid() else null
             val appSelectedTarget =
@@ -110,14 +110,11 @@ class Ts18DofunIntegrationResolver(
             }
 
             val rootSelectionEvidence = probeResults[Ts18RootProbe.DofunDataHintsReadOnly]
-            val rootSelectedTarget =
-                DofunIntegrationClassifier.selectedMusicTarget(rootSelectionEvidence)
             val selection =
                 chooseSelectionEvidence(
                     appSelectionEvidence,
                     appSelectedTarget,
                     rootSelectionEvidence,
-                    rootSelectedTarget,
                 )
 
             val classification =
@@ -129,8 +126,9 @@ class Ts18DofunIntegrationResolver(
                 - cmd=update, seek, prev, next: should not start playback from nothing
                 - Floating-only routing applies to MAIN/MUSIC_PLAYER; ACTION_VIEW still opens the player
                 - Installed package topology is not evidence that DoFun selected that package
-                - App-UID provider evidence is preferred; root provider evidence improves observation only
-                - DoFun selected target remains UNKNOWN unless a launcher-owned selection surface proves it
+                - Only app-UID provider evidence may establish the selected DoFun target
+                - Root provider output is retained as observation and cannot replace failed app authority
+                - DoFun selected target remains UNKNOWN unless the app-authority surface proves it
                 """
                     .trimIndent()
 
@@ -173,18 +171,16 @@ class Ts18DofunIntegrationResolver(
         val rows = mutableListOf<String>()
         do {
             val row =
-                columnNames.joinToString(prefix = "Row: ", separator = ", ") { column ->
-                    val index = cursor.getColumnIndex(column)
+                columnNames.mapIndexed { index, column ->
                     "$column=${readCursorValue(cursor, index)}"
-                }
+                }.joinToString(prefix = "Row: ", separator = ", ")
             rows.add(row.take(MAX_SELECTION_ROW_CHARS))
         } while (rows.size < MAX_SELECTION_ROWS && cursor.moveToNext())
         return rows.joinToString("\n").take(MAX_PROBE_RESULT_CHARS)
     }
 
-    private fun readCursorValue(cursor: Cursor, index: Int): String {
-        if (index < 0) return "<missing>"
-        return try {
+    private fun readCursorValue(cursor: Cursor, index: Int): String =
+        try {
             when (cursor.getType(index)) {
                 Cursor.FIELD_TYPE_NULL -> "null"
                 Cursor.FIELD_TYPE_BLOB -> "<blob>"
@@ -193,26 +189,22 @@ class Ts18DofunIntegrationResolver(
         } catch (_: RuntimeException) {
             "<unreadable>"
         }
-    }
 
     private fun chooseSelectionEvidence(
         appEvidence: String?,
         appTarget: DofunSelectedMusicTarget,
         rootEvidence: String?,
-        rootTarget: DofunSelectedMusicTarget,
     ): SelectionEvidence =
         when {
             appTarget != DofunSelectedMusicTarget.UNKNOWN ->
                 SelectionEvidence(appTarget, appEvidence, "APP_UID_EXPORTED_PROVIDER")
-            rootTarget != DofunSelectedMusicTarget.UNKNOWN ->
-                SelectionEvidence(rootTarget, rootEvidence, "ROOT_READ_EXPORTED_PROVIDER")
             appEvidence != null ->
                 SelectionEvidence(DofunSelectedMusicTarget.UNKNOWN, appEvidence, "APP_UID_EXPORTED_PROVIDER")
             rootEvidence != null ->
                 SelectionEvidence(
                     DofunSelectedMusicTarget.UNKNOWN,
                     rootEvidence,
-                    "ROOT_READ_EXPORTED_PROVIDER",
+                    "ROOT_OBSERVATION_ONLY",
                 )
             else -> SelectionEvidence(DofunSelectedMusicTarget.UNKNOWN, null, "NONE")
         }
