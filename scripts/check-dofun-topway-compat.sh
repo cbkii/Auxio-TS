@@ -200,7 +200,7 @@ require_file_contains "$coordinator" 'journal.log' 'coordinator diagnostic journ
 
 for token in \
   TopwayLauncherIntegrationCoordinator publishTopwayState topwayCoordinator.publishMetadata \
-  topwayCoordinator.publishProgress startTopwayProgressTicker topwayCoordinator.handle \
+  topwayCoordinator.publishProgress reconcileTopwayProgressTicker topwayCoordinator.handle \
   cmd-update topwayCoordinator.clear 'private var topwayProgressTickerJob: Job? = null'; do
   require_file_contains "$playback" "$token" 'playback service Topway integration'
 done
