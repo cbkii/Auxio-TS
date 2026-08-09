@@ -149,13 +149,25 @@ private constructor(
 
     private var attached = false
     private var lastReportedSessionActive: Boolean? = null
+    private var lastLauncherMode = launcherCoordinator.mode
     private val modePreferenceListener =
         SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key != Ts18LauncherIntegrationMode.PREF_KEY) return@OnSharedPreferenceChangeListener
             mainHandler.post {
                 if (!attached) return@post
+                val previousMode = lastLauncherMode
+                val newMode = launcherCoordinator.mode
+                lastLauncherMode = newMode
                 _notification.refreshProfile()
                 launcherCoordinator.refreshWidgetControls("mode-preference-change")
+                if (
+                    DofunMediaCompatPolicy.shouldRepublishLegacyAndroidMediaBroadcasts(
+                        previousMode,
+                        newMode,
+                    )
+                ) {
+                    republishLegacyAndroidMediaState()
+                }
                 foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
             }
         }
@@ -188,6 +200,7 @@ private constructor(
             }
             setQueueTitle(context.getString(R.string.lbl_queue))
         }
+        lastLauncherMode = launcherCoordinator.mode
         attached = true
         prefs.registerOnSharedPreferenceChangeListener(modePreferenceListener)
         playbackManager.addListener(this)
@@ -654,6 +667,29 @@ private constructor(
                     "raw=${playbackManager.rawPlaybackMetadata != null} queue=${playbackManager.queue.size} " +
                     "queueWindow=${playbackManager.queueWindow != null}",
         )
+    }
+
+    private fun republishLegacyAndroidMediaState() {
+        if (!hasPlayableSessionState()) return
+        val song = playbackManager.currentSong
+        val rawMetadata = playbackManager.rawPlaybackMetadata
+        when {
+            song != null ->
+                broadcastLegacyMetadataChanged(
+                    title = song.name.resolve(context),
+                    artist = song.artists.resolveNames(context),
+                    album = song.album.name.resolve(context),
+                    durationMs = song.durationMs,
+                )
+            rawMetadata != null ->
+                broadcastLegacyMetadataChanged(
+                    title = rawMetadata.displayTitle,
+                    artist = rawMetadata.displayArtist,
+                    album = rawMetadata.album,
+                    durationMs = rawMetadata.durationMs,
+                )
+        }
+        broadcastLegacyPlaybackChanged()
     }
 
     /** Publish VLC-compatible Android legacy metadata independently from Topway private traffic. */
