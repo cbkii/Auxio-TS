@@ -24,7 +24,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.BadParcelableException
-import androidx.core.content.ContextCompat
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
@@ -73,13 +72,11 @@ class BluetoothHeadsetReceiver : BroadcastReceiver() {
         L.d("Bluetooth headset connected, initializing service")
         val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
         val serviceIntent =
-            ForegroundServiceStartContract.markRequired(
-                Intent(context, serviceClass)
-                    .setAction(AuxioService.ACTION_START)
-                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BLUETOOTH)
-            )
+            Intent(context, serviceClass)
+                .setAction(AuxioService.ACTION_START)
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_BLUETOOTH)
         try {
-            ContextCompat.startForegroundService(context, serviceIntent)
+            ForegroundServiceStartContract.start(context, serviceIntent)
         } catch (e: IllegalStateException) {
             L.w(e, "Unable to start Auxio after Bluetooth connection")
         } catch (e: SecurityException) {
