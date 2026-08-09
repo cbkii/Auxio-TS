@@ -6,6 +6,14 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 package org.oxycblt.auxio.headunit.root.dofun
@@ -49,7 +57,8 @@ object DofunIntegrationClassifier {
 
     /**
      * Parse only explicit package/component values from DoFun's exported music-selection provider.
-     * Package presence elsewhere on the device must never be promoted into launcher-selection proof.
+     * Package presence elsewhere on the device must never be promoted into launcher-selection
+     * proof.
      */
     fun selectedMusicTarget(providerOutput: String?): DofunSelectedMusicTarget {
         val output = providerOutput?.trim().orEmpty()
@@ -70,8 +79,7 @@ object DofunIntegrationClassifier {
                 "(?:component|package|pkg|value|hotseat_app_music)\\s*=\\s*([^,}\\s]+)",
                 RegexOption.IGNORE_CASE,
             )
-        val explicitValues =
-            explicitValueRegex.findAll(output).map { it.groupValues[1] }.toList()
+        val explicitValues = explicitValueRegex.findAll(output).map { it.groupValues[1] }.toList()
         val componentValues =
             Regex("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+/[A-Za-z0-9_.$]+")
                 .findAll(output)
@@ -103,11 +111,7 @@ object DofunIntegrationClassifier {
         val appTarget = selectedMusicTarget(appProviderOutput)
         return when {
             appTarget != DofunSelectedMusicTarget.UNKNOWN ->
-                DofunSelectionEvidence(
-                    appTarget,
-                    appProviderOutput,
-                    SELECTION_SOURCE_APP_UID,
-                )
+                DofunSelectionEvidence(appTarget, appProviderOutput, SELECTION_SOURCE_APP_UID)
             appProviderOutput != null ->
                 DofunSelectionEvidence(
                     DofunSelectedMusicTarget.UNKNOWN,
