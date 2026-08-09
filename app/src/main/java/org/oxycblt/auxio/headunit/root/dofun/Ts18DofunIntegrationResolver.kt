@@ -194,10 +194,8 @@ class Ts18DofunIntegrationResolver(
     private fun readCursorValue(cursor: Cursor, index: Int): String =
         try {
             when (cursor.getType(index)) {
-                Cursor.FIELD_TYPE_NULL ->
-                    "null"
-                Cursor.FIELD_TYPE_BLOB ->
-                    "<blob>"
+                Cursor.FIELD_TYPE_NULL -> "null"
+                Cursor.FIELD_TYPE_BLOB -> "<blob>"
                 else -> cursor.getString(index)?.take(MAX_SELECTION_VALUE_CHARS) ?: "null"
             }
         } catch (_: RuntimeException) {
