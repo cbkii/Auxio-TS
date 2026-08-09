@@ -129,6 +129,7 @@ open class AuxioService :
     }
 
     private fun onHandleForeground(intent: Intent?, allowTrustedUserVisible: Boolean) {
+        // Playback/session restoration remains first and never waits for library-source validation.
         playbackFragment.start(intent)
         val startId = intent?.getIntExtra(INTENT_KEY_START_ID, -1)
         val trustedUserVisible =
@@ -240,9 +241,14 @@ open class AuxioService :
                 startForeground(mediaNotification.code, mediaNotification.build())
                 startupForegroundActive = false
             }
+            // Nothing changed, but don't show anything music related since we can always
+            // index during playback.
             isForeground = true
         } else {
             musicFragment.createNotification { indexNotification ->
+                // Notification creation is asynchronous. Re-check playback authority before
+                // applying the result so a late indexing callback cannot remove or replace a
+                // media notification that became authoritative in the meantime.
                 val currentMediaNotification = playbackFragment.notification
                 when {
                     currentMediaNotification != null -> {
@@ -280,6 +286,7 @@ open class AuxioService :
         var isForeground = false
             private set
 
+        // This is only meant for Auxio to internally ensure that it's state management will work.
         const val INTENT_KEY_START_ID = BuildConfig.APPLICATION_ID + ".service.START_ID"
         const val INTENT_KEY_TRUSTED_SCAN_NONCE =
             BuildConfig.APPLICATION_ID + ".service.TRUSTED_SCAN_NONCE"
@@ -301,11 +308,19 @@ interface ForegroundListener {
     }
 }
 
+/**
+ * Wrapper around [NotificationCompat.Builder] intended for use for [NotificationCompat]s that
+ * signal a Service's ongoing foreground state.
+ *
+ * @author Alexander Capehart (OxygenCobalt)
+ */
 abstract class ForegroundServiceNotification(context: Context, info: ChannelInfo) :
     NotificationCompat.Builder(context, info.id) {
     private val notificationManager = NotificationManagerCompat.from(context)
 
     init {
+        // Set up the notification channel. Foreground notifications are non-substantial, and
+        // thus make no sense to have lights, vibration, or lead to a notification badge.
         val channel =
             NotificationChannelCompat.Builder(info.id, NotificationManagerCompat.IMPORTANCE_LOW)
                 .setName(context.getString(info.nameRes))
@@ -316,7 +331,18 @@ abstract class ForegroundServiceNotification(context: Context, info: ChannelInfo
         notificationManager.createNotificationChannel(channel)
     }
 
+    /**
+     * The code used to identify this notification.
+     *
+     * @see NotificationManagerCompat.notify
+     */
     abstract val code: Int
 
+    /**
+     * Reduced representation of a [NotificationChannelCompat].
+     *
+     * @param id The ID of the channel.
+     * @param nameRes A string resource ID corresponding to the human-readable name.
+     */
     data class ChannelInfo(val id: String, @StringRes val nameRes: Int)
 }
