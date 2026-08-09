@@ -55,11 +55,19 @@ class FftSpectrumMapperTest {
     }
 
     @Test
+    fun attackRangeUsesConservativeLowAndHighActivityBounds() {
+        assertEquals(0.48f, FftSpectrumMapper.ATTACK_LOW_ACTIVITY, 0.0001f)
+        assertEquals(0.64f, FftSpectrumMapper.ATTACK_HIGH_ACTIVITY, 0.0001f)
+        assertTrue(FftSpectrumMapper.ATTACK_LOW_ACTIVITY < FftSpectrumMapper.ATTACK_HIGH_ACTIVITY)
+    }
+
+    @Test
     fun stableInputConvergesSmoothlyWithoutOvershoot() {
         val mapper = FftSpectrumMapper()
         val frame = createSineWaveFft(1000f, amplitude = 110)
 
         mapper.update(frame, SAMPLE_RATE_MILLIHZ)
+        assertTrue(mapper.bands.any { abs(it) > 0.0001f })
         val band = mapper.bands.indices.maxBy { abs(mapper.bands[it]) }
         var previous = mapper.bands[band]
         mapper.update(frame, SAMPLE_RATE_MILLIHZ)
