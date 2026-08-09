@@ -30,6 +30,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import org.apache.commons.text.similarity.JaroWinklerSimilarity
 import org.oxycblt.auxio.BuildConfig
+import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.headunit.topway.LauncherIntegrationTelemetry
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.service.MediaSessionUID
@@ -56,6 +58,7 @@ constructor(
     private val playbackManager: PlaybackStateManager,
     private val commandFactory: PlaybackCommand.Factory,
     private val musicRepository: MusicRepository,
+    private val launcherTelemetry: LauncherIntegrationTelemetry,
 ) : MediaSessionCompat.Callback() {
     private val jaroWinkler = JaroWinklerSimilarity()
     private var lastColdRestoreRequestAtMs = Long.MIN_VALUE
@@ -132,34 +135,60 @@ constructor(
     }
 
     override fun onPlay() {
+        val hasCurrentSong = playbackManager.currentSong != null
+        val hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null
         if (
             shouldResumeExistingPlayback(
-                hasCurrentSong = playbackManager.currentSong != null,
-                hasRawPlaybackMetadata = playbackManager.rawPlaybackMetadata != null,
+                hasCurrentSong = hasCurrentSong,
+                hasRawPlaybackMetadata = hasRawPlaybackMetadata,
             )
         ) {
             lastColdRestoreRequestAtMs = Long.MIN_VALUE
+            logTransport(
+                command = "PLAY",
+                result = "ADMITTED",
+                detail = "path=resume-existing currentSong=$hasCurrentSong raw=$hasRawPlaybackMetadata",
+            )
             playbackManager.playing(true)
             return
         }
 
         val nowMs = SystemClock.elapsedRealtime()
-        if (!shouldRequestColdRestore(lastColdRestoreRequestAtMs, nowMs)) return
+        if (!shouldRequestColdRestore(lastColdRestoreRequestAtMs, nowMs)) {
+            logTransport(command = "PLAY", result = "SUPPRESSED", detail = "path=cold-restore-rate-limit")
+            return
+        }
         lastColdRestoreRequestAtMs = nowMs
+        logTransport(command = "PLAY", result = "ADMITTED", detail = "path=cold-restore")
         playbackManager.playDeferred(
             DeferredPlayback.RestoreState(play = true, fallback = DeferredPlayback.ShuffleAll())
         )
     }
 
     override fun onPause() {
+        logTransport(
+            command = "PAUSE",
+            result = "ADMITTED",
+            detail = "currentSong=${playbackManager.currentSong != null}",
+        )
         playbackManager.playing(false)
     }
 
     override fun onSkipToNext() {
+        logTransport(
+            command = "NEXT",
+            result = "ADMITTED",
+            detail = "currentSong=${playbackManager.currentSong != null}",
+        )
         playbackManager.next()
     }
 
     override fun onSkipToPrevious() {
+        logTransport(
+            command = "PREVIOUS",
+            result = "ADMITTED",
+            detail = "currentSong=${playbackManager.currentSong != null}",
+        )
         playbackManager.prev()
     }
 
@@ -199,6 +228,7 @@ constructor(
     }
 
     override fun onStop() {
+        logTransport(command = "STOP", result = "ADMITTED")
         // Get the service to shut down with the ACTION_EXIT intent
         context.sendBroadcast(Intent(PlaybackActions.ACTION_EXIT))
     }
@@ -208,6 +238,17 @@ constructor(
         // Service already handles intents from the old notification actions, easier to
         // plug into that system.
         context.sendBroadcast(Intent(action))
+    }
+
+    private fun logTransport(command: String, result: String, detail: String? = null) {
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_PLAYBACK,
+            event = "MediaSession transport",
+            origin = "MediaSessionCallback",
+            command = command,
+            result = result,
+            detail = detail,
+        )
     }
 
     private fun expandUidIntoCommand(
