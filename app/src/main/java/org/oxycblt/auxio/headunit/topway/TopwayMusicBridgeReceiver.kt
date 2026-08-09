@@ -40,6 +40,7 @@ import timber.log.Timber as L
 class TopwayMusicBridgeReceiver : BroadcastReceiver() {
     @Inject lateinit var journal: DiagnosticJournal
     @Inject lateinit var coordinator: TopwayLauncherIntegrationCoordinator
+    @Inject lateinit var launcherTelemetry: LauncherIntegrationTelemetry
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
@@ -49,6 +50,14 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         }
         if (intent.clipData != null) {
             L.w("Ignoring Topway bridge action carrying ClipData: $action")
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_TOPWAY_CMD,
+                event = "Topway broadcast ingress",
+                origin = "TopwayMusicBridgeReceiver",
+                command = action,
+                result = "REJECTED",
+                detail = "clipData-present",
+            )
             return
         }
         if (
@@ -59,6 +68,13 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             )
         ) {
             L.w("Dropping excessive Topway bridge action: $action")
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_TOPWAY_CMD,
+                event = "Topway broadcast ingress",
+                origin = "TopwayMusicBridgeReceiver",
+                command = action,
+                result = "RATE_LIMITED",
+            )
             return
         }
 
@@ -70,9 +86,25 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
                 action,
                 coordinator.mode.name,
             )
+            launcherTelemetry.log(
+                category = DiagnosticJournal.CAT_TOPWAY_CMD,
+                event = "Topway broadcast ingress",
+                origin = "TopwayMusicBridgeReceiver",
+                command = action,
+                result = "SUPPRESSED",
+                detail = "mode-does-not-handle-topway-commands",
+            )
             L.d("Ignoring Topway bridge action in ${coordinator.mode.name}: $action")
             return
         }
+
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_TOPWAY_CMD,
+            event = "Topway broadcast ingress",
+            origin = "TopwayMusicBridgeReceiver",
+            command = action,
+            result = "ADMITTED",
+        )
 
         val serviceClass =
             if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
@@ -103,11 +135,25 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             ForegroundServiceStartContract.start(context, serviceIntent)
         } catch (e: IllegalStateException) {
             L.w(e, "Unable to start Auxio for Topway action due to service state")
+            logDispatchFailure(action, e)
         } catch (e: SecurityException) {
             L.w(e, "Unable to start Auxio for Topway action due to security policy")
+            logDispatchFailure(action, e)
         } catch (e: RuntimeException) {
             L.w(e, "Unable to start Auxio for malformed Topway action")
+            logDispatchFailure(action, e)
         }
+    }
+
+    private fun logDispatchFailure(action: String, error: RuntimeException) {
+        launcherTelemetry.log(
+            category = DiagnosticJournal.CAT_TOPWAY_CMD,
+            event = "Topway broadcast dispatch",
+            origin = "TopwayMusicBridgeReceiver",
+            command = action,
+            result = "FAILED",
+            detail = error.javaClass.simpleName,
+        )
     }
 
     private companion object {
