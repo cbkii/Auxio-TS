@@ -80,4 +80,32 @@ class DofunIntegrationClassifierTest {
             ),
         )
     }
+
+    @Test
+    fun `root observation cannot replace failed app uid selection authority`() {
+        val selection =
+            DofunIntegrationClassifier.authoritativeSelection(
+                appProviderOutput =
+                    "SecurityException: Permission Denial opening com.dofun.variety.ExportedProvider",
+                rootProviderOutput =
+                    "Row: 0 component=com.tw.media/com.tw.music.MusicActivity",
+            )
+
+        assertEquals(DofunSelectedMusicTarget.UNKNOWN, selection.target)
+        assertEquals("APP_UID_EXPORTED_PROVIDER", selection.source)
+        assertTrue(selection.evidence.orEmpty().contains("SecurityException"))
+    }
+
+    @Test
+    fun `root provider output remains observation when app uid surface is absent`() {
+        val selection =
+            DofunIntegrationClassifier.authoritativeSelection(
+                appProviderOutput = null,
+                rootProviderOutput = "Row: 0 package=com.tw.music",
+            )
+
+        assertEquals(DofunSelectedMusicTarget.UNKNOWN, selection.target)
+        assertEquals("ROOT_OBSERVATION_ONLY", selection.source)
+        assertEquals("Row: 0 package=com.tw.music", selection.evidence)
+    }
 }
