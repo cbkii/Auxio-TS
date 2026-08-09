@@ -46,7 +46,8 @@ for file in \
   app/src/main/java/org/oxycblt/auxio/BootReceiver.kt \
   app/src/main/java/org/oxycblt/auxio/playback/service/BluetoothHeadsetReceiver.kt \
   app/src/main/java/org/oxycblt/auxio/playback/service/MediaButtonReceiver.kt \
-  app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayMusicBridgeReceiver.kt; do
+  app/src/main/java/org/oxycblt/auxio/headunit/topway/TopwayMusicBridgeReceiver.kt \
+  app/src/main/java/org/oxycblt/auxio/tasker/Start.kt; do
   require_contains "$file" 'ForegroundServiceStartContract.start(context, serviceIntent)'
 done
 require_contains app/src/topwayCompat/java/com/tw/music/view/MusicWidgetProvider.kt \
