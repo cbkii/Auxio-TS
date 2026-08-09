@@ -78,15 +78,16 @@ object DofunIntegrationClassifier {
                 .findAll(output)
                 .map { it.value }
                 .toList()
-        val candidates = (explicitValues + componentValues).distinct()
-        if (candidates.isEmpty()) return DofunSelectedMusicTarget.UNKNOWN
+        val candidatePackages =
+            (explicitValues + componentValues)
+                .map(::candidatePackage)
+                .filter { it.isNotBlank() }
+                .distinct()
+        if (candidatePackages.size != 1) return DofunSelectedMusicTarget.UNKNOWN
 
-        val media = candidates.any { candidatePackage(it) == AUXIO_RELEASE_PACKAGE }
-        val stock = candidates.any { candidatePackage(it) == STOCK_MUSIC_PACKAGE }
-        return when {
-            media && !stock -> DofunSelectedMusicTarget.COM_TW_MEDIA
-            stock && !media -> DofunSelectedMusicTarget.COM_TW_MUSIC
-            media && stock -> DofunSelectedMusicTarget.UNKNOWN
+        return when (candidatePackages.single()) {
+            AUXIO_RELEASE_PACKAGE -> DofunSelectedMusicTarget.COM_TW_MEDIA
+            STOCK_MUSIC_PACKAGE -> DofunSelectedMusicTarget.COM_TW_MUSIC
             else -> DofunSelectedMusicTarget.OTHER
         }
     }
@@ -134,16 +135,19 @@ object DofunIntegrationClassifier {
         selectedTarget: DofunSelectedMusicTarget,
     ): String =
         when {
+            selectedTarget == DofunSelectedMusicTarget.COM_TW_MUSIC ->
+                "DoFun selection evidence points to stock com.tw.music. Preserve stock and use the guarded reversible selection experiment only after a saved baseline."
+            selectedTarget == DofunSelectedMusicTarget.COM_TW_MEDIA &&
+                !topology.releaseAuxioPresent ->
+                "DoFun selection evidence points to com.tw.media but the release package is not currently installed. Treat the selection as potentially stale until the exact release build is installed and re-read."
+            selectedTarget == DofunSelectedMusicTarget.COM_TW_MEDIA ->
+                "DoFun selection evidence points to com.tw.media. Validate notification, MediaSession and one-command ingress paths."
+            selectedTarget == DofunSelectedMusicTarget.OTHER ->
+                "DoFun selection evidence points to another target. Capture the exact provider value before changing launcher state."
             topology.debugAuxioPresent && !topology.releaseAuxioPresent ->
                 "Install the exact com.tw.media release build before fixed-identity validation; the debug suffix is not a DoFun fixed match."
             !topology.releaseAuxioPresent ->
                 "Install topwayTwMediaRelease. Package topology does not establish launcher selection."
-            selectedTarget == DofunSelectedMusicTarget.COM_TW_MEDIA ->
-                "DoFun selection evidence points to com.tw.media. Validate notification, MediaSession and one-command ingress paths."
-            selectedTarget == DofunSelectedMusicTarget.COM_TW_MUSIC ->
-                "DoFun selection evidence points to stock com.tw.music. Preserve stock and use the guarded reversible selection experiment only after a saved baseline."
-            selectedTarget == DofunSelectedMusicTarget.OTHER ->
-                "DoFun selection evidence points to another target. Capture the exact provider value before changing launcher state."
             else ->
                 "DoFun selection was not found in the inspected scope. Verify the playback channel/session first, then collect current launcher selection evidence."
         }
