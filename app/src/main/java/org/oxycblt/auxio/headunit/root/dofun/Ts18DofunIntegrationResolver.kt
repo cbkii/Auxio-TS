@@ -20,6 +20,8 @@ package org.oxycblt.auxio.headunit.root.dofun
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.database.Cursor
+import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.headunit.root.RootStateHolder
@@ -66,6 +68,7 @@ data class DofunIntegrationReport(
     val packageTopology: DofunPackageTopology,
     val selectedMusicTarget: DofunSelectedMusicTarget,
     val selectionEvidence: String?,
+    val selectionEvidenceSource: String,
     val probeResults: Map<Ts18RootProbe, String>,
     val bootClassification: String,
     val recommendedStep: String,
@@ -77,9 +80,7 @@ class Ts18DofunIntegrationResolver(
 ) {
     suspend fun runIntegrationCheck(): DofunIntegrationReport =
         withContext(Dispatchers.IO) {
-            val rootState = rootStateHolder.probeSync()
             val installedPackages = mutableListOf<String>()
-
             val pm = context.packageManager
             listOf("com.tw.media", "com.tw.media.debug", "com.tw.music", "com.dofun.variety")
                 .forEach {
@@ -88,7 +89,16 @@ class Ts18DofunIntegrationResolver(
                         installedPackages.add(it)
                     } catch (_: PackageManager.NameNotFoundException) {}
                 }
+            val topology = DofunIntegrationClassifier.topology(installedPackages)
 
+            // Query the launcher-owned exported selection surface under Auxio's real app UID first.
+            // A later root read can improve observability but must not be confused with app authority.
+            val appSelectionEvidence =
+                if (topology.dofunPresent) readDofunSelectionFromAppUid() else null
+            val appSelectedTarget =
+                DofunIntegrationClassifier.selectedMusicTarget(appSelectionEvidence)
+
+            val rootState = rootStateHolder.probeSync()
             val probeResults = mutableMapOf<Ts18RootProbe, String>()
             if (rootState == RootStateHolder.State.Available) {
                 Ts18RootProbe.entries.forEach { probe ->
@@ -99,10 +109,16 @@ class Ts18DofunIntegrationResolver(
                 probeResults[Ts18RootProbe.Id] = "Root checks skipped"
             }
 
-            val topology = DofunIntegrationClassifier.topology(installedPackages)
-            val selectionEvidence = probeResults[Ts18RootProbe.DofunDataHintsReadOnly]
-            val selectedMusicTarget =
-                DofunIntegrationClassifier.selectedMusicTarget(selectionEvidence)
+            val rootSelectionEvidence = probeResults[Ts18RootProbe.DofunDataHintsReadOnly]
+            val rootSelectedTarget =
+                DofunIntegrationClassifier.selectedMusicTarget(rootSelectionEvidence)
+            val selection =
+                chooseSelectionEvidence(
+                    appSelectionEvidence,
+                    appSelectedTarget,
+                    rootSelectionEvidence,
+                    rootSelectedTarget,
+                )
 
             val classification =
                 """
@@ -113,6 +129,7 @@ class Ts18DofunIntegrationResolver(
                 - cmd=update, seek, prev, next: should not start playback from nothing
                 - Floating-only routing applies to MAIN/MUSIC_PLAYER; ACTION_VIEW still opens the player
                 - Installed package topology is not evidence that DoFun selected that package
+                - App-UID provider evidence is preferred; root provider evidence improves observation only
                 - DoFun selected target remains UNKNOWN unless a launcher-owned selection surface proves it
                 """
                     .trimIndent()
@@ -121,16 +138,99 @@ class Ts18DofunIntegrationResolver(
                 rootState = rootState,
                 installedPackages = installedPackages,
                 packageTopology = topology,
-                selectedMusicTarget = selectedMusicTarget,
-                selectionEvidence = selectionEvidence,
+                selectedMusicTarget = selection.target,
+                selectionEvidence = selection.evidence,
+                selectionEvidenceSource = selection.source,
                 probeResults = probeResults,
                 bootClassification = classification,
                 recommendedStep =
-                    DofunIntegrationClassifier.recommendation(topology, selectedMusicTarget),
+                    DofunIntegrationClassifier.recommendation(topology, selection.target),
             )
         }
 
+    private fun readDofunSelectionFromAppUid(): String =
+        try {
+            val cursor =
+                context.contentResolver.query(
+                    DOFUN_SELECTION_URI,
+                    null,
+                    null,
+                    null,
+                    null,
+                ) ?: return "Provider returned null cursor"
+            cursor.use { serializeSelectionCursor(it) }
+        } catch (e: SecurityException) {
+            "SecurityException: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
+        } catch (e: IllegalArgumentException) {
+            "IllegalArgumentException: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
+        } catch (e: RuntimeException) {
+            "${e.javaClass.simpleName}: ${e.message.orEmpty().take(MAX_PROVIDER_ERROR_CHARS)}"
+        }
+
+    private fun serializeSelectionCursor(cursor: Cursor): String {
+        if (!cursor.moveToFirst()) return "No result found."
+        val columnNames = cursor.columnNames.take(MAX_SELECTION_COLUMNS)
+        val rows = mutableListOf<String>()
+        do {
+            val row =
+                columnNames.joinToString(prefix = "Row: ", separator = ", ") { column ->
+                    val index = cursor.getColumnIndex(column)
+                    "$column=${readCursorValue(cursor, index)}"
+                }
+            rows.add(row.take(MAX_SELECTION_ROW_CHARS))
+        } while (rows.size < MAX_SELECTION_ROWS && cursor.moveToNext())
+        return rows.joinToString("\n").take(MAX_PROBE_RESULT_CHARS)
+    }
+
+    private fun readCursorValue(cursor: Cursor, index: Int): String {
+        if (index < 0) return "<missing>"
+        return try {
+            when (cursor.getType(index)) {
+                Cursor.FIELD_TYPE_NULL -> "null"
+                Cursor.FIELD_TYPE_BLOB -> "<blob>"
+                else -> cursor.getString(index)?.take(MAX_SELECTION_VALUE_CHARS) ?: "null"
+            }
+        } catch (_: RuntimeException) {
+            "<unreadable>"
+        }
+    }
+
+    private fun chooseSelectionEvidence(
+        appEvidence: String?,
+        appTarget: DofunSelectedMusicTarget,
+        rootEvidence: String?,
+        rootTarget: DofunSelectedMusicTarget,
+    ): SelectionEvidence =
+        when {
+            appTarget != DofunSelectedMusicTarget.UNKNOWN ->
+                SelectionEvidence(appTarget, appEvidence, "APP_UID_EXPORTED_PROVIDER")
+            rootTarget != DofunSelectedMusicTarget.UNKNOWN ->
+                SelectionEvidence(rootTarget, rootEvidence, "ROOT_READ_EXPORTED_PROVIDER")
+            appEvidence != null ->
+                SelectionEvidence(DofunSelectedMusicTarget.UNKNOWN, appEvidence, "APP_UID_EXPORTED_PROVIDER")
+            rootEvidence != null ->
+                SelectionEvidence(
+                    DofunSelectedMusicTarget.UNKNOWN,
+                    rootEvidence,
+                    "ROOT_READ_EXPORTED_PROVIDER",
+                )
+            else -> SelectionEvidence(DofunSelectedMusicTarget.UNKNOWN, null, "NONE")
+        }
+
+    private data class SelectionEvidence(
+        val target: DofunSelectedMusicTarget,
+        val evidence: String?,
+        val source: String,
+    )
+
     private companion object {
+        val DOFUN_SELECTION_URI: Uri =
+            Uri.parse("content://com.dofun.variety.ExportedProvider/hotseat_app_music")
         const val MAX_PROBE_RESULT_CHARS = 5_000
+        const val MAX_PROVIDER_ERROR_CHARS = 240
+        const val MAX_SELECTION_COLUMNS = 16
+        const val MAX_SELECTION_ROWS = 8
+        const val MAX_SELECTION_ROW_CHARS = 1_024
+        const val MAX_SELECTION_VALUE_CHARS = 512
     }
 }
