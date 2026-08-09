@@ -24,7 +24,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.BadParcelableException
 import android.view.KeyEvent
-import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -88,14 +87,12 @@ class MediaButtonReceiver : BroadcastReceiver() {
 
         val serviceClass = TopwayServiceBridge.resolveCompatServiceClass(AuxioService::class.java)
         val serviceIntent =
-            ForegroundServiceStartContract.markRequired(
-                Intent(Intent.ACTION_MEDIA_BUTTON)
-                    .setComponent(ComponentName(context, serviceClass))
-                    .putExtra(Intent.EXTRA_KEY_EVENT, event)
-                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
-            )
+            Intent(Intent.ACTION_MEDIA_BUTTON)
+                .setComponent(ComponentName(context, serviceClass))
+                .putExtra(Intent.EXTRA_KEY_EVENT, event)
+                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
         try {
-            ContextCompat.startForegroundService(context, serviceIntent)
+            ForegroundServiceStartContract.start(context, serviceIntent)
         } catch (e: IllegalStateException) {
             L.w(e, "Unable to start Auxio for media-button event")
         } catch (e: SecurityException) {
