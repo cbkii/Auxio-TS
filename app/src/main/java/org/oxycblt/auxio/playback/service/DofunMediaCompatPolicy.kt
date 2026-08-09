@@ -54,8 +54,8 @@ object DofunMediaCompatPolicy {
      * Stock-name wrapper controls must remain live for the explicit Topway transport modes,
      * including broadcast-only mode. Generic and Android-only profiles route their wrapper controls
      * through the canonical media-button service path. `AutoAllSafePaths` keeps Topway wrapper
-     * controls while its canonical playback notification independently uses the generic three-action
-     * DoFun profile.
+     * controls while its canonical playback notification independently uses the generic
+     * three-action DoFun profile.
      */
     fun usesCanonicalWidgetControls(mode: Ts18LauncherIntegrationMode): Boolean =
         mode.usesGenericDofunProfile || mode == Ts18LauncherIntegrationMode.AndroidMediaSessionOnly
