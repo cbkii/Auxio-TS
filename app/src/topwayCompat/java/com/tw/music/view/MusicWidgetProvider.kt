@@ -38,6 +38,7 @@ import org.oxycblt.auxio.headunit.topway.TopwayMusicContract
 import org.oxycblt.auxio.headunit.topway.TopwayWidgetProviderPolicy
 import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 import org.oxycblt.auxio.playback.service.DofunMediaCompatPolicy
+import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 import org.oxycblt.auxio.playback.service.MediaButtonIntentFactory
 import org.oxycblt.auxio.playback.service.PendingIntentRequestCodePolicy
 import org.oxycblt.auxio.ui.UISettings
@@ -147,6 +148,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
             serviceIntent.putExtra(EXTRA_APP_WIDGET_IDS, appWidgetIds)
         }
 
+        ForegroundServiceStartContract.markRequired(serviceIntent)
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
         } catch (e: IllegalStateException) {
@@ -341,6 +343,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
             serviceIntent.putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, it)
         }
 
+        ForegroundServiceStartContract.markRequired(serviceIntent)
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
         } catch (e: IllegalStateException) {
