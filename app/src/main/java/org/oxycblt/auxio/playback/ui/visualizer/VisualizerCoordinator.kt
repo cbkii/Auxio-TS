@@ -54,13 +54,15 @@ class VisualizerCoordinator(
         VisualizerRuntimeMetrics(
             diagnosticJournal ?: VisualizerDiagnosticsResolver.resolve(context)
         )
+    private val recoveryTracker = VisualizerRecoveryTracker()
     private var visualizer: Visualizer? = null
     private var currentSessionId: Int? = null
     private var watchdogJob: Job? = null
+    private var pauseReleaseJob: Job? = null
     private var monitorJob: Job? = null
     private var activeScope: CoroutineScope? = null
+    private var pausedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
     private var generation = 0
-    private var retryCount = 0
     private var permissionDenied = uiSettings.visualizerPermissionDenied
     private var permissionRequestIssued = false
     private var active = false
@@ -69,6 +71,7 @@ class VisualizerCoordinator(
         if (active) return
         active = true
         activeScope = owner.lifecycleScope
+        recoveryTracker.reset()
         if (hasPermission()) {
             clearPersistedPermissionDenial()
             permissionRequestIssued = false
@@ -89,13 +92,14 @@ class VisualizerCoordinator(
         uiSettings.unregisterListener(this)
         monitorJob?.cancel()
         monitorJob = null
-        releaseVisualizer()
+        releaseVisualizer(resetRecovery = true)
+        _state.value = VisualizerState.Disabled
         runtimeMetrics.flush("lifecycle_stop", SystemClock.uptimeMillis())
         activeScope = null
     }
 
     override fun onVisualizerModeChanged() {
-        retryCount = 0
+        recoveryTracker.reset()
         if (hasPermission()) {
             clearPersistedPermissionDenial()
             permissionRequestIssued = false
@@ -116,13 +120,13 @@ class VisualizerCoordinator(
     fun onPermissionResult(granted: Boolean) {
         permissionRequestIssued = false
         if (granted) {
-            retryCount = 0
+            recoveryTracker.reset()
             clearPersistedPermissionDenial()
             updateState(forceRestart = true)
         } else {
             permissionDenied = true
             uiSettings.visualizerPermissionDenied = true
-            releaseVisualizer()
+            releaseVisualizer(resetRecovery = true)
             _state.value = VisualizerState.PermissionDenied
         }
     }
@@ -138,26 +142,29 @@ class VisualizerCoordinator(
         if (!active) return
         if (uiSettings.visualizerMode == UISettings.VisualizerMode.OFF) {
             permissionRequestIssued = false
-            releaseVisualizer()
+            releaseVisualizer(resetRecovery = true)
             _state.value = VisualizerState.Disabled
             return
         }
 
+        val sessionId = audioSessionIdFlow.value?.takeIf { it > 0 }
         if (!isPlayingFlow.value) {
-            releaseVisualizer()
+            if (visualizer != null && currentSessionId != sessionId) {
+                releaseVisualizer(resetRecovery = true)
+            }
+            pauseVisualizer()
             _state.value = VisualizerState.Paused
             return
         }
 
-        val sessionId = audioSessionIdFlow.value?.takeIf { it > 0 }
         if (sessionId == null) {
-            releaseVisualizer()
+            releaseVisualizer(resetRecovery = true)
             _state.value = VisualizerState.AwaitingAudioSession
             return
         }
 
         if (!hasPermission()) {
-            releaseVisualizer()
+            releaseVisualizer(resetRecovery = true)
             permissionDenied = permissionDenied || uiSettings.visualizerPermissionDenied
             _state.value =
                 if (permissionDenied) VisualizerState.PermissionDenied
@@ -168,16 +175,103 @@ class VisualizerCoordinator(
         permissionRequestIssued = false
 
         if (forceRestart || (visualizer != null && currentSessionId != sessionId)) {
-            retryCount = 0
-            releaseVisualizer()
+            recoveryTracker.reset()
+            releaseVisualizer(resetRecovery = false)
         }
 
-        if (visualizer == null) startVisualizer(sessionId)
+        if (visualizer != null) {
+            if (_state.value is VisualizerState.Paused && !resumeRetainedVisualizer(sessionId)) {
+                startVisualizer(sessionId)
+            }
+            return
+        }
+
+        startVisualizer(sessionId)
+    }
+
+    private fun pauseVisualizer() {
+        val candidate = visualizer
+        if (candidate == null) {
+            recoveryTracker.reset()
+            pausedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
+            return
+        }
+        if (_state.value is VisualizerState.Paused && pauseReleaseJob != null) return
+
+        watchdogJob?.cancel()
+        watchdogJob = null
+        recoveryTracker.reset()
+        pausedAtUptimeMs = SystemClock.uptimeMillis()
+        try {
+            if (candidate.enabled) candidate.enabled = false
+        } catch (error: RuntimeException) {
+            L.w(error, "Visualizer disable on pause failed; releasing session")
+            releaseVisualizer(resetRecovery = true)
+            return
+        }
+
+        val scope = activeScope
+        if (scope == null) {
+            releaseVisualizer(resetRecovery = true)
+            return
+        }
+        val retainedGeneration = generation
+        val retainedSessionId = currentSessionId
+        pauseReleaseJob?.cancel()
+        pauseReleaseJob =
+            scope.launch {
+                delay(VisualizerRecoveryPolicy.PAUSE_RETAIN_MS)
+                if (
+                    active &&
+                        !isPlayingFlow.value &&
+                        generation == retainedGeneration &&
+                        currentSessionId == retainedSessionId &&
+                        visualizer === candidate
+                ) {
+                    pauseReleaseJob = null
+                    releaseVisualizer(resetRecovery = true)
+                    _state.value = VisualizerState.Paused
+                }
+            }
+    }
+
+    private fun resumeRetainedVisualizer(sessionId: Int): Boolean {
+        val candidate = visualizer ?: return false
+        val now = SystemClock.uptimeMillis()
+        if (
+            !VisualizerRecoveryPolicy.canReusePausedSession(
+                currentSessionId,
+                sessionId,
+                pausedAtUptimeMs,
+                now,
+            )
+        ) {
+            releaseVisualizer(resetRecovery = true)
+            return false
+        }
+
+        pauseReleaseJob?.cancel()
+        pauseReleaseJob = null
+        pausedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
+        recoveryTracker.reset()
+        recoveryTracker.beginAttempt(now)
+        _state.value = VisualizerState.Starting
+        return try {
+            candidate.enabled = true
+            scheduleWatchdog(sessionId, generation)
+            L.d("Visualizer resumed retained session=$sessionId")
+            true
+        } catch (error: RuntimeException) {
+            L.w(error, "Visualizer retained-session resume failed for session $sessionId")
+            releaseVisualizer(resetRecovery = true)
+            false
+        }
     }
 
     private fun startVisualizer(sessionId: Int) {
         generation++
         val currentGeneration = generation
+        recoveryTracker.beginAttempt(SystemClock.uptimeMillis())
         _state.value = VisualizerState.Starting
         var candidateToRelease: Visualizer? = null
         try {
@@ -193,8 +287,10 @@ class VisualizerCoordinator(
             val targetSize = 512.coerceIn(captureRange[0], captureRange[1])
             candidate.captureSize = targetSize
             val targetRate = minOf(Visualizer.getMaxCaptureRate(), 30_000).coerceAtLeast(1)
+            val captureMode =
+                VisualizerRecoveryPolicy.captureModeForAttempt(recoveryTracker.consecutiveRetries)
             val scalingMode =
-                if (retryCount == 0) Visualizer.SCALING_MODE_AS_PLAYED
+                if (recoveryTracker.consecutiveRetries == 0) Visualizer.SCALING_MODE_AS_PLAYED
                 else Visualizer.SCALING_MODE_NORMALIZED
             try {
                 candidate.scalingMode = scalingMode
@@ -202,7 +298,6 @@ class VisualizerCoordinator(
                 L.d(error, "Requested visualizer scaling mode unavailable")
             }
 
-            var lastFftMs = 0L
             val listenerStatus =
                 candidate.setDataCaptureListener(
                     object : Visualizer.OnDataCaptureListener {
@@ -211,34 +306,33 @@ class VisualizerCoordinator(
                             waveform: ByteArray,
                             samplingRate: Int,
                         ) {
-                            val now = SystemClock.uptimeMillis()
-                            if (now - lastFftMs < FFT_PREFERENCE_WINDOW_MS) {
-                                runtimeMetrics.recordSuppressedWaveform()
+                            if (!VisualizerRecoveryPolicy.hasUsableSamplingRate(samplingRate))
                                 return
-                            }
                             if (!hasUsableWaveform(waveform)) return
-                            if (generation == currentGeneration && currentSessionId == sessionId) {
-                                val frame =
-                                    if (runtimeMetrics.isActive) {
-                                        val copyStart = SystemClock.elapsedRealtimeNanos()
-                                        waveform.copyOf().also { copy ->
-                                            runtimeMetrics.recordFrame(
-                                                copy.size,
-                                                SystemClock.elapsedRealtimeNanos() - copyStart,
-                                                now,
-                                            )
-                                        }
-                                    } else {
-                                        waveform.copyOf()
+                            val now = SystemClock.uptimeMillis()
+                            if (generation != currentGeneration || currentSessionId != sessionId)
+                                return
+                            recoveryTracker.noteUsableFrame(now)
+                            val frame =
+                                if (runtimeMetrics.isActive) {
+                                    val copyStart = SystemClock.elapsedRealtimeNanos()
+                                    waveform.copyOf().also { copy ->
+                                        runtimeMetrics.recordFrame(
+                                            copy.size,
+                                            SystemClock.elapsedRealtimeNanos() - copyStart,
+                                            now,
+                                        )
                                     }
-                                _state.value =
-                                    VisualizerState.Live(
-                                        frame,
-                                        samplingRate,
-                                        now,
-                                        VisualizerState.FrameSource.WAVEFORM,
-                                    )
-                            }
+                                } else {
+                                    waveform.copyOf()
+                                }
+                            _state.value =
+                                VisualizerState.Live(
+                                    frame,
+                                    samplingRate,
+                                    now,
+                                    VisualizerState.FrameSource.WAVEFORM,
+                                )
                         }
 
                         override fun onFftDataCapture(
@@ -246,51 +340,86 @@ class VisualizerCoordinator(
                             fft: ByteArray,
                             samplingRate: Int,
                         ) {
+                            if (!VisualizerRecoveryPolicy.hasUsableSamplingRate(samplingRate))
+                                return
                             if (!hasUsableFft(fft)) return
                             val now = SystemClock.uptimeMillis()
-                            lastFftMs = now
-                            if (generation == currentGeneration && currentSessionId == sessionId) {
-                                val frame =
-                                    if (runtimeMetrics.isActive) {
-                                        val copyStart = SystemClock.elapsedRealtimeNanos()
-                                        fft.copyOf().also { copy ->
-                                            runtimeMetrics.recordFrame(
-                                                copy.size,
-                                                SystemClock.elapsedRealtimeNanos() - copyStart,
-                                                now,
-                                            )
-                                        }
-                                    } else {
-                                        fft.copyOf()
+                            if (generation != currentGeneration || currentSessionId != sessionId)
+                                return
+                            recoveryTracker.noteUsableFrame(now)
+                            val frame =
+                                if (runtimeMetrics.isActive) {
+                                    val copyStart = SystemClock.elapsedRealtimeNanos()
+                                    fft.copyOf().also { copy ->
+                                        runtimeMetrics.recordFrame(
+                                            copy.size,
+                                            SystemClock.elapsedRealtimeNanos() - copyStart,
+                                            now,
+                                        )
                                     }
-                                _state.value =
-                                    VisualizerState.Live(
-                                        frame,
-                                        samplingRate,
-                                        now,
-                                        VisualizerState.FrameSource.FFT,
-                                    )
-                            }
+                                } else {
+                                    fft.copyOf()
+                                }
+                            _state.value =
+                                VisualizerState.Live(
+                                    frame,
+                                    samplingRate,
+                                    now,
+                                    VisualizerState.FrameSource.FFT,
+                                )
                         }
                     },
                     targetRate,
-                    true,
-                    true,
+                    captureMode.captureWaveform,
+                    captureMode.captureFft,
                 )
 
             if (listenerStatus != Visualizer.SUCCESS) {
+                if (
+                    captureMode == VisualizerCaptureMode.FFT &&
+                        recoveryTracker.consumeRetry(MAX_VISUALIZER_RETRIES)
+                ) {
+                    L.w(
+                        "FFT capture registration failed with status=$listenerStatus; " +
+                            "retrying waveform-only session=$sessionId"
+                    )
+                    releaseCandidate(candidate)
+                    candidateToRelease = null
+                    startVisualizer(sessionId)
+                    return
+                }
                 _state.value =
                     VisualizerState.Unavailable("Listener registration failed: $listenerStatus")
                 return
             }
 
-            candidate.enabled = true
             visualizer = candidate
-            candidateToRelease = null
             currentSessionId = sessionId
+            try {
+                candidate.enabled = true
+            } catch (error: RuntimeException) {
+                visualizer = null
+                currentSessionId = null
+                if (
+                    captureMode == VisualizerCaptureMode.FFT &&
+                        recoveryTracker.consumeRetry(MAX_VISUALIZER_RETRIES)
+                ) {
+                    L.w(
+                        error,
+                        "FFT capture enable failed; retrying waveform-only session=$sessionId",
+                    )
+                    releaseCandidate(candidate)
+                    candidateToRelease = null
+                    startVisualizer(sessionId)
+                    return
+                }
+                throw error
+            }
+            candidateToRelease = null
             L.i(
                 "Visualizer started session=$sessionId captureSize=$targetSize " +
-                    "rate=$targetRate attempt=$retryCount"
+                    "rate=$targetRate capture=$captureMode " +
+                    "attempt=${recoveryTracker.consecutiveRetries}"
             )
             scheduleWatchdog(sessionId, currentGeneration)
         } catch (error: RuntimeException) {
@@ -315,51 +444,58 @@ class VisualizerCoordinator(
         watchdogJob?.cancel()
         val scope = activeScope
         if (scope == null) {
-            releaseVisualizer()
+            releaseVisualizer(resetRecovery = true)
             _state.value = VisualizerState.Unavailable("Visualizer lifecycle is unavailable")
             return
         }
         watchdogJob =
             scope.launch {
                 while (currentGeneration == generation && currentSessionId == sessionId) {
-                    delay(VISUALIZER_WATCHDOG_INTERVAL_MS)
+                    delay(VisualizerRecoveryPolicy.WATCHDOG_INTERVAL_MS)
                     if (currentGeneration != generation || currentSessionId != sessionId) {
                         return@launch
                     }
-                    val currentState = _state.value
                     val now = SystemClock.uptimeMillis()
-                    val hasFreshFrame =
-                        currentState is VisualizerState.Live &&
-                            now - currentState.receivedAtUptimeMs <= VISUALIZER_STALE_AFTER_MS
-                    if (hasFreshFrame) continue
+                    if (!recoveryTracker.isTimedOut(now)) continue
 
-                    if (retryCount < MAX_VISUALIZER_RETRIES) {
-                        retryCount++
+                    if (recoveryTracker.consumeRetry(MAX_VISUALIZER_RETRIES)) {
                         runtimeMetrics.recordWatchdogRetry()
+                        val timeoutKind =
+                            if (
+                                recoveryTracker.lastUsableFrameAtUptimeMs ==
+                                    VisualizerRecoveryPolicy.UNSET_UPTIME_MS
+                            ) {
+                                "first frame"
+                            } else {
+                                "live frame"
+                            }
                         L.w(
-                            "Visualizer produced no recent usable frame; retrying " +
-                                "session=$sessionId attempt=$retryCount"
+                            "Visualizer $timeoutKind timeout; retrying " +
+                                "session=$sessionId attempt=${recoveryTracker.consecutiveRetries}"
                         )
-                        releaseVisualizer()
+                        releaseVisualizer(resetRecovery = false)
                         updateState()
                     } else {
-                        releaseVisualizer()
-                        _state.value =
-                            VisualizerState.Unavailable("No usable FFT or waveform frames")
+                        releaseVisualizer(resetRecovery = false)
+                        _state.value = VisualizerState.Unavailable("No usable visualizer frames")
                     }
                     return@launch
                 }
             }
     }
 
-    private fun releaseVisualizer() {
+    private fun releaseVisualizer(resetRecovery: Boolean) {
         watchdogJob?.cancel()
         watchdogJob = null
+        pauseReleaseJob?.cancel()
+        pauseReleaseJob = null
+        pausedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
         generation++
         val activeVisualizer = visualizer
         visualizer = null
         currentSessionId = null
         if (activeVisualizer != null) releaseCandidate(activeVisualizer)
+        if (resetRecovery) recoveryTracker.reset()
     }
 
     private fun releaseCandidate(candidate: Visualizer) {
@@ -404,9 +540,6 @@ class VisualizerCoordinator(
     }
 
     private companion object {
-        const val FFT_PREFERENCE_WINDOW_MS = 300L
-        const val VISUALIZER_WATCHDOG_INTERVAL_MS = 1_500L
-        const val VISUALIZER_STALE_AFTER_MS = 2_000L
         const val MAX_VISUALIZER_RETRIES = 1
         const val MIN_WAVEFORM_RANGE = 4
     }

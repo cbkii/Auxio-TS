@@ -21,8 +21,10 @@ package org.oxycblt.auxio.playback.ui.swiper
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.databinding.ItemCoverBinding
@@ -30,6 +32,7 @@ import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerDisplayPolicy
+import org.oxycblt.auxio.playback.ui.visualizer.VisualizerRecoveryPolicy
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
@@ -56,9 +59,11 @@ class CoverPagerAdapter(
 
     init {
         lifecycleOwner.lifecycleScope.launch {
-            visualizerStateFlow.collect { state ->
-                latestState = sanitize(state)
-                dispatchActiveVisualizerState(latestState)
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                visualizerStateFlow.collect { state ->
+                    latestState = sanitize(state)
+                    dispatchActiveVisualizerState(latestState)
+                }
             }
         }
     }
@@ -121,19 +126,8 @@ class CoverPagerAdapter(
         holder.updateVisualizerState(state, visualizerMode)
     }
 
-    private fun sanitize(state: VisualizerState): VisualizerState {
-        if (state !is VisualizerState.Live) return state
-        val ageMs = SystemClock.uptimeMillis() - state.receivedAtUptimeMs
-        return if (ageMs in 0..LIVE_FRAME_FRESHNESS_MS) {
-            state
-        } else {
-            VisualizerState.Unavailable("Stale visualizer frame")
-        }
-    }
-
-    private companion object {
-        const val LIVE_FRAME_FRESHNESS_MS = 1_500L
-    }
+    private fun sanitize(state: VisualizerState): VisualizerState =
+        VisualizerRecoveryPolicy.sanitizeCachedState(state, SystemClock.uptimeMillis())
 }
 
 /** A ViewHolder containing artwork, the visualizer surface, and fast-seek gestures. */

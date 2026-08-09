@@ -545,8 +545,8 @@ class FftSpectrumMapper(private val bandCount: Int = DEFAULT_BAND_COUNT) {
         private const val NEIGHBOR_WEIGHT = 0.12f
         private const val CENTER_WEIGHT = 0.76f
 
-        private const val ATTACK_LOW_ACTIVITY = 0.54f
-        private const val ATTACK_HIGH_ACTIVITY = 0.76f
+        internal const val ATTACK_LOW_ACTIVITY = 0.48f
+        internal const val ATTACK_HIGH_ACTIVITY = 0.64f
         private const val RELEASE_LOW_ACTIVITY = 0.12f
         private const val RELEASE_HIGH_ACTIVITY = 0.21f
 

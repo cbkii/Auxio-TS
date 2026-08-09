@@ -55,6 +55,41 @@ class FftSpectrumMapperTest {
     }
 
     @Test
+    fun attackRangeUsesConservativeLowAndHighActivityBounds() {
+        assertEquals(0.48f, FftSpectrumMapper.ATTACK_LOW_ACTIVITY, 0.0001f)
+        assertEquals(0.64f, FftSpectrumMapper.ATTACK_HIGH_ACTIVITY, 0.0001f)
+        assertTrue(FftSpectrumMapper.ATTACK_LOW_ACTIVITY < FftSpectrumMapper.ATTACK_HIGH_ACTIVITY)
+    }
+
+    @Test
+    fun stableInputConvergesSmoothlyWithoutOvershoot() {
+        val mapper = FftSpectrumMapper()
+        val frame = createSineWaveFft(1000f, amplitude = 110)
+
+        mapper.update(frame, SAMPLE_RATE_MILLIHZ)
+        assertTrue(mapper.bands.any { abs(it) > 0.0001f })
+        val band = mapper.bands.indices.maxBy { abs(mapper.bands[it]) }
+        var previous = mapper.bands[band]
+        mapper.update(frame, SAMPLE_RATE_MILLIHZ)
+        var current = mapper.bands[band]
+        var previousStep = abs(current - previous)
+        assertTrue(previous * current >= 0f)
+        assertTrue(abs(current) >= abs(previous))
+
+        repeat(8) {
+            previous = current
+            mapper.update(frame, SAMPLE_RATE_MILLIHZ)
+            current = mapper.bands[band]
+            val step = abs(current - previous)
+            assertTrue(mapper.bands.all { it in -1f..1f })
+            assertTrue(previous * current >= 0f)
+            assertTrue(abs(current) + 0.0001f >= abs(previous))
+            assertTrue(step <= previousStep + 0.0001f)
+            previousStep = step
+        }
+    }
+
+    @Test
     fun commonCaptureMappingsPopulateEveryBandWithoutOverlap() {
         assertCompleteMapping(SAMPLE_RATE_MILLIHZ)
         assertCompleteMapping(48_000_000)
