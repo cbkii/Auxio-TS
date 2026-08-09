@@ -111,7 +111,9 @@ actual_abis=$(
     sort -u |
     paste -sd, -
 )
-expected_abis='arm64-v8a,armeabi-v7a,x86,x86_64'
+# The published Auxio-TS asset is an exact TS18 production APK. Emulator architectures remain in
+# debug/benchmark lanes and are not valid release payloads.
+expected_abis='arm64-v8a'
 [[ "$actual_abis" == "$expected_abis" ]] ||
   fail "Expected ABI set $expected_abis, got ${actual_abis:-<empty>}."
 
