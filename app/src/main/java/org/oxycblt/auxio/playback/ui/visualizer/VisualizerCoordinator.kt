@@ -404,7 +404,10 @@ class VisualizerCoordinator(
                     captureMode == VisualizerCaptureMode.FFT &&
                         recoveryTracker.consumeRetry(MAX_VISUALIZER_RETRIES)
                 ) {
-                    L.w(error, "FFT capture enable failed; retrying waveform-only session=$sessionId")
+                    L.w(
+                        error,
+                        "FFT capture enable failed; retrying waveform-only session=$sessionId",
+                    )
                     releaseCandidate(candidate)
                     candidateToRelease = null
                     startVisualizer(sessionId)
