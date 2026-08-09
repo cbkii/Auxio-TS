@@ -99,7 +99,8 @@ dependencies {
 tasks.register("assembleTaglib", Exec, {
     def jniDir = "$projectDir/src/main/cpp"
     def ndkDir = androidComponents.sdkComponents.ndkDirectory.get().asFile
-    commandLine "sh", "$jniDir/build_taglib.sh", jniDir, ndkDir, "arm64-v8a,x86_64"
+    // build_taglib.sh deliberately uses Bash arrays/here-strings for a bounded ABI list.
+    commandLine "bash", "$jniDir/build_taglib.sh", jniDir, ndkDir, "arm64-v8a,x86_64"
 })
 
 afterEvaluate {
