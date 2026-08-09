@@ -183,6 +183,7 @@ class DiagnosticsRecoveryPreferenceFragment :
                 report.installedPackages.forEach { sb.appendLine("- $it") }
                 sb.appendLine("Package topology: ${report.packageTopology}")
                 sb.appendLine("DoFun selected music target: ${report.selectedMusicTarget}")
+                sb.appendLine("Selection evidence source: ${report.selectionEvidenceSource}")
                 sb.appendLine(
                     "Selection evidence: " +
                         (report.selectionEvidence?.takeIf { it.isNotBlank() }
