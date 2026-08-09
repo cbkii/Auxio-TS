@@ -26,6 +26,12 @@ enum class DofunSelectedMusicTarget {
     UNKNOWN,
 }
 
+data class DofunSelectionEvidence(
+    val target: DofunSelectedMusicTarget,
+    val evidence: String?,
+    val source: String,
+)
+
 /** Pure, fail-closed classification helpers used by runtime diagnostics and JVM tests. */
 object DofunIntegrationClassifier {
     private const val AUXIO_RELEASE_PACKAGE = "com.tw.media"
@@ -61,7 +67,7 @@ object DofunIntegrationClassifier {
 
         val explicitValues =
             Regex(
-                    "(?:component|package|pkg|value|app|activity|hotseat_app_music)\\s*=\\s*([^,}\\s]+)",
+                    "(?:component|package|pkg|value|hotseat_app_music)\\s*=\\s*([^,}\\s]+)",
                     RegexOption.IGNORE_CASE,
                 )
                 .findAll(output)
@@ -85,6 +91,44 @@ object DofunIntegrationClassifier {
         }
     }
 
+    /**
+     * Only evidence obtained through the exported provider under Auxio's real app UID may establish
+     * launcher selection. A root-shell read is retained for observation but never upgrades
+     * [DofunSelectedMusicTarget.UNKNOWN] into a claimed app-authority result.
+     */
+    fun authoritativeSelection(
+        appProviderOutput: String?,
+        rootProviderOutput: String?,
+    ): DofunSelectionEvidence {
+        val appTarget = selectedMusicTarget(appProviderOutput)
+        return when {
+            appTarget != DofunSelectedMusicTarget.UNKNOWN ->
+                DofunSelectionEvidence(
+                    appTarget,
+                    appProviderOutput,
+                    SELECTION_SOURCE_APP_UID,
+                )
+            appProviderOutput != null ->
+                DofunSelectionEvidence(
+                    DofunSelectedMusicTarget.UNKNOWN,
+                    appProviderOutput,
+                    SELECTION_SOURCE_APP_UID,
+                )
+            rootProviderOutput != null ->
+                DofunSelectionEvidence(
+                    DofunSelectedMusicTarget.UNKNOWN,
+                    rootProviderOutput,
+                    SELECTION_SOURCE_ROOT_OBSERVATION,
+                )
+            else ->
+                DofunSelectionEvidence(
+                    DofunSelectedMusicTarget.UNKNOWN,
+                    null,
+                    SELECTION_SOURCE_NONE,
+                )
+        }
+    }
+
     fun recommendation(
         topology: DofunPackageTopology,
         selectedTarget: DofunSelectedMusicTarget,
@@ -105,4 +149,8 @@ object DofunIntegrationClassifier {
         }
 
     private fun candidatePackage(value: String): String = value.substringBefore('/').trim()
+
+    private const val SELECTION_SOURCE_APP_UID = "APP_UID_EXPORTED_PROVIDER"
+    private const val SELECTION_SOURCE_ROOT_OBSERVATION = "ROOT_OBSERVATION_ONLY"
+    private const val SELECTION_SOURCE_NONE = "NONE"
 }
