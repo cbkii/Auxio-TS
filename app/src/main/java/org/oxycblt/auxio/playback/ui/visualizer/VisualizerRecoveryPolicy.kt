@@ -18,6 +18,9 @@
 
 package org.oxycblt.auxio.playback.ui.visualizer
 
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+
 /** Allocation-free timing and presentation policy for the Android Visualizer capture lifecycle. */
 internal object VisualizerRecoveryPolicy {
     const val WATCHDOG_INTERVAL_MS = 1_000L
@@ -62,42 +65,48 @@ internal object VisualizerRecoveryPolicy {
 
 /** Tracks consecutive recovery attempts separately from the lifetime of the UI coordinator. */
 internal class VisualizerRecoveryTracker {
-    var attemptStartedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
-        private set
-    var lastUsableFrameAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
-        private set
-    var consecutiveRetries = 0
-        private set
+    private val attemptStartedAt = AtomicLong(VisualizerRecoveryPolicy.UNSET_UPTIME_MS)
+    private val lastUsableFrameAt = AtomicLong(VisualizerRecoveryPolicy.UNSET_UPTIME_MS)
+    private val retries = AtomicInteger()
+
+    val attemptStartedAtUptimeMs: Long
+        get() = attemptStartedAt.get()
+
+    val lastUsableFrameAtUptimeMs: Long
+        get() = lastUsableFrameAt.get()
+
+    val consecutiveRetries: Int
+        get() = retries.get()
 
     fun beginAttempt(nowUptimeMs: Long) {
-        attemptStartedAtUptimeMs = nowUptimeMs
-        lastUsableFrameAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
+        attemptStartedAt.set(nowUptimeMs)
+        lastUsableFrameAt.set(VisualizerRecoveryPolicy.UNSET_UPTIME_MS)
     }
 
     fun noteUsableFrame(nowUptimeMs: Long) {
-        if (attemptStartedAtUptimeMs == VisualizerRecoveryPolicy.UNSET_UPTIME_MS) {
-            attemptStartedAtUptimeMs = nowUptimeMs
-        }
-        lastUsableFrameAtUptimeMs = nowUptimeMs
-        if (consecutiveRetries != 0) consecutiveRetries = 0
+        attemptStartedAt.compareAndSet(VisualizerRecoveryPolicy.UNSET_UPTIME_MS, nowUptimeMs)
+        lastUsableFrameAt.set(nowUptimeMs)
+        if (retries.get() != 0) retries.set(0)
     }
 
     fun isTimedOut(nowUptimeMs: Long) =
         VisualizerRecoveryPolicy.isCaptureTimedOut(
-            attemptStartedAtUptimeMs,
-            lastUsableFrameAtUptimeMs,
+            attemptStartedAt.get(),
+            lastUsableFrameAt.get(),
             nowUptimeMs,
         )
 
     fun consumeRetry(maxRetries: Int): Boolean {
-        if (consecutiveRetries >= maxRetries) return false
-        consecutiveRetries++
-        return true
+        while (true) {
+            val current = retries.get()
+            if (current >= maxRetries) return false
+            if (retries.compareAndSet(current, current + 1)) return true
+        }
     }
 
     fun reset() {
-        attemptStartedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
-        lastUsableFrameAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
-        consecutiveRetries = 0
+        attemptStartedAt.set(VisualizerRecoveryPolicy.UNSET_UPTIME_MS)
+        lastUsableFrameAt.set(VisualizerRecoveryPolicy.UNSET_UPTIME_MS)
+        retries.set(0)
     }
 }
