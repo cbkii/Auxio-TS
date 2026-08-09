@@ -23,8 +23,9 @@ import timber.log.Timber as L
 /**
  * Small, bounded event seam for comparing DoFun/Topway command ingress routes on an exact TS18.
  *
- * The DiagnosticJournal already bounds memory/persistence. This helper adds no queue, timer, I/O or
- * dedupe authority; it only annotates events with their integration mode and monotonic timestamp.
+ * The DiagnosticJournal bounds retained memory and files, but its debug persistence executor uses a
+ * normal task queue. This helper therefore rate-limits all newly added launcher telemetry before
+ * journal submission. It adds no playback, dedupe or control authority.
  */
 @Singleton
 class LauncherIntegrationTelemetry
@@ -34,6 +35,7 @@ constructor(
     private val journal: DiagnosticJournal,
 ) {
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    private val submissionLimiter = EventRateLimiter(SystemClock::elapsedRealtime)
 
     fun log(
         category: String,
@@ -43,6 +45,16 @@ constructor(
         result: String,
         detail: String? = null,
     ) {
+        if (
+            !submissionLimiter.allow(
+                key = TELEMETRY_LIMITER_KEY,
+                maxEvents = MAX_TELEMETRY_EVENTS_PER_WINDOW,
+                windowMs = TELEMETRY_WINDOW_MS,
+            )
+        ) {
+            return
+        }
+
         val mode =
             if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
                 Ts18LauncherIntegrationMode.fromPreference(
@@ -72,5 +84,8 @@ constructor(
 
     private companion object {
         const val MAX_DETAIL_CHARS = 320
+        const val TELEMETRY_LIMITER_KEY = "launcher-integration-telemetry"
+        const val MAX_TELEMETRY_EVENTS_PER_WINDOW = 16
+        const val TELEMETRY_WINDOW_MS = 1_000L
     }
 }
