@@ -85,6 +85,24 @@ class VisualizerRecoveryPolicyTest {
     }
 
     @Test
+    fun capturePolicyUsesFftPrimaryAndWaveformFallbackWithoutDualCapture() {
+        val primary = VisualizerRecoveryPolicy.captureModeForAttempt(consecutiveRetries = 0)
+        val fallback = VisualizerRecoveryPolicy.captureModeForAttempt(consecutiveRetries = 1)
+
+        assertEquals(VisualizerCaptureMode.FFT, primary)
+        assertTrue(primary.captureFft)
+        assertFalse(primary.captureWaveform)
+
+        assertEquals(VisualizerCaptureMode.WAVEFORM, fallback)
+        assertFalse(fallback.captureFft)
+        assertTrue(fallback.captureWaveform)
+
+        for (mode in VisualizerCaptureMode.entries) {
+            assertTrue(mode.captureFft xor mode.captureWaveform)
+        }
+    }
+
+    @Test
     fun nonPositiveSamplingRatesAreNotUsableCaptureFrames() {
         assertFalse(VisualizerRecoveryPolicy.hasUsableSamplingRate(0))
         assertFalse(VisualizerRecoveryPolicy.hasUsableSamplingRate(-1))
