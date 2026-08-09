@@ -27,6 +27,7 @@ import javax.inject.Inject
 import org.oxycblt.auxio.AuxioService
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.diagnostics.DiagnosticJournal
+import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 import timber.log.Timber as L
 
 /**
@@ -99,6 +100,7 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
             serviceIntent.putExtra(TopwayMusicContract.EXTRA_WIDGET_PROGRESS, it)
         }
         serviceIntent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_TOPWAY)
+        ForegroundServiceStartContract.markRequired(serviceIntent)
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
         } catch (e: IllegalStateException) {
