@@ -29,11 +29,18 @@ import org.oxycblt.auxio.headunit.topway.Ts18LauncherIntegrationMode
 
 class DofunMediaCompatPolicyTest {
     @Test
-    fun `generic profile is isolated to topway generic mode`() {
+    fun `generic notification profile is retained by all safe paths`() {
         assertEquals(
             PlaybackNotificationProfile.GenericDofun,
             DofunMediaCompatPolicy.notificationProfile(
                 Ts18LauncherIntegrationMode.GenericDofunMedia,
+                topwayCompatFlavor = true,
+            ),
+        )
+        assertEquals(
+            PlaybackNotificationProfile.GenericDofun,
+            DofunMediaCompatPolicy.notificationProfile(
+                Ts18LauncherIntegrationMode.AutoAllSafePaths,
                 topwayCompatFlavor = true,
             ),
         )
@@ -47,7 +54,7 @@ class DofunMediaCompatPolicyTest {
         assertEquals(
             PlaybackNotificationProfile.RichAuxio,
             DofunMediaCompatPolicy.notificationProfile(
-                Ts18LauncherIntegrationMode.AutoAllSafePaths,
+                Ts18LauncherIntegrationMode.TopwayBroadcastAndCommand,
                 topwayCompatFlavor = true,
             ),
         )
