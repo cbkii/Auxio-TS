@@ -31,6 +31,9 @@ internal object VisualizerRecoveryPolicy {
 
     fun hasUsableSamplingRate(samplingRate: Int) = samplingRate > 0
 
+    fun captureModeForAttempt(consecutiveRetries: Int): VisualizerCaptureMode =
+        if (consecutiveRetries <= 0) VisualizerCaptureMode.FFT else VisualizerCaptureMode.WAVEFORM
+
     fun isCaptureTimedOut(
         attemptStartedAtUptimeMs: Long,
         lastUsableFrameAtUptimeMs: Long,
@@ -61,6 +64,17 @@ internal object VisualizerRecoveryPolicy {
     }
 
     const val UNSET_UPTIME_MS = -1L
+}
+
+internal enum class VisualizerCaptureMode {
+    FFT,
+    WAVEFORM;
+
+    val captureFft: Boolean
+        get() = this == FFT
+
+    val captureWaveform: Boolean
+        get() = this == WAVEFORM
 }
 
 /** Tracks consecutive recovery attempts separately from the lifetime of the UI coordinator. */
