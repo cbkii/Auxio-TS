@@ -15,6 +15,11 @@ android {
 
     defaultConfig {
         minSdk min_sdk
+        // Musikr is consumed by the physical arm64 TS18 and the maintained x86_64 emulator lane.
+        // Legacy x86/armeabi-v7a builds are not part of a current runtime contract.
+        ndk {
+            abiFilters "arm64-v8a", "x86_64"
+        }
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -93,13 +98,8 @@ dependencies {
 
 tasks.register("assembleTaglib", Exec, {
     def jniDir = "$projectDir/src/main/cpp"
-    def libs = new File("$jniDir/taglib/pkg")
-    if (libs.exists()) {
-        commandLine "true"
-        return
-    }
     def ndkDir = androidComponents.sdkComponents.ndkDirectory.get().asFile
-    commandLine "sh", "-c", "$jniDir/build_taglib.sh $jniDir $ndkDir"
+    commandLine "sh", "$jniDir/build_taglib.sh", jniDir, ndkDir, "arm64-v8a,x86_64"
 })
 
 afterEvaluate {
