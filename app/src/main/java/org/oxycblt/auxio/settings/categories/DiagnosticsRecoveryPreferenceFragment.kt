@@ -200,6 +200,10 @@ class DiagnosticsRecoveryPreferenceFragment :
                 sb.appendLine(
                     "playbackNotificationRequestedThisProcess=${channel.publicationRequestedThisProcess}"
                 )
+                sb.appendLine(
+                    "playbackNotificationFirstRequestElapsedMs=" +
+                        (channel.firstPublicationRequestedElapsedMs ?: "not-requested")
+                )
                 sb.appendLine("hasCurrentSong=$hasCurrentSong")
                 sb.appendLine("hasRawPlaybackState=$hasRawPlaybackState")
                 sb.appendLine("hasPlayableSessionState=$hasPlayableSessionState")
