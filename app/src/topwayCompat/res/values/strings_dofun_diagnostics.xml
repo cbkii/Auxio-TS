@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="set_diagnostics_check_complete_summary">Check complete. DoFun target: %1$s. Root: %2$s. Packages: %3$s</string>
 </resources>
