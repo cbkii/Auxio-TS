@@ -40,7 +40,8 @@ enum class PlaybackChannelState {
 data class PlaybackChannelSnapshot(
     val state: PlaybackChannelState,
     val packageNotificationsEnabled: Boolean,
-    val channelExists: Boolean,
+    /** `null` on pre-O Android where notification channels do not exist as a platform concept. */
+    val channelExists: Boolean?,
     val importance: Int?,
     val publicationRequestedThisProcess: Boolean,
     val firstPublicationRequestedElapsedMs: Long?,
@@ -67,9 +68,11 @@ object PlaybackNotificationChannel {
         val packageEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return PlaybackChannelSnapshot(
+                // Channels are unsupported before O, but package-level notification enablement is
+                // still the effective publication prerequisite for this compatibility branch.
                 state = classify(packageEnabled, channelExists = true, importance = 1),
                 packageNotificationsEnabled = packageEnabled,
-                channelExists = true,
+                channelExists = null,
                 importance = null,
                 publicationRequestedThisProcess = publicationRequested.get(),
                 firstPublicationRequestedElapsedMs = publicationElapsedMsOrNull(),
