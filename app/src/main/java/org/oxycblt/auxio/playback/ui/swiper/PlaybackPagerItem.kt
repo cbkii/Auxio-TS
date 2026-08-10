@@ -44,7 +44,11 @@ sealed interface PlaybackPagerItem {
 
     /** Deterministic key for the visualizer's per-track render state. */
     val visualizerTrackKey: String
-        get() = identityKeys.firstOrNull() ?: "pager:${globalPosition ?: -1}:$durationMs"
+        get() =
+            selectVisualizerTrackKey(
+                identityKeys,
+                fallback = "pager:${globalPosition ?: -1}:$durationMs",
+            )
 
     data class Rich(override val globalPosition: Int, override val song: Song) : PlaybackPagerItem {
         override val durationMs: Long
@@ -106,6 +110,20 @@ sealed interface PlaybackPagerItem {
         }
     }
 }
+
+/**
+ * Pick the visualizer identity by a fixed cross-presentation priority.
+ *
+ * URI is shared by Raw/Primitive/Rich whenever available, path bridges Raw/Primitive, and UID is a
+ * final rich/primitive identity. This prevents a hydration upgrade from resetting per-track render
+ * state merely because one presentation carries more identity fields than another.
+ */
+internal fun selectVisualizerTrackKey(identityKeys: Set<String>, fallback: String): String =
+    identityKeys.firstOrNull { it.startsWith("uri:") }
+        ?: identityKeys.firstOrNull { it.startsWith("path:") }
+        ?: identityKeys.firstOrNull { it.startsWith("uid:") }
+        ?: identityKeys.firstOrNull()
+        ?: fallback
 
 /** Pure projection from the established queue UI model plus the raw single-item fallback. */
 object PlaybackPagerProjection {
