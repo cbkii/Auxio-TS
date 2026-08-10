@@ -89,6 +89,10 @@ constructor(
 
     init {
         playbackManager.addListener(this)
+        // PlaybackStateManager listener replay is intentionally conditional. Read the canonical
+        // state under the manager's own monitor after registration so a volatile UI created during
+        // Fast Resume cannot miss an already-active primitive/rich queue transition.
+        synchronized(playbackManager) { synchronizeCurrentQueue() }
     }
 
     override fun onIndexMoved(index: Int) {
@@ -143,14 +147,7 @@ constructor(
         if (window == null) return
         L.d("Updating bounded primitive queue display")
         _queueInstructions.put(UpdateInstructions.Replace(0))
-        _queue.value =
-            window.items.map { item ->
-                QueueDisplayItem(
-                    globalPosition = item.logicalPosition,
-                    song = null,
-                    primitive = item,
-                )
-            }
+        _queue.value = window.toDisplayItems()
         _index.value = window.currentLocalPosition
         _scrollTo.put(window.currentLocalPosition)
         _isInitialQueueLoaded.value = true
@@ -193,8 +190,7 @@ constructor(
                     return@launch
                 }
 
-                val newItems =
-                    window.items.map { item -> QueueDisplayItem(item.logicalPosition, null, item) }
+                val newItems = window.toDisplayItems()
                 val merged =
                     PrimitiveQueueAuthority.mergeBounded(
                         current = _queue.value,
@@ -252,7 +248,7 @@ constructor(
      * Move a queue item from one index to another index.
      *
      * @param adapterFrom The index of the queue item to move.
-     * @param adapterTo The destination index for the queue item.
+     * @param adapterTo The destination index for the queue item to move.
      * @return true if the items were moved, false otherwise.
      */
     fun moveQueueDataItems(adapterFrom: Int, adapterTo: Int): Boolean {
@@ -268,6 +264,29 @@ constructor(
         return true
     }
 
+    private fun synchronizeCurrentQueue() {
+        val primitiveWindow = playbackManager.queueWindow
+        if (primitiveWindow != null) {
+            activePrimitiveWindow = primitiveWindow
+            _queue.value = primitiveWindow.toDisplayItems()
+            _index.value = primitiveWindow.currentLocalPosition
+            _isInitialQueueLoaded.value = true
+            return
+        }
+
+        val richQueue = playbackManager.queue
+        if (richQueue.isNotEmpty()) {
+            activePrimitiveWindow = null
+            _queue.value = richQueue.toDisplayItems()
+            _index.value = playbackManager.index
+            _isInitialQueueLoaded.value = true
+        } else {
+            activePrimitiveWindow = null
+            _queue.value = emptyList()
+            _index.value = playbackManager.index
+        }
+    }
+
     private fun invalidatePrimitiveRange(nextWindow: QueueWindow? = null) {
         queueGeneration++
         rangeJob?.cancel()
@@ -275,6 +294,15 @@ constructor(
         lastRequestedAnchor = null
         activePrimitiveWindow = nextWindow
     }
+
+    private fun QueueWindow.toDisplayItems() =
+        items.map { item ->
+            QueueDisplayItem(
+                globalPosition = item.logicalPosition,
+                song = null,
+                primitive = item,
+            )
+        }
 
     private fun List<Song>.toDisplayItems() = mapIndexed { index, song ->
         QueueDisplayItem(globalPosition = index, song = song, primitive = null)
