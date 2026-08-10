@@ -68,7 +68,7 @@ class PlaybackViewModelFastResumeTest {
         val window = primitiveWindow()
         manager.progression =
             Progression.from(isPlaying = true, isAdvancing = true, positionMs = 9000)
-        manager.rawMetadata = rawMetadata(positionMs = 9000)
+        manager.rawMetadata = newRawMetadata(positionMs = 9000)
         manager.window = window
 
         // PlaybackStateManager callbacks are synchronous under its monitor. Deliberately deliver
@@ -86,7 +86,7 @@ class PlaybackViewModelFastResumeTest {
     fun rawMetadataCallbackUpdatesUiMirrorDirectly() {
         val manager = FakePlaybackManager()
         val model = newModel(manager.proxy)
-        val updated = rawMetadata(positionMs = 17_000, title = "Updated raw title")
+        val updated = newRawMetadata(positionMs = 17_000, title = "Updated raw title")
 
         manager.listener?.onRawPlaybackMetadataChanged(updated)
 
@@ -151,7 +151,7 @@ class PlaybackViewModelFastResumeTest {
                                     isAdvancing = true,
                                     positionMs = 12_000,
                                 )
-                            rawMetadata = rawMetadata(positionMs = 12_000)
+                            rawMetadata = newRawMetadata(positionMs = 12_000)
                         }
                         null
                     }
@@ -195,7 +195,7 @@ class PlaybackViewModelFastResumeTest {
                 else -> null
             }
 
-        fun rawMetadata(positionMs: Long, title: String = "Fast song") =
+        fun newRawMetadata(positionMs: Long, title: String = "Fast song") =
             RawPlaybackMetadata(
                 title = title,
                 artist = "Fast artist",
