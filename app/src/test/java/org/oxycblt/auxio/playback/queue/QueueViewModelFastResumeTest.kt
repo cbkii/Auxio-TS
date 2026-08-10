@@ -24,6 +24,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.oxycblt.auxio.playback.persist.PersistenceRepository
 import org.oxycblt.auxio.playback.persist.QueueDescriptor
 import org.oxycblt.auxio.playback.persist.QueueItemRef
@@ -33,7 +34,11 @@ import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.playback.state.ShuffleScope
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.LooperMode
 
+@RunWith(RobolectricTestRunner::class)
+@LooperMode(LooperMode.Mode.PAUSED)
 class QueueViewModelFastResumeTest {
     @Test
     fun primitiveWindowUsesLocalAdapterIndexAndStableGlobalNavigationTarget() {
