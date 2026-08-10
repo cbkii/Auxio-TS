@@ -38,6 +38,21 @@ class CoverCleanupPolicyTest {
     }
 
     @Test
+    fun `a caller without artwork evidence fails closed`() {
+        assertFalse(
+            CoverCleanupPolicy.evaluate(
+                    published = true,
+                    outcome = SourceScanOutcome.Success(setOf("usb0")),
+                    unresolvedSourceKeys = emptySet(),
+                    unavailableSourceKeys = emptySet(),
+                    completeMetadata = true,
+                    enrichmentOnly = false,
+                )
+                .allowed
+        )
+    }
+
+    @Test
     fun `an unpublished scan never reclaims covers`() {
         assertFalse(evaluate(published = false).allowed)
     }
