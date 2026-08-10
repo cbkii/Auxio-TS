@@ -178,8 +178,10 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
             L.d("Configuring cover mode setting")
             preference.onPreferenceChangeListener =
                 Preference.OnPreferenceChangeListener { _, _ ->
-                    L.d("Cover mode changed, reloading music")
-                    musicModel.refresh()
+                    // Cover representation is not source identity, but cached cover IDs can only be
+                    // regenerated after the explicit user choice by bypassing metadata cache reuse.
+                    L.d("Cover mode changed, rescanning artwork")
+                    musicModel.rescan()
                     true
                 }
         }
