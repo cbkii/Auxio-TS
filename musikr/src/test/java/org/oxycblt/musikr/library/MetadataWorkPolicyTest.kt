@@ -46,11 +46,11 @@ class MetadataWorkPolicyTest {
         assertFalse(dimensions.albumArtists)
         assertFalse(dimensions.replayGain)
         assertFalse(dimensions.musicBrainz)
-        assertEquals(ArtworkPolicy.VISIBLE_ITEMS, MetadataProfile.LEAN.defaultArtworkPolicy())
+        assertEquals(ArtworkPolicy.NONE, MetadataProfile.LEAN.defaultArtworkPolicy())
     }
 
     @Test
-    fun `full profile enables rich enrichment dimensions`() {
+    fun `full profile enables rich enrichment including authoritative artwork`() {
         val full = MetadataWorkPolicy.forProfile(MetadataProfile.FULL)
 
         assertFalse(full.useLeanPlatformExtractor)
@@ -61,6 +61,15 @@ class MetadataWorkPolicyTest {
         assertTrue(full.readDetailedDates)
         assertTrue(full.expandMultipleArtists)
         assertTrue(full.extractArtwork)
-        assertEquals(ArtworkPolicy.VISIBLE_ITEMS, MetadataProfile.FULL.defaultArtworkPolicy())
+        assertEquals(ArtworkPolicy.FULL_INDEXING, MetadataProfile.FULL.defaultArtworkPolicy())
+    }
+
+    @Test
+    fun `visible item artwork is never advertised without an executor`() {
+        assertTrue(
+            MetadataProfile.entries.none {
+                it.defaultArtworkPolicy() == ArtworkPolicy.VISIBLE_ITEMS
+            }
+        )
     }
 }
