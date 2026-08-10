@@ -83,7 +83,8 @@ class ImageSettingsTest {
     @Test
     fun `explicit current off remains off`() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        prefs.edit()
+        prefs
+            .edit()
             .putInt(context.getString(R.string.set_key_cover_mode), IntegerTable.COVER_MODE_OFF)
             .commit()
 
