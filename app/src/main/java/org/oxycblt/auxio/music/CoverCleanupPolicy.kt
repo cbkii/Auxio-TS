@@ -36,9 +36,9 @@ internal object CoverCleanupPolicy {
      * @param unavailableSourceKeys Sources the plan could not observe during this scan.
      * @param completeMetadata Whether the published library used the complete metadata profile.
      * @param completeArtwork Whether the publication contains the complete retained artwork set.
-     *   This defaults to [completeMetadata] for existing callers because the production FULL profile
-     *   is the sole complete-artwork producer; tests and future partial-artwork callers can deny
-     *   cleanup explicitly.
+     *   This defaults to [completeMetadata] for existing callers because the production FULL
+     *   profile is the sole complete-artwork producer; tests and future partial-artwork callers can
+     *   deny cleanup explicitly.
      * @param enrichmentOnly Whether the scan only upgraded optional metadata. Enrichment never owns
      *   authoritative source membership or the retained cover set.
      */
