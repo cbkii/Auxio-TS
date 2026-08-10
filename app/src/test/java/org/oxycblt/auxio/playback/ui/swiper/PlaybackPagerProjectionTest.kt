@@ -90,6 +90,20 @@ class PlaybackPagerProjectionTest {
 
         assertTrue(PlaybackPagerItem.sameLogicalItem(raw, primitive))
         assertTrue(PlaybackPagerItem.sameLogicalItem(primitive, raw))
+        assertEquals(raw.visualizerTrackKey, primitive.visualizerTrackKey)
+    }
+
+    @Test
+    fun visualizerIdentityPrefersUriWhenHydratedStateAlsoHasUid() {
+        val uriKey = "uri:file:///storage/usbdisk0/shared.flac"
+        val raw = PlaybackPagerItem.Raw(raw(uri = uriKey.removePrefix("uri:")))
+        val hydratedIdentity = linkedSetOf("uid:rich-song-123", uriKey)
+
+        assertEquals(uriKey, raw.visualizerTrackKey)
+        assertEquals(
+            raw.visualizerTrackKey,
+            selectVisualizerTrackKey(hydratedIdentity, fallback = "fallback"),
+        )
     }
 
     @Test
