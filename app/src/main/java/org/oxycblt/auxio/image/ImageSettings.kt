@@ -50,17 +50,10 @@ class ImageSettingsImpl @Inject constructor(@ApplicationContext context: Context
         get() {
             val code =
                 sharedPreferences.getInt(getString(R.string.set_key_cover_mode), Int.MIN_VALUE)
-            return CoverMode.fromIntCode(code)
-                ?: if (code == Int.MIN_VALUE) CoverMode.OPTIMISED else migrateUnknownCurrentValue()
+            // Reads are deliberately side-effect free. Unknown values fail open to enabled artwork;
+            // durable normalization is owned exclusively by migrate().
+            return CoverMode.fromIntCode(code) ?: CoverMode.OPTIMISED
         }
-
-    private fun migrateUnknownCurrentValue(): CoverMode {
-        // Unknown values must never silently disable artwork. Historical quality modes collapse to
-        // OPTIMISED in the TS18 three-mode UI; any other unknown value fails open the same way.
-        val migrated = CoverMode.OPTIMISED
-        sharedPreferences.edit { putInt(getString(R.string.set_key_cover_mode), migrated.intCode) }
-        return migrated
-    }
 
     override val forceSquareCovers: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_square_covers), false)
@@ -99,7 +92,11 @@ class ImageSettingsImpl @Inject constructor(@ApplicationContext context: Context
         val currentCode =
             sharedPreferences.getInt(getString(R.string.set_key_cover_mode), Int.MIN_VALUE)
         if (currentCode != Int.MIN_VALUE && CoverMode.fromIntCode(currentCode) == null) {
-            migrateUnknownCurrentValue()
+            // Unknown current values must never silently become OFF. Normalize once here rather
+            // than mutating durable state from the coverMode getter.
+            sharedPreferences.edit {
+                putInt(getString(R.string.set_key_cover_mode), CoverMode.OPTIMISED.intCode)
+            }
         }
     }
 
