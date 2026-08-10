@@ -23,15 +23,15 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import org.oxycblt.auxio.playback.state.LibraryAwarePlaybackStateManager
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
-import org.oxycblt.auxio.playback.state.PlaybackStateManagerImpl
 
 @Module
 @InstallIn(SingletonComponent::class)
 interface PlaybackModule {
     @Singleton
     @Binds
-    fun stateManager(playbackManager: PlaybackStateManagerImpl): PlaybackStateManager
+    fun stateManager(playbackManager: LibraryAwarePlaybackStateManager): PlaybackStateManager
 
     @Binds fun settings(playbackSettings: PlaybackSettingsImpl): PlaybackSettings
 }
