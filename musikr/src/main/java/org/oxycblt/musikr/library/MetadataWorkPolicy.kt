@@ -51,10 +51,19 @@ fun MetadataProfile.defaultDimensionPolicy(): LibraryDimensionPolicy =
             )
     }
 
+/**
+ * Artwork authority for each metadata profile.
+ *
+ * `VISIBLE_ITEMS` is intentionally not returned here: Auxio-TS has no production executor that
+ * hydrates artwork on visible-item demand. Advertising that policy caused both LEAN and FULL scans
+ * to skip [org.oxycblt.musikr.covers.MutableCovers.create], leaving new rows without cover IDs.
+ * Keep the first-pass profile explicitly artwork-free and make the FULL enrichment profile the
+ * single authoritative producer of the complete retained artwork set.
+ */
 fun MetadataProfile.defaultArtworkPolicy(): ArtworkPolicy =
     when (this) {
-        MetadataProfile.LEAN -> ArtworkPolicy.VISIBLE_ITEMS
-        MetadataProfile.FULL -> ArtworkPolicy.VISIBLE_ITEMS
+        MetadataProfile.LEAN -> ArtworkPolicy.NONE
+        MetadataProfile.FULL -> ArtworkPolicy.FULL_INDEXING
     }
 
 data class MetadataWorkPolicy(
