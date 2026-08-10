@@ -25,10 +25,7 @@ import org.oxycblt.musikr.covers.CoverCollection
 internal object ArtworkContentIdentity {
     fun sameCover(oldCover: Cover?, newCover: Cover?): Boolean = oldCover?.id == newCover?.id
 
-    fun sameCoverCollection(
-        oldCovers: CoverCollection,
-        newCovers: CoverCollection,
-    ): Boolean {
+    fun sameCoverCollection(oldCovers: CoverCollection, newCovers: CoverCollection): Boolean {
         val old = oldCovers.covers
         val new = newCovers.covers
         if (old.size != new.size) return false
