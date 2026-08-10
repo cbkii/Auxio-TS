@@ -51,14 +51,8 @@ class ArtworkContentIdentityTest {
 
     @Test
     fun `parent cover collection compares stable ids only`() {
-        val old =
-            CoverCollection.from(
-                listOf(TestCover("mcs:a", true), TestCover("mcs:b", true))
-            )
-        val same =
-            CoverCollection.from(
-                listOf(TestCover("mcs:b", true), TestCover("mcs:a", true))
-            )
+        val old = CoverCollection.from(listOf(TestCover("mcs:a", true), TestCover("mcs:b", true)))
+        val same = CoverCollection.from(listOf(TestCover("mcs:b", true), TestCover("mcs:a", true)))
 
         assertTrue(ArtworkContentIdentity.sameCoverCollection(old, same))
     }
