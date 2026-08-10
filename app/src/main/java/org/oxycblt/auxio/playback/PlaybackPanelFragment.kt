@@ -163,14 +163,17 @@ class PlaybackPanelFragment :
         binding.playbackPager.apply {
             adapter = currentCoverPagerAdapter
             userAwarePagerCallback =
-                UserAwarePagerCallback(this) {
-                        currentCoverPagerAdapter.setActivePosition(it)
-                        // Quick Queue exposes local adapter positions but QueueViewModel owns the
-                        // local -> global mapping and bounded primitive prefetch authority.
-                        queueModel.requestAdjacentRange(it, it)
+                UserAwarePagerCallback(this) { adapterIndex ->
+                        // Capture the queue authority's global target before asynchronous primitive
+                        // prefetch can prepend/trim the bounded display window.
+                        val targetGlobalPosition = queueModel.globalPositionAt(adapterIndex)
+                        currentCoverPagerAdapter.setActivePosition(adapterIndex)
+                        queueModel.requestAdjacentRange(adapterIndex, adapterIndex)
                         // Posting the queue goto command prevents the seekbar pos from desyncing
                         // from the item's duration, which creates a visual flicker in the seekbar.
-                        post { queueModel.goto(it) }
+                        if (targetGlobalPosition != null) {
+                            post { queueModel.gotoGlobalPosition(targetGlobalPosition) }
+                        }
                     }
                     .also { it.attach() }
             setPageTransformer(CarouselTransformer())
@@ -405,41 +408,44 @@ class PlaybackPanelFragment :
     private fun updatePlaybackMetadata(song: Song?, raw: RawPlaybackMetadata?) {
         val binding = requireBinding()
         val hasRichSong = song != null
+        val playable = hasRichSong || raw != null
         binding.playbackMore?.isEnabled = hasRichSong
         binding.playbackSong.isClickable = hasRichSong
         binding.playbackArtist.isClickable = hasRichSong
         binding.playbackAlbum?.isClickable = hasRichSong
         binding.playbackShuffle.isEnabled = hasRichSong
+        binding.playbackRepeat.isEnabled = playable
+        binding.playbackPlayPause.isEnabled = playable
 
-        if (song != null) {
-            val context = requireContext()
-            L.d("Updating rich song display: $song")
-            binding.playbackSong.text = song.name.resolve(context)
-            binding.playbackArtist.text = song.artists.resolveNames(context)
-            binding.playbackAlbum?.text = song.album.name.resolve(context)
-            binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
-            binding.playbackRepeat.isEnabled = true
-            binding.playbackPlayPause.isEnabled = true
-            return
+        when {
+            song != null -> {
+                val context = requireContext()
+                L.d("Updating rich song display: $song")
+                binding.playbackSong.text = song.name.resolve(context)
+                binding.playbackArtist.text = song.artists.resolveNames(context)
+                binding.playbackAlbum?.text = song.album.name.resolve(context)
+                binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
+            }
+            raw != null -> {
+                L.d("Updating primitive/raw Now Playing display")
+                binding.playbackSong.text = raw.displayTitle
+                binding.playbackArtist.text = raw.displayArtist
+                binding.playbackAlbum?.text = raw.album.orEmpty()
+                binding.playbackSeekBar?.durationDs = raw.durationMs.msToDs()
+            }
+            else -> {
+                binding.playbackSong.text = ""
+                binding.playbackArtist.text = ""
+                binding.playbackAlbum?.text = ""
+                binding.playbackSeekBar?.durationDs = 0L
+            }
         }
 
-        if (raw != null) {
-            L.d("Updating primitive/raw Now Playing display")
-            binding.playbackSong.text = raw.displayTitle
-            binding.playbackArtist.text = raw.displayArtist
-            binding.playbackAlbum?.text = raw.album.orEmpty()
-            binding.playbackSeekBar?.durationDs = raw.durationMs.msToDs()
-            binding.playbackRepeat.isEnabled = true
-            binding.playbackPlayPause.isEnabled = true
-            return
-        }
-
-        binding.playbackSong.text = ""
-        binding.playbackArtist.text = ""
-        binding.playbackAlbum?.text = ""
-        binding.playbackSeekBar?.durationDs = 0L
-        binding.playbackRepeat.isEnabled = false
-        binding.playbackPlayPause.isEnabled = false
+        // Capability transitions can occur without a corresponding repeat/play/shuffle StateFlow
+        // value change, so reconcile checked state whenever Rich/Raw/Idle presentation changes.
+        updateRepeat(playbackModel.repeatMode.value)
+        updatePlaying(playbackModel.isPlaying.value)
+        updateShuffleScope(playbackModel.shuffleScope.value)
     }
 
     private fun updateParent(parent: MusicParent?) {
@@ -460,9 +466,9 @@ class PlaybackPanelFragment :
     }
 
     private fun updatePlaying(isPlaying: Boolean) {
-        requireBinding().playbackPlayPause.isChecked =
-            requireBinding().playbackPlayPause.isEnabled && isPlaying
-        requireBinding().playbackSeekBar?.setWaveEnabled(isPlaying)
+        val binding = requireBinding()
+        binding.playbackPlayPause.isChecked = binding.playbackPlayPause.isEnabled && isPlaying
+        binding.playbackSeekBar?.setWaveEnabled(isPlaying)
     }
 
     override fun onVisualizerModeChanged() {
