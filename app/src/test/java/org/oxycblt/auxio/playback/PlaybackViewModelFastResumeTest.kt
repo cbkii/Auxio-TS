@@ -23,6 +23,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,7 +32,6 @@ import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.playback.persist.QueueDescriptor
 import org.oxycblt.auxio.playback.persist.QueueItemRef
 import org.oxycblt.auxio.playback.persist.QueueWindow
-import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
@@ -63,11 +63,12 @@ class PlaybackViewModelFastResumeTest {
     fun primitiveWindowTransitionReconcilesProgressionWithoutExtraProgressionCallback() {
         val manager = FakePlaybackManager()
         val model = newModel(manager.proxy)
-        assertTrue(!model.isPlaying.value)
+        assertFalse(model.isPlaying.value)
 
         val window = primitiveWindow()
-        manager.progression = Progression.from(isPlaying = true, isAdvancing = true, positionMs = 9000)
-        manager.raw = raw(positionMs = 9000)
+        manager.progression =
+            Progression.from(isPlaying = true, isAdvancing = true, positionMs = 9000)
+        manager.rawMetadata = rawMetadata(positionMs = 9000)
         manager.window = window
 
         // PlaybackStateManager callbacks are synchronous under its monitor. Deliberately deliver
@@ -85,7 +86,7 @@ class PlaybackViewModelFastResumeTest {
     fun rawMetadataCallbackUpdatesUiMirrorDirectly() {
         val manager = FakePlaybackManager()
         val model = newModel(manager.proxy)
-        val updated = raw(positionMs = 17_000, title = "Updated raw title")
+        val updated = rawMetadata(positionMs = 17_000, title = "Updated raw title")
 
         manager.listener?.onRawPlaybackMetadataChanged(updated)
 
@@ -96,7 +97,10 @@ class PlaybackViewModelFastResumeTest {
     private fun assertPositionAdvances(model: PlaybackViewModel) {
         val before = model.positionDs.value
         shadowOf(Looper.getMainLooper()).idleFor(250, TimeUnit.MILLISECONDS)
-        assertTrue("Playing position must advance without another playback callback", model.positionDs.value > before)
+        assertTrue(
+            "Playing position must advance without another playback callback",
+            model.positionDs.value > before,
+        )
     }
 
     private fun newModel(manager: PlaybackStateManager) =
@@ -117,7 +121,7 @@ class PlaybackViewModelFastResumeTest {
 
     private class FakePlaybackManager {
         var progression: Progression = Progression.nil()
-        var raw: RawPlaybackMetadata? = null
+        var rawMetadata: RawPlaybackMetadata? = null
         var window: QueueWindow? = null
         var listener: PlaybackStateManager.Listener? = null
         var transitionDuringRegistration = false
@@ -129,7 +133,7 @@ class PlaybackViewModelFastResumeTest {
                     "getRepeatMode" -> RepeatMode.NONE
                     "getParent" -> null
                     "getCurrentSong" -> null
-                    "getRawPlaybackMetadata" -> raw
+                    "getRawPlaybackMetadata" -> rawMetadata
                     "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
                     "getQueue" -> emptyList<Any>()
                     "getQueueWindow" -> window
@@ -147,7 +151,7 @@ class PlaybackViewModelFastResumeTest {
                                     isAdvancing = true,
                                     positionMs = 12_000,
                                 )
-                            raw = raw(positionMs = 12_000)
+                            rawMetadata = rawMetadata(positionMs = 12_000)
                         }
                         null
                     }
@@ -191,7 +195,7 @@ class PlaybackViewModelFastResumeTest {
                 else -> null
             }
 
-        fun raw(positionMs: Long, title: String = "Fast song") =
+        fun rawMetadata(positionMs: Long, title: String = "Fast song") =
             RawPlaybackMetadata(
                 title = title,
                 artist = "Fast artist",
