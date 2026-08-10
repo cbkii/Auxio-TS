@@ -183,8 +183,8 @@ class IndexRequestCoalescerTest {
     }
 
     @Test
-    fun `full replacement waits while playback is active`() {
-        assertTrue(
+    fun `bounded full enrichment does not starve while playback is active`() {
+        assertFalse(
             IndexReplacementHandoffPolicy.mustWaitForIdle(
                 IndexRequest(
                     IndexReason.METADATA_ENRICHMENT,
