@@ -214,17 +214,28 @@ constructor(
         super.onCleared()
     }
 
+    /** Return the stable logical position currently represented by [adapterIndex], if playable. */
+    fun globalPositionAt(adapterIndex: Int): Int? =
+        _queue.value.getOrNull(adapterIndex)?.takeIf { it.editable }?.globalPosition
+
     /**
-     * Start playing the the queue item at the given index.
-     *
-     * @param adapterIndex The index of the queue item to play. Does nothing if the index is out of
-     *   range.
+     * Start playing the queue item represented by [adapterIndex]. The logical position is resolved
+     * immediately from the current display snapshot so callers can retain it across async prefetch.
      */
     fun goto(adapterIndex: Int) {
-        val currentQueue = _queue.value
-        if (adapterIndex !in currentQueue.indices) return
-        val item = currentQueue[adapterIndex]
-        if (!item.editable) return
+        val globalPosition = globalPositionAt(adapterIndex) ?: return
+        gotoGlobalPosition(globalPosition)
+    }
+
+    /**
+     * Start playing a known logical queue position if it is still represented by a playable item in
+     * the current bounded/rich queue snapshot.
+     */
+    fun gotoGlobalPosition(globalPosition: Int) {
+        val item =
+            _queue.value.firstOrNull {
+                it.globalPosition == globalPosition && it.editable
+            } ?: return
         L.d("Going to logical position ${item.globalPosition} in queue")
         playbackManager.goto(item.globalPosition)
     }
@@ -248,7 +259,7 @@ constructor(
      * Move a queue item from one index to another index.
      *
      * @param adapterFrom The index of the queue item to move.
-     * @param adapterTo The destination index for the queue item to move.
+     * @param adapterTo The destination index for the queue item.
      * @return true if the items were moved, false otherwise.
      */
     fun moveQueueDataItems(adapterFrom: Int, adapterTo: Int): Boolean {
