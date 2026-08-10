@@ -136,9 +136,13 @@ internal class IncrementalScanStore(
                     previous?.committedProfile?.let {
                         runCatching { MetadataProfile.valueOf(it) }.getOrNull()
                     }
+                val enrichmentUpgrade =
+                    metadataProfile == MetadataProfile.FULL &&
+                        (previous?.enrichmentRevision ?: 0L) < FULL_ENRICHMENT_REVISION
                 val profileUpgrade =
                     previousProfile == null ||
-                        metadataProfile.incrementalRank > previousProfile.incrementalRank
+                        metadataProfile.incrementalRank > previousProfile.incrementalRank ||
+                        enrichmentUpgrade
                 val reason =
                     SourceFingerprintReusePolicy.scanReason(
                         strength = snapshot.fingerprintStrength,
@@ -775,7 +779,10 @@ internal class IncrementalScanStore(
     companion object {
         private const val PAGE_SIZE = 256
         private const val UNAVAILABLE_URI_BATCH_SIZE = 200
-        private const val FULL_ENRICHMENT_REVISION = 1L
+        // Revision 1 was committed while FULL still advertised VISIBLE_ITEMS and therefore did not
+        // actually create artwork. Revision 2 makes existing FULL ledgers re-enter a bounded
+        // enrichment pass after the corrected FULL_INDEXING policy ships.
+        private const val FULL_ENRICHMENT_REVISION = 2L
         private const val MAX_ERROR_LENGTH = 512
         private const val STATE_PENDING = "PENDING"
         private const val STATE_COMMITTED = "COMMITTED"
