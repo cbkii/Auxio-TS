@@ -81,6 +81,17 @@ class ImageSettingsTest {
     }
 
     @Test
+    fun `explicit legacy cover mode off remains off`() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        prefs.edit().putInt("auxio_cover_mode", IntegerTable.COVER_MODE_OFF).commit()
+
+        val settings = ImageSettingsImpl(context)
+        settings.migrate()
+
+        assertEquals(CoverMode.OFF, settings.coverMode)
+    }
+
+    @Test
     fun `explicit current off remains off`() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         prefs
