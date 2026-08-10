@@ -70,9 +70,6 @@ class DrivingStartupPolicyTest {
         assertFalse(dimensions.musicBrainz)
         assertFalse(dimensions.replayGain)
         assertFalse(dimensions.releaseTypes)
-        assertEquals(
-            ArtworkPolicy.VISIBLE_ITEMS,
-            DrivingStartupPolicy.artworkPolicy(MetadataProfile.LEAN),
-        )
+        assertEquals(ArtworkPolicy.NONE, DrivingStartupPolicy.artworkPolicy(MetadataProfile.LEAN))
     }
 }
