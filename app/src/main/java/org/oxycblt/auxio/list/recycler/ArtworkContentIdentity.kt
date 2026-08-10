@@ -28,5 +28,13 @@ internal object ArtworkContentIdentity {
     fun sameCoverCollection(
         oldCovers: CoverCollection,
         newCovers: CoverCollection,
-    ): Boolean = oldCovers.covers.map(Cover::id) == newCovers.covers.map(Cover::id)
+    ): Boolean {
+        val old = oldCovers.covers
+        val new = newCovers.covers
+        if (old.size != new.size) return false
+        for (index in old.indices) {
+            if (old[index].id != new[index].id) return false
+        }
+        return true
+    }
 }
