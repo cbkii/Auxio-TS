@@ -275,6 +275,15 @@ internal class IncrementalScanStore(
         if (plan.force) return false
         val sourceKey = SourceIdentity.forFile(file)
         if (sourceKey !in plan.scanSourceKeys) return true
+        if (plan.metadataProfile == MetadataProfile.FULL) {
+            val ledger = dao.sourceLedger(sourceKey)
+            if ((ledger?.enrichmentRevision ?: 0L) < FULL_ENRICHMENT_REVISION) {
+                // A source marked FULL by the old revision can still have null/missing artwork.
+                // Force extraction/staging once rather than accepting those rows from cache and
+                // incorrectly stamping the repaired revision without creating artwork.
+                return false
+            }
+        }
         val state =
             dao.uriState(sourceKey, file.uri.toString())
                 ?: return plan.metadataProfile == MetadataProfile.LEAN
@@ -418,14 +427,21 @@ internal class IncrementalScanStore(
                         }
                         val committedCount = dao.committedSongCount(snapshot.sourceKey, generation)
                         val seenCount = dao.seenCount(plan.scanId, snapshot.sourceKey)
+                        val sourceEnrichmentComplete = seenCount == committedCount
+                        val publishedEnrichmentRevision =
+                            if (sourceEnrichmentComplete) {
+                                FULL_ENRICHMENT_REVISION
+                            } else {
+                                ledger.enrichmentRevision
+                            }
                         dao.publishSeenSongs(
                             plan.scanId,
                             snapshot.sourceKey,
                             generation,
-                            FULL_ENRICHMENT_REVISION,
+                            publishedEnrichmentRevision,
                         )
                         dao.publishSeenUriStates(plan.scanId, snapshot.sourceKey, generation)
-                        if (seenCount == committedCount) {
+                        if (sourceEnrichmentComplete) {
                             dao.upsertSourceLedger(
                                 ledger.copy(
                                     committedProfile = MetadataProfile.FULL.name,
@@ -502,15 +518,21 @@ internal class IncrementalScanStore(
                             if (page.size < PAGE_SIZE) break
                             offset += page.size
                         }
+                        val sourceCoverageComplete = unresolvedItemCount == 0
+                        val publishedEnrichmentRevision =
+                            if (
+                                plan.metadataProfile == MetadataProfile.FULL &&
+                                    sourceCoverageComplete
+                            ) {
+                                FULL_ENRICHMENT_REVISION
+                            } else {
+                                ledger.enrichmentRevision
+                            }
                         dao.publishSeenSongs(
                             plan.scanId,
                             snapshot.sourceKey,
                             generation,
-                            if (plan.metadataProfile == MetadataProfile.FULL) {
-                                FULL_ENRICHMENT_REVISION
-                            } else {
-                                ledger.enrichmentRevision
-                            },
+                            publishedEnrichmentRevision,
                         )
                         dao.publishSeenUriStates(plan.scanId, snapshot.sourceKey, generation)
                         ledger.lastCommittedGeneration?.let { oldGeneration ->
@@ -560,7 +582,7 @@ internal class IncrementalScanStore(
                                                     .getOrNull()
                                             }
                                         if (
-                                            retainedItemCount > 0 &&
+                                            !sourceCoverageComplete &&
                                                 prior != null &&
                                                 prior.incrementalRank < proposed.incrementalRank
                                         ) {
@@ -569,13 +591,8 @@ internal class IncrementalScanStore(
                                             proposed.name
                                         }
                                     },
-                                enrichmentRevision =
-                                    if (plan.metadataProfile == MetadataProfile.FULL) {
-                                        FULL_ENRICHMENT_REVISION
-                                    } else {
-                                        ledger.enrichmentRevision
-                                    },
-                                incomplete = false,
+                                enrichmentRevision = publishedEnrichmentRevision,
+                                incomplete = !sourceCoverageComplete,
                             )
                         )
                         dao.completeGeneration(
