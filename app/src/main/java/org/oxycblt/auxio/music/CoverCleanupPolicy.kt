@@ -30,15 +30,14 @@ internal object CoverCleanupPolicy {
     data class Decision(val allowed: Boolean, val reason: String)
 
     /**
+     * Destructive cleanup entry point. Positive artwork authority must be explicit.
+     *
      * @param published Whether a new library was actually published by this scan.
      * @param outcome The single terminal outcome recorded for the scan.
      * @param unresolvedSourceKeys Configured sources still carrying an unresolved generation.
      * @param unavailableSourceKeys Sources the plan could not observe during this scan.
      * @param completeMetadata Whether the published library used the complete metadata profile.
      * @param completeArtwork Whether the publication contains the complete retained artwork set.
-     *   This defaults to [completeMetadata] for existing callers because the production FULL
-     *   profile is the sole complete-artwork producer; tests and future partial-artwork callers can
-     *   deny cleanup explicitly.
      * @param enrichmentOnly Whether the scan only upgraded optional metadata. Enrichment never owns
      *   authoritative source membership or the retained cover set.
      */
@@ -48,7 +47,7 @@ internal object CoverCleanupPolicy {
         unresolvedSourceKeys: Set<String>,
         unavailableSourceKeys: Set<String>,
         completeMetadata: Boolean,
-        completeArtwork: Boolean = completeMetadata,
+        completeArtwork: Boolean,
         enrichmentOnly: Boolean,
     ): Decision =
         when {
@@ -63,4 +62,29 @@ internal object CoverCleanupPolicy {
                 Decision(true, "complete-authoritative-empty")
             else -> Decision(false, "non-authoritative-outcome")
         }
+
+    /**
+     * Compatibility entry point for callers that do not yet carry artwork-completion evidence.
+     *
+     * This is intentionally fail-closed: metadata completeness is never promoted into artwork
+     * authority. Such callers may retain stale files, but they can never delete live artwork. New
+     * cleanup-capable callers must use the overload above and provide complete artwork evidence.
+     */
+    fun evaluate(
+        published: Boolean,
+        outcome: SourceScanOutcome,
+        unresolvedSourceKeys: Set<String>,
+        unavailableSourceKeys: Set<String>,
+        completeMetadata: Boolean,
+        enrichmentOnly: Boolean,
+    ): Decision =
+        evaluate(
+            published = published,
+            outcome = outcome,
+            unresolvedSourceKeys = unresolvedSourceKeys,
+            unavailableSourceKeys = unavailableSourceKeys,
+            completeMetadata = completeMetadata,
+            completeArtwork = false,
+            enrichmentOnly = enrichmentOnly,
+        )
 }
