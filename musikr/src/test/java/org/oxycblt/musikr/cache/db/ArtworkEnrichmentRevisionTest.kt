@@ -64,11 +64,11 @@ class ArtworkEnrichmentRevisionTest {
     }
 
     @Test
-    fun `legacy full ledger is re-enriched once for corrected artwork revision`() = runBlocking {
+    fun `legacy full ledger re-extracts once for corrected artwork revision`() = runBlocking {
         val source = snapshot()
         val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
         store.beginScan(initial)
-        store.stage(cachedFile())
+        store.stage(cachedFile("alpha.mp3"))
         store.commitScan()
 
         val legacy = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
@@ -85,7 +85,8 @@ class ArtworkEnrichmentRevisionTest {
         assertTrue(repair.enrichmentOnly)
 
         store.beginScan(repair)
-        store.stage(cachedFile())
+        assertFalse(store.cachedProfileAccepts(file("alpha.mp3")))
+        store.stage(cachedFile("alpha.mp3"))
         store.commitScan()
 
         val repaired = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
@@ -93,8 +94,30 @@ class ArtworkEnrichmentRevisionTest {
         assertFalse(store.planScan(listOf(source), false, MetadataProfile.FULL, 1L).hasWork)
     }
 
+    @Test
+    fun `partial full scan preserves stale artwork revision for later repair`() = runBlocking {
+        val source = snapshot()
+        val initial = store.planScan(listOf(source), false, MetadataProfile.LEAN, 1L)
+        store.beginScan(initial)
+        store.stage(cachedFile("alpha.mp3"))
+        store.stage(cachedFile("beta.mp3"))
+        store.commitScan()
+
+        val full = store.planScan(listOf(source), true, MetadataProfile.FULL, 1L)
+        assertFalse(full.enrichmentOnly)
+        store.beginScan(full)
+        store.stage(cachedFile("alpha.mp3"))
+        assertTrue(store.markItemUnavailable(file("beta.mp3")))
+        store.commitScan()
+
+        val partial = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
+        assertTrue(partial.enrichmentRevision < 2L)
+        assertTrue(partial.incomplete)
+        assertTrue(store.planScan(listOf(source), false, MetadataProfile.FULL, 1L).hasWork)
+    }
+
     private fun snapshot(): SourceSnapshot {
-        val root = "/storage/usbdisk0"
+        val root = ROOT
         val volume = Volume.ThirdParty(Uri.parse("file://$root"))
         return SourceSnapshot(
             sourceKey = SourceIdentity.forVolume(volume),
@@ -108,23 +131,27 @@ class ArtworkEnrichmentRevisionTest {
         )
     }
 
-    private fun cachedFile(): CachedFile {
-        val root = "/storage/usbdisk0"
-        val volume = Volume.ThirdParty(Uri.parse("file://$root"))
-        val file =
-            File(
-                uri = Uri.parse("file://$root/alpha.mp3"),
-                path = Path(volume, Components.parseUnix("alpha.mp3")),
-                addedMs = FixedAddedMs,
-                modifiedMs = 1L,
-                mimeType = "audio/mpeg",
-                size = 100L,
-                parent = null,
-            )
-        return CachedFile(file, audio = null, addedMs = 10L)
+    private fun cachedFile(name: String): CachedFile =
+        CachedFile(file(name), audio = null, addedMs = 10L)
+
+    private fun file(name: String): File {
+        val volume = Volume.ThirdParty(Uri.parse("file://$ROOT"))
+        return File(
+            uri = Uri.parse("file://$ROOT/$name"),
+            path = Path(volume, Components.parseUnix(name)),
+            addedMs = FixedAddedMs,
+            modifiedMs = 1L,
+            mimeType = "audio/mpeg",
+            size = 100L,
+            parent = null,
+        )
     }
 
     private object FixedAddedMs : AddedMs {
         override suspend fun resolve(): Long = 10L
+    }
+
+    private companion object {
+        const val ROOT = "/storage/usbdisk0"
     }
 }
