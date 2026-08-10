@@ -52,7 +52,9 @@ import org.oxycblt.auxio.home.HomeFragmentDirections
 import org.oxycblt.auxio.list.menu.Menu
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
+import org.oxycblt.auxio.playback.queue.QueueDisplayItem
 import org.oxycblt.auxio.playback.queue.QueueViewModel
+import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleScope
 import org.oxycblt.auxio.playback.ui.StyledSeekBar
@@ -60,6 +62,7 @@ import org.oxycblt.auxio.playback.ui.stepper.Direction
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.playback.ui.swiper.CarouselTransformer
 import org.oxycblt.auxio.playback.ui.swiper.CoverPagerAdapter
+import org.oxycblt.auxio.playback.ui.swiper.PlaybackPagerProjection
 import org.oxycblt.auxio.playback.ui.swiper.UserAwarePagerCallback
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerCoordinator
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
@@ -162,8 +165,11 @@ class PlaybackPanelFragment :
             userAwarePagerCallback =
                 UserAwarePagerCallback(this) {
                         currentCoverPagerAdapter.setActivePosition(it)
+                        // Quick Queue exposes local adapter positions but QueueViewModel owns the
+                        // local -> global mapping and bounded primitive prefetch authority.
+                        queueModel.requestAdjacentRange(it, it)
                         // Posting the queue goto command prevents the seekbar pos from desyncing
-                        // from the song's duration, which creates a visual flicker in the seekbar.
+                        // from the item's duration, which creates a visual flicker in the seekbar.
                         post { queueModel.goto(it) }
                     }
                     .also { it.attach() }
@@ -303,13 +309,21 @@ class PlaybackPanelFragment :
         }
 
         // --- VIEWMODEL SETUP --
-        collectImmediately(playbackModel.song, ::updateSong)
+        collectImmediately(playbackModel.song, playbackModel.rawPlaybackMetadata) { song, raw ->
+            updatePlaybackMetadata(song, raw)
+        }
         collectImmediately(playbackModel.parent, ::updateParent)
         collectImmediately(playbackModel.positionDs, ::updatePosition)
         collectImmediately(playbackModel.repeatMode, ::updateRepeat)
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.shuffleScope, ::updateShuffleScope)
-        collectImmediately(playbackModel.pagerQueue, ::updatePager)
+        collectImmediately(
+            queueModel.queue,
+            queueModel.index,
+            playbackModel.rawPlaybackMetadata,
+        ) { queue, index, raw ->
+            updatePager(queue, index, raw)
+        }
     }
 
     private fun applyLargeToolbarTargets(toolbar: ViewGroup) {
@@ -342,6 +356,9 @@ class PlaybackPanelFragment :
         userAwarePagerCallback = null
         binding.playbackPager.adapter = null
         coverPagerAdapter = null
+        // Do not let a stale volatile UI command survive binding recreation.
+        queueModel.queueInstructions.consume()
+        queueModel.scrollTo.consume()
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
@@ -385,22 +402,44 @@ class PlaybackPanelFragment :
         playbackModel.seekTo(positionDs)
     }
 
-    private fun updateSong(song: Song?) {
+    private fun updatePlaybackMetadata(song: Song?, raw: RawPlaybackMetadata?) {
         val binding = requireBinding()
-        // Disable the more button when there is no current song to prevent dead taps.
-        binding.playbackMore?.isEnabled = song != null
+        val hasRichSong = song != null
+        binding.playbackMore?.isEnabled = hasRichSong
+        binding.playbackSong.isClickable = hasRichSong
+        binding.playbackArtist.isClickable = hasRichSong
+        binding.playbackAlbum?.isClickable = hasRichSong
+        binding.playbackShuffle.isEnabled = hasRichSong
 
-        if (song == null) {
-            // Nothing to do.
+        if (song != null) {
+            val context = requireContext()
+            L.d("Updating rich song display: $song")
+            binding.playbackSong.text = song.name.resolve(context)
+            binding.playbackArtist.text = song.artists.resolveNames(context)
+            binding.playbackAlbum?.text = song.album.name.resolve(context)
+            binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
+            binding.playbackRepeat.isEnabled = true
+            binding.playbackPlayPause.isEnabled = true
             return
         }
 
-        val context = requireContext()
-        L.d("Updating song display: $song")
-        binding.playbackSong.text = song.name.resolve(context)
-        binding.playbackArtist.text = song.artists.resolveNames(context)
-        binding.playbackAlbum?.text = song.album.name.resolve(context)
-        binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
+        if (raw != null) {
+            L.d("Updating primitive/raw Now Playing display")
+            binding.playbackSong.text = raw.displayTitle
+            binding.playbackArtist.text = raw.displayArtist
+            binding.playbackAlbum?.text = raw.album.orEmpty()
+            binding.playbackSeekBar?.durationDs = raw.durationMs.msToDs()
+            binding.playbackRepeat.isEnabled = true
+            binding.playbackPlayPause.isEnabled = true
+            return
+        }
+
+        binding.playbackSong.text = ""
+        binding.playbackArtist.text = ""
+        binding.playbackAlbum?.text = ""
+        binding.playbackSeekBar?.durationDs = 0L
+        binding.playbackRepeat.isEnabled = false
+        binding.playbackPlayPause.isEnabled = false
     }
 
     private fun updateParent(parent: MusicParent?) {
@@ -416,12 +455,13 @@ class PlaybackPanelFragment :
 
     private fun updateRepeat(repeatMode: RepeatMode) {
         val repeatButton = requireBinding().playbackRepeat
-        repeatButton.isChecked = repeatMode != RepeatMode.NONE
+        repeatButton.isChecked = repeatButton.isEnabled && repeatMode != RepeatMode.NONE
         repeatButton.setIconResource(repeatMode.icon)
     }
 
     private fun updatePlaying(isPlaying: Boolean) {
-        requireBinding().playbackPlayPause.isChecked = isPlaying
+        requireBinding().playbackPlayPause.isChecked =
+            requireBinding().playbackPlayPause.isEnabled && isPlaying
         requireBinding().playbackSeekBar?.setWaveEnabled(isPlaying)
     }
 
@@ -438,12 +478,12 @@ class PlaybackPanelFragment :
                     contentDescription = context.getString(R.string.desc_shuffle_off)
                 }
                 ShuffleScope.ALL -> {
-                    isChecked = true
+                    isChecked = isEnabled
                     setIconResource(R.drawable.sel_shuffle_state_24)
                     contentDescription = context.getString(R.string.desc_shuffle_all_songs)
                 }
                 ShuffleScope.GENRE -> {
-                    isChecked = true
+                    isChecked = isEnabled
                     setIconResource(R.drawable.ic_shuffle_genre_state_24)
                     contentDescription = context.getString(R.string.desc_shuffle_current_genre)
                 }
@@ -451,46 +491,47 @@ class PlaybackPanelFragment :
         }
     }
 
-    private fun updatePager(queue: PagerQueue) {
+    private fun updatePager(
+        queue: List<QueueDisplayItem>,
+        queueIndex: Int,
+        rawMetadata: RawPlaybackMetadata?,
+    ) {
         val binding = requireBinding()
         val adapter =
             checkNotNull(coverPagerAdapter) {
                 "CoverPagerAdapter must exist while the playback-panel binding is active"
             }
-        adapter.setActivePosition(queue.index)
+        val presentation = PlaybackPagerProjection.project(queue, queueIndex, rawMetadata)
+        val queueInstruction = queueModel.queueInstructions.consume()
 
-        val command = playbackModel.pagerCommand.consume()
-        if (command == null) {
-            // This probably shouldn't happen in practice, as QueueViewModel directly
-            // attaches to PlaybackStateManager and will basically always initialize
-            // with a command as a result.
-            //
-            // If it does happen we should just make sure the UI state is aligned. Don't
-            // want broken UI.
-            adapter.update(queue.queue, null)
-            binding.playbackPager.setCurrentItem(queue.index, false)
+        adapter.setActivePosition(presentation.activeIndex)
+        adapter.update(
+            presentation.items,
+            // QueueViewModel instructions are authoritative only for queue-backed pages. Raw is a
+            // single display fallback and uses ordinary diffing.
+            queueInstruction.takeIf { queue.isNotEmpty() },
+        )
+
+        val queueCanNavigate = queue.isNotEmpty()
+        binding.playbackSkipPrev.isEnabled = queueCanNavigate
+        binding.playbackSkipNext.isEnabled = queueCanNavigate
+
+        if (!presentation.hasPlayablePage) {
+            queueModel.scrollTo.consume()
             return
         }
 
-        if (command.update != null) {
-            // queue needs to be updated.
-            adapter.update(queue.queue, command.update)
-        }
+        val requestedScroll =
+            if (queue.isNotEmpty()) queueModel.scrollTo.consume() else null
+        val target = requestedScroll ?: presentation.activeIndex
+        if (target !in presentation.items.indices) return
 
-        if (command.scroll != null) {
-            // we need to scroll, however the smooth scroll only really looks best
-            // when we are only doing next/prev due to various factors. better to
-            // just not animate on outright gotos or queue updates
-            val delta = binding.playbackPager.currentItem - command.scroll
-            if (delta == 0) {
-                // user scroll, carry on
-                return
-            }
-            binding.playbackPager.setCurrentItem(
-                command.scroll,
-                command.update == null && abs(delta) == 1,
-            )
-        }
+        val delta = binding.playbackPager.currentItem - target
+        if (delta == 0) return
+        binding.playbackPager.setCurrentItem(
+            target,
+            queueInstruction == null && abs(delta) == 1,
+        )
     }
 
     private fun navigateToCurrentSong() {
