@@ -88,7 +88,7 @@ class PlaybackViewModelFastResumeTest {
         val model = newModel(manager.proxy)
         val updated = newRawMetadata(positionMs = 17_000, title = "Updated raw title")
 
-        manager.listener?.onRawPlaybackMetadataChanged(updated)
+        synchronized(manager.proxy) { manager.listener?.onRawPlaybackMetadataChanged(updated) }
 
         assertNotNull(model.rawPlaybackMetadata.value)
         assertEquals("Updated raw title", model.rawPlaybackMetadata.value?.displayTitle)
