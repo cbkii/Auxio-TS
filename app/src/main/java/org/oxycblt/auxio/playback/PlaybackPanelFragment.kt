@@ -527,8 +527,9 @@ class PlaybackPanelFragment :
             return
         }
 
-        val requestedScroll =
-            if (queue.isNotEmpty()) queueModel.scrollTo.consume() else null
+        // Always drain the event so a stale primitive scroll cannot outlive its projection.
+        val consumedScroll = queueModel.scrollTo.consume()
+        val requestedScroll = consumedScroll.takeIf { queue.isNotEmpty() }
         val target = requestedScroll ?: presentation.activeIndex
         if (target !in presentation.items.indices) return
 
