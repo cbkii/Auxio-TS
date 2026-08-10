@@ -144,9 +144,14 @@ constructor(
 
     override fun onQueueWindowChanged(window: QueueWindow?) {
         invalidatePrimitiveRange(window)
-        if (window == null) return
-        L.d("Updating bounded primitive queue display")
         _queueInstructions.put(UpdateInstructions.Replace(0))
+        if (window == null) {
+            // A primitive authority can disappear while raw playback or a hydrated queue remains.
+            // Re-read the manager rather than leaving stale primitive rows in volatile UI state.
+            synchronized(playbackManager) { synchronizeCurrentQueue() }
+            return
+        }
+        L.d("Updating bounded primitive queue display")
         _queue.value = window.toDisplayItems()
         _index.value = window.currentLocalPosition
         _scrollTo.put(window.currentLocalPosition)
@@ -295,6 +300,7 @@ constructor(
             activePrimitiveWindow = null
             _queue.value = emptyList()
             _index.value = playbackManager.index
+            _isInitialQueueLoaded.value = false
         }
     }
 
