@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,6 +38,7 @@ import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.playback.state.ShuffleScope
+import org.oxycblt.musikr.MusicParent
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.LooperMode
@@ -93,6 +95,25 @@ class PlaybackViewModelFastResumeTest {
         assertEquals("Updated raw title", model.rawPlaybackMetadata.value?.displayTitle)
     }
 
+    @Test
+    fun sessionEndClearsParentWithPlaybackPresentation() {
+        val manager = FakePlaybackManager()
+        val playbackParent = interfaceProxy<MusicParent>()
+        manager.parent = playbackParent
+        val model = newModel(manager.proxy)
+
+        assertEquals(playbackParent, model.parent.value)
+
+        synchronized(manager.proxy) { manager.listener?.onSessionEnded() }
+
+        assertNull(model.parent.value)
+        assertNull(model.song.value)
+        assertNull(model.rawPlaybackMetadata.value)
+        assertFalse(model.isPlaying.value)
+        assertEquals(0L, model.positionDs.value)
+        assertNull(model.currentAudioSessionId.value)
+    }
+
     private fun assertPositionAdvances(model: PlaybackViewModel) {
         val before = model.positionDs.value
         shadowOf(Looper.getMainLooper()).idleFor(250, TimeUnit.MILLISECONDS)
@@ -120,6 +141,7 @@ class PlaybackViewModelFastResumeTest {
     private class FakePlaybackManager {
         var progression: Progression = Progression.nil()
         var rawMetadata: RawPlaybackMetadata? = null
+        var parent: MusicParent? = null
         var window: QueueWindow? = null
         var listener: PlaybackStateManager.Listener? = null
         var transitionDuringRegistration = false
@@ -128,7 +150,7 @@ class PlaybackViewModelFastResumeTest {
             when (method.name) {
                 "getProgression" -> progression
                 "getRepeatMode" -> RepeatMode.NONE
-                "getParent" -> null
+                "getParent" -> parent
                 "getCurrentSong" -> null
                 "getRawPlaybackMetadata" -> rawMetadata
                 "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
