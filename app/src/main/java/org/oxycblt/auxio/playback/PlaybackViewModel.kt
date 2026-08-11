@@ -256,6 +256,7 @@ constructor(
         lastPositionJob?.cancel()
         lastPositionJob = null
         _song.value = null
+        _parent.value = null
         _rawPlaybackMetadata.value = null
         _isPlaying.value = false
         _positionDs.value = 0L
@@ -797,7 +798,6 @@ constructor(
                             random = kotlin.random.Random.Default,
                         )
                     }
-
                 if (playbackManager.currentSong?.uid != currentSongUid) {
                     return@launch
                 }
