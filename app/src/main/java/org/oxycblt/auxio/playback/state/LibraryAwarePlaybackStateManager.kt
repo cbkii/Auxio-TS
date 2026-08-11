@@ -61,15 +61,9 @@ constructor(
                 listeners.forEach { it.onQueueChanged(projectQueue(queue), index, change) }
             }
 
-            override fun onQueueReordered(
-                queue: List<Song>,
-                index: Int,
-                isShuffled: Boolean,
-            ) {
+            override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
                 invalidateProjection()
-                listeners.forEach {
-                    it.onQueueReordered(projectQueue(queue), index, isShuffled)
-                }
+                listeners.forEach { it.onQueueReordered(projectQueue(queue), index, isShuffled) }
             }
 
             override fun onNewPlayback(
