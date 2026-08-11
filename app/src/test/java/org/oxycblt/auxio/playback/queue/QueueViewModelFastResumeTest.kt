@@ -77,6 +77,7 @@ class QueueViewModelFastResumeTest {
         model.goto(target)
         assertEquals(41, manager.lastGoto)
 
+        // A stale capture must not cross a primitive queue authority generation.
         manager.lastGoto = null
         manager.window = window(start = 60, current = 61)
         synchronized(manager.proxy) { manager.listener?.onQueueWindowChanged(manager.window) }
@@ -109,7 +110,7 @@ class QueueViewModelFastResumeTest {
                 "getRepeatMode" -> RepeatMode.NONE
                 "getParent" -> null
                 "getCurrentSong" -> null
-                "getRawPlaybackMetadata" -> null
+                "getRawPlaybackMetadata" -> rawMetadata
                 "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
                 "getQueue" -> emptyList<Any>()
                 "getQueueWindow" -> window
