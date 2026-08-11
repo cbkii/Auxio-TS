@@ -63,6 +63,12 @@ constructor(
     private val persistenceRepository: PersistenceRepository,
 ) : ViewModel(), PlaybackStateManager.Listener {
 
+    /** Stable user-navigation intent captured before a bounded primitive range can move. */
+    data class NavigationTarget internal constructor(
+        val globalPosition: Int,
+        internal val generation: Long,
+    )
+
     private val _queue = MutableStateFlow(listOf<QueueDisplayItem>())
     /** The currently loaded queue range. */
     val queue: StateFlow<List<QueueDisplayItem>> = _queue
@@ -97,6 +103,20 @@ constructor(
 
     override fun onIndexMoved(index: Int) {
         L.d("Index moved, synchronizing and scrolling to new position")
+        if (activePrimitiveWindow != null) {
+            // PlaybackStateManager reports the primitive index in global logical coordinates while
+            // this ViewModel exposes adapter-local coordinates for the bounded window. Do not
+            // transiently publish a global index as a local pager position while the replacement
+            // window is still arriving.
+            val localIndex = _queue.value.indexOfFirst { it.globalPosition == index }
+            if (localIndex < 0) {
+                L.d("Primitive index $index is outside the loaded window; awaiting window update")
+                return
+            }
+            _scrollTo.put(localIndex)
+            _index.value = localIndex
+            return
+        }
         _scrollTo.put(index)
         _index.value = index
     }
@@ -223,13 +243,40 @@ constructor(
     fun globalPositionAt(adapterIndex: Int): Int? =
         _queue.value.getOrNull(adapterIndex)?.takeIf { it.editable }?.globalPosition
 
+    /** Capture a queue-navigation intent before asynchronous primitive prefetch can move the UI. */
+    fun navigationTargetAt(adapterIndex: Int): NavigationTarget? =
+        _queue.value.getOrNull(adapterIndex)?.takeIf { it.editable }?.let {
+            NavigationTarget(it.globalPosition, queueGeneration)
+        }
+
     /**
      * Start playing the queue item represented by [adapterIndex]. The logical position is resolved
-     * immediately from the current display snapshot so callers can retain it across async prefetch.
+     * immediately from the current display snapshot.
      */
     fun goto(adapterIndex: Int) {
-        val globalPosition = globalPositionAt(adapterIndex) ?: return
-        gotoGlobalPosition(globalPosition)
+        val target = navigationTargetAt(adapterIndex) ?: return
+        goto(target)
+    }
+
+    /**
+     * Execute a previously captured user-navigation intent. Primitive targets are validated against
+     * the queue authority generation and logical bounds rather than current bounded display
+     * membership, so a valid swipe is not dropped if prefetch trims that row before the posted
+     * command executes.
+     */
+    fun goto(target: NavigationTarget) {
+        if (target.generation != queueGeneration) {
+            L.d("Ignoring stale queue navigation target ${target.globalPosition}")
+            return
+        }
+        val primitiveWindow = activePrimitiveWindow
+        if (primitiveWindow != null) {
+            if (target.globalPosition !in 0 until primitiveWindow.descriptor.totalCount) return
+            L.d("Going to logical position ${target.globalPosition} in primitive queue")
+            playbackManager.goto(target.globalPosition)
+            return
+        }
+        gotoGlobalPosition(target.globalPosition)
     }
 
     /**
@@ -238,9 +285,8 @@ constructor(
      */
     fun gotoGlobalPosition(globalPosition: Int) {
         val item =
-            _queue.value.firstOrNull {
-                it.globalPosition == globalPosition && it.editable
-            } ?: return
+            _queue.value.firstOrNull { it.globalPosition == globalPosition && it.editable }
+                ?: return
         L.d("Going to logical position ${item.globalPosition} in queue")
         playbackManager.goto(item.globalPosition)
     }
@@ -314,11 +360,7 @@ constructor(
 
     private fun QueueWindow.toDisplayItems() =
         items.map { item ->
-            QueueDisplayItem(
-                globalPosition = item.logicalPosition,
-                song = null,
-                primitive = item,
-            )
+            QueueDisplayItem(globalPosition = item.logicalPosition, song = null, primitive = item)
         }
 
     private fun List<Song>.toDisplayItems() = mapIndexed { index, song ->
