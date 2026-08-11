@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.playback.ui.swiper
 
+import java.lang.reflect.Method
+import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -26,6 +28,9 @@ import org.junit.Test
 import org.oxycblt.auxio.playback.persist.QueueItemRef
 import org.oxycblt.auxio.playback.queue.QueueDisplayItem
 import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
+import org.oxycblt.musikr.Album
+import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.tag.interpret.Naming
 
 class PlaybackPagerProjectionTest {
     @Test
@@ -104,6 +109,16 @@ class PlaybackPagerProjectionTest {
     }
 
     @Test
+    fun richAlbumNameChangeRequiresCoverRebindForAccessibility() {
+        val oldItem = PlaybackPagerItem.Rich(3, richSong(albumName = "Old album"))
+        val unchanged = PlaybackPagerItem.Rich(3, richSong(albumName = "Old album"))
+        val renamed = PlaybackPagerItem.Rich(3, richSong(albumName = "Renamed album"))
+
+        assertTrue(CoverViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, unchanged))
+        assertFalse(CoverViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, renamed))
+    }
+
+    @Test
     fun duplicateQueueReferencesAtDifferentLogicalPositionsStayDistinct() {
         val uri = "file:///storage/usbdisk0/duplicate.flac"
         val first = PlaybackPagerItem.Primitive(2, primitive(2, uri))
@@ -124,6 +139,23 @@ class PlaybackPagerProjectionTest {
         assertFalse(state.hasPlayablePage)
         assertTrue(state.items.isEmpty())
         assertEquals(-1, state.activeIndex)
+    }
+
+    private fun richSong(albumName: String): Song {
+        val album = interfaceProxy<Album> { method, _ ->
+            when (method.name) {
+                "getName" -> Naming.simple().name(albumName, null)
+                else -> defaultValue(method)
+            }
+        }
+        return interfaceProxy { method, _ ->
+            when (method.name) {
+                "getAlbum" -> album
+                "getCover" -> null
+                "getDurationMs" -> 180_000L
+                else -> defaultValue(method)
+            }
+        }
     }
 
     private fun primitive(logicalPosition: Int, uri: String) =
@@ -151,4 +183,36 @@ class PlaybackPagerProjectionTest {
             isPlaying = true,
             savedAtMs = 1L,
         )
+
+    private companion object {
+        @Suppress("UNCHECKED_CAST")
+        inline fun <reified T> interfaceProxy(
+            noinline invocation: (Method, Array<out Any?>?) -> Any? = { method, _ ->
+                defaultValue(method)
+            }
+        ): T =
+            Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) {
+                proxy,
+                method,
+                args ->
+                when (method.name) {
+                    "toString" -> "${T::class.java.simpleName}TestProxy"
+                    "hashCode" -> System.identityHashCode(proxy)
+                    "equals" -> proxy === args?.firstOrNull()
+                    else -> invocation(method, args)
+                }
+            } as T
+
+        fun defaultValue(method: Method): Any? =
+            when {
+                method.returnType == java.lang.Boolean.TYPE -> false
+                method.returnType == java.lang.Integer.TYPE -> 0
+                method.returnType == java.lang.Long.TYPE -> 0L
+                method.returnType == java.lang.Float.TYPE -> 0f
+                method.returnType == java.lang.Double.TYPE -> 0.0
+                method.returnType == java.lang.Void.TYPE -> null
+                method.returnType.isEnum -> method.returnType.enumConstants?.firstOrNull()
+                else -> null
+            }
+    }
 }
