@@ -38,6 +38,7 @@ import org.oxycblt.auxio.playback.state.RawPlaybackMetadata
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.RestoreOutcome
 import org.oxycblt.auxio.playback.state.ShuffleScope
+import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.MusicParent
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -98,7 +99,7 @@ class PlaybackViewModelFastResumeTest {
     @Test
     fun sessionEndClearsParentWithPlaybackPresentation() {
         val manager = FakePlaybackManager()
-        val playbackParent = interfaceProxy<MusicParent>()
+        val playbackParent: MusicParent = interfaceProxy<Album>()
         manager.parent = playbackParent
         val model = newModel(manager.proxy)
 
