@@ -176,6 +176,16 @@ constructor(
         _isInitialQueueLoaded.value = true
     }
 
+    override fun onSessionEnded() {
+        L.d("Playback session ended, clearing queue presentation authority")
+        invalidateQueueAuthority()
+        _queueInstructions.consume()
+        _scrollTo.consume()
+        _queue.value = emptyList()
+        _index.value = -1
+        _isInitialQueueLoaded.value = false
+    }
+
     fun requestAdjacentRange(firstVisible: Int, lastVisible: Int) {
         val activeWindow = activePrimitiveWindow ?: return
         val loaded = _queue.value
