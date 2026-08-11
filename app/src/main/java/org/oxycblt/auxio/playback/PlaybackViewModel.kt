@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.list.ListSettings
-import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.GenreShuffleQueueSelector
 import org.oxycblt.auxio.playback.state.PlaybackCommand
@@ -102,30 +101,32 @@ constructor(
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, BannerState.Idle)
 
-    private val _parent = MutableStateFlow<MusicParent?>(null)
+    private val _parent = MutableStateFlow(playbackManager.parent)
     /** The [MusicParent] currently being played. Null if playback is occurring from all songs. */
     val parent: StateFlow<MusicParent?> = _parent
-    private val _isPlaying = MutableStateFlow(false)
+
+    private val _isPlaying = MutableStateFlow(playbackManager.progression.isPlaying)
     /** Whether playback is ongoing or paused. */
     val isPlaying: StateFlow<Boolean>
         get() = _isPlaying
 
-    private val _positionDs = MutableStateFlow(0L)
+    private val _positionDs =
+        MutableStateFlow(playbackManager.progression.calculateElapsedPositionMs().msToDs())
     /** The current position, in deci-seconds (1/10th of a second). */
     val positionDs: StateFlow<Long>
         get() = _positionDs
 
-    private val _repeatMode = MutableStateFlow(RepeatMode.NONE)
+    private val _repeatMode = MutableStateFlow(playbackManager.repeatMode)
     /** The current [RepeatMode]. */
     val repeatMode: StateFlow<RepeatMode>
         get() = _repeatMode
 
-    private val _isShuffled = MutableStateFlow(false)
+    private val _isShuffled = MutableStateFlow(playbackManager.isShuffled)
     /** Whether the queue is shuffled or not. */
     val isShuffled: StateFlow<Boolean>
         get() = _isShuffled
 
-    private val _shuffleScope = MutableStateFlow(ShuffleScope.OFF)
+    private val _shuffleScope = MutableStateFlow(playbackManager.shuffleScope)
     val shuffleScope: StateFlow<ShuffleScope>
         get() = _shuffleScope
 
@@ -142,10 +143,6 @@ constructor(
     val openPanel: Event<OpenPanel>
         get() = _openPanel
 
-    private val _pagerQueue = MutableStateFlow(PagerQueue(listOf(), 0))
-    /** The current queue in a special bundled format suitable for the cover ViewPager2. */
-    val pagerQueue: StateFlow<PagerQueue> = _pagerQueue
-
     private val _visualizerState = MutableStateFlow<VisualizerState>(VisualizerState.Disabled)
     /** The current state of the audio visualizer. */
     val visualizerState: StateFlow<VisualizerState> = _visualizerState
@@ -153,11 +150,6 @@ constructor(
     fun updateVisualizerState(state: VisualizerState) {
         _visualizerState.value = state
     }
-
-    private val _pagerCommand = MutableEvent<PagerCommand>()
-    /** Specialized ViewPager2-friendly queue commands */
-    val pagerCommand: Event<PagerCommand>
-        get() = _pagerCommand
 
     private val _playbackDecision = MutableEvent<PlaybackDecision>()
     /**
@@ -177,10 +169,18 @@ constructor(
 
     init {
         playbackManager.addListener(this)
+        // Listener replay is conditional inside PlaybackStateManager. Register first, then mirror
+        // the complete canonical state while holding the manager's own monitor. A state mutation
+        // that happened before this block is included; one that happens afterwards must reach this
+        // already-registered listener. This closes the Fast Resume UI lost-update window without
+        // changing global listener semantics or creating another playback authority.
+        synchronized(playbackManager) { synchronizeCurrentPlaybackState() }
         playbackSettings.registerListener(this)
     }
 
     override fun onCleared() {
+        lastPositionJob?.cancel()
+        genreShuffleJob?.cancel()
         playbackManager.removeListener(this)
         playbackSettings.unregisterListener(this)
     }
@@ -189,35 +189,22 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
-        syncRawPlaybackMetadata()
-
-        _pagerCommand.put(PagerCommand(update = null, scroll = index))
-        _pagerQueue.value = _pagerQueue.value.copy(index = index)
+        _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
-        syncRawPlaybackMetadata()
+        _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
         // Other types of queue changes preserve the current song.
         if (change.type == QueueChange.Type.SONG) {
             L.d("Queue changed, updating current song")
             _song.value = playbackManager.currentSong
         }
-
-        _pagerCommand.put(
-            PagerCommand(
-                update = change.instructions,
-                scroll = index.takeIf { change.type != QueueChange.Type.MAPPING },
-            )
-        )
-        _pagerQueue.value = PagerQueue(queue = queue, index = index)
     }
 
     override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
         L.d("Queue completely changed, updating current song")
         _isShuffled.value = isShuffled
         _shuffleScope.value = playbackManager.shuffleScope
-        _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
-        _pagerQueue.value = PagerQueue(queue = queue, index = index)
     }
 
     override fun onNewPlayback(
@@ -228,46 +215,30 @@ constructor(
     ) {
         L.d("New playback started, updating playback information")
         _song.value = playbackManager.currentSong
-        syncRawPlaybackMetadata()
+        _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
         _parent.value = parent
         _isShuffled.value = isShuffled
         _shuffleScope.value = playbackManager.shuffleScope
-        _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
-        _pagerQueue.value = PagerQueue(queue = queue, index = index)
     }
 
     override fun onProgressionChanged(progression: Progression) {
-        L.d("Player state changed, starting new position polling")
-        _isPlaying.value = progression.isPlaying
-        syncRawPlaybackMetadata()
-        // Still need to update the position now due to co-routine launch delays
-        _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
-        // Replace the previous position co-routine with a new one that uses the new
-        // state information.
-        lastPositionJob?.cancel()
-        lastPositionJob =
-            // While paused the position cannot advance, so polling would just re-set the
-            // same value every deci-second and waste CPU on weak head-unit hardware. Any
-            // play/pause/seek transition delivers a fresh Progression that restarts polling.
-            if (progression.isPlaying) {
-                viewModelScope.launch {
-                    while (true) {
-                        _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
-                        // Wait a deci-second for the next position tick.
-                        delay(100)
-                    }
-                }
-            } else {
-                null
-            }
+        L.d("Player state changed, synchronizing position polling")
+        synchronizeProgression(progression)
+        _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
+    }
+
+    override fun onRawPlaybackMetadataChanged(metadata: RawPlaybackMetadata?) {
+        _rawPlaybackMetadata.value = metadata
+    }
+
+    override fun onQueueWindowChanged(window: org.oxycblt.auxio.playback.persist.QueueWindow?) {
+        // QueueWindowChanged is the primitive startup boundary that first makes Quick Queue useful.
+        // Reconcile all UI mirrors here instead of relying on a later unrelated playback event.
+        synchronized(playbackManager) { synchronizeCurrentPlaybackState() }
     }
 
     override fun onRestoreOutcomeChanged(outcome: RestoreOutcome) {
         _restoreOutcome.value = outcome
-        syncRawPlaybackMetadata()
-    }
-
-    private fun syncRawPlaybackMetadata() {
         _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
     }
 
@@ -281,8 +252,52 @@ constructor(
         }
     }
 
+    override fun onSessionEnded() {
+        lastPositionJob?.cancel()
+        lastPositionJob = null
+        _song.value = null
+        _parent.value = null
+        _rawPlaybackMetadata.value = null
+        _isPlaying.value = false
+        _positionDs.value = 0L
+        _currentAudioSessionId.value = null
+    }
+
     override fun onBarActionChanged() {
         _currentBarAction.value = playbackSettings.barAction
+    }
+
+    /** Mirror the canonical state. Caller must hold [playbackManager]'s monitor. */
+    private fun synchronizeCurrentPlaybackState() {
+        _song.value = playbackManager.currentSong
+        _rawPlaybackMetadata.value = playbackManager.rawPlaybackMetadata
+        _restoreOutcome.value = playbackManager.restoreOutcome
+        _parent.value = playbackManager.parent
+        _repeatMode.value = playbackManager.repeatMode
+        _isShuffled.value = playbackManager.isShuffled
+        _shuffleScope.value = playbackManager.shuffleScope
+        _currentAudioSessionId.value = playbackManager.currentAudioSessionId
+        synchronizeProgression(playbackManager.progression)
+    }
+
+    private fun synchronizeProgression(progression: Progression) {
+        _isPlaying.value = progression.isPlaying
+        // Publish the position immediately so a newly-created panel never waits for its first tick.
+        _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
+        lastPositionJob?.cancel()
+        lastPositionJob =
+            // While paused the position cannot advance, so polling would just reset the same value
+            // every decisecond. Every play/pause/seek transition installs a fresh Progression.
+            if (progression.isPlaying) {
+                viewModelScope.launch {
+                    while (true) {
+                        _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
+                        delay(POSITION_POLL_MS)
+                    }
+                }
+            } else {
+                null
+            }
     }
 
     // --- PLAYING FUNCTIONS ---
@@ -541,20 +556,20 @@ constructor(
     fun stepBackwards() {
         L.d("Stepping back 10 seconds")
         val currentPositionMs = playbackManager.progression.calculateElapsedPositionMs()
-        val newPositionMs = (currentPositionMs - 10000).coerceAtLeast(0)
+        val newPositionMs = (currentPositionMs - STEP_INCREMENT).coerceAtLeast(0)
         playbackManager.seekTo(newPositionMs)
     }
 
-    /** Step forward by 10 seconds in the current song. */
+    /** Step forward by 10 seconds in the current rich, primitive, or raw item. */
     fun stepForward() {
         L.d("Stepping forward 10 seconds")
         val currentPositionMs = playbackManager.progression.calculateElapsedPositionMs()
-        val currentSong = playbackManager.currentSong
-        if (currentSong != null) {
-            val newPositionMs =
-                (currentPositionMs + STEP_INCREMENT).coerceAtMost(currentSong.durationMs)
-            playbackManager.seekTo(newPositionMs)
-        }
+        val durationMs =
+            playbackManager.currentSong?.durationMs
+                ?: playbackManager.rawPlaybackMetadata?.durationMs?.takeIf { it > 0L }
+                ?: return
+        val newPositionMs = (currentPositionMs + STEP_INCREMENT).coerceAtMost(durationMs)
+        playbackManager.seekTo(newPositionMs)
     }
 
     // --- QUEUE FUNCTIONS ---
@@ -783,7 +798,6 @@ constructor(
                             random = kotlin.random.Random.Default,
                         )
                     }
-
                 if (playbackManager.currentSong?.uid != currentSongUid) {
                     return@launch
                 }
@@ -854,12 +868,9 @@ constructor(
 
     private companion object {
         private const val STEP_INCREMENT = 10000 // ms
+        private const val POSITION_POLL_MS = 100L
     }
 }
-
-data class PagerQueue(val queue: List<Song>, val index: Int)
-
-data class PagerCommand(val update: UpdateInstructions?, val scroll: Int?)
 
 /**
  * Command for controlling the main playback panel UI.

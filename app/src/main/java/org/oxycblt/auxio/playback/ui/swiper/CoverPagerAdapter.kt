@@ -25,21 +25,22 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
-import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerDisplayPolicy
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerRecoveryPolicy
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
-import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.tag.Name
 
 /**
- * Hosts cover pages while keeping visualizer collection at adapter scope.
+ * Hosts rich, primitive and raw Now Playing pages while keeping visualizer collection at adapter
+ * scope.
  *
  * Frequent live frames are delivered only to the current page. Attached off-screen holders are
  * reset only when attachment, position, or mode state changes, and replayed stale frames are
@@ -50,7 +51,7 @@ class CoverPagerAdapter(
     private val visualizerStateFlow: kotlinx.coroutines.flow.StateFlow<VisualizerState>,
     private val uiSettings: UISettings,
     lifecycleOwner: LifecycleOwner,
-) : FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
+) : FlexibleListAdapter<PlaybackPagerItem, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
 
     private val attachedHolders = linkedSetOf<CoverViewHolder>()
     private var activePosition = RecyclerView.NO_POSITION
@@ -130,25 +131,32 @@ class CoverPagerAdapter(
         VisualizerRecoveryPolicy.sanitizeCachedState(state, SystemClock.uptimeMillis())
 }
 
-/** A ViewHolder containing artwork, the visualizer surface, and fast-seek gestures. */
+/** A ViewHolder containing artwork/fallback, the visualizer surface, and fast-seek gestures. */
 class CoverViewHolder private constructor(private val binding: ItemCoverBinding) :
     RecyclerView.ViewHolder(binding.root) {
 
-    private var song: Song? = null
+    private var item: PlaybackPagerItem? = null
     private var visualizerShown = false
 
     fun onViewRecycled() {
-        song = null
+        item = null
         binding.coverVisualizer.updateState(VisualizerState.Disabled)
         visualizerShown = false
         binding.coverVisualizer.visibility = View.GONE
         binding.cover.visibility = View.VISIBLE
+        binding.cover.clear()
     }
 
-    fun bind(song: Song, listener: StepperOverlay.Listener) {
-        this.song = song
-        binding.cover.bind(song)
-        binding.coverVisualizer.configureTrack(song.uid.toString(), song.durationMs)
+    fun bind(item: PlaybackPagerItem, listener: StepperOverlay.Listener) {
+        this.item = item
+        val song = item.song
+        if (song != null) {
+            binding.cover.bind(song)
+        } else {
+            // Primitive/raw Fast Resume deliberately has no fake Song or artwork authority.
+            binding.cover.clear()
+        }
+        binding.coverVisualizer.configureTrack(item.visualizerTrackKey, item.durationMs)
         binding.coverFastSeekOverlay.listener = listener
         updateVisualizerState(VisualizerState.Disabled, UISettings.VisualizerMode.OFF)
     }
@@ -158,7 +166,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
             VisualizerDisplayPolicy.shouldShowVisualizer(
                 state = state,
                 mode = mode,
-                hasArtwork = song?.cover != null,
+                hasArtwork = item?.song?.cover != null,
             )
 
         if (shouldShow) {
@@ -179,9 +187,40 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
             CoverViewHolder(ItemCoverBinding.inflate(parent.context.inflater, parent, false))
 
         val DIFF_CALLBACK =
-            object : SimpleDiffCallback<Song>() {
-                override fun areContentsTheSame(oldItem: Song, newItem: Song) =
-                    oldItem.cover == newItem.cover
+            object : DiffUtil.ItemCallback<PlaybackPagerItem>() {
+                override fun areItemsTheSame(
+                    oldItem: PlaybackPagerItem,
+                    newItem: PlaybackPagerItem,
+                ) = PlaybackPagerItem.sameLogicalItem(oldItem, newItem)
+
+                override fun areContentsTheSame(
+                    oldItem: PlaybackPagerItem,
+                    newItem: PlaybackPagerItem,
+                ): Boolean =
+                    when {
+                        oldItem is PlaybackPagerItem.Rich && newItem is PlaybackPagerItem.Rich ->
+                            oldItem.song.cover == newItem.song.cover &&
+                                sameDisplayName(oldItem.song.album.name, newItem.song.album.name) &&
+                                oldItem.durationMs == newItem.durationMs
+                        oldItem is PlaybackPagerItem.Primitive &&
+                            newItem is PlaybackPagerItem.Primitive -> oldItem.item == newItem.item
+                        oldItem is PlaybackPagerItem.Raw && newItem is PlaybackPagerItem.Raw ->
+                            oldItem.metadata.title == newItem.metadata.title &&
+                                oldItem.metadata.artist == newItem.metadata.artist &&
+                                oldItem.metadata.album == newItem.metadata.album &&
+                                oldItem.metadata.uriString == newItem.metadata.uriString &&
+                                oldItem.metadata.path == newItem.metadata.path &&
+                                oldItem.metadata.durationMs == newItem.metadata.durationMs
+                        else -> false
+                    }
+            }
+
+        private fun sameDisplayName(oldName: Name, newName: Name): Boolean =
+            when {
+                oldName is Name.Known && newName is Name.Known -> oldName.raw == newName.raw
+                oldName is Name.Unknown && newName is Name.Unknown ->
+                    oldName.placeholder == newName.placeholder
+                else -> false
             }
     }
 }
