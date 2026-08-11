@@ -69,17 +69,25 @@ class QueueViewModelFastResumeTest {
     }
 
     @Test
-    fun capturedPrimitiveNavigationUsesAuthorityGenerationNotDisplayPosition() {
+    fun capturedPrimitiveNavigationSurvivesSameAuthorityWindowReplacement() {
         val manager = FakePlaybackManager(window(start = 40, current = 41))
         val model = QueueViewModel(manager.proxy, interfaceProxy())
         val target = checkNotNull(model.navigationTargetAt(1))
 
-        model.goto(target)
-        assertEquals(41, manager.lastGoto)
-
-        // A stale capture must not cross a primitive queue authority generation.
-        manager.lastGoto = null
         manager.window = window(start = 60, current = 61)
+        synchronized(manager.proxy) { manager.listener?.onQueueWindowChanged(manager.window) }
+        model.goto(target)
+
+        assertEquals(41, manager.lastGoto)
+    }
+
+    @Test
+    fun capturedPrimitiveNavigationIsRejectedAfterAuthorityChange() {
+        val manager = FakePlaybackManager(window(start = 40, current = 41))
+        val model = QueueViewModel(manager.proxy, interfaceProxy())
+        val target = checkNotNull(model.navigationTargetAt(1))
+
+        manager.window = window(start = 60, current = 61, revision = 4L)
         synchronized(manager.proxy) { manager.listener?.onQueueWindowChanged(manager.window) }
         model.goto(target)
 
@@ -167,7 +175,7 @@ class QueueViewModelFastResumeTest {
                 else -> null
             }
 
-        fun window(start: Int, current: Int): QueueWindow {
+        fun window(start: Int, current: Int, revision: Long = 3L): QueueWindow {
             val totalCount = 100
             val descriptor =
                 QueueDescriptor(
@@ -177,7 +185,7 @@ class QueueViewModelFastResumeTest {
                     positionMs = 12_000L,
                     repeatMode = RepeatMode.NONE,
                     shuffleScope = ShuffleScope.OFF,
-                    revision = 3L,
+                    revision = revision,
                     updatedAtMs = 1L,
                 )
             return QueueWindow(
