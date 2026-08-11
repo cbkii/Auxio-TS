@@ -21,7 +21,6 @@ package org.oxycblt.auxio.playback.queue
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -74,10 +73,9 @@ class QueueViewModelFastResumeTest {
     fun capturedPrimitiveNavigationUsesAuthorityGenerationNotDisplayPosition() {
         val manager = FakePlaybackManager(window(start = 40, current = 41))
         val model = QueueViewModel(manager.proxy, interfaceProxy())
-        val target = model.navigationTargetAt(1)
-        assertNotNull(target)
+        val target = checkNotNull(model.navigationTargetAt(1))
 
-        model.goto(checkNotNull(target))
+        model.goto(target)
         assertEquals(41, manager.lastGoto)
 
         manager.lastGoto = null
