@@ -27,9 +27,25 @@ import org.junit.Test
 class PlaybackPanelLayoutContractTest {
     @Test
     fun everyPlaybackPanelQualifierKeepsLogicalMediumMetadataInset() {
-        layoutPaths.forEach { relativePath ->
-            val file = resolveAppFile(relativePath)
-            assertTrue("Missing playback layout: $relativePath", file.isFile)
+        val resDir = resolveAppResDir()
+        assertTrue("Missing app resource directory: ${resDir.path}", resDir.isDirectory)
+
+        val layoutFiles =
+            resDir.listFiles()
+                ?.asSequence()
+                ?.filter { directory ->
+                    directory.isDirectory &&
+                        (directory.name == "layout" || directory.name.startsWith("layout-"))
+                }
+                ?.map { directory -> File(directory, PLAYBACK_PANEL_LAYOUT) }
+                ?.filter(File::isFile)
+                ?.sortedBy { it.parentFile.name }
+                ?.toList()
+                .orEmpty()
+        assertTrue("No playback-panel layout variants found under ${resDir.path}", layoutFiles.isNotEmpty())
+
+        layoutFiles.forEach { file ->
+            val relativePath = file.relativeTo(resDir).path
             val xml = file.readText()
             val marker = "android:id=\"@+id/playback_info_container\""
             val markerIndex = xml.indexOf(marker)
@@ -58,20 +74,14 @@ class PlaybackPanelLayoutContractTest {
         }
     }
 
-    private fun resolveAppFile(relativePath: String): File {
+    private fun resolveAppResDir(): File {
         val workingDir = File(System.getProperty("user.dir"))
-        val direct = File(workingDir, relativePath)
-        if (direct.exists()) return direct
-        return File(File(workingDir, "app"), relativePath)
+        val moduleRelative = File(workingDir, "src/main/res")
+        if (moduleRelative.isDirectory) return moduleRelative
+        return File(workingDir, "app/src/main/res")
     }
 
     private companion object {
-        val layoutPaths =
-            listOf(
-                "src/main/res/layout/fragment_playback_panel.xml",
-                "src/main/res/layout-h360dp/fragment_playback_panel.xml",
-                "src/main/res/layout-h520dp/fragment_playback_panel.xml",
-                "src/main/res/layout-w400dp-h520dp/fragment_playback_panel.xml",
-            )
+        const val PLAYBACK_PANEL_LAYOUT = "fragment_playback_panel.xml"
     }
 }
