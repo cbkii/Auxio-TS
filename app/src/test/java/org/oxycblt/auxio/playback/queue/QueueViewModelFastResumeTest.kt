@@ -21,6 +21,7 @@ package org.oxycblt.auxio.playback.queue
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -105,6 +106,29 @@ class QueueViewModelFastResumeTest {
 
         assertTrue(model.queue.value.isEmpty())
         assertNull(model.globalPositionAt(0))
+    }
+
+    @Test
+    fun sessionEndClearsPrimitivePresentationAndInvalidatesNavigation() {
+        val manager = FakePlaybackManager(window(start = 40, current = 41))
+        val model = QueueViewModel(manager.proxy, interfaceProxy())
+        val target = checkNotNull(model.navigationTargetAt(1))
+
+        synchronized(manager.proxy) { manager.listener?.onIndexMoved(42) }
+        assertEquals(2, model.scrollTo.consume())
+        synchronized(manager.proxy) { manager.listener?.onIndexMoved(41) }
+
+        synchronized(manager.proxy) { manager.listener?.onSessionEnded() }
+        manager.lastGoto = null
+        model.goto(target)
+
+        assertTrue(model.queue.value.isEmpty())
+        assertEquals(-1, model.index.value)
+        assertFalse(model.isInitialQueueLoaded.value)
+        assertNull(model.globalPositionAt(0))
+        assertNull(model.scrollTo.consume())
+        assertNull(model.queueInstructions.consume())
+        assertNull(manager.lastGoto)
     }
 
     private class FakePlaybackManager(initialWindow: QueueWindow?) {
