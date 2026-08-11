@@ -142,12 +142,13 @@ class PlaybackPagerProjectionTest {
     }
 
     private fun richSong(albumName: String): Song {
-        val album = interfaceProxy<Album> { method, _ ->
-            when (method.name) {
-                "getName" -> Naming.simple().name(albumName, null)
-                else -> defaultValue(method)
+        val album =
+            interfaceProxy<Album> { method, _ ->
+                when (method.name) {
+                    "getName" -> Naming.simple().name(albumName, null)
+                    else -> defaultValue(method)
+                }
             }
-        }
         return interfaceProxy { method, _ ->
             when (method.name) {
                 "getAlbum" -> album
