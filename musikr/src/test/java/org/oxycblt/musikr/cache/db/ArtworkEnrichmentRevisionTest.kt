@@ -74,10 +74,7 @@ class ArtworkEnrichmentRevisionTest {
         val legacy = requireNotNull(db.incrementalDao().sourceLedger(source.sourceKey))
         db.incrementalDao()
             .upsertSourceLedger(
-                legacy.copy(
-                    committedProfile = MetadataProfile.FULL.name,
-                    enrichmentRevision = 1L,
-                )
+                legacy.copy(committedProfile = MetadataProfile.FULL.name, enrichmentRevision = 1L)
             )
 
         val repair = store.planScan(listOf(source), false, MetadataProfile.FULL, 1L)
