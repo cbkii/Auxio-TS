@@ -21,6 +21,7 @@ package org.oxycblt.auxio.playback.queue
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,6 +53,39 @@ class QueueViewModelFastResumeTest {
         model.gotoGlobalPosition(41)
         assertEquals(41, manager.lastGoto)
         assertNull(model.globalPositionAt(99))
+    }
+
+    @Test
+    fun primitiveIndexMovedUsesLocalAdapterCoordinates() {
+        val manager = FakePlaybackManager(window(start = 40, current = 41))
+        val model = QueueViewModel(manager.proxy, interfaceProxy())
+
+        synchronized(manager.proxy) { manager.listener?.onIndexMoved(42) }
+
+        assertEquals(2, model.index.value)
+        assertEquals(2, model.scrollTo.consume())
+
+        synchronized(manager.proxy) { manager.listener?.onIndexMoved(50) }
+        assertEquals(2, model.index.value)
+        assertNull(model.scrollTo.consume())
+    }
+
+    @Test
+    fun capturedPrimitiveNavigationUsesAuthorityGenerationNotDisplayPosition() {
+        val manager = FakePlaybackManager(window(start = 40, current = 41))
+        val model = QueueViewModel(manager.proxy, interfaceProxy())
+        val target = model.navigationTargetAt(1)
+        assertNotNull(target)
+
+        model.goto(checkNotNull(target))
+        assertEquals(41, manager.lastGoto)
+
+        manager.lastGoto = null
+        manager.window = window(start = 60, current = 61)
+        synchronized(manager.proxy) { manager.listener?.onQueueWindowChanged(manager.window) }
+        model.goto(target)
+
+        assertNull(manager.lastGoto)
     }
 
     @Test
