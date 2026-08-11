@@ -28,7 +28,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.playback.persist.QueueDescriptor
 import org.oxycblt.auxio.playback.persist.QueueItemRef
 import org.oxycblt.auxio.playback.persist.QueueWindow
@@ -111,13 +110,12 @@ class PlaybackViewModelFastResumeTest {
             listSettings = interfaceProxy(),
         )
 
-    private fun playbackSettings(): PlaybackSettings =
-        interfaceProxy { method, _ ->
-            when (method.name) {
-                "getBarAction" -> ActionMode.NEXT
-                else -> defaultValue(method)
-            }
+    private fun playbackSettings(): PlaybackSettings = interfaceProxy { method, _ ->
+        when (method.name) {
+            "getBarAction" -> ActionMode.NEXT
+            else -> defaultValue(method)
         }
+    }
 
     private class FakePlaybackManager {
         var progression: Progression = Progression.nil()
@@ -126,42 +124,41 @@ class PlaybackViewModelFastResumeTest {
         var listener: PlaybackStateManager.Listener? = null
         var transitionDuringRegistration = false
 
-        val proxy: PlaybackStateManager =
-            interfaceProxy { method, args ->
-                when (method.name) {
-                    "getProgression" -> progression
-                    "getRepeatMode" -> RepeatMode.NONE
-                    "getParent" -> null
-                    "getCurrentSong" -> null
-                    "getRawPlaybackMetadata" -> rawMetadata
-                    "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
-                    "getQueue" -> emptyList<Any>()
-                    "getQueueWindow" -> window
-                    "getIndex" -> window?.descriptor?.currentLogicalPosition ?: -1
-                    "isShuffled" -> false
-                    "getShuffleScope" -> ShuffleScope.OFF
-                    "getCurrentAudioSessionId" -> 73
-                    "isAudioFocusHeld" -> true
-                    "addListener" -> {
-                        listener = args?.singleOrNull() as? PlaybackStateManager.Listener
-                        if (transitionDuringRegistration) {
-                            progression =
-                                Progression.from(
-                                    isPlaying = true,
-                                    isAdvancing = true,
-                                    positionMs = 12_000,
-                                )
-                            rawMetadata = newRawMetadata(positionMs = 12_000)
-                        }
-                        null
+        val proxy: PlaybackStateManager = interfaceProxy { method, args ->
+            when (method.name) {
+                "getProgression" -> progression
+                "getRepeatMode" -> RepeatMode.NONE
+                "getParent" -> null
+                "getCurrentSong" -> null
+                "getRawPlaybackMetadata" -> rawMetadata
+                "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
+                "getQueue" -> emptyList<Any>()
+                "getQueueWindow" -> window
+                "getIndex" -> window?.descriptor?.currentLogicalPosition ?: -1
+                "isShuffled" -> false
+                "getShuffleScope" -> ShuffleScope.OFF
+                "getCurrentAudioSessionId" -> 73
+                "isAudioFocusHeld" -> true
+                "addListener" -> {
+                    listener = args?.singleOrNull() as? PlaybackStateManager.Listener
+                    if (transitionDuringRegistration) {
+                        progression =
+                            Progression.from(
+                                isPlaying = true,
+                                isAdvancing = true,
+                                positionMs = 12_000,
+                            )
+                        rawMetadata = newRawMetadata(positionMs = 12_000)
                     }
-                    "removeListener" -> {
-                        listener = null
-                        null
-                    }
-                    else -> defaultValue(method)
+                    null
                 }
+                "removeListener" -> {
+                    listener = null
+                    null
+                }
+                else -> defaultValue(method)
             }
+        }
     }
 
     private companion object {
@@ -171,10 +168,10 @@ class PlaybackViewModelFastResumeTest {
                 defaultValue(method)
             }
         ): T =
-            Proxy.newProxyInstance(
-                T::class.java.classLoader,
-                arrayOf(T::class.java),
-            ) { proxy, method, args ->
+            Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) {
+                proxy,
+                method,
+                args ->
                 when (method.name) {
                     "toString" -> "${T::class.java.simpleName}TestProxy"
                     "hashCode" -> System.identityHashCode(proxy)

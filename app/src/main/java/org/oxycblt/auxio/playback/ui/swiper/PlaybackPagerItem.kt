@@ -26,8 +26,8 @@ import org.oxycblt.musikr.Song
 /**
  * Display-only item for the Now Playing pager.
  *
- * Raw and primitive entries deliberately remain primitive. They are never promoted into fake
- * [Song] instances or a second playback queue authority.
+ * Raw and primitive entries deliberately remain primitive. They are never promoted into fake [Song]
+ * instances or a second playback queue authority.
  */
 sealed interface PlaybackPagerItem {
     /** Global logical queue position when this item is backed by the canonical queue. */
@@ -55,44 +55,41 @@ sealed interface PlaybackPagerItem {
             get() = song.durationMs
 
         override val identityKeys: Set<String>
-            get() =
-                buildSet {
-                    add("uid:${song.uid}")
-                    add("uri:${song.uri}")
-                }
+            get() = buildSet {
+                add("uid:${song.uid}")
+                add("uri:${song.uri}")
+            }
     }
 
-    data class Primitive(
-        override val globalPosition: Int,
-        val item: QueueItemRef,
-    ) : PlaybackPagerItem {
+    data class Primitive(override val globalPosition: Int, val item: QueueItemRef) :
+        PlaybackPagerItem {
         override val durationMs: Long
             get() = item.durationMs
+
         override val song: Song? = null
         override val identityKeys: Set<String>
-            get() =
-                buildSet {
-                    item.stableSongUid?.let { add("uid:$it") }
-                    item.uri?.takeIf(String::isNotBlank)?.let { add("uri:$it") }
-                    item.pathFallback?.takeIf(String::isNotBlank)?.let { add("path:$it") }
-                    if (isEmpty()) add("primitive:$globalPosition:${item.durationMs}")
-                }
+            get() = buildSet {
+                item.stableSongUid?.let { add("uid:$it") }
+                item.uri?.takeIf(String::isNotBlank)?.let { add("uri:$it") }
+                item.pathFallback?.takeIf(String::isNotBlank)?.let { add("path:$it") }
+                if (isEmpty()) add("primitive:$globalPosition:${item.durationMs}")
+            }
     }
 
     data class Raw(val metadata: RawPlaybackMetadata) : PlaybackPagerItem {
         override val globalPosition: Int? = null
         override val durationMs: Long
             get() = metadata.durationMs
+
         override val song: Song? = null
         override val identityKeys: Set<String>
-            get() =
-                buildSet {
-                    metadata.uriString.takeIf(String::isNotBlank)?.let { add("uri:$it") }
-                    metadata.path?.takeIf(String::isNotBlank)?.let { add("path:$it") }
-                    if (isEmpty()) {
-                        add("raw:${metadata.displayTitle}:${metadata.durationMs}")
-                    }
+            get() = buildSet {
+                metadata.uriString.takeIf(String::isNotBlank)?.let { add("uri:$it") }
+                metadata.path?.takeIf(String::isNotBlank)?.let { add("path:$it") }
+                if (isEmpty()) {
+                    add("raw:${metadata.displayTitle}:${metadata.durationMs}")
                 }
+            }
     }
 
     companion object {
@@ -152,9 +149,7 @@ object PlaybackPagerProjection {
             val activeIndex =
                 activeGlobalPosition
                     ?.let { global -> items.indexOfFirst { it.globalPosition == global } }
-                    ?.takeIf { it >= 0 }
-                    ?: items.indices.firstOrNull()
-                    ?: -1
+                    ?.takeIf { it >= 0 } ?: items.indices.firstOrNull() ?: -1
             return State(items, activeIndex)
         }
 

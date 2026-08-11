@@ -25,7 +25,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.oxycblt.auxio.playback.persist.PersistenceRepository
 import org.oxycblt.auxio.playback.persist.QueueDescriptor
 import org.oxycblt.auxio.playback.persist.QueueItemRef
 import org.oxycblt.auxio.playback.persist.QueueWindow
@@ -104,37 +103,36 @@ class QueueViewModelFastResumeTest {
         var listener: PlaybackStateManager.Listener? = null
         var lastGoto: Int? = null
 
-        val proxy: PlaybackStateManager =
-            interfaceProxy { method, args ->
-                when (method.name) {
-                    "getProgression" -> Progression.nil()
-                    "getRepeatMode" -> RepeatMode.NONE
-                    "getParent" -> null
-                    "getCurrentSong" -> null
-                    "getRawPlaybackMetadata" -> null
-                    "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
-                    "getQueue" -> emptyList<Any>()
-                    "getQueueWindow" -> window
-                    "getIndex" -> window?.descriptor?.currentLogicalPosition ?: -1
-                    "isShuffled" -> false
-                    "getShuffleScope" -> ShuffleScope.OFF
-                    "getCurrentAudioSessionId" -> null
-                    "isAudioFocusHeld" -> false
-                    "addListener" -> {
-                        listener = args?.singleOrNull() as? PlaybackStateManager.Listener
-                        null
-                    }
-                    "removeListener" -> {
-                        listener = null
-                        null
-                    }
-                    "goto" -> {
-                        lastGoto = args?.singleOrNull() as? Int
-                        null
-                    }
-                    else -> defaultValue(method)
+        val proxy: PlaybackStateManager = interfaceProxy { method, args ->
+            when (method.name) {
+                "getProgression" -> Progression.nil()
+                "getRepeatMode" -> RepeatMode.NONE
+                "getParent" -> null
+                "getCurrentSong" -> null
+                "getRawPlaybackMetadata" -> null
+                "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
+                "getQueue" -> emptyList<Any>()
+                "getQueueWindow" -> window
+                "getIndex" -> window?.descriptor?.currentLogicalPosition ?: -1
+                "isShuffled" -> false
+                "getShuffleScope" -> ShuffleScope.OFF
+                "getCurrentAudioSessionId" -> null
+                "isAudioFocusHeld" -> false
+                "addListener" -> {
+                    listener = args?.singleOrNull() as? PlaybackStateManager.Listener
+                    null
                 }
+                "removeListener" -> {
+                    listener = null
+                    null
+                }
+                "goto" -> {
+                    lastGoto = args?.singleOrNull() as? Int
+                    null
+                }
+                else -> defaultValue(method)
             }
+        }
     }
 
     private companion object {
@@ -144,10 +142,10 @@ class QueueViewModelFastResumeTest {
                 defaultValue(method)
             }
         ): T =
-            Proxy.newProxyInstance(
-                T::class.java.classLoader,
-                arrayOf(T::class.java),
-            ) { proxy, method, args ->
+            Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) {
+                proxy,
+                method,
+                args ->
                 when (method.name) {
                     "toString" -> "${T::class.java.simpleName}TestProxy"
                     "hashCode" -> System.identityHashCode(proxy)

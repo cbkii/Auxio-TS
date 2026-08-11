@@ -64,10 +64,8 @@ constructor(
 ) : ViewModel(), PlaybackStateManager.Listener {
 
     /** Stable user-navigation intent captured before a bounded primitive range can move. */
-    data class NavigationTarget internal constructor(
-        val globalPosition: Int,
-        internal val generation: Long,
-    )
+    data class NavigationTarget
+    internal constructor(val globalPosition: Int, internal val generation: Long)
 
     private val _queue = MutableStateFlow(listOf<QueueDisplayItem>())
     /** The currently loaded queue range. */
@@ -245,9 +243,10 @@ constructor(
 
     /** Capture a queue-navigation intent before asynchronous primitive prefetch can move the UI. */
     fun navigationTargetAt(adapterIndex: Int): NavigationTarget? =
-        _queue.value.getOrNull(adapterIndex)?.takeIf { it.editable }?.let {
-            NavigationTarget(it.globalPosition, queueGeneration)
-        }
+        _queue.value
+            .getOrNull(adapterIndex)
+            ?.takeIf { it.editable }
+            ?.let { NavigationTarget(it.globalPosition, queueGeneration) }
 
     /**
      * Start playing the queue item represented by [adapterIndex]. The logical position is resolved

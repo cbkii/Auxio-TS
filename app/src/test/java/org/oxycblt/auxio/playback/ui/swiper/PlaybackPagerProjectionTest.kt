@@ -35,10 +35,7 @@ class PlaybackPagerProjectionTest {
         val state =
             PlaybackPagerProjection.project(
                 queue =
-                    listOf(
-                        QueueDisplayItem(40, null, first),
-                        QueueDisplayItem(41, null, current),
-                    ),
+                    listOf(QueueDisplayItem(40, null, first), QueueDisplayItem(41, null, current)),
                 queueIndex = 1,
                 rawMetadata = raw(uri = current.uri!!),
             )
