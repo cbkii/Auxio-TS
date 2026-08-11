@@ -31,7 +31,8 @@ class PlaybackPanelLayoutContractTest {
         assertTrue("Missing app resource directory: ${resDir.path}", resDir.isDirectory)
 
         val layoutFiles =
-            resDir.listFiles()
+            resDir
+                .listFiles()
                 ?.asSequence()
                 ?.filter { directory ->
                     directory.isDirectory &&
@@ -39,10 +40,13 @@ class PlaybackPanelLayoutContractTest {
                 }
                 ?.map { directory -> File(directory, PLAYBACK_PANEL_LAYOUT) }
                 ?.filter(File::isFile)
-                ?.sortedBy { it.parentFile.name }
+                ?.sortedBy { it.parentFile?.name.orEmpty() }
                 ?.toList()
                 .orEmpty()
-        assertTrue("No playback-panel layout variants found under ${resDir.path}", layoutFiles.isNotEmpty())
+        assertTrue(
+            "No playback-panel layout variants found under ${resDir.path}",
+            layoutFiles.isNotEmpty(),
+        )
 
         layoutFiles.forEach { file ->
             val relativePath = file.relativeTo(resDir).path
@@ -75,7 +79,7 @@ class PlaybackPanelLayoutContractTest {
     }
 
     private fun resolveAppResDir(): File {
-        val workingDir = File(System.getProperty("user.dir"))
+        val workingDir = File(System.getProperty("user.dir").orEmpty())
         val moduleRelative = File(workingDir, "src/main/res")
         if (moduleRelative.isDirectory) return moduleRelative
         return File(workingDir, "app/src/main/res")
