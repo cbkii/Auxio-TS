@@ -990,10 +990,18 @@ internal object IndexReplacementHandoffPolicy {
         request: IndexRequest,
         playbackActive: Boolean,
         observationMode: ObservationMode,
-    ): Boolean =
-        playbackActive &&
-            (request.metadataProfile == MetadataProfile.FULL ||
-                observationMode == ObservationMode.WHEN_IDLE)
+    ): Boolean {
+        if (!playbackActive) return false
+        // The compatibility artwork repair is already bounded by startup readiness, incremental
+        // profile planning, and the playback-first worker policy. Requiring an idle boundary here
+        // can starve artwork indefinitely in an automotive player that remains active for hours.
+        val boundedEnrichment =
+            request.reason == IndexReason.METADATA_ENRICHMENT &&
+                request.metadataProfile == MetadataProfile.FULL
+        if (boundedEnrichment) return false
+        return request.metadataProfile == MetadataProfile.FULL ||
+            observationMode == ObservationMode.WHEN_IDLE
+    }
 }
 
 /** Prevents an older coroutine's finally block from clearing a newer job slot. */

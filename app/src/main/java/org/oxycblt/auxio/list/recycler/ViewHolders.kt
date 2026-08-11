@@ -54,7 +54,7 @@ class SongViewHolder private constructor(private val binding: ItemSongBinding) :
     /**
      * Bind new data to this instance.
      *
-     * @param song The new [Song] to bind.
+     * @param song The new [Song] to bind to the view.
      * @param listener An [SelectableListListener] to bind interactions to.
      */
     fun bind(song: Song, listener: SelectableListListener<Song>) {
@@ -90,7 +90,9 @@ class SongViewHolder private constructor(private val binding: ItemSongBinding) :
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Song>() {
                 override fun areContentsTheSame(oldItem: Song, newItem: Song) =
-                    oldItem.name == newItem.name && oldItem.artists.areNamesTheSame(newItem.artists)
+                    oldItem.name == newItem.name &&
+                        oldItem.artists.areNamesTheSame(newItem.artists) &&
+                        ArtworkContentIdentity.sameCover(oldItem.cover, newItem.cover)
             }
     }
 }
@@ -105,7 +107,7 @@ class AlbumViewHolder private constructor(private val binding: ItemParentBinding
     /**
      * Bind new data to this instance.
      *
-     * @param album The new [Album] to bind.
+     * @param album The new [Album] to bind to the view.
      * @param listener An [SelectableListListener] to bind interactions to.
      */
     fun bind(album: Album, listener: SelectableListListener<Album>) {
@@ -143,7 +145,8 @@ class AlbumViewHolder private constructor(private val binding: ItemParentBinding
                 override fun areContentsTheSame(oldItem: Album, newItem: Album) =
                     oldItem.name == newItem.name &&
                         oldItem.artists.areNamesTheSame(newItem.artists) &&
-                        oldItem.releaseType == newItem.releaseType
+                        oldItem.releaseType == newItem.releaseType &&
+                        ArtworkContentIdentity.sameCoverCollection(oldItem.covers, newItem.covers)
             }
     }
 }
@@ -158,7 +161,7 @@ class ArtistViewHolder private constructor(private val binding: ItemParentBindin
     /**
      * Bind new data to this instance.
      *
-     * @param artist The new [Artist] to bind.
+     * @param artist The new [Artist] to bind to the view.
      * @param listener An [SelectableListListener] to bind interactions to.
      */
     fun bind(artist: Artist, listener: SelectableListListener<Artist>) {
@@ -209,7 +212,8 @@ class ArtistViewHolder private constructor(private val binding: ItemParentBindin
                 override fun areContentsTheSame(oldItem: Artist, newItem: Artist) =
                     oldItem.name == newItem.name &&
                         oldItem.explicitAlbums.size == newItem.explicitAlbums.size &&
-                        oldItem.songs.size == newItem.songs.size
+                        oldItem.songs.size == newItem.songs.size &&
+                        ArtworkContentIdentity.sameCoverCollection(oldItem.covers, newItem.covers)
             }
     }
 }
@@ -224,7 +228,7 @@ class GenreViewHolder private constructor(private val binding: ItemParentBinding
     /**
      * Bind new data to this instance.
      *
-     * @param genre The new [Genre] to bind.
+     * @param genre The new [Genre] to bind to the view.
      * @param listener An [SelectableListListener] to bind interactions to.
      */
     fun bind(genre: Genre, listener: SelectableListListener<Genre>) {
@@ -267,7 +271,8 @@ class GenreViewHolder private constructor(private val binding: ItemParentBinding
                 override fun areContentsTheSame(oldItem: Genre, newItem: Genre) =
                     oldItem.name == newItem.name &&
                         oldItem.artists.size == newItem.artists.size &&
-                        oldItem.songs.size == newItem.songs.size
+                        oldItem.songs.size == newItem.songs.size &&
+                        ArtworkContentIdentity.sameCoverCollection(oldItem.covers, newItem.covers)
             }
     }
 }
@@ -282,7 +287,7 @@ class PlaylistViewHolder private constructor(private val binding: ItemParentBind
     /**
      * Bind new data to this instance.
      *
-     * @param playlist The new [Playlist] to bind.
+     * @param playlist The new [Playlist] to bind to the view.
      * @param listener An [SelectableListListener] to bind interactions to.
      */
     fun bind(playlist: Playlist, listener: SelectableListListener<Playlist>) {
@@ -323,7 +328,9 @@ class PlaylistViewHolder private constructor(private val binding: ItemParentBind
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Playlist>() {
                 override fun areContentsTheSame(oldItem: Playlist, newItem: Playlist) =
-                    oldItem.name == newItem.name && oldItem.songs.size == newItem.songs.size
+                    oldItem.name == newItem.name &&
+                        oldItem.songs.size == newItem.songs.size &&
+                        ArtworkContentIdentity.sameCoverCollection(oldItem.covers, newItem.covers)
             }
     }
 }

@@ -22,22 +22,22 @@ package org.oxycblt.auxio.music
  * Decides whether expired covers may be deleted after a library publication.
  *
  * Cover cleanup retains only the artwork referenced by the library that was just published, so it
- * is destructive whenever that library is not a complete authoritative view. A source that failed,
- * was unavailable, or was never enumerated still owns committed rows in the ledger; deleting the
- * artwork they reference would silently degrade the last-known-good library the moment that source
- * returns.
+ * is destructive whenever that library is not a complete authoritative view. Source authority and
+ * artwork authority are deliberately separate: a source scan can be complete while artwork work is
+ * deferred, disabled, partial, or failed.
  */
 internal object CoverCleanupPolicy {
     data class Decision(val allowed: Boolean, val reason: String)
 
     /**
+     * Destructive cleanup entry point. Positive artwork authority must be explicit.
+     *
      * @param published Whether a new library was actually published by this scan.
      * @param outcome The single terminal outcome recorded for the scan.
      * @param unresolvedSourceKeys Configured sources still carrying an unresolved generation.
      * @param unavailableSourceKeys Sources the plan could not observe during this scan.
-     * @param completeMetadata Whether the published library used the complete metadata profile. A
-     *   lean publication is deliberately incomplete and is followed by enrichment, so it must not
-     *   define the retained cover set.
+     * @param completeMetadata Whether the published library used the complete metadata profile.
+     * @param completeArtwork Whether the publication contains the complete retained artwork set.
      * @param enrichmentOnly Whether the scan only upgraded optional metadata. Enrichment never owns
      *   authoritative source membership or the retained cover set.
      */
@@ -47,12 +47,14 @@ internal object CoverCleanupPolicy {
         unresolvedSourceKeys: Set<String>,
         unavailableSourceKeys: Set<String>,
         completeMetadata: Boolean,
+        completeArtwork: Boolean,
         enrichmentOnly: Boolean,
     ): Decision =
         when {
             !published -> Decision(false, "no-new-generation-published")
             enrichmentOnly -> Decision(false, "enrichment-does-not-own-cleanup")
             !completeMetadata -> Decision(false, "lean-publication-is-not-complete")
+            !completeArtwork -> Decision(false, "artwork-retained-set-is-not-complete")
             unresolvedSourceKeys.isNotEmpty() -> Decision(false, "unresolved-sources-retained")
             unavailableSourceKeys.isNotEmpty() -> Decision(false, "sources-unobserved")
             outcome is SourceScanOutcome.Success -> Decision(true, "complete-authoritative-success")
@@ -60,4 +62,29 @@ internal object CoverCleanupPolicy {
                 Decision(true, "complete-authoritative-empty")
             else -> Decision(false, "non-authoritative-outcome")
         }
+
+    /**
+     * Compatibility entry point for callers that do not yet carry artwork-completion evidence.
+     *
+     * This is intentionally fail-closed: metadata completeness is never promoted into artwork
+     * authority. Such callers may retain stale files, but they can never delete live artwork. New
+     * cleanup-capable callers must use the overload above and provide complete artwork evidence.
+     */
+    fun evaluate(
+        published: Boolean,
+        outcome: SourceScanOutcome,
+        unresolvedSourceKeys: Set<String>,
+        unavailableSourceKeys: Set<String>,
+        completeMetadata: Boolean,
+        enrichmentOnly: Boolean,
+    ): Decision =
+        evaluate(
+            published = published,
+            outcome = outcome,
+            unresolvedSourceKeys = unresolvedSourceKeys,
+            unavailableSourceKeys = unavailableSourceKeys,
+            completeMetadata = completeMetadata,
+            completeArtwork = false,
+            enrichmentOnly = enrichmentOnly,
+        )
 }

@@ -31,6 +31,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.headunit.root.RootStateHolder
@@ -178,8 +179,14 @@ class MusicPreferenceFragment : BasePreferenceFragment(R.xml.preferences_music) 
             L.d("Configuring cover mode setting")
             preference.onPreferenceChangeListener =
                 Preference.OnPreferenceChangeListener { _, _ ->
-                    L.d("Cover mode changed, reloading music")
-                    musicModel.refresh()
+                    // IntListPreference persists the accepted value only after this callback
+                    // returns. Yield once so the rescan always constructs SettingCovers from the
+                    // newly committed mode rather than racing the previous value.
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        yield()
+                        L.d("Cover mode changed, rescanning artwork")
+                        musicModel.rescan()
+                    }
                     true
                 }
         }

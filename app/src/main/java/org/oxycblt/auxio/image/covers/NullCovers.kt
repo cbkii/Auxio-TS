@@ -18,25 +18,26 @@
 
 package org.oxycblt.auxio.image.covers
 
-import org.oxycblt.musikr.covers.Cover
 import org.oxycblt.musikr.covers.CoverResult
 import org.oxycblt.musikr.covers.MutableCovers
 import org.oxycblt.musikr.covers.stored.CoverStorage
 import org.oxycblt.musikr.fs.File
 import org.oxycblt.musikr.metadata.Metadata
 
-class NullCovers(private val storage: CoverStorage) : MutableCovers<NullCover> {
-    override suspend fun obtain(id: String) = CoverResult.Hit(NullCover)
+/**
+ * Explicitly disabled artwork surface.
+ *
+ * OFF is a presentation/extraction choice, not authority to destroy the durable artwork cache.
+ * Returning misses keeps new rows artwork-free while allowing the incremental cache to preserve an
+ * existing cover ID, and the no-op cleanup makes OFF -> enabled reversible without clearing app
+ * data or rescanning solely because the user temporarily hid artwork.
+ */
+class NullCovers(@Suppress("UNUSED_PARAMETER") storage: CoverStorage) :
+    MutableCovers<org.oxycblt.musikr.covers.Cover> {
+    override suspend fun obtain(id: String) = CoverResult.Miss<org.oxycblt.musikr.covers.Cover>()
 
-    override suspend fun create(file: File, metadata: Metadata) = CoverResult.Hit(NullCover)
+    override suspend fun create(file: File, metadata: Metadata) =
+        CoverResult.Miss<org.oxycblt.musikr.covers.Cover>()
 
-    override suspend fun cleanup(excluding: Collection<Cover>) {
-        storage.ls(setOf()).map { storage.rm(it) }
-    }
-}
-
-data object NullCover : Cover {
-    override val id = "null"
-
-    override suspend fun open() = null
+    override suspend fun cleanup(excluding: Collection<org.oxycblt.musikr.covers.Cover>) = Unit
 }

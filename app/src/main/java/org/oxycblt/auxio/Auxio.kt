@@ -43,6 +43,7 @@ import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.headunit.overlay.CarOverlayContract
 import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
+import org.oxycblt.auxio.music.ArtworkRepairCoordinator
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.ui.UISettings
@@ -73,6 +74,7 @@ class Auxio : Application() {
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var homeSettings: HomeSettings
     @Inject lateinit var musicSettings: MusicSettings
+    @Inject lateinit var artworkRepairCoordinator: ArtworkRepairCoordinator
 
     private val startupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -148,6 +150,9 @@ class Auxio : Application() {
                 Timber.e(e, "Failed to migrate settings: ${settings.javaClass.simpleName}")
             }
         }
+        // Register after image-setting migration. The coordinator only requests repair after the
+        // full library graph becomes usable, so it cannot compete with startup shell/first audio.
+        artworkRepairCoordinator.start()
         scheduleOptionalStartupWork()
         PerfTimer.point("Application.onCreate:end")
     }

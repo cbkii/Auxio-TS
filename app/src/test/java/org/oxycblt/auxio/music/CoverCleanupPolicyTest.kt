@@ -24,7 +24,7 @@ import org.junit.Test
 
 /**
  * Cover cleanup retains only the artwork of the library that was just published, so it may only run
- * behind proof that the publication is a complete authoritative view.
+ * behind proof that both source membership and artwork coverage are complete and authoritative.
  */
 class CoverCleanupPolicyTest {
     @Test
@@ -34,8 +34,22 @@ class CoverCleanupPolicyTest {
 
     @Test
     fun `an authoritative empty library may reclaim expired covers`() {
-        // Proven-empty is still a complete view of the configured sources.
         assertTrue(evaluate(outcome = SourceScanOutcome.AuthoritativeEmpty(setOf("usb0"))).allowed)
+    }
+
+    @Test
+    fun `a caller without artwork evidence fails closed`() {
+        assertFalse(
+            CoverCleanupPolicy.evaluate(
+                    published = true,
+                    outcome = SourceScanOutcome.Success(setOf("usb0")),
+                    unresolvedSourceKeys = emptySet(),
+                    unavailableSourceKeys = emptySet(),
+                    completeMetadata = true,
+                    enrichmentOnly = false,
+                )
+                .allowed
+        )
     }
 
     @Test
@@ -45,9 +59,14 @@ class CoverCleanupPolicyTest {
 
     @Test
     fun `a lean publication never defines the retained cover set`() {
-        // Rich extraction has not run yet, so the lean library does not reference every cover the
-        // committed library still needs.
         assertFalse(evaluate(completeMetadata = false).allowed)
+    }
+
+    @Test
+    fun `complete metadata without complete artwork never reclaims covers`() {
+        val decision = evaluate(completeMetadata = true, completeArtwork = false)
+        assertFalse(decision.allowed)
+        assertTrue(decision.reason.contains("artwork"))
     }
 
     @Test
@@ -62,7 +81,6 @@ class CoverCleanupPolicyTest {
 
     @Test
     fun `unobserved sources block cleanup`() {
-        // An unmounted USB volume keeps its last-known-good rows, and therefore its covers.
         assertFalse(evaluate(unavailableSourceKeys = setOf("usb1")).allowed)
     }
 
@@ -80,6 +98,7 @@ class CoverCleanupPolicyTest {
     fun `every rejection explains itself`() {
         assertFalse(evaluate(published = false).reason.isBlank())
         assertFalse(evaluate(completeMetadata = false).reason.isBlank())
+        assertFalse(evaluate(completeArtwork = false).reason.isBlank())
         assertFalse(evaluate(unresolvedSourceKeys = setOf("usb1")).reason.isBlank())
     }
 
@@ -89,6 +108,7 @@ class CoverCleanupPolicyTest {
         unresolvedSourceKeys: Set<String> = emptySet(),
         unavailableSourceKeys: Set<String> = emptySet(),
         completeMetadata: Boolean = true,
+        completeArtwork: Boolean = completeMetadata,
         enrichmentOnly: Boolean = false,
     ) =
         CoverCleanupPolicy.evaluate(
@@ -97,6 +117,7 @@ class CoverCleanupPolicyTest {
             unresolvedSourceKeys = unresolvedSourceKeys,
             unavailableSourceKeys = unavailableSourceKeys,
             completeMetadata = completeMetadata,
+            completeArtwork = completeArtwork,
             enrichmentOnly = enrichmentOnly,
         )
 }
