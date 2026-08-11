@@ -110,7 +110,7 @@ class QueueViewModelFastResumeTest {
                 "getRepeatMode" -> RepeatMode.NONE
                 "getParent" -> null
                 "getCurrentSong" -> null
-                "getRawPlaybackMetadata" -> rawMetadata
+                "getRawPlaybackMetadata" -> null
                 "getRestoreOutcome" -> RestoreOutcome.NOT_REQUESTED
                 "getQueue" -> emptyList<Any>()
                 "getQueueWindow" -> window
