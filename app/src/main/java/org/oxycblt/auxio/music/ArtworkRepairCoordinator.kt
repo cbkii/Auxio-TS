@@ -40,8 +40,8 @@ import timber.log.Timber as L
  * complete without creating artwork.
  *
  * Repository construction is deliberately lazy and resolved on an IO scope. Injecting this
- * coordinator into [org.oxycblt.auxio.Auxio] therefore does not eagerly construct the database-backed
- * music graph on the application main-thread startup path.
+ * coordinator into [org.oxycblt.auxio.Auxio] therefore does not eagerly construct the
+ * database-backed music graph on the application main-thread startup path.
  */
 @Singleton
 class ArtworkRepairCoordinator
