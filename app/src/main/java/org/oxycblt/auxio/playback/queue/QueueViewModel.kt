@@ -122,7 +122,7 @@ constructor(
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
         // Queue changed trivially due to item move -> Diff queue, stay at current index.
         L.d("Updating queue display")
-        invalidatePrimitiveRange()
+        invalidateQueueAuthority()
         _queueInstructions.put(change.instructions)
         _queue.value = queue.toDisplayItems()
         _isInitialQueueLoaded.value = true
@@ -136,7 +136,7 @@ constructor(
     override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
         // Queue changed completely -> Replace queue, update index
         L.d("Queue changed completely, replacing queue and position")
-        invalidatePrimitiveRange()
+        invalidateQueueAuthority()
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
         _queue.value = queue.toDisplayItems()
@@ -152,7 +152,7 @@ constructor(
     ) {
         // Entirely new queue -> Replace queue, update index
         L.d("New playback, replacing queue and position")
-        invalidatePrimitiveRange()
+        invalidateQueueAuthority()
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
         _queue.value = queue.toDisplayItems()
@@ -161,7 +161,7 @@ constructor(
     }
 
     override fun onQueueWindowChanged(window: QueueWindow?) {
-        invalidatePrimitiveRange(window)
+        replacePrimitiveWindow(window)
         _queueInstructions.put(UpdateInstructions.Replace(0))
         if (window == null) {
             // A primitive authority can disappear while raw playback or a hydrated queue remains.
@@ -349,12 +349,29 @@ constructor(
         }
     }
 
-    private fun invalidatePrimitiveRange(nextWindow: QueueWindow? = null) {
+    private fun invalidateQueueAuthority() {
         queueGeneration++
+        cancelPrimitiveRangeRequest()
+        activePrimitiveWindow = null
+    }
+
+    private fun replacePrimitiveWindow(nextWindow: QueueWindow?) {
+        val previousDescriptor = activePrimitiveWindow?.descriptor
+        val nextDescriptor = nextWindow?.descriptor
+        val sameAuthority =
+            previousDescriptor != null &&
+                nextDescriptor != null &&
+                previousDescriptor.sessionId == nextDescriptor.sessionId &&
+                previousDescriptor.revision == nextDescriptor.revision
+        if (!sameAuthority) queueGeneration++
+        cancelPrimitiveRangeRequest()
+        activePrimitiveWindow = nextWindow
+    }
+
+    private fun cancelPrimitiveRangeRequest() {
         rangeJob?.cancel()
         rangeJob = null
         lastRequestedAnchor = null
-        activePrimitiveWindow = nextWindow
     }
 
     private fun QueueWindow.toDisplayItems() =
