@@ -36,6 +36,7 @@ import org.oxycblt.auxio.playback.ui.visualizer.VisualizerRecoveryPolicy
 import org.oxycblt.auxio.playback.ui.visualizer.VisualizerState
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.inflater
+import org.oxycblt.musikr.tag.Name
 
 /**
  * Hosts rich, primitive and raw Now Playing pages while keeping visualizer collection at adapter
@@ -199,7 +200,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
                     when {
                         oldItem is PlaybackPagerItem.Rich && newItem is PlaybackPagerItem.Rich ->
                             oldItem.song.cover == newItem.song.cover &&
-                                oldItem.song.album.name == newItem.song.album.name &&
+                                sameDisplayName(oldItem.song.album.name, newItem.song.album.name) &&
                                 oldItem.durationMs == newItem.durationMs
                         oldItem is PlaybackPagerItem.Primitive &&
                             newItem is PlaybackPagerItem.Primitive -> oldItem.item == newItem.item
@@ -212,6 +213,14 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
                                 oldItem.metadata.durationMs == newItem.metadata.durationMs
                         else -> false
                     }
+            }
+
+        private fun sameDisplayName(oldName: Name, newName: Name): Boolean =
+            when {
+                oldName is Name.Known && newName is Name.Known -> oldName.raw == newName.raw
+                oldName is Name.Unknown && newName is Name.Unknown ->
+                    oldName.placeholder == newName.placeholder
+                else -> false
             }
     }
 }
