@@ -27,10 +27,7 @@ class ArtworkRepairPolicyTest {
     @Test
     fun `enabled artwork waits until full library is ready`() {
         assertFalse(
-            ArtworkRepairPolicy.shouldRequest(
-                CoverMode.OPTIMISED,
-                StartupReadinessState.QueueReady,
-            )
+            ArtworkRepairPolicy.shouldRequest(CoverMode.OPTIMISED, StartupReadinessState.QueueReady)
         )
         assertTrue(
             ArtworkRepairPolicy.shouldRequest(
