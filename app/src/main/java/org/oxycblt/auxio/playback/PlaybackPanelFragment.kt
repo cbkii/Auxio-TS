@@ -164,15 +164,15 @@ class PlaybackPanelFragment :
             adapter = currentCoverPagerAdapter
             userAwarePagerCallback =
                 UserAwarePagerCallback(this) { adapterIndex ->
-                        // Capture the queue authority's global target before asynchronous primitive
-                        // prefetch can prepend/trim the bounded display window.
-                        val targetGlobalPosition = queueModel.globalPositionAt(adapterIndex)
+                        // Capture the queue authority before asynchronous primitive prefetch can
+                        // prepend or trim the bounded display window.
+                        val navigationTarget = queueModel.navigationTargetAt(adapterIndex)
                         currentCoverPagerAdapter.setActivePosition(adapterIndex)
                         queueModel.requestAdjacentRange(adapterIndex, adapterIndex)
                         // Posting the queue goto command prevents the seekbar pos from desyncing
                         // from the item's duration, which creates a visual flicker in the seekbar.
-                        if (targetGlobalPosition != null) {
-                            post { queueModel.gotoGlobalPosition(targetGlobalPosition) }
+                        if (navigationTarget != null) {
+                            post { queueModel.goto(navigationTarget) }
                         }
                     }
                     .also { it.attach() }
@@ -320,11 +320,10 @@ class PlaybackPanelFragment :
         collectImmediately(playbackModel.repeatMode, ::updateRepeat)
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.shuffleScope, ::updateShuffleScope)
-        collectImmediately(
-            queueModel.queue,
-            queueModel.index,
-            playbackModel.rawPlaybackMetadata,
-        ) { queue, index, raw ->
+        collectImmediately(queueModel.queue, queueModel.index, playbackModel.rawPlaybackMetadata) {
+            queue,
+            index,
+            raw ->
             updatePager(queue, index, raw)
         }
     }
@@ -535,10 +534,7 @@ class PlaybackPanelFragment :
 
         val delta = binding.playbackPager.currentItem - target
         if (delta == 0) return
-        binding.playbackPager.setCurrentItem(
-            target,
-            queueInstruction == null && abs(delta) == 1,
-        )
+        binding.playbackPager.setCurrentItem(target, queueInstruction == null && abs(delta) == 1)
     }
 
     private fun navigateToCurrentSong() {
