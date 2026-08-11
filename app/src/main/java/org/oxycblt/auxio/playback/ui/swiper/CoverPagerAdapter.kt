@@ -199,6 +199,7 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
                     when {
                         oldItem is PlaybackPagerItem.Rich && newItem is PlaybackPagerItem.Rich ->
                             oldItem.song.cover == newItem.song.cover &&
+                                oldItem.song.album.name == newItem.song.album.name &&
                                 oldItem.durationMs == newItem.durationMs
                         oldItem is PlaybackPagerItem.Primitive &&
                             newItem is PlaybackPagerItem.Primitive -> oldItem.item == newItem.item
