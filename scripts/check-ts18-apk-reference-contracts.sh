@@ -48,10 +48,12 @@ require_contains docs/reference/ts18-apk/reference-contracts.json '"cn.cardoor.l
 require_contains docs/reference/ts18-apk/reference-contracts.json '"android.tw.john.TWUtil"' 'forbidden TWUtil reference'
 require_contains docs/reference/ts18-apk/reference-contracts.json '"com.tw.service.xt.aidl.ITWCommandAidl"' 'forbidden ITWCommandAidl reference'
 
-require_contains AGENTS.md 'DoFun, Topway and stock music authority' 'agent DoFun/twmusic authority section'
-require_contains AGENTS.md 'Do not casually change maintained package/component contracts.' 'agent package-identity guard'
-require_contains .github/copilot-instructions.md 'DoFun Variety / stock twmusic compatibility authority' 'Copilot DoFun/twmusic authority section'
-require_contains docs/README.md 'Maintained package contract' 'docs index package reference section'
+require_contains AGENTS.md 'Track A is direct integration inside the `com.tw.media` app' 'agent Track-A authority'
+require_contains AGENTS.md 'Never modify or impersonate genuine stock `com.tw.music`.' 'agent protected-package guard'
+require_contains AGENTS.md 'Keep `com.tw.music.MusicActivity`, `com.tw.music.MusicService`' 'agent compatibility-component guard'
+require_contains .github/copilot-instructions.md '[AGENTS.md](../AGENTS.md)' 'thin Copilot authority link'
+require_contains docs/PRODUCT_SCOPE.md 'Auxio-TS is one maintained in-car local-music application installed as `com.tw.media`.' 'canonical product identity'
+require_contains docs/ARCHITECTURE.md 'Track C — optional stock shim' 'canonical Track-C architecture'
 require_contains docs/README.md 'TS18_APK_REFERENCE.md' 'docs index APK reference link'
 
 if (( failures > 0 )); then
