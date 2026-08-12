@@ -147,7 +147,6 @@ android {
         main {
             java.srcDirs += ["src/topwayCompat/java"]
             kotlin.srcDirs += ["src/topwayCompat/java", "src/topwayCompat/kotlin"]
-            res.srcDirs += ["src/topwayCompat/res"]
         }
         test {
             java.srcDirs += ["src/topwayCompatTest/java"]
