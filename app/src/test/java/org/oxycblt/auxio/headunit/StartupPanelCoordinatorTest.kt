@@ -126,10 +126,7 @@ class StartupPanelCoordinatorTest {
     @Test
     fun `automatic generic launch preserves a pending explicit route`() {
         val explicit =
-            request(
-                OpenPanel.PLAYBACK_QUEUE,
-                StartupPanelCoordinator.Priority.EXPLICIT_INTENT,
-            )
+            request(OpenPanel.PLAYBACK_QUEUE, StartupPanelCoordinator.Priority.EXPLICIT_INTENT)
         val generic = request(OpenPanel.PLAYBACK, StartupPanelCoordinator.Priority.GENERIC_STARTUP)
 
         assertEquals(
@@ -145,10 +142,7 @@ class StartupPanelCoordinatorTest {
     @Test
     fun `latest user launcher tap replaces a pending explicit route`() {
         val explicit =
-            request(
-                OpenPanel.PLAYBACK_QUEUE,
-                StartupPanelCoordinator.Priority.EXPLICIT_INTENT,
-            )
+            request(OpenPanel.PLAYBACK_QUEUE, StartupPanelCoordinator.Priority.EXPLICIT_INTENT)
         val generic = request(OpenPanel.PLAYBACK, StartupPanelCoordinator.Priority.GENERIC_STARTUP)
 
         assertEquals(
@@ -164,24 +158,18 @@ class StartupPanelCoordinatorTest {
     @Test
     fun `user launcher tap clears a pending route when launch-to-panel is disabled`() {
         val explicit =
-            request(
-                OpenPanel.PLAYBACK_QUEUE,
-                StartupPanelCoordinator.Priority.EXPLICIT_INTENT,
-            )
+            request(OpenPanel.PLAYBACK_QUEUE, StartupPanelCoordinator.Priority.EXPLICIT_INTENT)
 
         assertNull(
             StartupPanelCoordinator.selectGenericRequest(
                 explicit,
                 null,
                 StartupPanelCoordinator.GenericRouteOrigin.USER_LAUNCHER,
-            ),
+            )
         )
     }
 
-    private fun request(
-        destination: OpenPanel,
-        priority: StartupPanelCoordinator.Priority,
-    ) =
+    private fun request(destination: OpenPanel, priority: StartupPanelCoordinator.Priority) =
         StartupPanelCoordinator.RouteRequest(
             UUID.randomUUID(),
             destination,
