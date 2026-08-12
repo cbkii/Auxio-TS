@@ -35,9 +35,10 @@ preferred.
 - Floating controls default to persistent visibility, sticky restart promotes before suppression,
   app startup always establishes the foreground service, window attach has two bounded retries, and
   the full-player action uses an explicit component.
-- The fixed `com.tw.media/com.tw.music.MusicActivity` alias routes MAIN/MUSIC_PLAYER according to
-  the floating-only preference, while ACTION_VIEW still opens the full player. The separate
-  user-facing Floating Controls launcher is preserved.
+- The fixed `com.tw.media/com.tw.music.MusicActivity` alias routes MAIN/MUSIC_PLAYER/ACTION_VIEW
+  directly to `MainActivity`. The floating-only preference is boot/autostart policy owned by
+  `BootReceiver`; it cannot suppress an explicit app or DoFun launch. The separate user-facing
+  Floating Controls launcher is preserved.
 - The library playback banner uses 76dp/85dp buttons, about 73% of the full-panel values, and
   41dp/48dp icons, about 85%; full Now Playing dimensions remain unchanged. The ineffective Large
   touch controls row is removed from the Topway UI.
@@ -94,8 +95,11 @@ Automated checks cannot prove OEM audio-effect, WindowManager, DoFun or ACC beha
 3. Enable floating controls once. Move between Auxio, DoFun and at least two other apps; restart the
    launcher, kill Auxio's process, screen off/on, reboot and ACC sleep/wake. Confirm one foreground
    service, one notification and one overlay window.
-4. Select floating-only startup and confirm MAIN/DoFun music entry attaches the overlay without
-   showing MainActivity. Use the overlay's app button to open the full player explicitly.
+4. Select floating-only startup, reboot/cold-boot and confirm boot attaches the overlay without
+   showing `MainActivity`. Then tap the app icon and DoFun music entry: each must open the full
+   `MainActivity` without a homepage flicker and route to Now Playing when that setting is enabled.
+   Confirm a paused saved session remains paused. Use the overlay's app button to open the full
+   player explicitly as a separate entry-path check.
 5. Confirm the library banner buttons are approximately 27% smaller and its icons approximately
    15% smaller, while Now Playing controls are unchanged. Verify banner buttons are 76dp/85dp and
    icons are 41dp/48dp (±2dp tolerance).

@@ -48,7 +48,12 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        if (!playbackSettings.autostartOnBoot) {
+        val launchRoute =
+            BootLaunchPolicy.route(
+                playbackSettings.autostartOnBoot,
+                playbackSettings.autostartFloatingOnly,
+            )
+        if (launchRoute == BootLaunchPolicy.Route.DISABLED) {
             L.d("Autostart disabled, ignoring boot")
             return
         }
@@ -103,7 +108,7 @@ class BootReceiver : BroadcastReceiver() {
 
         // Floating-only is an explicit request not to launch the full UI. Return after every
         // typed restore outcome, including disabled/permission/rejected results.
-        if (playbackSettings.autostartFloatingOnly) {
+        if (launchRoute == BootLaunchPolicy.Route.FLOATING_CONTROLS_ONLY) {
             journal.log(
                 DiagnosticJournal.CAT_BOOT,
                 "Floating-only autostart",
@@ -140,4 +145,20 @@ class BootReceiver : BroadcastReceiver() {
             L.w("Cannot start Activity from boot: $e")
         }
     }
+}
+
+/** Keeps the boot-only floating-controls preference out of manual launcher routing. */
+internal object BootLaunchPolicy {
+    enum class Route {
+        DISABLED,
+        FLOATING_CONTROLS_ONLY,
+        FULL_PLAYER,
+    }
+
+    fun route(autostartOnBoot: Boolean, floatingOnly: Boolean): Route =
+        when {
+            !autostartOnBoot -> Route.DISABLED
+            floatingOnly -> Route.FLOATING_CONTROLS_ONLY
+            else -> Route.FULL_PLAYER
+        }
 }

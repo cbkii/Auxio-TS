@@ -116,7 +116,11 @@ class MainActivity : AppCompatActivity() {
                     // A fresh explicit launcher intent can recreate a previously saved task with
                     // savedInstanceState != null. Treat the explicit MAIN/MUSIC_PLAYER origin as a
                     // launch route request, but keep autoplay tied only to a true cold resume.
-                    startupPanelCoordinator.requestGenericStartupRoute()
+                    if (HeadUnitRoutePolicy.isGenericLauncherAction(intent?.action)) {
+                        startupPanelCoordinator.requestUserLauncherRoute()
+                    } else {
+                        startupPanelCoordinator.requestGenericStartupRoute()
+                    }
                 }
             }
             isFirstResume = false
@@ -134,7 +138,7 @@ class MainActivity : AppCompatActivity() {
             // here instead of through onCreate/onResume's cold-launch route. Route by the explicit
             // launcher origin itself rather than depending on startIntentAction's handled result.
             L.d("Warm launcher entry requesting generic route action=${intent.action}")
-            startupPanelCoordinator.requestGenericStartupRoute()
+            startupPanelCoordinator.requestUserLauncherRoute()
         }
     }
 

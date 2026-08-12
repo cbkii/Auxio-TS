@@ -61,12 +61,12 @@ class HeadUnitRoutePolicyTest {
     @Test
     fun `generic launcher actions only include explicit music entries`() {
         assertTrue(HeadUnitRoutePolicy.isGenericLauncherAction(Intent.ACTION_MAIN))
-        assertTrue(HeadUnitRoutePolicy.isGenericLauncherAction(Intent.ACTION_MUSIC_PLAYER))
+        assertTrue(
+            HeadUnitRoutePolicy.isGenericLauncherAction(HeadUnitEntryPoints.ACTION_MUSIC_PLAYER)
+        )
         assertFalse(HeadUnitRoutePolicy.isGenericLauncherAction(Intent.ACTION_VIEW))
         assertFalse(
-            HeadUnitRoutePolicy.isGenericLauncherAction(
-                HeadUnitEntryPoints.ACTION_OPEN_NOW_PLAYING
-            )
+            HeadUnitRoutePolicy.isGenericLauncherAction(HeadUnitEntryPoints.ACTION_OPEN_NOW_PLAYING)
         )
         assertFalse(HeadUnitRoutePolicy.isGenericLauncherAction(null))
     }
@@ -74,19 +74,15 @@ class HeadUnitRoutePolicyTest {
     @Test
     fun `generic startup route distinguishes cold launch from restored task re-entry`() {
         assertTrue(HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(true, null))
-        assertTrue(
-            HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, Intent.ACTION_MAIN)
-        )
+        assertTrue(HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, Intent.ACTION_MAIN))
         assertTrue(
             HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(
                 false,
-                Intent.ACTION_MUSIC_PLAYER,
+                HeadUnitEntryPoints.ACTION_MUSIC_PLAYER,
             )
         )
         assertFalse(HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, null))
-        assertFalse(
-            HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, Intent.ACTION_VIEW)
-        )
+        assertFalse(HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, Intent.ACTION_VIEW))
     }
 
     @Test

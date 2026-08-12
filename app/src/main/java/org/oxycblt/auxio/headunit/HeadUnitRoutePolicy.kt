@@ -66,7 +66,7 @@ object HeadUnitRoutePolicy {
 
     /** True only for explicit user/launcher music entry actions, never lifecycle foregrounding. */
     fun isGenericLauncherAction(action: String?): Boolean =
-        action == Intent.ACTION_MAIN || action == Intent.ACTION_MUSIC_PLAYER
+        action == Intent.ACTION_MAIN || action == HeadUnitEntryPoints.ACTION_MUSIC_PLAYER
 
     /**
      * A real cold launch retains the existing generic route behaviour. A restored task also gets

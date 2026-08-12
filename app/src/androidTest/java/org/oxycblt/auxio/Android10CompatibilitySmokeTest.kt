@@ -20,12 +20,14 @@ package org.oxycblt.auxio
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
 import android.support.v4.media.MediaBrowserCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
+import androidx.preference.PreferenceManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
@@ -41,6 +43,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.oxycblt.auxio.headunit.HeadUnitEntryPoints
 import org.oxycblt.auxio.playback.service.ForegroundServiceStartContract
 
 @RunWith(AndroidJUnit4::class)
@@ -52,6 +55,31 @@ class Android10CompatibilitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.moveToState(Lifecycle.State.RESUMED)
             scenario.onActivity { activity -> assertFalse(activity.isFinishing) }
+        }
+    }
+
+    @Test
+    fun exactTopwayLauncherAliasTargetsAndResumesMainActivity() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val alias = ComponentName(context.packageName, TOPWAY_MUSIC_ACTIVITY)
+        val aliasInfo = context.packageManager.getActivityInfo(alias, 0)
+
+        assertEquals(MainActivity::class.java.name, aliasInfo.targetActivity)
+        launchTopwayAlias(Intent.ACTION_MAIN)
+    }
+
+    @Test
+    fun floatingOnlyBootPreferenceDoesNotSuppressExplicitTopwayLaunch() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = PreferenceManager.getDefaultSharedPreferences(context)
+        val key = context.getString(R.string.set_key_autostart_floating_only)
+        val original = SavedPreference.capture(preferences, key)
+
+        try {
+            assertTrue(preferences.edit().putBoolean(key, true).commit())
+            launchTopwayAlias(HeadUnitEntryPoints.ACTION_MUSIC_PLAYER)
+        } finally {
+            original.restore(preferences, key)
         }
     }
 
@@ -144,7 +172,38 @@ class Android10CompatibilitySmokeTest {
         assertNull(failure.get(), failure.get())
     }
 
+    private fun launchTopwayAlias(action: String) {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val launchIntent =
+            Intent(action)
+                .setComponent(ComponentName(context.packageName, TOPWAY_MUSIC_ACTIVITY))
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            scenario.onActivity { activity ->
+                assertEquals(MainActivity::class.java, activity.javaClass)
+                assertFalse(activity.isFinishing)
+            }
+        }
+    }
+
+    private data class SavedPreference(val wasPresent: Boolean, val value: Boolean) {
+        fun restore(preferences: SharedPreferences, key: String) {
+            val editor = preferences.edit()
+            if (wasPresent) editor.putBoolean(key, value) else editor.remove(key)
+            assertTrue(editor.commit())
+        }
+
+        companion object {
+            fun capture(preferences: SharedPreferences, key: String): SavedPreference =
+                SavedPreference(preferences.contains(key), preferences.getBoolean(key, false))
+        }
+    }
+
     private companion object {
+        const val TOPWAY_MUSIC_ACTIVITY = "com.tw.music.MusicActivity"
         const val FOREGROUND_PROMOTION_WAIT_MS = 4_000L
         const val FOREGROUND_PROMOTION_POLL_MS = 20L
     }
