@@ -26,10 +26,10 @@ object TopwayServiceBridge {
     private const val STOCK_MUSIC_SERVICE_CLASS = "com.tw.music.MusicService"
 
     /**
-     * Resolves the appropriate service class for the current flavor.
+     * Resolves the appropriate service class for the current compatibility policy.
      *
-     * @param defaultClass The standard service class to return if not in Topway flavor.
-     * @return The stock-compatible service class name if in Topway flavor, else defaultClass.
+     * @param defaultClass The Android fallback service class when compatibility is disabled.
+     * @return The stock-compatible service class name when compatibility is enabled, else defaultClass.
      */
     fun <T : Service> resolveCompatServiceClass(defaultClass: Class<T>): Class<*> {
         if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
@@ -42,4 +42,3 @@ object TopwayServiceBridge {
         return defaultClass
     }
 }
-

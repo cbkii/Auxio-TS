@@ -70,10 +70,15 @@ for build_type, expected in (("debug", "com.tw.media.debug"), ("release", "com.t
 
     apk_dir = ROOT / "app/build/outputs/apk" / build_type
     apks = sorted(p for p in apk_dir.glob("*.apk") if "unsigned" not in p.name) if apk_dir.is_dir() else []
-    for apk in apks[:1]:
+    for apk in apks:
         with zipfile.ZipFile(apk) as zf:
             dex = [name for name in zf.namelist() if name.startswith("classes") and name.endswith(".dex")]
             if not dex: failures.append(f"{apk} has no DEX entries")
+            dex_payloads = [zf.read(name) for name in dex]
+            for cls in sorted(REQUIRED):
+                descriptor = f"L{cls.replace('.', '/')};".encode()
+                if not any(descriptor in payload for payload in dex_payloads):
+                    failures.append(f"{apk} lacks required DEX descriptor {descriptor.decode()}")
 
 if failures:
     for failure in failures: print(f"ERROR: {failure}", file=sys.stderr)

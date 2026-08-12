@@ -62,7 +62,8 @@ done
 bash scripts/check-topway-manifest-components.sh
 
 if find app/build/outputs/apk -type f -name '*.apk' -print -quit 2>/dev/null | grep -q .; then
-  if command -v apkanalyzer >/dev/null 2>&1 || [[ -x ${ANDROID_HOME:-}/cmdline-tools/latest/bin/apkanalyzer ]]; then
+  sdk_root=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}
+  if command -v apkanalyzer >/dev/null 2>&1 || [[ -x ${sdk_root:-}/cmdline-tools/latest/bin/apkanalyzer ]]; then
     BUILD_APP=true bash scripts/check-built-topway-apks.sh
   else
     printf 'DoFun/Topway contract: APK outputs present; binary validation skipped because apkanalyzer is unavailable.\n'

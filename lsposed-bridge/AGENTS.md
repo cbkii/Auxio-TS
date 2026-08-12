@@ -6,7 +6,8 @@ Root [AGENTS.md](../AGENTS.md) remains authoritative. These stricter rules apply
 - Keep static scope exactly `com.tw.music`; never add Auxio, DoFun, `system_server`, SystemUI, Package Manager, vendor services or unrelated apps.
 - Preserve the genuine stock signer, package and UID 1000. No signature spoofing, shared-UID mutation, package replacement or privilege transfer.
 - Compile against `:libxposed-api100-stubs` only; no libxposed, Android platform, Kotlin, IntelliJ or tooling runtime classes may be packaged.
-- Require the exact package, main process, UID, approved signer/registry/capability and trusted paired Auxio target. Signer match alone is insufficient for private hooks.
+- Install probes only after exact `com.tw.music` package and main-process routing. Do not make hook installation depend on current UID, signer, registry, capability or paired-target readiness.
+- Activate private hooks or stock suppression only after UID 1000, approved signer and registry, per-build capability, trusted build-specific Auxio target and an `ENABLED` kill switch are all confirmed. Signer match alone is insufficient.
 - Suppress stock behaviour only after the bounded Auxio protocol positively acknowledges command admission. Timeout, mismatch, unavailable and error paths fail open to stock.
 - Do not block either process main thread. Preserve bounded deduplication, rate-limited diagnostics and the `ENABLED`/`DISABLED`/`UNKNOWN` kill switch; `UNKNOWN` disables hooks.
 - Pair debug with `com.tw.media.debug` and release with signed `com.tw.media`. Manual Release keeps this add-on opt-in.

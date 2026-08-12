@@ -43,6 +43,8 @@ Before release-authority changes:
 
 ```bash
 bash scripts/check-product-contracts.sh
+bash scripts/check-headunit-compat-safety.sh
+bash scripts/check-dofun-topway-compat.sh
 bash scripts/check-manual-release-workflow.sh
 python3 scripts/ci/test_manual_release_matrix.py
 bash scripts/check-lsposed-bridge-contracts.sh

@@ -175,10 +175,14 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testStandardModeIsolation() {
-        Assume.assumeTrue(!BuildConfig.TOPWAY_COMPAT_ENABLED)
-
         val resolver = TestIntentResolver()
-        val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
+        val intent =
+            TopwayEqualizerLauncher.resolveIntent(
+                context,
+                123,
+                resolver,
+                topwayProduct = false,
+            )
 
         assertNotNull(intent)
         assertEquals(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL, intent?.action)
@@ -186,4 +190,3 @@ class TopwayEqualizerLauncherTest {
         assertEquals(0, resolver.queriedPackages.size)
     }
 }
-
