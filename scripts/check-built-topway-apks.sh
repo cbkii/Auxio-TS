@@ -31,16 +31,24 @@ validate_apk() {
   mapfile -t apks < <(find "$directory" -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' -print | sort)
   ((${#apks[@]} == 1)) || fail "Expected one ${label} APK in ${directory}, found ${#apks[@]}."
 
-  local actual_package manifest
+  local actual_package manifest manifest_dump alias_error
   actual_package=$("$apkanalyzer" manifest application-id "${apks[0]}")
   [[ "$actual_package" == "$expected_package" ]] ||
     fail "${label} application id expected ${expected_package}, got ${actual_package}."
 
   manifest=$("$apkanalyzer" manifest print "${apks[0]}")
-  grep -Fq 'android:name="com.tw.music.MusicActivity"' <<<"$manifest" ||
-    fail "${label} lacks com.tw.music.MusicActivity."
-  grep -Fq 'android:targetActivity="org.oxycblt.auxio.MainActivity"' <<<"$manifest" ||
-    fail "${label} alias target mismatch."
+  manifest_dump=$(mktemp)
+  printf '%s\n' "$manifest" > "$manifest_dump"
+  if ! alias_error=$(
+    python3 ./scripts/check-manifest-alias-target.py \
+      "$manifest_dump" \
+      com.tw.music.MusicActivity \
+      org.oxycblt.auxio.MainActivity 2>&1
+  ); then
+    rm -f -- "$manifest_dump"
+    fail "${label} alias target mismatch: ${alias_error}"
+  fi
+  rm -f -- "$manifest_dump"
   grep -Fq 'android:name="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' <<<"$manifest" &&
     fail "${label} still packages obsolete TopwayMusicEntryActivity."
 

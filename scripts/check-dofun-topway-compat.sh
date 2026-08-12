@@ -91,6 +91,25 @@ require_manifest_dump_contains() {
   fi
 }
 
+require_manifest_alias_target() {
+  local manifest_file=$1
+  local alias_name=$2
+  local target_name=$3
+  local pass_message=$4
+  local fail_message=$5
+  local error
+  if error=$(
+    python3 ./scripts/check-manifest-alias-target.py \
+      "$manifest_file" \
+      "$alias_name" \
+      "$target_name" 2>&1
+  ); then
+    pass "$pass_message"
+  else
+    fail "${fail_message}: ${error}"
+  fi
+}
+
 check_apk_manifest() {
   local apk=$1
   local expected_package=$2
@@ -115,8 +134,7 @@ check_apk_manifest() {
   local manifest_dump
   manifest_dump="$(mktemp)"
   "$apkanalyzer_bin" manifest print "$apk" > "$manifest_dump"
-  require_manifest_dump_contains "$manifest_dump" 'android:name="com.tw.music.MusicActivity"' "${label} APK manifest has com.tw.music.MusicActivity" "${label} APK manifest lacks com.tw.music.MusicActivity"
-  require_manifest_dump_contains "$manifest_dump" 'android:targetActivity="org.oxycblt.auxio.MainActivity"' "${label} APK alias targets MainActivity directly" "${label} APK alias target mismatch"
+  require_manifest_alias_target "$manifest_dump" com.tw.music.MusicActivity org.oxycblt.auxio.MainActivity "${label} APK com.tw.music.MusicActivity alias targets MainActivity directly" "${label} APK alias target mismatch"
   if grep -Fq 'android:name="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' "$manifest_dump"; then
     fail "${label} APK manifest still declares obsolete TopwayMusicEntryActivity"
   else
@@ -147,8 +165,7 @@ require_file_contains app/build.gradle 'src/topwayCompat/java' 'shared Topway Ja
 require_file_contains app/build.gradle 'src/topwayCompat/AndroidManifest.xml' 'shared Topway manifest'
 
 flavour_manifest=app/src/topwayCompat/AndroidManifest.xml
-require_file_contains "$flavour_manifest" 'com.tw.music.MusicActivity' 'Topway activity alias'
-require_file_contains "$flavour_manifest" 'android:targetActivity="org.oxycblt.auxio.MainActivity"' 'Topway alias direct MainActivity target'
+require_manifest_alias_target "$flavour_manifest" com.tw.music.MusicActivity org.oxycblt.auxio.MainActivity 'Topway source com.tw.music.MusicActivity alias targets MainActivity directly' 'Topway source alias target mismatch'
 require_file_not_contains "$flavour_manifest" 'org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity' 'Topway manifest obsolete launcher trampoline'
 require_file_contains "$flavour_manifest" 'org.oxycblt.auxio.MainActivity' 'Topway full-player activity'
 require_file_contains "$flavour_manifest" 'com.tw.music.MusicService' 'Topway MusicService component fallback'
