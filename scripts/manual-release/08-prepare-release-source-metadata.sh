@@ -29,4 +29,3 @@ fi
   echo "version_name=${resolved_name}"
   echo "version_code=${resolved_code}"
 } >> "${GITHUB_OUTPUT}"
-

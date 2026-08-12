@@ -7,4 +7,3 @@ cp scripts/lib/apksigner-certificate.sh "${tools_dir}/lib/apksigner-certificate.
 chmod +x "${tools_dir}/release-orchestrator.py"
 python3 "${tools_dir}/release-orchestrator.py" self-test
 echo "tools_dir=${tools_dir}" >> "${GITHUB_OUTPUT}"
-

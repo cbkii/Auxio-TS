@@ -5,4 +5,3 @@ if ! command -v ninja >/dev/null 2>&1; then
   timeout 10m sudo apt-get update
   timeout 10m sudo apt-get install -y ninja-build
 fi
-

@@ -326,4 +326,3 @@ It is not enough to claim:
 Until current TS18 evidence resolves those points, use the more precise classifications documented in
 the validation matrix, including `TRACK_A_SOFTWARE_READY_NEEDS_DEVICE_TEST` and
 `PHYSICAL_EVIDENCE_INCOMPLETE`.
-

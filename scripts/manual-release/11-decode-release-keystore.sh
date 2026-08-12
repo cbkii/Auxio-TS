@@ -13,4 +13,3 @@ path="${RUNNER_TEMP}/release.keystore"
 printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${path}"
 chmod 600 "${path}"
 echo "path=${path}" >> "${GITHUB_OUTPUT}"
-

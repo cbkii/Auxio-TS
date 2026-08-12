@@ -432,4 +432,3 @@ internal constructor(private val query: SAF.Query, private val options: DirectFs
         }
     }
 }
-

@@ -61,4 +61,3 @@ if [[ "${RELEASE_MODE}" == create_new_release ]]; then
   fi
 fi
 echo "verified=true" >> "${GITHUB_OUTPUT}"
-

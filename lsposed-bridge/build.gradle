@@ -134,4 +134,3 @@ gradle.taskGraph.whenReady { graph ->
                         "releaseKeyAlias/releaseKeyPassword properties.")
     }
 }
-

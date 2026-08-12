@@ -157,4 +157,3 @@ General Auxio issues should be checked against [upstream Auxio](https://github.c
 ---
 
 [← Main README](../README.md) · [Settings guide](SETTINGS_GUIDE.md) · [Documentation index](README.md)
-

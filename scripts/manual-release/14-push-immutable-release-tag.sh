@@ -18,4 +18,3 @@ remote_sha="$(timeout 60s git ls-remote --tags origin "refs/tags/${RELEASE_TAG}"
   exit 1
 }
 echo "tag_pushed=true" >> "${GITHUB_OUTPUT}"
-

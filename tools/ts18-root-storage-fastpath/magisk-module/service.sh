@@ -181,4 +181,3 @@ esac
 acquire_lock || exit 0
 prepare_manifest "$wait_seconds" "$include_sample" || exit 1
 exit 0
-

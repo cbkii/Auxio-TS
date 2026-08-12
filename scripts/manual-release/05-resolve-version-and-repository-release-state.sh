@@ -113,4 +113,3 @@ jq -r '.assets[]?.name' "${target_release}" > "${existing_assets}"
   echo "metadata_change_required=$(jq -r .metadata_change_required "${final_plan}")"
   echo "existing_release_url=$(jq -r .target_release_url "${final_plan}")"
 } >> "${GITHUB_OUTPUT}"
-

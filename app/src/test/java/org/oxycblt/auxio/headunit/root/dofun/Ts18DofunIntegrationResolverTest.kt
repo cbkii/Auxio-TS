@@ -61,4 +61,3 @@ class Ts18DofunIntegrationResolverTest {
         }
     }
 }
-
