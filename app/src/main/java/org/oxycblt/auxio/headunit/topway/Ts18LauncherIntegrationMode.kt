@@ -145,4 +145,3 @@ data class Ts18LauncherModeMigrationDecision(
     val persistMode: Ts18LauncherIntegrationMode?,
     val markComplete: Boolean,
 )
-

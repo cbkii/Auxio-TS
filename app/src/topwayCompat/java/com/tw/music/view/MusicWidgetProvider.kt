@@ -359,4 +359,3 @@ class MusicWidgetProvider : AppWidgetProvider() {
         const val STOCK_WIDGET_ARTWORK_MAX_BYTES = 3_680_000
     }
 }
-

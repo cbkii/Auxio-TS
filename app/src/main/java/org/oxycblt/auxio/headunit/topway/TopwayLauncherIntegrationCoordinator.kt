@@ -295,4 +295,3 @@ constructor(
         private const val MIN_PROGRESS_INTERVAL_MS = 1000L
     }
 }
-

@@ -170,4 +170,3 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         const val TOPWAY_RATE_WINDOW_MS = 1_000L
     }
 }
-

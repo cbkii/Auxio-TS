@@ -695,4 +695,3 @@ private fun Parcel.readNullableBundle(): Bundle? {
 }
 
 private const val PARCEL_MIN_FIELD_BYTES = 4
-

@@ -251,4 +251,3 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         const val STARTUP_FLOATING_ONLY = "floating_only"
     }
 }
-

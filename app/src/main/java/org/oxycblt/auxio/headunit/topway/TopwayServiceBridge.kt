@@ -29,7 +29,8 @@ object TopwayServiceBridge {
      * Resolves the appropriate service class for the current compatibility policy.
      *
      * @param defaultClass The Android fallback service class when compatibility is disabled.
-     * @return The stock-compatible service class name when compatibility is enabled, else defaultClass.
+     * @return The stock-compatible service class name when compatibility is enabled, else
+     *   defaultClass.
      */
     fun <T : Service> resolveCompatServiceClass(defaultClass: Class<T>): Class<*> {
         if (BuildConfig.TOPWAY_COMPAT_ENABLED) {

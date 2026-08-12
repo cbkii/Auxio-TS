@@ -1208,4 +1208,3 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isEnabled
     }
 }
-
