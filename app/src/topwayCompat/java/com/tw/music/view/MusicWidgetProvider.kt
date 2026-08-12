@@ -177,7 +177,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
         val component = ComponentName(context, MusicWidgetProvider::class.java)
 
         if (!TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate(context)) {
-            L.d("Skipping Topway widget update: no active instances and not in Topway flavor")
+            L.d("Skipping Topway widget update: no active instances and not in maintained product")
             return
         }
 
@@ -264,7 +264,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         return Ts18LauncherIntegrationMode.resolveAndPersist(
                 prefs = prefs,
-                topwayCompatFlavor = true,
+                topwayProduct = true,
             )
             .mode
     }
@@ -359,3 +359,4 @@ class MusicWidgetProvider : AppWidgetProvider() {
         const val STOCK_WIDGET_ARTWORK_MAX_BYTES = 3_680_000
     }
 }
+

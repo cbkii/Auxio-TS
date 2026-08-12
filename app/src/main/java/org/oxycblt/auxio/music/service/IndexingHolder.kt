@@ -265,7 +265,7 @@ private constructor(
                             )
                         val automaticScanAllowed =
                             StartupScanAuthorityPolicy.allowAutomaticScan(
-                                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
                                 origin = origin,
                                 sourceAuthority = sourceAuthority,
                             )
@@ -296,7 +296,7 @@ private constructor(
                                         },
                                 )
                             )
-                        } else if (BuildConfig.TOPWAY_COMPAT_FLAVOR && automaticScanAllowed) {
+                        } else if (BuildConfig.TOPWAY_COMPAT_ENABLED && automaticScanAllowed) {
                             requestVisibleRecoveryScan(sourceAuthority)
                         }
                     } finally {
@@ -1017,3 +1017,4 @@ internal class IndexJobLease {
         return true
     }
 }
+

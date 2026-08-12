@@ -24,3 +24,4 @@ include ':musikr'
 include ':startup-benchmark'
 include ':lsposed-bridge'
 include ':libxposed-api100-stubs'
+

@@ -13,21 +13,10 @@ android {
     defaultConfig {
         minSdk 28
         targetSdk target_sdk
+        buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] =
             "EMULATOR,LOW-BATTERY"
-    }
-
-    flavorDimensions += "distribution"
-    productFlavors {
-        topwayTwMusic {
-            dimension "distribution"
-            buildConfigField "String", "TARGET_PACKAGE", '"com.tw.music"'
-        }
-        topwayTwMedia {
-            dimension "distribution"
-            buildConfigField "String", "TARGET_PACKAGE", '"com.tw.media"'
-        }
     }
 
     buildTypes {

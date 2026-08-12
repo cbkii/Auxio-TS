@@ -30,3 +30,4 @@ else
   status='dev_moved'
 fi
 echo "status=${status}" >> "${GITHUB_OUTPUT}"
+

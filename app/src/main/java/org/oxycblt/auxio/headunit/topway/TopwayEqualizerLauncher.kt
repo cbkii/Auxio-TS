@@ -180,7 +180,7 @@ object TopwayEqualizerLauncher {
         val candidates = mutableListOf<Candidate>()
         val attempted = mutableListOf<String>()
 
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+        if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
             for (target in nativeTargets) {
                 val label = target.component.flattenToShortString()
                 attempted += "$label[${target.category}]"
@@ -227,3 +227,4 @@ object TopwayEqualizerLauncher {
         return candidates.distinctBy { it.intent.component ?: it.intent.action }
     }
 }
+

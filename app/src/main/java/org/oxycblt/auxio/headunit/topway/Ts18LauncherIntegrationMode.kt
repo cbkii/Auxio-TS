@@ -78,10 +78,10 @@ enum class Ts18LauncherIntegrationMode {
         const val PREF_GENERIC_DEFAULT_MIGRATED = "auxio_ts18_launcher_generic_default_migrated_v1"
 
         /** Pure policy helper retained independently from distributable product flavours. */
-        fun defaultFor(topwayCompatFlavor: Boolean): Ts18LauncherIntegrationMode =
-            if (topwayCompatFlavor) GenericDofunMedia else AndroidMediaSessionOnly
+        fun defaultFor(topwayProduct: Boolean): Ts18LauncherIntegrationMode =
+            if (topwayProduct) GenericDofunMedia else AndroidMediaSessionOnly
 
-        fun default(): Ts18LauncherIntegrationMode = defaultFor(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        fun default(): Ts18LauncherIntegrationMode = defaultFor(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         fun fromPreference(value: String?): Ts18LauncherIntegrationMode =
             entries.firstOrNull { it.name == value } ?: default()
@@ -97,12 +97,12 @@ enum class Ts18LauncherIntegrationMode {
         fun migrationDecision(
             persistedValue: String?,
             migrationComplete: Boolean,
-            topwayCompatFlavor: Boolean,
+            topwayProduct: Boolean,
         ): Ts18LauncherModeMigrationDecision {
             val parsed = entries.firstOrNull { it.name == persistedValue }
-            if (!topwayCompatFlavor || migrationComplete) {
+            if (!topwayProduct || migrationComplete) {
                 return Ts18LauncherModeMigrationDecision(
-                    mode = parsed ?: defaultFor(topwayCompatFlavor),
+                    mode = parsed ?: defaultFor(topwayProduct),
                     persistMode = null,
                     markComplete = false,
                 )
@@ -121,13 +121,13 @@ enum class Ts18LauncherIntegrationMode {
          */
         fun resolveAndPersist(
             prefs: SharedPreferences,
-            topwayCompatFlavor: Boolean,
+            topwayProduct: Boolean,
         ): Ts18LauncherModeMigrationDecision {
             val decision =
                 migrationDecision(
                     persistedValue = prefs.getString(PREF_KEY, null),
                     migrationComplete = prefs.getBoolean(PREF_GENERIC_DEFAULT_MIGRATED, false),
-                    topwayCompatFlavor = topwayCompatFlavor,
+                    topwayProduct = topwayProduct,
                 )
             if (decision.persistMode != null || decision.markComplete) {
                 prefs.edit {
@@ -145,3 +145,4 @@ data class Ts18LauncherModeMigrationDecision(
     val persistMode: Ts18LauncherIntegrationMode?,
     val markComplete: Boolean,
 )
+

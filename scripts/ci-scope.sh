@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Classify the current GitHub change set into the smallest safe Auxio-TS CI lanes.
-# Every unknown path or uncertain comparison fails open to full maintained-variant validation.
+# Every unknown path or uncertain comparison fails open to full single-product validation.
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd -P) || {
   printf '::error::Cannot resolve repository root for CI scope classification.\n' >&2
@@ -22,8 +22,7 @@ reset_flags() {
   app_core=false
   musikr=false
   topway_shared=false
-  topway_twmedia=false
-  topway_twmusic=false
+  app_build=false
   android_runtime_high_risk=false
   native_cpp=false
   benchmark=false
@@ -37,13 +36,12 @@ reset_flags() {
   android_lint=false
   compatibility_contracts=false
   gradle_quality=false
-  topway_build=false
   api29=false
   full=false
 }
 
 mark_full() {
-  # "Full" means every maintained Android/Topway lane. Native formatting remains
+  # "Full" means every maintained Android/app lane. Native formatting remains
   # changed-file driven because Eclipse CDT provisioning is an independent external
   # P2 dependency and provides no evidence for a change set with no C/C++ files.
   full=true
@@ -53,8 +51,7 @@ mark_full() {
   app_core=true
   musikr=true
   topway_shared=true
-  topway_twmedia=true
-  topway_twmusic=true
+  app_build=true
   android_runtime_high_risk=true
   benchmark=true
   release=true
@@ -68,7 +65,7 @@ mark_full() {
 
 mark_app_primary() {
   app_core=true
-  topway_twmedia=true
+  app_build=true
   app_tests=true
   formatting=true
   static_only=false
@@ -77,7 +74,6 @@ mark_app_primary() {
 mark_topway_shared() {
   mark_app_primary
   topway_shared=true
-  topway_twmusic=true
   android_lint=true
   compatibility_contracts=true
 }
@@ -86,8 +82,8 @@ mark_musikr() {
   musikr=true
   musikr_tests=true
   formatting=true
-  # One primary application compile is sufficient to prove Musikr integration.
-  topway_twmedia=true
+  # One application compile is sufficient to prove Musikr integration.
+  app_build=true
   static_only=false
 }
 
@@ -123,20 +119,6 @@ classify_path() {
       ;;
     app/src/topwayCompat/*)
       mark_topway_shared
-      matched=true
-      ;;
-    app/src/topwayTwMedia/*|app/src/topwayTwMediaDebug/*)
-      mark_app_primary
-      android_lint=true
-      compatibility_contracts=true
-      matched=true
-      ;;
-    app/src/topwayTwMusic/*|app/src/topwayTwMusicDebug/*)
-      app_core=true
-      topway_twmusic=true
-      formatting=true
-      compatibility_contracts=true
-      static_only=false
       matched=true
       ;;
     app/src/androidTest/*|app/src/benchmark/*)
@@ -177,7 +159,7 @@ classify_path() {
     startup-benchmark/*)
       benchmark=true
       formatting=true
-      topway_twmedia=true
+      app_build=true
       static_only=false
       matched=true
       ;;
@@ -217,14 +199,12 @@ finalise_flags() {
     gradle_quality=true
     static_only=false
   fi
-  if [[ "$topway_twmedia" == true || "$topway_twmusic" == true ]]; then
-    topway_build=true
+  if [[ "$app_build" == true ]]; then
     static_only=false
   fi
   if [[ "$api29" == true ]]; then
-    # API 29 exercises the primary maintained application and Musikr instrumentation lane.
-    topway_twmedia=true
-    topway_build=true
+    # API 29 exercises the maintained application and Musikr instrumentation lane.
+    app_build=true
     app_tests=true
     musikr_tests=true
     unit_tests=true
@@ -246,8 +226,7 @@ emit_outputs() {
     "app_core=$app_core"
     "musikr=$musikr"
     "topway_shared=$topway_shared"
-    "topway_twmedia=$topway_twmedia"
-    "topway_twmusic=$topway_twmusic"
+    "app_build=$app_build"
     "android_runtime_high_risk=$android_runtime_high_risk"
     "native_cpp=$native_cpp"
     "benchmark=$benchmark"
@@ -261,7 +240,6 @@ emit_outputs() {
     "android_lint=$android_lint"
     "compatibility_contracts=$compatibility_contracts"
     "gradle_quality=$gradle_quality"
-    "topway_build=$topway_build"
     "api29=$api29"
     "full=$full"
     "changed_count=$changed_count"
@@ -278,67 +256,55 @@ self_test() {
   reset_flags
   classify_path 'docs/CI_TASK_POLICY.md'
   finalise_flags
-  [[ "$static_only" == true && "$gradle_quality" == false && "$topway_build" == false ]] ||
+  [[ "$static_only" == true && "$gradle_quality" == false && "$app_build" == false ]] ||
     fail 'Self-test: docs-only classification is not static-only.'
 
   reset_flags
   classify_path '.github/workflows/android.yml'
   finalise_flags
-  [[ "$static_only" == true && "$gradle_quality" == false && "$topway_build" == false ]] ||
+  [[ "$static_only" == true && "$gradle_quality" == false && "$app_build" == false ]] ||
     fail 'Self-test: workflow-only classification must stay static unless full CI is requested.'
 
   reset_flags
   classify_path 'app/src/main/java/example/PresentationPolicy.kt'
   finalise_flags
-  [[ "$app_tests" == true && "$android_lint" == true && "$topway_twmedia" == true && "$topway_twmusic" == false && "$api29" == false ]] ||
-    fail 'Self-test: ordinary app code did not select focused primary validation.'
+  [[ "$app_tests" == true && "$android_lint" == true && "$app_build" == true && "$api29" == false ]] ||
+    fail 'Self-test: ordinary app code did not select focused product validation.'
 
   reset_flags
   classify_path 'app/src/debug/java/example/DebugProbe.kt'
   finalise_flags
-  [[ "$app_tests" == true && "$android_lint" == true && "$topway_twmedia" == true && "$release" == true ]] ||
+  [[ "$app_tests" == true && "$android_lint" == true && "$app_build" == true && "$release" == true ]] ||
     fail 'Self-test: debug-only source did not select optimized release-boundary validation.'
 
   reset_flags
   classify_path 'app/src/release/java/example/ReleaseNoOp.kt'
   finalise_flags
-  [[ "$release" == true && "$android_lint" == true && "$topway_twmedia" == true ]] ||
+  [[ "$release" == true && "$android_lint" == true && "$app_build" == true ]] ||
     fail 'Self-test: release-only source did not select release compilation.'
 
   reset_flags
   classify_path 'app/src/main/java/example/MusicRepository.kt'
   finalise_flags
-  [[ "$api29" == true && "$topway_twmedia" == true && "$musikr_tests" == true ]] ||
+  [[ "$api29" == true && "$app_build" == true && "$musikr_tests" == true ]] ||
     fail 'Self-test: high-risk app runtime change missed API 29 maintained validation.'
 
   reset_flags
   classify_path 'musikr/src/main/java/example/Parser.kt'
   finalise_flags
-  [[ "$musikr_tests" == true && "$topway_twmedia" == true && "$topway_twmusic" == false ]] ||
+  [[ "$musikr_tests" == true && "$app_build" == true ]] ||
     fail 'Self-test: Musikr change must run Musikr tests plus one primary app compile.'
 
   reset_flags
   classify_path 'app/src/topwayCompat/java/com/tw/music/MusicService.kt'
   finalise_flags
-  [[ "$topway_shared" == true && "$topway_twmedia" == true && "$topway_twmusic" == true && "$compatibility_contracts" == true ]] ||
-    fail 'Self-test: shared Topway source must select both maintained variants and contracts.'
-
-  reset_flags
-  classify_path 'app/src/topwayTwMedia/res/values/strings.xml'
-  finalise_flags
-  [[ "$topway_twmedia" == true && "$topway_twmusic" == false && "$topway_build" == true ]] ||
-    fail 'Self-test: topwayTwMedia-specific classification is not focused.'
-
-  reset_flags
-  classify_path 'app/src/topwayTwMusic/res/values/strings.xml'
-  finalise_flags
-  [[ "$topway_twmusic" == true && "$topway_twmedia" == false && "$compatibility_contracts" == true ]] ||
-    fail 'Self-test: topwayTwMusic-specific classification is not focused.'
+  [[ "$topway_shared" == true && "$app_build" == true && "$compatibility_contracts" == true ]] ||
+    fail 'Self-test: shared Topway source must select the product build and contracts.'
 
   reset_flags
   mark_full
   finalise_flags
-  [[ "$full" == true && "$api29" == true && "$topway_twmedia" == true && "$topway_twmusic" == true && "$format_cpp" == false ]] ||
+  [[ "$full" == true && "$api29" == true && "$app_build" == true && "$format_cpp" == false ]] ||
     fail 'Self-test: full maintained Android CI must not invent an unrelated native formatter lane.'
 
   reset_flags
@@ -350,7 +316,7 @@ self_test() {
   reset_flags
   classify_path 'app/build.gradle'
   finalise_flags
-  [[ "$full" == true && "$api29" == true && "$topway_twmedia" == true && "$topway_twmusic" == true && "$format_cpp" == false ]] ||
+  [[ "$full" == true && "$api29" == true && "$app_build" == true && "$format_cpp" == false ]] ||
     fail 'Self-test: module build configuration changes must run full maintained Android CI without unrelated C/C++ provisioning.'
 
   log 'self-test PASS'
@@ -436,5 +402,5 @@ if [[ "$event" == push && "$ref_name" == dev ]]; then
 fi
 
 finalise_flags
-log "comparison=$comparison changed=$changed_count full=$full native_cpp=$native_cpp static_only=$static_only formatting=$formatting format_cpp=$format_cpp app_tests=$app_tests musikr_tests=$musikr_tests lint=$android_lint twmedia=$topway_twmedia twmusic=$topway_twmusic api29=$api29"
+log "comparison=$comparison changed=$changed_count full=$full native_cpp=$native_cpp static_only=$static_only formatting=$formatting format_cpp=$format_cpp app_tests=$app_tests musikr_tests=$musikr_tests lint=$android_lint app_build=$app_build api29=$api29"
 emit_outputs "$changed_count" "$comparison"

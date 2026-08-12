@@ -149,3 +149,4 @@ if ((ERRORS != 0)); then
   exit 1
 fi
 printf '[SUMMARY] LSPosed bridge and paired target contracts passed.\n' >&2
+

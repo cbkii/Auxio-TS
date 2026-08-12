@@ -24,9 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      topway_build: ${{ steps.scope.outputs.topway_build }}
-      topway_twmedia: ${{ steps.scope.outputs.topway_twmedia }}
-      topway_twmusic: ${{ steps.scope.outputs.topway_twmusic }}
+      app_build: ${{ steps.scope.outputs.app_build }}
       compatibility_contracts: ${{ steps.scope.outputs.compatibility_contracts }}
       api29: ${{ steps.scope.outputs.api29 }}
       release: ${{ steps.scope.outputs.release }}
@@ -79,8 +77,7 @@ jobs:
             echo
             echo "- Comparison: \`${{ steps.scope.outputs.comparison }}\`"
             echo "- Changed files: \`${{ steps.scope.outputs.changed_count }}\`"
-            echo "- Build topwayTwMedia: \`${{ steps.scope.outputs.topway_twmedia }}\`"
-            echo "- Build topwayTwMusic: \`${{ steps.scope.outputs.topway_twmusic }}\`"
+            echo "- Build Auxio-TS app: \`${{ steps.scope.outputs.app_build }}\`"
             echo "- Compatibility contracts: \`${{ steps.scope.outputs.compatibility_contracts }}\`"
             echo "- API 29: \`${{ steps.scope.outputs.api29 }}\`"
             echo "- Full CI: \`${{ steps.scope.outputs.full }}\`"
@@ -245,7 +242,7 @@ jobs:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/api29-gradle.log
         run: |
           bash ./scripts/ci-gradle.sh \
-            :app:connectedTopwayTwMediaDebugAndroidTest \
+            :app:connectedDebugAndroidTest \
             :musikr:connectedDebugAndroidTest
 
       - name: Upload API 29 failure reports
@@ -277,7 +274,7 @@ jobs:
   build:
     name: build
     needs: scope
-    if: needs.scope.outputs.topway_build == 'true'
+    if: needs.scope.outputs.app_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -321,34 +318,18 @@ jobs:
         shell: bash
         run: bash ./scripts/bootstrap-dependencies.sh --profile full-build
 
-      - name: Build selected maintained debug APKs
+      - name: Build maintained debug APK
         shell: bash
         env:
-          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
-          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-debug-gradle.log
-        run: |
-          tasks=()
-          [[ "${BUILD_TWMEDIA}" == "true" ]] && tasks+=(:app:assembleTopwayTwMediaDebug)
-          [[ "${BUILD_TWMUSIC}" == "true" ]] && tasks+=(:app:assembleTopwayTwMusicDebug)
-          ((${#tasks[@]} > 0)) || { echo "::error::Topway build selected without a maintained variant."; exit 1; }
-          printf 'Selected debug APK tasks:\n'
-          printf ' - %s\n' "${tasks[@]}"
-          bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
+        run: bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleDebug
 
-      - name: Build selected maintained release APKs
+      - name: Build maintained release APK
         if: github.event_name != 'pull_request' && (needs.scope.outputs.release == 'true' || needs.scope.outputs.full == 'true')
         shell: bash
         env:
-          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
-          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
-        run: |
-          tasks=()
-          [[ "${BUILD_TWMEDIA}" == "true" ]] && tasks+=(:app:assembleTopwayTwMediaRelease)
-          [[ "${BUILD_TWMUSIC}" == "true" ]] && tasks+=(:app:assembleTopwayTwMusicRelease)
-          ((${#tasks[@]} > 0)) || { echo "::error::Release validation selected without a maintained variant."; exit 1; }
-          bash ./scripts/ci-gradle.sh --warning-mode all "${tasks[@]}"
+        run: bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleRelease
 
       - name: Build and inspect primary release diagnostics boundary
         if: github.event_name == 'pull_request' && needs.scope.outputs.release == 'true'
@@ -356,9 +337,9 @@ jobs:
         env:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/android-build-release-gradle.log
         run: |
-          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleTopwayTwMediaRelease
+          bash ./scripts/ci-gradle.sh --warning-mode all :app:assembleRelease
           release_apk="$(
-            find app/build/outputs/apk/topwayTwMedia/release \
+            find app/build/outputs/apk/release \
               -maxdepth 1 -type f -name '*.apk' -print -quit
           )"
           [[ -n "${release_apk}" ]] || {
@@ -367,24 +348,21 @@ jobs:
           }
           bash ./scripts/check-release-diagnostics-boundary.sh "${release_apk}"
 
-      - name: Validate selected maintained APK outputs
+      - name: Validate maintained APK output
         shell: bash
-        env:
-          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
-          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
         run: bash ./scripts/check-built-topway-apks.sh
 
-      - name: Validate maintained variant contracts
+      - name: Validate single-product contracts
         shell: bash
-        run: bash ./scripts/check-ci-variant-contracts.sh
+        run: bash ./scripts/check-product-contracts.sh
 
       - name: Validate TS18 APK reference contracts
         if: needs.scope.outputs.compatibility_contracts == 'true' || needs.scope.outputs.full == 'true'
         shell: bash
         run: bash ./scripts/check-ts18-apk-reference-contracts.sh
 
-      - name: Validate combined DoFun/Topway outputs
-        if: needs.scope.outputs.topway_twmedia == 'true' && needs.scope.outputs.topway_twmusic == 'true'
+      - name: Validate DoFun/Topway product contracts
+        if: needs.scope.outputs.compatibility_contracts == 'true' || needs.scope.outputs.full == 'true'
         shell: bash
         run: bash ./scripts/check-dofun-topway-compat.sh
 
@@ -406,57 +384,32 @@ jobs:
         id: artifact_inventory
         if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true'
         shell: bash
-        env:
-          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
-          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
         run: |
           stage="${RUNNER_TEMP}/auxio-ts-debug-artifacts"
-          mkdir -p "${stage}/topwayTwMedia" "${stage}/topwayTwMusic"
+          mkdir -p "${stage}/app"
           : > "${stage}/debug-apks.sha256"
           {
             echo "commit=${GITHUB_SHA}"
             echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } > "${stage}/build-metadata.txt"
 
-          if [[ "${BUILD_TWMEDIA}" == "true" ]]; then
-            media_apk="$(find app/build/outputs/apk/topwayTwMedia/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
-            [[ -n "${media_apk}" ]] || { echo "::error::topwayTwMedia debug APK is missing."; exit 1; }
-            cp -- "${media_apk}" "${stage}/topwayTwMedia/"
-            media_name="$(basename -- "${media_apk}")"
-            media_sha="$(sha256sum "${media_apk}" | awk '{print $1}')"
-            printf '%s  %s\n' "${media_sha}" "${media_name}" >> "${stage}/debug-apks.sha256"
-            echo "twmedia_sha256=${media_sha}" >> "${GITHUB_OUTPUT}"
-          fi
-
-          if [[ "${BUILD_TWMUSIC}" == "true" ]]; then
-            music_apk="$(find app/build/outputs/apk/topwayTwMusic/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
-            [[ -n "${music_apk}" ]] || { echo "::error::topwayTwMusic debug APK is missing."; exit 1; }
-            cp -- "${music_apk}" "${stage}/topwayTwMusic/"
-            music_name="$(basename -- "${music_apk}")"
-            music_sha="$(sha256sum "${music_apk}" | awk '{print $1}')"
-            printf '%s  %s\n' "${music_sha}" "${music_name}" >> "${stage}/debug-apks.sha256"
-            echo "twmusic_sha256=${music_sha}" >> "${GITHUB_OUTPUT}"
-          fi
+          app_apk="$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          [[ -n "${app_apk}" ]] || { echo "::error::Auxio-TS debug APK is missing."; exit 1; }
+          cp -- "${app_apk}" "${stage}/app/"
+          app_name="$(basename -- "${app_apk}")"
+          app_sha="$(sha256sum "${app_apk}" | awk '{print $1}')"
+          printf '%s  %s\n' "${app_sha}" "${app_name}" >> "${stage}/debug-apks.sha256"
+          echo "app_sha256=${app_sha}" >> "${GITHUB_OUTPUT}"
 
           echo "stage=${stage}" >> "${GITHUB_OUTPUT}"
 
-      - name: Upload topwayTwMedia debug APK
-        id: debug_twmedia
-        if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true' && needs.scope.outputs.topway_twmedia == 'true'
+      - name: Upload Auxio-TS debug APK
+        id: debug_app
+        if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: auxio-ts-topwayTwMedia-debug-${{ github.sha }}
-          path: ${{ steps.artifact_inventory.outputs.stage }}/topwayTwMedia/*
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload topwayTwMusic debug APK
-        id: debug_twmusic
-        if: success() && env.PUBLISH_DEBUG_ARTIFACTS == 'true' && needs.scope.outputs.topway_twmusic == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: auxio-ts-topwayTwMusic-debug-${{ github.sha }}
-          path: ${{ steps.artifact_inventory.outputs.stage }}/topwayTwMusic/*
+          name: auxio-ts-debug-${{ github.sha }}
+          path: ${{ steps.artifact_inventory.outputs.stage }}/app/*
           if-no-files-found: error
           retention-days: 14
 
@@ -478,21 +431,16 @@ jobs:
         env:
           JOB_STATUS: ${{ job.status }}
           REPORTS_URL: ${{ steps.failure_reports.outputs.artifact-url }}
-          TWMEDIA_URL: ${{ steps.debug_twmedia.outputs.artifact-url }}
-          TWMUSIC_URL: ${{ steps.debug_twmusic.outputs.artifact-url }}
+          APP_URL: ${{ steps.debug_app.outputs.artifact-url }}
           INVENTORY_URL: ${{ steps.debug_inventory.outputs.artifact-url }}
-          TWMEDIA_SHA256: ${{ steps.artifact_inventory.outputs.twmedia_sha256 }}
-          TWMUSIC_SHA256: ${{ steps.artifact_inventory.outputs.twmusic_sha256 }}
-          BUILD_TWMEDIA: ${{ needs.scope.outputs.topway_twmedia }}
-          BUILD_TWMUSIC: ${{ needs.scope.outputs.topway_twmusic }}
+          APP_SHA256: ${{ steps.artifact_inventory.outputs.app_sha256 }}
           PUBLISH_DEBUG_ARTIFACTS: ${{ env.PUBLISH_DEBUG_ARTIFACTS }}
         run: |
           {
             echo "## Android Build"
             echo
             echo "- Result: \`${JOB_STATUS}\`"
-            echo "- topwayTwMedia selected: \`${BUILD_TWMEDIA}\`"
-            echo "- topwayTwMusic selected: \`${BUILD_TWMUSIC}\`"
+            echo "- Product: \`Auxio-TS / com.tw.media\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
             echo "- Debug artifact publication authorized: \`${PUBLISH_DEBUG_ARTIFACTS}\`"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
@@ -504,16 +452,13 @@ jobs:
             echo
             echo "| Artifact | Download | SHA-256 |"
             echo "|---|---|---|"
-            if [[ -n "${TWMEDIA_URL}" ]]; then
-              echo "| topwayTwMedia debug APK | [Download](${TWMEDIA_URL}) | \`${TWMEDIA_SHA256}\` |"
-            fi
-            if [[ -n "${TWMUSIC_URL}" ]]; then
-              echo "| topwayTwMusic internal contract APK — do not install | [Download](${TWMUSIC_URL}) | \`${TWMUSIC_SHA256}\` |"
+            if [[ -n "${APP_URL}" ]]; then
+              echo "| Auxio-TS debug APK | [Download](${APP_URL}) | \`${APP_SHA256}\` |"
             fi
             if [[ -n "${INVENTORY_URL}" ]]; then
               echo "| Checksums and build metadata | [Download](${INVENTORY_URL}) | — |"
             fi
-            if [[ -z "${TWMEDIA_URL}${TWMUSIC_URL}${INVENTORY_URL}" ]]; then
+            if [[ -z "${APP_URL}${INVENTORY_URL}" ]]; then
               echo "| None | Build validation ran without publishing debug binaries | — |"
             fi
           } >> "${GITHUB_STEP_SUMMARY}"

@@ -32,7 +32,7 @@ object TopwayOverlayRestoreBridge {
     private const val SERVICE_CLASS = "org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
 
     fun requestOverlayRestore(context: Context): CarOverlayContract.OverlayRestoreResult {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED)
             return CarOverlayContract.OverlayRestoreResult.UnsupportedBuild
 
         val prefs =
@@ -82,3 +82,4 @@ object TopwayOverlayRestoreBridge {
         }
     }
 }
+

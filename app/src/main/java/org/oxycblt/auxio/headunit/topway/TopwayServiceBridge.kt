@@ -32,7 +32,7 @@ object TopwayServiceBridge {
      * @return The stock-compatible service class name if in Topway flavor, else defaultClass.
      */
     fun <T : Service> resolveCompatServiceClass(defaultClass: Class<T>): Class<*> {
-        if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+        if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
             return try {
                 Class.forName(STOCK_MUSIC_SERVICE_CLASS)
             } catch (e: ClassNotFoundException) {
@@ -42,3 +42,4 @@ object TopwayServiceBridge {
         return defaultClass
     }
 }
+

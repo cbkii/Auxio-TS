@@ -12,3 +12,4 @@ remote_sha="$(git rev-parse origin/dev)"
   exit 1
 }
 echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
+

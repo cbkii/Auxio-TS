@@ -33,3 +33,4 @@ jq -r '.debug_workflow_names[]' "${plan_file}" > "${debug_workflow_names}"
   echo "build_count=$(wc -l < "${build_variants}" | tr -d ' ')"
   echo "needs_signing=$(jq -r .needs_signing "${plan_file}")"
 } >> "${GITHUB_OUTPUT}"
+

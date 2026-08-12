@@ -8,14 +8,6 @@ on:
         required: true
         default: dev
         type: string
-      variant:
-        description: App variant
-        required: true
-        default: topway_twmedia
-        type: choice
-        options:
-          - topway_twmedia
-          - topway_twmusic
       roborazzi_task:
         description: Roborazzi operation
         required: true
@@ -34,7 +26,7 @@ env:
   GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx6g -Dorg.gradle.daemon=false -Dkotlin.incremental=false
 
 concurrency:
-  group: ui-screenshots-${{ inputs.target_ref }}-${{ inputs.variant }}-${{ inputs.roborazzi_task }}
+  group: ui-screenshots-${{ inputs.target_ref }}-${{ inputs.roborazzi_task }}
   cancel-in-progress: true
 
 jobs:
@@ -86,14 +78,8 @@ jobs:
         id: task
         shell: bash
         env:
-          VARIANT: ${{ inputs.variant }}
           OPERATION: ${{ inputs.roborazzi_task }}
         run: |
-          case "${VARIANT}" in
-            topway_twmusic) suffix='TopwayTwMusicDebug' ;;
-            topway_twmedia) suffix='TopwayTwMediaDebug' ;;
-            *) echo "::error::Unknown variant: ${VARIANT}"; exit 1 ;;
-          esac
           case "${OPERATION}" in
             record) prefix='recordRoborazzi' ;;
             verify) prefix='verifyRoborazzi' ;;
@@ -101,7 +87,7 @@ jobs:
             verify_and_record) prefix='verifyAndRecordRoborazzi' ;;
             *) echo "::error::Unknown operation: ${OPERATION}"; exit 1 ;;
           esac
-          echo "gradle_task=${prefix}${suffix}" >> "${GITHUB_OUTPUT}"
+          echo "gradle_task=${prefix}Debug" >> "${GITHUB_OUTPUT}"
 
       - name: Run Roborazzi
         id: roborazzi
@@ -113,7 +99,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: auxio-ts-${{ inputs.variant }}-roborazzi-reports
+          name: auxio-ts-roborazzi-reports
           path: |
             app/build/reports/roborazzi/**
             app/build/reports/tests/**
@@ -127,7 +113,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: auxio-ts-${{ inputs.variant }}-roborazzi-screenshots
+          name: auxio-ts-roborazzi-screenshots
           path: |
             app/build/outputs/roborazzi/**/*.png
             app/src/test/**/roborazzi/**/*.png
@@ -143,14 +129,13 @@ jobs:
           SCREENSHOTS_URL: ${{ steps.screenshots.outputs.artifact-url }}
           GRADLE_TASK: ${{ steps.task.outputs.gradle_task }}
           TARGET_REF: ${{ inputs.target_ref }}
-          VARIANT: ${{ inputs.variant }}
         run: |
           {
             echo "## UI Screenshots (Roborazzi)"
             echo
             echo "- Result: \`${RESULT}\`"
             echo "- Target ref: \`${TARGET_REF}\`"
-            echo "- Variant: \`${VARIANT}\`"
+            echo "- Product: \`com.tw.media\`"
             echo "- Gradle task: \`${GRADLE_TASK}\`"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             [[ -n "${REPORTS_URL}" ]] && echo "- Reports: ${REPORTS_URL}"

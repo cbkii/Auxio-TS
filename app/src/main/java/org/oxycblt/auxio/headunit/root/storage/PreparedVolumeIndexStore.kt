@@ -401,3 +401,4 @@ constructor(@ApplicationContext context: Context, private val rootStateHolder: R
         const val ROOT_AUTHORITY_TIMEOUT_MS = 5_000L
     }
 }
+

@@ -6,3 +6,4 @@
         android:label="@string/module_name"
         android:supportsRtl="true" />
 </manifest>
+

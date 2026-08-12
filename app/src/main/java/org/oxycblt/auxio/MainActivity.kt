@@ -255,3 +255,4 @@ class MainActivity : AppCompatActivity() {
         const val KEY_INTENT_USED = BuildConfig.APPLICATION_ID + ".key.FILE_INTENT_USED"
     }
 }
+

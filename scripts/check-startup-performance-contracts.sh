@@ -45,7 +45,7 @@ for path in \
   "$browser" "$perf_timer" "$music_repository" "$music_settings" \
   "$deferred_startup_test" "$capture_restore_test" \
   "$startup_validation" "$android_workflow" "$quality_workflow" "$release_workflow" \
-  "$benchmark_workflow" scripts/ci-scope.sh scripts/check-ci-variant-contracts.sh \
+  "$benchmark_workflow" scripts/ci-scope.sh scripts/check-product-contracts.sh \
   scripts/summarize-startup-benchmarks.py docs/architecture/STARTUP_PROFILES_BENCHMARKS.md; do
   require_file "$path"
 done
@@ -65,11 +65,7 @@ require_contains startup-benchmark/build.gradle 'managedDevices = ["pixel6Api35"
 require_absent_regex startup-benchmark/build.gradle '^[[:space:]]*standard[[:space:]]*\{'
 require_absent startup-benchmark/build.gradle 'org.oxycblt.auxio"'
 
-for task in \
-  ':startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark' \
-  ':startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark'; do
-  require_contains "$startup_validation" "$task"
-done
+require_contains "$startup_validation" ':startup-benchmark:assembleBenchmarkBenchmark'
 require_absent "$startup_validation" 'assembleStandard'
 require_absent "$startup_validation" 'bundleStandard'
 
@@ -124,15 +120,16 @@ for workflow in "$android_workflow" "$quality_workflow"; do
   require_contains "$workflow" 'actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95'
   require_contains "$workflow" 'gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c'
 done
-require_contains "$android_workflow" ':app:connectedTopwayTwMediaDebugAndroidTest'
-require_contains "$quality_workflow" ':app:testTopwayTwMediaDebugUnitTest'
-require_contains "$quality_workflow" ':app:lintTopwayTwMediaDebug'
+require_contains "$android_workflow" ':app:connectedDebugAndroidTest'
+require_contains "$quality_workflow" ':app:testDebugUnitTest'
+require_contains "$quality_workflow" ':app:lintDebug'
 require_contains "$release_workflow" 'persist-credentials: false'
 require_contains "$release_surface" 'bash ./scripts/check-startup-performance-contracts.sh "${asset_path}"'
 require_contains "$release_surface" '.sha256'
 require_contains "$release_surface" '.metadata.txt'
 require_absent "$release_surface" 'include_standard_apk'
-require_contains "$benchmark_workflow" 'default: topwayTwMedia'
+require_absent "$benchmark_workflow" 'flavour:'
+require_contains "$benchmark_workflow" 'product=com.tw.media'
 require_contains "$benchmark_workflow" 'Measurement iterations (15-30)'
 require_contains "$benchmark_workflow" '        default: 15'
 require_absent_regex "$benchmark_workflow" '^[[:space:]]*-[[:space:]]*standard[[:space:]]*$'

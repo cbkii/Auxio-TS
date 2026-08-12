@@ -5,3 +5,4 @@ set -euo pipefail
   exit 1
 }
 bash ./scripts/bootstrap-dependencies.sh --profile release
+

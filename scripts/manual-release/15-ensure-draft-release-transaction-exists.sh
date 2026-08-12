@@ -15,7 +15,7 @@ if [[ "${RELEASE_EXISTS}" != true ]]; then
     fi
     echo
     echo '## Assets'
-    echo '- topwayTwMedia is the primary signed APK.'
+    echo '- Auxio-TS (`com.tw.media`) is the maintained signed APK.'
     echo '- The LSPosed API 100 bridge is the signed TS18 addon for the genuine stock `com.tw.music` process.'
     if [[ "${DEBUG_DESTINATION}" == release_assets ]]; then
       echo '- Debug APKs were explicitly selected as GitHub Release assets.'

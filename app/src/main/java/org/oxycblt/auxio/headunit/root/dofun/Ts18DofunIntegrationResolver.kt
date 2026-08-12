@@ -214,3 +214,4 @@ class Ts18DofunIntegrationResolver(
         const val MAX_SELECTION_VALUE_CHARS = 512
     }
 }
+

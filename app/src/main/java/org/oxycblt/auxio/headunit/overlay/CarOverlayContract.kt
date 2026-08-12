@@ -42,3 +42,4 @@ object CarOverlayContract {
         data class StartRejected(val reason: String) : OverlayRestoreResult
     }
 }
+

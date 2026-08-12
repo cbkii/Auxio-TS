@@ -64,7 +64,7 @@ constructor(
         }
 
         val mode =
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
                 Ts18LauncherIntegrationMode.fromPreference(
                         prefs.getString(Ts18LauncherIntegrationMode.PREF_KEY, null)
                     )
@@ -97,3 +97,4 @@ constructor(
         const val TELEMETRY_WINDOW_MS = 1_000L
     }
 }
+

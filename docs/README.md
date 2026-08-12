@@ -1,70 +1,40 @@
-# 🧭 Auxio-TS documentation index
+# Documentation
 
-Auxio-TS targets TS18, Topway and DoFun Variety head units. Choose the section that matches your task.
+Start with the document that owns the question:
 
-> [!NOTE]
-> Exact TS18 widget, USB, ACC, MCU, CAN, DSP, radio and launcher behaviour requires physical device validation.
+- [Product scope](PRODUCT_SCOPE.md) — product, package, module, support and artefact matrix.
+- [Architecture](ARCHITECTURE.md) — runtime ownership, source boundaries and Tracks A/B/C.
+- [Development](DEVELOPMENT.md) — setup, build, test and validation commands.
+- [Release workflow](RELEASE_WORKFLOW.md) — signed app and optional add-on publication policy.
+- [Repository engineering authority](../AGENTS.md) — instructions and safety precedence.
+- [Single-product architecture decision](decisions/0001-single-product-architecture.md).
 
-## 🙋 User guides
+## Current guides and runbooks
 
-- [Main README and quick start](../README.md)
 - [Settings guide](SETTINGS_GUIDE.md)
-- [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md)
-- [DoFun Variety compatibility](DOFUN_VARIETY_COMPATIBILITY.md)
-- [Physical TS18 validation](TS18_RUNTIME_VALIDATION.md)
-
-## 🧰 Advanced users
-
 - [Advanced use and contributing](ADVANCED_AND_CONTRIBUTING.md)
+- [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md)
+- [DoFun/Topway compatibility guide](DOFUN_VARIETY_COMPATIBILITY.md)
+- [LSPosed Track-C guide](ts18/launcher-integration/LSPOSED_API100_BRIDGE.md)
 - [Root storage fast path](ts18/ROOT_STORAGE_FASTPATH.md)
+- [Physical TS18 validation](TS18_RUNTIME_VALIDATION.md)
 - [Exact-device context](CODEX_TS18_DEVICE_CONTEXT.md)
-- [Topway research index](topway/README.md)
 
-## 🧑‍💻 Contributors
+## Current architecture references
 
-- [Repository instructions](../AGENTS.md)
-- [Development setup and maintained variants](DEVELOPMENT.md)
-- [CI task policy](CI_TASK_POLICY.md)
-- [Release workflow](RELEASE_WORKFLOW.md)
 - [Fast interaction startup](architecture/FAST_INTERACTION_STARTUP.md)
 - [Incremental library pipeline](architecture/INCREMENTAL_LIBRARY_PIPELINE.md)
-- [Canonical music sources and DirectFS traversal](architecture/CANONICAL_SOURCES_AND_DIRECTFS.md)
-- [Source-scan attempt leases and watchdog](architecture/SOURCE_SCAN_ATTEMPT_LEASES.md)
+- [Canonical sources and DirectFS](architecture/CANONICAL_SOURCES_AND_DIRECTFS.md)
+- [Source-scan attempt leases](architecture/SOURCE_SCAN_ATTEMPT_LEASES.md)
 - [Cached presentation versus source authority](architecture/CACHED_PRESENTATION_VS_SOURCE_AUTHORITY.md)
 - [Startup profiles and benchmarks](architecture/STARTUP_PROFILES_BENCHMARKS.md)
 - [Exact TS18 startup validation](validation/EXACT_TS18_STARTUP_VALIDATION.md)
 
-The source-authority documents define one backend-qualified ledger identity per canonical configured
-root. Durable publication uses a full generation/attempt check immediately before Room, followed by
-a pure in-memory current-session guard as the transaction's first operation. Existing volume-derived
-file attribution remains a legacy read fallback only; new SAF and DirectFS work carries the exact
-configured-root key end to end.
+## Evidence
 
-## 🔬 Evidence and reference
+Evidence supports engineering decisions but is non-normative. Use only the curated evidence index and provenance records; do not start routine work in raw decompilation output. Label claims **Observed**, **Inferred**, **Proposed** or **Physically unverified**.
 
 - [TS18 APK reference](TS18_APK_REFERENCE.md)
-- [Exact TS18 device context](CODEX_TS18_DEVICE_CONTEXT.md)
-- [Topway source-led notes](topway/README.md)
+- [Topway research index](topway/README.md)
 
-Use the repository evidence labels consistently: **Observed**, **Inferred**, **Hypothesis**, **Requires TS18 validation** and **Unsupported**.
-
-## 📦 Maintained package contract
-
-| Variant | Package | Role |
-| --- | --- | --- |
-| `topwayTwMedia` | `com.tw.media` | Primary signed APK and normal installation lane. |
-| LSPosed bridge addon | `org.oxycblt.auxio.ts18bridge` | Optional signed addon **[beta]**, static-scoped only to genuine stock `com.tw.music`. |
-| `topwayTwMusic` | `com.tw.music` | Internal exact-package compatibility/test build; never publish or install. |
-
-The old `standard` distributable is retired. See [Advanced use and contributing](ADVANCED_AND_CONTRIBUTING.md#installation-and-package-identity) for the package and release boundaries.
-
-## 🛡️ Safety boundary
-
-The normal release is the signed `com.tw.media` APK. The optional TS18 addon is the signed LSPosed
-API 100 bridge **[beta]**. The former exact-package Auxio Magisk overlay is retired.
-
-Root does not provide platform signing, shared UID 1000, MCU, CAN, DSP, radio or protected-package authority. Read [TS18 installation constraints](TS18_INSTALLATION_CONSTRAINTS.md) before any exact-package or stock-app change.
-
----
-
-[← Main README](../README.md) · [Settings guide](SETTINGS_GUIDE.md) · [Advanced and contributing](ADVANCED_AND_CONTRIBUTING.md)
+Historical facts remain in [CHANGELOG.md](../CHANGELOG.md). Old prompts and status reports do not define current policy.

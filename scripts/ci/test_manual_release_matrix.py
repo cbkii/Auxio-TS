@@ -170,8 +170,8 @@ def test_version_resolution(module: ModuleType) -> None:
 
 def test_asset_planning(module: ModuleType, root: Path) -> None:
     tag = "v6.6.0"
-    topway = variant_triplet(module, "topway_twmedia", tag)
-    topway_debug = variant_triplet(module, "topway_twmedia_debug", tag)
+    topway = variant_triplet(module, "app", tag)
+    topway_debug = variant_triplet(module, "app_debug", tag)
     bridge = variant_triplet(module, "lsposed_bridge", tag)
     bridge_debug = variant_triplet(module, "lsposed_bridge_debug", tag)
 
@@ -180,12 +180,12 @@ def test_asset_planning(module: ModuleType, root: Path) -> None:
         root,
         mode="create_new_release",
         tag=tag,
-        variants=["topway_twmedia", "topway_twmedia_debug"],
+        variants=["app", "app_debug"],
         debug_destination="workflow_artifacts",
         existing=[],
         replace="false",
     )
-    check(plan["build_variants"] == ["topway_twmedia", "topway_twmedia_debug"], "default Topway selection did not build release+debug")
+    check(plan["build_variants"] == ["app", "app_debug"], "default Topway selection did not build release+debug")
     check(plan["upload_names"] == topway, "workflow-only debug files leaked into release upload plan")
     check(plan["debug_workflow_names"] == topway_debug, "workflow debug triplet was not retained")
     check(plan["verify_names"] == topway, "release verification set is wrong for default Topway selection")
@@ -196,7 +196,7 @@ def test_asset_planning(module: ModuleType, root: Path) -> None:
         root,
         mode="create_new_release",
         tag=tag,
-        variants=["topway_twmedia", "topway_twmedia_debug", "lsposed_bridge", "lsposed_bridge_debug"],
+        variants=["app", "app_debug", "lsposed_bridge", "lsposed_bridge_debug"],
         debug_destination="release_assets",
         existing=[],
         replace="false",
@@ -212,7 +212,7 @@ def test_asset_planning(module: ModuleType, root: Path) -> None:
         root,
         mode="repair_existing_release",
         tag=tag,
-        variants=["topway_twmedia"],
+        variants=["app"],
         debug_destination="workflow_artifacts",
         existing=complete,
         replace="false",
@@ -226,12 +226,12 @@ def test_asset_planning(module: ModuleType, root: Path) -> None:
         root,
         mode="repair_existing_release",
         tag=tag,
-        variants=["topway_twmedia"],
+        variants=["app"],
         debug_destination="workflow_artifacts",
         existing=partial,
         replace="false",
     )
-    check(plan["build_variants"] == ["topway_twmedia"], "partial interrupted triplet was not rebuilt")
+    check(plan["build_variants"] == ["app"], "partial interrupted triplet was not rebuilt")
     check(plan["upload_names"] == topway, "partial repair did not re-stage the full triplet")
     check(plan["replace_names"] == partial, "partial repair did not replace exactly the already-present files")
 
@@ -240,12 +240,12 @@ def test_asset_planning(module: ModuleType, root: Path) -> None:
         root,
         mode="repair_existing_release",
         tag=tag,
-        variants=["topway_twmedia"],
+        variants=["app"],
         debug_destination="workflow_artifacts",
         existing=complete,
         replace="true",
     )
-    check(plan["build_variants"] == ["topway_twmedia"], "explicit replacement did not rebuild a complete triplet")
+    check(plan["build_variants"] == ["app"], "explicit replacement did not rebuild a complete triplet")
     check(plan["replace_names"] == complete, "explicit replacement did not authorise all existing triplet files")
 
     unknown_file = root / "unknown-variants.txt"
@@ -288,7 +288,7 @@ def run_selection(root: Path, *, topway: str, bridge: str, debug: str, should_pa
         {
             "RUNNER_TEMP": str(root),
             "GITHUB_OUTPUT": str(output),
-            "INCLUDE_TWMEDIA": topway,
+            "INCLUDE_APP": topway,
             "INCLUDE_LSPOSED_BRIDGE": bridge,
             "PUBLISH_DEBUG_APKS": debug,
         }
@@ -322,7 +322,7 @@ def run_selection(root: Path, *, topway: str, bridge: str, debug: str, should_pa
 def test_dispatch_selection(root: Path) -> None:
     destination, selected = run_selection(root, topway="true", bridge="false", debug="false", should_pass=True)
     check(destination == "workflow_artifacts", "debug-off selection did not stay in workflow artifacts")
-    check(selected == ["topway_twmedia", "topway_twmedia_debug"], "default primary selection is not deterministic")
+    check(selected == ["app", "app_debug"], "default primary selection is not deterministic")
 
     destination, selected = run_selection(root, topway="false", bridge="true", debug="true", should_pass=True)
     check(destination == "release_assets", "debug-on selection did not resolve to release assets")
@@ -331,7 +331,7 @@ def test_dispatch_selection(root: Path) -> None:
     destination, selected = run_selection(root, topway="true", bridge="true", debug="false", should_pass=True)
     check(destination == "workflow_artifacts", "combined selection changed debug destination")
     check(
-        selected == ["topway_twmedia", "topway_twmedia_debug", "lsposed_bridge", "lsposed_bridge_debug"],
+        selected == ["app", "app_debug", "lsposed_bridge", "lsposed_bridge_debug"],
         "combined selection order changed",
     )
 
@@ -342,8 +342,8 @@ def test_dispatch_selection(root: Path) -> None:
 def build_manifest_entry(module: ModuleType, variant: str, tag: str, version_name: str, version_code: int, source: str, destination: str) -> dict:
     filename = module.VARIANT_NAMES[variant].format(tag=tag)
     package = {
-        "topway_twmedia": "com.tw.media",
-        "topway_twmedia_debug": "com.tw.media.debug",
+        "app": "com.tw.media",
+        "app_debug": "com.tw.media.debug",
         "lsposed_bridge": "org.oxycblt.auxio.ts18bridge",
         "lsposed_bridge_debug": "org.oxycblt.auxio.ts18bridge.debug",
     }[variant]
@@ -387,8 +387,8 @@ def test_manifest_validation(module: ModuleType, root: Path) -> None:
     code = 6060000
     source = "1" * 40
     variants = [
-        ("topway_twmedia", "release"),
-        ("topway_twmedia_debug", "workflow_artifacts"),
+        ("app", "release"),
+        ("app_debug", "workflow_artifacts"),
         ("lsposed_bridge", "release"),
         ("lsposed_bridge_debug", "workflow_artifacts"),
     ]
@@ -418,7 +418,7 @@ def test_manifest_validation(module: ModuleType, root: Path) -> None:
             continue
         raise TestFailure(f"manifest validator accepted {description}")
 
-    debug_index = next(index for index, entry in enumerate(entries) if entry["variant"] == "topway_twmedia_debug")
+    debug_index = next(index for index, entry in enumerate(entries) if entry["variant"] == "app_debug")
     debug_mutations = [
         ("debug APK without -DEBUG version suffix", "version_name", version),
         ("debug APK outside configured debug destination", "destination", "release"),
@@ -462,3 +462,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

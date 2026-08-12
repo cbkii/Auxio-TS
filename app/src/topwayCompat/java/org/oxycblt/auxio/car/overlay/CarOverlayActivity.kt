@@ -43,3 +43,4 @@ class CarOverlayActivity : Activity() {
             "org.oxycblt.auxio.action.LAUNCH_FLOATING_CONTROLS"
     }
 }
+

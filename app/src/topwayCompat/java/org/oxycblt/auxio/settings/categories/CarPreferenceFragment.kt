@@ -113,7 +113,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
     }
 
     private fun setupStartupMode(preference: Preference) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) {
             preference.isVisible = false
             return
         }
@@ -202,7 +202,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
     }
 
     private fun setupCarOverlayEnabled(preference: Preference) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) return
 
         // Sync initial checked state from the actual source of truth.
         val currentlyEnabled = CarOverlaySettings.isEnabled(requireContext())
@@ -222,7 +222,7 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
     }
 
     private fun setupCarOverlayReset(preference: Preference) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) return
         preference.setOnPreferenceClickListener {
             CarOverlaySettings.resetPosition(requireContext())
             true
@@ -251,3 +251,4 @@ class CarPreferenceFragment : BasePreferenceFragment(R.xml.preferences_car) {
         const val STARTUP_FLOATING_ONLY = "floating_only"
     }
 }
+

@@ -419,7 +419,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                 withContext(Dispatchers.IO) {
                     val preparedRoots =
                         if (
-                            BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                            BuildConfig.TOPWAY_COMPAT_ENABLED &&
                                 locationMode == LocationMode.DIRECT_FS
                         ) {
                             preparedVolumeIndexStore.refreshFromRootSync()
@@ -436,7 +436,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
                         allowUnconfiguredUsb = true,
                         rootGate =
                             rootGate.takeIf {
-                                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                                BuildConfig.TOPWAY_COMPAT_ENABLED &&
                                     locationMode == LocationMode.DIRECT_FS &&
                                     rootGate.stateSnapshot() == RootStateHolder.State.Available
                             },
@@ -522,7 +522,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
             var authorityDetail = "directory_validation"
             val directTopwayPlayable =
                 requiresPlayableSource &&
-                    BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                    BuildConfig.TOPWAY_COMPAT_ENABLED &&
                     initiatingMode == LocationMode.DIRECT_FS
             if (directTopwayPlayable) {
                 val resolution =
@@ -606,7 +606,7 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
     ): ManualPathValidation {
         val directTopwayPlayable =
             requiresPlayableSource &&
-                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                BuildConfig.TOPWAY_COMPAT_ENABLED &&
                 mode == LocationMode.DIRECT_FS
         if (directTopwayPlayable && !TopwaySourcePolicy.isAllowedSourceCandidate(path)) {
             return ManualPathValidation.UNSAFE
@@ -1208,3 +1208,4 @@ class LocationsDialog : ViewBindingMaterialDialogFragment<DialogMusicLocationsBi
         dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = isEnabled
     }
 }
+

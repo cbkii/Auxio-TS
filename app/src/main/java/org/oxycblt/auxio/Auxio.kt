@@ -124,16 +124,15 @@ class Auxio : Application() {
             journal.log(
                 DiagnosticJournal.CAT_LIFECYCLE,
                 "Application process started",
-                "variant=${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE} commit=${BuildConfig.BUILD_COMMIT}",
+                "buildType=${BuildConfig.BUILD_TYPE} commit=${BuildConfig.BUILD_COMMIT}",
             )
             Timber.tag(DIAGNOSTIC_CANARY_TAG)
                 .i(
-                    "AUXIO_TS_CAPTURE_CANARY session=%s applicationId=%s version=%s(%d) variant=%s%s commit=%s",
+                    "AUXIO_TS_CAPTURE_CANARY session=%s applicationId=%s version=%s(%d) buildType=%s commit=%s",
                     processSessionId,
                     BuildConfig.APPLICATION_ID,
                     BuildConfig.VERSION_NAME,
                     BuildConfig.VERSION_CODE,
-                    BuildConfig.FLAVOR,
                     BuildConfig.BUILD_TYPE,
                     BuildConfig.BUILD_COMMIT,
                 )
@@ -163,7 +162,7 @@ class Auxio : Application() {
             val shortcutsEnabled =
                 prefs.getBoolean(
                     getString(R.string.set_key_dynamic_shortcuts),
-                    !BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    !BuildConfig.TOPWAY_COMPAT_ENABLED,
                 )
             if (shortcutsEnabled) {
                 val shortcutMarker = "auxio_dynamic_shortcuts_published_${BuildConfig.VERSION_CODE}"
@@ -181,7 +180,7 @@ class Auxio : Application() {
             }
 
             if (
-                BuildConfig.TOPWAY_COMPAT_FLAVOR &&
+                BuildConfig.TOPWAY_COMPAT_ENABLED &&
                     prefs.getBoolean(CarOverlayContract.KEY_ENABLED, false)
             ) {
                 withContext(Dispatchers.Main.immediate) { registerCarOverlayIfAvailable() }
@@ -299,9 +298,7 @@ class Auxio : Application() {
                 appendLine("  versionName: ${BuildConfig.VERSION_NAME}")
                 appendLine("  versionCode: ${BuildConfig.VERSION_CODE}")
                 appendLine("  debug: ${BuildConfig.DEBUG}")
-                appendLine("  topwayTwMusicFlavor: ${BuildConfig.TOPWAY_TWMUSIC_FLAVOR}")
-                appendLine("  topwayTwMediaFlavor: ${BuildConfig.TOPWAY_TWMEDIA_FLAVOR}")
-                appendLine("  topwayCompatFlavor: ${BuildConfig.TOPWAY_COMPAT_FLAVOR}")
+                appendLine("  topwayCompatEnabled: ${BuildConfig.TOPWAY_COMPAT_ENABLED}")
                 appendLine()
                 appendLine("Device")
                 appendLine("  manufacturer: ${Build.MANUFACTURER}")

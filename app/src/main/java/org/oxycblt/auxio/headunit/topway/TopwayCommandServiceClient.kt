@@ -140,7 +140,7 @@ constructor(
     /** Tracks the service owner and binds only for an explicitly selected fallback mode. */
     @Synchronized
     fun attach(serviceClass: Class<out AuxioService>) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) return
         requestedServiceClass = serviceClass
         if (!preferenceListenerRegistered) {
             prefs.registerOnSharedPreferenceChangeListener(modePreferenceListener)
@@ -152,7 +152,7 @@ constructor(
     /** Releases the optional adapter without touching Auxio's canonical Android media stack. */
     @Synchronized
     fun release() {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) return
         requestedServiceClass = null
         pendingServiceClass = null
         if (preferenceListenerRegistered) {
@@ -695,3 +695,4 @@ private fun Parcel.readNullableBundle(): Bundle? {
 }
 
 private const val PARCEL_MIN_FIELD_BYTES = 4
+

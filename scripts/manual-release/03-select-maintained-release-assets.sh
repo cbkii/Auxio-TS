@@ -10,8 +10,8 @@ case "${PUBLISH_DEBUG_APKS}" in
 esac
 
 selected=()
-if [[ "${INCLUDE_TWMEDIA}" == true ]]; then
-  selected+=(topway_twmedia topway_twmedia_debug)
+if [[ "${INCLUDE_APP}" == true ]]; then
+  selected+=(app app_debug)
 fi
 if [[ "${INCLUDE_LSPOSED_BRIDGE}" == true ]]; then
   selected+=(lsposed_bridge lsposed_bridge_debug)
@@ -29,3 +29,4 @@ printf '%s\n' "${selected[@]}" > "${selected_file}"
   printf 'selected_summary=%s\n' "$(IFS=', '; echo "${selected[*]}")"
   echo "debug_destination=${DEBUG_DESTINATION}"
 } >> "${GITHUB_OUTPUT}"
+

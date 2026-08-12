@@ -62,8 +62,8 @@ jobs:
           AUXIO_TS_CI_GRADLE_LOG: ${{ runner.temp }}/lsposed-target-gradle.log
         run: |
           bash ./scripts/ci-gradle.sh \
-            :app:testTopwayTwMediaDebugUnitTest \
-            :app:assembleTopwayTwMediaDebug
+            :app:testDebugUnitTest \
+            :app:assembleDebug
 
       - name: Resolve paired debug signer
         id: target
@@ -72,7 +72,7 @@ jobs:
           sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           apksigner="$(find "${sdk_root}/build-tools" -type f -name apksigner -perm -u+x | sort -V | tail -n1)"
           [[ -x "${apksigner}" ]] || { echo '::error::apksigner unavailable'; exit 1; }
-          mapfile -t apks < <(find app/build/outputs/apk/topwayTwMedia/debug -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' | sort)
+          mapfile -t apks < <(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' | sort)
           ((${#apks[@]} == 1)) || { echo "::error::Expected one paired debug APK, found ${#apks[@]}"; exit 1; }
           # shellcheck source=/dev/null
           source scripts/lib/apksigner-certificate.sh
@@ -142,8 +142,8 @@ jobs:
           path: |
             lsposed-bridge/build/reports/**
             lsposed-bridge/build/test-results/**
-            app/build/reports/tests/testTopwayTwMediaDebugUnitTest/**
-            app/build/test-results/testTopwayTwMediaDebugUnitTest/**
+            app/build/reports/tests/testDebugUnitTest/**
+            app/build/test-results/testDebugUnitTest/**
             ${{ runner.temp }}/lsposed-target-gradle.log
             ${{ runner.temp }}/lsposed-bridge-gradle.log
 

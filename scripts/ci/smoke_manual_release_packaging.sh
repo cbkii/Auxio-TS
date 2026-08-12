@@ -151,7 +151,7 @@ prepared_code=$(jq -r .version_code "$prepared_metadata")
 # Exercise the highest-risk operator selection: primary Topway plus optional LSPosed addon.
 # Manual Release deliberately builds debug companions even when they remain workflow artifacts, so
 # include all four variants here. This catches both release-only and debug-only packaging regressions.
-printf '%s\n' topway_twmedia topway_twmedia_debug lsposed_bridge lsposed_bridge_debug > "${work}/selected-release-variants.txt"
+printf '%s\n' app app_debug lsposed_bridge lsposed_bridge_debug > "${work}/selected-release-variants.txt"
 : > "${work}/existing-assets.txt"
 asset_plan="${work}/asset-plan.json"
 if ! python3 "$tools_dir/release-orchestrator.py" plan-assets \
@@ -219,3 +219,4 @@ if ! bash scripts/manual-release/13-validate-new-release-source-contracts.sh; th
 fi
 
 printf 'SUCCESS: Manual Release exact signed Topway + LSPosed release/debug packaging smoke passed for %s\n' "$release_tag"
+

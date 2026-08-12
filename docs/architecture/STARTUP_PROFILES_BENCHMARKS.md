@@ -23,7 +23,7 @@ No percentage or latency improvement is claimed without captured with-profile an
 
 ### Dedicated module and production separation
 
-`startup-benchmark` is a dedicated `com.android.test` module using AndroidX Macrobenchmark 1.5.0-beta01 and the AndroidX Baseline Profile plugin. It mirrors only the two maintained Topway identities: primary `topwayTwMedia` (`com.tw.media`) and internal compatibility `topwayTwMusic` (`com.tw.music`). The former `standard` flavour is retired and must not be recreated as a benchmark or release target.
+`startup-benchmark` is a dedicated `com.android.test` module using AndroidX Macrobenchmark 1.5.0-beta01 and the AndroidX Baseline Profile plugin. It targets the one maintained Auxio-TS application (`com.tw.media`). The former `standard` flavour is retired, and the former exact-package `topwayTwMusic` application is retained only as historical context; neither may be recreated as a benchmark or release target.
 
 The app keeps a separate, unminified `benchmark` target for profile collection. Release remains minified and consumes the checked-in human-readable Baseline and Startup Profile rules. The app also applies the Baseline Profile plugin with automatic build-time generation disabled, so profile regeneration is an explicit, reproducible operation rather than a hidden release side effect.
 
@@ -133,7 +133,7 @@ Full-library-ready and enrichment-complete remain separate non-blocking mileston
 
 The production TS18 target and hosted benchmark/test runtime are intentionally separate:
 
-- published `topwayTwMedia` release APK: `arm64-v8a` only;
+- published Auxio-TS release APK: `arm64-v8a` only;
 - debug/benchmark app lanes: `arm64-v8a` plus hosted-emulator `x86_64`;
 - TagLib preparation: those same two maintained ABIs by default;
 - legacy x86 and armeabi-v7a are not built merely because the firmware can host 32-bit software.
@@ -251,7 +251,7 @@ STOP and preserve evidence when build identity, playback authority, source ident
 ## Integrated completion audit
 
 - **Evidence confidence:** Observed for repository source and each explicitly recorded CI or managed-emulator run; exact-device behaviour remains **Requires TS18 validation**.
-- **Porting decision:** Directly reusable for the maintained primary `topwayTwMedia` and internal `topwayTwMusic` compatibility lanes; no exact TS18 latency claim is portable without the device runbook.
+- **Porting decision:** Directly reusable for the maintained `com.tw.media` product; no exact TS18 latency claim is portable without the device runbook.
 
 The integrated audit corrected production startup before profiles were accepted:
 

@@ -58,3 +58,4 @@ class CarOverlayBootReceiver : BroadcastReceiver() {
         private const val ACTION_RESTORE_OVERLAY = CarOverlayContract.RESTORE_ACTION
     }
 }
+

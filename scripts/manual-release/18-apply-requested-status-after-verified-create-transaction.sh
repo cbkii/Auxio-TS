@@ -17,3 +17,4 @@ if ! patch_status > "${final_json}"; then
 fi
 echo "draft=$(jq -r .draft "${final_json}")" >> "${GITHUB_OUTPUT}"
 echo "prerelease=$(jq -r .prerelease "${final_json}")" >> "${GITHUB_OUTPUT}"
+

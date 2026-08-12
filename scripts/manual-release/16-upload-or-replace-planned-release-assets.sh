@@ -143,3 +143,4 @@ while IFS=$'\t' read -r name path; do
       exit 1
     }
 done < "${UPLOAD_TSV}"
+

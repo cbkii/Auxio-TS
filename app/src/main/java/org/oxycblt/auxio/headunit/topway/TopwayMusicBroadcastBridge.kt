@@ -35,7 +35,7 @@ class TopwayMusicBroadcastBridge(
     private var lastProgressAtMs = 0L
 
     private val bridgeEnabled: Boolean
-        get() = BuildConfig.TOPWAY_COMPAT_FLAVOR || uiSettings.headUnitLandscapeMode
+        get() = BuildConfig.TOPWAY_COMPAT_ENABLED || uiSettings.headUnitLandscapeMode
 
     fun publishMetadata(snapshot: HeadUnitMetadataSnapshot?, force: Boolean = false) {
         if (!bridgeEnabled) return
@@ -147,3 +147,4 @@ class TopwayMusicBroadcastBridge(
         const val MIN_PROGRESS_INTERVAL_MS = 1000L
     }
 }
+

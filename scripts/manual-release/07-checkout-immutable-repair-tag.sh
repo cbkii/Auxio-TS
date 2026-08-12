@@ -10,3 +10,4 @@ git checkout --detach "${tag_sha}"
   echo "::error::Repair checkout does not match immutable tag ${RELEASE_TAG}."
   exit 1
 }
+

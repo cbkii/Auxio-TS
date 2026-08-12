@@ -98,7 +98,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testResolverOrderEqChoiceActivity() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         val resolver = TestIntentResolver()
         resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQActivity"))
@@ -111,7 +111,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testResolverOrderEqActivity() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         val resolver = TestIntentResolver()
         // EQChoiceActivity is NOT added, only EQActivity
@@ -124,7 +124,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testPackageFallback() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         val resolver = TestIntentResolver()
         // No native components added, only package
@@ -162,7 +162,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testNoMainActivity() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         // Make sure it doesn't contain com.tw.eq.MainActivity
         assertEquals(
@@ -175,7 +175,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testStandardModeIsolation() {
-        Assume.assumeTrue(!BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(!BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         val resolver = TestIntentResolver()
         val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
@@ -186,3 +186,4 @@ class TopwayEqualizerLauncherTest {
         assertEquals(0, resolver.queriedPackages.size)
     }
 }
+

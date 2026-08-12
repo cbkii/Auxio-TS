@@ -29,7 +29,7 @@ grep -Fq 'snapshotTreeSync' "$root_gate" || fail 'typed snapshot API missing'
 if grep -Fq 'runRootCommandSync' "$root_gate"; then
   fail 'free-form root command escaped into Musikr'
 fi
-grep -Fq 'BuildConfig.TOPWAY_COMPAT_FLAVOR' "$root_holder" ||
+grep -Fq 'BuildConfig.TOPWAY_COMPAT_ENABLED' "$root_holder" ||
   fail 'Topway variant gate missing'
 grep -Fq '/data/adb/modules/auxio_ts_root_storage/service.sh' "$root_holder" ||
   fail 'fixed prepared-helper command missing'
@@ -199,3 +199,4 @@ done < <(find scripts tools/ts18-root-storage-fastpath -type f -name '*.sh' -pri
 [ "$shell_count" -gt 0 ] || fail 'no shell scripts found for syntax validation'
 
 echo "TS18 root storage fast-path checks passed (shell_files=$shell_count)"
+
