@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -37,7 +38,7 @@ import org.robolectric.annotation.Config
 import timber.log.Timber
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30])
+@Config(application = Application::class, sdk = [30])
 class TopwayEqualizerLauncherTest {
 
     private lateinit var context: Context
@@ -177,7 +178,12 @@ class TopwayEqualizerLauncherTest {
     fun testStandardModeIsolation() {
         val resolver = TestIntentResolver()
         val intent =
-            TopwayEqualizerLauncher.resolveIntent(context, 123, resolver, topwayProduct = false)
+            TopwayEqualizerLauncher.resolveIntent(
+                context,
+                123,
+                resolver,
+                topwayProduct = false,
+            )
 
         assertNotNull(intent)
         assertEquals(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL, intent?.action)
