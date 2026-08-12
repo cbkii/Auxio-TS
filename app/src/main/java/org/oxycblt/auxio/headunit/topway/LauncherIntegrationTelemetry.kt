@@ -97,4 +97,3 @@ constructor(
         const val TELEMETRY_WINDOW_MS = 1_000L
     }
 }
-

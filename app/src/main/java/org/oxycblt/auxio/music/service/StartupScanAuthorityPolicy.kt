@@ -52,14 +52,14 @@ object StartupScanAuthorityPolicy {
         return trusted
     }
 
-    fun originAllowsAutomaticScan(topwayCompatFlavor: Boolean, origin: StartupScanOrigin): Boolean =
-        !topwayCompatFlavor || origin == StartupScanOrigin.USER_VISIBLE
+    fun originAllowsAutomaticScan(topwayProduct: Boolean, origin: StartupScanOrigin): Boolean =
+        !topwayProduct || origin == StartupScanOrigin.USER_VISIBLE
 
     fun allowAutomaticScan(
-        topwayCompatFlavor: Boolean,
+        topwayProduct: Boolean,
         origin: StartupScanOrigin,
         sourceAuthority: Boolean,
-    ): Boolean = sourceAuthority && originAllowsAutomaticScan(topwayCompatFlavor, origin)
+    ): Boolean = sourceAuthority && originAllowsAutomaticScan(topwayProduct, origin)
 
     /** Current source authority check. Never invokes root or recursively enumerates contents. */
     fun hasCurrentSourceAuthority(context: Context, settings: MusicSettings): Boolean {

@@ -288,4 +288,3 @@ constructor(
 interface RootEntryPoint {
     fun rootGate(): RootStateHolder
 }
-
