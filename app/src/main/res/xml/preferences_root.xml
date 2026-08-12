@@ -9,6 +9,11 @@
         <Preference app:icon="@drawable/ic_play_24" app:key="@string/set_key_audio" app:summary="@string/set_audio_desc" app:title="@string/set_audio" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/set_head_unit">
+        <Preference app:icon="@drawable/ic_play_seek_triangle" app:key="@string/set_key_car" app:summary="@string/set_car_desc" app:title="@string/set_car" />
+        <Preference app:icon="@drawable/ic_code_24" app:key="@string/set_key_diagnostics" app:summary="@string/set_diagnostics_desc" app:title="@string/set_diagnostics" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/set_group_support">
         <Preference app:key="@string/set_key_about" app:summary="@string/set_about_auxio_ts_desc" app:title="@string/set_about_auxio_ts" />
     </PreferenceCategory>
