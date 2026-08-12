@@ -7,9 +7,9 @@ narrow Binder adapter introduced by PR #185. It does not claim that the physical
 accepted a normal-app callback, assigned Auxio the local-music source, or delivered DoFun
 fixed-widget commands.
 
-The adapter is limited at runtime to the dedicated `topwayTwMusic` and `topwayTwMedia`
-compatibility variants. `standard` returns before creating a worker thread or requesting a
-vendor-service bind.
+The adapter is a bounded optional Track-A mode inside the maintained `com.tw.media` product.
+Mode policy can return before creating a worker thread or requesting a vendor-service bind; no
+separate application identity is used as a runtime gate.
 
 ## Exact APK evidence
 
@@ -98,8 +98,8 @@ write TWUtil/MCU commands.
 
 ## Runtime design
 
-1. `standard` returns from `attach()` before worker creation or binding.
-2. A compatibility build creates one bounded worker while the concrete Auxio service lives.
+1. A disabled/non-command integration mode returns from `attach()` before worker creation or binding.
+2. An enabled command mode creates one bounded worker while the concrete Auxio service lives.
 3. Action resolution is attempted first, with the exact component as fallback.
 4. The runtime Binder descriptor must match before registration.
 5. Music callback registration is required; the general callback/source query is optional.
@@ -126,8 +126,8 @@ The implementation does **not**:
 - replace the existing playback service, player, queue, MediaSession or notification stack;
 - modify the separate systemless Magisk-only exact-`com.tw.music` replacement contract.
 
-`topwayTwMedia` and `topwayTwMusic` remain distinct. The latter is not an ordinary
-side-by-side replacement for the platform-signed stock package.
+The adapter remains a component of `com.tw.media`; it does not create or replace a
+platform-signed `com.tw.music` application.
 
 Missing, rejected or descriptor-mismatched vendor services leave Auxio's existing Android
 MediaSession, media-button and Topway broadcast paths intact. That is not a claim that the
@@ -148,7 +148,7 @@ non-workflow-token head before the PR is marked ready for code review.
 
 ## Exact-device acceptance still required
 
-Install the `topwayTwMedia` build first and validate:
+Install the maintained `com.tw.media` build first and validate:
 
 1. normal-app bind and music callback registration;
 2. observed source value and whether the ordinary launcher/playback flow reaches source `3`;
@@ -172,7 +172,7 @@ Use one of:
 
 - select `AndroidMediaSessionOnly` or `Disabled` in TS18 launcher-integration settings;
 - install the previous Auxio-TS APK;
-- install `standard`, which never activates the adapter.
+- select a mode that does not activate the adapter and restart the app.
 
 No system partition, Topway package, launcher database, MCU/CAN configuration or persistent
 root state is modified by this PR.

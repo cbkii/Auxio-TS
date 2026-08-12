@@ -1,5 +1,0 @@
-package android.arch.lifecycle;
-
-/* JADX INFO: loaded from: classes.dex */
-public class AndroidViewModel extends AbstractC0026o {
-}

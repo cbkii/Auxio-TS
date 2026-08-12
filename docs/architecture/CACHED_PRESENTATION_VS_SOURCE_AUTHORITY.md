@@ -345,10 +345,10 @@ Not performed in this change. All twenty Prompt 4 items remain outstanding.
 ## Safety boundaries preserved
 
 Repository/static compatibility claim: [Evidence confidence: Observed in current code and CI]
-[Porting decision: Preserve for maintained variants; exact TS18 behaviour requires runtime validation].
+[Porting decision: Preserve for the maintained product; exact TS18 behaviour requires runtime validation].
 
 One playback service, one queue owner, one MediaSession and one notification authority are
 unchanged. Root is never the playback authority and protected storage is never enumerated as root.
-The `topwayTwMusic` and `topwayTwMedia` variants keep distinct package/component contracts, API 29
-support is preserved, and no APKs, logs, credentials, Room schema changes or temporary workflows are
-present in the final diff.
+The one `com.tw.media` product preserves its stock-compatible component contract, API 29 support is
+preserved, and no APKs, logs, credentials, Room schema changes or temporary workflows are present
+in the final diff.

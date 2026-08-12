@@ -278,13 +278,13 @@ A signer match alone does not authorise unknown obfuscated stock methods.
 Published primary asset:
 
 ```text
-Auxio-TS topwayTwMedia release APK (com.tw.media)
+Auxio-TS release APK (com.tw.media)
 ```
 
-Internal fixture:
+Retired application lane:
 
 ```text
-topwayTwMusic (com.tw.music) - build/test only; never publish/install as the normal product
+former exact-package Auxio com.tw.music app - no build, test, install or release capability
 ```
 
 Optional artifacts:

@@ -25,16 +25,16 @@ operation. The supported release layout is:
 | Component | Package | Role |
 | --- | --- | --- |
 | Stock Topway music | `com.tw.music` | Keeps the OEM/platform identity that DoFun addresses |
-| Auxio-TS `topwayTwMediaRelease` | `com.tw.media` | Independently signed playback app and media service |
+| Auxio-TS release | `com.tw.media` | Independently signed playback app and media service |
 | Auxio-TS LSPosed API-100 bridge | `org.oxycblt.auxio.ts18bridge` | Runs only inside genuine `com.tw.music` and forwards its public integration surface to Auxio |
 
 The LSPosed module has `staticScope=true`; its packaged, default, and recommended scope is exactly
 `com.tw.music`. Do not add `com.tw.media`, `com.dofun.variety`, `android`, `system`, or
 `system_server` to its scope.
 
-`topwayTwMusic` remains an internal build/test fixture for package and component contracts. It is
-not a published replacement APK. The former exact-package Magisk overlay is retired and must not
-be installed alongside the bridge.
+The former exact-package Auxio application is retired. Package/component coverage uses fixtures,
+manifest inspection and tests instead of a replacement APK. The former exact-package Magisk
+overlay is retired and must not be installed alongside the bridge.
 
 ## Installation authority
 
@@ -77,7 +77,7 @@ unless a separate, backed-up recovery procedure explicitly requires it.
 
 ## Recommended installation
 
-1. Install the signed `topwayTwMediaRelease` APK as `com.tw.media`.
+1. Install the signed Auxio-TS release APK as `com.tw.media`.
 2. Install the separately signed LSPosed API-100 bridge APK.
 3. In LSPosed, enable the module and leave its scope at the single recommended package:
    `com.tw.music`.
@@ -104,6 +104,6 @@ exact-package Magisk overlay.
 
 ## Documentation rule
 
-Do not describe `topwayTwMusic` or the old Magisk overlay as a supported release/install lane.
+Do not describe the former exact-package Auxio app or old Magisk overlay as a supported release/install lane.
 Always describe `com.tw.media` plus the single-scope LSPosed addon, and retain the physical TS18
 acceptance boundary for DoFun/private-panel behaviour.

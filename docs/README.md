@@ -8,6 +8,7 @@ Start with the document that owns the question:
 - [Release workflow](RELEASE_WORKFLOW.md) — signed app and optional add-on publication policy.
 - [Repository engineering authority](../AGENTS.md) — instructions and safety precedence.
 - [Single-product architecture decision](decisions/0001-single-product-architecture.md).
+- [Documentation disposition inventory](DOCUMENTATION_INVENTORY.md).
 
 ## Current guides and runbooks
 
@@ -34,6 +35,7 @@ Start with the document that owns the question:
 
 Evidence supports engineering decisions but is non-normative. Use only the curated evidence index and provenance records; do not start routine work in raw decompilation output. Label claims **Observed**, **Inferred**, **Proposed** or **Physically unverified**.
 
+- [Curated evidence index](evidence/README.md)
 - [TS18 APK reference](TS18_APK_REFERENCE.md)
 - [Topway research index](topway/README.md)
 

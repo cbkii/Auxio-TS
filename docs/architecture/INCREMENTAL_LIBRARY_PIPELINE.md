@@ -254,7 +254,7 @@ does not gate playback, Fast Start, Quick Find, direct folders or bounded MediaB
 
 ## Resource policy
 
-The Topway variants default to the Driving Startup policy.
+The maintained Auxio-TS product defaults to the Driving Startup policy.
 
 TS18 policy claim: [Evidence confidence: Requires TS18 validation]
 [Porting decision: Requires TS18 runtime validation].
@@ -274,9 +274,9 @@ downgraded.
 Maintained repository verification runs:
 
 - `bash ./scripts/ci-gradle.sh --continue spotlessKotlinCheck`;
-- `bash ./scripts/ci-gradle.sh :app:testTopwayTwMediaDebugUnitTest :musikr:testDebugUnitTest`;
-- `bash ./scripts/ci-gradle.sh :app:lintTopwayTwMediaDebug`;
-- maintained `topwayTwMedia` and `topwayTwMusic` debug/release builds;
+- `bash ./scripts/ci-gradle.sh :app:testDebugUnitTest :musikr:testDebugUnitTest`;
+- `bash ./scripts/ci-gradle.sh :app:lintDebug`;
+- maintained Auxio-TS debug/release builds;
 - Android 10/API 29 compatibility checks;
 - TS18 APK-reference and DoFun/Topway compatibility contracts;
 - workflow/script syntax and head-unit safety checks.

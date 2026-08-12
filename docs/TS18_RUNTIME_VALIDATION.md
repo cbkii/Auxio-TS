@@ -25,8 +25,8 @@ TS18/Topway head unit and a rollback test.
 | LSPosed version | |
 | Tester/date | |
 
-`topwayTwMusic` is an internal build/test fixture. Do not install it for this campaign. Remove and
-reboot away from the retired exact-package Magisk overlay before collecting evidence.
+The former exact-package Auxio application is retired and has no build artefact. Remove and reboot
+away from any retired exact-package Magisk overlay before collecting evidence.
 
 ## Pre-install identity gate
 
@@ -52,7 +52,7 @@ disable, uninstall-for-user, replace, clear, or re-sign stock `com.tw.music`.
 ## Install and LSPosed configuration
 
 ```sh
-adb install -r app/build/outputs/apk/topwayTwMedia/release/app-topwayTwMedia-release.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
 adb install -r lsposed-bridge/build/outputs/apk/release/lsposed-bridge-release.apk
 ```
 

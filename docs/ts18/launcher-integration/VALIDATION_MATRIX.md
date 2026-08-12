@@ -4,8 +4,8 @@
 > `MediaSession`, `MediaBrowserService` or notification is a prerequisite, not proof that DoFun's
 > fixed homepage media surface selected Auxio.
 
-The primary product is `topwayTwMedia` / `com.tw.media`. `topwayTwMusic` remains an internal
-exact-package compatibility fixture only. Do not restore a third distributable flavour.
+The product is the one `com.tw.media` Auxio-TS app. Exact-package coverage uses contract fixtures
+and tests; do not restore a distributable flavour.
 
 ## Current capability model
 
