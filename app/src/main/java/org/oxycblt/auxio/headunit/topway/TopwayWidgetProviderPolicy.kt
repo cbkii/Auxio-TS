@@ -93,4 +93,3 @@ object TopwayWidgetProviderPolicy {
     internal fun providerClassNames(topwayProduct: Boolean): List<String> =
         if (topwayProduct) topwayCompatClassNames else standardClassNames
 }
-

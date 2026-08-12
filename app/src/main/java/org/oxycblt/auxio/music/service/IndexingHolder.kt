@@ -1017,4 +1017,3 @@ internal class IndexJobLease {
         return true
     }
 }
-

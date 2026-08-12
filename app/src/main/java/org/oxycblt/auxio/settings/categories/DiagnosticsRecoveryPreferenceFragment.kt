@@ -282,4 +282,3 @@ class DiagnosticsRecoveryPreferenceFragment :
             ?.isEnabled = lastReportStr != null
     }
 }
-

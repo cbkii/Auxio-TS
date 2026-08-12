@@ -139,4 +139,3 @@ class Ts18LauncherIntegrationModeTest {
         assertFalse(nonTopway.markComplete)
     }
 }
-
