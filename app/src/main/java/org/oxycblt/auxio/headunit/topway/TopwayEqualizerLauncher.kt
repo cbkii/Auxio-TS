@@ -170,17 +170,20 @@ object TopwayEqualizerLauncher {
         context: Context,
         audioSessionId: Int?,
         resolver: IntentResolver,
-    ): Intent? = resolveCandidates(context, audioSessionId, resolver).firstOrNull()?.intent
+        topwayProduct: Boolean = BuildConfig.TOPWAY_COMPAT_ENABLED,
+    ): Intent? =
+        resolveCandidates(context, audioSessionId, resolver, topwayProduct).firstOrNull()?.intent
 
     internal fun resolveCandidates(
         context: Context,
         audioSessionId: Int?,
         resolver: IntentResolver,
+        topwayProduct: Boolean = BuildConfig.TOPWAY_COMPAT_ENABLED,
     ): List<Candidate> {
         val candidates = mutableListOf<Candidate>()
         val attempted = mutableListOf<String>()
 
-        if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
+        if (topwayProduct) {
             for (target in nativeTargets) {
                 val label = target.component.flattenToShortString()
                 attempted += "$label[${target.category}]"
@@ -227,4 +230,3 @@ object TopwayEqualizerLauncher {
         return candidates.distinctBy { it.intent.component ?: it.intent.action }
     }
 }
-

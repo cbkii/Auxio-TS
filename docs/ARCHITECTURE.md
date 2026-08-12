@@ -38,12 +38,12 @@ No `com.dofun.variety` module exists. Do not create one unless exact evidence de
 
 ### Track C — optional stock shim
 
-`lsposed-bridge` is a separately installed optional add-on, statically scoped exactly to genuine stock `com.tw.music`. It validates package/process/signer/capability and paired Auxio identity, fails open to stock behaviour, and admits commands only through the bounded Auxio-owned protocol. It is not an Auxio app variant.
+`lsposed-bridge` is a separately installed optional add-on, statically scoped exactly to genuine stock `com.tw.music`. Installation probing begins only after exact package and main-process routing. Functional hooks and stock suppression activate only after UID 1000, the expected signer and approved registry, a per-build capability grant, the trusted build-specific Auxio target, and an `ENABLED` kill switch are all confirmed. `UNKNOWN`, mismatch, timeout, unavailable and error states fail open to stock behaviour. It is not an Auxio app variant.
 
 ## Source boundaries
 
 - `app/src/main`: core product and main manifest.
-- `app/src/topwayCompat`: thin compatibility sources/resources compiled into `main`; no independent manifest or product flavour.
+- `app/src/topwayCompat`: thin Kotlin/Java compatibility sources compiled into `main`; production resources and the manifest live in `app/src/main`, with no independent manifest or product flavour.
 - `app/src/test`, `app/src/androidTest`, `app/src/topwayCompatTest`: policy, unit and instrumentation coverage.
 - `musikr`: internal library implementation.
 - `startup-benchmark`: validation-only instrumentation against `com.tw.media`.

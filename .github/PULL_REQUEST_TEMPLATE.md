@@ -9,6 +9,7 @@
 - **Runtime authority:** Preserved / changed — identify playback, queue, MediaSession, notification and audio-focus impact
 - **Canonical source of truth updated:**
 - **Device evidence:** Observed / inferred / proposed / physically unverified
+- **Evidence environment/boundary:** CI / emulator / exact device — identify what remains unverified
 - **Release implications:** None / app / optional add-on / tooling
 - **Rollback or disable path:**
 
@@ -22,16 +23,18 @@
 
 ## Validation
 
-**Validated head:** `________________`
+**Validated head SHA:** `________________`
 
-| Check or scenario | Result |
-| --- | --- |
-| `bash scripts/check-product-contracts.sh` | Not run — reason |
-| Focused tests/build/lint | Not run — reason |
-| Physical device | Not run — reason |
+| Exact command or scenario | Result | Environment/boundary |
+| --- | --- | --- |
+| `bash scripts/check-product-contracts.sh` | Not run — reason | Local / CI |
+| Focused tests/build/lint command | Not run — reason | Local / CI / emulator |
+| Physical-device scenario | Not run — reason | Device/build identifier |
 
 ## Review status
 
+- **Delivery state:** Implemented / partial / scaffold-only
+- **Submission state:** Review snapshot / complete for stated scope
 - **Open findings:**
 - **Required checks:** Pending / passing / failing
 - **Known limitations:**

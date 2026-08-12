@@ -69,7 +69,18 @@ contains .github/workflows/lint.yml ':app:testDebugUnitTest'
 contains .github/workflows/lint.yml ':app:lintDebug'
 contains .github/workflows/manual-release.yml 'include_app_apk:'
 contains .github/workflows/manual-release.yml 'include_lsposed_bridge_apk:'
-contains .github/workflows/manual-release.yml 'default: false'
+python3 - <<'PY'
+import re
+from pathlib import Path
+
+workflow = Path('.github/workflows/manual-release.yml').read_text(encoding='utf-8')
+match = re.search(
+    r'(?ms)^      include_lsposed_bridge_apk:\s*\n(?P<body>(?:^        .*\n?)*)',
+    workflow,
+)
+if match is None or re.search(r'(?m)^        default:\s*false\s*$', match.group('body')) is None:
+    raise SystemExit('product contract: include_lsposed_bridge_apk must default to false')
+PY
 contains "$release_surface" ':app:assembleRelease'
 contains "$release_surface" ':lsposed-bridge:assembleRelease'
 absent "$release_surface" ':app:assembleTopwayTwMusicRelease'
