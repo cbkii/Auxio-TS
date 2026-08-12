@@ -26,10 +26,10 @@ import org.oxycblt.auxio.music.service.StartupScanOrigin
 
 class StartupScanAuthorityPolicyTest {
     @Test
-    fun topwayVisibleStartMayRecoverAnAuthorisedSource() {
+    fun currentProductVisibleStartMayRecoverAnAuthorisedSource() {
         assertTrue(
             StartupScanAuthorityPolicy.allowAutomaticScan(
-                topwayCompatFlavor = true,
+                topwayProduct = true,
                 origin = StartupScanOrigin.USER_VISIBLE,
                 sourceAuthority = true,
             )
@@ -37,10 +37,10 @@ class StartupScanAuthorityPolicyTest {
     }
 
     @Test
-    fun topwayBackgroundStartNeverStartsARecoveryScan() {
+    fun currentProductBackgroundStartNeverStartsARecoveryScan() {
         assertFalse(
             StartupScanAuthorityPolicy.allowAutomaticScan(
-                topwayCompatFlavor = true,
+                topwayProduct = true,
                 origin = StartupScanOrigin.BACKGROUND,
                 sourceAuthority = true,
             )
@@ -48,10 +48,10 @@ class StartupScanAuthorityPolicyTest {
     }
 
     @Test
-    fun standardVariantRetainsBackgroundStartupAuthority() {
+    fun androidFallbackPolicyRetainsBackgroundStartupAuthority() {
         assertTrue(
             StartupScanAuthorityPolicy.allowAutomaticScan(
-                topwayCompatFlavor = false,
+                topwayProduct = false,
                 origin = StartupScanOrigin.BACKGROUND,
                 sourceAuthority = true,
             )
@@ -59,10 +59,10 @@ class StartupScanAuthorityPolicyTest {
     }
 
     @Test
-    fun noVariantScansWithoutCurrentSourceAuthority() {
+    fun noProductModeScansWithoutCurrentSourceAuthority() {
         assertFalse(
             StartupScanAuthorityPolicy.allowAutomaticScan(
-                topwayCompatFlavor = false,
+                topwayProduct = false,
                 origin = StartupScanOrigin.USER_VISIBLE,
                 sourceAuthority = false,
             )

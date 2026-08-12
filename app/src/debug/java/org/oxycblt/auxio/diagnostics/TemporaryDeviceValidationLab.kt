@@ -73,12 +73,11 @@ object TemporaryDeviceValidationLab {
             journal.startSession(id)
             Timber.tag("AuxioCapture")
                 .i(
-                    "AUXIO_TS_CAPTURE_CANARY session=%s applicationId=%s version=%s(%d) variant=%s%s commit=%s",
+                    "AUXIO_TS_CAPTURE_CANARY session=%s applicationId=%s version=%s(%d) variant=%s commit=%s",
                     id,
                     BuildConfig.APPLICATION_ID,
                     BuildConfig.VERSION_NAME,
                     BuildConfig.VERSION_CODE,
-                    BuildConfig.FLAVOR,
                     BuildConfig.BUILD_TYPE,
                     BuildConfig.BUILD_COMMIT,
                 )
@@ -103,7 +102,7 @@ object TemporaryDeviceValidationLab {
                 DiagnosticJournal.CAT_SYSTEM,
                 "Identity snapshot",
                 "applicationId=${BuildConfig.APPLICATION_ID} version=${BuildConfig.VERSION_NAME}" +
-                    "(${BuildConfig.VERSION_CODE}) variant=${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE} " +
+                    "(${BuildConfig.VERSION_CODE}) variant=${BuildConfig.BUILD_TYPE} " +
                     "commit=${BuildConfig.BUILD_COMMIT} uid=${Process.myUid()} " +
                     "apk=${context.applicationInfo.sourceDir}",
             )
