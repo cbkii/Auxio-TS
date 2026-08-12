@@ -39,8 +39,10 @@ validate_apk() {
   manifest=$("$apkanalyzer" manifest print "${apks[0]}")
   grep -Fq 'android:name="com.tw.music.MusicActivity"' <<<"$manifest" ||
     fail "${label} lacks com.tw.music.MusicActivity."
-  grep -Fq 'android:targetActivity="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' <<<"$manifest" ||
+  grep -Fq 'android:targetActivity="org.oxycblt.auxio.MainActivity"' <<<"$manifest" ||
     fail "${label} alias target mismatch."
+  grep -Fq 'android:name="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' <<<"$manifest" &&
+    fail "${label} still packages obsolete TopwayMusicEntryActivity."
 
   printf 'Validated %s: %s (%s)\n' "$label" "${apks[0]}" "$actual_package"
 }

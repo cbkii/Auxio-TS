@@ -18,8 +18,11 @@
 
 package org.oxycblt.auxio.headunit
 
+import android.content.Intent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HeadUnitRoutePolicyTest {
@@ -53,6 +56,37 @@ class HeadUnitRoutePolicyTest {
     fun `unknown action fails safely`() {
         assertNull(HeadUnitRoutePolicy.routeForAction("org.oxycblt.auxio.action.UNKNOWN"))
         assertNull(HeadUnitRoutePolicy.routeForAction(null))
+    }
+
+    @Test
+    fun `generic launcher actions only include explicit music entries`() {
+        assertTrue(HeadUnitRoutePolicy.isGenericLauncherAction(Intent.ACTION_MAIN))
+        assertTrue(HeadUnitRoutePolicy.isGenericLauncherAction(Intent.ACTION_MUSIC_PLAYER))
+        assertFalse(HeadUnitRoutePolicy.isGenericLauncherAction(Intent.ACTION_VIEW))
+        assertFalse(
+            HeadUnitRoutePolicy.isGenericLauncherAction(
+                HeadUnitEntryPoints.ACTION_OPEN_NOW_PLAYING
+            )
+        )
+        assertFalse(HeadUnitRoutePolicy.isGenericLauncherAction(null))
+    }
+
+    @Test
+    fun `generic startup route distinguishes cold launch from restored task re-entry`() {
+        assertTrue(HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(true, null))
+        assertTrue(
+            HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, Intent.ACTION_MAIN)
+        )
+        assertTrue(
+            HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(
+                false,
+                Intent.ACTION_MUSIC_PLAYER,
+            )
+        )
+        assertFalse(HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, null))
+        assertFalse(
+            HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(false, Intent.ACTION_VIEW)
+        )
     }
 
     @Test

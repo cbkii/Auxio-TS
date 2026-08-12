@@ -116,7 +116,12 @@ check_apk_manifest() {
   manifest_dump="$(mktemp)"
   "$apkanalyzer_bin" manifest print "$apk" > "$manifest_dump"
   require_manifest_dump_contains "$manifest_dump" 'android:name="com.tw.music.MusicActivity"' "${label} APK manifest has com.tw.music.MusicActivity" "${label} APK manifest lacks com.tw.music.MusicActivity"
-  require_manifest_dump_contains "$manifest_dump" 'android:targetActivity="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' "${label} APK alias targets the Topway entry router" "${label} APK alias target mismatch"
+  require_manifest_dump_contains "$manifest_dump" 'android:targetActivity="org.oxycblt.auxio.MainActivity"' "${label} APK alias targets MainActivity directly" "${label} APK alias target mismatch"
+  if grep -Fq 'android:name="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"' "$manifest_dump"; then
+    fail "${label} APK manifest still declares obsolete TopwayMusicEntryActivity"
+  else
+    pass "${label} APK manifest has no obsolete TopwayMusicEntryActivity"
+  fi
   require_manifest_dump_contains "$manifest_dump" 'android:name="android.intent.action.MAIN"' "${label} APK alias has MAIN action" "${label} APK alias lacks MAIN action"
   require_manifest_dump_contains "$manifest_dump" 'android:name="android.intent.action.MUSIC_PLAYER"' "${label} APK alias has MUSIC_PLAYER action" "${label} APK alias lacks MUSIC_PLAYER action"
   require_manifest_dump_contains "$manifest_dump" 'android:name="android.intent.action.VIEW"' "${label} APK alias has VIEW action" "${label} APK alias lacks VIEW action"
@@ -143,7 +148,8 @@ require_file_contains app/build.gradle 'src/topwayCompat/AndroidManifest.xml' 's
 
 flavour_manifest=app/src/topwayCompat/AndroidManifest.xml
 require_file_contains "$flavour_manifest" 'com.tw.music.MusicActivity' 'Topway activity alias'
-require_file_contains "$flavour_manifest" 'org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity' 'Topway alias router target'
+require_file_contains "$flavour_manifest" 'android:targetActivity="org.oxycblt.auxio.MainActivity"' 'Topway alias direct MainActivity target'
+require_file_not_contains "$flavour_manifest" 'org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity' 'Topway manifest obsolete launcher trampoline'
 require_file_contains "$flavour_manifest" 'org.oxycblt.auxio.MainActivity' 'Topway full-player activity'
 require_file_contains "$flavour_manifest" 'com.tw.music.MusicService' 'Topway MusicService component fallback'
 require_file_contains "$flavour_manifest" 'org.oxycblt.auxio.AuxioService' 'Topway canonical external service override'
@@ -389,8 +395,8 @@ def require_topway_alias(application, label):
         fail(f"{label} expected one com.tw.music.MusicActivity alias, got {len(aliases)}")
         return
     alias = aliases[0]
-    if attr(alias, "targetActivity") != "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity": fail(f"{label} alias target mismatch")
-    else: ok(f"{label} alias target is correct")
+    if attr(alias, "targetActivity") != "org.oxycblt.auxio.MainActivity": fail(f"{label} alias target mismatch")
+    else: ok(f"{label} alias targets MainActivity directly")
     if attr(alias, "exported") != "true": fail(f"{label} alias is not exported=true")
     if attr(alias, "label") != "@string/info_topway_music_app_name": fail(f"{label} alias label is {attr(alias, 'label')!r}")
     actions, categories = set(), set()
@@ -410,7 +416,17 @@ def require_main_activity_minimised(application, label):
     activity = activities[0]
     if attr(activity, "exported") != "false": fail(f"{label} MainActivity exported is {attr(activity, 'exported')!r}")
     if activity.findall("intent-filter"): fail(f"{label} MainActivity retains external intent filters")
-    else: ok(f"{label} MainActivity is minimised")
+    else: ok(f"{label} MainActivity is minimised behind the exported alias")
+
+def require_no_launcher_trampoline(application, label):
+    names = {
+        attr(item, "name")
+        for tag in ["activity", "activity-alias"]
+        for item in application.findall(tag)
+    }
+    obsolete = "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
+    if obsolete in names: fail(f"{label} still declares obsolete launcher trampoline {obsolete}")
+    else: ok(f"{label} has no obsolete launcher trampoline")
 
 for raw in sys.argv[1:]:
     path, expected_package, label = raw.split("|", 2)
@@ -420,6 +436,7 @@ for raw in sys.argv[1:]:
     require_launcher_entries(application, label)
     require_topway_alias(application, label)
     require_main_activity_minimised(application, label)
+    require_no_launcher_trampoline(application, label)
     require_provider(application, f"{expected_package}.image.CoverProvider", label)
     require_media_browser(application, label)
     require_topway_receiver(application, label)

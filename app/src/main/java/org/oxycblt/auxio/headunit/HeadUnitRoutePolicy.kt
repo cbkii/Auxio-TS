@@ -18,6 +18,8 @@
 
 package org.oxycblt.auxio.headunit
 
+import android.content.Intent
+
 /** Canonical route model for head-unit visible actions/entry points. */
 enum class HeadUnitRoute {
     NOW_PLAYING,
@@ -61,6 +63,17 @@ object HeadUnitRoutePolicy {
             HeadUnitEntryPoints.ACTION_OPEN_HEAD_UNIT_SETTINGS -> HeadUnitRoute.HEAD_UNIT_SETTINGS
             else -> null
         }
+
+    /** True only for explicit user/launcher music entry actions, never lifecycle foregrounding. */
+    fun isGenericLauncherAction(action: String?): Boolean =
+        action == Intent.ACTION_MAIN || action == Intent.ACTION_MUSIC_PLAYER
+
+    /**
+     * A real cold launch retains the existing generic route behaviour. A restored task also gets
+     * that route when it was explicitly re-entered from a launcher/music action.
+     */
+    fun shouldRequestGenericStartupRoute(isFirstResume: Boolean, action: String?): Boolean =
+        isFirstResume || isGenericLauncherAction(action)
 
     fun routeForQuickPick(action: QuickPickAction): HeadUnitRoute? =
         when (action) {
