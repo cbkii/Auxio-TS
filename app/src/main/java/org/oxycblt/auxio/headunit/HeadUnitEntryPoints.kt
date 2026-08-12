@@ -42,6 +42,9 @@ object HeadUnitEntryPoints {
     const val ACTION_OPEN_FAVOURITES = ACTION_PREFIX + "OPEN_FAVOURITES"
     const val ACTION_OPEN_HEAD_UNIT_SETTINGS = ACTION_PREFIX + "OPEN_HEAD_UNIT_SETTINGS"
 
+    /** Legacy music-player action retained for the observed DoFun/Topway component contract. */
+    const val ACTION_MUSIC_PLAYER = "android.intent.action.MUSIC_PLAYER"
+
     const val EXTRA_ENTRY_DESTINATION = ACTION_PREFIX + "ENTRY_DESTINATION"
 
     /** Explicit public actions for launcher/widget/shortcut integration. */

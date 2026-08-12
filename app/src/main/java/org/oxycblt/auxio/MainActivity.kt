@@ -107,8 +107,20 @@ class MainActivity : AppCompatActivity() {
                         playbackSettings.autoplayOnLaunch && isFirstResume
                     )
                 playbackModel.playDeferred(action)
-                if (isFirstResume) {
-                    startupPanelCoordinator.requestGenericStartupRoute()
+                if (
+                    HeadUnitRoutePolicy.shouldRequestGenericStartupRoute(
+                        isFirstResume,
+                        intent?.action,
+                    )
+                ) {
+                    // A fresh explicit launcher intent can recreate a previously saved task with
+                    // savedInstanceState != null. Treat the explicit MAIN/MUSIC_PLAYER origin as a
+                    // launch route request, but keep autoplay tied only to a true cold resume.
+                    if (HeadUnitRoutePolicy.isGenericLauncherAction(intent?.action)) {
+                        startupPanelCoordinator.requestUserLauncherRoute()
+                    } else {
+                        startupPanelCoordinator.requestGenericStartupRoute()
+                    }
                 }
             }
             isFirstResume = false
@@ -119,7 +131,15 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         clearIntentRoutingState(intent)
         setIntent(intent)
+        val genericLauncherEntry = HeadUnitRoutePolicy.isGenericLauncherAction(intent.action)
         startIntentAction(intent)
+        if (genericLauncherEntry) {
+            // MainActivity is singleTask. A second explicit launcher/DoFun tap therefore arrives
+            // here instead of through onCreate/onResume's cold-launch route. Route by the explicit
+            // launcher origin itself rather than depending on startIntentAction's handled result.
+            L.d("Warm launcher entry requesting generic route action=${intent.action}")
+            startupPanelCoordinator.requestUserLauncherRoute()
+        }
     }
 
     private fun setupTheme() {
@@ -171,6 +191,11 @@ class MainActivity : AppCompatActivity() {
             return true
         }
         intent.putExtra(KEY_INTENT_USED, true)
+
+        if (HeadUnitRoutePolicy.isGenericLauncherAction(intent.action)) {
+            L.d("Generic launcher entry action=${intent.action}")
+            return false
+        }
 
         val route = HeadUnitRoutePolicy.routeForAction(intent.action)
         val action =

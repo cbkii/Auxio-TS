@@ -18,14 +18,31 @@
 
 package org.oxycblt.auxio
 
+import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 
-@RunWith(RobolectricTestRunner::class)
 class BootReceiverTest {
     @Test
-    fun `test boot receiver topway restore does not silently return`() {
-        // Just a structural test
+    fun `disabled autostart does not launch even when floating-only remains set`() {
+        assertEquals(
+            BootLaunchPolicy.Route.DISABLED,
+            BootLaunchPolicy.route(autostartOnBoot = false, floatingOnly = true),
+        )
+    }
+
+    @Test
+    fun `floating-only autostart owns the overlay-only boot route`() {
+        assertEquals(
+            BootLaunchPolicy.Route.FLOATING_CONTROLS_ONLY,
+            BootLaunchPolicy.route(autostartOnBoot = true, floatingOnly = true),
+        )
+    }
+
+    @Test
+    fun `normal autostart opens the full player`() {
+        assertEquals(
+            BootLaunchPolicy.Route.FULL_PLAYER,
+            BootLaunchPolicy.route(autostartOnBoot = true, floatingOnly = false),
+        )
     }
 }

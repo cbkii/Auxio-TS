@@ -67,9 +67,10 @@
 
         <!--
         DoFun/Variety's extracted apps_match_config.json fixes the local music hotseat to
-        com.tw.music/.MusicActivity (or com.tw.media with the same class).  Expose that stock
-        Topway-compatible identity only in the Topway-compatible flavours while targeting Auxio's real
-        activity implementation.
+        com.tw.music/.MusicActivity (or com.tw.media with the same class). Expose that stock
+        Topway-compatible identity only in the Topway-compatible flavours and route it directly to
+        Auxio's real activity. Boot-only floating-controls policy remains owned by BootReceiver;
+        an explicit user/launcher tap must never be diverted through a no-display trampoline.
         -->
         <activity
             android:name="org.oxycblt.auxio.MainActivity"
@@ -97,14 +98,9 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.NoDisplay" />
-
         <activity-alias
             android:name="com.tw.music.MusicActivity"
-            android:targetActivity="org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
+            android:targetActivity="org.oxycblt.auxio.MainActivity"
             android:exported="true"
             android:enabled="true"
             android:icon="@mipmap/ic_launcher"

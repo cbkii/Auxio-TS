@@ -57,6 +57,11 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
         EXPLICIT_INTENT,
     }
 
+    internal enum class GenericRouteOrigin {
+        AUTOMATIC_STARTUP,
+        USER_LAUNCHER,
+    }
+
     sealed interface RouteEvaluation {
         data object Idle : RouteEvaluation
 
@@ -117,23 +122,40 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
 
     /** Request the user-configured generic cold-launch destination. */
     fun requestGenericStartupRoute() {
-        if (!playbackSettings.launchToPanel) {
-            L.d("Generic startup route skipped: launchToPanel disabled")
-            return
-        }
-        activeRequest.update { current ->
-            if (current?.priority == Priority.EXPLICIT_INTENT) {
-                L.d("Generic startup route suppressed by explicit route: $current")
-                current
-            } else {
+        requestGenericRoute(GenericRouteOrigin.AUTOMATIC_STARTUP)
+    }
+
+    /** A new user launcher tap supersedes any older pending intent route. */
+    fun requestUserLauncherRoute() {
+        requestGenericRoute(GenericRouteOrigin.USER_LAUNCHER)
+    }
+
+    private fun requestGenericRoute(origin: GenericRouteOrigin) {
+        val replacement =
+            if (playbackSettings.launchToPanel) {
                 RouteRequest(
-                        UUID.randomUUID(),
-                        genericDestination(),
-                        Priority.GENERIC_STARTUP,
-                        "Generic App Launch",
-                    )
-                    .also { L.d("Requesting generic startup route: $it") }
+                    UUID.randomUUID(),
+                    genericDestination(),
+                    Priority.GENERIC_STARTUP,
+                    if (origin == GenericRouteOrigin.USER_LAUNCHER) {
+                        "User App Launch"
+                    } else {
+                        "Generic App Launch"
+                    },
+                )
+            } else {
+                null
             }
+        activeRequest.update { current ->
+            val selected = selectGenericRequest(current, replacement, origin)
+            if (selected === current && current?.priority == Priority.EXPLICIT_INTENT) {
+                L.d("Generic startup route suppressed by explicit route: $current")
+            } else if (selected == null) {
+                L.d("Generic route cleared: launchToPanel disabled origin=$origin")
+            } else {
+                L.d("Requesting generic route origin=$origin: $selected")
+            }
+            selected
         }
     }
 
@@ -173,6 +195,17 @@ class StartupPanelCoordinator @Inject constructor(private val playbackSettings: 
 
     companion object {
         internal fun genericDestination(): OpenPanel = OpenPanel.PLAYBACK
+
+        internal fun selectGenericRequest(
+            current: RouteRequest?,
+            replacement: RouteRequest?,
+            origin: GenericRouteOrigin,
+        ): RouteRequest? =
+            when {
+                origin == GenericRouteOrigin.USER_LAUNCHER -> replacement
+                current?.priority == Priority.EXPLICIT_INTENT -> current
+                else -> replacement
+            }
 
         internal fun evaluate(
             request: RouteRequest?,

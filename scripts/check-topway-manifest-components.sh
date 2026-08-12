@@ -34,19 +34,21 @@ TOPWAY_VARIANTS = {
     "topwayTwMediaRelease": "com.tw.media",
 }
 # Activity aliases are manifest components but Android resolves them to targetActivity; it does not
-# instantiate a class with the alias name. Keep the stock alias in the manifest, but require the real
-# target activity class to be packaged.
+# instantiate a class with the alias name. Keep the stock alias in the manifest, and require it to
+# resolve directly to Auxio's real activity rather than a no-display trampoline.
 REQUIRED_TOPWAY_LOADABLE_CLASSES = {
     "com.tw.music.MusicService",
     "com.tw.music.view.MusicWidgetProvider",
     "org.oxycblt.auxio.MainActivity",
-    "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity",
     "org.oxycblt.auxio.car.overlay.CarFloatingControlsService",
     "org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver",
     "org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity",
 }
+OBSOLETE_TOPWAY_LOADABLE_CLASSES = {
+    "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity",
+}
 REQUIRED_TOPWAY_ALIAS = "com.tw.music.MusicActivity"
-EXPECTED_TOPWAY_ALIAS_TARGET = "org.oxycblt.auxio.car.overlay.TopwayMusicEntryActivity"
+EXPECTED_TOPWAY_ALIAS_TARGET = "org.oxycblt.auxio.MainActivity"
 
 failures = 0
 warnings = 0
@@ -135,8 +137,13 @@ def check_source_manifest():
         fail(f"topwayCompat source manifest lacks required loadable classes: {sorted(missing_decl)}")
     else:
         ok("topwayCompat source manifest declares all required loadable wrapper/overlay classes")
+    obsolete_decl = OBSOLETE_TOPWAY_LOADABLE_CLASSES & loadable
+    if obsolete_decl:
+        fail(f"topwayCompat source manifest still declares obsolete launcher trampoline classes: {sorted(obsolete_decl)}")
+    else:
+        ok("topwayCompat source manifest has no obsolete launcher trampoline")
     if aliases.get(REQUIRED_TOPWAY_ALIAS) == EXPECTED_TOPWAY_ALIAS_TARGET:
-        ok("topwayCompat source manifest routes com.tw.music.MusicActivity through TopwayMusicEntryActivity")
+        ok("topwayCompat source manifest aliases com.tw.music.MusicActivity directly to MainActivity")
     else:
         fail(f"topwayCompat source manifest alias mismatch for {REQUIRED_TOPWAY_ALIAS}: {aliases.get(REQUIRED_TOPWAY_ALIAS)!r}")
     for class_name in sorted(loadable & REQUIRED_TOPWAY_LOADABLE_CLASSES):
@@ -166,8 +173,13 @@ def check_merged_manifests():
             fail(f"{variant} merged manifest is missing required loadable classes: {sorted(missing)}")
         else:
             ok(f"{variant} merged manifest declares all required loadable classes")
+        obsolete = OBSOLETE_TOPWAY_LOADABLE_CLASSES & loadable
+        if obsolete:
+            fail(f"{variant} merged manifest still declares obsolete launcher trampoline classes: {sorted(obsolete)}")
+        else:
+            ok(f"{variant} merged manifest has no obsolete launcher trampoline")
         if aliases.get(REQUIRED_TOPWAY_ALIAS) == EXPECTED_TOPWAY_ALIAS_TARGET:
-            ok(f"{variant} merged manifest aliases {REQUIRED_TOPWAY_ALIAS} to TopwayMusicEntryActivity")
+            ok(f"{variant} merged manifest aliases {REQUIRED_TOPWAY_ALIAS} directly to MainActivity")
         else:
             fail(f"{variant} merged manifest alias mismatch for {REQUIRED_TOPWAY_ALIAS}: {aliases.get(REQUIRED_TOPWAY_ALIAS)!r}")
 
@@ -225,6 +237,12 @@ def check_apks():
                         ok(f"{variant} APK DEX contains loadable class {class_name}")
                     else:
                         fail(f"{variant} APK DEX is missing manifest loadable class {class_name}")
+                for class_name in sorted(OBSOLETE_TOPWAY_LOADABLE_CLASSES):
+                    needle = descriptor(class_name).encode()
+                    if dex_contains(zf, dex_names, needle):
+                        fail(f"{variant} APK DEX still contains obsolete launcher trampoline {class_name}")
+                    else:
+                        ok(f"{variant} APK DEX excludes obsolete launcher trampoline {class_name}")
                 alias_descriptor = descriptor(REQUIRED_TOPWAY_ALIAS).encode()
                 if dex_contains(zf, dex_names, alias_descriptor):
                     ok(f"{variant} APK also contains optional alias class {REQUIRED_TOPWAY_ALIAS}")

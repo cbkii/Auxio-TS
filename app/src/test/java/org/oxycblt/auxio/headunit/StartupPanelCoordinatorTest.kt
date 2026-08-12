@@ -20,6 +20,7 @@ package org.oxycblt.auxio.headunit
 
 import java.util.UUID
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.music.StartupLibraryStatus
@@ -121,6 +122,60 @@ class StartupPanelCoordinatorTest {
             ) is StartupPanelCoordinator.RouteEvaluation.Render
         )
     }
+
+    @Test
+    fun `automatic generic launch preserves a pending explicit route`() {
+        val explicit =
+            request(OpenPanel.PLAYBACK_QUEUE, StartupPanelCoordinator.Priority.EXPLICIT_INTENT)
+        val generic = request(OpenPanel.PLAYBACK, StartupPanelCoordinator.Priority.GENERIC_STARTUP)
+
+        assertEquals(
+            explicit,
+            StartupPanelCoordinator.selectGenericRequest(
+                explicit,
+                generic,
+                StartupPanelCoordinator.GenericRouteOrigin.AUTOMATIC_STARTUP,
+            ),
+        )
+    }
+
+    @Test
+    fun `latest user launcher tap replaces a pending explicit route`() {
+        val explicit =
+            request(OpenPanel.PLAYBACK_QUEUE, StartupPanelCoordinator.Priority.EXPLICIT_INTENT)
+        val generic = request(OpenPanel.PLAYBACK, StartupPanelCoordinator.Priority.GENERIC_STARTUP)
+
+        assertEquals(
+            generic,
+            StartupPanelCoordinator.selectGenericRequest(
+                explicit,
+                generic,
+                StartupPanelCoordinator.GenericRouteOrigin.USER_LAUNCHER,
+            ),
+        )
+    }
+
+    @Test
+    fun `user launcher tap clears a pending route when launch-to-panel is disabled`() {
+        val explicit =
+            request(OpenPanel.PLAYBACK_QUEUE, StartupPanelCoordinator.Priority.EXPLICIT_INTENT)
+
+        assertNull(
+            StartupPanelCoordinator.selectGenericRequest(
+                explicit,
+                null,
+                StartupPanelCoordinator.GenericRouteOrigin.USER_LAUNCHER,
+            )
+        )
+    }
+
+    private fun request(destination: OpenPanel, priority: StartupPanelCoordinator.Priority) =
+        StartupPanelCoordinator.RouteRequest(
+            UUID.randomUUID(),
+            destination,
+            priority,
+            "test request",
+        )
 
     private fun evaluate(
         hasSong: Boolean,
