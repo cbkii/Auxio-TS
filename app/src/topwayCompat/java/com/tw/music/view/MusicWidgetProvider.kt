@@ -262,10 +262,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
     private fun currentIntegrationMode(context: Context): Ts18LauncherIntegrationMode {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        return Ts18LauncherIntegrationMode.resolveAndPersist(
-                prefs = prefs,
-                topwayProduct = true,
-            )
+        return Ts18LauncherIntegrationMode.resolveAndPersist(prefs = prefs, topwayProduct = true)
             .mode
     }
 
