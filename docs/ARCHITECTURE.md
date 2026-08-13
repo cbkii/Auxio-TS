@@ -38,7 +38,7 @@ No `com.dofun.variety` module exists. Do not create one unless exact evidence de
 
 ### Track C — optional stock shim
 
-`lsposed-bridge` is a separately installed optional add-on, statically scoped exactly to genuine stock `com.tw.music`. Installation probing begins only after exact package and main-process routing. Functional hooks and stock suppression activate only after UID 1000, the expected signer and approved registry, a per-build capability grant, the trusted build-specific Auxio target, and an `ENABLED` kill switch are all confirmed. `UNKNOWN`, mismatch, timeout, unavailable and error states fail open to stock behaviour. It is not an Auxio app variant.
+`lsposed-bridge` is a separately installed optional add-on, statically scoped exactly to genuine stock `com.tw.music`. Installation probing begins only after exact package and main-process routing. The current implementation enables bridge actions only when its fail-safe kill-switch state is `ENABLED`; `UNKNOWN`, unavailable and read-error states leave those actions disabled. Signer fingerprints produced by build/reference checks describe the supplied APKs and are not an independent activation rule. Stock suppression additionally requires a positive bounded Auxio command-admission acknowledgement, while timeout, mismatch and unavailable paths preserve stock behaviour. It is not an Auxio app variant.
 
 ## Source boundaries
 
