@@ -12,3 +12,11 @@ Root [AGENTS.md](../AGENTS.md) remains authoritative. These stricter rules apply
 - Do not block either process main thread. Preserve bounded deduplication, rate-limited diagnostics and the `ENABLED`/`DISABLED`/`UNKNOWN` kill switch; `UNKNOWN` disables bridge actions.
 - Pair debug with `com.tw.media.debug` and release with signed `com.tw.media`. Manual Release keeps this add-on opt-in.
 - Inspect every DEX and run module tests/lint/contract checks. Do not claim exact TS18, fixed-widget, boot or ACC success without physical execution.
+
+## Emergency rollback
+
+Follow the full procedure in [the Track-C runbook](../docs/ts18/launcher-integration/LSPOSED_API100_BRIDGE.md#rollback). The minimum incident path is:
+
+1. Create `/storage/emulated/0/Auxio-TS/disable-lsposed-bridge` so bridge actions fail closed while stock behaviour remains available.
+2. Disable the bridge module in LSPosed and reboot. If the add-on is no longer required, uninstall only the bridge APK; never delete, replace or modify the genuine stock `com.tw.music` package or its data as rollback.
+3. After reboot, verify the bridge is inactive and the genuine stock music activity/control path works normally before removing any recovery safeguard. If Android UI is unavailable, use only the already-proven LSPosed/Magisk boot-loop recovery path; do not use firmware flashing or Package Manager database edits as bridge recovery.
