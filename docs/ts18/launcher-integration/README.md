@@ -1,19 +1,17 @@
-# TS18 launcher media integration
+# TS18 launcher integration
 
-This folder separates two compatibility paths:
+Current integration follows [Architecture](../../ARCHITECTURE.md):
 
-1. **Observed — Directly reusable requirement:** in-app Android/Topway compatibility in the normal Auxio-TS `com.tw.media` app.
-2. **Requires TS18 validation — Requires TS18 runtime validation:** optional LSPosed stock-identity bridge for exact TS18 firmware where the fixed DoFun widget requires calls or broadcasts to originate from the genuine platform-signed `com.tw.music` process.
+1. **Track A:** direct Android/Topway compatibility inside the maintained `com.tw.media` app.
+2. **Track B:** no module exists; a future DoFun-private adapter requires a separate evidence-backed architecture decision.
+3. **Track C:** optional, separate LSPosed relay for genuine stock `com.tw.music` only when device evidence proves it is required.
 
-The LSPosed bridge is not a platform-signature clone and does not replace the stock APK. Start with the in-app path and add the bridge only when exact-device evidence proves that Android MediaSession and safe Topway broadcasts are insufficient.
+Current references:
 
-Files:
+- [DoFun/Topway compatibility](../../DOFUN_VARIETY_COMPATIBILITY.md)
+- [Topway command-service boundary](TOPWAY_COMMAND_SERVICE_BRIDGE.md)
+- [Topway widget contract](TOPWAY_MUSIC_WIDGET_CONTRACT.md)
+- [Optional LSPosed Track-C bridge](LSPOSED_API100_BRIDGE.md)
+- [Physical validation matrix](VALIDATION_MATRIX.md)
 
-- `docs/ts18/launcher-integration/LSPOSED_API100_BRIDGE.md`
-- `docs/prompts/codex_ts18_launcher_comprehensive_in_app_integration.md`
-- `docs/ts18/launcher-integration/TS18_LAUNCHER_COMPREHENSIVE_IN_APP_PLAN.md`
-- `docs/ts18/launcher-integration/TOPWAY_MUSIC_WIDGET_CONTRACT.md`
-- `docs/ts18/launcher-integration/VALIDATION_MATRIX.md`
-- `scripts/evidence/collect-ts18-launcher-media-integration.sh`
-
-Run the evidence script on the physical TS18 only for a defined test window, export the result, then stop additional logging.
+Collect physical evidence with `scripts/evidence/collect-ts18-launcher-media-integration.sh` only for a defined test window. Old comprehensive implementation prompts/plans are non-normative and were removed once the architecture consolidated.

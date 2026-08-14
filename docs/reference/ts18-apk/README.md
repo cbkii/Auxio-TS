@@ -11,7 +11,7 @@ The original APK binaries are **not** committed here. These files are small extr
 
 ## How to use these files
 
-Use this directory as evidence for Auxio-TS development and agent tasks. It defines the compatibility target that CI/docs/scripts should protect.
+Use this directory only as non-normative evidence for a specific engineering question. Current product and architecture documents define the compatibility target.
 
 Primary files:
 
@@ -34,4 +34,4 @@ Primary files:
 - Do not copy decompiled source/smali into Auxio-TS.
 - Do not commit full APKs or bulk decompile trees.
 - Keep reference material concise; update this directory only when a new APK changes the compatibility contract.
-- Keep product code compatibility in Android-standard surfaces and the isolated Topway bridge.
+- Keep product code compatibility in Android-standard surfaces and the isolated Track-A bridge.

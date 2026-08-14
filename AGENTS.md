@@ -20,7 +20,7 @@ Resolve conflicts in favour of the higher authority and update the lower documen
 - **Compile-only support:** `libxposed-api100-stubs`; it must not enter an APK runtime graph.
 - **Validation:** `startup-benchmark`, Android tests, JVM tests, lint and screenshots.
 - **Tooling:** `scripts`, CI/release automation, diagnostics and root-storage support material.
-- **Evidence:** curated observed contracts and device records under `docs`; evidence does not set product policy.
+- **Evidence:** the [curated evidence index](docs/evidence/README.md) and bounded device/contract records; evidence does not set product policy.
 - **Retired:** the generic `standard` app and the exact-package `topwayTwMusic`/`com.tw.music` Auxio app, including their flavours, benchmarks, screenshots and releases.
 
 No Track-B `com.dofun.variety` module exists.

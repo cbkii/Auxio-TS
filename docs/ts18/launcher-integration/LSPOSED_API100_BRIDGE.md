@@ -138,7 +138,7 @@ Fork PRs run the gate but do not publish downloadable APK binaries.
 
 1. Keep the genuine stock `com.tw.music` enabled and unchanged.
 2. Confirm it is UID 1000 and signed by the captured Topway certificate. Record its version code; version 118 is the currently device-tested reference.
-3. Install the normal Auxio-TS `topwayTwMedia` release so the package is exactly `com.tw.media`.
+3. Install the normal Auxio-TS release so the package is exactly `com.tw.media`.
 4. In Auxio-TS, select a music source and verify normal playback first.
 5. Create the kill-switch marker shown above.
 6. Install the signed bridge APK from the same Auxio-TS release.

@@ -61,6 +61,7 @@ Run the narrow checks relevant to the change:
 ```bash
 bash scripts/ci-scope.sh --self-test
 bash scripts/check-product-contracts.sh
+python3 scripts/check-documentation-policy.py
 bash scripts/check-headunit-compat-safety.sh
 bash scripts/check-dofun-topway-compat.sh
 bash scripts/check-startup-performance-contracts.sh

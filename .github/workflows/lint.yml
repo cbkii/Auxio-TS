@@ -129,6 +129,10 @@ jobs:
         shell: bash
         run: bash ./scripts/check-product-contracts.sh
 
+      - name: Check documentation authority and links
+        shell: bash
+        run: python3 ./scripts/check-documentation-policy.py
+
       - name: Check manual release workflow
         shell: bash
         run: bash ./scripts/check-manual-release-workflow.sh

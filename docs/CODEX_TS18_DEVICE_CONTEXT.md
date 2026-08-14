@@ -20,9 +20,10 @@ Concise redacted context for agents working on Auxio-TS install/runtime behavior
 - Root availability does not give Auxio UID 1000, platform signing, vendor signing, signature permissions, or private Topway authority.
 - Stock `com.tw.music` is a privileged system package at `/system/priv-app/com.tw.music_a41e` with observed versionName `TW_THEME.20240715`, userId `1000`, and platform/vendor signature lineage different from user-signed Auxio variants.
 - Existing user-installed `com.tw.media` Auxio-TS alternate package was normal app UID and exposed `com.tw.media/com.tw.music.MusicActivity`, the Topway bridge receiver, widget provider, and `com.tw.music.MusicService`.
-- `topwayTwMusicRelease` is an internal package-contract fixture, not an installation or release lane.
-- The supported layout keeps stock `com.tw.music`, installs `topwayTwMediaRelease`, and adds the
-  API-100 bridge with static/recommended scope limited to `com.tw.music`.
+- The former exact-package Auxio application is retired; package-contract coverage uses fixtures,
+  manifest inspection and tests instead of an installable protected-package impersonation.
+- The supported layout keeps stock `com.tw.music`, installs the Auxio-TS `com.tw.media` release,
+  and optionally adds the API-100 bridge with static/recommended scope limited to `com.tw.music`.
 
 ## Display and storage
 
