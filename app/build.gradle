@@ -18,12 +18,12 @@ android {
 
     defaultConfig {
         applicationId "com.tw.media"
-        versionName "26.6.2"
+        versionName "26.6.6"
         // Monotonic TS18 code: major * 1,000,000 + minor * 10,000 + patch * 100 + revision.
         // Keep this above every recorded stock com.tw.music build (currently 118) so an
         // exact-package test never fails for an avoidable version downgrade. Signing and
         // privileged package identity remain separate, mandatory installation gates.
-        versionCode 26060200
+        versionCode 26060600
         def buildCommit = System.getenv("GITHUB_SHA") ?: "local-unrecorded"
         buildConfigField "String", "BUILD_COMMIT", "\"${buildCommit.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "boolean", "TOPWAY_COMPAT_ENABLED", "true"
