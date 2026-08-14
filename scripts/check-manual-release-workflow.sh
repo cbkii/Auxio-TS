@@ -111,7 +111,7 @@ expected_input_names = {
     'version_tag',
     'draft',
     'prerelease',
-    'include_topway_twmedia_apk',
+    'include_app_apk',
     'include_lsposed_bridge_apk',
     'publish_debug_apks',
     'replace_existing_assets',
@@ -130,8 +130,8 @@ if 'debug' not in debug_description or 'normally leave off' not in debug_descrip
     raise SystemExit('publish_debug_apks description must clearly identify the safe default.')
 if inputs['publish_debug_apks'].get('default') is not False:
     raise SystemExit('Debug APK publication must default off.')
-if inputs['include_topway_twmedia_apk'].get('default') is not True:
-    raise SystemExit('The primary topwayTwMedia APK must default on.')
+if inputs['include_app_apk'].get('default') is not True:
+    raise SystemExit('The maintained Auxio-TS APK must default on.')
 
 references = re.findall(r'run: bash (scripts/manual-release/[^\s]+\.sh)', text)
 expected_references = [str(path) for path in script_paths]
@@ -287,8 +287,8 @@ python3 "${orchestrator}" resolve \
 [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["release_tag"])' "${tmp}/next.json")" == v6.5.1 ]] ||
   fail 'Blank input did not create the next patch after a complete latest release.'
 
-printf '%s\n' topway_twmedia topway_twmedia_debug > "${tmp}/variants.txt"
-base='Auxio-TS-v6.5.0-topway-twmedia-release.apk'
+printf '%s\n' app app_debug > "${tmp}/variants.txt"
+base='Auxio-TS-v6.5.0-app-release.apk'
 printf '%s\n' "${base}" "${base}.sha256" > "${tmp}/partial-assets.txt"
 python3 "${orchestrator}" plan-assets \
   --mode repair_existing_release \

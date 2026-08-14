@@ -29,11 +29,11 @@ class Ts18LauncherIntegrationModeTest {
     fun `default policy is explicit for both compatibility states`() {
         assertEquals(
             Ts18LauncherIntegrationMode.GenericDofunMedia,
-            Ts18LauncherIntegrationMode.defaultFor(topwayCompatFlavor = true),
+            Ts18LauncherIntegrationMode.defaultFor(topwayProduct = true),
         )
         assertEquals(
             Ts18LauncherIntegrationMode.AndroidMediaSessionOnly,
-            Ts18LauncherIntegrationMode.defaultFor(topwayCompatFlavor = false),
+            Ts18LauncherIntegrationMode.defaultFor(topwayProduct = false),
         )
     }
 
@@ -83,7 +83,7 @@ class Ts18LauncherIntegrationModeTest {
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = null,
                 migrationComplete = false,
-                topwayCompatFlavor = true,
+                topwayProduct = true,
             )
         assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.mode)
         assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.persistMode)
@@ -96,7 +96,7 @@ class Ts18LauncherIntegrationModeTest {
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = Ts18LauncherIntegrationMode.AutoAllSafePaths.name,
                 migrationComplete = false,
-                topwayCompatFlavor = true,
+                topwayProduct = true,
             )
         assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, decision.mode)
         assertNull(decision.persistMode)
@@ -109,7 +109,7 @@ class Ts18LauncherIntegrationModeTest {
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = Ts18LauncherIntegrationMode.TopwayCommandOnly.name,
                 migrationComplete = false,
-                topwayCompatFlavor = true,
+                topwayProduct = true,
             )
         assertEquals(Ts18LauncherIntegrationMode.TopwayCommandOnly, decision.mode)
         assertNull(decision.persistMode)
@@ -122,7 +122,7 @@ class Ts18LauncherIntegrationModeTest {
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = Ts18LauncherIntegrationMode.AutoAllSafePaths.name,
                 migrationComplete = true,
-                topwayCompatFlavor = true,
+                topwayProduct = true,
             )
         assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, completed.mode)
         assertNull(completed.persistMode)
@@ -132,7 +132,7 @@ class Ts18LauncherIntegrationModeTest {
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = null,
                 migrationComplete = false,
-                topwayCompatFlavor = false,
+                topwayProduct = false,
             )
         assertEquals(Ts18LauncherIntegrationMode.AndroidMediaSessionOnly, nonTopway.mode)
         assertNull(nonTopway.persistMode)

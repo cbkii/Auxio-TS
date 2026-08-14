@@ -793,7 +793,7 @@ constructor(
                     priorState = musicSettings.libraryState,
                     deferCachedLoad = true,
                     lastScanFailed = { musicSettings.lastScanFailed },
-                    isTopwayCompat = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                    isTopwayCompat = BuildConfig.TOPWAY_COMPAT_ENABLED,
                     loadCachedLibrary = { 0 },
                     cachedSongCount = { 0 },
                     emitCachedLibrary = {},
@@ -955,7 +955,7 @@ constructor(
                         explicit = request.metadataProfile,
                         scanPriority = musicSettings.scanPriority,
                         playbackActive = playbackActive,
-                        isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                        isTopwayVariant = BuildConfig.TOPWAY_COMPAT_ENABLED,
                     )
                 updateNonAuthoritativeWorkDeferred(
                     sessionId,
@@ -967,7 +967,7 @@ constructor(
                     DefaultIndexingResourcePolicy.resolveWorkerCount(
                         scanPriority = musicSettings.scanPriority,
                         playbackActive = playbackActive,
-                        isTopwayVariant = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                        isTopwayVariant = BuildConfig.TOPWAY_COMPAT_ENABLED,
                         availableProcessors = Runtime.getRuntime().availableProcessors(),
                     )
                 val originalRequestedSourceKeys = request.sourceKeys
@@ -1718,7 +1718,7 @@ constructor(
             priorState == LibraryState.USABLE &&
                 decision.requestScan &&
                 sourceConfigured &&
-                !BuildConfig.TOPWAY_COMPAT_FLAVOR
+                !BuildConfig.TOPWAY_COMPAT_ENABLED
         ) {
             worker.requestIndex(
                 IndexRequest(

@@ -373,8 +373,8 @@ def command_update_gradle(args: argparse.Namespace) -> None:
 
 
 VARIANT_NAMES = {
-    "topway_twmedia": "Auxio-TS-{tag}-topway-twmedia-release.apk",
-    "topway_twmedia_debug": "Auxio-TS-{tag}-topway-twmedia-debug.apk",
+    "app": "Auxio-TS-{tag}-app-release.apk",
+    "app_debug": "Auxio-TS-{tag}-app-debug.apk",
     "lsposed_bridge": "Auxio-TS-{tag}-lsposed-api100-bridge.apk",
     "lsposed_bridge_debug": "Auxio-TS-{tag}-lsposed-api100-bridge-debug.apk",
 }
@@ -473,8 +473,8 @@ def command_validate_manifest(args: argparse.Namespace) -> None:
         "destination",
     }
     expected_identity = {
-        "topway_twmedia": ("com.tw.media", args.version_name, "release"),
-        "topway_twmedia_debug": (
+        "app": ("com.tw.media", args.version_name, "release"),
+        "app_debug": (
             "com.tw.media.debug",
             f"{args.version_name}-DEBUG",
             args.debug_destination,
@@ -709,3 +709,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

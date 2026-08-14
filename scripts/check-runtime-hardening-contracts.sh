@@ -61,7 +61,7 @@ require_absent "$playback_fragment" 'startTopwayProgressTicker()'
 require_contains "$doc" 'schema version: `3`'
 require_contains "$doc" '`app/src/main/generated/baselineProfiles/startup-prof.txt`'
 require_contains "$doc" 'The former `standard` flavour is retired'
-require_contains "$doc" 'published `topwayTwMedia` release APK: `arm64-v8a` only'
+require_contains "$doc" 'published Auxio-TS release APK: `arm64-v8a` only'
 
 bash ./scripts/check-native-abi-contracts.sh || fail 'native ABI contract gate failed'
 

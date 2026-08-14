@@ -60,7 +60,7 @@ constructor(
         private set
 
     init {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) state = State.UnsupportedForVariant
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) state = State.UnsupportedForVariant
     }
 
     private val prefs by lazy {
@@ -68,14 +68,14 @@ constructor(
     }
 
     private fun userEnabled(): Boolean =
-        BuildConfig.TOPWAY_COMPAT_FLAVOR && prefs.getBoolean(KEY_USE_ROOT_FS, false)
+        BuildConfig.TOPWAY_COMPAT_ENABLED && prefs.getBoolean(KEY_USE_ROOT_FS, false)
 
     /** Snapshot persisted storage-root consent without invoking `su`. */
     fun isUserEnabled(): Boolean = userEnabled()
 
     /** Persist an explicit storage-only root decision and reset the bounded probe generation. */
     fun setUserEnabled(enabled: Boolean) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) {
             state = State.UnsupportedForVariant
             return
         }
@@ -93,7 +93,7 @@ constructor(
     }
 
     fun stateSnapshot(): State {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return State.UnsupportedForVariant
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) return State.UnsupportedForVariant
         if (!userEnabled()) return State.DisabledByUser
         if (state == State.DisabledByUser) state = State.Unknown
         return state
@@ -115,7 +115,7 @@ constructor(
         synchronized(probeLock) {
             val generation =
                 synchronized(stateLock) {
-                    if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                    if (!BuildConfig.TOPWAY_COMPAT_ENABLED) {
                         state = State.UnsupportedForVariant
                         return state
                     }

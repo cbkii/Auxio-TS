@@ -125,9 +125,9 @@ jobs:
         shell: bash
         run: bash ./scripts/ci-scope.sh --self-test
 
-      - name: Check final maintained-variant contract
+      - name: Check single-product contract
         shell: bash
-        run: bash ./scripts/check-ci-variant-contracts.sh
+        run: bash ./scripts/check-product-contracts.sh
 
       - name: Check manual release workflow
         shell: bash
@@ -198,9 +198,9 @@ jobs:
         run: |
           tasks=()
           [[ "${FORMAT_KOTLIN}" == "true" ]] && tasks+=(spotlessKotlinCheck)
-          [[ "${APP_TESTS}" == "true" ]] && tasks+=(:app:testTopwayTwMediaDebugUnitTest)
+          [[ "${APP_TESTS}" == "true" ]] && tasks+=(:app:testDebugUnitTest)
           [[ "${MUSIKR_TESTS}" == "true" ]] && tasks+=(:musikr:testDebugUnitTest)
-          [[ "${ANDROID_LINT}" == "true" ]] && tasks+=(:app:lintTopwayTwMediaDebug)
+          [[ "${ANDROID_LINT}" == "true" ]] && tasks+=(:app:lintDebug)
 
           if ((${#tasks[@]} > 0)); then
             printf 'Selected consolidated Gradle quality tasks:\n'
@@ -331,7 +331,7 @@ jobs:
           log="${RUNNER_TEMP}/headunit-safety.log"
           (
             for script in \
-              scripts/check-ci-variant-contracts.sh \
+              scripts/check-product-contracts.sh \
               scripts/check-ts18-apk-reference-contracts.sh \
               scripts/check-headunit-compat-safety.sh \
               scripts/check-dofun-topway-compat.sh \

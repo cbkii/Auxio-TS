@@ -67,18 +67,18 @@ if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
     printf '%s\n' "${signer}"
   }
 
-  twmedia_release_apk=''
-  twmedia_debug_apk=''
-  ensure_twmedia_release() {
-    if [[ -z "${twmedia_release_apk}" ]]; then
-      timeout 45m bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaRelease
-      twmedia_release_apk="$(find_apk app/build/outputs/apk/topwayTwMedia/release)"
+  app_release_apk=''
+  app_debug_apk=''
+  ensure_app_release() {
+    if [[ -z "${app_release_apk}" ]]; then
+      timeout 45m bash ./scripts/ci-gradle.sh :app:assembleRelease
+      app_release_apk="$(find_apk app/build/outputs/apk/release)"
     fi
   }
-  ensure_twmedia_debug() {
-    if [[ -z "${twmedia_debug_apk}" ]]; then
-      timeout 45m bash ./scripts/ci-gradle.sh :app:assembleTopwayTwMediaDebug
-      twmedia_debug_apk="$(find_apk app/build/outputs/apk/topwayTwMedia/debug)"
+  ensure_app_debug() {
+    if [[ -z "${app_debug_apk}" ]]; then
+      timeout 45m bash ./scripts/ci-gradle.sh :app:assembleDebug
+      app_debug_apk="$(find_apk app/build/outputs/apk/debug)"
     fi
   }
 
@@ -86,23 +86,23 @@ if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
     [[ -n "${variant}" ]] || continue
     paired_target_apk=''
     case "${variant}" in
-      topway_twmedia)
-        ensure_twmedia_release
-        apk_path="${twmedia_release_apk}"
-        asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-release.apk"
+      app)
+        ensure_app_release
+        apk_path="${app_release_apk}"
+        asset_name="Auxio-TS-${RELEASE_TAG}-app-release.apk"
         asset_kind='signed-apk'
         destination='release'
         ;;
-      topway_twmedia_debug)
-        ensure_twmedia_debug
-        apk_path="${twmedia_debug_apk}"
-        asset_name="Auxio-TS-${RELEASE_TAG}-topway-twmedia-debug.apk"
+      app_debug)
+        ensure_app_debug
+        apk_path="${app_debug_apk}"
+        asset_name="Auxio-TS-${RELEASE_TAG}-app-debug.apk"
         asset_kind='debug-diagnostics-apk'
         destination="${DEBUG_DESTINATION}"
         ;;
       lsposed_bridge)
-        ensure_twmedia_release
-        paired_target_apk="${twmedia_release_apk}"
+        ensure_app_release
+        paired_target_apk="${app_release_apk}"
         paired_target_signer="$(signer_for_apk "${paired_target_apk}")"
         timeout 45m bash ./scripts/ci-gradle.sh \
           :lsposed-bridge:assembleRelease \
@@ -113,8 +113,8 @@ if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
         destination='release'
         ;;
       lsposed_bridge_debug)
-        ensure_twmedia_debug
-        paired_target_apk="${twmedia_debug_apk}"
+        ensure_app_debug
+        paired_target_apk="${app_debug_apk}"
         paired_target_signer="$(signer_for_apk "${paired_target_apk}")"
         timeout 45m bash ./scripts/ci-gradle.sh \
           :lsposed-bridge:assembleDebug \
@@ -165,7 +165,7 @@ if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
     } > "${asset_dir}/${asset_name}.metadata.txt"
 
     case "${variant}" in
-      topway_twmedia)
+      app)
         for checker in scripts/check-release-diagnostics-boundary.sh scripts/check-startup-performance-contracts.sh scripts/check-app-release-contracts.sh; do
           [[ -x "${checker}" ]] || { echo "::error::Immutable source lacks required release checker ${checker}."; exit 1; }
         done

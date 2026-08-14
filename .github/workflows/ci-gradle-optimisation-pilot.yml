@@ -69,11 +69,10 @@ jobs:
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
-            :app:testTopwayTwMediaDebugUnitTest \
+            :app:testDebugUnitTest \
             :musikr:testDebugUnitTest \
-            :app:lintTopwayTwMediaDebug \
-            :app:assembleTopwayTwMediaDebug \
-            :app:assembleTopwayTwMusicDebug
+            :app:lintDebug \
+            :app:assembleDebug
 
       - name: Run configuration-cache reuse pass
         shell: bash
@@ -82,11 +81,10 @@ jobs:
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
-            :app:testTopwayTwMediaDebugUnitTest \
+            :app:testDebugUnitTest \
             :musikr:testDebugUnitTest \
-            :app:lintTopwayTwMediaDebug \
-            :app:assembleTopwayTwMediaDebug \
-            :app:assembleTopwayTwMusicDebug
+            :app:lintDebug \
+            :app:assembleDebug
 
       - name: Upload configuration-cache evidence
         if: always()
@@ -147,11 +145,10 @@ jobs:
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
-            :app:testTopwayTwMediaDebugUnitTest \
+            :app:testDebugUnitTest \
             :musikr:testDebugUnitTest \
-            :app:lintTopwayTwMediaDebug \
-            :app:assembleTopwayTwMediaDebug \
-            :app:assembleTopwayTwMusicDebug
+            :app:lintDebug \
+            :app:assembleDebug
 
       - name: Upload parallel-execution evidence
         if: always()

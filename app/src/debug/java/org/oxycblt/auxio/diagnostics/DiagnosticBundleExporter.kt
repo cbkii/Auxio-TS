@@ -165,7 +165,7 @@ object DiagnosticBundleExporter {
             append("  \"applicationId\": ${DiagnosticJson.string(BuildConfig.APPLICATION_ID)},\n")
             append("  \"versionName\": ${DiagnosticJson.string(BuildConfig.VERSION_NAME)},\n")
             append("  \"versionCode\": ${BuildConfig.VERSION_CODE},\n")
-            append("  \"flavor\": ${DiagnosticJson.string(BuildConfig.FLAVOR)},\n")
+            append("  \"flavor\": ${DiagnosticJson.string("")},\n")
             append("  \"buildType\": ${DiagnosticJson.string(BuildConfig.BUILD_TYPE)},\n")
             append("  \"commit\": ${DiagnosticJson.string(BuildConfig.BUILD_COMMIT)},\n")
             append("  \"apkSha256\": ${DiagnosticJson.string(apkSha256)},\n")

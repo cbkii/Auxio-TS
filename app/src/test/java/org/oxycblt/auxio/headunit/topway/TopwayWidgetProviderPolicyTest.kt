@@ -31,42 +31,42 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class TopwayWidgetProviderPolicyTest {
     @Test
-    fun standardVariantChecksOnlyNormalAuxioProvider() {
+    fun androidFallbackChecksOnlyNormalAuxioProvider() {
         assertEquals(
             listOf(WidgetProvider::class.java.name),
-            TopwayWidgetProviderPolicy.providerClassNames(topwayCompatFlavor = false),
+            TopwayWidgetProviderPolicy.providerClassNames(topwayProduct = false),
         )
     }
 
     @Test
-    fun topwayVariantsCheckNormalAndStockNameWrapperProviders() {
+    fun currentProductChecksNormalAndStockNameWrapperProviders() {
         assertEquals(
             listOf(WidgetProvider::class.java.name, "com.tw.music.view.MusicWidgetProvider"),
-            TopwayWidgetProviderPolicy.providerClassNames(topwayCompatFlavor = true),
+            TopwayWidgetProviderPolicy.providerClassNames(topwayProduct = true),
         )
     }
 
     @Test
-    fun standardVariantRequiresWidgetInstanceForUpdate() {
+    fun androidFallbackRequiresWidgetInstanceForUpdate() {
         assertFalse(
             TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate(
-                topwayCompatFlavor = false,
+                topwayProduct = false,
                 hasAnyWidgetInstances = false,
             )
         )
         assertTrue(
             TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate(
-                topwayCompatFlavor = false,
+                topwayProduct = false,
                 hasAnyWidgetInstances = true,
             )
         )
     }
 
     @Test
-    fun topwayVariantsServeUpdateEvenWithoutNormalAppWidgetInstance() {
+    fun currentProductServesUpdateWithoutNormalAppWidgetInstance() {
         assertTrue(
             TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate(
-                topwayCompatFlavor = true,
+                topwayProduct = true,
                 hasAnyWidgetInstances = false,
             )
         )

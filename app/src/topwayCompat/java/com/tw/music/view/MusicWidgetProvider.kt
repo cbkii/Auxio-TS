@@ -177,7 +177,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
         val component = ComponentName(context, MusicWidgetProvider::class.java)
 
         if (!TopwayWidgetProviderPolicy.shouldHandleTopwayUpdate(context)) {
-            L.d("Skipping Topway widget update: no active instances and not in Topway flavor")
+            L.d("Skipping Topway widget update: no active instances and not in maintained product")
             return
         }
 
@@ -262,10 +262,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
     private fun currentIntegrationMode(context: Context): Ts18LauncherIntegrationMode {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-        return Ts18LauncherIntegrationMode.resolveAndPersist(
-                prefs = prefs,
-                topwayCompatFlavor = true,
-            )
+        return Ts18LauncherIntegrationMode.resolveAndPersist(prefs = prefs, topwayProduct = true)
             .mode
     }
 

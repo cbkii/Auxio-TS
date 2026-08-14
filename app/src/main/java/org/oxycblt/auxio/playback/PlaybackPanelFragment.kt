@@ -209,7 +209,7 @@ class PlaybackPanelFragment :
         val forceLargeLandscapeControls =
             resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val useLargeControls =
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
                 true
             } else {
                 uiSettings.largeHeadUnitControls || forceLargeLandscapeControls

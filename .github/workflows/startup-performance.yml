@@ -82,16 +82,16 @@ jobs:
         shell: bash
         run: |
           bash ./scripts/check-startup-performance-contracts.sh
-          bash ./scripts/check-ci-variant-contracts.sh
+          bash ./scripts/check-product-contracts.sh
 
       - name: Run maintained quality tasks
         shell: bash
         run: |
           bash ./scripts/ci-gradle.sh --continue \
             spotlessKotlinCheck \
-            :app:testTopwayTwMediaDebugUnitTest \
+            :app:testDebugUnitTest \
             :musikr:testDebugUnitTest \
-            :app:lintTopwayTwMediaDebug
+            :app:lintDebug
 
       - name: Run head-unit safety checks
         shell: bash
@@ -103,26 +103,21 @@ jobs:
           mkdir -p build/reports/startup-performance
           set +e
           bash ./scripts/ci-gradle.sh \
-            :startup-benchmark:assembleTopwayTwMediaBenchmarkBenchmark \
-            :startup-benchmark:assembleTopwayTwMusicBenchmarkBenchmark 2>&1 |
+            :startup-benchmark:assembleBenchmarkBenchmark 2>&1 |
             tee build/reports/startup-performance/benchmark-compile.log
           status=${PIPESTATUS[0]}
           set -e
           exit "${status}"
 
-      - name: Build maintained debug variants
+      - name: Build maintained debug app
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh \
-            :app:assembleTopwayTwMediaDebug \
-            :app:assembleTopwayTwMusicDebug
+          bash ./scripts/ci-gradle.sh :app:assembleDebug
 
-      - name: Build maintained release variants
+      - name: Build maintained release app
         shell: bash
         run: |
-          bash ./scripts/ci-gradle.sh \
-            :app:assembleTopwayTwMediaRelease \
-            :app:assembleTopwayTwMusicRelease
+          bash ./scripts/ci-gradle.sh :app:assembleRelease
 
       - name: Validate compiled Baseline Profile artefacts
         shell: bash
@@ -135,8 +130,8 @@ jobs:
             mapfile -t apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' | sort)
             printf 'Release APK count: %s\n' "${#apks[@]}"
             printf '%s\n' "${apks[@]:-}"
-            if ((${#apks[@]} != 2)); then
-              printf 'Expected the two maintained Topway release APKs, found %s\n' "${#apks[@]}" >&2
+            if ((${#apks[@]} != 1)); then
+              printf 'Expected the maintained Auxio-TS release APK, found %s\n' "${#apks[@]}" >&2
               exit 1
             fi
             for apk in "${apks[@]}"; do
@@ -190,9 +185,8 @@ jobs:
             echo
             echo "- Result: \`${JOB_STATUS}\`"
             echo "- Commit: \`${GITHUB_SHA}\`"
-            echo "- Primary validation package: \`com.tw.media\`"
-            echo "- Exact-package compatibility package: \`com.tw.music\`"
-            echo "- Includes syntax, maintained-variant contracts, formatting, unit tests, lint, head-unit safety, both benchmark configurations, both debug/release APKs, Baseline Profile packaging, TS18 APK contracts and DoFun/Topway output checks."
+            echo "- Maintained product package: \`com.tw.media\`"
+            echo "- Includes syntax, single-product contracts, formatting, unit tests, lint, head-unit safety, benchmark instrumentation, debug/release APKs, Baseline Profile packaging, TS18 APK contracts and DoFun/Topway output checks."
             echo "- No hosted-runner wall-clock threshold or exact-device latency claim is produced."
             echo "- Exact TS18 runtime behaviour: Requires device validation."
           } >> "${GITHUB_STEP_SUMMARY}"

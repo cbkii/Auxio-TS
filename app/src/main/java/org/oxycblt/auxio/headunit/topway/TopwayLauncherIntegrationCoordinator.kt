@@ -66,7 +66,7 @@ constructor(
         val decision =
             Ts18LauncherIntegrationMode.resolveAndPersist(
                 prefs = prefs,
-                topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
             )
         if (!decision.markComplete && decision.persistMode == null) return
         logJournalAndTimber(
@@ -79,7 +79,7 @@ constructor(
 
     /** Re-render installed stock-name wrapper widgets after their control-routing mode changes. */
     fun refreshWidgetControls(reason: String) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) return
         try {
             val manager = AppWidgetManager.getInstance(context)
             val component = ComponentName(context.packageName, STOCK_WIDGET_PROVIDER_CLASS)

@@ -257,7 +257,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
             ScanPriority.fromName(
                 sharedPreferences.getString(getString(R.string.set_key_scan_priority), null)
             )
-                ?: if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+                ?: if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_ENABLED) {
                     ScanPriority.PLAYBACK_FIRST
                 } else {
                     ScanPriority.BALANCED
@@ -287,7 +287,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
         get() =
             sharedPreferences.getBoolean(
                 getString(R.string.set_key_dynamic_shortcuts),
-                !org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                !org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_ENABLED,
             )
 
     override val performanceCaptureEnabled: Boolean
@@ -390,7 +390,7 @@ class MusicSettingsImpl @Inject constructor(@ApplicationContext private val cont
     override var locationMode: LocationMode
         get() {
             val fallback =
-                LocationMode.defaultForFlavor(org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR)
+                LocationMode.defaultForFlavor(org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_ENABLED)
             val mode =
                 sharedPreferences.getInt(
                     getString(R.string.set_key_locations_mode),

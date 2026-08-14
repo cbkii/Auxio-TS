@@ -1,7 +1,7 @@
 name: Manual Release
 
-# DoFun/Topway publication contracts are implemented by bounded scripts/manual-release steps:
-# assembleTopwayTwMediaRelease -> topway-twmedia-release.apk
+# Publication contracts are implemented by bounded scripts/manual-release steps:
+# assembleRelease -> app-release.apk
 # :lsposed-bridge:assembleRelease -> lsposed-api100-bridge.apk
 # The forbidden retired raw asset name topway-twmusic-release.apk is checked before publication.
 
@@ -22,8 +22,8 @@ on:
         required: true
         default: false
         type: boolean
-      include_topway_twmedia_apk:
-        description: Include the primary Topway/DoFun com.tw.media APK (recommended)
+      include_app_apk:
+        description: Include the maintained Auxio-TS com.tw.media APK (recommended)
         required: true
         default: true
         type: boolean
@@ -75,7 +75,7 @@ jobs:
         id: selection
         shell: bash
         env:
-          INCLUDE_TWMEDIA: ${{ inputs.include_topway_twmedia_apk }}
+          INCLUDE_APP: ${{ inputs.include_app_apk }}
           INCLUDE_LSPOSED_BRIDGE: ${{ inputs.include_lsposed_bridge_apk }}
           PUBLISH_DEBUG_APKS: ${{ inputs.publish_debug_apks }}
         run: bash scripts/manual-release/03-select-maintained-release-assets.sh

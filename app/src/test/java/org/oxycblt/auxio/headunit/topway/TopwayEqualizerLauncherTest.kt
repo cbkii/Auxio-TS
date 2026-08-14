@@ -18,6 +18,7 @@
 
 package org.oxycblt.auxio.headunit.topway
 
+import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -37,7 +38,7 @@ import org.robolectric.annotation.Config
 import timber.log.Timber
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [30])
+@Config(application = Application::class, sdk = [30])
 class TopwayEqualizerLauncherTest {
 
     private lateinit var context: Context
@@ -98,7 +99,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testResolverOrderEqChoiceActivity() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         val resolver = TestIntentResolver()
         resolver.resolvedComponents.add(ComponentName("com.tw.eq", "com.tw.eq.EQActivity"))
@@ -111,7 +112,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testResolverOrderEqActivity() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         val resolver = TestIntentResolver()
         // EQChoiceActivity is NOT added, only EQActivity
@@ -124,7 +125,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testPackageFallback() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         val resolver = TestIntentResolver()
         // No native components added, only package
@@ -162,7 +163,7 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testNoMainActivity() {
-        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_FLAVOR)
+        Assume.assumeTrue(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
         // Make sure it doesn't contain com.tw.eq.MainActivity
         assertEquals(
@@ -175,10 +176,9 @@ class TopwayEqualizerLauncherTest {
 
     @Test
     fun testStandardModeIsolation() {
-        Assume.assumeTrue(!BuildConfig.TOPWAY_COMPAT_FLAVOR)
-
         val resolver = TestIntentResolver()
-        val intent = TopwayEqualizerLauncher.resolveIntent(context, 123, resolver)
+        val intent =
+            TopwayEqualizerLauncher.resolveIntent(context, 123, resolver, topwayProduct = false)
 
         assertNotNull(intent)
         assertEquals(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL, intent?.action)

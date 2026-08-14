@@ -45,7 +45,7 @@ object StartupPerformanceReport {
             appendLine("applicationId=${BuildConfig.APPLICATION_ID}")
             appendLine("version=${BuildConfig.VERSION_NAME}")
             appendLine("versionCode=${BuildConfig.VERSION_CODE}")
-            appendLine("variant=${BuildConfig.FLAVOR}${BuildConfig.BUILD_TYPE}")
+            appendLine("variant=${BuildConfig.BUILD_TYPE}")
             appendLine("commit=${captureContext.commit ?: BuildConfig.BUILD_COMMIT}")
             appendLine("bootId=${bootId ?: "unavailable"}")
             appendLine("reportElapsedRealtimeMs=$reportElapsedRealtimeMs")

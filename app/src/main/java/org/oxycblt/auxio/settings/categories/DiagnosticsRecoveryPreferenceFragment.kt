@@ -68,7 +68,7 @@ class DiagnosticsRecoveryPreferenceFragment :
 
     /** Installs debug-only controls through a source-set-specific, compile-time-checked API. */
     private fun installTemporaryDebugLab() {
-        if (!BuildConfig.DEBUG || !BuildConfig.TOPWAY_COMPAT_FLAVOR) return
+        if (!BuildConfig.DEBUG || !BuildConfig.TOPWAY_COMPAT_ENABLED) return
         TemporaryDeviceValidationLab.install(this, journal, musicSettings, rootStateHolder)
     }
 
@@ -141,7 +141,7 @@ class DiagnosticsRecoveryPreferenceFragment :
     }
 
     private fun setupCarOverlayStatus(preference: Preference) {
-        if (!BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+        if (!BuildConfig.TOPWAY_COMPAT_ENABLED) {
             preference.isVisible = false
             return
         }

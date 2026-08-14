@@ -62,7 +62,7 @@ need_absent "$widget" "DiagnosticJournal" "non-essential widget diagnostics depe
 
 need_fixed "$legacy" "ACTION_LEGACY_META_CHANGED = \"com.android.music.metachanged\"" "legacy metadata broadcast action"
 need_fixed "$legacy" "ACTION_LEGACY_PLAYSTATE_CHANGED = \"com.android.music.playstatechanged\"" "legacy playstate broadcast action"
-need_fixed "$legacy" "BuildConfig.TOPWAY_COMPAT_FLAVOR" "topwayCompat-only broadcast guard"
+need_fixed "$legacy" "BuildConfig.TOPWAY_COMPAT_ENABLED" "topwayCompat-only broadcast guard"
 
 need_fixed "$overlay_service" "registerScreenOnReceiver" "dynamic SCREEN_ON receiver"
 need_fixed "$overlay_service" "Intent.ACTION_SCREEN_ON" "dynamic SCREEN_ON action"
@@ -87,3 +87,4 @@ if [ "$error_count" -ne 0 ]; then
 fi
 
 printf 'RESULT: SUCCESS, errors=0 warnings=%s\n' "$warning_count" >&2
+

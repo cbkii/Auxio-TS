@@ -13,6 +13,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.BROADCAST_STICKY" />
+    <!-- Android 14+ requires this permission for the optional floating-controls overlay.
+         Android 10 safely ignores it; runtime code API-gates the service type. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Required by Android's Visualizer API to read the current playback audio session. Auxio-TS does not record microphone audio. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
@@ -30,6 +35,7 @@
         <package android:name="com.dofun.variety" />
         <package android:name="com.tw.music" />
         <package android:name="com.tw.media" />
+        <package android:name="com.tw.service.xt" />
         <package android:name="com.tw.eq" />
         <package android:name="com.tw.dsp" />
         <package android:name="com.syu.eq" />
@@ -66,45 +72,42 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true"
+            android:exported="false"
             android:icon="@mipmap/ic_launcher"
             android:launchMode="singleTask"
             android:allowCrossUidActivitySwitchFromBelow="false"
             android:roundIcon="@mipmap/ic_launcher"
             android:windowSoftInputMode="adjustNothing"
-            android:screenOrientation="unspecified">
+            android:screenOrientation="unspecified" />
 
+        <!-- DoFun/Variety addresses this stock-compatible component in the com.tw.media app. -->
+        <activity-alias
+            android:name="com.tw.music.MusicActivity"
+            android:targetActivity="org.oxycblt.auxio.MainActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:label="@string/info_topway_music_app_name">
             <intent-filter>
-                <!-- Expose that we are a music player. -->
                 <action android:name="android.intent.action.MAIN" />
                 <action android:name="android.intent.action.MUSIC_PLAYER" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.APP_MUSIC" />
             </intent-filter>
-
             <intent-filter>
-                <!--
-                Signal that we can take audio of *any* format, file or content. This is important,
-                as some apps use this to determine if Auxio is eligible to be a default music
-                player.
-                -->
                 <action android:name="android.intent.action.VIEW" />
-
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-
                 <data android:scheme="content" />
                 <data android:scheme="file" />
-
-                <!-- Normal audio mime types + weird mime types -->
                 <data android:mimeType="audio/*" />
                 <data android:mimeType="application/ogg" />
                 <data android:mimeType="application/x-ogg" />
                 <data android:mimeType="application/itunes" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
 
         <!--
@@ -114,15 +117,23 @@
             android:name=".AuxioService"
             android:foregroundServiceType="mediaPlayback"
             android:icon="@mipmap/ic_launcher"
-            android:exported="true"
+            android:exported="false"
             android:roundIcon="@mipmap/ic_launcher"
+            tools:ignore="ExportedService" />
+
+        <!-- Canonical exported MediaBrowser wrapper; delegates to Auxio's sole playback service. -->
+        <service
+            android:name="com.tw.music.MusicService"
+            android:foregroundServiceType="mediaPlayback"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService"/>
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
-            <!-- Required for Android Auto voice search support (MissingIntentFilterForMediaSearch) -->
             <intent-filter>
-                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH"/>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
         </service>
 
@@ -195,6 +206,60 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
+        </receiver>
+
+        <receiver
+            android:name="com.tw.music.view.MusicWidgetProvider"
+            android:exported="true"
+            android:label="@string/info_topway_music_app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
+        <service
+            android:name="org.oxycblt.auxio.car.overlay.CarFloatingControlsService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            tools:ignore="ForegroundServicePermission">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Car floating playback controls overlay for head-unit displays" />
+        </service>
+
+        <activity
+            android:name="org.oxycblt.auxio.car.overlay.CarOverlayActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:label="@string/car_overlay_setting_title"
+            android:icon="@mipmap/ic_launcher">
+            <intent-filter>
+                <action android:name="org.oxycblt.auxio.action.LAUNCH_FLOATING_CONTROLS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="org.oxycblt.auxio.car.overlay.CarOverlayPermissionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Auxio.App" />
+
+        <receiver
+            android:name="org.oxycblt.auxio.car.overlay.CarOverlayBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="org.oxycblt.auxio.car.overlay.ACTION_RESTORE_OVERLAY" />
+            </intent-filter>
         </receiver>
 
         <!-- Tasker 'start service' integration -->

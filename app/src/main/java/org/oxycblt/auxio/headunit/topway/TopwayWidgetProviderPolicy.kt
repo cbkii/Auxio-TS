@@ -37,15 +37,15 @@ object TopwayWidgetProviderPolicy {
     private const val STOCK_WIDGET_PROVIDER_CLASS = "com.tw.music.view.MusicWidgetProvider"
 
     fun shouldHandleTopwayUpdate(context: Context): Boolean {
-        val topwayCompatFlavor = BuildConfig.TOPWAY_COMPAT_FLAVOR
+        val topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED
         // DoFun/Topway launchers are not guaranteed to be normal Android AppWidget hosts. In the
         // dedicated compatibility APKs, serve explicit `cmd=update` requests even when
         // AppWidgetManager cannot report a widget instance for either provider component.
-        if (topwayCompatFlavor) {
+        if (topwayProduct) {
             return true
         }
         return shouldHandleTopwayUpdate(
-            topwayCompatFlavor = topwayCompatFlavor,
+            topwayProduct = topwayProduct,
             hasAnyWidgetInstances = hasAnyWidgetInstances(context),
         )
     }
@@ -73,14 +73,14 @@ object TopwayWidgetProviderPolicy {
     }
 
     fun providerComponents(context: Context): List<ComponentName> =
-        providerClassNames(BuildConfig.TOPWAY_COMPAT_FLAVOR).map { className ->
+        providerClassNames(BuildConfig.TOPWAY_COMPAT_ENABLED).map { className ->
             ComponentName(context, className)
         }
 
     internal fun shouldHandleTopwayUpdate(
-        topwayCompatFlavor: Boolean,
+        topwayProduct: Boolean,
         hasAnyWidgetInstances: Boolean,
-    ): Boolean = topwayCompatFlavor || hasAnyWidgetInstances
+    ): Boolean = topwayProduct || hasAnyWidgetInstances
 
     private val standardClassNames: List<String> by
         lazy(LazyThreadSafetyMode.PUBLICATION) { listOf(WidgetProvider::class.java.name) }
@@ -90,6 +90,6 @@ object TopwayWidgetProviderPolicy {
             listOf(WidgetProvider::class.java.name, STOCK_WIDGET_PROVIDER_CLASS)
         }
 
-    internal fun providerClassNames(topwayCompatFlavor: Boolean): List<String> =
-        if (topwayCompatFlavor) topwayCompatClassNames else standardClassNames
+    internal fun providerClassNames(topwayProduct: Boolean): List<String> =
+        if (topwayProduct) topwayCompatClassNames else standardClassNames
 }

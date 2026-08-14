@@ -74,7 +74,7 @@ private constructor(
 
     private val widgetProvider = WidgetProvider()
     private val topwayWidgetProvider: Any? =
-        if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+        if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_ENABLED) {
             try {
                 Class.forName("com.tw.music.view.MusicWidgetProvider")
                     .getDeclaredConstructor()

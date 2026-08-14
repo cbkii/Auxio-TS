@@ -141,7 +141,7 @@ private constructor(
         PlaybackNotification(context, mediaSession.sessionToken, canonicalServiceClass) {
             DofunMediaCompatPolicy.notificationProfile(
                 launcherCoordinator.mode,
-                BuildConfig.TOPWAY_COMPAT_FLAVOR,
+                BuildConfig.TOPWAY_COMPAT_ENABLED,
             )
         }
     val notification: ForegroundServiceNotification
@@ -177,7 +177,7 @@ private constructor(
             setFlags(MediaSessionInitializationPolicy.FLAGS)
             setCallback(mediaSessionInterface)
             setPlaybackState(MediaSessionInitializationPolicy.initialPlaybackState())
-            if (BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            if (BuildConfig.TOPWAY_COMPAT_ENABLED) {
                 setSessionActivity(
                     android.app.PendingIntent.getActivity(
                         context,
@@ -693,7 +693,7 @@ private constructor(
         durationMs: Long,
     ) {
         if (
-            !BuildConfig.TOPWAY_COMPAT_FLAVOR ||
+            !BuildConfig.TOPWAY_COMPAT_ENABLED ||
                 !launcherCoordinator.mode.publishesLegacyAndroidMediaBroadcasts
         ) {
             return
@@ -731,7 +731,7 @@ private constructor(
 
     private fun broadcastLegacyPlaybackChanged() {
         if (
-            !BuildConfig.TOPWAY_COMPAT_FLAVOR ||
+            !BuildConfig.TOPWAY_COMPAT_ENABLED ||
                 !launcherCoordinator.mode.publishesLegacyAndroidMediaBroadcasts
         ) {
             return

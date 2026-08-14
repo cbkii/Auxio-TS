@@ -94,7 +94,7 @@ class TopwayMusicBridgeReceiver : BroadcastReceiver() {
         )
 
         val serviceClass =
-            if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_FLAVOR) {
+            if (org.oxycblt.auxio.BuildConfig.TOPWAY_COMPAT_ENABLED) {
                 try {
                     Class.forName("com.tw.music.MusicService")
                 } catch (e: ClassNotFoundException) {

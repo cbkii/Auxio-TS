@@ -61,7 +61,7 @@ if [ -n "$APK_PATH" ]; then
     printf 'Observed release APK ABIs:' >&2
     printf ' %s' "${packaged_abis[@]:-<none>}" >&2
     printf '\n' >&2
-    fail 'primary topwayTwMedia release APK must package only arm64-v8a'
+    fail 'maintained Auxio-TS release APK must package only arm64-v8a'
   fi
 
   if ! unzip -Z1 "$APK_PATH" | grep -Fxq 'lib/arm64-v8a/libtagJNI.so'; then

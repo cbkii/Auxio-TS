@@ -36,7 +36,7 @@ import org.oxycblt.auxio.ts18bridge.TopwayBridgeCommandLedger
 import timber.log.Timber
 
 /**
- * Thin stock-name wrapper used by the maintained `com.tw.media` compatibility build.
+ * Thin stock-name wrapper used by the maintained `com.tw.media` product.
  *
  * <p>The narrow Binder below is only a Track-C command admission surface. All playback remains
  * owned by [AuxioService] and its singleton playback state manager. This subclass deliberately is
