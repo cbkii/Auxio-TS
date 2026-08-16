@@ -26,6 +26,14 @@ Stock-compatible services, receivers, widgets and activities delegate into these
 | Root/Magisk tooling | explicitly approved storage and diagnostic operations | signer, shared UID, platform privileges or stock-package replacement |
 | Track C LSPosed bridge | optional, fail-open translation inside genuine stock `com.tw.music` | Auxio runtime ownership, DoFun scope or system-wide hooks |
 
+## Library and source-scan authority
+
+A successfully committed library is the normal operating state of the maintained TS18 product. App/activity/service lifecycle events are not source-enumeration authority. In particular, a visible Topway launch or resume must restore cached state rather than silently converting slow hydration into a compatibility-recovery scan.
+
+Source traversal is entered only for a positive source reason: initial/pending source configuration, an explicit user refresh/rescan/retry, a changed source configuration, or an independently enabled source-observation/removable-storage path. Wall-clock age alone is not a source reason. An unchanged advisory fingerprint therefore remains reusable until its observed token changes, the source is explicitly invalidated, the configuration changes, or a forced scan is requested.
+
+Generated playlists are derived presentation. Enabling them must not alter source identity, source checkpoints or scan authority. Their compilation is lazy behind playlist access so restoring the base cached library does not sort/group the whole song collection merely because generated playlists are enabled.
+
 ## Integration tracks
 
 ### Track A — direct app integration
