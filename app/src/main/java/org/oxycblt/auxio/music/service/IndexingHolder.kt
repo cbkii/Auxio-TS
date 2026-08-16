@@ -46,7 +46,6 @@ import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.IndexingTerminalOutcome
 import org.oxycblt.auxio.music.IndexingWatchdogInput
 import org.oxycblt.auxio.music.IndexingWatchdogPolicy
-import org.oxycblt.auxio.music.LibraryState
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicSettings
 import org.oxycblt.auxio.music.ObservationMode
@@ -54,7 +53,6 @@ import org.oxycblt.auxio.music.SourceConfigurationCheckpoint
 import org.oxycblt.auxio.music.SourceScanAttemptOwner
 import org.oxycblt.auxio.music.SourceScanClaimReason
 import org.oxycblt.auxio.music.SourceScanProcessIdentity
-import org.oxycblt.auxio.music.StartupLibraryStatus
 import org.oxycblt.auxio.music.StartupOptionalWorkGate
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
@@ -111,7 +109,6 @@ private constructor(
     private var pendingIndexRequest: IndexRequest? = null
     private var directReplacementHandoff = false
     private var startupJob: Job? = null
-    private var startupRecoveryJob: Job? = null
     private var watchdogJob: Job? = null
     private var sourceConfigurationJob: Job? = null
     private var attached = false
@@ -197,8 +194,6 @@ private constructor(
         }
         startupJob?.cancel()
         startupJob = null
-        startupRecoveryJob?.cancel()
-        startupRecoveryJob = null
         watchdogJob?.cancel()
         watchdogJob = null
         sourceConfigurationJob?.cancel()
@@ -258,20 +253,9 @@ private constructor(
                             L.e("Indexing startup blocked because worker attachment failed")
                             return@launch
                         }
-                        val sourceAuthority =
-                            StartupScanAuthorityPolicy.hasCurrentSourceAuthority(
-                                workerContext,
-                                musicSettings,
-                            )
-                        val automaticScanAllowed =
-                            StartupScanAuthorityPolicy.allowAutomaticScan(
-                                topwayProduct = BuildConfig.TOPWAY_COMPAT_ENABLED,
-                                origin = origin,
-                                sourceAuthority = sourceAuthority,
-                            )
                         // Root probing remains on-demand. Cache and playback restoration do not
-                        // wait
-                        // for su, source traversal, or a library scan.
+                        // wait for su, source traversal, or a library scan. A normal lifecycle
+                        // start never escalates slow/failed hydration into source enumeration.
                         musicRepository.startup(this@IndexingHolder)
                         val pendingConfiguration = musicSettings.sourceConfigurationCheckpoint
                         if (
@@ -296,8 +280,6 @@ private constructor(
                                         },
                                 )
                             )
-                        } else if (BuildConfig.TOPWAY_COMPAT_ENABLED && automaticScanAllowed) {
-                            requestVisibleRecoveryScan(sourceAuthority)
                         }
                     } finally {
                         val nextOrigin =
@@ -315,50 +297,6 @@ private constructor(
                     }
                 }
         }
-    }
-
-    private fun requestVisibleRecoveryScan(sourceAuthority: Boolean) {
-        if (!sourceAuthority) return
-        val needsImmediateScan =
-            musicSettings.revision == null || musicSettings.libraryState != LibraryState.USABLE
-        if (needsImmediateScan) {
-            L.i(
-                "Trusted visible startup is repairing the library " +
-                    "[state=${musicSettings.libraryState} revision=${musicSettings.revision}]"
-            )
-            requestIndex(
-                IndexRequest(
-                    reason = IndexReason.COMPATIBILITY_RECOVERY,
-                    withCache = false,
-                    configurationGeneration = musicSettings.sourceConfigurationGeneration,
-                )
-            )
-            return
-        }
-        // A previous failure must not permanently strand an empty or unusable library,
-        // but it should suppress delayed retry loops once a usable generation exists.
-        if (musicSettings.lastScanFailed) return
-
-        startupRecoveryJob?.cancel()
-        startupRecoveryJob =
-            indexScope.launch {
-                delay(STARTUP_RECOVERY_GRACE_MS)
-                val shouldRecover =
-                    synchronized(this@IndexingHolder) { attached && currentIndexJob == null } &&
-                        !musicSettings.lastScanFailed &&
-                        (musicRepository.library == null ||
-                            musicRepository.startupLibraryStatus != StartupLibraryStatus.Usable)
-                if (shouldRecover) {
-                    L.w("Cached library did not become usable; requesting one recovery scan")
-                    requestIndex(
-                        IndexRequest(
-                            reason = IndexReason.COMPATIBILITY_RECOVERY,
-                            withCache = true,
-                            configurationGeneration = musicSettings.sourceConfigurationGeneration,
-                        )
-                    )
-                }
-            }
     }
 
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
@@ -801,7 +739,21 @@ private constructor(
                         )
                     if (keys.isEmpty()) return
                     when (action) {
-                        Intent.ACTION_MEDIA_MOUNTED -> scheduleMountedSourceRetry(keys)
+                        Intent.ACTION_MEDIA_MOUNTED -> {
+                            if (
+                                RemovableStorageEventPolicy.allowsAutomaticMountedRefresh(
+                                    musicSettings.observationMode
+                                )
+                            ) {
+                                scheduleMountedSourceRetry(keys)
+                            } else {
+                                L.i(
+                                    "Mounted source is readable in manual library mode; " +
+                                        "preserving the committed generation until explicit " +
+                                        "refresh [sources=$keys]"
+                                )
+                            }
+                        }
                         Intent.ACTION_MEDIA_UNMOUNTED,
                         Intent.ACTION_MEDIA_EJECT,
                         Intent.ACTION_MEDIA_REMOVED -> handleSourcesRemoved(keys)
@@ -979,7 +931,6 @@ private constructor(
         const val WAKELOCK_TIMEOUT_MS = 60 * 1000L
         internal const val OBSERVATION_DEBOUNCE_MS = 750L
         internal const val SOURCE_CONFIGURATION_DEBOUNCE_MS = 600L
-        internal const val STARTUP_RECOVERY_GRACE_MS = 3_000L
         internal const val WATCHDOG_POLL_MS = 5_000L
     }
 }

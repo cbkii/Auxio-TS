@@ -20,10 +20,12 @@ package org.oxycblt.auxio.music.service
 
 import android.net.Uri
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.oxycblt.auxio.music.ConfiguredSourceSpec
+import org.oxycblt.auxio.music.ObservationMode
 import org.oxycblt.auxio.music.locations.LocationMode
 import org.robolectric.RobolectricTestRunner
 
@@ -41,6 +43,19 @@ class RemovableStorageEventPolicyTest {
         assertEquals(
             setOf("usb0"),
             RemovableStorageEventPolicy.matchingSourceKeys("/storage/usbdisk0", specs),
+        )
+    }
+
+    @Test
+    fun `manual mode never turns a remount into scan authority`() {
+        assertFalse(
+            RemovableStorageEventPolicy.allowsAutomaticMountedRefresh(ObservationMode.MANUAL)
+        )
+        assertTrue(
+            RemovableStorageEventPolicy.allowsAutomaticMountedRefresh(ObservationMode.WHEN_IDLE)
+        )
+        assertTrue(
+            RemovableStorageEventPolicy.allowsAutomaticMountedRefresh(ObservationMode.CONTINUOUS)
         )
     }
 

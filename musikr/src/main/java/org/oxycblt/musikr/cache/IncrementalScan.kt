@@ -86,6 +86,71 @@ interface IncrementalCache {
         configurationRevision: Long,
     ): IncrementalScanPlan
 
+    /**
+     * Policy-aware planning entry point. Existing cache implementations retain automatic advisory
+     * validation through [planScan]. In manual mode the maintained app passes false so age-only
+     * advisory expiry cannot create a new source generation.
+     *
+     * If a standalone FULL plan contains only age-expired advisory sources, they are downgraded to
+     * the optional metadata-enrichment lane so a genuine legacy artwork/metadata repair can still
+     * run without acquiring source-membership authority. In any mixed authoritative/removal plan,
+     * age-only sources are reused instead of being swept into the sibling source generation.
+     */
+    suspend fun planScan(
+        snapshots: List<SourceSnapshot>,
+        force: Boolean,
+        metadataProfile: MetadataProfile,
+        configurationRevision: Long,
+        allowAdvisoryExpiry: Boolean,
+    ): IncrementalScanPlan {
+        val planned = planScan(snapshots, force, metadataProfile, configurationRevision)
+        if (allowAdvisoryExpiry || force) return planned
+
+        val expiredKeys =
+            planned.scanReasons
+                .filterValues { it == SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED }
+                .keys
+        if (expiredKeys.isEmpty()) return planned
+
+        val nonExpiredSources = planned.scanSources.filterNot { it.sourceKey in expiredKeys }
+        if (
+            metadataProfile == MetadataProfile.FULL &&
+                nonExpiredSources.isEmpty() &&
+                planned.removedSourceKeys.isEmpty()
+        ) {
+            val reasons =
+                planned.scanReasons.mapValues { (sourceKey, reason) ->
+                    if (sourceKey in expiredKeys) {
+                        SourceScanReason.METADATA_PROFILE_UPGRADE
+                    } else {
+                        reason
+                    }
+                }
+            return planned.copy(
+                scanReasons = reasons,
+                enrichmentOnly =
+                    IncrementalScanPlan.isEnrichmentOnly(
+                        scanSources = planned.scanSources,
+                        removedSourceKeys = planned.removedSourceKeys,
+                        scanReasons = reasons,
+                    ),
+            )
+        }
+
+        val retainedReasons = planned.scanReasons.filterKeys { it !in expiredKeys }
+        return planned.copy(
+            scanSources = nonExpiredSources,
+            reuseSourceKeys = planned.reuseSourceKeys + expiredKeys,
+            scanReasons = retainedReasons,
+            enrichmentOnly =
+                IncrementalScanPlan.isEnrichmentOnly(
+                    scanSources = nonExpiredSources,
+                    removedSourceKeys = planned.removedSourceKeys,
+                    scanReasons = retainedReasons,
+                ),
+        )
+    }
+
     suspend fun beginScan(plan: IncrementalScanPlan)
 
     /** Record a discovered file, even when its cached metadata is unchanged. */
