@@ -59,7 +59,7 @@ class ArtworkRepairPolicyTest {
     }
 
     @Test
-    fun `only full metadata enrichment can satisfy the compatibility repair`() {
+    fun `only full cached unscoped metadata enrichment can satisfy compatibility repair`() {
         assertTrue(
             ArtworkRepairCompletionPolicy.isRepairRequest(
                 IndexRequest(
@@ -87,6 +87,27 @@ class ArtworkRepairPolicyTest {
                     withCache = true,
                     metadataProfile = MetadataProfile.LEAN,
                     configurationGeneration = 3L,
+                )
+            )
+        )
+        assertFalse(
+            ArtworkRepairCompletionPolicy.isRepairRequest(
+                IndexRequest(
+                    reason = IndexReason.METADATA_ENRICHMENT,
+                    withCache = false,
+                    metadataProfile = MetadataProfile.FULL,
+                    configurationGeneration = 3L,
+                )
+            )
+        )
+        assertFalse(
+            ArtworkRepairCompletionPolicy.isRepairRequest(
+                IndexRequest(
+                    reason = IndexReason.METADATA_ENRICHMENT,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.FULL,
+                    configurationGeneration = 3L,
+                    sourceKeys = setOf("direct:usb0"),
                 )
             )
         )

@@ -67,8 +67,10 @@ constructor(
     private var startScheduled = false
     private var started = false
     private var requested = false
-    private var repairSessionObserved = false
     private var indexingListenerAttached = false
+    private var repairRequest: IndexRequest? = null
+    private var preexistingSessionId: Long? = null
+    private var repairSessionId: Long? = null
     private var musicRepository: MusicRepository? = null
     private var musicSettings: MusicSettings? = null
     private var imageSettings: ImageSettings? = null
@@ -119,20 +121,34 @@ constructor(
         val repository = synchronized(this) { musicRepository } ?: return
         when (val state = repository.indexingState) {
             is IndexingState.Indexing -> {
-                if (ArtworkRepairCompletionPolicy.isRepairRequest(state.request)) {
-                    synchronized(this) { repairSessionObserved = true }
+                synchronized(this) {
+                    val expected = repairRequest ?: return@synchronized
+                    if (
+                        repairSessionId == null &&
+                            state.sessionId != preexistingSessionId &&
+                            state.request == expected &&
+                            ArtworkRepairCompletionPolicy.isRepairRequest(state.request)
+                    ) {
+                        repairSessionId = state.sessionId
+                        L.d("Artwork compatibility repair session started [session=${state.sessionId}]")
+                    }
                 }
             }
             is IndexingState.Completed -> {
-                val observed = synchronized(this) { repairSessionObserved }
-                if (!observed) return
+                val observedSession = synchronized(this) { repairSessionId } ?: return
+                // Repository indexing is serialised: completion is dispatched synchronously before
+                // IndexingHolder can start the next pending session. Once the submitted repair's
+                // session has been observed, this is therefore its terminal state.
                 if (ArtworkRepairCompletionPolicy.isSuccessfulCompletion(state.outcome)) {
                     preferences.edit { putBoolean(KEY_ARTWORK_REPAIR_V2_COMPLETE, true) }
-                    L.i("Artwork enrichment compatibility repair completed and was checkpointed")
+                    L.i(
+                        "Artwork enrichment compatibility repair completed and was checkpointed " +
+                            "[session=$observedSession]"
+                    )
                 } else {
                     L.w(
                         "Artwork enrichment compatibility repair did not complete " +
-                            "[outcome=${state.outcome}]"
+                            "[session=$observedSession outcome=${state.outcome}]"
                     )
                 }
                 detachIndexingListener(repository)
@@ -159,12 +175,6 @@ constructor(
         ) {
             return
         }
-        requested = true
-        repairSessionObserved = false
-        if (!indexingListenerAttached) {
-            indexingListenerAttached = true
-            repository.addIndexingListener(this)
-        }
         val request =
             IndexRequest(
                 reason = IndexReason.METADATA_ENRICHMENT,
@@ -172,6 +182,14 @@ constructor(
                 metadataProfile = MetadataProfile.FULL,
                 configurationGeneration = settings.sourceConfigurationGeneration,
             )
+        requested = true
+        repairRequest = request
+        repairSessionId = null
+        preexistingSessionId = (repository.indexingState as? IndexingState.Indexing)?.sessionId
+        if (!indexingListenerAttached) {
+            indexingListenerAttached = true
+            repository.addIndexingListener(this)
+        }
         L.i("Scheduling one-shot artwork enrichment compatibility repair")
         repository.requestIndex(request)
         detachReadinessListeners()
@@ -205,7 +223,9 @@ internal object ArtworkRepairPolicy {
 internal object ArtworkRepairCompletionPolicy {
     fun isRepairRequest(request: IndexRequest?): Boolean =
         request?.reason == IndexReason.METADATA_ENRICHMENT &&
-            request.metadataProfile == MetadataProfile.FULL
+            request.withCache &&
+            request.metadataProfile == MetadataProfile.FULL &&
+            request.sourceKeys == null
 
     fun isSuccessfulCompletion(outcome: IndexingTerminalOutcome): Boolean =
         outcome == IndexingTerminalOutcome.SUCCESS
