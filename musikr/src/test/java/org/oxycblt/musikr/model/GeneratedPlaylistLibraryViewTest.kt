@@ -18,8 +18,9 @@
 
 package org.oxycblt.musikr.model
 
-import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
@@ -32,37 +33,59 @@ import org.oxycblt.musikr.fs.Path
 
 class GeneratedPlaylistLibraryViewTest {
     @Test
-    fun `heavy collections delegate to base by identity`() {
-        val base = FakeLibrary()
-        val view = GeneratedPlaylistLibraryView(base, emptyList())
+    fun `base-library access does not compile generated playlists`() {
+        var compilations = 0
+        val view =
+            GeneratedPlaylistLibraryView(EmptyLibrary) {
+                compilations++
+                emptyList()
+            }
 
-        assertSame(base.songs, view.songs)
-        assertSame(base.albums, view.albums)
-        assertSame(base.artists, view.artists)
-        assertSame(base.genres, view.genres)
+        assertTrue(view.songs.isEmpty())
+        assertTrue(view.albums.isEmpty())
+        assertTrue(view.artists.isEmpty())
+        assertTrue(view.genres.isEmpty())
+        assertTrue(view.empty())
+        assertSame(view, view.withGeneratedPlaylists(true))
+        assertEquals(0, compilations)
     }
 
     @Test
-    fun `user mutation wraps new base without cloning heavy collections`() = runBlocking {
-        val next = FakeLibrary()
-        val base = FakeLibrary().apply { mutationResult = next }
-        val view = GeneratedPlaylistLibraryView(base, emptyList())
+    fun `playlist access compiles once and memoizes the projection`() {
+        var compilations = 0
+        val view =
+            GeneratedPlaylistLibraryView(EmptyLibrary) {
+                compilations++
+                emptyList()
+            }
 
-        val mutated = view.createPlaylist("Road", emptyList())
-
-        assertSame(next.songs, mutated.songs)
-        assertSame(next.albums, mutated.albums)
+        assertTrue(view.playlists.isEmpty())
+        assertTrue(view.playlists.isEmpty())
+        assertEquals(null, view.findPlaylistByName("missing"))
+        assertEquals(1, compilations)
     }
 
-    private class FakeLibrary : MutableLibrary {
-        override val songs = emptySet<Song>()
-        override val albums = emptySet<Album>()
-        override val artists = emptySet<Artist>()
-        override val genres = emptySet<Genre>()
-        override val playlists = emptySet<Playlist>()
-        var mutationResult: MutableLibrary = this
+    @Test
+    fun `disabling generated playlists before access does not compile them`() {
+        var compilations = 0
+        val view =
+            GeneratedPlaylistLibraryView(EmptyLibrary) {
+                compilations++
+                emptyList()
+            }
 
-        override fun empty() = songs.isEmpty()
+        assertSame(EmptyLibrary, view.withGeneratedPlaylists(false))
+        assertEquals(0, compilations)
+    }
+
+    private object EmptyLibrary : MutableLibrary {
+        override val songs: Collection<Song> = emptyList()
+        override val albums: Collection<Album> = emptyList()
+        override val artists: Collection<Artist> = emptyList()
+        override val genres: Collection<Genre> = emptyList()
+        override val playlists: Collection<Playlist> = emptyList()
+
+        override fun empty() = true
 
         override fun findSong(uid: Music.UID): Song? = null
 
@@ -78,14 +101,20 @@ class GeneratedPlaylistLibraryViewTest {
 
         override fun findPlaylistByName(name: String): Playlist? = null
 
-        override suspend fun createPlaylist(name: String, songs: List<Song>) = mutationResult
+        override suspend fun createPlaylist(name: String, songs: List<Song>): MutableLibrary = this
 
-        override suspend fun renamePlaylist(playlist: Playlist, name: String) = mutationResult
+        override suspend fun renamePlaylist(playlist: Playlist, name: String): MutableLibrary = this
 
-        override suspend fun addToPlaylist(playlist: Playlist, songs: List<Song>) = mutationResult
+        override suspend fun addToPlaylist(
+            playlist: Playlist,
+            songs: List<Song>,
+        ): MutableLibrary = this
 
-        override suspend fun rewritePlaylist(playlist: Playlist, songs: List<Song>) = mutationResult
+        override suspend fun rewritePlaylist(
+            playlist: Playlist,
+            songs: List<Song>,
+        ): MutableLibrary = this
 
-        override suspend fun deletePlaylist(playlist: Playlist) = mutationResult
+        override suspend fun deletePlaylist(playlist: Playlist): MutableLibrary = this
     }
 }
