@@ -86,6 +86,19 @@ interface IncrementalCache {
         configurationRevision: Long,
     ): IncrementalScanPlan
 
+    /**
+     * Policy-aware planning entry point. Existing cache implementations retain automatic advisory
+     * validation through the compatibility default; the maintained app passes false in manual mode
+     * so elapsed time alone cannot cause a source traversal.
+     */
+    suspend fun planScan(
+        snapshots: List<SourceSnapshot>,
+        force: Boolean,
+        metadataProfile: MetadataProfile,
+        configurationRevision: Long,
+        allowAdvisoryExpiry: Boolean,
+    ): IncrementalScanPlan = planScan(snapshots, force, metadataProfile, configurationRevision)
+
     suspend fun beginScan(plan: IncrementalScanPlan)
 
     /** Record a discovered file, even when its cached metadata is unchanged. */
