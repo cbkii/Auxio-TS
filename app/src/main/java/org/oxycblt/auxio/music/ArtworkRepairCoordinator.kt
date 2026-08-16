@@ -56,11 +56,13 @@ constructor(
     private val musicRepositoryProvider: Provider<MusicRepository>,
     private val musicSettingsProvider: Provider<MusicSettings>,
     private val imageSettingsProvider: Provider<ImageSettings>,
-) : MusicRepository.StartupReadinessListener, MusicRepository.IndexingListener, ImageSettings.Listener {
+) :
+    MusicRepository.StartupReadinessListener,
+    MusicRepository.IndexingListener,
+    ImageSettings.Listener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val preferences by lazy(LazyThreadSafetyMode.NONE) {
-        PreferenceManager.getDefaultSharedPreferences(context)
-    }
+    private val preferences by
+        lazy(LazyThreadSafetyMode.NONE) { PreferenceManager.getDefaultSharedPreferences(context) }
 
     private var startScheduled = false
     private var started = false
