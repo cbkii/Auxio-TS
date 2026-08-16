@@ -30,24 +30,16 @@ import org.oxycblt.musikr.fs.Path
 /**
  * Lightweight playlist projection over a base library.
  *
- * Song/album/artist/genre collections and lookup maps remain owned by [base]. Generated-playlist
- * compilation is lazy and memoized so merely enabling the feature or restoring the cached base
- * library does not immediately sort/group the whole song collection. The derived playlists are
- * built only when a playlist surface actually asks for them.
- *
- * User playlist mutations update the base and return a newly wrapped view; generated playlists
- * remain immutable and are reused across those playlist-only mutations.
+ * Song/album/artist/genre collections and lookup maps remain owned by [base]. Only the small
+ * generated-playlist lookup is built here. User playlist mutations update the base and return a
+ * newly wrapped view; generated playlists remain immutable.
  */
 internal class GeneratedPlaylistLibraryView(
     private val base: MutableLibrary,
-    generated: () -> Collection<Playlist>,
+    generated: Collection<Playlist>,
 ) : MutableLibrary {
-    private val generatedPlaylists: Set<Playlist> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        generated().toSet()
-    }
-    private val generatedByUid: Map<Music.UID, Playlist> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        generatedPlaylists.associateBy { it.uid }
-    }
+    private val generatedPlaylists = generated.toSet()
+    private val generatedByUid = generatedPlaylists.associateBy { it.uid }
 
     override val songs: Collection<Song>
         get() = base.songs
@@ -112,5 +104,5 @@ internal class GeneratedPlaylistLibraryView(
     }
 
     private fun wrap(nextBase: MutableLibrary) =
-        GeneratedPlaylistLibraryView(nextBase.withGeneratedPlaylists(false)) { generatedPlaylists }
+        GeneratedPlaylistLibraryView(nextBase.withGeneratedPlaylists(false), generatedPlaylists)
 }
