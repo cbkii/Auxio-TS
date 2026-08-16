@@ -29,9 +29,9 @@ enum class SourceFingerprintConfidence {
     STRONG,
     /**
      * A bounded, cheap observation such as a shallow directory sample. It is a useful change signal
-     * but not proof that a large tree is unchanged. Automatic observation modes may therefore
-     * periodically validate it; manual mode deliberately does not turn elapsed time into scan
-     * authority.
+     * but not proof that a large tree is unchanged. Callers that explicitly opt into periodic
+     * validation may expire it; the maintained TS18 product instead relies on positive observer,
+     * mount, configuration or user-refresh signals.
      */
     ADVISORY,
     /** No trustworthy change token. The source must be enumerated when an index is authorised. */
@@ -54,10 +54,10 @@ enum class SourceScanReason {
 /**
  * Pure classification of "may this committed source generation be reused?".
  *
- * Reuse is a performance optimisation layered on top of explicit scan authority. In the maintained
- * TS18 product, manual library mode sets [allowAdvisoryExpiry] to false so wall-clock age alone can
- * never turn an ordinary cached refresh into a filesystem traversal. Automatic observation modes
- * retain bounded advisory validation because they explicitly opt into background source checking.
+ * Reuse is a performance optimisation layered on top of explicit scan authority. The generic
+ * policy retains bounded advisory expiry for callers that pass [allowAdvisoryExpiry] as true. The
+ * maintained TS18 integration passes false because its automatic modes already receive explicit
+ * observer/mount invalidation signals; wall-clock age is not a second, hidden source trigger.
  */
 object SourceFingerprintReusePolicy {
     /**
@@ -134,8 +134,8 @@ object SourceFingerprintReusePolicy {
                     val lastSuccess = previous.lastSuccessfulScanMs
                     val ageMs = lastSuccess?.let { nowMs - it }
                     // Persisted timestamps use wall clock. A clock rollback/future timestamp is not
-                    // evidence that the advisory observation remains fresh, so automatic modes fail
-                    // safe to a validating scan. Manual mode never enters this expiry branch.
+                    // evidence that the advisory observation remains fresh, so an expiry-enabled
+                    // caller fails safe to a validating scan.
                     if (ageMs == null || ageMs < 0L || ageMs >= ADVISORY_REFRESH_MS) {
                         return SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED
                     }
