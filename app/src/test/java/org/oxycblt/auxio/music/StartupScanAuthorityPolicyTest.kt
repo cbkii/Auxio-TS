@@ -26,8 +26,8 @@ import org.oxycblt.auxio.music.service.StartupScanOrigin
 
 class StartupScanAuthorityPolicyTest {
     @Test
-    fun currentProductVisibleStartMayRecoverAnAuthorisedSource() {
-        assertTrue(
+    fun currentProductVisibleStartNeverAuthorisesASourceScan() {
+        assertFalse(
             StartupScanAuthorityPolicy.allowAutomaticScan(
                 topwayProduct = true,
                 origin = StartupScanOrigin.USER_VISIBLE,
@@ -53,6 +53,17 @@ class StartupScanAuthorityPolicyTest {
             StartupScanAuthorityPolicy.allowAutomaticScan(
                 topwayProduct = false,
                 origin = StartupScanOrigin.BACKGROUND,
+                sourceAuthority = true,
+            )
+        )
+    }
+
+    @Test
+    fun androidFallbackPolicyRetainsVisibleStartupAuthority() {
+        assertTrue(
+            StartupScanAuthorityPolicy.allowAutomaticScan(
+                topwayProduct = false,
+                origin = StartupScanOrigin.USER_VISIBLE,
                 sourceAuthority = true,
             )
         )

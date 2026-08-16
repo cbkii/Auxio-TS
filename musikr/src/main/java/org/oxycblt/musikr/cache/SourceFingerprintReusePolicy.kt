@@ -28,11 +28,13 @@ enum class SourceFingerprintConfidence {
      */
     STRONG,
     /**
-     * A bounded, cheap observation such as a shallow directory sample. Useful to avoid needless
-     * warm work, never proof that a large tree is unchanged, so it expires on a bounded interval.
+     * A bounded, cheap observation such as a shallow directory sample. It is a useful change signal
+     * but not proof that a large tree is unchanged. Callers that explicitly opt into periodic
+     * validation may expire it; the maintained TS18 product instead relies on positive observer,
+     * mount, configuration or user-refresh signals.
      */
     ADVISORY,
-    /** No trustworthy change token. The source must be enumerated. */
+    /** No trustworthy change token. The source must be enumerated when an index is authorised. */
     UNAVAILABLE,
 }
 
@@ -50,18 +52,17 @@ enum class SourceScanReason {
 }
 
 /**
- * Pure classification of "is this source provably unchanged?".
+ * Pure classification of "may this committed source generation be reused?".
  *
- * Reuse is only ever a performance optimisation layered on top of the authoritative scan lane. Any
- * doubt must resolve to a real scan, because a wrongly reused generation silently hides files the
- * user can see on the device.
+ * Reuse is a performance optimisation layered on top of explicit scan authority. The generic policy
+ * retains bounded advisory expiry for callers that pass [allowAdvisoryExpiry] as true. The
+ * maintained TS18 integration passes false because its automatic modes already receive explicit
+ * observer/mount invalidation signals; wall-clock age is not a second, hidden source trigger.
  */
 object SourceFingerprintReusePolicy {
     /**
-     * How long an advisory fingerprint may suppress enumeration.
-     *
-     * Bounded rather than indefinite because advisory tokens observe a sample, not the complete
-     * tree: a change beneath the sampled level is invisible to them.
+     * How long an advisory fingerprint may suppress enumeration when periodic validation is
+     * explicitly enabled by the caller.
      */
     const val ADVISORY_REFRESH_MS = 6L * 60L * 60L * 1000L
 
@@ -110,6 +111,7 @@ object SourceFingerprintReusePolicy {
         profileUpgrade: Boolean,
         configurationRevision: Long,
         nowMs: Long,
+        allowAdvisoryExpiry: Boolean = true,
     ): SourceScanReason? {
         if (force) return SourceScanReason.FORCED
         if (previous == null || !previous.hasCommittedGeneration) {
@@ -128,12 +130,15 @@ object SourceFingerprintReusePolicy {
             SourceFingerprintConfidence.UNAVAILABLE ->
                 return SourceScanReason.FINGERPRINT_UNAVAILABLE
             SourceFingerprintConfidence.ADVISORY -> {
-                val lastSuccess = previous.lastSuccessfulScanMs
-                val ageMs = lastSuccess?.let { nowMs - it }
-                // Persisted timestamps use wall clock. A clock rollback/future timestamp is not
-                // evidence that the advisory observation remains fresh, so fail safe to a scan.
-                if (ageMs == null || ageMs < 0L || ageMs >= ADVISORY_REFRESH_MS) {
-                    return SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED
+                if (allowAdvisoryExpiry) {
+                    val lastSuccess = previous.lastSuccessfulScanMs
+                    val ageMs = lastSuccess?.let { nowMs - it }
+                    // Persisted timestamps use wall clock. A clock rollback/future timestamp is not
+                    // evidence that the advisory observation remains fresh, so an expiry-enabled
+                    // caller fails safe to a validating scan.
+                    if (ageMs == null || ageMs < 0L || ageMs >= ADVISORY_REFRESH_MS) {
+                        return SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED
+                    }
                 }
             }
             SourceFingerprintConfidence.STRONG -> Unit

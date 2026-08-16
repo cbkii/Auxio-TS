@@ -19,10 +19,15 @@
 package org.oxycblt.auxio.music.service
 
 import org.oxycblt.auxio.music.ConfiguredSourceSpec
+import org.oxycblt.auxio.music.ObservationMode
 import org.oxycblt.auxio.music.locations.LocationMode
 
 internal object RemovableStorageEventPolicy {
     val settleDelaysMs = longArrayOf(500L, 1_500L, 3_000L)
+
+    /** Manual library mode treats a remount as availability only, never scan authority. */
+    fun allowsAutomaticMountedRefresh(observationMode: ObservationMode): Boolean =
+        observationMode != ObservationMode.MANUAL
 
     fun matchingSourceKeys(mountedPath: String?, specs: List<ConfiguredSourceSpec>): Set<String> {
         val root = mountedPath?.trimEnd('/')?.takeIf { it.startsWith("/") } ?: return emptySet()
