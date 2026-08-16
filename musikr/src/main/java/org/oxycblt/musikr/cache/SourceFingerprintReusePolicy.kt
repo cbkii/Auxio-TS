@@ -28,11 +28,12 @@ enum class SourceFingerprintConfidence {
      */
     STRONG,
     /**
-     * A bounded, cheap observation such as a shallow directory sample. Useful to avoid needless
-     * warm work, never proof that a large tree is unchanged, so it expires on a bounded interval.
+     * A bounded, cheap observation such as a shallow directory sample. It is a change signal, not
+     * proof that a large tree is unchanged. Auxio-TS therefore combines it with explicit
+     * invalidation/refresh authority instead of periodically expiring it into an unsolicited scan.
      */
     ADVISORY,
-    /** No trustworthy change token. The source must be enumerated. */
+    /** No trustworthy change token. The source must be enumerated when an index is explicitly run. */
     UNAVAILABLE,
 }
 
@@ -46,25 +47,22 @@ enum class SourceScanReason {
     INVALIDATED,
     FINGERPRINT_CHANGED,
     FINGERPRINT_UNAVAILABLE,
-    ADVISORY_FINGERPRINT_EXPIRED,
 }
 
 /**
- * Pure classification of "is this source provably unchanged?".
+ * Pure classification of "may this committed source generation be reused?".
  *
- * Reuse is only ever a performance optimisation layered on top of the authoritative scan lane. Any
- * doubt must resolve to a real scan, because a wrongly reused generation silently hides files the
- * user can see on the device.
+ * Auxio-TS treats a committed library as the normal operating state. Time passing by itself must
+ * never become source-enumeration authority: an unchanged advisory fingerprint remains reusable
+ * until a source observer/mount path explicitly invalidates it, its observed token changes, the
+ * configuration changes, or the user requests a forced rescan. This is deliberately different from
+ * periodically validating a weak fingerprint in the background, which caused ordinary TS18
+ * lifecycle work to become a full library traversal after enough wall-clock time elapsed.
+ *
+ * A missing fingerprint still carries no evidence and cannot suppress an index that has otherwise
+ * been authorised.
  */
 object SourceFingerprintReusePolicy {
-    /**
-     * How long an advisory fingerprint may suppress enumeration.
-     *
-     * Bounded rather than indefinite because advisory tokens observe a sample, not the complete
-     * tree: a change beneath the sampled level is invisible to them.
-     */
-    const val ADVISORY_REFRESH_MS = 6L * 60L * 60L * 1000L
-
     /** Durable per-source ledger fields consulted before enumeration. */
     data class LedgerState(
         val hasCommittedGeneration: Boolean,
@@ -101,7 +99,12 @@ object SourceFingerprintReusePolicy {
      * Source correctness gates deliberately precede a metadata-profile upgrade. A changed or
      * invalidated source remains an authoritative source scan even when the same request also asks
      * for richer metadata; the profile request must never conceal why reuse was unsafe.
+     *
+     * [nowMs] remains part of this internal contract because the durable ledger records successful
+     * scan time for diagnostics and compatibility, but elapsed wall-clock time is intentionally no
+     * longer a scan trigger.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun scanReason(
         strength: SourceFingerprintStrength,
         fingerprint: String?,
@@ -124,19 +127,8 @@ object SourceFingerprintReusePolicy {
             return SourceScanReason.FINGERPRINT_CHANGED
         }
 
-        when (confidence(strength, fingerprint)) {
-            SourceFingerprintConfidence.UNAVAILABLE ->
-                return SourceScanReason.FINGERPRINT_UNAVAILABLE
-            SourceFingerprintConfidence.ADVISORY -> {
-                val lastSuccess = previous.lastSuccessfulScanMs
-                val ageMs = lastSuccess?.let { nowMs - it }
-                // Persisted timestamps use wall clock. A clock rollback/future timestamp is not
-                // evidence that the advisory observation remains fresh, so fail safe to a scan.
-                if (ageMs == null || ageMs < 0L || ageMs >= ADVISORY_REFRESH_MS) {
-                    return SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED
-                }
-            }
-            SourceFingerprintConfidence.STRONG -> Unit
+        if (confidence(strength, fingerprint) == SourceFingerprintConfidence.UNAVAILABLE) {
+            return SourceScanReason.FINGERPRINT_UNAVAILABLE
         }
 
         return if (profileUpgrade) SourceScanReason.METADATA_PROFILE_UPGRADE else null
