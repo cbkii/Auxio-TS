@@ -138,4 +138,21 @@ class DofunIntegrationClassifierTest {
 
         assertTrue(recommendation.contains("Preserve stock"))
     }
+
+    @Test
+    fun `missing release recommendation names the current product identity`() {
+        val recommendation =
+            DofunIntegrationClassifier.recommendation(
+                topology =
+                    DofunPackageTopology(
+                        releaseAuxioPresent = false,
+                        debugAuxioPresent = false,
+                        stockMusicPresent = false,
+                        dofunPresent = true,
+                    ),
+                selectedTarget = DofunSelectedMusicTarget.UNKNOWN,
+            )
+
+        assertTrue(recommendation.contains("signed com.tw.media release APK"))
+    }
 }
