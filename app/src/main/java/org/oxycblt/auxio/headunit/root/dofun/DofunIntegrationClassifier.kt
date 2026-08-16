@@ -150,7 +150,7 @@ object DofunIntegrationClassifier {
             topology.debugAuxioPresent && !topology.releaseAuxioPresent ->
                 "Install the exact com.tw.media release build before fixed-identity validation; the debug suffix is not a DoFun fixed match."
             !topology.releaseAuxioPresent ->
-                "Install topwayTwMediaRelease. Package topology does not establish launcher selection."
+                "Install the signed com.tw.media release APK. Package topology does not establish launcher selection."
             else ->
                 "DoFun selection was not found in the inspected scope. Verify the playback channel/session first, then collect current launcher selection evidence."
         }
