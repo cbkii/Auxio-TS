@@ -88,8 +88,13 @@ interface IncrementalCache {
 
     /**
      * Policy-aware planning entry point. Existing cache implementations retain automatic advisory
-     * validation through the compatibility default; the maintained app passes false in manual mode
-     * so elapsed time alone cannot cause a source traversal.
+     * validation through [planScan]. In manual mode the maintained app passes false so age-only
+     * advisory expiry cannot create a new source generation.
+     *
+     * A FULL request still keeps expired sources in the optional metadata-enrichment lane: the
+     * caller may genuinely be repairing old metadata/artwork, but that work must not be relabelled
+     * as source-membership authority merely because the advisory timestamp is old. LEAN requests
+     * reuse the committed source generation outright.
      */
     suspend fun planScan(
         snapshots: List<SourceSnapshot>,
@@ -97,7 +102,50 @@ interface IncrementalCache {
         metadataProfile: MetadataProfile,
         configurationRevision: Long,
         allowAdvisoryExpiry: Boolean,
-    ): IncrementalScanPlan = planScan(snapshots, force, metadataProfile, configurationRevision)
+    ): IncrementalScanPlan {
+        val planned = planScan(snapshots, force, metadataProfile, configurationRevision)
+        if (allowAdvisoryExpiry || force) return planned
+
+        val expiredKeys =
+            planned.scanReasons
+                .filterValues { it == SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED }
+                .keys
+        if (expiredKeys.isEmpty()) return planned
+
+        if (metadataProfile == MetadataProfile.FULL) {
+            val reasons =
+                planned.scanReasons.mapValues { (sourceKey, reason) ->
+                    if (sourceKey in expiredKeys) {
+                        SourceScanReason.METADATA_PROFILE_UPGRADE
+                    } else {
+                        reason
+                    }
+                }
+            return planned.copy(
+                scanReasons = reasons,
+                enrichmentOnly =
+                    IncrementalScanPlan.isEnrichmentOnly(
+                        scanSources = planned.scanSources,
+                        removedSourceKeys = planned.removedSourceKeys,
+                        scanReasons = reasons,
+                    ),
+            )
+        }
+
+        val retainedScanSources = planned.scanSources.filterNot { it.sourceKey in expiredKeys }
+        val retainedReasons = planned.scanReasons.filterKeys { it !in expiredKeys }
+        return planned.copy(
+            scanSources = retainedScanSources,
+            reuseSourceKeys = planned.reuseSourceKeys + expiredKeys,
+            scanReasons = retainedReasons,
+            enrichmentOnly =
+                IncrementalScanPlan.isEnrichmentOnly(
+                    scanSources = retainedScanSources,
+                    removedSourceKeys = planned.removedSourceKeys,
+                    scanReasons = retainedReasons,
+                ),
+        )
+    }
 
     suspend fun beginScan(plan: IncrementalScanPlan)
 
