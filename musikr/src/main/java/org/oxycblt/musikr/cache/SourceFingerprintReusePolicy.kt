@@ -54,8 +54,8 @@ enum class SourceScanReason {
 /**
  * Pure classification of "may this committed source generation be reused?".
  *
- * Reuse is a performance optimisation layered on top of explicit scan authority. The generic
- * policy retains bounded advisory expiry for callers that pass [allowAdvisoryExpiry] as true. The
+ * Reuse is a performance optimisation layered on top of explicit scan authority. The generic policy
+ * retains bounded advisory expiry for callers that pass [allowAdvisoryExpiry] as true. The
  * maintained TS18 integration passes false because its automatic modes already receive explicit
  * observer/mount invalidation signals; wall-clock age is not a second, hidden source trigger.
  */
