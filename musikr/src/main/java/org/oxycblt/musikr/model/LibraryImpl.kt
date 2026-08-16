@@ -51,7 +51,7 @@ internal data class LibraryImpl(
             playlists.filterNotTo(mutableSetOf()) { it.origin == Playlist.Origin.GENERATED }
         val base = if (ordinary == playlists) this else copy(playlists = ordinary)
         return if (enabled) {
-            GeneratedPlaylistLibraryView(base, LibraryFactoryImpl.generatedPlaylists(songs))
+            GeneratedPlaylistLibraryView(base) { LibraryFactoryImpl.generatedPlaylists(base.songs) }
         } else {
             base
         }
