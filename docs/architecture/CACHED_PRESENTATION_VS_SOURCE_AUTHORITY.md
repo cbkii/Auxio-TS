@@ -76,9 +76,9 @@ It may **never**:
 
 `StartupReadinessController` publishes capability from cached state. `StartupOptionalWorkGate` may
 hold compatibility-graph hydration and normalized backfill behind Queue Ready and a terminal restore
-outcome, but a slow hydration is not permission to start a recovery scan. Generated-playlist wrapper
-publication also waits for optional-work readiness, while actual playlist compilation is lazy and
-occurs only when a playlist surface requests the derived collection.
+outcome, but a slow hydration is not permission to start a recovery scan. Generated-playlist
+publication and compilation also stay behind optional-work readiness on the coordinator's background
+scope; they are deliberately not moved onto a UI getter merely to avoid process-start work.
 
 ### Authoritative source lane — the only source of truth
 
@@ -244,9 +244,10 @@ hydration, and generated playlists. Each later stage may fail without invalidati
 - generated playlists are opt-in and default off, are derived after the base library is available,
   are cancellable and coalesced, cannot mutate source authority, and changing the preference cannot
   trigger a source rescan;
-- generated-playlist compilation itself is lazy and memoized inside the wrapper view, so restoring
-  the base library with generated playlists enabled does not immediately sort/group the full song
-  collection. Compilation occurs on first playlist access and is then reused by that view.
+- generated-playlist compilation remains whole-library derived work on the existing background
+  coordinator after the optional-work gate. It can repeat after process recreation when enabled,
+  but it is not source indexing and is deliberately not moved onto a UI access path without a safe
+  durable generated-playlist representation.
 
 ## Cleanup safety
 
@@ -281,8 +282,10 @@ Focused host tests include:
   acquire scan authority;
 - `RemovableStorageEventPolicyTest` — manual remount is availability-only while opt-in automatic
   observation modes retain mounted-source refresh authority;
-- `GeneratedPlaylistLibraryViewTest` — base-library access does not compile generated playlists,
-  first playlist access compiles once, and disabling before access remains allocation-free;
+- `GeneratedPlaylistCoordinatorTest` and `MusicSettingsIndexingTriggerTest` — generated-playlist
+  work remains post-load/derived and preference changes cannot request source indexing;
+- `GeneratedPlaylistLibraryViewTest` — generated views continue delegating heavy base collections and
+  user mutations without cloning the indexed graph;
 - `ArtworkRepairPolicyTest` and `ArtworkEnrichmentRevisionTest` — only FULL enrichment can satisfy
   the compatibility repair and the durable Musikr revision becomes a one-time repair;
 - `SourceConfigurationIdentityTest` — one shared identity, order/alias independence, mode scoping
@@ -308,7 +311,7 @@ Representative scenario coverage:
 | 8 | temporarily unavailable source | `IncrementalScanStoreTest`, `SourceAvailabilityOutcomePolicyTest` |
 | 9 | partial multi-source success | `IncrementalScanStoreTest`, `SourceScanOutcomeTest`, `SourceAvailabilityOutcomePolicyTest` |
 | 10 | enrichment failure after a base commit | `IncrementalScanStoreTest`, `IncrementalResultFailurePolicyTest` |
-| 11 | generated playlists do not trigger source authority and compile lazily | `MusicSettingsIndexingTriggerTest`, `GeneratedPlaylistCoordinatorTest`, `GeneratedPlaylistLibraryViewTest` |
+| 11 | generated playlists do not trigger source authority | `MusicSettingsIndexingTriggerTest`, `GeneratedPlaylistCoordinatorTest`, `GeneratedPlaylistLibraryViewTest` |
 | 12 | stale enrichment after a newer generation | `RepositoryIndexRequestQueueTest.staleEnrichmentIsDiscardedAfterANewerSourceGeneration` |
 | 13 | cover cleanup after successful publication | `CoverCleanupPolicyTest` |
 | 14 | cleanup skipped after failure or enrichment | `CoverCleanupPolicyTest` |
@@ -360,7 +363,8 @@ Not performed in this change. [Evidence confidence: Requires TS18 validation]
 8. DirectFS USB remount in `MANUAL` mode does not rescan;
 9. `WHEN_IDLE`/`CONTINUOUS` remount behaviour remains bounded when explicitly enabled;
 10. generated playlists enabled do not create an indexing session on launch;
-11. first playlist access may perform derived compilation but not source traversal;
+11. post-gate generated-playlist compilation may run when enabled, but must not traverse sources or
+    block the immediate browse/search lane;
 12. completed artwork-revision repair does not repeat after process recreation;
 13. no stale `RUNNING` attempt remains;
 14. no indefinite `DISCOVERING` occurs;
