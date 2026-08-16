@@ -25,10 +25,21 @@ import org.oxycblt.auxio.music.locations.LocationMode
 internal object RemovableStorageEventPolicy {
     val settleDelaysMs = longArrayOf(500L, 1_500L, 3_000L)
 
-    /** Manual library mode treats a remount as availability only, never scan authority. */
+    /**
+         * Determines whether mounted-storage events may trigger an automatic refresh.
+         *
+         * @return `true` if automatic mounted-storage refresh is permitted, `false` for manual observation mode.
+         */
     fun allowsAutomaticMountedRefresh(observationMode: ObservationMode): Boolean =
         observationMode != ObservationMode.MANUAL
 
+    /**
+     * Finds direct-filesystem source keys whose configured paths overlap the mounted path.
+     *
+     * @param mountedPath The absolute mounted path to match.
+     * @param specs The configured source specifications to search.
+     * @return Matching source keys in insertion order, without duplicates; an empty set if the path is absent or invalid.
+     */
     fun matchingSourceKeys(mountedPath: String?, specs: List<ConfiguredSourceSpec>): Set<String> {
         val root = mountedPath?.trimEnd('/')?.takeIf { it.startsWith("/") } ?: return emptySet()
         return specs

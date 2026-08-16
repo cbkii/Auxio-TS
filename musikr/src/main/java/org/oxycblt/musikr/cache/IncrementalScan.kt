@@ -79,6 +79,15 @@ data class IncrementalScanCommit(
  * readers. [abortScan] must preserve every previously committed generation.
  */
 interface IncrementalCache {
+    /**
+     * Creates an incremental scan plan from the provided source snapshots and configuration state.
+     *
+     * @param snapshots The current snapshots of sources to consider for scanning.
+     * @param force Whether to force scanning eligible sources.
+     * @param metadataProfile The metadata detail required by the scan.
+     * @param configurationRevision The configuration revision associated with the plan.
+     * @return The planned sources, reusable sources, removals, and scan metadata.
+     */
     suspend fun planScan(
         snapshots: List<SourceSnapshot>,
         force: Boolean,
@@ -87,14 +96,17 @@ interface IncrementalCache {
     ): IncrementalScanPlan
 
     /**
-     * Policy-aware planning entry point. Existing cache implementations retain automatic advisory
-     * validation through [planScan]. In manual mode the maintained app passes false so age-only
-     * advisory expiry cannot create a new source generation.
+     * Creates a scan plan while applying the advisory-expiry policy.
      *
-     * If a standalone FULL plan contains only age-expired advisory sources, they are downgraded to
-     * the optional metadata-enrichment lane so a genuine legacy artwork/metadata repair can still
-     * run without acquiring source-membership authority. In any mixed authoritative/removal plan,
-     * age-only sources are reused instead of being swept into the sibling source generation.
+     * When advisory expiry is disallowed and force scanning is disabled, standalone expired advisory
+     * sources in a FULL scan become metadata enrichment work; in mixed plans, they are reused rather
+     * than scanned.
+     *
+     * @param snapshots The current source snapshots to evaluate.
+     * @param metadataProfile The metadata profile requested for the scan.
+     * @param configurationRevision The configuration revision associated with the plan.
+     * @param allowAdvisoryExpiry Whether advisory expiry may trigger source scanning.
+     * @return The resulting incremental scan plan.
      */
     suspend fun planScan(
         snapshots: List<SourceSnapshot>,
@@ -151,7 +163,12 @@ interface IncrementalCache {
         )
     }
 
-    suspend fun beginScan(plan: IncrementalScanPlan)
+    /**
+ * Starts staging changes for the specified scan plan.
+ *
+ * @param plan The scan plan whose results will be staged.
+ */
+suspend fun beginScan(plan: IncrementalScanPlan)
 
     /** Record a discovered file, even when its cached metadata is unchanged. */
     suspend fun markSeen(file: File, cachedFile: CachedFile? = null)

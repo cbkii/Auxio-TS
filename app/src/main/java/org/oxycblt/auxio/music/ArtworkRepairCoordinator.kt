@@ -71,6 +71,9 @@ constructor(
     private var musicSettings: MusicSettings? = null
     private var imageSettings: ImageSettings? = null
 
+    /**
+     * Schedules the artwork compatibility repair initialization once.
+     */
     @Synchronized
     fun start() {
         if (startScheduled) return
@@ -113,6 +116,12 @@ constructor(
         maybeRequestRepair()
     }
 
+    /**
+     * Tracks the artwork compatibility repair and records successful completion.
+     *
+     * Matching repair sessions are observed until they reach a terminal state. Successful
+     * completion is checkpointed, while unsuccessful completion is left uncheckpointed.
+     */
     override fun onIndexingStateChanged() {
         val repository = synchronized(this) { musicRepository } ?: return
         when (val state = repository.indexingState) {
@@ -139,6 +148,9 @@ constructor(
         }
     }
 
+    /**
+     * Requests the one-time artwork compatibility repair when startup readiness and artwork settings permit it.
+     */
     @Synchronized
     private fun maybeRequestRepair() {
         if (!started || requested) return
@@ -175,6 +187,9 @@ constructor(
         detachReadinessListeners()
     }
 
+    /**
+     * Removes the startup-readiness and image-settings listeners.
+     */
     @Synchronized
     private fun detachReadinessListeners() {
         val repository = musicRepository ?: return
@@ -183,6 +198,11 @@ constructor(
         images.unregisterListener(this)
     }
 
+    /**
+     * Detaches the indexing listener from the repository.
+     *
+     * @param repository The repository from which to remove the listener.
+     */
     @Synchronized
     private fun detachIndexingListener(repository: MusicRepository) {
         if (!indexingListenerAttached) return
@@ -196,15 +216,34 @@ constructor(
 }
 
 internal object ArtworkRepairPolicy {
-    fun shouldRequest(coverMode: CoverMode, readiness: StartupReadinessState): Boolean =
+    /**
+         * Determines whether artwork repair can be requested for the current library state.
+         *
+         * @param coverMode The configured artwork cover mode.
+         * @param readiness The current startup readiness state.
+         * @return `true` if artwork is enabled and the full library is ready, `false` otherwise.
+         */
+        fun shouldRequest(coverMode: CoverMode, readiness: StartupReadinessState): Boolean =
         coverMode != CoverMode.OFF && readiness.rank >= StartupReadinessState.FullLibraryReady.rank
 }
 
 internal object ArtworkRepairCompletionPolicy {
-    fun isRepairRequest(request: IndexRequest?): Boolean =
+    /**
+             * Determines whether an indexing request represents an artwork repair request.
+             *
+             * @param request The indexing request to evaluate.
+             * @return `true` if the request performs full metadata enrichment, `false` otherwise.
+             */
+            fun isRepairRequest(request: IndexRequest?): Boolean =
         request?.reason == IndexReason.METADATA_ENRICHMENT &&
             request.metadataProfile == MetadataProfile.FULL
 
-    fun isSuccessfulCompletion(outcome: IndexingTerminalOutcome): Boolean =
+    /**
+         * Determines whether an indexing operation completed successfully.
+         *
+         * @param outcome The terminal outcome to evaluate.
+         * @return `true` if the outcome is successful, `false` otherwise.
+         */
+        fun isSuccessfulCompletion(outcome: IndexingTerminalOutcome): Boolean =
         outcome == IndexingTerminalOutcome.SUCCESS
 }

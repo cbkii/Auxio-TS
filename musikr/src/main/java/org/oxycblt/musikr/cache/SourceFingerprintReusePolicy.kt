@@ -96,12 +96,12 @@ object SourceFingerprintReusePolicy {
         }
 
     /**
-     * Returns the reason this source must be scanned, or `null` when its committed generation may
-     * be reused as-is.
+     * Determines whether a committed source generation requires scanning.
      *
-     * Source correctness gates deliberately precede a metadata-profile upgrade. A changed or
-     * invalidated source remains an authoritative source scan even when the same request also asks
-     * for richer metadata; the profile request must never conceal why reuse was unsafe.
+     * Correctness requirements take precedence over metadata profile upgrades.
+     *
+     * @param allowAdvisoryExpiry Whether advisory fingerprints are required to pass freshness validation.
+     * @return The applicable scan reason, or `null` when the committed generation may be reused.
      */
     fun scanReason(
         strength: SourceFingerprintStrength,

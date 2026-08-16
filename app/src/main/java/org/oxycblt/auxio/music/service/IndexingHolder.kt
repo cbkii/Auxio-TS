@@ -185,6 +185,9 @@ private constructor(
             }
     }
 
+    /**
+     * Releases resources, cancels active work, and unregisters listeners.
+     */
     fun release() {
         synchronized(this) {
             if (!attached) return
@@ -226,6 +229,11 @@ private constructor(
         }
     }
 
+    /**
+     * Starts library startup processing and recovers any claimable pending source configuration.
+     *
+     * @param origin The origin of the startup request, used to prioritize user-visible startup.
+     */
     @Synchronized
     fun start(origin: StartupScanOrigin = StartupScanOrigin.BACKGROUND) {
         PerfTimer.trace("IndexingHolder.start(origin=$origin)") {
@@ -299,6 +307,11 @@ private constructor(
         }
     }
 
+    /**
+     * Selects the foreground notification based on the current indexing and observation state.
+     *
+     * @param post Receives the indexing notification, observing notification, or `null` when no foreground notification is needed.
+     */
     fun createNotification(post: (ForegroundServiceNotification?) -> Unit) {
         val state = musicRepository.indexingState
         if (state is IndexingState.Indexing) {
@@ -722,6 +735,12 @@ private constructor(
             }
     }
 
+    /**
+     * Configures removable-storage event handling for direct filesystem locations.
+     *
+     * Mounted sources may trigger an automatic refresh when the observation mode allows it;
+     * unmounted, ejected, or removed sources are marked unavailable.
+     */
     private fun updateRemovableStorageReceiver() {
         if (musicSettings.locationMode != LocationMode.DIRECT_FS) {
             unregisterRemovableStorageReceiver()

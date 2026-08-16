@@ -36,6 +36,16 @@ internal class SourcePreflightException(message: String, cause: Throwable? = nul
 internal object IncrementalIndexPlanner {
     data class Prepared(val fs: FS, val cache: MutableCache, val plan: IncrementalScanPlan?)
 
+    /**
+     * Prepares the filesystem, cache, and incremental scan plan for indexing.
+     *
+     * @param targetSourceKeys Sources to restrict the scan to, or `null` to include all sources.
+     * @param allowEmptySourceSet Whether an empty configured source set is accepted.
+     * @param applyRemovedSources Whether removed sources are included in the scan plan.
+     * @param allowAdvisoryExpiry Whether advisory expiry may trigger source rescans.
+     * @return The source-selected filesystem, cache, and optional scan plan.
+     * @throws SourcePreflightException If source preflight fails or returns no sources when empty sets are disallowed.
+     */
     suspend fun prepare(
         fs: FS,
         cache: MutableCache,

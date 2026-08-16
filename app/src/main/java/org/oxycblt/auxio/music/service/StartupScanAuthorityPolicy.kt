@@ -45,6 +45,12 @@ object StartupScanAuthorityPolicy {
     fun issueTrustedUserVisibleStart(): String =
         UUID.randomUUID().toString().also { trustedUserVisibleNonce = it }
 
+    /**
+     * Consumes the trusted user-visible startup nonce when the candidate matches it.
+     *
+     * @param candidate The nonce to validate.
+     * @return `true` if the candidate matches the trusted nonce, `false` otherwise.
+     */
     @Synchronized
     fun consumeTrustedUserVisibleStart(candidate: String?): Boolean {
         val trusted = candidate != null && candidate == trustedUserVisibleNonce
@@ -53,14 +59,12 @@ object StartupScanAuthorityPolicy {
     }
 
     /**
-     * The maintained TS18/Topway product never turns an Activity/service lifecycle event into
-     * source-enumeration authority. Initial source configuration is handled independently by the
-     * durable configuration checkpoint, while later refresh/rescan/retry actions must remain
-     * explicit. This prevents a slow cached-library hydration from silently becoming a new scan.
-     *
-     * The generic Android fallback retains the historical recovery posture for policy tests and
-     * non-product reuse of this component.
-     */
+         * Determines whether the product and startup origin permit an automatic scan.
+         *
+         * @param topwayProduct Whether the product is a Topway product.
+         * @param origin The source of the startup event.
+         * @return `true` for non-Topway products, `false` for Topway products.
+         */
     fun originAllowsAutomaticScan(topwayProduct: Boolean, origin: StartupScanOrigin): Boolean =
         when {
             !topwayProduct -> true
@@ -68,6 +72,14 @@ object StartupScanAuthorityPolicy {
             else -> false
         }
 
+    /**
+     * Determines whether an automatic scan is authorized for the current source and startup origin.
+     *
+     * @param topwayProduct Whether the product is a Topway product.
+     * @param origin The startup origin requesting the scan.
+     * @param sourceAuthority Whether the configured music source has current access authority.
+     * @return `true` if the source and startup origin authorize an automatic scan, `false` otherwise.
+     */
     fun allowAutomaticScan(
         topwayProduct: Boolean,
         origin: StartupScanOrigin,
