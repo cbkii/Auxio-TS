@@ -23,10 +23,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.oxycblt.musikr.fs.SourceFingerprintStrength
 
-/**
- * Reuse is layered on top of explicit scan authority. An unchanged committed generation must not
- * become scan-eligible merely because wall-clock time elapsed.
- */
+/** Reuse policy keeps wall-clock expiry out of manual mode while retaining automatic validation. */
 class SourceFingerprintReusePolicyTest {
     private val now = 1_000_000_000L
 
@@ -40,14 +37,41 @@ class SourceFingerprintReusePolicyTest {
                     committed(
                         fingerprint = "token-1",
                         strength = SourceFingerprintStrength.AUTHORITATIVE,
-                        lastSuccessfulScanMs = 1L,
+                        lastSuccessfulScanMs = now - 30L * ADVISORY_WINDOW,
                     ),
             )
         )
     }
 
     @Test
-    fun `unchanged advisory fingerprint does not expire into a periodic scan`() {
+    fun `automatic mode advisory fingerprint reuses only inside its bounded window`() {
+        assertNull(
+            reason(
+                strength = SourceFingerprintStrength.ADVISORY,
+                fingerprint = "shallow-1",
+                previous =
+                    committed(
+                        fingerprint = "shallow-1",
+                        lastSuccessfulScanMs = now - ADVISORY_WINDOW / 2,
+                    ),
+            )
+        )
+        assertEquals(
+            SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED,
+            reason(
+                strength = SourceFingerprintStrength.ADVISORY,
+                fingerprint = "shallow-1",
+                previous =
+                    committed(
+                        fingerprint = "shallow-1",
+                        lastSuccessfulScanMs = now - ADVISORY_WINDOW,
+                    ),
+            ),
+        )
+    }
+
+    @Test
+    fun `manual mode unchanged advisory fingerprint never ages into a scan`() {
         assertNull(
             reason(
                 strength = SourceFingerprintStrength.ADVISORY,
@@ -57,12 +81,13 @@ class SourceFingerprintReusePolicyTest {
                         fingerprint = "shallow-1",
                         lastSuccessfulScanMs = 1L,
                     ),
+                allowAdvisoryExpiry = false,
             )
         )
     }
 
     @Test
-    fun `wall clock rollback does not create source scan authority`() {
+    fun `manual mode wall clock rollback does not create source scan authority`() {
         assertNull(
             reason(
                 strength = SourceFingerprintStrength.ADVISORY,
@@ -70,9 +95,26 @@ class SourceFingerprintReusePolicyTest {
                 previous =
                     committed(
                         fingerprint = "shallow-1",
-                        lastSuccessfulScanMs = now + 86_400_000L,
+                        lastSuccessfulScanMs = now + ADVISORY_WINDOW,
                     ),
+                allowAdvisoryExpiry = false,
             )
+        )
+    }
+
+    @Test
+    fun `automatic mode future advisory timestamp still requires validation`() {
+        assertEquals(
+            SourceScanReason.ADVISORY_FINGERPRINT_EXPIRED,
+            reason(
+                strength = SourceFingerprintStrength.ADVISORY,
+                fingerprint = "shallow-1",
+                previous =
+                    committed(
+                        fingerprint = "shallow-1",
+                        lastSuccessfulScanMs = now + ADVISORY_WINDOW,
+                    ),
+            ),
         )
     }
 
@@ -91,7 +133,8 @@ class SourceFingerprintReusePolicyTest {
             reason(
                 strength = SourceFingerprintStrength.ADVISORY,
                 fingerprint = null,
-                previous = committed(fingerprint = null, lastSuccessfulScanMs = 1L),
+                previous = committed(fingerprint = null, lastSuccessfulScanMs = now),
+                allowAdvisoryExpiry = false,
             ),
         )
     }
@@ -109,18 +152,20 @@ class SourceFingerprintReusePolicyTest {
                         strength = SourceFingerprintStrength.NONE,
                         lastSuccessfulScanMs = now,
                     ),
+                allowAdvisoryExpiry = false,
             ),
         )
     }
 
     @Test
-    fun `a changed fingerprint enumerates that source`() {
+    fun `a changed fingerprint enumerates that source in manual mode`() {
         assertEquals(
             SourceScanReason.FINGERPRINT_CHANGED,
             reason(
                 strength = SourceFingerprintStrength.ADVISORY,
                 fingerprint = "shallow-2",
                 previous = committed(fingerprint = "shallow-1"),
+                allowAdvisoryExpiry = false,
             ),
         )
     }
@@ -222,6 +267,7 @@ class SourceFingerprintReusePolicyTest {
         fingerprint: String? = previous?.fingerprint ?: "token-1",
         force: Boolean = false,
         profileUpgrade: Boolean = false,
+        allowAdvisoryExpiry: Boolean = true,
     ) =
         SourceFingerprintReusePolicy.scanReason(
             strength = strength,
@@ -231,9 +277,11 @@ class SourceFingerprintReusePolicyTest {
             profileUpgrade = profileUpgrade,
             configurationRevision = REVISION,
             nowMs = now,
+            allowAdvisoryExpiry = allowAdvisoryExpiry,
         )
 
     private companion object {
         const val REVISION = 7L
+        const val ADVISORY_WINDOW = SourceFingerprintReusePolicy.ADVISORY_REFRESH_MS
     }
 }
