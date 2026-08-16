@@ -52,8 +52,21 @@ object StartupScanAuthorityPolicy {
         return trusted
     }
 
+    /**
+     * The maintained TS18/Topway product never turns an Activity/service lifecycle event into
+     * source-enumeration authority. Initial source configuration is handled independently by the
+     * durable configuration checkpoint, while later refresh/rescan/retry actions must remain
+     * explicit. This prevents a slow cached-library hydration from silently becoming a new scan.
+     *
+     * The generic Android fallback retains the historical recovery posture for policy tests and
+     * non-product reuse of this component.
+     */
     fun originAllowsAutomaticScan(topwayProduct: Boolean, origin: StartupScanOrigin): Boolean =
-        !topwayProduct || origin == StartupScanOrigin.USER_VISIBLE
+        when {
+            !topwayProduct -> true
+            origin == StartupScanOrigin.USER_VISIBLE -> false
+            else -> false
+        }
 
     fun allowAutomaticScan(
         topwayProduct: Boolean,
