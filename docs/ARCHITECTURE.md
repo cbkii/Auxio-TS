@@ -32,7 +32,7 @@ A successfully committed library is the normal operating state of the maintained
 
 Source traversal is entered only for a positive source reason: initial/pending source configuration, an explicit user refresh/rescan/retry, a changed source configuration, or an independently enabled source-observation/removable-storage path. Wall-clock age alone is not a source reason. An unchanged advisory fingerprint therefore remains reusable until its observed token changes, the source is explicitly invalidated, the configuration changes, or a forced scan is requested.
 
-Generated playlists are derived presentation. Enabling them must not alter source identity, source checkpoints or scan authority. Their compilation is lazy behind playlist access so restoring the base cached library does not sort/group the whole song collection merely because generated playlists are enabled.
+Generated playlists are derived presentation. Enabling them must not alter source identity, source checkpoints or scan authority. Their whole-library compilation stays on the existing optional background coordinator rather than being moved onto a UI getter; it may run after process recreation when the feature is enabled, but it must never become an indexing/source-scan trigger or block the immediate browse/search lane.
 
 ## Integration tracks
 
