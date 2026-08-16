@@ -44,6 +44,7 @@ internal object IncrementalIndexPlanner {
         targetSourceKeys: Set<String>? = null,
         allowEmptySourceSet: Boolean = false,
         applyRemovedSources: Boolean = true,
+        allowAdvisoryExpiry: Boolean = true,
         legacyWriteOnly: (MutableCache) -> MutableCache,
     ): Prepared {
         val incremental = cache as? IncrementalCache
@@ -108,6 +109,7 @@ internal object IncrementalIndexPlanner {
                 force = !withCache,
                 metadataProfile = profile,
                 configurationRevision = configurationRevision,
+                allowAdvisoryExpiry = allowAdvisoryExpiry,
             )
         val removalScopedPlan =
             if (applyRemovedSources) completePlan
