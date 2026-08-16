@@ -76,11 +76,7 @@ class SourceFingerprintReusePolicyTest {
             reason(
                 strength = SourceFingerprintStrength.ADVISORY,
                 fingerprint = "shallow-1",
-                previous =
-                    committed(
-                        fingerprint = "shallow-1",
-                        lastSuccessfulScanMs = 1L,
-                    ),
+                previous = committed(fingerprint = "shallow-1", lastSuccessfulScanMs = 1L),
                 allowAdvisoryExpiry = false,
             )
         )
@@ -186,9 +182,10 @@ class SourceFingerprintReusePolicyTest {
             reason(
                 previous =
                     committed(
-                        fingerprint = "token-1",
-                        strength = SourceFingerprintStrength.AUTHORITATIVE,
-                    ).copy(invalidated = true),
+                            fingerprint = "token-1",
+                            strength = SourceFingerprintStrength.AUTHORITATIVE,
+                        )
+                        .copy(invalidated = true),
                 profileUpgrade = true,
             ),
         )

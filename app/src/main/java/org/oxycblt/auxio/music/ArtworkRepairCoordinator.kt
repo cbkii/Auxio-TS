@@ -130,7 +130,9 @@ constructor(
                             ArtworkRepairCompletionPolicy.isRepairRequest(state.request)
                     ) {
                         repairSessionId = state.sessionId
-                        L.d("Artwork compatibility repair session started [session=${state.sessionId}]")
+                        L.d(
+                            "Artwork compatibility repair session started [session=${state.sessionId}]"
+                        )
                     }
                 }
             }
