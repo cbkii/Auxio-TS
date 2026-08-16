@@ -19,9 +19,7 @@
 package org.oxycblt.musikr.model
 
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
@@ -34,80 +32,26 @@ import org.oxycblt.musikr.fs.Path
 
 class GeneratedPlaylistLibraryViewTest {
     @Test
-    fun `heavy collections delegate to base by identity without compiling playlists`() {
-        var compilations = 0
+    fun `heavy collections delegate to base by identity`() {
         val base = FakeLibrary()
-        val view =
-            GeneratedPlaylistLibraryView(base) {
-                compilations++
-                emptyList()
-            }
+        val view = GeneratedPlaylistLibraryView(base, emptyList())
 
         assertSame(base.songs, view.songs)
         assertSame(base.albums, view.albums)
         assertSame(base.artists, view.artists)
         assertSame(base.genres, view.genres)
-        assertEquals(0, compilations)
     }
 
     @Test
     fun `user mutation wraps new base without cloning heavy collections`() = runBlocking {
         val next = FakeLibrary()
         val base = FakeLibrary().apply { mutationResult = next }
-        val view = GeneratedPlaylistLibraryView(base) { emptyList() }
+        val view = GeneratedPlaylistLibraryView(base, emptyList())
 
         val mutated = view.createPlaylist("Road", emptyList())
 
         assertSame(next.songs, mutated.songs)
         assertSame(next.albums, mutated.albums)
-    }
-
-    @Test
-    fun `base-library access does not compile generated playlists`() {
-        var compilations = 0
-        val base = FakeLibrary()
-        val view =
-            GeneratedPlaylistLibraryView(base) {
-                compilations++
-                emptyList()
-            }
-
-        assertTrue(view.songs.isEmpty())
-        assertTrue(view.albums.isEmpty())
-        assertTrue(view.artists.isEmpty())
-        assertTrue(view.genres.isEmpty())
-        assertTrue(view.empty())
-        assertSame(view, view.withGeneratedPlaylists(true))
-        assertEquals(0, compilations)
-    }
-
-    @Test
-    fun `playlist access compiles once and memoizes the projection`() {
-        var compilations = 0
-        val view =
-            GeneratedPlaylistLibraryView(FakeLibrary()) {
-                compilations++
-                emptyList()
-            }
-
-        assertTrue(view.playlists.isEmpty())
-        assertTrue(view.playlists.isEmpty())
-        assertEquals(null, view.findPlaylistByName("missing"))
-        assertEquals(1, compilations)
-    }
-
-    @Test
-    fun `disabling generated playlists before access does not compile them`() {
-        var compilations = 0
-        val base = FakeLibrary()
-        val view =
-            GeneratedPlaylistLibraryView(base) {
-                compilations++
-                emptyList()
-            }
-
-        assertSame(base, view.withGeneratedPlaylists(false))
-        assertEquals(0, compilations)
     }
 
     private class FakeLibrary : MutableLibrary {
