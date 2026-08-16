@@ -19,6 +19,7 @@
 package org.oxycblt.auxio.music
 
 import kotlinx.coroutines.CancellationException
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.musikr.cache.IncrementalCache
 import org.oxycblt.musikr.cache.IncrementalScanPlan
 import org.oxycblt.musikr.cache.MutableCache
@@ -44,7 +45,10 @@ internal object IncrementalIndexPlanner {
         targetSourceKeys: Set<String>? = null,
         allowEmptySourceSet: Boolean = false,
         applyRemovedSources: Boolean = true,
-        allowAdvisoryExpiry: Boolean = true,
+        // The maintained Topway product is cache-authoritative between positive source-change
+        // signals. Its automatic observation modes already invalidate on actual provider/mount
+        // events, so elapsed wall-clock time is not an additional source-scan authority.
+        allowAdvisoryExpiry: Boolean = !BuildConfig.TOPWAY_COMPAT_ENABLED,
         legacyWriteOnly: (MutableCache) -> MutableCache,
     ): Prepared {
         val incremental = cache as? IncrementalCache
