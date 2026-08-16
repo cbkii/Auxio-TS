@@ -186,10 +186,9 @@ class SourceFingerprintReusePolicyTest {
             reason(
                 previous =
                     committed(
-                            fingerprint = "token-1",
-                            strength = SourceFingerprintStrength.AUTHORITATIVE,
-                        )
-                        .copy(invalidated = true),
+                        fingerprint = "token-1",
+                        strength = SourceFingerprintStrength.AUTHORITATIVE,
+                    ).copy(invalidated = true),
                 profileUpgrade = true,
             ),
         )
