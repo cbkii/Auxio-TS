@@ -22,6 +22,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.image.CoverMode
+import org.oxycblt.musikr.library.MetadataProfile
 
 class ArtworkRepairPolicyTest {
     @Test
@@ -54,6 +55,55 @@ class ArtworkRepairPolicyTest {
                 CoverMode.AS_IS,
                 StartupReadinessState.FullLibraryReady,
             )
+        )
+    }
+
+    @Test
+    fun `only full metadata enrichment can satisfy the compatibility repair`() {
+        assertTrue(
+            ArtworkRepairCompletionPolicy.isRepairRequest(
+                IndexRequest(
+                    reason = IndexReason.METADATA_ENRICHMENT,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.FULL,
+                    configurationGeneration = 3L,
+                )
+            )
+        )
+        assertFalse(
+            ArtworkRepairCompletionPolicy.isRepairRequest(
+                IndexRequest(
+                    reason = IndexReason.USER_REFRESH,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.FULL,
+                    configurationGeneration = 3L,
+                )
+            )
+        )
+        assertFalse(
+            ArtworkRepairCompletionPolicy.isRepairRequest(
+                IndexRequest(
+                    reason = IndexReason.METADATA_ENRICHMENT,
+                    withCache = true,
+                    metadataProfile = MetadataProfile.LEAN,
+                    configurationGeneration = 3L,
+                )
+            )
+        )
+    }
+
+    @Test
+    fun `repair checkpoint is written only after a complete success`() {
+        assertTrue(
+            ArtworkRepairCompletionPolicy.isSuccessfulCompletion(IndexingTerminalOutcome.SUCCESS)
+        )
+        assertFalse(
+            ArtworkRepairCompletionPolicy.isSuccessfulCompletion(
+                IndexingTerminalOutcome.PARTIAL_SUCCESS
+            )
+        )
+        assertFalse(
+            ArtworkRepairCompletionPolicy.isSuccessfulCompletion(IndexingTerminalOutcome.FAILED)
         )
     }
 }
