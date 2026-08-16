@@ -19,6 +19,7 @@ required=(
   .github/workflows/lint.yml
   .github/workflows/manual-release.yml
   scripts/ci-scope.sh
+  scripts/check-ts18-installed-topway-media.sh
 )
 for path in "${required[@]}"; do [[ -s $path ]] || fail "required file missing: $path"; done
 
@@ -52,7 +53,8 @@ done
 
 workflow_surface=$(mktemp)
 release_surface=$(mktemp)
-cleanup() { rm -f -- "$workflow_surface" "$release_surface"; }
+retired_identity_surface=$(mktemp)
+cleanup() { rm -f -- "$workflow_surface" "$release_surface" "$retired_identity_surface"; }
 trap cleanup EXIT
 find .github/workflows -maxdepth 1 -type f -name '*.yml' -print0 | sort -z | xargs -0 cat > "$workflow_surface"
 cat .github/workflows/manual-release.yml scripts/release-orchestrator.py scripts/manual-release/*.sh > "$release_surface"
@@ -63,6 +65,22 @@ fi
 if grep -Eq 'app/build/outputs/apk/topwayTw(Music|Media)' "$workflow_surface" "$release_surface"; then
   fail 'an active build or release path still reads a retired flavour APK directory'
 fi
+
+# Keep retired distribution task names out of live production/tooling surfaces. Historical evidence,
+# decision records and this guard itself are intentionally outside this narrow inspection scope.
+retired_distribution_token='topwayTwMediaRelease'
+if grep -R -n -F \
+    --exclude='check-product-contracts.sh' \
+    --exclude-dir='evidence' \
+    -- "$retired_distribution_token" \
+    app/src/main .github/workflows scripts > "$retired_identity_surface"; then
+  cat "$retired_identity_surface" >&2
+  fail "active surface still names retired distribution task: $retired_distribution_token"
+else
+  grep_status=$?
+  [[ $grep_status -eq 1 ]] || fail 'unable to inspect active surfaces for retired distribution identity'
+fi
+
 contains .github/workflows/android.yml ':app:assembleDebug'
 contains .github/workflows/android.yml ':app:assembleRelease'
 contains .github/workflows/lint.yml ':app:testDebugUnitTest'
@@ -95,5 +113,7 @@ if grep -Fq 'implementation project(":lsposed-bridge")' app/build.gradle; then
   fail 'optional LSPosed add-on must not be an app dependency'
 fi
 
+bash scripts/check-ts18-installed-topway-media.sh --self-test >/dev/null ||
+  fail 'TS18 installed-package preflight self-test failed'
 bash scripts/ci-scope.sh --self-test >/dev/null
 printf 'Auxio-TS single-product contracts: PASS\n'
