@@ -28,7 +28,7 @@ dokka = "2.2.0"
 spotless = "8.6.0"
 roborazzi = "1.64.0"
 # AGP 9 requires the Baseline Profile plugin line with new-DSL support.
-baselineProfile = "1.5.0-beta01"
+baselineProfile = "1.5.0-rc01"
 appcompat = "1.7.1"
 activity = "1.13.0"
 fragment = "1.6.2"
