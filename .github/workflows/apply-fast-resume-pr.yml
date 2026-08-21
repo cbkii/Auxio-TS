@@ -19,24 +19,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: Apply scoped source patch from bootstrap recipe
+      - name: Apply scoped source patch
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          recipe = Path('.github/workflows/apply-fast-resume-finalisation.yml').read_text().splitlines()
-          start = next(i for i, line in enumerate(recipe) if "python3 <<'PY'" in line) + 1
-          end = next(i for i in range(start, len(recipe)) if recipe[i].strip() == 'PY')
-          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in recipe[start:end])
-          script = script.replace(
-              'raise SystemExit(f"{path}: expected exactly one patch anchor, found {count}")',
-              'raise SystemExit(f"{path}: expected exactly one patch anchor, found {count}; old={old!r}")',
-          )
-          namespace = {'__name__': '__main__'}
-          exec(compile(script, 'fast-resume-finalisation-bootstrap', 'exec'), namespace)
-          Path('.github/workflows/apply-fast-resume-pr.yml').unlink(missing_ok=True)
-          PY
+          python3 scripts/apply-fast-resume-finalisation.py
+          rm -f scripts/apply-fast-resume-finalisation.py
+          rm -f .github/workflows/apply-fast-resume-finalisation.yml
+          rm -f .github/workflows/apply-fast-resume-pr.yml
 
       - name: Commit finalised implementation
         shell: bash
