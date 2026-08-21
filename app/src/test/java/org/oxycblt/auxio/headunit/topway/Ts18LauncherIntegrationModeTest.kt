@@ -28,7 +28,7 @@ class Ts18LauncherIntegrationModeTest {
     @Test
     fun `default policy is explicit for both compatibility states`() {
         assertEquals(
-            Ts18LauncherIntegrationMode.AutoAllSafePaths,
+            Ts18LauncherIntegrationMode.GenericDofunMedia,
             Ts18LauncherIntegrationMode.defaultFor(topwayProduct = true),
         )
         assertEquals(
@@ -78,28 +78,15 @@ class Ts18LauncherIntegrationModeTest {
     }
 
     @Test
-    fun `unset topway preference adopts all safe paths once`() {
+    fun `unset topway preference adopts generic media once`() {
         val decision =
             Ts18LauncherIntegrationMode.migrationDecision(
                 persistedValue = null,
                 migrationComplete = false,
                 topwayProduct = true,
             )
-        assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, decision.mode)
-        assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, decision.persistMode)
-        assertTrue(decision.markComplete)
-    }
-
-    @Test
-    fun `persisted generic media survives proxy default change`() {
-        val decision =
-            Ts18LauncherIntegrationMode.migrationDecision(
-                persistedValue = Ts18LauncherIntegrationMode.GenericDofunMedia.name,
-                migrationComplete = false,
-                topwayProduct = true,
-            )
         assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.mode)
-        assertNull(decision.persistMode)
+        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, decision.persistMode)
         assertTrue(decision.markComplete)
     }
 
@@ -133,11 +120,11 @@ class Ts18LauncherIntegrationModeTest {
     fun `completed or non Topway migration does not rewrite preferences`() {
         val completed =
             Ts18LauncherIntegrationMode.migrationDecision(
-                persistedValue = Ts18LauncherIntegrationMode.GenericDofunMedia.name,
+                persistedValue = Ts18LauncherIntegrationMode.AutoAllSafePaths.name,
                 migrationComplete = true,
                 topwayProduct = true,
             )
-        assertEquals(Ts18LauncherIntegrationMode.GenericDofunMedia, completed.mode)
+        assertEquals(Ts18LauncherIntegrationMode.AutoAllSafePaths, completed.mode)
         assertNull(completed.persistMode)
         assertFalse(completed.markComplete)
 
