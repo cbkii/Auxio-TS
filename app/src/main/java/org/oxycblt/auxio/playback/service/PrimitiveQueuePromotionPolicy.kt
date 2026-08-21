@@ -26,8 +26,9 @@ import org.oxycblt.auxio.playback.state.ShuffleScope
  * Validates the persisted Fast Resume queue topology before it is promoted back to hydrated Songs.
  *
  * Primitive queue items are stored in logical playback order. [QueueItemRef.canonicalPosition]
- * points back to the unshuffled heap. Promotion must reconstruct both views rather than applying a
- * second shuffle to an already shuffled logical list.
+ * points back to the unshuffled heap while a shuffle is active. When shuffle is off, logical order
+ * itself is authoritative because pre-library move/insert/remove operations may have intentionally
+ * changed it since the original canonical positions were assigned.
  */
 internal object PrimitiveQueuePromotionPolicy {
     data class Layout(
@@ -46,18 +47,28 @@ internal object PrimitiveQueuePromotionPolicy {
         if (!descriptor.hasCurrentItem || items.size != descriptor.totalCount) return null
         if (items.map { it.logicalPosition } != (0 until descriptor.totalCount).toList()) return null
 
+        // Always validate canonical positions so corrupt/ambiguous persistence fails open instead of
+        // risking a jump to unrelated media. Only shuffled playback needs that order as the heap.
         val byCanonical = arrayOfNulls<QueueItemRef>(descriptor.totalCount)
         for (item in items) {
             val canonical = item.canonicalPosition
             if (canonical !in byCanonical.indices || byCanonical[canonical] != null) return null
             byCanonical[canonical] = item
         }
-        val canonicalItems = byCanonical.map { it ?: return null }
+        val storedCanonicalItems = byCanonical.map { it ?: return null }
         val mapping =
             if (descriptor.shuffleScope == ShuffleScope.OFF) {
                 emptyList()
             } else {
                 items.map { it.canonicalPosition }
+            }
+        val canonicalItems =
+            if (mapping.isEmpty()) {
+                // With shuffle off, logical playback order is the new canonical heap. This preserves
+                // queue edits made while the hydrated library was unavailable.
+                items
+            } else {
+                storedCanonicalItems
             }
         val currentHeapIndex =
             if (mapping.isEmpty()) descriptor.currentLogicalPosition
