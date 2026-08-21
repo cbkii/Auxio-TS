@@ -25,6 +25,11 @@ Use this dependency order:
 Do not scope `com.tw.media` in LSPosed. Auxio owns that process and required behaviour belongs in the
 app source.
 
+The proxy-pattern comparison with the supplied FYT MusicProxy/RadioProxy binaries is recorded in
+[`ts18/launcher-integration/PROXY_GRADE_NATIVE_INTEGRATION.md`](ts18/launcher-integration/PROXY_GRADE_NATIVE_INTEGRATION.md).
+Those binaries are architectural precedent only; FYT/SYU actions and package authority are not a
+Topway contract.
+
 ## Exact observed evidence
 
 The reviewed DoFun APK contains fixed music matches for both:
@@ -82,7 +87,10 @@ LauncherIntegrationTelemetry
 compatibility class/component names inside the independently signed `com.tw.media` APK; they do not
 grant stock package identity, signer or UID.
 
-The current Topway-compatible fresh-install default remains `GenericDofunMedia`.
+The Topway-compatible **fresh-install default is `AutoAllSafePaths`**. This is intentionally additive:
+it keeps one Auxio playback authority while exposing every currently observed safe generic and
+Topway-compatible surface. Existing persisted mode choices are preserved because older releases did
+not record enough preference provenance to distinguish an old default from an explicit user choice.
 
 ### `GenericDofunMedia`
 
@@ -100,10 +108,12 @@ Does not enable:
 - Topway command execution;
 - CommandService binding.
 
+It remains an important physical comparator and fallback mode.
+
 ### `AutoAllSafePaths`
 
-Is now genuinely additive for physical comparison. It retains the same three-action generic
-notification and public legacy Android broadcasts, and additionally enables:
+Retains the same three-action generic notification and public legacy Android broadcasts, and
+additionally enables:
 
 - Topway metadata/progress TX;
 - observed Topway command/update/seek RX;
@@ -111,11 +121,20 @@ notification and public legacy Android broadcasts, and additionally enables:
 
 It does not force a Topway source or create a second playback authority.
 
+Transient CommandService failures use a short bounded reconnect burst followed by a quiet cooldown
+and re-arm. Exhausting the initial boot/wake race therefore no longer disables the callback lane for
+the remainder of a live Auxio process. Descriptor mismatch remains a hard fail-open STOP for that
+adapter rather than a retry condition.
+
 The existing `lsposed-bridge/` module is Track C and remains statically scoped to:
 
 ```text
 com.tw.music
 ```
+
+Track C now uses the same bounded-burst + low-rate re-arm principle for its Auxio MediaBrowser and
+command-endpoint connections. A command Binder timeout still trips the existing process-lifetime
+circuit breaker and leaves stock behaviour in control.
 
 No Track-B `com.dofun.variety` module exists.
 
@@ -230,7 +249,7 @@ The sequence is deliberately discriminating:
 1. prove a healthy Auxio playback channel, live notification, DoFun listener and active session;
 2. establish a current VLC positive control;
 3. test `GenericDofunMedia` one button at a time;
-4. test corrected `AutoAllSafePaths` identically;
+4. test `AutoAllSafePaths` identically;
 5. use a non-fixed identity comparator only if needed;
 6. only with explicit approval and saved rollback evidence, use the existing guarded reversible
    stock-selection comparator.
@@ -265,13 +284,15 @@ required behaviour through genuine stock `com.tw.music`.
 Track C must:
 
 - remain optional and independently disableable;
-- verify stock UID/signing/build capability before a hook is used;
-- verify paired Auxio identity/signer;
-- fail open to stock behaviour;
-- suppress stock only after bounded positive Auxio acceptance;
+- remain statically scoped exactly to `com.tw.music` and route only its captured default/main process;
+- probe each exact known Activity, Service, receiver and presenter surface independently;
+- treat unavailable or changed hook surfaces as fail-open stock behaviour;
+- keep the emergency kill switch fail-safe (`UNKNOWN` means no bridge action);
+- suppress stock only after bounded positive Auxio command admission;
 - avoid reviving stock playback, duplicate sessions, focus or commands.
 
-A signer match alone does not authorise unknown obfuscated stock methods.
+Build/reference signer fingerprints are evidence about retained APKs, not an invented runtime
+activation gate. A signer match alone does not authorise unknown obfuscated stock methods.
 
 ## Release posture
 
