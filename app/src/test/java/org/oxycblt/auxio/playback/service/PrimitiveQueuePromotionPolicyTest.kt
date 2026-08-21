@@ -42,6 +42,20 @@ class PrimitiveQueuePromotionPolicyTest {
     }
 
     @Test
+    fun unshuffledLogicalQueueEditsAreNotUndoneDuringPromotion() {
+        val layout =
+            PrimitiveQueuePromotionPolicy.layout(
+                descriptor(shuffleScope = ShuffleScope.OFF),
+                listOf(item(0, 2), item(1, 0), item(2, 1)),
+            )
+
+        requireNotNull(layout)
+        assertEquals(listOf(2, 0, 1), layout.itemsByCanonicalPosition.map { it.canonicalPosition })
+        assertEquals(emptyList(), layout.shuffledMapping)
+        assertEquals(1, layout.heapIndexForLogicalPosition(1))
+    }
+
+    @Test
     fun shuffledLogicalOrderReconstructsCanonicalHeapAndMapping() {
         val layout =
             PrimitiveQueuePromotionPolicy.layout(
