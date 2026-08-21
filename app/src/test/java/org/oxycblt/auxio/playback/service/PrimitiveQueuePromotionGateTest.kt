@@ -35,6 +35,17 @@ class PrimitiveQueuePromotionGateTest {
     }
 
     @Test
+    fun libraryNotReadyBypassesWithoutCreatingPromotionBoundary() {
+        val gate = PrimitiveQueuePromotionGate()
+
+        assertEquals(
+            PrimitiveQueuePromotionGate.Decision.BYPASS,
+            gate.requestBoundary(key, libraryReady = false),
+        )
+        assertFalse(gate.onPrepared(key))
+    }
+
+    @Test
     fun semanticBoundaryPromotesImmediatelyWhenCanonicalQueueIsPrepared() {
         val gate = PrimitiveQueuePromotionGate()
         gate.onPrepared(key)
