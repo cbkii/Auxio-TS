@@ -115,10 +115,10 @@ LauncherIntegrationTelemetry
 compatibility class/component names inside the independently signed `com.tw.media` APK; they do not
 grant stock package identity, signer or UID.
 
-The Topway-compatible **fresh-install default is `AutoAllSafePaths`**. This is intentionally additive:
-it keeps one Auxio playback authority while exposing every currently observed safe generic and
-Topway-compatible surface. Existing persisted mode choices are preserved because older releases did
-not record enough preference provenance to distinguish an old default from an explicit user choice.
+The Topway-compatible fresh-install default remains `GenericDofunMedia`. `AutoAllSafePaths` is the
+proxy-grade direct/hybrid candidate because it exposes every currently observed safe generic and
+Topway-compatible surface through the same Auxio playback owner. It remains explicit until exact-device
+evidence proves current DoFun selection and exactly-once controls across the combined ingress lanes.
 
 ### `GenericDofunMedia`
 
@@ -136,7 +136,7 @@ Does not enable:
 - Topway command execution;
 - CommandService binding.
 
-It remains an important physical comparator and fallback mode.
+It remains the standards-first default, physical comparator and fallback mode.
 
 ### `AutoAllSafePaths`
 
