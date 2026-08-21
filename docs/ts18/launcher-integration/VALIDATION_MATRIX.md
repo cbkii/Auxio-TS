@@ -25,11 +25,10 @@ legacy Android signals and are deliberately independent from the observed Topway
 broadcasts. `AutoAllSafePaths` is additive: its canonical notification remains the conventional
 previous / play-pause / next DoFun profile while the separately gated Topway paths are also enabled.
 
-Fresh Topway-compatible installs now default to `AutoAllSafePaths` so one Auxio playback authority is
-visible through every currently observed safe generic and Topway-compatible surface. Existing
-persisted valid choices are not rewritten because older releases did not record enough preference
-provenance to distinguish an old default from an explicit user selection. `GenericDofunMedia`
-remains the standards-only physical comparator.
+Fresh Topway-compatible installs remain conservative at `GenericDofunMedia`. `AutoAllSafePaths` is
+the proxy-grade direct/hybrid candidate and now has long-lived recovery, but it remains an explicit
+physical comparator until current DoFun selection and exactly-once control across its combined
+external ingress lanes are established on the exact TS18.
 
 ## Read-only baseline collector
 
@@ -104,9 +103,9 @@ and CommandService binding remain off.
 
 Repeat the same one-button-at-a-time sequence.
 
-This is the key hybrid discriminator and the fresh-install default. It must retain the same
-three-action generic notification and legacy Android broadcasts while additionally enabling the
-observed Topway TX/RX and read/query CommandService callback lane.
+This is the key proxy-grade hybrid discriminator. It must retain the same three-action generic
+notification and legacy Android broadcasts while additionally enabling the observed Topway TX/RX and
+read/query CommandService callback lane.
 
 Use the ingress telemetry to classify each physical button. Do not add a speculative global debounce:
 first determine whether one press actually reaches more than one external ingress path.
