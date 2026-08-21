@@ -25,6 +25,39 @@ Use this dependency order:
 Do not scope `com.tw.media` in LSPosed. Auxio owns that process and required behaviour belongs in the
 app source.
 
+## Supplied proxy reference evidence
+
+Static inspection on 2026-08-22 used the supplied `MusicProxy-2.5.5.apk` and
+`RadioProxyFYT_1.1.apk` as architectural references. MusicProxy exposes stock FYT `com.syu.music`
+surfaces, follows boot/ACC and target-player lifecycle, controls an external active MediaSession,
+handles stock previous/next/play-pause actions, watches `closeApp com.syu.music`, and retries/relaunches
+its selected player. RadioProxy applies the same broad pattern to `com.syu.radio`, including boot/ACC,
+audio-focus observation, repeated autoplay/key-event attempts, close-app watching and NavRadio
+handling.
+
+The useful precedent is therefore:
+
+```text
+vendor-owned launcher/system expectation
+        -> compatibility surface
+        -> one real playback owner
+```
+
+For this TS18 the safe equivalent is DoFun/Topway -> the recognised `com.tw.media` compatibility
+surfaces -> Auxio's existing playback owner, with optional genuine-stock Track C only when current
+exact-device evidence proves stock remains selected. FYT/SYU actions and package authority are **not**
+Topway contracts and are not copied into the product.
+
+Reference binary hashes:
+
+```text
+MusicProxy-2.5.5.apk
+SHA-256 601b33f60934158e49d0dde6ea35592fafff1004f380d0fb66756e2f8d56187c
+
+RadioProxyFYT_1.1.apk
+SHA-256 f9f658bb82c65f59f698f44b9d8dfbd7987a6de720b68a27482e6d7ce2dc5398
+```
+
 ## Exact observed evidence
 
 The reviewed DoFun APK contains fixed music matches for both:
@@ -82,7 +115,10 @@ LauncherIntegrationTelemetry
 compatibility class/component names inside the independently signed `com.tw.media` APK; they do not
 grant stock package identity, signer or UID.
 
-The current Topway-compatible fresh-install default remains `GenericDofunMedia`.
+The Topway-compatible fresh-install default remains `GenericDofunMedia`. `AutoAllSafePaths` is the
+proxy-grade direct/hybrid candidate because it exposes every currently observed safe generic and
+Topway-compatible surface through the same Auxio playback owner. It remains explicit until exact-device
+evidence proves current DoFun selection and exactly-once controls across the combined ingress lanes.
 
 ### `GenericDofunMedia`
 
@@ -100,10 +136,12 @@ Does not enable:
 - Topway command execution;
 - CommandService binding.
 
+It remains the standards-first default, physical comparator and fallback mode.
+
 ### `AutoAllSafePaths`
 
-Is now genuinely additive for physical comparison. It retains the same three-action generic
-notification and public legacy Android broadcasts, and additionally enables:
+Retains the same three-action generic notification and public legacy Android broadcasts, and
+additionally enables:
 
 - Topway metadata/progress TX;
 - observed Topway command/update/seek RX;
@@ -111,11 +149,20 @@ notification and public legacy Android broadcasts, and additionally enables:
 
 It does not force a Topway source or create a second playback authority.
 
+Transient CommandService failures use a short bounded reconnect burst followed by a quiet cooldown
+and re-arm. Exhausting the initial boot/wake race therefore no longer disables the callback lane for
+the remainder of a live Auxio process. Descriptor mismatch remains a hard fail-open STOP for that
+adapter rather than a retry condition.
+
 The existing `lsposed-bridge/` module is Track C and remains statically scoped to:
 
 ```text
 com.tw.music
 ```
+
+Track C now uses the same bounded-burst + low-rate re-arm principle for its Auxio MediaBrowser and
+command-endpoint connections. A command Binder timeout still trips the existing process-lifetime
+circuit breaker and leaves stock behaviour in control.
 
 No Track-B `com.dofun.variety` module exists.
 
@@ -230,7 +277,7 @@ The sequence is deliberately discriminating:
 1. prove a healthy Auxio playback channel, live notification, DoFun listener and active session;
 2. establish a current VLC positive control;
 3. test `GenericDofunMedia` one button at a time;
-4. test corrected `AutoAllSafePaths` identically;
+4. test `AutoAllSafePaths` identically;
 5. use a non-fixed identity comparator only if needed;
 6. only with explicit approval and saved rollback evidence, use the existing guarded reversible
    stock-selection comparator.
@@ -265,13 +312,15 @@ required behaviour through genuine stock `com.tw.music`.
 Track C must:
 
 - remain optional and independently disableable;
-- verify stock UID/signing/build capability before a hook is used;
-- verify paired Auxio identity/signer;
-- fail open to stock behaviour;
-- suppress stock only after bounded positive Auxio acceptance;
+- remain statically scoped exactly to `com.tw.music` and route only its captured default/main process;
+- probe each exact known Activity, Service, receiver and presenter surface independently;
+- treat unavailable or changed hook surfaces as fail-open stock behaviour;
+- keep the emergency kill switch fail-safe (`UNKNOWN` means no bridge action);
+- suppress stock only after bounded positive Auxio command admission;
 - avoid reviving stock playback, duplicate sessions, focus or commands.
 
-A signer match alone does not authorise unknown obfuscated stock methods.
+Build/reference signer fingerprints are evidence about retained APKs, not an invented runtime
+activation gate. A signer match alone does not authorise unknown obfuscated stock methods.
 
 ## Release posture
 

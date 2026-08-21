@@ -36,7 +36,6 @@ final class MediaMirror {
     private static final String ACTION_LEGACY_METADATA = "com.android.music.metachanged";
     private static final String ACTION_LEGACY_PLAYSTATE = "com.android.music.playstatechanged";
     private static final long TICK_MS = 1_000L;
-    private static final int MAX_RECONNECT_ATTEMPTS = 5;
     private static final int MAX_METADATA_CHARS = 1_024;
     private static final long COMMAND_WAIT_TIMEOUT_MS = 120L;
     private static final long SERVER_DEADLINE_MS = 75L;
@@ -422,14 +421,16 @@ final class MediaMirror {
 
     private void scheduleCommandReconnect() {
         if (stopped.get() || commandCircuitOpen.get()) return;
-        if (commandReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            log.log("command endpoint reconnect limit reached; stock path retained", null);
-            return;
-        }
-        commandReconnectAttempts += 1;
+        BridgeReconnectPolicy.Decision decision =
+                BridgeReconnectPolicy.next(commandReconnectAttempts);
+        commandReconnectAttempts = decision.nextAttempt;
         handler.removeCallbacks(commandReconnect);
-        handler.postDelayed(
-                commandReconnect, Math.min(30_000L, 2_000L * commandReconnectAttempts));
+        if (decision.cooldown) {
+            log.log(
+                    "command endpoint retry burst exhausted; low-rate watcher remains armed",
+                    null);
+        }
+        handler.postDelayed(commandReconnect, decision.delayMs);
     }
 
     private void scheduleReconnect() {
@@ -439,13 +440,15 @@ final class MediaMirror {
         handler.removeCallbacks(commandReconnect);
         handler.removeCallbacks(commandBindTimeout);
         commandReconnectAttempts = 0;
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            started.set(false);
-            return;
-        }
-        reconnectAttempts += 1;
+        BridgeReconnectPolicy.Decision decision = BridgeReconnectPolicy.next(reconnectAttempts);
+        reconnectAttempts = decision.nextAttempt;
         handler.removeCallbacks(reconnect);
-        handler.postDelayed(reconnect, Math.min(30_000L, 2_000L * reconnectAttempts));
+        if (decision.cooldown) {
+            log.log(
+                    "MediaBrowser retry burst exhausted; low-rate watcher remains armed",
+                    null);
+        }
+        handler.postDelayed(reconnect, decision.delayMs);
     }
 
     private void disconnectBrowser() {
