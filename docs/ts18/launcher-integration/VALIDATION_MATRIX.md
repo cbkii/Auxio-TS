@@ -25,9 +25,11 @@ legacy Android signals and are deliberately independent from the observed Topway
 broadcasts. `AutoAllSafePaths` is additive: its canonical notification remains the conventional
 previous / play-pause / next DoFun profile while the separately gated Topway paths are also enabled.
 
-Fresh Topway-compatible installs still default conservatively to `GenericDofunMedia`. Existing
-persisted valid choices are not rewritten merely because the hybrid mode gained the missing public
-capabilities.
+Fresh Topway-compatible installs now default to `AutoAllSafePaths` so one Auxio playback authority is
+visible through every currently observed safe generic and Topway-compatible surface. Existing
+persisted valid choices are not rewritten because older releases did not record enough preference
+provenance to distinguish an old default from an explicit user selection. `GenericDofunMedia`
+remains the standards-only physical comparator.
 
 ## Read-only baseline collector
 
@@ -102,14 +104,33 @@ and CommandService binding remain off.
 
 Repeat the same one-button-at-a-time sequence.
 
-This is the key hybrid discriminator. It must retain the same three-action generic notification and
-legacy Android broadcasts while additionally enabling the observed Topway TX/RX and read/query
-CommandService callback lane.
+This is the key hybrid discriminator and the fresh-install default. It must retain the same
+three-action generic notification and legacy Android broadcasts while additionally enabling the
+observed Topway TX/RX and read/query CommandService callback lane.
 
 Use the ingress telemetry to classify each physical button. Do not add a speculative global debounce:
 first determine whether one press actually reaches more than one external ingress path.
 
-### E. Identity comparator
+### E. Long-lived recovery
+
+Proxy-style reliability must survive service-order and process-order races, not only a clean launch.
+Test the recovery lanes separately:
+
+1. start Auxio while the Topway command endpoint is unavailable or restarting, without changing the
+   selected integration mode;
+2. allow the initial fast retry burst to expire;
+3. wait through the 30-second quiet cooldown and make the endpoint available;
+4. confirm callback registration recovers without restarting Auxio or toggling the mode;
+5. for Track C, start genuine stock `com.tw.music` with Auxio unavailable, allow its initial
+   MediaBrowser/command retries to expire, then make Auxio available and confirm the mirror reconnects;
+6. repeat with Auxio process death/recreation while the stock process remains alive;
+7. confirm a Track-C command Binder timeout still opens the circuit and leaves stock behaviour in
+   control rather than retrying a potentially wedged command path.
+
+The retry implementation owns one delayed runnable per endpoint. It must not produce a hot loop,
+unbounded queue, duplicate browser/controller or second playback authority.
+
+### F. Identity comparator
 
 Only if C/D still do not explain the result, use a maintained debug/application-ID-suffixed build as
 a controlled **non-fixed identity comparator**. It is not a release product and is not proof of
@@ -119,7 +140,7 @@ If the otherwise equivalent generic path works under the non-fixed identity but 
 `com.tw.media`, classify the package/source classification hypothesis as strongly supported and keep
 investigating the fixed DoFun source-selection boundary.
 
-### F. Reversible stock-selection comparator
+### G. Reversible stock-selection comparator
 
 This touches the protected stock package and is **not** part of the normal collector. Run only after
 a saved baseline and explicit approval, using the existing guarded tool:
@@ -157,6 +178,8 @@ Interpretation:
 | Previous | queue changes exactly once | title/progress update once | before/after queue + journal |
 | Source tap | session activity resolves to Auxio's fixed component | Auxio opens, not stock | window/activity state |
 | Process death + PLAY | bounded saved-state restoration may start playback | command is not lost/duplicated | service/session timing |
+| Topway service late/restart | bounded burst + cooldown watcher rebinds | controls recover without Auxio restart | callback journal + service state |
+| Track-C Auxio late/restart | MediaBrowser/command watcher reconnects; state snapshot republishes | stock-selected panel follows Auxio again | stock bridge log + media_session |
 | Launcher restart | public state remains/reappears | source selection is re-evaluated correctly | before/after collector |
 | ACC sleep/wake | no duplicate service/session/queue owner | no stale or duplicate homepage action | exact-device ACC evidence |
 
@@ -175,6 +198,8 @@ Use these classifications only from successful inspection in the correct user/pr
   causes duplicate semantic action.
 - **Permission/listener failure** — DoFun notification listener or normal-app vendor callback access
   is unavailable.
+- **Recovery exhaustion failure** — a transient endpoint outage does not recover after the bounded
+  burst/cooldown re-arm while the owning process is still alive.
 - **Physical evidence incomplete** — required probe failed, was truncated, used the wrong identity,
   or the relevant physical observation was not made.
 
@@ -203,9 +228,13 @@ that DoFun scans during a recoverable inactive restoration window and never re-a
 register the observed callback subset and request the current source state. It must not set source
 `3`, invent Binder transactions or assume root/platform authority.
 
+A transient bind/registration failure uses the bounded fast retry burst and then a 30-second quiet
+re-arm while the Auxio service and selected mode still own the adapter. A descriptor mismatch remains
+an explicit STOP for that adapter rather than a retry condition.
+
 Classify runtime results separately:
 
-- no bind/registration → access/authority blocker;
+- no bind/registration after re-arm windows → access/authority blocker;
 - callback registered but reported source is not local music → source-selection blocker;
 - local-music source but no music callbacks → routing/ownership blocker;
 - callback arrives while DoFun UI remains stock → command and display/source adapters are separate.
@@ -231,6 +260,7 @@ to show:
 - source tap opening Auxio;
 - no stock Music, Radio, Bluetooth, notification, audio-focus or duplicate-owner regression;
 - process restart and launcher restart safety;
+- recovery after late/restarted Topway/Auxio endpoints;
 - ACC sleep/wake when practical.
 
 Until those observations are supplied, classify the result as
