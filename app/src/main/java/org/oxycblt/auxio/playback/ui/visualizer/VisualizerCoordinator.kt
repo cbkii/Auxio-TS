@@ -59,6 +59,8 @@ class VisualizerCoordinator(
     private var currentSessionId: Int? = null
     private var watchdogJob: Job? = null
     private var pauseReleaseJob: Job? = null
+    private var startRetryJob: Job? = null
+    private var startRetryAttempt = 0
     private var monitorJob: Job? = null
     private var activeScope: CoroutineScope? = null
     private var pausedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
@@ -72,6 +74,7 @@ class VisualizerCoordinator(
         active = true
         activeScope = owner.lifecycleScope
         recoveryTracker.reset()
+        cancelStartRetry(resetAttempt = true)
         if (hasPermission()) {
             clearPersistedPermissionDenial()
             permissionRequestIssued = false
@@ -100,6 +103,7 @@ class VisualizerCoordinator(
 
     override fun onVisualizerModeChanged() {
         recoveryTracker.reset()
+        cancelStartRetry(resetAttempt = true)
         if (hasPermission()) {
             clearPersistedPermissionDenial()
             permissionRequestIssued = false
@@ -121,6 +125,7 @@ class VisualizerCoordinator(
         permissionRequestIssued = false
         if (granted) {
             recoveryTracker.reset()
+            cancelStartRetry(resetAttempt = true)
             clearPersistedPermissionDenial()
             updateState(forceRestart = true)
         } else {
@@ -149,6 +154,7 @@ class VisualizerCoordinator(
 
         val sessionId = audioSessionIdFlow.value?.takeIf { it > 0 }
         if (!isPlayingFlow.value) {
+            cancelStartRetry(resetAttempt = true)
             if (visualizer != null && currentSessionId != sessionId) {
                 releaseVisualizer(resetRecovery = true)
             }
@@ -176,6 +182,7 @@ class VisualizerCoordinator(
 
         if (forceRestart || (visualizer != null && currentSessionId != sessionId)) {
             recoveryTracker.reset()
+            cancelStartRetry(resetAttempt = true)
             releaseVisualizer(resetRecovery = false)
         }
 
@@ -186,6 +193,7 @@ class VisualizerCoordinator(
             return
         }
 
+        if (startRetryJob?.isActive == true) return
         startVisualizer(sessionId)
     }
 
@@ -390,6 +398,7 @@ class VisualizerCoordinator(
                 }
                 _state.value =
                     VisualizerState.Unavailable("Listener registration failed: $listenerStatus")
+                scheduleStartRetry(sessionId, "listener-status-$listenerStatus")
                 return
             }
 
@@ -416,6 +425,7 @@ class VisualizerCoordinator(
                 throw error
             }
             candidateToRelease = null
+            cancelStartRetry(resetAttempt = true)
             L.i(
                 "Visualizer started session=$sessionId captureSize=$targetSize " +
                     "rate=$targetRate capture=$captureMode " +
@@ -435,6 +445,9 @@ class VisualizerCoordinator(
             visualizer = null
             currentSessionId = null
             _state.value = VisualizerState.Unavailable(message)
+            if (error !is UnsupportedOperationException) {
+                scheduleStartRetry(sessionId, message)
+            }
         } finally {
             candidateToRelease?.let(::releaseCandidate)
         }
@@ -478,10 +491,52 @@ class VisualizerCoordinator(
                     } else {
                         releaseVisualizer(resetRecovery = false)
                         _state.value = VisualizerState.Unavailable("No usable visualizer frames")
+                        scheduleStartRetry(sessionId, "frame-watchdog")
                     }
                     return@launch
                 }
             }
+    }
+
+    private fun scheduleStartRetry(sessionId: Int, reason: String) {
+        val scope = activeScope ?: return
+        val delayMs = VisualizerRecoveryPolicy.startRetryDelayMs(startRetryAttempt)
+        if (delayMs == null) {
+            L.w(
+                "Visualizer startup retry budget exhausted " +
+                    "[session=$sessionId reason=$reason attempts=$startRetryAttempt]"
+            )
+            return
+        }
+        startRetryJob?.cancel()
+        val attempt = startRetryAttempt + 1
+        startRetryAttempt = attempt
+        _state.value = VisualizerState.Starting
+        L.i(
+            "Scheduling visualizer startup retry " +
+                "[session=$sessionId reason=$reason attempt=$attempt delayMs=$delayMs]"
+        )
+        startRetryJob =
+            scope.launch {
+                delay(delayMs)
+                startRetryJob = null
+                if (
+                    !active ||
+                        !isPlayingFlow.value ||
+                        audioSessionIdFlow.value != sessionId ||
+                        uiSettings.visualizerMode == UISettings.VisualizerMode.OFF ||
+                        !hasPermission()
+                ) {
+                    return@launch
+                }
+                startVisualizer(sessionId)
+            }
+    }
+
+    private fun cancelStartRetry(resetAttempt: Boolean) {
+        startRetryJob?.cancel()
+        startRetryJob = null
+        if (resetAttempt) startRetryAttempt = 0
     }
 
     private fun releaseVisualizer(resetRecovery: Boolean) {
@@ -495,7 +550,10 @@ class VisualizerCoordinator(
         visualizer = null
         currentSessionId = null
         if (activeVisualizer != null) releaseCandidate(activeVisualizer)
-        if (resetRecovery) recoveryTracker.reset()
+        if (resetRecovery) {
+            recoveryTracker.reset()
+            cancelStartRetry(resetAttempt = true)
+        }
     }
 
     private fun releaseCandidate(candidate: Visualizer) {
