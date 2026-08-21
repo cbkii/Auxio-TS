@@ -339,6 +339,7 @@ constructor(
                 unbindIfNeeded()
                 mainHandler.removeCallbacks(retryRunnable)
                 retryScheduled = false
+                retryCount = 0
             }
             return
         }
@@ -501,15 +502,15 @@ constructor(
 
     private fun scheduleRetry(reason: String) {
         if (!attached || releaseInProgress || retryScheduled) return
-        if (retryCount >= RETRY_DELAYS_MS.size) {
-            log("Reconnect exhausted", reason)
-            return
-        }
-        val delayMs = RETRY_DELAYS_MS[retryCount]
-        retryCount += 1
+        val decision = TopwayReconnectPolicy.next(retryCount)
+        retryCount = decision.nextAttempt
         retryScheduled = true
-        log("Reconnect scheduled", "$reason; attempt=$retryCount delayMs=$delayMs")
-        mainHandler.postDelayed(retryRunnable, delayMs)
+        val event = if (decision.cooldown) "Reconnect watcher armed" else "Reconnect scheduled"
+        log(
+            event,
+            "$reason; nextAttempt=$retryCount delayMs=${decision.delayMs} cooldown=${decision.cooldown}",
+        )
+        mainHandler.postDelayed(retryRunnable, decision.delayMs)
     }
 
     private fun onMusicControl(control: TopwayMusicControl) {
@@ -569,7 +570,6 @@ constructor(
     private companion object {
         const val WORKER_NAME = "AuxioTopwayCommand"
         const val MAX_LOGGED_BUNDLE_KEYS = 16
-        val RETRY_DELAYS_MS = longArrayOf(500L, 1500L, 3000L)
     }
 }
 
