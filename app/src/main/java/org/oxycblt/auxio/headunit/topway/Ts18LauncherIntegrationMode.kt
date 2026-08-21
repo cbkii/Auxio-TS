@@ -75,27 +75,11 @@ enum class Ts18LauncherIntegrationMode {
 
     companion object {
         const val PREF_KEY = "auxio_ts18_launcher_integration_mode"
-
-        /**
-         * Historical one-time migration marker retained for preference compatibility.
-         *
-         * Older releases used this marker when `GenericDofunMedia` became the standards-first
-         * default. Do not rename it: existing installations rely on it to avoid rewriting an
-         * explicit launcher-mode choice.
-         */
         const val PREF_GENERIC_DEFAULT_MIGRATED = "auxio_ts18_launcher_generic_default_migrated_v1"
 
-        /**
-         * Fresh TS18 installs use every currently observed safe compatibility surface.
-         *
-         * This is the closest safe equivalent to a vendor music proxy: the same Auxio playback
-         * authority is exposed simultaneously through Android MediaSession/MediaBrowser,
-         * conventional DoFun/VLC notification + legacy broadcasts, Topway metadata/progress
-         * broadcasts, the observed Topway command broadcasts and the verified CommandService
-         * callback lane. It does not add another player, queue, MediaSession or notification owner.
-         */
+        /** Pure policy helper retained independently from distributable product flavours. */
         fun defaultFor(topwayProduct: Boolean): Ts18LauncherIntegrationMode =
-            if (topwayProduct) AutoAllSafePaths else AndroidMediaSessionOnly
+            if (topwayProduct) GenericDofunMedia else AndroidMediaSessionOnly
 
         fun default(): Ts18LauncherIntegrationMode = defaultFor(BuildConfig.TOPWAY_COMPAT_ENABLED)
 
@@ -105,9 +89,10 @@ enum class Ts18LauncherIntegrationMode {
         /**
          * Resolves the one-time default migration without overwriting an explicit selection.
          *
-         * Preference provenance was not recorded by older releases, so any persisted valid mode
-         * may have been deliberately selected. Only an absent preference adopts the current proxy-
-         * grade default; every persisted valid mode is preserved, including `GenericDofunMedia`.
+         * Preference provenance was not recorded by older releases, so a persisted
+         * [AutoAllSafePaths] value may have been deliberately selected. Only an absent preference
+         * is therefore migrated to the new standards-first default; every persisted valid mode is
+         * preserved.
          */
         fun migrationDecision(
             persistedValue: String?,
@@ -123,11 +108,10 @@ enum class Ts18LauncherIntegrationMode {
                 )
             }
 
-            val shouldAdoptCurrentDefault = parsed == null
-            val currentDefault = defaultFor(topwayProduct)
+            val shouldAdoptGenericDefault = parsed == null
             return Ts18LauncherModeMigrationDecision(
-                mode = parsed ?: currentDefault,
-                persistMode = if (shouldAdoptCurrentDefault) currentDefault else null,
+                mode = parsed ?: GenericDofunMedia,
+                persistMode = if (shouldAdoptGenericDefault) GenericDofunMedia else null,
                 markComplete = true,
             )
         }
