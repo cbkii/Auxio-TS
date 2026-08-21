@@ -25,10 +25,38 @@ Use this dependency order:
 Do not scope `com.tw.media` in LSPosed. Auxio owns that process and required behaviour belongs in the
 app source.
 
-The proxy-pattern comparison with the supplied FYT MusicProxy/RadioProxy binaries is recorded in
-[`ts18/launcher-integration/PROXY_GRADE_NATIVE_INTEGRATION.md`](ts18/launcher-integration/PROXY_GRADE_NATIVE_INTEGRATION.md).
-Those binaries are architectural precedent only; FYT/SYU actions and package authority are not a
-Topway contract.
+## Supplied proxy reference evidence
+
+Static inspection on 2026-08-22 used the supplied `MusicProxy-2.5.5.apk` and
+`RadioProxyFYT_1.1.apk` as architectural references. MusicProxy exposes stock FYT `com.syu.music`
+surfaces, follows boot/ACC and target-player lifecycle, controls an external active MediaSession,
+handles stock previous/next/play-pause actions, watches `closeApp com.syu.music`, and retries/relaunches
+its selected player. RadioProxy applies the same broad pattern to `com.syu.radio`, including boot/ACC,
+audio-focus observation, repeated autoplay/key-event attempts, close-app watching and NavRadio
+handling.
+
+The useful precedent is therefore:
+
+```text
+vendor-owned launcher/system expectation
+        -> compatibility surface
+        -> one real playback owner
+```
+
+For this TS18 the safe equivalent is DoFun/Topway -> the recognised `com.tw.media` compatibility
+surfaces -> Auxio's existing playback owner, with optional genuine-stock Track C only when current
+exact-device evidence proves stock remains selected. FYT/SYU actions and package authority are **not**
+Topway contracts and are not copied into the product.
+
+Reference binary hashes:
+
+```text
+MusicProxy-2.5.5.apk
+SHA-256 601b33f60934158e49d0dde6ea35592fafff1004f380d0fb66756e2f8d56187c
+
+RadioProxyFYT_1.1.apk
+SHA-256 f9f658bb82c65f59f698f44b9d8dfbd7987a6de720b68a27482e6d7ce2dc5398
+```
 
 ## Exact observed evidence
 
