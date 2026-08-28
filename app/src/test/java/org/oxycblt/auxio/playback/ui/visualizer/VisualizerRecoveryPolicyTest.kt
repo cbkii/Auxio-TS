@@ -113,6 +113,22 @@ class VisualizerRecoveryPolicyTest {
     }
 
     @Test
+    fun startupRetryTrackerStaysExhaustedUntilUsableFrameReset() {
+        val tracker = VisualizerStartRetryTracker()
+
+        assertEquals(250L, tracker.nextDelayMs())
+        assertEquals(750L, tracker.nextDelayMs())
+        assertEquals(1_500L, tracker.nextDelayMs())
+        assertNull(tracker.nextDelayMs())
+        assertEquals(3, tracker.attemptCount)
+
+        tracker.reset()
+
+        assertEquals(0, tracker.attemptCount)
+        assertEquals(250L, tracker.nextDelayMs())
+    }
+
+    @Test
     fun nonPositiveSamplingRatesAreNotUsableCaptureFrames() {
         assertFalse(VisualizerRecoveryPolicy.hasUsableSamplingRate(0))
         assertFalse(VisualizerRecoveryPolicy.hasUsableSamplingRate(-1))

@@ -44,8 +44,8 @@ if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
     local dir=$1 found=()
     mapfile -t found < <(find "${dir}" -maxdepth 1 -type f -name '*.apk' ! -name '*unsigned*' | sort)
     ((${#found[@]} == 1)) || {
-      echo "::error::Expected one signed APK in ${dir}, found ${#found[@]}."
-      exit 1
+      echo "::error::Expected one signed APK in ${dir}, found ${#found[@]}." >&2
+      return 1
     }
     printf '%s\n' "${found[0]}"
   }
@@ -70,15 +70,19 @@ if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
   app_release_apk=''
   app_debug_apk=''
   ensure_app_release() {
+    local resolved_apk
     if [[ -z "${app_release_apk}" ]]; then
       timeout 45m bash ./scripts/ci-gradle.sh :app:assembleRelease
-      app_release_apk="$(find_apk app/build/outputs/apk/release)"
+      resolved_apk="$(find_apk app/build/outputs/apk/release)" || return 1
+      app_release_apk="${resolved_apk}"
     fi
   }
   ensure_app_debug() {
+    local resolved_apk
     if [[ -z "${app_debug_apk}" ]]; then
       timeout 45m bash ./scripts/ci-gradle.sh :app:assembleDebug
-      app_debug_apk="$(find_apk app/build/outputs/apk/debug)"
+      resolved_apk="$(find_apk app/build/outputs/apk/debug)" || return 1
+      app_debug_apk="${resolved_apk}"
     fi
   }
 
@@ -132,18 +136,37 @@ if [[ -s "${BUILD_VARIANTS_FILE}" ]]; then
     cp "${apk_path}" "${asset_path}"
 
     digest="$(sha256sum "${asset_path}" | awk '{print $1}')"
-    badging="$("${aapt}" dump badging "${apk_path}")"
+    badging="$("${aapt}" dump badging "${apk_path}")" || {
+      echo "::error::Unable to inspect APK badging for ${asset_name}." >&2
+      exit 1
+    }
     signing_report="$("${apksigner}" verify --verbose --print-certs "${apk_path}" 2>&1)" || {
       echo "::error::APK signature verification failed for ${asset_name}."; exit 1;
     }
     signer="$(extract_apksigner_certificate_sha256 "${signing_report}")" || {
       echo "::error::Unable to resolve exactly one signer for ${asset_name}."; exit 1;
     }
-    application_id="$(sed -n -E "s/^package: name='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
-    actual_code="$(sed -n -E "s/^package: .*versionCode='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
-    actual_name="$(sed -n -E "s/^package: .*versionName='([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
-    min_sdk="$(sed -n -E "s/^sdkVersion:'([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
-    target_sdk="$(sed -n -E "s/^targetSdkVersion:'([^']+)'.*/\1/p" <<< "${badging}" | head -n1)"
+    application_id="$(sed -n -E "s/^package: name='([^']+)'.*/\1/p" <<< "${badging}")"
+    actual_code="$(sed -n -E "s/^package: .*versionCode='([^']+)'.*/\1/p" <<< "${badging}")"
+    actual_name="$(sed -n -E "s/^package: .*versionName='([^']+)'.*/\1/p" <<< "${badging}")"
+    min_sdk="$(sed -n -E "s/^sdkVersion:'([^']+)'.*/\1/p" <<< "${badging}")"
+    target_sdk="$(sed -n -E "s/^targetSdkVersion:'([^']+)'.*/\1/p" <<< "${badging}")"
+    [[ "${application_id}" =~ ^[A-Za-z][A-Za-z0-9_.]*$ ]] || {
+      echo "::error::Malformed application ID for ${asset_name}: ${application_id:-<empty>}." >&2
+      exit 1
+    }
+    [[ "${actual_code}" =~ ^[0-9]+$ ]] || {
+      echo "::error::Malformed version code for ${asset_name}: ${actual_code:-<empty>}." >&2
+      exit 1
+    }
+    [[ -n "${actual_name}" && "${actual_name}" != *$'\n'* ]] || {
+      echo "::error::Malformed version name for ${asset_name}." >&2
+      exit 1
+    }
+    [[ "${min_sdk}" =~ ^[0-9]+$ && "${target_sdk}" =~ ^[0-9]+$ ]] || {
+      echo "::error::Malformed SDK metadata for ${asset_name}." >&2
+      exit 1
+    }
     abis="$(unzip -Z1 "${apk_path}" | sed -n -E 's#^lib/([^/]+)/.*#\1#p' | sort -u | paste -sd, -)"
 
     printf '%s  %s\n' "${digest}" "${asset_name}" > "${asset_dir}/${asset_name}.sha256"
@@ -236,3 +259,5 @@ PY
   echo "upload_tsv=${upload_tsv}"
   echo "staged_tsv=${staged_tsv}"
 } >> "${GITHUB_OUTPUT}"
+
+echo "SUCCESS: selected Manual Release assets were built, inspected and staged." >&2

@@ -41,11 +41,32 @@ class HomeIndexingPresentationPolicyTest {
 
     @Test
     fun actionableTerminalOutcomeShowsDiagnosticCard() {
-        assertTrue(
-            HomeIndexingPresentationPolicy.shouldShowStatusCard(
-                completed(IndexingTerminalOutcome.SOURCE_UNAVAILABLE)
+        val outcomes =
+            listOf(
+                IndexingTerminalOutcome.PARTIAL_SUCCESS,
+                IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                IndexingTerminalOutcome.FAILED,
+                IndexingTerminalOutcome.SERVICE_STOPPED,
+                IndexingTerminalOutcome.TIMED_OUT,
             )
-        )
+
+        outcomes.forEach { outcome ->
+            assertTrue(HomeIndexingPresentationPolicy.shouldShowStatusCard(completed(outcome)))
+        }
+    }
+
+    @Test
+    fun expectedTerminalOutcomeDoesNotShowDiagnosticCard() {
+        val outcomes =
+            listOf(
+                IndexingTerminalOutcome.SUCCESS,
+                IndexingTerminalOutcome.CANCELLED,
+                IndexingTerminalOutcome.SUPERSEDED,
+            )
+
+        outcomes.forEach { outcome ->
+            assertFalse(HomeIndexingPresentationPolicy.shouldShowStatusCard(completed(outcome)))
+        }
     }
 
     private fun completed(outcome: IndexingTerminalOutcome): IndexingState.Completed =

@@ -91,6 +91,30 @@ class PrimitiveQueuePromotionGateTest {
     }
 
     @Test
+    fun freshLibraryGenerationInvalidatesPreparedHydration() {
+        val gate = PrimitiveQueuePromotionGate()
+        gate.onPrepared(key)
+        gate.onLibraryChanged(key)
+
+        assertEquals(
+            PrimitiveQueuePromotionGate.Decision.PREPARE,
+            gate.requestBoundary(key, libraryReady = true),
+        )
+    }
+
+    @Test
+    fun successfulPreparationClearsFailureForSameQueueRevision() {
+        val gate = PrimitiveQueuePromotionGate()
+        gate.onFailed(key)
+        gate.onPrepared(key)
+
+        assertEquals(
+            PrimitiveQueuePromotionGate.Decision.PROMOTE,
+            gate.requestBoundary(key, libraryReady = true),
+        )
+    }
+
+    @Test
     fun differentQueueRevisionDoesNotInheritOldFailure() {
         val gate = PrimitiveQueuePromotionGate()
         gate.onFailed(key)

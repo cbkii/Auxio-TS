@@ -36,7 +36,8 @@ internal object VisualizerRecoveryPolicy {
         if (consecutiveRetries <= 0) VisualizerCaptureMode.FFT else VisualizerCaptureMode.WAVEFORM
 
     /** Delay for a transient construction/enable retry, or null once the bounded budget is spent. */
-    fun startRetryDelayMs(attempt: Int): Long? = START_RETRY_DELAYS_MS.getOrNull(attempt.coerceAtLeast(0))
+    fun startRetryDelayMs(attempt: Int): Long? =
+        START_RETRY_DELAYS_MS.getOrNull(attempt.coerceAtLeast(0))
 
     fun isCaptureTimedOut(
         attemptStartedAtUptimeMs: Long,
@@ -126,5 +127,25 @@ internal class VisualizerRecoveryTracker {
         attemptStartedAt.set(VisualizerRecoveryPolicy.UNSET_UPTIME_MS)
         lastUsableFrameAt.set(VisualizerRecoveryPolicy.UNSET_UPTIME_MS)
         retries.set(0)
+    }
+}
+
+/** Keeps construction retries bounded until an actual capture frame proves recovery. */
+internal class VisualizerStartRetryTracker {
+    private val attempts = AtomicInteger()
+
+    val attemptCount: Int
+        get() = attempts.get()
+
+    fun nextDelayMs(): Long? {
+        while (true) {
+            val current = attempts.get()
+            val delayMs = VisualizerRecoveryPolicy.startRetryDelayMs(current) ?: return null
+            if (attempts.compareAndSet(current, current + 1)) return delayMs
+        }
+    }
+
+    fun reset() {
+        attempts.set(0)
     }
 }

@@ -45,11 +45,13 @@ internal class PrimitiveQueuePromotionGate {
 
     /** A newly committed library generation may make a previously unresolved queue hydratable. */
     fun onLibraryChanged(key: Key) {
+        if (preparedKey == key) preparedKey = null
         if (failedKey == key) failedKey = null
     }
 
     fun onPrepared(key: Key): Boolean {
         preparedKey = key
+        if (failedKey == key) failedKey = null
         return boundaryKey == key
     }
 

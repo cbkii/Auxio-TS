@@ -144,6 +144,7 @@ class ExoPlaybackStateHolder(
         val layout: PrimitiveQueuePromotionPolicy.Layout,
         val songsByCanonicalPosition: List<Song>,
     )
+
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener(::onAudioFocusChanged)
     private val focusRequest: AudioFocusRequestCompat =
         AudioFocusRequestCompat.Builder(AudioManagerCompat.AUDIOFOCUS_GAIN)
@@ -797,18 +798,23 @@ class ExoPlaybackStateHolder(
             restoreScope.launch {
                 val allItems = persistenceRepository.readAllQueueItems(descriptor)
                 val layout = PrimitiveQueuePromotionPolicy.layout(descriptor, allItems)
+                val canonicalItems = layout?.itemsByCanonicalPosition.orEmpty()
+                val songsByUid =
+                    canonicalItems.map { item -> item.stableSongUid?.let(library::findSong) }
                 val songsByCanonicalPosition: List<Song?> =
-                    layout
-                        ?.itemsByCanonicalPosition
-                        ?.map { item ->
-                            item.stableSongUid?.let(library::findSong)
-                                ?: item.uri?.let { uri ->
-                                    library.songs.firstOrNull { it.uri.toString() == uri }
-                                }
-                                ?: item.pathFallback?.let { path ->
-                                    library.songs.firstOrNull { it.path.toString() == path }
-                                }
-                        } ?: emptyList()
+                    if (songsByUid.all { it != null }) {
+                        songsByUid
+                    } else {
+                        // UID is authoritative. Build fallback indexes only when legacy/incomplete
+                        // persistence needs them, keeping hydration O(library + queue).
+                        val songsByUri = library.songs.associateBy { it.uri.toString() }
+                        val songsByPath = library.songs.associateBy { it.path.toString() }
+                        canonicalItems.mapIndexed { index, item ->
+                            songsByUid[index]
+                                ?: item.uri?.let(songsByUri::get)
+                                ?: item.pathFallback?.let(songsByPath::get)
+                        }
+                    }
                 val complete =
                     layout != null &&
                         songsByCanonicalPosition.size == layout.itemsByCanonicalPosition.size &&

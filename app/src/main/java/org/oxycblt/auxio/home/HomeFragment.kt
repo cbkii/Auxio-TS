@@ -547,7 +547,10 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         indexingTickerJob?.cancel()
         indexingTickerJob = null
         renderIndexerState(state, SystemClock.elapsedRealtime())
-        if (state is IndexingState.Indexing) {
+        if (
+            state is IndexingState.Indexing &&
+                HomeIndexingPresentationPolicy.shouldShowStatusCard(state)
+        ) {
             indexingTickerJob =
                 viewLifecycleOwner.lifecycleScope.launch {
                     while (true) {

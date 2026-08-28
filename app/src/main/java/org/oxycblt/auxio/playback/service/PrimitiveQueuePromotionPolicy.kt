@@ -45,7 +45,9 @@ internal object PrimitiveQueuePromotionPolicy {
 
     fun layout(descriptor: QueueDescriptor, items: List<QueueItemRef>): Layout? {
         if (!descriptor.hasCurrentItem || items.size != descriptor.totalCount) return null
-        if (items.map { it.logicalPosition } != (0 until descriptor.totalCount).toList()) return null
+        if (items.map { it.logicalPosition } != (0 until descriptor.totalCount).toList()) {
+            return null
+        }
 
         // Always validate canonical positions so corrupt/ambiguous persistence fails open instead of
         // risking a jump to unrelated media. Only shuffled playback needs that order as the heap.

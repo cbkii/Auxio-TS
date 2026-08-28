@@ -24,5 +24,15 @@ import org.oxycblt.auxio.music.IndexingTerminalOutcome
 /** Keeps routine launch/background scans silent while retaining actionable terminal failures. */
 internal object HomeIndexingPresentationPolicy {
     fun shouldShowStatusCard(state: IndexingState?): Boolean =
-        state is IndexingState.Completed && state.outcome != IndexingTerminalOutcome.SUCCESS
+        state is IndexingState.Completed &&
+            when (state.outcome) {
+                IndexingTerminalOutcome.PARTIAL_SUCCESS,
+                IndexingTerminalOutcome.SOURCE_UNAVAILABLE,
+                IndexingTerminalOutcome.FAILED,
+                IndexingTerminalOutcome.SERVICE_STOPPED,
+                IndexingTerminalOutcome.TIMED_OUT -> true
+                IndexingTerminalOutcome.SUCCESS,
+                IndexingTerminalOutcome.CANCELLED,
+                IndexingTerminalOutcome.SUPERSEDED -> false
+            }
 }

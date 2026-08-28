@@ -55,12 +55,12 @@ class VisualizerCoordinator(
             diagnosticJournal ?: VisualizerDiagnosticsResolver.resolve(context)
         )
     private val recoveryTracker = VisualizerRecoveryTracker()
+    private val startRetryTracker = VisualizerStartRetryTracker()
     private var visualizer: Visualizer? = null
     private var currentSessionId: Int? = null
     private var watchdogJob: Job? = null
     private var pauseReleaseJob: Job? = null
     private var startRetryJob: Job? = null
-    private var startRetryAttempt = 0
     private var monitorJob: Job? = null
     private var activeScope: CoroutineScope? = null
     private var pausedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
@@ -321,6 +321,7 @@ class VisualizerCoordinator(
                             if (generation != currentGeneration || currentSessionId != sessionId)
                                 return
                             recoveryTracker.noteUsableFrame(now)
+                            startRetryTracker.reset()
                             val frame =
                                 if (runtimeMetrics.isActive) {
                                     val copyStart = SystemClock.elapsedRealtimeNanos()
@@ -355,6 +356,7 @@ class VisualizerCoordinator(
                             if (generation != currentGeneration || currentSessionId != sessionId)
                                 return
                             recoveryTracker.noteUsableFrame(now)
+                            startRetryTracker.reset()
                             val frame =
                                 if (runtimeMetrics.isActive) {
                                     val copyStart = SystemClock.elapsedRealtimeNanos()
@@ -425,7 +427,9 @@ class VisualizerCoordinator(
                 throw error
             }
             candidateToRelease = null
-            cancelStartRetry(resetAttempt = true)
+            // Construction is not recovery: keep the bounded startup budget until the capture
+            // callback supplies a usable frame.
+            cancelStartRetry(resetAttempt = false)
             L.i(
                 "Visualizer started session=$sessionId captureSize=$targetSize " +
                     "rate=$targetRate capture=$captureMode " +
@@ -500,17 +504,16 @@ class VisualizerCoordinator(
 
     private fun scheduleStartRetry(sessionId: Int, reason: String) {
         val scope = activeScope ?: return
-        val delayMs = VisualizerRecoveryPolicy.startRetryDelayMs(startRetryAttempt)
+        val delayMs = startRetryTracker.nextDelayMs()
         if (delayMs == null) {
             L.w(
                 "Visualizer startup retry budget exhausted " +
-                    "[session=$sessionId reason=$reason attempts=$startRetryAttempt]"
+                    "[session=$sessionId reason=$reason attempts=${startRetryTracker.attemptCount}]"
             )
             return
         }
         startRetryJob?.cancel()
-        val attempt = startRetryAttempt + 1
-        startRetryAttempt = attempt
+        val attempt = startRetryTracker.attemptCount
         _state.value = VisualizerState.Starting
         L.i(
             "Scheduling visualizer startup retry " +
@@ -536,7 +539,7 @@ class VisualizerCoordinator(
     private fun cancelStartRetry(resetAttempt: Boolean) {
         startRetryJob?.cancel()
         startRetryJob = null
-        if (resetAttempt) startRetryAttempt = 0
+        if (resetAttempt) startRetryTracker.reset()
     }
 
     private fun releaseVisualizer(resetRecovery: Boolean) {
