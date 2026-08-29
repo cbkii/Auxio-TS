@@ -52,7 +52,7 @@ done
 
 [[ ! -e app/src/main/startup-prof.txt ]] || fail 'obsolete Startup Profile path remains'
 require_contains settings.gradle "include ':startup-benchmark'"
-require_contains build.gradle 'id "androidx.baselineprofile" version "1.5.0-beta01" apply false'
+require_contains build.gradle 'id "androidx.baselineprofile" version "1.5.0-rc01" apply false'
 require_contains app/build.gradle 'id "androidx.baselineprofile"'
 require_contains app/build.gradle 'minifyEnabled false'
 require_contains app/build.gradle 'baselineProfile project(":startup-benchmark")'

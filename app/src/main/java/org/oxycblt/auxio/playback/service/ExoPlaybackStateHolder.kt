@@ -127,12 +127,24 @@ class ExoPlaybackStateHolder(
     private var pauseFromAudioFocus = false
     private var rawFastResumeItem: RawFastResumeItem? = null
     private var activePrimitiveWindow: QueueWindow? = null
+    private val primitivePromotionGate = PrimitiveQueuePromotionGate()
+    private var primitivePromotionPreparationJob: Job? = null
+    private var primitivePromotionPreparationKey: PrimitiveQueuePromotionGate.Key? = null
+    private var preparedPrimitivePromotion: PreparedPrimitivePromotion? = null
+    private val pendingPrimitivePromotionActions = mutableListOf<() -> Unit>()
     private var primitiveNavigationJob: Job? = null
     private var primitivePrefetchJob: Job? = null
     private val primitiveMutationMutex = Mutex()
     private var pendingPrimitiveTarget: Int? = null
     private var pendingLibraryRestoreAfterRawFailure: DeferredPlayback.RestoreState? = null
     private var markedFirstPlaying = false
+
+    private data class PreparedPrimitivePromotion(
+        val key: PrimitiveQueuePromotionGate.Key,
+        val layout: PrimitiveQueuePromotionPolicy.Layout,
+        val songsByCanonicalPosition: List<Song>,
+    )
+
     private val focusChangeListener = AudioManager.OnAudioFocusChangeListener(::onAudioFocusChanged)
     private val focusRequest: AudioFocusRequestCompat =
         AudioFocusRequestCompat.Builder(AudioManagerCompat.AUDIOFOCUS_GAIN)
@@ -737,13 +749,238 @@ class ExoPlaybackStateHolder(
         return updated
     }
 
-    private fun clearPrimitiveQueueState() {
+    private fun clearPrimitiveQueueState(clearPromotion: Boolean = true) {
         primitiveNavigationJob?.cancel()
         primitiveNavigationJob = null
         primitivePrefetchJob?.cancel()
         primitivePrefetchJob = null
         pendingPrimitiveTarget = null
         activePrimitiveWindow = null
+        if (clearPromotion) clearPrimitivePromotionState("primitive-queue-cleared")
+    }
+
+    private fun clearPrimitivePromotionState(reason: String) {
+        if (
+            preparedPrimitivePromotion != null ||
+                primitivePromotionPreparationJob?.isActive == true ||
+                pendingPrimitivePromotionActions.isNotEmpty()
+        ) {
+            L.d("Clearing Fast Resume canonical promotion state [reason=$reason]")
+        }
+        primitivePromotionPreparationJob?.cancel()
+        primitivePromotionPreparationJob = null
+        primitivePromotionPreparationKey = null
+        preparedPrimitivePromotion = null
+        pendingPrimitivePromotionActions.clear()
+        primitivePromotionGate.clear()
+    }
+
+    private fun QueueWindow.promotionKey() =
+        PrimitiveQueuePromotionGate.Key(descriptor.sessionId, descriptor.revision)
+
+    private fun preparePrimitivePromotion(library: Library, force: Boolean = false) {
+        val active = activePrimitiveWindow ?: return
+        val descriptor = active.descriptor
+        val key = active.promotionKey()
+        if (!force && preparedPrimitivePromotion?.key == key) return
+        if (
+            !force &&
+                primitivePromotionPreparationJob?.isActive == true &&
+                primitivePromotionPreparationKey == key
+        ) {
+            return
+        }
+
+        primitivePromotionPreparationJob?.cancel()
+        primitivePromotionPreparationKey = key
+        preparedPrimitivePromotion = null
+        primitivePromotionPreparationJob =
+            restoreScope.launch {
+                val allItems = persistenceRepository.readAllQueueItems(descriptor)
+                val layout = PrimitiveQueuePromotionPolicy.layout(descriptor, allItems)
+                val canonicalItems = layout?.itemsByCanonicalPosition.orEmpty()
+                val songsByUid =
+                    canonicalItems.map { item -> item.stableSongUid?.let(library::findSong) }
+                val songsByCanonicalPosition: List<Song?> =
+                    if (songsByUid.all { it != null }) {
+                        songsByUid
+                    } else {
+                        // UID is authoritative. Build fallback indexes only when legacy/incomplete
+                        // persistence needs them, keeping hydration O(library + queue).
+                        val songsByUri =
+                            PrimitiveQueuePromotionIdentityIndex.uniqueBy(library.songs) {
+                                it.uri.toString()
+                            }
+                        val songsByPath =
+                            PrimitiveQueuePromotionIdentityIndex.uniqueBy(library.songs) {
+                                it.path.toString()
+                            }
+                        canonicalItems.mapIndexed { index, item ->
+                            songsByUid[index]
+                                ?: item.uri?.let(songsByUri::get)
+                                ?: item.pathFallback?.let(songsByPath::get)
+                        }
+                    }
+                val complete =
+                    layout != null &&
+                        songsByCanonicalPosition.size == layout.itemsByCanonicalPosition.size &&
+                        songsByCanonicalPosition.all { it != null }
+
+                withContext(Dispatchers.Main) {
+                    if (primitivePromotionPreparationKey != key) return@withContext
+                    primitivePromotionPreparationJob = null
+                    primitivePromotionPreparationKey = null
+                    val current = activePrimitiveWindow ?: return@withContext
+                    val currentKey = current.promotionKey()
+                    if (currentKey != key) {
+                        L.d(
+                            "Discarding stale Fast Resume canonical preparation " +
+                                "[prepared=$key current=$currentKey]"
+                        )
+                        if (pendingPrimitivePromotionActions.isNotEmpty()) {
+                            primitivePromotionGate.requestBoundary(currentKey, libraryReady = true)
+                        }
+                        preparePrimitivePromotion(library, force = true)
+                        return@withContext
+                    }
+
+                    if (!complete || layout == null) {
+                        val unresolved = songsByCanonicalPosition.count { it == null }
+                        preparedPrimitivePromotion = null
+                        primitivePromotionGate.onFailed(key)
+                        L.w(
+                            "Unable to hydrate complete Fast Resume queue; keeping primitive " +
+                                "authority [session=${key.sessionId} revision=${key.revision} " +
+                                "items=${allItems.size}/${descriptor.totalCount} unresolved=$unresolved]"
+                        )
+                        primitivePromotionGate.clearBoundary(key)
+                        drainPendingPrimitivePromotionActions()
+                        return@withContext
+                    }
+
+                    preparedPrimitivePromotion =
+                        PreparedPrimitivePromotion(
+                            key,
+                            layout,
+                            songsByCanonicalPosition.filterNotNull(),
+                        )
+                    val boundaryRequested = primitivePromotionGate.onPrepared(key)
+                    L.i(
+                        "Fast Resume canonical queue prepared " +
+                            "[session=${key.sessionId} revision=${key.revision} " +
+                            "count=${layout.itemsByCanonicalPosition.size} " +
+                            "boundaryRequested=$boundaryRequested]"
+                    )
+                    if (boundaryRequested) {
+                        if (!promotePreparedPrimitiveQueue("prepared-after-boundary")) {
+                            primitivePromotionGate.onFailed(key)
+                        }
+                        drainPendingPrimitivePromotionActions()
+                    }
+                }
+            }
+    }
+
+    private fun deferPrimitiveQueueInteractionUntilPromotion(
+        reason: String,
+        replay: () -> Unit,
+    ): Boolean {
+        val active = activePrimitiveWindow ?: return false
+        val library = musicRepository.library?.takeIf { !it.empty() } ?: return false
+        val key = active.promotionKey()
+        return when (primitivePromotionGate.requestBoundary(key, libraryReady = true)) {
+            PrimitiveQueuePromotionGate.Decision.BYPASS -> false
+            PrimitiveQueuePromotionGate.Decision.PROMOTE -> {
+                if (!promotePreparedPrimitiveQueue(reason)) {
+                    primitivePromotionGate.onFailed(key)
+                }
+                false
+            }
+            PrimitiveQueuePromotionGate.Decision.PREPARE -> {
+                L.i(
+                    "Deferring Fast Resume queue interaction until canonical queue is ready " +
+                        "[reason=$reason session=${key.sessionId} revision=${key.revision}]"
+                )
+                pendingPrimitivePromotionActions.add(replay)
+                preparePrimitivePromotion(library)
+                true
+            }
+        }
+    }
+
+    private fun requestPrimitivePromotionBoundary(reason: String) {
+        val active = activePrimitiveWindow ?: return
+        val library = musicRepository.library?.takeIf { !it.empty() } ?: return
+        val key = active.promotionKey()
+        when (primitivePromotionGate.requestBoundary(key, libraryReady = true)) {
+            PrimitiveQueuePromotionGate.Decision.BYPASS -> Unit
+            PrimitiveQueuePromotionGate.Decision.PROMOTE -> {
+                if (!promotePreparedPrimitiveQueue(reason)) {
+                    primitivePromotionGate.onFailed(key)
+                }
+            }
+            PrimitiveQueuePromotionGate.Decision.PREPARE -> preparePrimitivePromotion(library)
+        }
+    }
+
+    private fun promotePreparedPrimitiveQueue(reason: String): Boolean {
+        val active = activePrimitiveWindow ?: return false
+        val key = active.promotionKey()
+        val prepared = preparedPrimitivePromotion ?: return false
+        if (prepared.key != key || !primitivePromotionGate.isPrepared(key)) return false
+
+        val logicalPosition = active.descriptor.currentLogicalPosition
+        val heapIndex = prepared.layout.heapIndexForLogicalPosition(logicalPosition) ?: return false
+        val currentSong = prepared.songsByCanonicalPosition.getOrNull(heapIndex) ?: return false
+        val currentPositionMs =
+            player.currentPosition.coerceAtLeast(0L).let { position ->
+                if (currentSong.durationMs > 0L) position.coerceAtMost(currentSong.durationMs)
+                else position
+            }
+        val keepPlaying = player.playWhenReady
+        val audioSessionBefore = player.audioSessionId
+        val shuffledMapping = prepared.layout.shuffledMapping
+
+        primitivePromotionPreparationJob?.cancel()
+        primitivePromotionPreparationJob = null
+        primitivePromotionPreparationKey = null
+        clearPrimitiveQueueState(clearPromotion = false)
+        preparedPrimitivePromotion = null
+        primitivePromotionGate.clear()
+        rawFastResumeItem = null
+        pendingLibraryRestoreAfterRawFailure = null
+        parent = null
+
+        player.setMediaItems(prepared.songsByCanonicalPosition.map { it.buildMediaItem() })
+        if (shuffledMapping.isNotEmpty()) {
+            player.shuffleModeEnabled = true
+            player.setShuffleOrder(BetterShuffleOrder(shuffledMapping.toIntArray()))
+        } else {
+            player.shuffleModeEnabled = false
+        }
+        player.seekTo(heapIndex, currentPositionMs)
+        player.prepare()
+        player.playWhenReady = keepPlaying
+        sessionOngoing = true
+        playbackManager.notifyRestoreOutcome(RestoreOutcome.RESTORED_EXISTING_SESSION)
+        playbackManager.ack(this, StateAck.NewPlayback)
+        playbackManager.ack(this, StateAck.ProgressionChanged)
+        Ts18FirstAudioLatency.mark("primitive_queue_promoted")
+        deferSave()
+        L.i(
+            "Promoted Fast Resume queue to canonical library authority " +
+                "[reason=$reason count=${prepared.songsByCanonicalPosition.size} " +
+                "logical=$logicalPosition heap=$heapIndex positionMs=$currentPositionMs " +
+                "audioSessionBefore=$audioSessionBefore audioSessionAfter=${player.audioSessionId}]"
+        )
+        return true
+    }
+
+    private fun drainPendingPrimitivePromotionActions() {
+        if (pendingPrimitivePromotionActions.isEmpty()) return
+        val actions = pendingPrimitivePromotionActions.toList()
+        pendingPrimitivePromotionActions.clear()
+        actions.forEach { action -> action() }
     }
 
     private fun launchPrimitiveMutation(
@@ -952,6 +1189,7 @@ class ExoPlaybackStateHolder(
 
     override fun shuffled(shuffled: Boolean) {
         cancelActiveRestore("queue-reordered")
+        if (deferPrimitiveQueueInteractionUntilPromotion("shuffle") { shuffled(shuffled) }) return
         activePrimitiveWindow?.let { window ->
             launchPrimitiveMutation("reorder") { descriptor ->
                 val all = persistenceRepository.readAllQueueItems(descriptor)
@@ -999,6 +1237,7 @@ class ExoPlaybackStateHolder(
             return
         }
         cancelActiveRestore("next")
+        if (deferPrimitiveQueueInteractionUntilPromotion("next") { next() }) return
         activePrimitiveWindow?.let { window ->
             val current = pendingPrimitiveTarget ?: window.descriptor.currentLogicalPosition
             val target =
@@ -1049,6 +1288,7 @@ class ExoPlaybackStateHolder(
             return
         }
         cancelActiveRestore("previous")
+        if (deferPrimitiveQueueInteractionUntilPromotion("previous") { prev() }) return
         activePrimitiveWindow?.let { window ->
             if (playbackSettings.rewindWithPrev && player.currentPosition > 3000L) {
                 player.seekTo(0L)
@@ -1086,6 +1326,7 @@ class ExoPlaybackStateHolder(
 
     override fun goto(index: Int) {
         cancelActiveRestore("queue-index")
+        if (deferPrimitiveQueueInteractionUntilPromotion("goto") { goto(index) }) return
         activePrimitiveWindow?.let { window ->
             if (index !in 0 until window.descriptor.totalCount) {
                 L.w("Ignoring primitive goto with out-of-bounds index $index")
@@ -1111,6 +1352,9 @@ class ExoPlaybackStateHolder(
 
     override fun playNext(songs: List<Song>, ack: StateAck.PlayNext) {
         cancelActiveRestore("play-next")
+        if (deferPrimitiveQueueInteractionUntilPromotion("play-next") { playNext(songs, ack) }) {
+            return
+        }
         activePrimitiveWindow?.let { window ->
             val insertion = window.descriptor.currentLogicalPosition + 1
             val refs = songs.map { it.toPrimitiveQueueItem() }
@@ -1142,6 +1386,11 @@ class ExoPlaybackStateHolder(
 
     override fun addToQueue(songs: List<Song>, ack: StateAck.AddToQueue) {
         cancelActiveRestore("add-to-queue")
+        if (
+            deferPrimitiveQueueInteractionUntilPromotion("add-to-queue") { addToQueue(songs, ack) }
+        ) {
+            return
+        }
         activePrimitiveWindow?.let { window ->
             val refs = songs.map { it.toPrimitiveQueueItem() }
             launchPrimitiveMutation("append") { descriptor ->
@@ -1156,6 +1405,7 @@ class ExoPlaybackStateHolder(
 
     override fun move(from: Int, to: Int, ack: StateAck.Move) {
         cancelActiveRestore("move-queue-item")
+        if (deferPrimitiveQueueInteractionUntilPromotion("move") { move(from, to, ack) }) return
         activePrimitiveWindow?.let {
             launchPrimitiveMutation("move") { descriptor ->
                 persistenceRepository.moveQueueItem(descriptor, from, to)
@@ -1188,6 +1438,7 @@ class ExoPlaybackStateHolder(
 
     override fun remove(at: Int, ack: StateAck.Remove) {
         cancelActiveRestore("remove-queue-item")
+        if (deferPrimitiveQueueInteractionUntilPromotion("remove") { remove(at, ack) }) return
         activePrimitiveWindow?.let { window ->
             val removingCurrent = at == window.descriptor.currentLogicalPosition
             launchPrimitiveMutation("remove", preservePosition = !removingCurrent) { descriptor ->
@@ -1353,6 +1604,12 @@ class ExoPlaybackStateHolder(
             playbackManager.ack(this, StateAck.QueueWindowChanged)
             deferSave()
             maybePrefetchPrimitiveWindow()
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                // Avoid re-entrant playlist replacement from inside ExoPlayer's transition
+                // callback.
+                // The posted boundary still runs at the start of the newly selected track.
+                mainHandler.post { requestPrimitivePromotionBoundary("auto-transition") }
+            }
         } else if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
             playbackManager.ack(this, StateAck.IndexMoved)
             deferSave()
@@ -1468,8 +1725,14 @@ class ExoPlaybackStateHolder(
     override fun onMusicChanges(changes: MusicRepository.Changes) {
         val library = musicRepository.library?.takeIf { !it.empty() }
         if (changes.deviceLibrary && library != null) {
-            activePrimitiveWindow?.let {
-                L.d("Library obtained while primitive queue is active; enriching loaded range")
+            activePrimitiveWindow?.let { window ->
+                val key = window.promotionKey()
+                primitivePromotionGate.onLibraryChanged(key)
+                L.d(
+                    "Library obtained while primitive queue is active; preparing canonical " +
+                        "promotion and enriching loaded range"
+                )
+                preparePrimitivePromotion(library, force = true)
                 reconcilePrimitiveWindow(library)
                 return
             }

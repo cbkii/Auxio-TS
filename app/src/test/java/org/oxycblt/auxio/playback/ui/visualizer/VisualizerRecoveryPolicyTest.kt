@@ -22,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -100,6 +101,31 @@ class VisualizerRecoveryPolicyTest {
         for (mode in VisualizerCaptureMode.entries) {
             assertTrue(mode.captureFft xor mode.captureWaveform)
         }
+    }
+
+    @Test
+    fun startupRetryPolicyIsBoundedAndBacksOff() {
+        assertEquals(250L, VisualizerRecoveryPolicy.startRetryDelayMs(0))
+        assertEquals(750L, VisualizerRecoveryPolicy.startRetryDelayMs(1))
+        assertEquals(1_500L, VisualizerRecoveryPolicy.startRetryDelayMs(2))
+        assertNull(VisualizerRecoveryPolicy.startRetryDelayMs(3))
+        assertEquals(250L, VisualizerRecoveryPolicy.startRetryDelayMs(-1))
+    }
+
+    @Test
+    fun startupRetryTrackerStaysExhaustedUntilUsableFrameReset() {
+        val tracker = VisualizerStartRetryTracker()
+
+        assertEquals(250L, tracker.nextDelayMs())
+        assertEquals(750L, tracker.nextDelayMs())
+        assertEquals(1_500L, tracker.nextDelayMs())
+        assertNull(tracker.nextDelayMs())
+        assertEquals(3, tracker.attemptCount)
+
+        tracker.reset()
+
+        assertEquals(0, tracker.attemptCount)
+        assertEquals(250L, tracker.nextDelayMs())
     }
 
     @Test

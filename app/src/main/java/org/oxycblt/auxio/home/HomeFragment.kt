@@ -547,7 +547,10 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         indexingTickerJob?.cancel()
         indexingTickerJob = null
         renderIndexerState(state, SystemClock.elapsedRealtime())
-        if (state is IndexingState.Indexing) {
+        if (
+            state is IndexingState.Indexing &&
+                HomeIndexingPresentationPolicy.shouldShowStatusCard(state)
+        ) {
             indexingTickerJob =
                 viewLifecycleOwner.lifecycleScope.launch {
                     while (true) {
@@ -564,7 +567,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         val binding = requireBinding()
         when (state) {
             is IndexingState.Completed -> {
-                val actionable = state.outcome != IndexingTerminalOutcome.SUCCESS
+                val actionable = HomeIndexingPresentationPolicy.shouldShowStatusCard(state)
                 binding.homeIndexingContainer.isInvisible = !actionable
                 binding.homeIndexingProgress.isInvisible = actionable
                 binding.homeIndexingError.isInvisible = !actionable
@@ -609,7 +612,11 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 }
             }
             is IndexingState.Indexing -> {
-                binding.homeIndexingContainer.isInvisible = false
+                // Routine launch/background indexing is silent. True first bootstrap progress is
+                // already owned by HomeListEmptyState; this diagnostic card is reserved for
+                // actionable terminal outcomes so it cannot flash on every normal launch.
+                binding.homeIndexingContainer.isInvisible =
+                    !HomeIndexingPresentationPolicy.shouldShowStatusCard(state)
                 binding.homeIndexingTitle.setText(phaseLabel(state.progress.phase))
                 binding.homeIndexingProgress.apply {
                     isInvisible = false
