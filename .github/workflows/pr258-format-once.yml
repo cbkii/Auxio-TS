@@ -30,8 +30,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Apply repository Spotless formatter
-        run: ./gradlew --no-daemon spotlessApply
+      - name: Apply repository Kotlin formatter
+        run: ./gradlew --no-daemon spotlessKotlinApply
 
       - name: Commit formatting only
         shell: bash
