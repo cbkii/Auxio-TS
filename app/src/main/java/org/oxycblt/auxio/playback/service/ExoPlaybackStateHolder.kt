@@ -807,8 +807,14 @@ class ExoPlaybackStateHolder(
                     } else {
                         // UID is authoritative. Build fallback indexes only when legacy/incomplete
                         // persistence needs them, keeping hydration O(library + queue).
-                        val songsByUri = library.songs.associateBy { it.uri.toString() }
-                        val songsByPath = library.songs.associateBy { it.path.toString() }
+                        val songsByUri =
+                            PrimitiveQueuePromotionIdentityIndex.uniqueBy(library.songs) {
+                                it.uri.toString()
+                            }
+                        val songsByPath =
+                            PrimitiveQueuePromotionIdentityIndex.uniqueBy(library.songs) {
+                                it.path.toString()
+                            }
                         canonicalItems.mapIndexed { index, item ->
                             songsByUid[index]
                                 ?: item.uri?.let(songsByUri::get)
