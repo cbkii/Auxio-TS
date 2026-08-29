@@ -61,6 +61,7 @@ class VisualizerCoordinator(
     private var watchdogJob: Job? = null
     private var pauseReleaseJob: Job? = null
     private var startRetryJob: Job? = null
+    private var startRetrySessionId: Int? = null
     private var monitorJob: Job? = null
     private var activeScope: CoroutineScope? = null
     private var pausedAtUptimeMs = VisualizerRecoveryPolicy.UNSET_UPTIME_MS
@@ -179,6 +180,11 @@ class VisualizerCoordinator(
         }
         clearPersistedPermissionDenial()
         permissionRequestIssued = false
+
+        if (startRetrySessionId != null && startRetrySessionId != sessionId) {
+            recoveryTracker.reset()
+            cancelStartRetry(resetAttempt = true)
+        }
 
         if (forceRestart || (visualizer != null && currentSessionId != sessionId)) {
             recoveryTracker.reset()
@@ -504,6 +510,10 @@ class VisualizerCoordinator(
 
     private fun scheduleStartRetry(sessionId: Int, reason: String) {
         val scope = activeScope ?: return
+        if (startRetrySessionId != sessionId) {
+            cancelStartRetry(resetAttempt = true)
+            startRetrySessionId = sessionId
+        }
         val delayMs = startRetryTracker.nextDelayMs()
         if (delayMs == null) {
             L.w(
@@ -539,7 +549,10 @@ class VisualizerCoordinator(
     private fun cancelStartRetry(resetAttempt: Boolean) {
         startRetryJob?.cancel()
         startRetryJob = null
-        if (resetAttempt) startRetryTracker.reset()
+        if (resetAttempt) {
+            startRetryTracker.reset()
+            startRetrySessionId = null
+        }
     }
 
     private fun releaseVisualizer(resetRecovery: Boolean) {
